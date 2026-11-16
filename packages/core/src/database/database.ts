@@ -209,24 +209,6 @@ export interface ExportPage {
   readonly next?: SiteId;
 }
 
-/** A publish as `addVersion` takes it. */
-export interface NewVersion {
-  /** The number `reserveVersion` set aside. */
-  readonly number: number;
-
-  /** How many versions the site keeps at most, the live one included. */
-  readonly keep: number;
-
-  /** The sum of the sizes of the version's files. */
-  readonly bytes: number;
-
-  /** How many files the version holds. */
-  readonly files: number;
-
-  /** What the version holds; nothing is known of it when left out. */
-  readonly contents?: VersionContents;
-}
-
 /** The visitor key and whether this call stored it. `kept` is a key that was already there, which is the one to use. */
 export interface VisitorKey {
   readonly kind: "created" | "kept";
@@ -541,15 +523,6 @@ export interface TokenStates {
 
 /** The one doorway to stored sites, tokens, pending logins, settings, the visitor key, the audit log, and the request counts of the last year. */
 export interface Database {
-  /**
-   * Make a site under a fresh id, with version 1 as its only version and its live one: published at `signed.at` by `signed.by`, of the draft's `bytes` and `files`.
-   *
-   * @returns the site, or `name_taken` when it is to be public and another site holds the public name or has it as its id, whatever its folder
-   * @param contents - what version 1 holds; nothing is known of it when left out
-   * @throws {Error} the draft breaks a field rule, or its folder is a site's, in the trash or not; nothing is stored
-   */
-  createSite(draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken">>;
-
   /** The site with this id, in the trash or not. */
   getSite(id: SiteId): Promise<Site | undefined>;
 
@@ -619,7 +592,7 @@ export interface Database {
    */
   listShownSites(query: SitesQuery, shown: SitesShown): Promise<ShownSitesPage>;
 
-  /** Set who may open a site. Going public claims the public name; leaving public frees it. `name_taken` as in `createSite`. */
+  /** Set who may open a site. Going public claims the public name; leaving public frees it. `name_taken` when another site holds the public name or has it as its id, in the trash or not. */
   changeAccess(id: SiteId, access: SiteAccess, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">>;
 
   /**
@@ -690,14 +663,6 @@ export interface Database {
   reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">>;
 
   /**
-   * Record a publish under a reserved number and make it live. The page's title stays as the version before left it.
-   *
-   * @returns `stale_number` when the number was not reserved or a higher version is already kept
-   * @throws {RangeError} `keep` is not a whole number from 1 up, or `bytes` or `files` is not a whole number from 0 up
-   */
-  addVersion(id: SiteId, version: NewVersion, signed: Signed): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">>;
-
-  /**
    * Make a kept version the live one.
    *
    * @param target - the version's number, or `"previous"` for the highest kept version below the live one
@@ -722,7 +687,7 @@ export interface Database {
    *
    * @param site - the site, whose folder is the upload's; `contents` says what each of its versions holds, by the version's number, and nothing is known of a version left out
    * @returns the first of these that holds: `not_pending` when the upload is finished, abandoned, gone, or of another folder; `id_taken` when a site has the id as its id or its public name; `folder_taken` when a site has the folder;
-   *   `name_taken` as in `createSite` or when the public name is the site's own id. Every refusal but `not_pending` leaves the upload pending
+   *   `name_taken` as in `changeAccess` or when the public name is the site's own id. Every refusal but `not_pending` leaves the upload pending
    * @throws {Error} the value is no site
    */
   importUploadAsSite(id: UploadId, site: Site, signed: Signed, contents?: ReadonlyMap<number, VersionContents>): Promise<Done | Refused<"id_taken" | "folder_taken" | "name_taken" | "not_pending">>;
@@ -759,7 +724,7 @@ export interface Database {
    * @param draft - the site, whose folder is the upload's
    * @param made - `contents` is what version 1 holds, worked out from the upload's manifest; nothing is known of it when left out.
    *   `copiedFrom` is the site a copy was made of: it writes one `duplicate` audit entry more about the new site, in the same step
-   * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; `name_taken` as in `createSite`
+   * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; `name_taken` when it is to be public and another site holds the public name or has it as its id
    * @throws {Error} the draft breaks a field rule, or its folder is already a site's
    */
   publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made?: MadeWith): Promise<Done | Refused<"name_taken" | "not_pending">>;

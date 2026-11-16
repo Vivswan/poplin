@@ -30,6 +30,8 @@ import {
   opened,
   pagedNames,
   publish,
+  publishedSite,
+  publishedVersion,
   SIZE,
   sizeOf,
   storedBack,
@@ -77,8 +79,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       ["an expiry that is no moment", (site: NewSite): unknown => ({ ...site, expires: -1 })],
     ] as const)("a draft with %s is refused by a throw, and nothing is stored", async (_case, change) => {
       const database = await opened(makeDatabase);
+      const begun = await begunSite(database, draft(REPORT));
 
-      await expect(database.createSite(change(draft(REPORT)) as NewSite, BY_ADA)).rejects.toThrow();
+      await expect(database.publishUploadAsSite(begun.id, change(begun.site) as NewSite, BY_ADA)).rejects.toThrow();
       expect(await everything(database)).toEqual([[], [], NOTHING]);
     });
 
@@ -91,7 +94,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       const refused = async (): Promise<void> => {
         const before = await everything(database);
 
-        await expect(database.createSite(squatter, BY_ADA)).rejects.toThrow();
+        await expect(publishedSite(database, squatter, BY_ADA)).rejects.toThrow();
         expect(await storedBack(database, { ...holder, id: NO_SITE })).toEqual({ kind: "folder_taken" });
         expect(await everything(database)).toEqual(before);
       };
@@ -104,9 +107,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       await refused();
 
       expect([id === holder.id, (await database.getSite(id))?.folder]).toEqual([false, holder.folder]);
-      expect(await database.createSite({ ...squatter, access: "public", public_name: DOCS }, BY_ADA)).toEqual({ kind: "name_taken" });
+      expect(await publishedSite(database, { ...squatter, access: "public", public_name: DOCS }, BY_ADA)).toEqual({ kind: "name_taken" });
       await database.deleteSite(id, BY_ADA);
-      expect((await database.createSite(squatter, BY_ADA)).kind).toBe("done");
+      expect((await publishedSite(database, squatter, BY_ADA)).kind).toBe("done");
     });
 
     // Drift: an import asks once whether its id and its public name are free, before a file of it is sent. A holder it missed would take every file of a backup and refuse it at the end; a free name told as held would refuse a backup the install can take.
@@ -259,7 +262,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       const steps = [
         await database.changeAccess(site.id, { access: "public", public_name: DOCS }, later),
         await database.changeDetails(site.id, { title: "T" }, later),
-        await database.reserveVersion(site.id).then(() => database.addVersion(site.id, publish(2, 3), later)),
+        await database.reserveVersion(site.id).then(() => publishedVersion(database, site.id, publish(2, 3), later)),
         await database.setLiveVersion(site.id, "previous", later),
         await database.trashSite(site.id, later),
         await database.restoreSite(site.id, later),
@@ -308,7 +311,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       ["a new id given", (database: Database, id: SiteId): Promise<{ kind: string }> => database.giveNewId(id, BY_ADA)],
       ["the site trashed", (database: Database, id: SiteId): Promise<{ kind: string }> => database.trashSite(id, BY_ADA)],
       ["a version reserved", (database: Database, id: SiteId): Promise<{ kind: string }> => database.reserveVersion(id)],
-      ["a version published", (database: Database, id: SiteId): Promise<{ kind: string }> => database.addVersion(id, publish(2, 3), BY_ADA)],
+      ["a version published", (database: Database, id: SiteId): Promise<{ kind: string }> => publishedVersion(database, id, publish(2, 3), BY_ADA)],
       ["the live version moved", (database: Database, id: SiteId): Promise<{ kind: string }> => database.setLiveVersion(id, "previous", BY_ADA)],
     ] as const)("%s is refused with in_trash for a trashed site and with not_found for no site, and nothing is stored", async (_case, change) => {
       const database = await opened(makeDatabase);
@@ -333,11 +336,11 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     test.each([
       [
         "a new public site, the name held by another site",
-        async (database: Database): Promise<unknown> => database.createSite(draft(REPORT, "public", DOCS), BY_ADA),
+        async (database: Database): Promise<unknown> => publishedSite(database, draft(REPORT, "public", DOCS), BY_ADA),
       ],
       [
         "a new public site, the name being another site's id",
-        async (database: Database, holder: Site): Promise<unknown> => database.createSite(draft(REPORT, "public", holder.id as string as PublicName), BY_ADA),
+        async (database: Database, holder: Site): Promise<unknown> => publishedSite(database, draft(REPORT, "public", holder.id as string as PublicName), BY_ADA),
       ],
       [
         "a site going public, the name held by another site",
@@ -384,7 +387,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(holders).toHaveLength(1);
       expect((await auditActions(database)).filter((action) => action === "access")).toHaveLength(1);
       expect(
-        [...claims, ...(await Promise.all([database.createSite(draft(DOCS, "public"), BY_ADA), database.createSite(draft(DOCS, "public"), BY_ADA)]))]
+        [...claims, ...(await Promise.all([publishedSite(database, draft(DOCS, "public"), BY_ADA), publishedSite(database, draft(DOCS, "public"), BY_ADA)]))]
           .map((claim) => claim.kind)
           .sort(),
       ).toEqual(["done", "name_taken", "name_taken", "name_taken"]);
@@ -453,7 +456,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(trashed).toEqual({ kind: "done", site: inTrash } as typeof trashed);
       expect([await database.findServed({ id: site.id }, NOW), await database.findServed({ public_name: DOCS }, NOW)]).toEqual([undefined, undefined]);
       expect<unknown>([await database.getSite(site.id), await database.getSiteByPublicName(DOCS)]).toEqual([inTrash, inTrash]);
-      expect(await database.createSite(draft(DOCS, "public"), BY_ADA)).toEqual({ kind: "name_taken" });
+      expect(await publishedSite(database, draft(DOCS, "public"), BY_ADA)).toEqual({ kind: "name_taken" });
       expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 2 })).toEqual({ kind: "done", site });
       expect((await database.findServed({ public_name: DOCS }, NOW))?.site).toEqual(site);
     });
@@ -462,7 +465,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     // A move or a removal that trusted the list would trash a site its owner had just renewed, or delete for good one just restored.
     test("the sites due are listed the longest due first and no other, and each is moved or removed only while it is still due, in the step that checks it", async () => {
       const database = await opened(makeDatabase);
-      const [early, late, never, later, sat, fresh] = await Promise.all(["early", "late", "never", "later", "sat", "fresh"].map((name) => made(database, draft(name as SiteName)))) as [Site, Site, Site, Site, Site, Site];
+      const sites: Site[] = [];
+      for (const name of ["early", "late", "never", "later", "sat", "fresh"]) sites.push(await made(database, draft(name as SiteName)));
+      const [early, late, never, later, sat, fresh] = sites as [Site, Site, Site, Site, Site, Site];
       for (const [site, expires] of [[early, NOW + 5], [late, NOW + 10], [later, NOW + 20]] as const) await database.changeDetails(site.id, { expires }, BY_ADA);
       await database.trashSite(sat.id, { by: ADA, at: NOW + 1 });
       await database.trashSite(fresh.id, { by: ADA, at: NOW + 50 });
@@ -513,7 +518,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(deleted).toEqual({ kind: "done", site: trashed } as typeof deleted);
       expect([await database.getSite(site.id), await database.getSiteByPublicName(DOCS)]).toEqual([undefined, undefined]);
       expect([await sizeOf(database, site.id), await database.readTotals()]).toEqual([undefined, NOTHING]);
-      expect((await database.createSite(draft(DOCS, "public"), BY_ADA)).kind).toBe("done");
+      expect((await publishedSite(database, draft(DOCS, "public"), BY_ADA)).kind).toBe("done");
     });
 
     // Drift: the folder of a removed site is all that says files may still sit in the bucket; one that was not remembered would leave them there for good.
@@ -806,8 +811,8 @@ export function versions(label: string, makeDatabase: DatabaseFactory): void {
       const site = await made(database, draft(REPORT));
       const reserved = await Promise.all([1, 2, 3].map(() => database.reserveVersion(site.id)));
       const numbers = reserved.map((answer) => (answer.kind === "reserved" ? answer.number : 0)).sort();
-      const second = await database.addVersion(site.id, publish(2, 3), { by: BO, at: NOW + 2 });
-      const fourth = await database.addVersion(site.id, publish(4, 2), { by: BO, at: NOW + 4 });
+      const second = await publishedVersion(database, site.id, publish(2, 3), { by: BO, at: NOW + 2 });
+      const fourth = await publishedVersion(database, site.id, publish(4, 2), { by: BO, at: NOW + 4 });
 
       expect(numbers).toEqual([2, 3, 4]);
       expect(second).toMatchObject({
@@ -816,10 +821,10 @@ export function versions(label: string, makeDatabase: DatabaseFactory): void {
         site: { live_version: 2, updated_at: NOW + 2, versions: [{ number: 1 }, { number: 2, published_at: NOW + 2, published_by: BO }] },
       });
       expect(fourth).toMatchObject({ kind: "done", dropped: [1], site: { live_version: 4, versions: [{ number: 2 }, { number: 4 }] } });
-      expect(await database.addVersion(site.id, publish(3, 2), BY_ADA)).toEqual({ kind: "stale_number" });
-      expect(await database.addVersion(site.id, publish(5, 2), BY_ADA)).toEqual({ kind: "stale_number" });
-      expect(await database.addVersion(NO_SITE, publish(2, 2), BY_ADA)).toEqual({ kind: "not_found" });
-      await expect(database.addVersion(site.id, publish(5, 0), BY_ADA)).rejects.toThrow(RangeError);
+      expect(await publishedVersion(database, site.id, publish(3, 2), BY_ADA)).toEqual({ kind: "stale_number" });
+      expect(await publishedVersion(database, site.id, publish(5, 2), BY_ADA)).toEqual({ kind: "stale_number" });
+      expect(await publishedVersion(database, NO_SITE, publish(2, 2), BY_ADA)).toEqual({ kind: "not_found" });
+      await expect(publishedVersion(database, site.id, publish(5, 0), BY_ADA)).rejects.toThrow(RangeError);
       expect(await auditActions(database)).toEqual(["create", "publish", "publish"]);
       expect<unknown>((await auditTrail(database)).slice(1).map((entry) => [entry.by, entry.at, entry.site, entry.detail])).toEqual([
         [BO, NOW + 2, { id: site.id, name: REPORT }, { version: 2 }],
@@ -834,7 +839,7 @@ export function versions(label: string, makeDatabase: DatabaseFactory): void {
       const site = await made(database, draft(REPORT));
       for (const number of [2, 3]) {
         await database.reserveVersion(site.id);
-        await database.addVersion(site.id, publish(number, 3), BY_ADA);
+        await publishedVersion(database, site.id, publish(number, 3), BY_ADA);
       }
 
       const moves = [
@@ -876,10 +881,10 @@ export function sizes(label: string, makeDatabase: DatabaseFactory): void {
 
       await after(undefined);
       await after(database.reserveVersion(big.id));
-      await after(database.addVersion(big.id, { number: 2, keep: 2, bytes: 250, files: 5 }, BY_ADA));
-      await after(database.reserveVersion(big.id).then(() => database.addVersion(big.id, { number: 3, keep: 2, bytes: 40, files: 1 }, BY_ADA)));
-      await after(database.addVersion(big.id, { number: 2, keep: 2, bytes: 9000, files: 9 }, BY_ADA));
-      await after(database.createSite({ ...draft(REPORT, "public", DOCS), bytes: 9000, files: 9 }, BY_ADA));
+      await after(publishedVersion(database, big.id, { number: 2, keep: 2, bytes: 250, files: 5 }, BY_ADA));
+      await after(database.reserveVersion(big.id).then(() => publishedVersion(database, big.id, { number: 3, keep: 2, bytes: 40, files: 1 }, BY_ADA)));
+      await after(publishedVersion(database, big.id, { number: 2, keep: 2, bytes: 9000, files: 9 }, BY_ADA));
+      await after(publishedSite(database, { ...draft(REPORT, "public", DOCS), bytes: 9000, files: 9 }, BY_ADA));
       await after(database.setLiveVersion(big.id, "previous", BY_ADA));
       await after(database.trashSite(small.id, BY_ADA));
       await after(database.restoreSite(small.id, BY_ADA));
@@ -906,13 +911,12 @@ export function sizes(label: string, makeDatabase: DatabaseFactory): void {
       ["bytes below zero", { bytes: -1, files: 1 }],
       ["a fraction of a file", { bytes: 1, files: 1.5 }],
       ["bytes past what a number holds exactly", { bytes: 2 ** 53, files: 1 }],
-    ] as const)("a size with %s is refused for a new site and for a new version, and nothing is stored", async (_case, size) => {
+    ] as const)("a size with %s is refused for a new site, and nothing is stored", async (_case, size) => {
       const database = await opened(makeDatabase);
-      const site = await made(database, draft(REPORT));
-      await database.reserveVersion(site.id);
+      await made(database, draft(REPORT));
+      const begun = await begunSite(database, draft(DOCS));
 
-      await expect(database.createSite({ ...draft(DOCS), ...size }, BY_ADA)).rejects.toThrow();
-      await expect(database.addVersion(site.id, { number: 2, keep: 3, ...size }, BY_ADA)).rejects.toThrow(RangeError);
+      await expect(database.publishUploadAsSite(begun.id, { ...begun.site, ...size }, BY_ADA)).rejects.toThrow();
       expect(await database.readTotals()).toEqual({ sites: 1, trashed_sites: 0, ...SIZE });
     });
   });
@@ -927,7 +931,7 @@ export function backups(label: string, makeDatabase: DatabaseFactory): void {
       for (const name of [REPORT, DOCS, REPORT]) await made(database, draft(name, "unlisted"), { by: BO, at: NOW + 1 });
       for (const number of [2, 3]) {
         await database.reserveVersion(rolledBack.id);
-        await database.addVersion(rolledBack.id, { number, keep: 3, bytes: number * 11, files: number }, { by: BO, at: NOW + number });
+        await publishedVersion(database, rolledBack.id, { number, keep: 3, bytes: number * 11, files: number }, { by: BO, at: NOW + number });
       }
       await database.reserveVersion(rolledBack.id);
       await database.setLiveVersion(rolledBack.id, 2, BY_ADA);
@@ -998,7 +1002,7 @@ export function backups(label: string, makeDatabase: DatabaseFactory): void {
       await made(database, draft(REPORT));
       await made(database, draft(REPORT, "public", "cccccccccccc" as PublicName));
       await database.reserveVersion("aaaaaaaaaaaa" as SiteId);
-      const published = await database.addVersion("aaaaaaaaaaaa" as SiteId, publish(2, 3), BY_ADA);
+      const published = await publishedVersion(database, "aaaaaaaaaaaa" as SiteId, publish(2, 3), BY_ADA);
       if (published.kind !== "done") throw new Error(`the fixture publish was refused: ${published.kind}`);
 
       const before = await everything(database);

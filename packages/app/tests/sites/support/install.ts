@@ -13,6 +13,7 @@ import { siteLabel } from "@poplin/core/src/sites/labels";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import { type HeadResult, type ObjectKey, parseObjectKey, type ReadOptions, type ReadResult, resolveRange } from "@poplin/core/src/storage/storage";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
+import { publishedSite } from "@poplin/core/tests/database/support/database-fixtures";
 import type { SiteAddresses } from "../../../src/sites/addresses";
 import type { serveSite } from "../../../src/sites/serve";
 import { ADDRESSES } from "./layout";
@@ -169,7 +170,7 @@ export async function openInstall(addresses: SiteAddresses = ADDRESSES): Promise
 
   const publish = async (draft: Draft): Promise<Site> => {
     const contents = draft.unlisted_files === true ? undefined : contentsOf(Object.keys(draft.files));
-    const made = await database.createSite(draftOf(draft, addresses), { by: draft.by ?? owner, at: NOW }, contents);
+    const made = await publishedSite(database, draftOf(draft, addresses), { by: draft.by ?? owner, at: NOW }, contents);
     if (made.kind !== "done") throw new Error(`the test's site was refused: ${made.kind}`);
 
     for (const [path, [body, contentType]] of Object.entries(draft.files)) {

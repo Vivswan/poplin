@@ -32,6 +32,7 @@ import {
   OTHER_SITE,
   pendingLogin,
   publish,
+  publishedVersion,
   REPORT,
   SETTINGS,
   storedBack,
@@ -504,7 +505,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.changeAccessAndDetails(site.id, { access: "private" }, { title: "T" }, BY_ADA);
       await database.changeDetails(site.id, { title: "T", search_engines: true, embeddable: false, expires: NOW }, BY_ADA);
       await database.reserveVersion(site.id);
-      await database.addVersion(site.id, publish(2, 3), BY_ADA);
+      await publishedVersion(database, site.id, publish(2, 3), BY_ADA);
       await database.setLiveVersion(site.id, "previous", BY_ADA);
       await database.setLiveVersion(site.id, 2, BY_ADA);
       await database.readTotals();

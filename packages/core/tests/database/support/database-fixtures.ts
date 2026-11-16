@@ -4,7 +4,7 @@
 import { mintComputerLogin, type PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
 import type { TokenId } from "../../../src/auth/tokens";
-import type { Database, NewSite, NewUpload, NewVersion, Signed, SitesPage, SitesQuery } from "../../../src/database/database";
+import type { Database, Done, NewSite, NewUpload, Published, Refused, Signed, SitesPage, SitesQuery } from "../../../src/database/database";
 import type { PublicName, SiteName } from "../../../src/names/names";
 import type { AuditAction, AuditEntry } from "../../../src/records/audit";
 import { defaultSettings } from "../../../src/records/settings";
@@ -12,6 +12,7 @@ import { mintSiteFolder, type Site } from "../../../src/records/site";
 import type { Totals } from "../../../src/records/sizes";
 import type { SiteId } from "../../../src/sites/ids";
 import { type ManifestFile, mintUploadId, type UploadId } from "../../../src/records/upload";
+import type { VersionContents } from "../../../src/records/version-contents";
 
 /** The moment the fixtures are made at. */
 export const NOW = 1_700_000_000_000;
@@ -70,6 +71,9 @@ export const MANIFEST = [
 /** Room no fixture upload fills. */
 export const ROOMY = { own: 100, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: "2026-11-13", dayFiles: 1_000_000, writes: 2, dayWrites: 1_000_000 };
 
+/** The room of the uploads the fixture sites and versions are made through: bounded by nothing, and counted on a day no case counts on. */
+const FIXTURE_ROOM = { ...ROOMY, folderBytes: Number.MAX_SAFE_INTEGER, totalBytes: Number.MAX_SAFE_INTEGER, day: "2026-01-01", dayFiles: Number.MAX_SAFE_INTEGER, writes: 0 };
+
 /** A change made by the second person a moment later. */
 export const BY_BO_LATER: Signed = { by: BO, at: NOW + 5 };
 
@@ -84,6 +88,15 @@ export const ROOM = { perVisitor: 100, all: 100 };
 
 /** Gives a new, empty database on every call, one that draws its site ids from `mintId` when a case passes one. */
 export type DatabaseFactory = (mintId?: () => SiteId) => Database | Promise<Database>;
+
+/** A version as `publishedVersion` publishes it: the number set aside for it, how many versions the site keeps at most, its size, and what it holds when that is known. */
+export interface NewVersion {
+  readonly number: number;
+  readonly keep: number;
+  readonly bytes: number;
+  readonly files: number;
+  readonly contents?: VersionContents;
+}
 
 /** Site ids handed out in order, so a test knows the id a site gets and can make two candidates collide. */
 export function mintFrom(...ids: string[]): () => SiteId {
@@ -128,13 +141,73 @@ export function publish(number: number, keep: number): NewVersion {
   return { number, keep, ...SIZE };
 }
 
+/** Declared files that are `files` in number and `bytes` long together. */
+function filesOf(size: Pick<NewVersion, "bytes" | "files">): ManifestFile[] {
+  return Array.from(Array(size.files).keys(), (index) => ({ path: `file-${index}.html`, size: index === 0 ? size.bytes : 0, content_type: "text/html", sha256: SHA256 }));
+}
+
+/** Give up a fixture upload that still waits, and remove its record. */
+async function forgotten(database: Database, id: UploadId): Promise<void> {
+  await database.abandonUpload(id);
+  await database.removeUpload(id);
+}
+
+/**
+ * Make a site as an install does, through an upload begun for it by whoever signs and published in its folder, and leave no record of the upload behind.
+ *
+ * @param contents - what version 1 holds; nothing is known of it when left out
+ * @throws {Error} the draft breaks a field rule, or its folder is a site's
+ */
+export async function publishedSite(database: Database, site: NewSite, signed: Signed = BY_ADA, contents?: VersionContents): Promise<Done | Refused<"name_taken">> {
+  const upload: NewUpload = { id: mintUploadId(), folder: site.folder, number: 1, owner: signed.by, plan: { kind: "create", site: { embeddable: true, ...site } }, manifest: MANIFEST, created_at: signed.at };
+  await database.addUpload(upload, FIXTURE_ROOM);
+
+  try {
+    const created = await database.publishUploadAsSite(upload.id, site, signed, contents === undefined ? {} : { contents });
+    if (created.kind === "done") return created;
+
+    if (created.kind === "name_taken") return { kind: "name_taken" };
+
+    throw new Error("the fixture upload did not wait for its site");
+  } finally {
+    await forgotten(database, upload.id);
+  }
+}
+
+/**
+ * Publish a version of a site as an install does, through an upload of that size under the number, and leave no record of the upload behind. The page's title stays as the version before left it.
+ *
+ * @param id - the site; for an id of no site the upload sits in a folder of no site
+ * @throws {RangeError} `keep` is not a whole number from 1 up
+ */
+export async function publishedVersion(database: Database, id: SiteId, version: NewVersion, signed: Signed = BY_ADA): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">> {
+  const site = await database.getSite(id);
+  const manifest = filesOf(version);
+  const upload: NewUpload = { id: mintUploadId(), folder: site?.folder ?? mintSiteFolder(), number: version.number, owner: signed.by, plan: { kind: "update", details: {} }, manifest, created_at: signed.at };
+  await database.addUpload(upload, FIXTURE_ROOM);
+
+  try {
+    const title = site?.page_title ?? null;
+    const pageTitle = title === null ? {} : { page_title: title };
+    const contents = version.contents === undefined ? {} : { contents: version.contents };
+    const added = await database.publishUploadAsVersion(upload.id, { keep: version.keep, details: {}, ...pageTitle, ...contents }, signed);
+    if (added.kind === "done") return added;
+
+    if (added.kind === "not_found" || added.kind === "in_trash" || added.kind === "stale_number") return { kind: added.kind };
+
+    throw new Error(`the fixture version was refused: ${added.kind}`);
+  } finally {
+    await forgotten(database, upload.id);
+  }
+}
+
 /**
  * Make a fixture site.
  *
  * @throws {Error} the site was refused, which is a broken fixture
  */
 export async function made(database: Database, site: NewSite, signed: Signed = BY_ADA): Promise<Site> {
-  const created = await database.createSite(site, signed);
+  const created = await publishedSite(database, site, signed);
   if (created.kind !== "done") throw new Error(`the fixture site was refused: ${created.kind}`);
 
   return created.site;

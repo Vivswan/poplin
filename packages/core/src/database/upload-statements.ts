@@ -1,6 +1,6 @@
 // The statements that read and change uploads, the room an upload is given, and the day's count of writes to the store.
 
-import { and, type SQL, sql as fragment } from "drizzle-orm";
+import { and, eq, type SQL, sql as fragment } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import type { UploadId } from "../records/upload";
@@ -55,14 +55,14 @@ export function addWrites(day: string, writes: number, condition: SQL): Statemen
   return insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files, declaredFiles.writes], added);
 }
 
-/** The upload with the given id, without its manifest; none for no id. */
-export function uploadById(id: UploadId | null): Statement {
-  return built(BUILD.select(UPLOAD_FIELDS).from(uploads).where(fragment`${uploads.id} = ${id}`));
+/** The upload with the given id, without its manifest. */
+export function uploadById(id: UploadId): Statement {
+  return built(BUILD.select(UPLOAD_FIELDS).from(uploads).where(eq(uploads.id, id)));
 }
 
 /** An upload marked finished and its manifest dropped, only when the statement before it changed a row. */
-export function finishUpload(id: UploadId | null): Statement {
-  return built(BUILD.update(uploads).set({ state: "finished", manifest: "{}" }).where(and(fragment`${uploads.id} = ${id}`, CHANGED)));
+export function finishUpload(id: UploadId): Statement {
+  return built(BUILD.update(uploads).set({ state: "finished", manifest: "{}" }).where(and(eq(uploads.id, id), CHANGED)));
 }
 
 /** How many pending uploads a holder began. */
