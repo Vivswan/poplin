@@ -21,7 +21,7 @@ on:
       - "!docs/**"
       - "!brand/**"
       - "!skills/**"
-      - "!*.md"
+      - "!**/*.md"
       - "!.github/**"
       - ".github/workflows/live-checks.yml"
       - ".github/workflows/live-install.yml"

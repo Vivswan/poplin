@@ -41,13 +41,13 @@ Each workflow runs the same steps on its own install. A push starts the one whos
 | -------------------------------------------------------------------------------------------- | ----------------- |
 | only files of an install with a domain                                                       | that install      |
 | only files of an install without a domain                                                    | that install      |
-| any other file of `packages/**`, tests included                                              | both installs     |
-| `demo/**`, `packages/providers/cloudflare/live/**`                                                                   | both installs     |
+| any other file of `packages/**` that is no `.md` page, tests included                        | both installs     |
+| any file of `demo/**` or `packages/providers/cloudflare/live/**` that is no `.md` page                               | both installs     |
 | `wrangler.jsonc`, the root `package.json`, `bun.lock`, `.bun-version`, `tsconfig*`           | both installs     |
 | `.github/workflows/live-install.yml`, `.github/actions/setup/**`, `.gitattributes`           | both installs     |
 | the workflow file of one kind                                                                | that install      |
 | a file no `!` line of either `paths` list names                                              | both installs     |
-| only `website/**`, `docs/**`, `brand/**`, `skills/**`, `*.md` at the root                    | no run            |
+| only `website/**`, `docs/**`, `brand/**`, `skills/**`, a `.md` page in any folder            | no run            |
 | only the rest of `.github/**`, the root test guards, `tests/{fuzz,support}/**`               | no run            |
 | only the settings of lint, review, hook, and release tools at the root                       | no run            |
 
