@@ -1,4 +1,4 @@
-// The Settings screen under the wheel: its rows scroll, and the page around them never does.
+// The Settings screen under the wheel: its rows scroll, and the page around them never does. And a count too large to keep, which is refused at its field.
 
 import { expect, type Page } from "@playwright/test";
 
@@ -12,6 +12,9 @@ const SCREENS = [
 
 /** How far one turn of the wheel goes, in pixels, and how many turns reach the end of the longest list of rows. */
 const [TURN, TURNS] = [400, 12] as const;
+
+/** A count larger than any a number holds exactly, and what its field is told. */
+const TOO_LARGE = { typed: "99999999999999999999", refusal: "Use a whole number, 1 or more." } as const;
 
 /** Turn the wheel down to the end with the pointer at a place of the window. */
 async function wheelDown(page: Page, x: number, y: number): Promise<void> {
@@ -44,3 +47,18 @@ for (const size of SCREENS) {
     });
   });
 }
+
+// Drift: the field would turn a count too large to keep into the largest one a number holds, and Save would store that and say "Saved." of a number nobody typed.
+test("a count too large to keep is refused at its field, which keeps what was typed", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  const field = page.getByRole("textbox", { name: "Keep versions", exact: true });
+  await field.fill(TOO_LARGE.typed);
+  await field.press("Enter");
+
+  // The sentence is the field's own: it is marked as refused, and a screen reader says the sentence after its name.
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(field).toHaveAccessibleDescription(new RegExp(TOO_LARGE.refusal.replaceAll(".", "\\.")));
+  await expect(page.getByText(TOO_LARGE.refusal, { exact: true })).toBeVisible();
+  await expect(field).toHaveValue(TOO_LARGE.typed);
+});

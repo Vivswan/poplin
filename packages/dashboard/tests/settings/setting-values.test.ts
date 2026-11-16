@@ -16,6 +16,7 @@ describe("the text of a number", () => {
     ["an emptied field, which keeps its unit", numberOf("max_total_size", "MB"), "MB", { count: null, unit: "MB" }],
     ["a count with a fraction, which stays in the count", numberOf("max_total_size", "MB"), "1.5MB", { count: 1.5, unit: "MB" }],
     ["a fraction a number writes with an exponent, which the text writes in digits", numberOf("max_total_size", "MB"), "0.0000001MB", { count: 1e-7, unit: "MB" }],
+    ["a count below 0, whose minus stays in the count and out of the unit", numberOf("max_total_size", "MB"), "-5MB", { count: -5, unit: "MB" }],
   ])("of %s is taken apart and read back unchanged", (_what, row, text, parts) => {
     expect([partsOf(row, text), textOf(row, parts)]).toEqual([parts, text]);
   });
