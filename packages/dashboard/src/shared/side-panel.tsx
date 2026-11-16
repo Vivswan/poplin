@@ -2,6 +2,7 @@
 // Escape closes it either way, a press beside it closes it where the list is in sight, and the focus goes into it when it opens and back to where it came from when it closes.
 
 import { Dialog } from "@base-ui/react/dialog";
+import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
@@ -10,7 +11,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { FOCUS_HOME, useFocusHome } from "@/lib/focus";
-import { useMedia } from "@/lib/media";
+import { IN_BROWSER } from "@/lib/media";
 import { IconButton } from "@/shared/icon-button";
 
 /** The width from which a panel lies over the end of its list: beside the panel the list then still shows its fixed column and one more. */
@@ -52,7 +53,7 @@ interface SidePanelProps {
  * Under that width the panel takes the whole row and the list is out of sight.
  */
 export function useLiesOver(): boolean {
-  return useMedia(OVER);
+  return useMediaQuery(OVER, IN_BROWSER);
 }
 
 /**

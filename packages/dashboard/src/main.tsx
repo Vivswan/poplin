@@ -2,6 +2,7 @@
 
 import "./index.css";
 
+import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -10,7 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { noteFocus } from "@/lib/focus";
-import { PHONE, useMedia } from "@/lib/media";
+import { IN_BROWSER, PHONE } from "@/lib/media";
 import { leaveAtPress, leaveNewest } from "@/lib/notify";
 import { Screens } from "@/screens";
 
@@ -28,7 +29,7 @@ const QUERIES = new QueryClient({ defaultOptions: { queries: { retry: false } } 
 
 /** Draw the place where every result is said. */
 function Lines(): ReactNode {
-  const phone = useMedia(PHONE);
+  const phone = useMediaQuery(PHONE, IN_BROWSER);
   useEffect(() => {
     if (phone) leaveNewest();
   }, [phone]);
