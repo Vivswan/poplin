@@ -154,7 +154,7 @@ describe("the setup page", () => {
     const everything = [text, await again.text(), await stored(), JSON.stringify(logged.map((spy) => spy.mock.calls)), JSON.stringify([...repaired.headers, ...again.headers])];
 
     expect([repaired.status, ran.summary.tone, ran.steps, ran.expects]).toEqual([200, "good", [{ text: "The login is ready. Open your dashboard and log in:", address: ADMIN }], OWNER]);
-    expect(account.bindings.find((binding) => binding.name === "ACCESS")).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications[0]?.aud } });
+    expect(account.bindings.find((binding) => binding.name === "ACCESS")).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } });
     expect(account.routes.map((route) => [route.pattern, route.script])).toContainEqual(["poplin.example.com/*", "poplin"]);
     expect(everything.map((place) => place.includes(TOKEN))).toEqual([false, false, false, false, false]);
     expect((await (await installOf(w)).database.listAudit({ limit: 10 })).map((entry) => [entry.action, entry.detail.from])).toEqual([["domain_synced", "setup"], ["settings_set", undefined]]);
@@ -284,10 +284,10 @@ describe("a Worker with nothing set", () => {
     expect([stranger.status, repaired.status, ran.summary.tone, text.includes(TOKEN)]).toEqual([200, 200, "good", false]);
     expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "ACCESS", "KEPT_KEY"]);
     expect([await stored(), (await BINDINGS.SITES.list()).objects.length]).toEqual(before);
-    // The page and the run together: 37 calls to Cloudflare of the 50 a request of the Free plan may send, and 10 to the database of its 50.
-    // Two of the 37 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
+    // The page and the run together: 39 calls to Cloudflare of the 50 a request of the Free plan may send, and 10 to the database of its 50.
+    // Two of the 39 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
     // Five are the key: the Worker's bindings read for it, the permission groups, the new token, and the two pages of the account's tokens.
-    expect([asked.length - strangers, tally.calls]).toEqual([37, 10]);
+    expect([asked.length - strangers, tally.calls]).toEqual([39, 10]);
   });
 
   // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.
@@ -332,6 +332,6 @@ describe("the Domain screen", () => {
     expect([form.tokenRights.includes("Workers Scripts: Edit"), form.tokenRights.includes("Zone Settings: Read")]).toEqual([true, true]);
     // Drift: the link carries nine rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.
     expect([form.tokenRights.includes("Zone WAF: Edit"), form.tokenOptional.find((optional) => optional.right === "Zone WAF: Edit")?.adds.startsWith("Cloudflare stops"), text.includes("by hand")]).toEqual([false, true, false]);
-    expect([checked.status, (await checked.json<Ran>()).ok, none, repaired.status, (await repaired.json<Ran>()).summary.tone, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, true, [], 200, "good", 1, false]);
+    expect([checked.status, (await checked.json<Ran>()).ok, none, repaired.status, (await repaired.json<Ran>()).summary.tone, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, true, [], 200, "good", 2, false]);
   });
 });
