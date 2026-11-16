@@ -179,6 +179,8 @@ describe("the Visits block", () => {
     await draw();
     await doing(() => fireEvent.click(within(document.body).getByRole("combobox", { name: "Compare sites" })));
     const report = await within(document.body).findByRole("option", { name: /^Report/ });
+    // The popup and its list are named: a screen reader says what was opened and what the options are.
+    const named = [within(document.body).getAllByRole("dialog", { name: "Compare sites" }).length, within(document.body).getAllByRole("listbox", { name: "Sites" }).length];
     await doing(() => fireEvent.click(report));
     await waitFor(() => expect(asked.at(-1)).toContain(SITES[4]?.id ?? "none"));
     await settle();
@@ -191,6 +193,7 @@ describe("the Visits block", () => {
     const looks = [...within(document.body).getByRole("list", { name: "Lines" }).querySelectorAll("line")].map((line) => `${line.getAttribute("stroke")} ${line.getAttribute("stroke-dasharray")}`);
     await doing(() => fireEvent.click(within(document.body).getByRole("button", { name: "Clear" })));
 
+    expect(named).toEqual([1, 1]);
     expect([free.slice(4), all, [looks.length, new Set(looks).size], kept().sites]).toEqual([
       [
         ["Report", "true", null],

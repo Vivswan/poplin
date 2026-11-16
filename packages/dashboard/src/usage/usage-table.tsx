@@ -80,7 +80,7 @@ function LimitLink({ line }: { readonly line: Line }): ReactNode {
   if (line.setting === null) return null;
 
   return (
-    <IconButton label="Change this limit" link={<Link {...settingAddress(line.setting)} />}>
+    <IconButton label="Change this limit" name={`Change the limit of ${NAMES[line.what]}`} link={<Link {...settingAddress(line.setting)} />}>
       <ArrowUpRightIcon />
     </IconButton>
   );

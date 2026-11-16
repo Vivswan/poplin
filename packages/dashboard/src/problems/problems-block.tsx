@@ -54,7 +54,7 @@ function LimitLink({ problem }: { readonly problem: Problem }): ReactNode {
   if (problem.setting === null) return null;
 
   return (
-    <IconButton label="Change this limit" link={<Link {...settingAddress(problem.setting)} />}>
+    <IconButton label="Change this limit" name={`Change this limit: ${problem.sentence}`} link={<Link {...settingAddress(problem.setting)} />}>
       <ArrowUpRightIcon />
     </IconButton>
   );

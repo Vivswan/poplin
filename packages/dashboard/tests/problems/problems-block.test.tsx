@@ -82,7 +82,7 @@ describe("the Problems block", () => {
       ["The daily limit of requests was reached", "once", ""],
     ]);
     expect(within(table).getByRole("link", { name: "Domain" }).getAttribute("href")).toBe(`${BOOT.base}/domain`);
-    expect(within(table).getAllByRole("button", { name: "Change this limit" }).map((link) => link.getAttribute("href"))).toEqual([`${BOOT.base}/settings#setting-requests_per_day`]);
+    expect(within(table).getAllByRole("button", { name: "Change this limit: The daily limit of requests was reached" }).map((link) => link.getAttribute("href"))).toEqual([`${BOOT.base}/settings#setting-requests_per_day`]);
     expect(asked).toEqual(["7"]);
   });
 

@@ -6,6 +6,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BOOT } from "@/lib/boot";
 import { momentIn } from "@/lib/timezone";
 import type { Line, Usage } from "@/usage/usage-queries";
 import { UsageTable } from "@/usage/usage-table";
@@ -109,6 +110,19 @@ describe("the table of the Usage screen", () => {
       "Requests today1,240of 100,0001%See it at Provider",
       "Database rows read todayabout 4,100,000of 5,000,00082%Near the limitSee it at Provider",
       "Database rows written todayabout 310of 100,0000%See it at Provider",
+    ]);
+  });
+
+  // Drift: the way to a line's limit would be called the same on every line again, and a screen reader's list of buttons would not say which limit each one changes.
+  test("names each way to the setting of a limit by its line", async () => {
+    await draw(OWN);
+    const ways = within(screen.getByRole("table", { name: "Usage" }))
+      .getAllByRole("button", { name: /^Change the limit of / })
+      .map((way) => [way.getAttribute("aria-label"), way.getAttribute("href")]);
+
+    expect(ways).toEqual([
+      ["Change the limit of Storage, all sites", `${BOOT.base}/settings#setting-max_total_size`],
+      ["Change the limit of Requests today", `${BOOT.base}/settings#setting-requests_per_day`],
     ]);
   });
 
