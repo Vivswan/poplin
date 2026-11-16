@@ -295,16 +295,21 @@ async function versionOf(place: Place): Promise<string | undefined> {
   return typeof tag === "string" && isPlainVersion(tag) ? tag : undefined;
 }
 
-/** Say that an install that was started and not finished was started for another place than the one a person named; `undefined` where the two are one. */
-function startedElsewhere(bindings: readonly ListedBinding[], where: Where): string | undefined {
+/** Say that an install that was started and not finished was started for another place than the one a person named, with the option that names its own; `undefined` where the two are one. */
+function startedElsewhere(bindings: readonly ListedBinding[], where: Where): Pick<Extract<FoundHere, { readonly why: "other_place" }>, "words" | "give"> | undefined {
   const started = readStartedPlace(bindings);
   if (started === undefined) return undefined;
 
-  if (started.kind === "no-domain") return where.kind === "domain" ? "An install was started in this account without a domain, and not finished: give --no-domain." : undefined;
+  if (started.kind === "no-domain") {
+    const give = "--no-domain";
+
+    return where.kind === "domain" ? { words: `An install was started in this account without a domain, and not finished: give ${give}.`, give } : undefined;
+  }
 
   const named = where.kind === "domain" && where.layout.domain === started.domain;
+  const give = `--domain ${started.domain}`;
 
-  return named ? undefined : `An install was started in this account under the domain ${started.domain}, and not finished: give --domain ${started.domain}.`;
+  return named ? undefined : { words: `An install was started in this account under the domain ${started.domain}, and not finished: give ${give}.`, give };
 }
 
 /** A whole install: its version, and the newest release the project's website names. */
@@ -416,5 +421,5 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
 
   const other = startedElsewhere(bindings.value, where);
 
-  return other === undefined ? standing(place, true, rights) : { state: "refused", why: "other_place", words: other };
+  return other === undefined ? standing(place, true, rights) : { state: "refused", why: "other_place", ...other };
 }

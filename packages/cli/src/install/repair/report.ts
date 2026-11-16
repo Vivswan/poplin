@@ -48,7 +48,7 @@ export function foundWords(found: Whole<unknown>): string {
  * @param provider - the provider, which the line that names `poplin install` names
  * @param careful - the careful choices of the repair's line, kept where the repair itself goes on
  * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one.
- *   Where data was left behind, the sentence and the next step name one line: the install that takes the data up
+ *   Where data was left behind, or the install was started for another place, the sentence and the next step name one line: the install with the option that takes it
  */
 export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[]): Stop {
   const next = NEXT.install(provider);
@@ -69,6 +69,13 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
   if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNCHANGED) };
+
+  if (found.why === "other_place") {
+    // A repair at the place it was started for would stop again: the install is not set, so the install goes on with it there.
+    const finish = NEXT.install(provider, [], [found.give]);
+
+    return { problem: "unfinished", exit: 1, words: followed(found.words, `To finish it: ${finish.command}`), next: finish };
+  }
 
   return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
 }

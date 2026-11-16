@@ -169,7 +169,7 @@ Every value of a run of this command, of the repair, and of the removal names wh
 
 Where `next.step` is the command you just ran, its `command` keeps `--keep-data` of a removal, and `--dry-run` of a dry run that stopped or is not ready: leave both on the line.
 
-Where a repair found kept data and no install, `command` holds `--adopt`. Ask the user before you run it: it uses the data with what it holds.
+Where a repair found kept data and no install, `command` holds `--adopt`. Ask the user before you run it: it uses the data with what it holds. Where it found an install started for another place, `command` holds that place's option: use it in place of yours.
 
 | `next.step` | Run next                                                        |
 | ----------- | --------------------------------------------------------------- |
