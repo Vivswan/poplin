@@ -161,7 +161,7 @@ function PhoneList({
             {/* It eases nothing: a closed panel gives it the focus back at once, while an eased change would still keep it out of sight. */}
             <Button
               variant="ghost"
-              aria-label={`Details of ${shownName(site)}`}
+              aria-label={detailsOf(site)}
               data-opens={site.label}
               className="absolute inset-0 h-auto rounded-none transition-none hover:bg-transparent focus-visible:ring-inset"
               onClick={() => onOpen(site)}
@@ -417,7 +417,12 @@ function useQuestion(): {
   return { asked, asker, ask, leave };
 }
 
-/** The row or the row's button that opens the panel of the site with a label, whichever is in sight. */
+/** The name of the button that opens a site's panel. */
+function detailsOf(site: Site): string {
+  return `Details of ${shownName(site)}`;
+}
+
+/** The button that opens the panel of the site with a label: the one of the table's row or of the phone's, whichever is in sight. */
 function openerOf(label: string): HTMLElement | undefined {
   return [...document.querySelectorAll<HTMLElement>(`[data-opens="${CSS.escape(label)}"]`)].find((opener) => opener.getClientRects().length > 0);
 }
@@ -454,7 +459,7 @@ export function SitesScreen(): ReactNode {
   const follow = useCallback((site: Pick<Site, "label">): void => void navigate({ ...toSite(site), replace: true }), [navigate, toSite]);
   const actions = useSiteChanges(opened, follow);
   const kept = useKeptFocus(opened);
-  const open = useCallback((site: Site): void => void navigate(site.label === opened ? toTable : toSite(site)), [navigate, opened, toTable, toSite]);
+  const opens = useMemo(() => ({ name: detailsOf, open: (site: Site): void => void navigate(site.label === opened ? toTable : toSite(site)) }), [navigate, opened, toTable, toSite]);
   const copy = useCallback((site: Site): void => void actions.copyLink(site), [actions]);
   const reveal = useReveal(opened);
   const logins = page?.logins ?? NO_LOGINS;
@@ -508,7 +513,7 @@ export function SitesScreen(): ReactNode {
                   sort={sortOf(query)}
                   onSort={(next) => stay(sortedQuery(query, next))}
                   selected={opened}
-                  onOpen={open}
+                  opens={opens}
                   actions={rowActions}
                   actionsWidth={actionsWidth}
                   loading={isPending}
@@ -516,7 +521,7 @@ export function SitesScreen(): ReactNode {
                   after={pages}
                 />
               </div>
-              <PhoneList sites={sites} opened={opened} onOpen={open} rowActions={rowActions} onCopy={copy} reveal={reveal} place={place} after={pages} />
+              <PhoneList sites={sites} opened={opened} onOpen={opens.open} rowActions={rowActions} onCopy={copy} reveal={reveal} place={place} after={pages} />
             </>
           )}
         </section>

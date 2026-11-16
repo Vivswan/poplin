@@ -71,7 +71,7 @@ function Harness({
         seen.sorted.push(next);
         setSort(next ?? UNSORTED);
       }}
-      onOpen={(fruit) => seen.opened.push(fruit.name)}
+      opens={{ name: (fruit) => `Details of ${fruit.name}`, open: (fruit) => seen.opened.push(fruit.name) }}
       actions={(fruit) => <button type="button">More for {fruit.name}</button>}
     />
   );
@@ -167,6 +167,14 @@ describe("the table", () => {
     fireEvent.click(page().getByRole("button", { name: "More for apple" }));
 
     expect(seen.opened).toEqual(["banana"]);
+  });
+
+  // Drift: a row would open at a press alone again, with no control a reader or a key finds; or the button's press would reach the row too and open it twice.
+  test("starts each row that opens with a button named for the row, which opens it once", () => {
+    render(<Harness />);
+    fireEvent.click(page().getByRole("button", { name: "Details of apple" }));
+
+    expect(seen.opened).toEqual(["apple"]);
   });
 });
 

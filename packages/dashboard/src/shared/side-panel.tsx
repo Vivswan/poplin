@@ -4,7 +4,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
-import { type ReactElement, type ReactNode, useRef, useState } from "react";
+import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -15,8 +15,11 @@ import { IconButton } from "@/shared/icon-button";
 /** The width from which a panel lies over the end of its list: beside the panel the list then still shows its fixed column and one more. */
 const OVER = "(min-width: 1040px)";
 
+/** A row of the list that opens a panel, and everything in it. */
+const ROWS = "[data-opens]";
+
 /** The places beside a panel that close nothing when they are pressed or take the focus: a row of the list opens, changes, or closes the panel itself, a result's button acts on the panel's thing, and a question the panel asked lies over the page. */
-const OWN_PLACES = "[data-opens], [data-sonner-toaster], [role='dialog'], [role='alertdialog']";
+const OWN_PLACES = `${ROWS}, [data-sonner-toaster], [role='dialog'], [role='alertdialog']`;
 
 /** What a panel is drawn from. */
 interface SidePanelProps {
@@ -145,6 +148,13 @@ function leftBy(place: HTMLElement): boolean {
   return document.activeElement === document.body || place.contains(document.activeElement);
 }
 
+/** Whether the panel lies over a control, in part or in whole. */
+function covers(place: HTMLElement, control: Element): boolean {
+  const [over, under] = [place.getBoundingClientRect(), control.getBoundingClientRect()];
+
+  return under.right > over.left && under.left < over.right && under.bottom > over.top && under.top < over.bottom;
+}
+
 /**
  * Whether what the library says closed the panel closes it: Escape does, and so does a press beside it or a focus that left it, unless it went to a place of its own.
  *
@@ -159,6 +169,24 @@ function closes({ reason, event }: Dialog.Root.ChangeEventDetails): boolean {
 }
 
 /**
+ * Close a panel when the focus reaches a control of a row that lies under it, so the focus is never out of sight: the list keeps its width under the panel, which covers the end of each row.
+ *
+ * The library tells of a focus that leaves the panel only, and a row is reached from another row as well.
+ */
+function useNoFocusUnder(place: HTMLElement | null, onClose: () => void): void {
+  useEffect(() => {
+    if (place === null) return;
+
+    const onFocus = ({ target }: FocusEvent): void => {
+      if (target instanceof Element && target.closest(ROWS) !== null && covers(place, target)) onClose();
+    };
+    document.addEventListener("focusin", onFocus);
+
+    return () => document.removeEventListener("focusin", onFocus);
+  }, [place, onClose]);
+}
+
+/**
  * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page, so nothing is dimmed and the rest of the page stays in use.
  *
  * It moves the focus to the heading, closes on Escape, and gives the focus back to its opener, though not after a close it was refused: the screen then finds the focus its place.
@@ -170,6 +198,7 @@ export function SidePanel({ title, closeLink, onClose, opener, back, beside, chi
   const liesOver = useLiesOver();
   // A change of the thing can take away the control that was pressed for it: the heading takes the focus then.
   const kept = useFocusHome();
+  useNoFocusUnder(place, onClose);
 
   return (
     <aside

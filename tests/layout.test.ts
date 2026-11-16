@@ -11,6 +11,7 @@ const BUILT_ENTRY = /^(?:\.\/)?dist\/(.+)\.mjs$/;
 
 const UNMIRRORED: readonly (readonly [path: string, reason: string])[] = [
   ["packages/cloudflare/tests/login/login.test.ts", "drives the app package's login through the real Access check"],
+  ["packages/cloudflare/tests/worker/request-budget.test.ts", "holds every request the Worker answers to a budget of database queries and storage calls"],
 ];
 
 const SUPPORT_FILE = /^(packages\/[^/]+)\/tests\/(.+)\/support\/[^/]+\.ts$/;

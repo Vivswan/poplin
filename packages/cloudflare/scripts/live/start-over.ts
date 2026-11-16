@@ -7,11 +7,13 @@
 //   Worker            the script named `poplin`, and with it the login and the first settings it was given
 //   Database          the database named `poplin`, with every record
 //   Bucket objects    every object of the test install's bucket; the bucket itself stays
+//   Budget alert      the notification policy with poplin's name
 //
-// A record, a route, a rule, an application, or a policy without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
+// A record, a route, a rule, an application, a policy, or an alert without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
 // It runs only on the test account: one that pays for nothing and holds the test install's bucket, a name no install of a person has.
 // Each kind is listed and then removed, so a run that stopped half-way is run again, and a second run removes nothing.
 
+import { BasePolicies as BaseAlerts } from "cloudflare/resources/alerting/policies";
 import { BaseRecords } from "cloudflare/resources/dns/records";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
@@ -22,6 +24,7 @@ import { BaseApplications } from "cloudflare/resources/zero-trust/access/applica
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 
 import { isAccessOff } from "../../src/zone/access/access";
+import { BUDGET_ALERT } from "../../src/zone/alerts/budget-alert";
 import { type CloudflareResult, callCloudflare } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
@@ -52,6 +55,7 @@ const KINDS: readonly Kind[] = [
   { name: "Worker", remove: removeWorker, optional: false },
   { name: "Database", remove: removeDatabase, optional: false },
   { name: "Bucket objects", remove: removeObjects, optional: true },
+  { name: "Budget alert", remove: removeAlert, optional: true },
 ];
 
 /** The variables a run reads. */
@@ -175,6 +179,13 @@ async function removeObjects(run: Run): Promise<Removal> {
     (object) => callCloudflare(run.connection, (api) => new BaseObjects(api).delete(object.key ?? "", { account_id: run.accountId, bucket_name: BUCKET })),
     "Workers R2 Storage: Edit",
   );
+}
+
+async function removeAlert(run: Run): Promise<Removal> {
+  const account = { account_id: run.accountId };
+  const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseAlerts(api).list(account)));
+
+  return removeOwn(listed, (policy) => policy.name === BUDGET_ALERT, (policy) => callCloudflare(run.connection, (api) => new BaseAlerts(api).delete(policy.id ?? "", account)), "Notifications: Edit");
 }
 
 /**

@@ -96,14 +96,15 @@ export function DeleteForGoodQuestion(): ReactNode {
     setTyped("");
   }
 
-  // A question left open on a screen that is left is not asked on the next one.
-  useEffect(
-    () => () => {
+  // A question left open on a screen that is left is not asked on the next one. A development build sets an effect up twice, so the setup says the screen is drawn again.
+  useEffect(() => {
+    drawn.current = true;
+
+    return () => {
       drawn.current = false;
       put(undefined);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const remove = (event: FormEvent): void => {
     event.preventDefault();

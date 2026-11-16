@@ -56,6 +56,9 @@ export interface Account {
   /** The account's D1 databases. */
   databases: Row[];
 
+  /** The account's notification policies. */
+  alerts: Row[];
+
   /** The bindings of the install's Worker. */
   bindings: Row[];
 
@@ -86,6 +89,7 @@ export function emptyAccount(): Account {
     switches: { ai_bots_protection: "disabled", fight_mode: false },
     zoneRedirects: false,
     databases: [],
+    alerts: [],
     bindings: [
       { name: "SITES", type: "r2_bucket", bucket_name: "poplin-sites" },
       { name: "DB", type: "d1", id: "database-1" },
@@ -183,6 +187,8 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
   if (kind === "workers/scripts") return worker(account, asked, parts);
 
   if (kind === "d1/database") return stored(account.databases, asked, parts[4], "uuid");
+
+  if (kind === "alerting/v3") return stored(account.alerts, asked, parts[5]);
 
   if (parts[2] === "rulesets") return rules(account, asked, parts);
 

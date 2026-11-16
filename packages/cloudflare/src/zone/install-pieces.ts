@@ -1,6 +1,6 @@
 // Every object of an install, with the address of each block of the OpenTofu module in `packages/cloudflare/tofu/` that declares it. Both ways of installing are held to this one list, so neither gains an object the other lacks unnoticed.
 
-/** Every object by who makes it besides the module: `repair` on the setup page, a `deploy` of the Worker, or the module alone. An address is `<type>.<name>`, with `data.` in front of what the module only reads. */
+/** Every object by who makes it: `repair` and `deploy` beside the module, the repair alone, which has no address, or the module alone. An address is `<type>.<name>`, with `data.` in front of what the module only reads. */
 export const INSTALL_PIECES = {
   repair: {
     Zone: ["data.cloudflare_zone.this"],
@@ -19,6 +19,9 @@ export const INSTALL_PIECES = {
     Worker: ["cloudflare_workers_script.poplin"],
     "Sweep trigger": ["cloudflare_workers_cron_trigger.sweep"],
     "R2 bucket": ["cloudflare_r2_bucket.sites", "cloudflare_r2_managed_domain.sites"],
+  },
+  repairAlone: {
+    "Budget alert": [],
   },
   moduleAlone: {
     "Bucket cleanup": ["cloudflare_r2_bucket_lifecycle.sites"],

@@ -5,6 +5,7 @@
 //   sql-wasm.wasm   SQLite
 //   404.html        sends an address inside the demo through the first page, on a host that answers a missing path with it
 //   assets/         the dashboard's client: its scripts, its stylesheet, and its fonts, which the worker reads from the host as a browser asks for each
+//                   and poplin's icon, under the name the dashboard links it by
 //
 //   sites.json      no build writes it: a host that also holds the sample sites as real ones puts the address of each here, and the dashboard's links then lead to them
 //
@@ -18,6 +19,7 @@ import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 
 import manifest from "../../cli/package.json" with { type: "json" };
+import { ICON, ICON_FILE } from "../../app/src/console/shell";
 import { buildClient, readClient } from "../../dashboard/scripts/client-build";
 import { notFoundPage } from "./deep-links";
 import { readSamples } from "./samples";
@@ -115,6 +117,8 @@ export async function buildDemo(target: Target): Promise<readonly Built[]> {
     "sql-wasm.wasm": wasm,
     "404.html": notFoundPage("/"),
   };
+  // The icon is a file of the host too: the first page links it before any worker answers, and a browser may ask for a tab's icon around the worker.
+  files[`${CLIENT_FOLDER}/${ICON_FILE}`] = ICON.body;
   for (const name of client.names) files[`${CLIENT_FOLDER}/${name}`] = new Uint8Array(await Bun.file(join(folder, name)).arrayBuffer());
 
   await rm(target.out, { recursive: true, force: true });

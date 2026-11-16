@@ -186,17 +186,6 @@ rulesets:
           actor_type: RepositoryRole
           bypass_mode: always
 environments:
-  - name: cloudflare-live-tests
-    wait_timer: 0
-    prevent_self_review: false
-    reviewers: []
-    deployment_branch_policy:
-      protected_branches: false
-      custom_branch_policies: true
-    deployment_branch_policies:
-      _undeclared: delete
-      entries:
-        - name: main
   - name: github-pages
     wait_timer: 0
     prevent_self_review: false

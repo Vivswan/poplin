@@ -75,7 +75,7 @@ jobs:
     if: github.event_name != 'schedule' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 85
-    environment: cloudflare-live-tests
+    environment: with-domain-ci-tests
     # The wait reads the commit's run of CI and the jobs of that run.
     permissions:
       contents: read
@@ -143,7 +143,7 @@ jobs:
     if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: cloudflare-live-tests
+    environment: with-domain-ci-tests
     concurrency:
       group: live-checks
       cancel-in-progress: false

@@ -11,8 +11,8 @@ const FROM_KEY = "from";
 /** The mark of a button that goes to another page of a list. */
 export const PAGE_WAY = { "data-page-way": "" } as const;
 
-/** A row of a list: of a table's body, and of the list a phone shows. */
-const ROWS = "tbody > tr, ul > li";
+/** What takes the focus for a row of a list: a row of a table's body, the button a row that opens starts with, and a row of the list a phone shows. */
+const ROWS = "tbody > tr[tabindex], tbody button[data-opens], ul > li";
 
 /** What the ways are drawn from. */
 interface PagesProps {

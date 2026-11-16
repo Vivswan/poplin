@@ -30,7 +30,20 @@ On the free Workers plan, a month at the settings a new install starts with stay
 
 Cloudflare's changelog of 2026-11-13 describes spend limits for Workers and Durable Objects. It does not name R2, and it says recorded spend can exceed a limit.
 
-**Your own safety net** is Cloudflare's budget alert: Manage Account, then Billing, then Billable Usage, then Create budget alert. It sends an email when the account's usage-based charges pass the amount you name. It pauses nothing.
+**The warning** is a budget alert in your Cloudflare account. It pauses nothing.
+
+```text
+when     the account's usage charges for the billing period reach 1 US dollar
+who      Cloudflare emails your first user
+made by  Repair, with an account token that also holds Notifications: Edit
+```
+
+| Install | Gets the alert |
+| --- | --- |
+| by the Deploy button or by hand | once you add the permission to the account token and press Repair: [Domain](domain.md#optional-an-email-when-charges-reach-1-dollar) |
+| by the OpenTofu module | the same way. The module makes no budget alert |
+
+Without the permission, Repair makes no alert and fails nothing. You can also make one by hand: Manage Account, then Billing, then Billable Usage, then Create budget alert.
 
 ## What is capped or protected
 
@@ -52,10 +65,11 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | the bucket's public address | Module: `cloudflare_r2_managed_domain.sites`. A bucket [step 2](../start/by-hand.md#the-steps) made has none | it stays off: files are read through the Worker alone |
 | uploads in parts that nobody finished | Module: `cloudflare_r2_bucket_lifecycle.sites`, after one day. A bucket step 2 made has Cloudflare's own rule, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
 | every file of an install that only tests | Module alone: `test_install_file_days`, not set by default | the bucket deletes every file at that age, a live site's included |
-| R2's bytes stored, write operations, and read operations | Module alone, and off until `usage_alert_percents` is set: `cloudflare_notification_policy.usage`. It needs the Notifications permission, and applies on accounts where Cloudflare offers usage alerts | Cloudflare emails the logins at each share of the free allowance the list names. Nothing is stopped |
+| the account's usage charges of a billing period: 1 US dollar | Repair: Budget alert, with the optional permission Notifications: Edit. The module makes none | Cloudflare emails the first user. Nothing is stopped |
+| R2's bytes stored, write operations, and read operations | Module alone, and off until `usage_alert_percents` is set: `cloudflare_notification_policy.usage`. It needs the Notifications permission. Cloudflare's API does not list the product names the alerts are made with, so they are unconfirmed | Cloudflare emails the logins at each share of the free allowance the list names. Nothing is stopped |
 | the domain's plan | Module alone: `paid_plan_allowed` | an apply on a plan other than Free stops with an error, unless the input is true |
 
-Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made: the setup page's token holds no permission for R2 or for notifications.
+Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made. The budget alert exists only where Repair made it.
 
 ## Where a limit is counted
 
@@ -88,6 +102,39 @@ On the free Workers plan, a month at the settings a new install starts with stay
 | reads                 | 10,000,000   | 9,765,000                           |
 
 A finish, a look at an upload, a delete, a copy, and a backup's list of files each list the storage. At the limit they answer `allowance_spent` until 00:00 UTC; a delete still removes the site, and its files go later.
+
+## What one action costs
+
+Each action as the tests measure it on a Worker that is already running: a full page of the list, the longest file, a site that keeps every version it may. The queries and the storage calls are the most the action makes. The rows read are those of the measured case.
+
+```text
+Cloudflare's free plan     one request: 50 database queries
+                           one day: 5,000,000 rows read, 100,000 rows written
+```
+
+| Action | Requests | Database queries | Rows read | Rows written | Storage reads | Storage writes and listings |
+| --- | --- | --- | --- | --- | --- | --- |
+| A visitor opens a page of a public site | 1 | 2 | 5 | 2 | 1 | 0 |
+| A visitor opens a page of a private site | 1 | 2 | 5 | 2 | 1 | 0 |
+| Publish a site of one page | 3 | 10 | 34 | 25 | 1 | 2 |
+| Open the Sites screen | 1 | 2 | 470 | 0 | 0 | 0 |
+| Open the Access screen | 3 | 5 | 257 | 0 | 0 | 0 |
+| Open the Activity screen | 2 | 4 | 10,606 | 0 | 0 | 0 |
+| Open the Usage screen | 2 | 6 | 37,386 | 0 | 0 | 0 |
+| Open the Settings screen | 1 | 2 | 3 | 0 | 0 | 0 |
+| Open the Domain screen | 1 | 2 | 3 | 0 | 0 | 0 |
+| Copy a site of 112 files | 1 | 9 | 35 | 28 | 112 | 114 |
+| Download a file of the Activity log | 1 | 4 | 2,003 | 0 | 0 | 0 |
+
+- **A screen** counts its own requests. The frame around every screen is one more, of 2 queries.
+- **A publish** is three requests: its start, its one file, its finish.
+- **A copy** of up to 112 files is one request. A larger one takes several, each with a read and a write for every file it copies and a listing for every 1,000 files of the site.
+- **A search or a sort** reads every row it passes over, so a list reads more rows on an install with more sites.
+- **A page view** is measured on a Worker that served the site a moment before. A request for a site after a minute without one costs up to 4 queries.
+- **The day's count** is written for every request of a day's first 2,000, then for 1 in 2, then 1 in 3, and so on down to 1 in 50 from 98,000 on. A request that is not counted writes no row, and is 1 query on a Worker that served the site a moment before.
+- **The storage** is read once for a page view. A path that names no file reads it up to 3 times.
+- **A Worker that starts** with a request asks 4 queries more for it.
+- **The Usage screen** reads the most rows when its graph shows a year of 50 sites, and the Activity screen when the log holds 10,000 entries or more.
 
 ## Visits by day
 
