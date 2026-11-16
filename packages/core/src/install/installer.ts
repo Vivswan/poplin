@@ -128,6 +128,7 @@ export interface Step {
  *
  * `rows` are the same objects in the same order for a dry run and the run after it. `ready` is true for a dry run that a run would go through after, and for a run that left nothing undone.
  * `release` is the version a run uploads, and `address` where the install's dashboard is; each is absent from a run that was blocked before it knew. Whether the install answers there yet is the command's to ask.
+ * `release` is absent too from a run that went on with code that was there before it, and uploaded none.
  * `proof` says how the token's rights were proven: each object's first read was allowed, which a write then proves.
  * The second shape is a run that could not start its work: the provider or the project's website gave no answer.
  */

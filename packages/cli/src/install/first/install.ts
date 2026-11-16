@@ -35,6 +35,9 @@ const FOUND_WORDS: Readonly<Record<Found<unknown, unknown>["state"], string>> = 
 /** What goes on from a run that left something undone, as its last lines name it: this command where the install is not found whole yet, and the repair where it is. */
 const [AGAIN, REPAIR] = ["this command again", "npx poplin doctor --repair"] as const;
 
+/** The last line of a run that named no release: it went on with a program that was there, and uploaded none. */
+const UNCHECKED = "poplin is installed. Its code was there before this run, and this run did not check it against a release.";
+
 /** What a look came to that a run goes on from, with the place the provider was last asked about. */
 interface Ground {
   readonly found: Startable<unknown>;
@@ -169,7 +172,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
   const value = runValue(installed, mode.mode, ground.found.state, answers);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
   const next = mode.mode === "dry-run" || installed.ready ? AGAIN : await nextAfter(ground, request, ends);
-  const done = `poplin${installed.release === undefined ? "" : ` ${installed.release}`} is installed.`;
+  const done = installed.release === undefined ? UNCHECKED : `poplin ${installed.release} is installed.`;
   const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next });
 
   for (const line of lines) show.line(line.tone, line.text);

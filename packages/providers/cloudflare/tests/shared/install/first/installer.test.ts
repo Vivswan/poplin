@@ -203,7 +203,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
 
     delete account.refuse;
     const again = await installed(account, kind, APPLY);
-    const stood = ["R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", "Worker | leave | poplin", "Sweep trigger | change | */15 * * * *"];
+    const stood = ["R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", "Worker | leave | poplin: its code was there before this run, and this run did not check it", "Sweep trigger | change | */15 * * * *"];
 
     expect([again.found.state, shown(again.done).slice(0, 4), shown(again.done).slice(5), again.done.ok && again.done.ready]).toEqual(["started", stood, ROWS[kind].slice(5), true]);
     expect([account.uploads.length, account.buckets.length, account.databases.length]).toEqual([1, 1, 1]);
