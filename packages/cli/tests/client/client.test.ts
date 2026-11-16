@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { type AddressInfo, createServer } from "node:net";
 
 import { answered, bytes, ORIGIN, openApi } from "../../../app/tests/api/support/install";
 import { LISTED_SITES } from "../../../core/src/actions/list";
 import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { SITE_ANSWER } from "../../../core/src/actions/site-object";
-import { createClient, type Fetch } from "../../src/client/client";
+import { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
+import { type Client, createClient, type Fetch } from "../../src/client/client";
 
 /** A token in the form of one, which no install knows. */
 const TOKEN = `poplin_${"0".repeat(16)}_${"a".repeat(64)}`;
@@ -25,6 +27,60 @@ const TICKET = {
 
 /** A `fetch` that never answers until the request is given up. */
 const hangs: Fetch = (_input, init) => new Promise((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+
+/** The refusal the requests of a cut connection are answered with, once they are answered at all. */
+const NOT_THERE = { kind: "refused", status: 404, code: "not_found", message: "there is no such thing here" } as const;
+
+/** The line a request that is sent once more is told with. */
+const SENT_AGAIN = "the connection to the install was cut before any answer: sending the request again";
+
+/** One request of each kind a cut may meet: a read, the begin of an upload, a change, a file, and a download. */
+const ASKS = {
+  read: (client: Client) => client.call(LISTED_SITES, (api) => api.sites.$get()),
+  begin: (client: Client) => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ json: { name: "notes", files: [] } }), "repeatable"),
+  change: (client: Client) => client.call(SITE_ANSWER, (api) => api.sites[":site"].rollback.$post({ param: { site: "docs" }, json: {} })),
+  file: (client: Client) => client.send(TICKET, new TextEncoder().encode("body{}")),
+  download: (client: Client) => client.download({ site: "docs", version: 1, path: "index.html" }),
+} as const;
+
+/**
+ * Open a server on this machine that cuts the connection of its first requests before any answer, and answers each one after them with a refusal in JSON under `status`.
+ *
+ * @param cuts - how each of the first requests is cut: the socket is ended, or reset
+ * @returns its origin, how many requests reached it, and what closes it
+ */
+async function openCutting(cuts: readonly ("ended" | "reset")[], status: number): Promise<{ readonly origin: string; readonly requests: () => number; readonly close: () => Promise<void> }> {
+  const body = JSON.stringify({ error: { code: NOT_THERE.code, message: NOT_THERE.message } });
+  let requests = 0;
+
+  const server = createServer((socket) => {
+    socket.on("error", () => undefined);
+    socket.once("data", () => {
+      const cut = cuts[requests];
+      requests += 1;
+
+      if (cut === "reset") return socket.resetAndDestroy();
+
+      if (cut === "ended") return socket.end();
+
+      return socket.end(`HTTP/1.1 ${status} Answered\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}`);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  return {
+    origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests: () => requests,
+    close: () => new Promise((resolve) => server.close(() => resolve())),
+  };
+}
+
+/** What a `fetch` throws, as a runtime shapes it: a `TypeError` that names a code itself, as Bun's does, or on its cause, as Node's does. */
+function thrownBy(runtime: "bun" | "node", code: string): TypeError {
+  if (runtime === "bun") return Object.assign(new TypeError("The socket connection was closed unexpectedly."), { code });
+
+  return new TypeError("fetch failed", { cause: Object.assign(new Error(`read ${code}`), { code }) });
+}
 
 describe("client", () => {
   test("a call is built from the routes the app declares: the method, the path, the bearer token, and the body with its type and its length", async () => {
@@ -87,6 +143,58 @@ describe("client", () => {
 
     expect(called).toEqual({ ok: false, failure } as never);
     expect(JSON.stringify(called)).not.toContain(TOKEN);
+  });
+
+  // Drift: a runtime writes a request onto a kept connection the far end has closed, and sends only a GET again by itself. Nothing but these rows says which requests the client sends once more, and that it does so once.
+  test.each<[string, ("ended" | "reset")[], number, keyof typeof ASKS, { readonly requests: number; readonly told: number; readonly failure: unknown }]>([
+    ["a read whose socket is ended", ["ended"], 404, "read", { requests: 2, told: 1, failure: NOT_THERE }],
+    ["a read whose socket is reset", ["reset"], 404, "read", { requests: 2, told: 1, failure: NOT_THERE }],
+    ["the begin of an upload whose socket is ended", ["ended"], 404, "begin", { requests: 2, told: 1, failure: NOT_THERE }],
+    ["the begin of an upload whose socket is reset", ["reset"], 404, "begin", { requests: 2, told: 1, failure: NOT_THERE }],
+    ["a download whose socket is reset", ["reset"], 404, "download", { requests: 2, told: 1, failure: NOT_THERE }],
+    ["a read cut twice", ["reset", "ended"], 404, "read", { requests: 2, told: 1, failure: { kind: "unreachable" } }],
+    ["the begin of an upload cut twice", ["ended", "reset"], 404, "begin", { requests: 2, told: 1, failure: { kind: "unreachable" } }],
+    ["a change, which is no request to send twice", ["reset"], 404, "change", { requests: 1, told: 0, failure: { kind: "unreachable" } }],
+    ["a file, which its upload sends again by its own count", ["reset"], 404, "file", { requests: 1, told: 0, failure: { kind: "unreachable" } }],
+    ["a read answered 404", [], 404, "read", { requests: 1, told: 0, failure: NOT_THERE }],
+    ["the begin of an upload answered 503", [], 503, "begin", { requests: 1, told: 0, failure: { ...NOT_THERE, status: 503 } }],
+  ])("%s reaches the install as often as it may, and is told each time it is sent again", async (_name, cuts, status, ask, expected) => {
+    const install = await openCutting(cuts, status);
+    const told: string[] = [];
+    const client = createClient({ server: install.origin, token: TOKEN, fetch, told: (line) => told.push(line), timeoutMs: 5000 });
+
+    try {
+      const called = await ASKS[ask](client);
+
+      expect<unknown>({ requests: install.requests(), told, called }).toEqual({ requests: expected.requests, told: Array(expected.told).fill(SENT_AGAIN), called: { ok: false, failure: expected.failure } });
+    } finally {
+      await install.close();
+    }
+  });
+
+  // Drift: what a cut connection throws is each runtime's own and no code of this repository's: Bun names the code on the error, Node on its cause. The tests run in Bun alone, so these rows hold Node's shapes.
+  test.each<[string, TypeError, (boolean | undefined)[]]>([
+    ["Bun's closed socket", thrownBy("bun", "ECONNRESET"), [undefined, false]],
+    ["Node's reset socket", thrownBy("node", "ECONNRESET"), [undefined, false]],
+    ["Node's socket the other side closed", thrownBy("node", "UND_ERR_SOCKET"), [undefined, false]],
+    ["Bun's refused connection", thrownBy("bun", "ConnectionRefused"), [undefined]],
+    ["Node's refused connection", thrownBy("node", "ECONNREFUSED"), [undefined]],
+    ["Bun's name no DNS knows", thrownBy("bun", "ENOTFOUND"), [undefined]],
+    ["Node's name no DNS knows", thrownBy("node", "ENOTFOUND"), [undefined]],
+    ["Bun's TLS failure", thrownBy("bun", "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR"), [undefined]],
+    ["Node's TLS failure", thrownBy("node", "ERR_SSL_WRONG_VERSION_NUMBER"), [undefined]],
+  ])("a begin that meets %s is sent as often as a cut connection alone allows, the second time on a connection that is not kept", async (_name, error, sendings) => {
+    const kept: (boolean | undefined)[] = [];
+    const cutOnce: Fetch = async (_input, init) => {
+      kept.push(init.keepalive);
+      if (kept.length === 1) throw error;
+
+      return answer(404, { error: { code: NOT_THERE.code, message: NOT_THERE.message } });
+    };
+
+    const called = await ASKS.begin(createClient({ server: ORIGIN, token: TOKEN, fetch: cutOnce }));
+
+    expect<unknown>([kept, called]).toEqual([sendings, { ok: false, failure: sendings.length === 2 ? NOT_THERE : { kind: "unreachable" } }]);
   });
 
   // Drift: an install that cannot start answers every path, the API's too, with one sentence in plain text. A client that dropped it would leave the person with a status and a hint about the address, which is right.

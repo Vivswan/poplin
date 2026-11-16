@@ -275,6 +275,28 @@ describe("publish", () => {
     expect((await bench.install.keys()).length).toBe(1);
   });
 
+  // Drift: the first request of a publish is a POST, which no runtime sends again when a kept connection turns out closed. Without these rows a publish behind a proxy that closes idle connections fails in milliseconds, or is begun over and over.
+  test.each<[string, number, { readonly code: number; readonly begins: number; readonly stored: number }]>([
+    ["once goes through", 1, { code: 0, begins: 2, stored: 1 }],
+    ["twice is given up as unreachable", 2, { code: 5, begins: 2, stored: 0 }],
+  ])("a publish whose begin is cut before any answer %s, and says in a line on stderr that it was sent again", async (_name, cuts, expected) => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });
+    let left = cuts;
+
+    bench.hook = (request) => {
+      if (request.method !== "POST" || !request.url.endsWith("/api/uploads") || left === 0) return undefined;
+
+      left -= 1;
+      throw Object.assign(new TypeError("The socket connection was closed unexpectedly."), { code: "ECONNRESET" });
+    };
+
+    const made = await bench.run(folder);
+
+    expect({ code: made.code, begins: bench.sent.filter((sent) => sent === "POST /api/uploads").length, stored: (await bench.install.keys()).length }).toEqual(expected);
+    expect(made.err.filter((line) => line.includes("sending the request again"))).toEqual(["the connection to the install was cut before any answer: sending the request again"]);
+  });
+
   // Drift: four files are on their way at once; a rest of each lane's own would tell one refusal four times, and send three more requests into a full count.
   test("four uploads refused at once share one rest", async () => {
     const bench = await openBench();

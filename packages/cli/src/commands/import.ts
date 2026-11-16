@@ -142,7 +142,7 @@ function isRefusedAs(failure: Failure, code: string): boolean {
 
 /** Begin the import of one site with every version the backup holds; one the install finds too large is begun once more with its live version alone. */
 async function begin(session: Pick<Session, "client" | "io">, format: number, site: BackupSite): Promise<{ readonly begun: Called<Begun>; readonly sending: Sending }> {
-  const send = (body: Begin): Promise<Called<Begun>> => callUnhurried(session.io, () => session.client.call(BEGUN_UPLOAD, (api) => api.import.sites.$post({ json: body })));
+  const send = (body: Begin): Promise<Called<Begun>> => callUnhurried(session.io, () => session.client.call(BEGUN_UPLOAD, (api) => api.import.sites.$post({ json: body }), "repeatable"));
   const hashed = await hashedVersions(site);
   const whole = sendingOf(format, site, hashed, false);
   const begun = await send(whole.body);

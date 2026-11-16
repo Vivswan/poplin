@@ -45,6 +45,7 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 - **Each file is read before it is sent,** for its fingerprint, a SHA-256 of its bytes. `--dry-run` takes the fingerprints too.
 - **A file whose bytes are not the ones fingerprinted is refused** with `hash_mismatch`, and nothing of it is stored: it changed after it was read, or was damaged on its way. The publish is given up and no site changes.
 - **A file the install fails on,** or gives no answer to, is sent up to 4 times, with a pause of seconds before each new try. After the fourth the publish is given up.
+- **A connection cut before any answer** has its request sent once more, at once, when the request is a read or the first step of a publish or an import. It is told in a plain line on stderr: `the connection to the install was cut before any answer: sending the request again`.
 - **Ctrl-C** stops a publish, an import, or a copy: the upload on its way is given up, so its site is not made or changed, and the command exits 1. A second Ctrl-C ends it at once.
 - **A file that is sent again is told,** as `the install did not take index.html: sending it again in 2 s, 2 of 4`.
 

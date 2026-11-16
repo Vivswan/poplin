@@ -174,7 +174,7 @@ export function previewPublish(plan: PublishPlan, addressRead: boolean): Outcome
  */
 export async function sendPublish(plan: PublishPlan, session: Session): Promise<Outcome> {
   const { client, io } = session;
-  const begun = await callUnhurried(io, () => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ json: plan.manifest })));
+  const begun = await callUnhurried(io, () => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ json: plan.manifest }), "repeatable"));
   if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: problemOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
 
   const upload = begun.value.upload.id;
