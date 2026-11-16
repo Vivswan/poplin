@@ -1,9 +1,10 @@
 // What publishing may cost: a publish's three steps, a copy's rounds, and a backup put back.
 
 import type { ImportRequest } from "@poplin/core/src/actions/begin-import";
+import { sha256Of } from "@poplin/core/src/storage/storage";
 import { done, type Published, page, sendFile } from "./install";
 import { adminToken, apiOf, type BudgetRow, published, type Stage, unmeasured } from "./budget-stage";
-import { filePath, manyFiles, manySites, siteFolder, siteId, siteWithFiles, uploadOf } from "./budget-seeds";
+import { BYTE_SHA256, filePath, manyFiles, manySites, siteFolder, siteId, siteWithFiles, uploadOf } from "./budget-seeds";
 
 /** The group of every row here. */
 const group = "Publishing";
@@ -26,7 +27,7 @@ const BODY = new TextEncoder().encode("x");
 /** What a backup holds of one site: the site as the export answered it, and every file of every version by the path an import names it with. */
 interface Backup {
   readonly site: ImportRequest["site"];
-  readonly files: readonly { readonly path: string; readonly size: number; readonly content_type: string }[];
+  readonly files: readonly { readonly path: string; readonly size: number; readonly content_type: string; readonly sha256: string }[];
 }
 
 /** The made-up site 1 with every version it keeps holding ten files in the bucket, as a site published three times does. */
@@ -46,7 +47,8 @@ async function backupOf(stage: Stage, token: string): Promise<Backup> {
   const files: Backup["files"][number][] = [];
   for (const { number } of kept.site.versions) {
     const listed = await done<{ files: readonly { path: string; size: number }[] }>(await calls.export.sites[":site"].files.$get({ param, query: { version: String(number) } }));
-    files.push(...listed.files.map(({ path, size }) => ({ path: `v${number}/${path}`, size, content_type: "text/html" })));
+    // A row that sends these files sends so many zeros for each, so that is the hash each declares.
+    for (const { path, size } of listed.files) files.push({ path: `v${number}/${path}`, size, content_type: "text/html", sha256: await sha256Of(new Uint8Array(size)) });
   }
 
   await done(await calls.sites[":site"].$delete({ param, query: { forever: "true" } }));
@@ -63,7 +65,7 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
     // The common publish: a new site of one page.
     arrange: async (stage) => {
       const token = await adminToken(stage);
-      const files = [{ path: filePath(0), size: BODY.byteLength, content_type: "text/html" }];
+      const files = [{ path: filePath(0), size: BODY.byteLength, content_type: "text/html", sha256: BYTE_SHA256 }];
 
       return (measured) => apiOf(measured, token).uploads.$post({ query: {}, json: { name: "report", files } });
     },
@@ -78,7 +80,7 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
     arrange: async (stage) => {
       await manySites(stage, 1, { versions: KEPT });
       const token = await adminToken(stage);
-      const files = Array.from({ length: MOST_FILES }, (_file, at) => ({ path: filePath(at), size: BODY.byteLength, content_type: "text/html" }));
+      const files = Array.from({ length: MOST_FILES }, (_file, at) => ({ path: filePath(at), size: BODY.byteLength, content_type: "text/html", sha256: BYTE_SHA256 }));
       const json = { site: siteId(1), access: "public", public_name: "report-page", title: "A title", search_engines: true, embeddable: false, expires: "7d", files } as const;
 
       return (measured) => apiOf(measured, token).uploads.$post({ query: {}, json: { ...json, files } });
@@ -99,6 +101,21 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
     },
     status: 200,
     budget: { queries: 2, reads: 1, writes: 1 },
+  },
+  {
+    group,
+    name: "publish 5,000 files: the tickets of a hundred files",
+    route: "POST /api/uploads/:upload/tickets",
+    // Worst: the most paths one call names, each looked up in the largest manifest a publish may declare. Nothing is written, and the bucket is not asked.
+    arrange: async (stage) => {
+      const token = await adminToken(stage);
+      const upload = await uploadOf(stage, token, { declared: MOST_FILES, stored: 0 });
+      const paths = Array.from({ length: 100 }, (_path, at) => filePath(MOST_FILES - 1 - at));
+
+      return (measured) => apiOf(measured, token).uploads[":upload"].tickets.$post({ param: { upload }, query: {}, json: { paths } });
+    },
+    status: 200,
+    budget: { queries: 2, read: 2, written: 0, reads: 0, writes: 0 },
   },
   {
     group,

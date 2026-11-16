@@ -10,13 +10,26 @@ import type { Install } from "../../../src/actions/records";
 import { openDatabase } from "../../../src/database/open";
 import { defaultSettings, type SettingValues } from "../../../src/records/settings";
 import { MemoryStore } from "../../../src/storage/memory";
+import { sha256Of } from "../../../src/storage/storage";
 import { BunSqliteDriver } from "../../database/support/bun-sqlite-driver";
 
+/** The moment a world's clock starts at. */
 export const NOW = 1_700_000_000_000;
+
+/** A day, in milliseconds. */
 export const DAY = 86_400_000;
+
+/** An admin, by the email of a login. */
 export const ADMIN: Actor = { scope: "admin", holder: "ada@example.com" as Login };
+
+/** The publisher most cases act as, by the id of its token. */
 export const OWNER: Actor = { scope: "publisher", holder: "00000000000000aa" as TokenId };
+
+/** Another publisher, who made nothing the first one did. */
 export const STRANGER: Actor = { scope: "publisher", holder: "00000000000000bb" as TokenId };
+
+/** The SHA-256 of the four bytes `page` in base64, as `openssl dgst -sha256 -binary | base64` gives it: the hash a fixture file that holds them declares. */
+export const PAGE_SHA256 = "NmAxWprz3yVdjxmrB35Hl4IrQUiKDioEvGr3EhPCMnQ=";
 
 /** What a test can break in the store. */
 interface Faults {
@@ -34,6 +47,11 @@ export interface World {
   readonly clock: { now: number };
   readonly keys: () => Promise<string[]>;
   readonly audit: () => Promise<unknown[]>;
+}
+
+/** The SHA-256 a file that holds `text` declares. */
+export function hashOf(text: string): Promise<string> {
+  return sha256Of(new TextEncoder().encode(text));
 }
 
 /** One file of a publish. `declared` is the size it claims when that is not its real length. */

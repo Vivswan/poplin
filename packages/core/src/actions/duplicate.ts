@@ -59,6 +59,9 @@ const SPARE_PAGES = 2;
 /** What a copy's manifest names as every file's type, as short as a type can be: no publish declares a shorter manifest for the same files. No file is stored with it. */
 const UNREAD_TYPE = "-";
 
+/** What a copy's manifest names as every file's hash: none. A file is copied with the hash the source holds, which the store holds its bytes to. */
+const UNREAD_HASH = "";
+
 /** A copy bounded by nothing but what a publish may declare. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Number.MAX_SAFE_INTEGER };
 
@@ -136,7 +139,7 @@ async function listVersion(store: ObjectStore, prefix: string, files: number): P
   let page = await store.list({ prefix });
 
   for (let pages = Math.ceil(files / MAX_LIST_LIMIT) + SPARE_PAGES; ; pages -= 1) {
-    for (const object of page.objects) listed.push({ path: object.key.slice(prefix.length), size: object.size, content_type: UNREAD_TYPE });
+    for (const object of page.objects) listed.push({ path: object.key.slice(prefix.length), size: object.size, content_type: UNREAD_TYPE, sha256: UNREAD_HASH });
 
     if (!page.more) return listed;
 
@@ -216,7 +219,7 @@ function failBatch(batch: Batch, failure: unknown): void {
   if (batch.ended?.kind !== "failed") batch.ended = { kind: "failed", failure };
 }
 
-/** Copy one file of the source's version to the copy's folder, with the media type the source holds. A source that no longer holds it ends the batch, and so does a write the store did not keep. */
+/** Copy one file of the source's version to the copy's folder, with the media type and the hash the source holds. A source that no longer holds it ends the batch, and so does a write the store did not keep. */
 async function copyFile(install: Install, upload: CopyUpload, path: string, batch: Batch): Promise<void> {
   const { from: source } = upload.plan;
   const from = fileKey(source.folder, source.number, path);
@@ -231,7 +234,7 @@ async function copyFile(install: Install, upload: CopyUpload, path: string, batc
   }
 
   try {
-    await install.store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType });
+    await install.store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType, sha256: read.info.sha256 });
   } catch (error) {
     failBatch(batch, error);
     batch.unkept += 1;

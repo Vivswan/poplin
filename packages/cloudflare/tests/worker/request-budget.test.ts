@@ -46,6 +46,7 @@ const API_ROUTES: { readonly [Path in keyof Routes]: { readonly [Method in keyof
   "/api/sites/:site/duplicate": { $post: true },
   "/api/uploads": { $post: true },
   "/api/uploads/:upload": { $get: true, $delete: true },
+  "/api/uploads/:upload/tickets": { $post: true },
   "/api/uploads/:upload/file": { $put: true },
   "/api/uploads/:upload/finish": { $post: true },
   "/api/export/settings": { $get: true },

@@ -84,7 +84,7 @@ import { domainCheckAsked, domainCheckIn, domainCheckKept, usersCarried, usersCh
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { type ProblemNote, problemNoted, problemsAsked, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
-import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
+import { filesUnderKeys, fileUnderKey, MANIFEST_KEY, manifestFromText, manifestKey, manifestToText } from "./manifest";
 import {
   audit,
   declaredFiles,
@@ -163,6 +163,9 @@ import {
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
+
+/** The most keys of a manifest one column of a statement reads: a function of the engine takes 32 arguments at most. */
+const KEYS_PER_LIST = 32;
 
 /** The most rows one page of a listing holds. */
 const MAX_PAGE = 100;
@@ -843,6 +846,26 @@ export class SqlDatabase implements Database {
     if (typeof stored !== "string") return { upload, file: undefined };
 
     return { upload, file: fileUnderKey(stored, path) };
+  }
+
+  async getUploadFiles(id: UploadId, paths: readonly string[]): Promise<{ readonly upload: Upload; readonly files: readonly (ManifestFile | undefined)[] } | undefined> {
+    // The engine reads one value out of the row for each key, and walks no other entry of the manifest. A key is written into the statement, which binds a hundred values at most, and is checked to be the letter and hex digits a key is made of.
+    const keys = [...new Set(paths.map(manifestKey))];
+    if (!keys.every((key) => MANIFEST_KEY.test(key))) throw new Error("a manifest key is not a letter and hex digits");
+
+    const lists: Record<string, SQL.Aliased<string>> = {};
+    for (let at = 0; at < keys.length; at += KEYS_PER_LIST) {
+      const read = keys.slice(at, at + KEYS_PER_LIST).map((key) => fragment`json_extract(${uploads.manifest}, ${fragment.raw(`'$.${key}'`)})`);
+      lists[`named_${at}`] = fragment<string>`json_array(${fragment.join(read, fragment`, `)})`.as(`named_${at}`);
+    }
+
+    const [found] = await this.#driver.batch([built(BUILD.select({ ...UPLOAD_FIELDS, ...lists }).from(uploads).where(eq(uploads.id, id)))]);
+    const upload = uploadIn(found);
+    if (upload === undefined) return undefined;
+
+    const row = found?.rows[0];
+
+    return { upload, files: filesUnderKeys(Object.keys(lists).map((name) => String(row?.[name])), paths) };
   }
 
   publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made: MadeWith = {}): Promise<Done | Refused<"name_taken" | "not_pending">> {

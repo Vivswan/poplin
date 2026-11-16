@@ -5,7 +5,9 @@ import { abandonPublish } from "./abandon-publish";
 import { beginPublish } from "./begin-publish";
 import type { SiteChanges } from "./changes";
 import { finishPublish } from "./finish-publish";
+import type { ManifestFile } from "../records/upload";
 import type { Install, Refused } from "./records";
+import { sha256Of } from "../storage/storage";
 import { uploadFile } from "./upload-file";
 
 /** One file of a publish. `open` starts a new read from the first byte, and the stream holds exactly `size` bytes. */
@@ -62,7 +64,13 @@ export async function publishSite(install: Install, actor: Actor, request: Publi
     listed.push({ path, size, contentType, open: () => file.open() });
   }
 
-  const manifest = listed.map(({ path, size, contentType }) => ({ path, size, content_type: contentType }));
+  // Each file is read once more to be hashed, one whole file in memory at a time: the store holds the bytes sent after it to that hash.
+  const manifest: ManifestFile[] = [];
+  for (const { path, size, contentType, open } of listed) {
+    const bytes = new Uint8Array(await new Response(open()).arrayBuffer());
+    manifest.push({ path, size, content_type: contentType, sha256: await sha256Of(bytes) });
+  }
+
   const begun = await beginPublish(install, actor, { ...asked, files: manifest });
   if (!begun.ok) return begun;
 

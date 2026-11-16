@@ -6,6 +6,7 @@ import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
+import { sha256Of } from "@poplin/core/src/storage/storage";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { ACCOUNT, emptyAccount, TOKEN } from "../zone/support/fake-install";
@@ -81,7 +82,7 @@ describe("the scheduled run", () => {
     const token = await tokenOf(w, "publisher");
     const kept = await publish(worker, token, { name: "kept" }, [page("<p>kept</p>")]);
     const brief = await publish(worker, token, { name: "brief", expires: "1h" }, [page("<p>brief</p>")]);
-    const manifest = [{ path: "index.html", size: HTML.byteLength, content_type: "text/html" }];
+    const manifest = [{ path: "index.html", size: HTML.byteLength, content_type: "text/html", sha256: await sha256Of(HTML) }];
     const begun = await done<{ upload: { id: string } }>(await api(worker, token).uploads.$post({ query: {}, json: { name: "unfinished", files: manifest } }));
     await done(await sendFile(api(worker, token), begun.upload.id, { path: "index.html", body: HTML }));
     const stored = await keysUnder("");

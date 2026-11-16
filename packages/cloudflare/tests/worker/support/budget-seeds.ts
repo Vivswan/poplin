@@ -29,6 +29,9 @@ const PUTS_AT_ONCE = 250;
 /** The one byte every made-up file holds. */
 const BYTE = "x";
 
+/** The SHA-256 of that byte in base64, as `openssl dgst -sha256 -binary | base64` gives it: what every made-up file declares. */
+export const BYTE_SHA256 = "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=";
+
 /** The milliseconds of one day. */
 const DAY_MS = 86_400_000;
 
@@ -144,7 +147,7 @@ export async function siteWithFiles(stage: Stage, files: number, made: { readonl
  * @returns the upload's id
  */
 export async function uploadOf(stage: Stage, token: string, asked: { readonly declared: number; readonly stored: number; readonly site?: string }): Promise<string> {
-  const files = Array.from({ length: asked.declared }, (_file, at) => ({ path: filePath(at), size: BYTE.length, content_type: "text/html" }));
+  const files = Array.from({ length: asked.declared }, (_file, at) => ({ path: filePath(at), size: BYTE.length, content_type: "text/html", sha256: BYTE_SHA256 }));
   const named = asked.site === undefined ? { name: "large" } : { site: asked.site };
   const begun = await done<{ upload: { id: string } }>(await apiOf(unmeasured(stage), token).uploads.$post({ query: {}, json: { ...named, files } }));
   const placed = await BINDINGS.DB.prepare("SELECT folder, number FROM uploads WHERE id = ?1").bind(begun.upload.id).first<{ folder: string; number: number }>();

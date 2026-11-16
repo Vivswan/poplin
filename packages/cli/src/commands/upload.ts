@@ -6,16 +6,19 @@ import type * as v from "valibot";
 
 import { ABANDONED_UPLOAD } from "../../../core/src/actions/abandon-publish";
 import { PUBLISHED_SITE } from "../../../core/src/actions/finish-publish";
+import { ISSUED_TICKETS } from "../../../core/src/actions/issue-tickets";
 import { SHOWN_UPLOAD } from "../../../core/src/actions/show-upload";
-import { STORED_FILE } from "../../../core/src/actions/upload-file";
+import type { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
+import type { Ticket } from "../../../core/src/storage/tickets";
 import type { Called, Client, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Io, Outcome, Session } from "./records";
+import { TicketBook } from "./tickets";
 
 /** How many files are on their way at once. */
 const UPLOADS_AT_ONCE = 4;
 
-/** How often one file is sent again before the upload is given up. The route stores the same bytes again, so sending twice is safe. */
+/** How often one file is sent again before the upload is given up. A ticket takes the same bytes again, so sending twice is safe. */
 const UPLOAD_RETRIES = 3;
 
 /** The pause before a file is first sent again, in milliseconds. Each pause after it is twice as long, and each is stretched by a random share of up to its own length, so four lanes do not come back at one moment. */
@@ -48,13 +51,17 @@ const MS_PER_SECOND = 1000;
 /** The answer to a finished upload. */
 export type Published = v.InferOutput<typeof PUBLISHED_SITE>;
 
+/** The answer to a begun upload: its id, and the tickets of its files when the install handed them out with it. */
+export type Begun = v.InferOutput<typeof BEGUN_UPLOAD>;
+
 /** What a wait needs of the machine's ends. */
 type Resting = Pick<Io, "pause" | "status" | "err" | "terminal">;
 
-/** What the lanes of one upload share: where every wait of it is waited out, and the stop after which no file is sent again. */
+/** What the lanes of one upload share: where every wait of it is waited out, the stop after which no file is sent again, and the tickets its files are sent by. */
 interface Lanes {
   readonly pace: Pace;
   readonly stopped: AbortSignal;
+  readonly tickets: TicketBook;
 }
 
 /** One file to send: the name the upload declared it under, its length, and what opens its bytes anew from the first. */
@@ -229,9 +236,13 @@ export async function callUnhurried<Done>(io: Resting, call: () => Promise<Calle
   }
 }
 
-async function sendOnce(client: Client, upload: string, file: UploadFile): Promise<Called<unknown>> {
+/** Send one file once, to the address and with the headers its ticket names. A file with no ticket yet has one asked for as it goes. */
+async function sendOnce(client: Client, tickets: TicketBook, file: UploadFile): Promise<Called<undefined>> {
+  const ticket = await tickets.of(file.path);
+  if (!ticket.ok) return ticket;
+
   const body = await file.open();
-  const sent = await client.upload(STORED_FILE, { upload, path: file.path, body, length: file.size });
+  const sent = await client.send(ticket.value, body);
 
   // A request that broke off leaves the file open; a stream the request still holds refuses the cancel, and closes with the request.
   if (!sent.ok) await body.cancel().catch(() => undefined);
@@ -240,9 +251,9 @@ async function sendOnce(client: Client, upload: string, file: UploadFile): Promi
 }
 
 /** Send one file, and send it again after a pause while the install fails or gives no answer, up to three times more. The pause is the upload's own, on the command's clock: the library waits none. */
-async function sendFile(client: Client, upload: string, file: UploadFile, lanes: Lanes): Promise<Failure | undefined> {
+async function sendFile(client: Client, file: UploadFile, lanes: Lanes): Promise<Failure | undefined> {
   const attempt = async (): Promise<void> => {
-    const sent = await unhurried(lanes.pace, () => sendOnce(client, upload, file));
+    const sent = await unhurried(lanes.pace, () => sendOnce(client, lanes.tickets, file));
 
     if (!sent.ok) throw new Unsent(sent.failure);
   };
@@ -266,13 +277,14 @@ async function sendFile(client: Client, upload: string, file: UploadFile, lanes:
 }
 
 /** Send files, four at a time. The first file that cannot be sent stops the rest from starting; the answer is that file's failure, or `stopped` when the person stopped the command. */
-async function sendFiles<File extends UploadFile>(client: Client, upload: string, files: readonly File[], sending: Lanes & { readonly arrived: (file: File) => void }): Promise<Failure | undefined> {
+async function sendFiles<File extends UploadFile>(client: Client, files: readonly File[], sending: Lanes & { readonly arrived: (file: File) => void }): Promise<Failure | undefined> {
   let failure: Failure | undefined;
+  sending.tickets.expect(files.map((file) => file.path));
 
   const send = async (file: File): Promise<typeof pMapStop | undefined> => {
     if (failure !== undefined) return pMapStop;
 
-    const failed = await sendFile(client, upload, file, sending);
+    const failed = await sendFile(client, file, sending);
 
     if (failed !== undefined) {
       failure ??= failed;
@@ -280,6 +292,7 @@ async function sendFiles<File extends UploadFile>(client: Client, upload: string
       return undefined;
     }
 
+    sending.tickets.arrived(file.path);
     // A file that arrives during a rest is told after it, so the line that says why nothing moves stays.
     await sending.pace.ready();
     sending.arrived(file);
@@ -352,30 +365,36 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
 /**
  * Send the files of a begun upload and finish it.
  *
+ * Each file goes to the address its ticket names, with the ticket's headers. A file the begun upload answered no ticket for has one asked for, a hundred files a call, as the files go.
  * Four files go at once; one the install fails on or does not answer is sent again after a pause it tells, up to three times more. While the install lacks files, it is asked which, sent those, and finished again, three times at most.
  *
  * An answer of "too many requests" to any call here counts as none of those: the upload rests as long as the answer asks, says so, and makes the call again, up to six rests a call.
  * The answer after the sixth rest is the failure. Once the person stops the command, during a rest or a call, the failure is `stopped` and no call is made after it.
- *
  * @returns the install's answer to the finish, or the first failure; the upload is then still there to be given up
  */
-export async function sendUpload<File extends UploadFile>(client: Client, upload: string, files: readonly File[], on: Sending<File>): Promise<Called<Published>> {
-  const sending = { arrived: on.arrived, pace: new Pace(on.io), stopped: on.io.stopped };
-  const finish = (): Promise<Called<Published>> => unhurried(sending.pace, () => finishUpload(client, upload));
+export async function sendUpload<File extends UploadFile>(client: Client, begun: Begun, files: readonly File[], on: Sending<File>): Promise<Called<Published>> {
+  const upload = begun.upload.id;
+  const pace = new Pace(on.io);
+  const askTickets = async (paths: readonly string[]): Promise<Called<readonly Ticket[]>> => {
+    const asked = await unhurried(pace, () => client.call(ISSUED_TICKETS, (api) => api.uploads[":upload"].tickets.$post({ param: { upload }, json: { paths: [...paths] } })));
 
-  const unsent = await sendFiles(client, upload, files, sending);
+    return asked.ok ? { ok: true, value: asked.value.tickets } : asked;
+  };
+  const sending = { arrived: on.arrived, pace, stopped: on.io.stopped, tickets: new TicketBook(begun.tickets, askTickets) };
+  const finish = (): Promise<Called<Published>> => unhurried(pace, () => finishUpload(client, upload));
+
+  const unsent = await sendFiles(client, files, sending);
   if (unsent !== undefined) return { ok: false, failure: unsent };
 
   let finished = await finish();
 
   for (let attempt = 1; attempt < FINISH_ATTEMPTS && lacksFiles(finished); attempt += 1) {
-    const shown = await unhurried(sending.pace, () => client.call(SHOWN_UPLOAD, (api) => api.uploads[":upload"].$get({ param: { upload } })));
+    const shown = await unhurried(pace, () => client.call(SHOWN_UPLOAD, (api) => api.uploads[":upload"].$get({ param: { upload } })));
     if (!shown.ok) return shown;
 
     const lacking = new Set(shown.value.missing);
     const failure = await sendFiles(
       client,
-      upload,
       files.filter((file) => lacking.has(file.path)),
       sending,
     );

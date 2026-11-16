@@ -12,12 +12,27 @@ import { parseLoginSecret } from "@poplin/core/src/auth/computer-logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { TokenRecord } from "@poplin/core/src/auth/tokens";
 import type { PublicWord } from "@poplin/core/src/names/marker";
+import type { Tickets } from "@poplin/core/src/storage/tickets";
 import * as v from "valibot";
 
 import { capBody } from "./body";
 
 /** What the upload of one file takes from its query: the path the file is stored under. */
 export const FILE_QUERY = v.strictObject({ path: v.string() });
+
+/** The content type a file's bytes are sent with. */
+const BYTES_TYPE = "application/octet-stream";
+
+/** The tickets of an install that takes its uploads' files itself: each names the install's own route for one file, as a path, and carries no leave: the route asks for the sender's token and holds the bytes to their size and hash. */
+const ROUTE_TICKETS: Tickets = {
+  async issue(upload, files) {
+    return files.map(({ file }) => {
+      const url = `/api/uploads/${upload.id}/file?${new URLSearchParams({ path: file.path })}`;
+
+      return { path: file.path, url, method: "PUT", headers: { "Content-Type": BYTES_TYPE, "Content-Length": String(file.size) }, expires: upload.expires };
+    });
+  },
+};
 
 /** What an action answers, behind its promise. */
 type AnswerOf<Action extends (...parameters: never[]) => Promise<unknown>> = Awaited<ReturnType<Action>>;
@@ -63,6 +78,15 @@ export async function checked<Schema extends v.GenericSchema, Answer>(
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "body");
 
   return run(asked.output);
+}
+
+/**
+ * Give an install the tickets its uploads' files are sent by, for a request that begins an upload or asks for tickets.
+ *
+ * @returns the install with `ROUTE_TICKETS`
+ */
+export function ticketed(install: Install): Install {
+  return { ...install, tickets: ROUTE_TICKETS };
 }
 
 /**

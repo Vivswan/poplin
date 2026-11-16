@@ -1,6 +1,7 @@
 // The HTTP API: every route with its method, its path, and what it takes, answered by one action each. It authenticates, parses, calls, and maps the answer; it holds no rule of its own.
 // A client is typed from these declarations, so the two cannot differ. A request carries `Authorization: Bearer <token>`, but for the two routes a computer with no token calls to get one.
-// A JSON body goes with `Content-Type: application/json`, a file's bytes with `application/octet-stream`. A done request answers 200 with JSON, or with the bytes of one file; any other answers an `ApiError`.
+// A JSON body goes with `Content-Type: application/json`, a file's bytes to the address and with the headers the file's ticket names.
+// A done request answers 200 with JSON, or with the bytes of one file; any other answers an `ApiError`.
 
 import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
 import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
@@ -15,6 +16,7 @@ import { DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/dupli
 import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
 import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import-settings";
+import { issueTickets, TICKETS_REQUEST } from "@poplin/core/src/actions/issue-tickets";
 import { LIST_QUERY, listSites } from "@poplin/core/src/actions/list";
 import { issueToken, listTokens, revokeToken, TOKEN_REQUEST } from "@poplin/core/src/actions/manage-tokens";
 import { newLink } from "@poplin/core/src/actions/new-link";
@@ -40,7 +42,7 @@ import * as v from "valibot";
 import { followUsers, type UsersFollow } from "../console/access/users-follow";
 import { carries, counted, type Gate, metered, namesSite, sent } from "./asked";
 import { authenticate, type ReadToken } from "./authenticate";
-import { answerWhoami, beginWithAddress, checked, FILE_QUERY, saveAddress, storeBody } from "./handlers";
+import { answerWhoami, beginWithAddress, checked, FILE_QUERY, saveAddress, storeBody, ticketed } from "./handlers";
 import { queried } from "./query";
 import { refusal, respond, respondFile, spentRefusal, writesSpentRefusal } from "./respond";
 
@@ -140,9 +142,14 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     })
 
     .post("/uploads", token, install, json, noQuery, sent<v.InferInput<typeof PUBLISH_REQUEST>>(deps.limits.manifestBytes), async (context) => {
-      return respond(await beginPublish(context.var.install, context.var.actor, context.req.valid("json"), deps.limits), deps.now());
+      return respond(await beginPublish(ticketed(context.var.install), context.var.actor, context.req.valid("json"), deps.limits), deps.now());
     })
     .get("/uploads/:upload", token, install, noQuery, async (context) => respond(await showUpload(context.var.install, context.var.actor, context.req.param("upload"))))
+    .post("/uploads/:upload/tickets", token, install, json, noQuery, sent<v.InferInput<typeof TICKETS_REQUEST>>(JSON_BYTES), async (context) => {
+      const issue = (asked: v.InferOutput<typeof TICKETS_REQUEST>): ReturnType<typeof issueTickets> => issueTickets(ticketed(context.var.install), context.var.actor, { ...asked, upload: context.req.param("upload") });
+
+      return respond(await checked(TICKETS_REQUEST, context.req.valid("json"), issue));
+    })
     .put("/uploads/:upload/file", token, install, carries("bytes"), queried(FILE_QUERY), async (context) => {
       const file = { upload: context.req.param("upload"), query: context.req.valid("query"), request: context.req.raw, limits: deps.limits };
 
@@ -166,7 +173,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
       return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(await importSettings(context.var.install, context.var.actor, request), request.logins === true)));
     })
     .post("/import/sites", token, install, json, noQuery, sent<ImportRequest>(deps.limits.manifestBytes), async (context) => {
-      return respond(await beginImport(context.var.install, context.var.actor, context.req.valid("json"), deps.limits), deps.now());
+      return respond(await beginImport(ticketed(context.var.install), context.var.actor, context.req.valid("json"), deps.limits), deps.now());
     })
 
     .get("/config", token, install, noQuery, async (context) => respond(await readConfig(context.var.install, context.var.actor)))

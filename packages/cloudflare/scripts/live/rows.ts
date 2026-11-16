@@ -77,6 +77,7 @@ const HELD_BACK = 403;
 const PRICES = [
   { method: "POST", path: "/api/uploads", rows: (asked) => (asked.body.site === undefined ? NEW_SITE + inheritedExpiryRows(asked.body) : NEW_VERSION + changeRows(settingsOf(asked.body))) },
   { method: "POST", path: "/api/import/sites", rows: (asked) => IMPORTED_SITE + IMPORTED_VERSION * (versionsIn(asked.body) - 1) + importedExpiryRows(asked.body.site) },
+  { method: "POST", path: "/api/uploads/:upload/tickets", rows: () => 0 },
   { method: "PUT", path: "/api/uploads/:upload/file", rows: () => 0 },
   { method: "POST", path: "/api/uploads/:upload/finish", rows: () => 0 },
   { method: "GET", path: "/api/uploads/:upload", rows: () => 1 },
