@@ -83,9 +83,11 @@ async function answer(driver: BunSqliteDriver, asked: Asked, refuse?: string): P
   if (!path.endsWith("/query")) return reply({ uuid: NEW, name: "poplin" });
 
   const { sql, params } = asked.body as { readonly sql: string; readonly params: readonly string[] };
-  const [result] = await driver.batch([{ sql, params }]);
+  // A statement the database cannot run, such as a read of a table that is not there, is answered as an error of the API, never as a dropped connection.
+  const ran = await driver.batch([{ sql, params }]).catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
+  if (ran instanceof Error) return refusal(400, 7500, `${ran.message}: SQLITE_ERROR`);
 
-  return reply([{ results: result?.rows ?? [], success: true, meta: {} }]);
+  return reply([{ results: ran[0]?.rows ?? [], success: true, meta: {} }]);
 }
 
 /** Run the check on a fake account, and answer what it settled with the calls that changed the account. */
