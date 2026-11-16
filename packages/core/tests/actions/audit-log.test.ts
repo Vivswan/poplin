@@ -90,6 +90,21 @@ describe("listAuditForFile", () => {
 });
 
 describe("a narrowed reading of a log longer than its window", () => {
+  // Drift: the first file of a narrowed download would begin at the log's newest entry again: where a window holds no entry of it, that file is one note and no entry, while the screen, searched further, shows them.
+  test("a narrowed file begins past the windows of the log that hold no entry of it, where the reading from the newest entry stops short with none", async () => {
+    const world = await makeWorld();
+    await made(world, ADMIN, "report");
+    for (let count = 0; count < 2 * AUDIT_WINDOW + 5; count += 1) await world.install.database.appendAudit({ action: "login", detail: {} }, signedBy(ADMIN, NOW));
+    const told = async (after?: number): Promise<unknown> => {
+      const read = await listAuditForFile(world.install, ADMIN, after === undefined ? { site: "report" } : { site: "report", after });
+
+      return read.ok ? [read.entries.map(({ entry }) => entry.site?.name), read.stopped_at !== undefined] : read;
+    };
+    const next = await nextAuditFile(world.install, ADMIN, { entries: 2000, site: "report" });
+
+    expect([await told(), next.ok && next.after, next.ok && (await told(next.from))]).toEqual([[[], true], null, [["report"], false]]);
+  });
+
   // Drift: the screen, a file of the log and the API all go on from `stopped_at`. Left out, a rare site's history would end at the window; set on a full page or at the log's end, it would offer a search with nothing behind it.
   test("answers what its window holds and where it stopped, the count and the file's end stop with it, and the screen's reading takes a page of 201", async () => {
     const world = await makeWorld();
