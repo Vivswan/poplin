@@ -221,16 +221,6 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
-    name: "the question before an update, from the account's menu",
-    only: "narrow",
-    open: async (page) => {
-      await page.getByRole("button", { name: /^Account/ }).click();
-      await page.getByRole("menuitem", { name: /^Update to / }).click();
-    },
-    shows: (page) => [question(page, /^Update to /)],
-    close: leaveBy("Cancel"),
-  },
-  {
     name: "the notes of the newer version in the sections of a phone, and from there the question before an update",
     only: "narrow",
     open: async (page) => {
@@ -975,20 +965,32 @@ test.describe("on a phone, on Activity", () => {
     await expect(entries.filter({ has: ofSite })).not.toHaveCount(0);
     await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
   });
+
+  // Drift: one engine would cut the end off a site's name again though the row has room for it: the name's link reaches past the box that cuts it by the link's own edges.
+  test("a site's name in a row with room for it is whole", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Activity");
+    const names = page.getByRole("list", { name: "Activity", exact: true }).getByRole("link");
+    await expect(names.first()).toBeVisible();
+    const cut = await names.evaluateAll((links) => links.filter((link) => (link.parentElement?.scrollWidth ?? 0) > (link.parentElement?.clientWidth ?? 0)).map((link) => link.textContent));
+
+    expect([await names.count() > 0, cut]).toEqual([true, []]);
+  });
 });
 
 for (const viewport of SMALL_PHONES) {
   test.describe(`on a phone of ${viewport.width}x${viewport.height}, in the sections`, () => {
     test.use({ viewport });
 
-    // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the start of an update would lie under its edge, out of reach.
-    test("the start of an update can be reached and pressed, by scrolling where the sheet is too short", async ({ page }) => {
+    // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the start of an update would lie under its edge, out of reach; or the button that closes the sheet would scroll away with its top.
+    test("the start of an update can be reached and pressed, by scrolling where the sheet is too short, with the way to close the sheet still in sight", async ({ page }) => {
       await arrive(page);
       await page.getByRole("button", { name: "Sections", exact: true }).click();
       const start = page.getByRole("dialog").getByRole("button", { name: "Update now", exact: true });
 
       await start.scrollIntoViewIfNeeded();
       await expect(start).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole("dialog").getByRole("button", { name: "Close", exact: true })).toBeInViewport({ ratio: 1 });
       await start.click();
       await expect(question(page, /^Update to /)).toBeVisible();
     });

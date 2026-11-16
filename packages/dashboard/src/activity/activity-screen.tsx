@@ -126,7 +126,7 @@ function PhoneList({ page, place, actions, after }: { readonly page: Page; reado
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="flex min-w-0 items-baseline gap-2">
                 <span className="truncate">{whatOf(entry)}</span>
-                <span className="min-w-0 shrink-0 truncate">
+                <span className="-mx-1 min-w-0 shrink-0 truncate px-1">
                   <SiteThen entry={entry} />
                 </span>
               </span>
