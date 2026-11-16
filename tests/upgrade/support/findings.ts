@@ -10,7 +10,6 @@ const SHAPES = [
   "this command on that install",
   "that command on this install",
   "update notice",
-  "module",
 ] as const;
 
 /** One of those shapes. */

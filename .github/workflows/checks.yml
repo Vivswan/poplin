@@ -58,27 +58,6 @@ jobs:
       - name: Test the packages and the tree guards
         run: bun run test ./packages/ ./tests/layout.test.ts ./tests/portable.test.ts ./tests/no-old-shapes.test.ts
 
-  # The OpenTofu module: formatted, valid against the provider's schema, and its plan logic tested with a mocked provider,
-  # so no Cloudflare credentials are read.
-  tofu:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with:
-          tofu_version: 1.13.9
-      - name: Format
-        run: tofu fmt -check -recursive packages/cloudflare/tofu
-      - name: Init
-        run: tofu -chdir=packages/cloudflare/tofu init -backend=false -input=false
-      - name: Validate
-        run: tofu -chdir=packages/cloudflare/tofu validate
-      - name: Test
-        run: tofu -chdir=packages/cloudflare/tofu test
-
   # Every link, heading anchor, and image of the repository's Markdown pages, as lychee.toml sets the check. No install:
   # the pages link nothing a build makes. The lychee is the one the site's own link check runs.
   links:

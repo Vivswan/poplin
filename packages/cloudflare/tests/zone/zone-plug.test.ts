@@ -1340,7 +1340,7 @@ describe("a check the install makes with the key it holds", () => {
     );
   });
 
-  // Drift: first setup, and an install the OpenTofu module made, hold no key. A check of their own would call Cloudflare with nothing, and the screen would stop asking for the token they need.
+  // Drift: first setup holds no key. A check of its own would call Cloudflare with nothing, and the screen would stop asking for the token it needs.
   test("an install that holds no key has no check of its own, which is what the console asks its token by", () => {
     expect(createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT }).ownCheck).toBeUndefined();
   });

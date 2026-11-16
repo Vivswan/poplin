@@ -1,4 +1,4 @@
-// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, settings, and module inputs that exist; every link into the guide leads to a page and a heading of it; the guide's folders are ranked. Not the prose.
+// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, and settings that exist; every link into the guide leads to a page and a heading of it; the guide's folders are ranked. Not the prose.
 
 import { describe, expect, test } from "bun:test";
 import { dirname, join, normalize } from "node:path";
@@ -25,7 +25,7 @@ const GUIDE_PAGES: readonly string[] = [...new Bun.Glob(`${GUIDE_PLACE}**/*.md`)
 const PAGES: readonly string[] = ["README.md", ...GUIDE_PAGES, "packages/cli/README.md"];
 
 /** The pages outside the guide that link into it. */
-const LINKING_PAGES: readonly string[] = ["README.md", "packages/cloudflare/README.md", "packages/cloudflare/tofu/README.md", "skills/poplin/references/setup.md"];
+const LINKING_PAGES: readonly string[] = ["README.md", "packages/cloudflare/README.md", "skills/poplin/references/setup.md"];
 
 /** How a page that is read outside the repository writes the address of a guide page: the page on GitHub. */
 const GUIDE_ON_GITHUB = "https://github.com/Vivswan/poplin/blob/main/";
@@ -52,12 +52,6 @@ const REFUSALS_PAGE = "docs/fix/poplin-refuses.md";
 /** The heading the tables of refusals follow on that page. */
 const REFUSALS_HEADING = "When poplin refuses";
 
-/** The files of the OpenTofu module that declare its inputs and outputs. */
-const MODULE_FILES: readonly string[] = ["packages/cloudflare/tofu/variables.tf", "packages/cloudflare/tofu/outputs.tf"];
-
-/** The pages that name the module's inputs and outputs. On every other page a word spelled like one must be a tool, an input of a tool, a setting, or a code. */
-const MODULE_PAGES: readonly string[] = ["docs/upkeep/cost/limits.md", "docs/start/with-opentofu.md"];
-
 /** The words written with an underscore that are none of the above: a folder that is never uploaded. */
 const OTHER_WORDS: readonly string[] = ["node_modules"];
 
@@ -76,7 +70,7 @@ const COMMAND_ALONE = /^poplin ([a-z-]+)$/;
 /** What ends a command on its line: a comment, or an arrow to what it does. */
 const AFTER_COMMAND = /\s+(?:#|->)\s.*$/;
 
-/** A word written the way tools, codes, settings, and inputs are: lowercase words joined by underscores. */
+/** A word written the way tools, their inputs, codes, and settings are: lowercase words joined by underscores. */
 const SNAKE_WORD = /^[a-z]+(?:_[a-z]+)+$/;
 
 /** A span that opens with a flag: the flag is its first word. */
@@ -85,23 +79,8 @@ const FLAG = /^(--\S+)/;
 /** A span that holds the input of a tool as JSON. */
 const JSON_SPAN = /^\{.*\}$/;
 
-/** The module block of an HCL example, with its body as the first group. */
-const MODULE_BLOCK = /module "poplin" \{\n([\s\S]*?)\n\s*\}/;
-
-/** A value set in that block, with its name as the first group. */
-const MODULE_VALUE = /^\s*([a-z_]+)\s*=/gm;
-
-/** What a module block sets that is no input of the module. */
-const MODULE_SOURCE = "source";
-
 /** What a table cell holds beside its codes when it holds codes alone: the commas between them. */
 const BETWEEN_CODES = /^[\s,]*$/;
-
-/** An input or an output of the module, with its name as the first group. */
-const MODULE_NAME = /^(?:variable|output) "([a-z_]+)"/gm;
-
-/** An input of the module, with its name as the first group. */
-const MODULE_INPUT = /^variable "([a-z_]+)"/gm;
 
 /** A code of the CLI's table of problems. */
 type Code = Parameters<typeof problem>[0];
@@ -123,10 +102,6 @@ async function parse(root: string, path: string): Promise<Page> {
   const { spans, blocks } = readPage(await read(root, path));
 
   return { spans, blocks: blocks.map((block) => block.text) };
-}
-
-function groups(text: string, pattern: RegExp): string[] {
-  return [...text.matchAll(pattern)].map((match) => match[1] ?? "");
 }
 
 function unique(values: readonly string[]): string[] {
@@ -234,29 +209,17 @@ describe("the pages a person reads", () => {
     expect(unique(named).filter((flag) => !flags.has(flag))).toEqual([]);
   });
 
-  test("every word written like a tool, a code, a setting, a kind of problem, or a module input is one: without this a renamed one stays in a page", async () => {
-    const module = (await Promise.all(MODULE_FILES.map((path) => read(ROOT, path)))).flatMap((text) => groups(text, MODULE_NAME));
+  test("every word written like a tool, a code, a setting, or a kind of problem is one: without this a renamed one stays in a page", async () => {
     const inputs = Object.values(TOOLS).flatMap((tool) => Object.keys(tool.parameters));
-    const known = [...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...PROBLEM_KINDS, ...OTHER_WORDS];
+    const known = new Set<string>([...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...PROBLEM_KINDS, ...OTHER_WORDS]);
     const unknown: string[] = [];
 
     for (const path of PAGES) {
-      const here = new Set<string>(MODULE_PAGES.includes(path) ? [...known, ...module] : known);
       const named = (await parse(ROOT, path)).spans.filter((span) => SNAKE_WORD.test(span));
-      unknown.push(...unique(named).flatMap((word) => (here.has(word) || isCode(word) ? [] : `${path}: ${word}`)));
+      unknown.push(...unique(named).flatMap((word) => (known.has(word) || isCode(word) ? [] : `${path}: ${word}`)));
     }
 
-    expect(module.length).toBeGreaterThan(0);
     expect(unknown).toEqual([]);
-  });
-
-  test("every value an example gives the module is an input the module declares: without this a removed input stays in the file a person copies", async () => {
-    const inputs = (await Promise.all(MODULE_FILES.map((path) => read(ROOT, path)))).flatMap((text) => groups(text, MODULE_INPUT));
-    const blocks = (await Promise.all(PAGES.map((path) => parse(ROOT, path)))).flatMap((page) => page.blocks);
-    const set = blocks.flatMap((block) => groups(MODULE_BLOCK.exec(block)?.[1] ?? "", MODULE_VALUE)).filter((name) => name !== MODULE_SOURCE);
-
-    expect(set.length).toBeGreaterThan(0);
-    expect(unique(set).filter((name) => !inputs.includes(name))).toEqual([]);
   });
 
   test("the page of the agent tools names every tool, and each example passes only inputs its tool takes: without this a new tool is never shown, and a renamed input stays in an example", async () => {

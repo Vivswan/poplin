@@ -1,7 +1,6 @@
-// What marks an object at Cloudflare as poplin's, and what poplin writes into each. The OpenTofu module in `packages/cloudflare/tofu/` writes the same values, so each tool leaves the other's objects as they are.
-// `keyBinding`, `keyName`, `uploadKeyBinding`, and `uploadKeyName` are the setup client's alone.
+// What marks an object at Cloudflare as poplin's, and what poplin writes into each.
 
-/** Every value the setup client and the OpenTofu module write alike. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The last rows are the Worker's own: limiter, Workflow, sweep, variables, and log. */
+/** Every value the setup client writes. A record with a comment starting `recordMark` and a rule with one of the refs are poplin's. The last rows are the Worker's own: its Workflow, its variables, and its two keys. */
 export const INSTALL_OBJECTS = {
   recordMark: "poplin: ",
   wildcardComment: "poplin: every site",
@@ -52,11 +51,6 @@ export const INSTALL_OBJECTS = {
   httpsTarget: 'concat("https://", http.host, http.request.uri.path)',
   httpsStatus: 301,
   aiBots: "block",
-  minuteLimitsBinding: "MINUTE_LIMITS",
-  minuteLimitsNamespace: "1001",
-  minuteLimitsLimit: 1_000_000,
-  minuteLimitsSeconds: 60,
-  jobsBinding: "JOBS",
   jobsClass: "PoplinJobs",
   jobsSuffix: "-jobs",
   jobsNameLength: 64,
@@ -70,8 +64,4 @@ export const INSTALL_OBJECTS = {
   keyName: "poplin kept key",
   uploadKeyBinding: "UPLOAD_KEY",
   uploadKeyName: "poplin upload key",
-  sweepCron: "*/15 * * * *",
-  logsKept: true,
-  logsShare: 1,
-  requestRecords: false,
 } as const;

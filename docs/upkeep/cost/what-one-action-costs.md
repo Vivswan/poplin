@@ -55,4 +55,4 @@ The page or the command that began the copy only asks whether it is a site yet: 
 
 A job that stops without giving its copy up leaves an upload nobody finishes. The sweep removes it and its files once 25 hours have passed, and notes `copy_failed`: one query more in that run.
 
-**A Worker with no binding to a Workflow** runs no job. A deploy and the OpenTofu module both add the binding, so only a Worker uploaded some other way has none, until its next deploy. There the page or the command that began the copy sends one request for every round, and the copy stops when it is closed.
+**A Worker with no binding to a Workflow** runs no job. A deploy adds the binding, so only a Worker uploaded some other way has none, until its next deploy. There the page or the command that began the copy sends one request for every round, and the copy stops when it is closed.

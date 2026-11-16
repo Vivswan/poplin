@@ -16,7 +16,7 @@ export interface Bindings {
   /** The Workflow that runs the install's jobs. A Worker deployed without it has none, and runs each round of a job in the request that asks after it. */
   readonly JOBS?: Workflow<Job>;
 
-  /** Where the install answers, unchecked: its domain and the public word it chose, or the account's name in its free address on an install without a domain. Setup or the OpenTofu module writes it; a Worker without it answers setup alone. */
+  /** Where the install answers, unchecked: its domain and the public word it chose, or the account's name in its free address on an install without a domain. Setup writes it; a Worker without it answers setup alone. */
   readonly ZONE: unknown;
 
   /** The first settings in their text form, unchecked: the logins, and any other setting that does not start at its default. The Worker stores them while it has no settings, and never reads them once it has. */

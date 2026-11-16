@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { readAccessBinding } from "../../src/zone/access-binding";
 import { AUDIENCE, TEAM } from "../login/support/access";
 
-const PACKAGE = join(import.meta.dir, "..", "..");
 const BOUND = { team_domain: "team.cloudflareaccess.com", audience: AUDIENCE };
 
 describe("readAccessBinding", () => {
@@ -24,15 +21,5 @@ describe("readAccessBinding", () => {
 
   test.each(refused)("$name is refused as $refusal and nothing throws: the Worker names the binding instead of failing on every request", ({ binding, refusal }) => {
     expect<unknown>(readAccessBinding(binding)).toEqual({ ok: false, refusal });
-  });
-});
-
-describe("the ACCESS binding the module gives the Worker", () => {
-  // Drift: the module writes the binding and the Worker reads it; a key renamed on one side would stop every instance at its start.
-  test("the module binds exactly the two keys the reader takes: the team domain from its input, the audience from its own Access application", () => {
-    const [team, audience] = Object.keys(BOUND);
-    const bound = `jsonencode({ ${team} = var.access_team_domain, ${audience} = cloudflare_zero_trust_access_application.login.aud })`;
-
-    expect(readFileSync(join(PACKAGE, "tofu", "worker.tf"), "utf8")).toContain(bound);
   });
 });

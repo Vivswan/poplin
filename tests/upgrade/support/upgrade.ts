@@ -4,7 +4,6 @@
 //   backup                                       a zip one code exports, the other imports
 //   login file                                   saved by that code's command, read by this one
 //   the two commands                             each code's command against the other's install
-//   module                                       the names an install's variables file and state hold
 
 import { mkdirSync, mkdtempDisposableSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +12,6 @@ import { join } from "node:path";
 import { fault, field, type Machine, type Ran, runCli } from "./command";
 import { attempt, type Finding, found } from "./findings";
 import { capture, upgradeInPlace } from "./in-place";
-import { moduleFaults } from "./module-names";
 import { type Seeded, seedInstall } from "./seeded-install";
 import { newInstall } from "./this-install";
 import { HERE, part, type Tree } from "./trees";
@@ -193,7 +191,7 @@ async function findingsOf(scene: Scene, listening: Listening, fresh: Awaited<Ret
   await listening.stop();
   const inPlace = await upgradeInPlace({ from: scene.from, seeded: scene.seeded, machine: scene.there, folder: scene.folder }, before, walked.site, fresh);
 
-  return [...inPlace, ...backup, ...login, ...walked.findings, ...found("module", moduleFaults(scene.from, HERE))];
+  return [...inPlace, ...backup, ...login, ...walked.findings];
 }
 
 /**

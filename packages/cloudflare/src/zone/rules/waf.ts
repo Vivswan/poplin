@@ -18,25 +18,17 @@ const RATE_LIMIT = {
 const RATE_RULE_SLOTS: Readonly<Record<ZonePlan, number>> = { free: 1, pro: 2, business: 5, enterprise: 100 };
 const SLOT_TAKEN = "the zone's plan allows no further rate rule and other rules hold every slot";
 const LIMITS_OTHERS = "a rate rule that counts the whole zone would also limit this zone's other hostnames";
-const NEEDS_PAID_PLAN = "a rate rule of the Free plan may read the path alone, never the hostname";
-const SWITCHED_OFF = "the rate rule is set to off";
-
-/** What the rate rule counts, the values of the OpenTofu module's `rate_rule` input: every request of the zone, the install's hostnames alone, or nothing. */
-type RateRule = "zone" | "hostnames" | "off";
 
 /** The rule an install wants. */
 interface DesiredRules {
-  /** The hostnames the `hostnames` rule reads. */
+  /** The hostnames the rule of a paid plan reads. */
   readonly layout: DomainLayout;
 
-  /** The zone's plan: it sets how many rate rules the zone may hold, and whether one may read the hostname. */
+  /** The zone's plan: it sets how many rate rules the zone may hold, and whether one may read the hostname, so what the rule counts. */
   readonly plan: ZonePlan;
 
-  /** Whether the zone has hostnames of its own, which a `zone` rule would count too. */
+  /** Whether the zone has hostnames of its own, which the rule of the Free plan would count too. */
   readonly sharesZone: boolean;
-
-  /** What the rule counts; the plan never picks it. */
-  readonly rateRule: RateRule;
 }
 
 function skipped(reason: string): RuleStep {
@@ -52,22 +44,13 @@ function removeWholeZoneRule(current: PhaseRules | undefined): RuleStep[] {
 }
 
 /**
- * Name the rate rule to offer a caller that has not chosen one.
- *
- * @returns `zone` on the Free plan, whose rate rules may read the path alone, and `hostnames` on a paid plan
- */
-export function defaultRateRule(plan: ZonePlan): "zone" | "hostnames" {
-  return plan === "free" ? "zone" : "hostnames";
-}
-
-/**
  * Write the expression of the rate rule.
  *
- * @returns for `zone` an expression true for every request of the zone; for `hostnames` one true for the requests the routes send to the Worker and no other
+ * @returns on the Free plan, whose rate rules may read the path alone, an expression true for every request of the zone; on a paid plan one true for the requests the routes send to the Worker and no other
  * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
-export function rateRuleExpression(layout: DomainLayout, rateRule: "zone" | "hostnames"): string {
-  if (rateRule === "zone") return INSTALL_OBJECTS.rateWholeZone;
+export function rateRuleExpression(layout: DomainLayout, plan: ZonePlan): string {
+  if (plan === "free") return INSTALL_OBJECTS.rateWholeZone;
 
   return [...siteTerms(siteEndings(layout)), `http.host eq ${quoted(layout.adminHostname)}`].join(" or ");
 }
@@ -76,22 +59,16 @@ export function rateRuleExpression(layout: DomainLayout, rateRule: "zone" | "hos
  * Compute the rule change an install needs.
  *
  * @param current - the entry point ruleset of the rate limiting phase as it is now
- * @returns the rate rule's step; a rule the zone cannot hold is skipped with its reason and poplin's rule stays, unless it counts the whole of a zone with hostnames of its own; `off` removes poplin's rule
+ * @returns the rate rule's step; a rule the zone cannot hold is skipped with its reason and poplin's rule stays, unless it counts the whole of a zone with hostnames of its own
  */
 export function planWaf(desired: DesiredRules, current: PhaseRules | undefined): RuleStep[] {
-  const { rateRule } = desired;
-
-  if (rateRule === "off") return [...removeOwnRule(RATE_SUBJECT, RATE_REF, current), skipped(SWITCHED_OFF)];
-
-  if (rateRule === "hostnames" && desired.plan === "free") return [skipped(NEEDS_PAID_PLAN)];
-
-  if (rateRule === "zone" && desired.sharesZone) return [...removeWholeZoneRule(current), skipped(LIMITS_OTHERS)];
+  if (desired.plan === "free" && desired.sharesZone) return [...removeWholeZoneRule(current), skipped(LIMITS_OTHERS)];
 
   const others = current?.rules.filter((rule) => rule.ref !== RATE_REF).length ?? 0;
   const rule = {
     ref: RATE_REF,
     description: INSTALL_OBJECTS.rateDescription,
-    expression: rateRuleExpression(desired.layout, rateRule),
+    expression: rateRuleExpression(desired.layout, desired.plan),
     action: "block",
     enabled: true,
     ratelimit: RATE_LIMIT,
@@ -104,7 +81,7 @@ export function planWaf(desired: DesiredRules, current: PhaseRules | undefined):
  * Make the zone's rate rule match an install.
  *
  * @param mode - `plan` reads the rate limiting phase and sends no change
- * @returns what was created, changed, left, or removed; a rate rule the zone cannot hold, or one switched off, is a skip with its reason, never a failure
+ * @returns what was created, changed, left, or removed; a rate rule the zone cannot hold is a skip with its reason, never a failure
  */
 export function syncWaf(connection: Connection, zoneId: string, desired: DesiredRules, mode: Mode): Promise<Synced> {
   return syncPhase(connection, zoneId, RATE_PHASE, (current) => planWaf(desired, current), mode);
