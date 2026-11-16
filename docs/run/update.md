@@ -9,11 +9,63 @@ How each kind of install updates, and the notice of a newer version; the steps i
 
 Nothing updates on its own while the setting `auto_update` is off, as it is in a new install. An install says when a newer version is out, and how it updates depends on how it was made.
 
-| The install was made      | It updates by                                                       |
+| The install               | It updates by                                                       |
 | ------------------------- | ------------------------------------------------------------------- |
-| with the button of step 2 | three clicks at Cloudflare: [Build again](#build-again)             |
-| from a terminal           | two commands in its folder: [From a terminal](#from-a-terminal)     |
-| with the OpenTofu module  | a new bundle and an apply: [With OpenTofu](with-opentofu.md)        |
+| holds its key             | one press, or one command: [With the kept key](#with-the-kept-key)  |
+| was made with the button of step 2 | three clicks at Cloudflare: [Build again](#build-again)    |
+| was made from a terminal  | two commands in its folder: [From a terminal](#from-a-terminal)     |
+| was made with the OpenTofu module | a new bundle and an apply: [With OpenTofu](with-opentofu.md) |
+
+The row `Key` of the Domain screen says whether the install holds its key. Every install can also update the way it was made.
+
+## With the kept key
+
+```text
+Update now, or poplin update
+        |
+1  read releases.json                 poplin's website         which releases are out, each with a digest
+2  fetch the manifest                 the release's page       its digest == the website's
+3  fetch worker.js and its map        the release's page       each digest and size == the manifest's
+4  one upload, with the kept key      Cloudflare's API         whole, or not at all
+        |
+the next request runs the new version
+```
+
+No build runs, at Cloudflare or anywhere. The install takes the built Worker the release published, and nothing is replaced before every row of step 1 to 3 passed.
+
+| Where                 | Do                                                                        |
+| --------------------- | ------------------------------------------------------------------------- |
+| the dashboard         | press Update now, at the foot of the side, when a newer version is out    |
+| a terminal            | `npx poplin update`                                                       |
+| nowhere               | switch `auto_update` on: [Update by itself](#optional-update-by-itself)   |
+
+**It worked when** the foot of the dashboard's side, and the `version` row of `npx poplin doctor`, name the new version. Activity says `Started an update to 0.3.1`.
+
+| What stays as it was                                   | How                                                              |
+| ------------------------------------------------------ | ---------------------------------------------------------------- |
+| the bucket, the database, every variable, and the key  | the upload names every binding the Worker has as kept            |
+| the routes, the DNS records, the rules, and the login  | an upload does not touch them                                    |
+| the Worker's log settings                              | the upload states them again: the release's, or else the Worker's own |
+| the schedule of the sweep                              | written only when the release's differs                          |
+
+| The install finds                                         | It answers            | Changed |
+| --------------------------------------------------------- | --------------------- | ------- |
+| no release above the running version                      | `no_update`           | nothing |
+| a start in the same minute                                | `too_many_requests`   | nothing |
+| a key Cloudflare no longer takes, or none                 | `key_refused`, `no_key` | nothing |
+| a key made before poplin could update itself              | `lacks_right`, about `Workers Scripts Write` | nothing |
+| the website or the release's page does not answer         | `release_refused` | nothing |
+| a file whose digest or size is not the published one      | `release_refused` | nothing |
+| a manifest of another version or schema than the website names | `release_refused` | nothing |
+| a release that needs a binding the Worker does not have   | `release_refused` | nothing |
+| Cloudflare refuses the new code, such as code that stops as it starts | `version_refused` | nothing: the install runs the version it ran |
+| Cloudflare does not answer the upload                     | `update_unreachable`  | the update may be in: reload in a minute |
+
+`release_refused` comes with a word for which row it is. For `key_refused`, `no_key`, and `lacks_right`, press Repair on the Domain screen with an account token: it makes a key with every right the install uses. [When poplin refuses](../use/when-poplin-refuses.md) has each code.
+
+A release that changes the database is taken when you start it, never by itself. Once it ran, an older poplin cannot read the database.
+
+[The kept key](../about/security.md#the-kept-key) says what the key can reach, and [Hardening](../about/security.md#hardening) what an update still trusts.
 
 ## Build again
 
@@ -89,7 +141,7 @@ ok  version   install 0.2.0, this poplin 0.1.0: the install and this poplin are 
 
 ## Optional: update with one command
 
-`poplin update` has the install start that build itself, at its update link. The update link is a secret address your host gives. poplin calls it to update itself. Nothing else needs it. Cloudflare calls it a Deploy Hook, and its documentation gives these steps for making one:
+On an install that holds no key, `poplin update` has the install start that build itself, at its update link. The update link is a secret address your host gives. poplin calls it to update itself. Nothing else needs it. Cloudflare calls it a Deploy Hook, and its documentation gives these steps for making one:
 
 | Step | In Cloudflare's dashboard                                  |
 | ---- | ---------------------------------------------------------- |
@@ -113,7 +165,7 @@ $env:POPLIN_UPDATE_ADDRESS = "paste the update link here"
 | Line                           | Does                                                                                         |
 | ------------------------------ | -------------------------------------------------------------------------------------------- |
 | `poplin update --save-address` | saves the update link in the install, once; the install never shows it again                 |
-| `poplin update`                | starts the build when a newer version is out; `--anyway` starts it whatever the version      |
+| `poplin update`                | starts the build when a newer version is out; `--anyway` starts it whatever the version. An install that holds its key takes the release itself, and reads which is the newest each time, so `--anyway` changes nothing there |
 | `poplin update --check`        | says which version is out and whether an update link is saved; starts nothing                |
 | `poplin update --forget-address` | removes the saved update link                                                              |
 
@@ -125,11 +177,11 @@ The install takes an update link of this form alone, and only an admin's login s
 https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<DEPLOY_HOOK_ID>
 ```
 
-Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has an update link unless you connect a build of your own. With none saved, `poplin update` answers `no_update_address` and starts nothing.
+Cloudflare builds neither an install made from a terminal nor one the OpenTofu module made, so neither has an update link unless you connect a build of your own. With none saved and no key held, `poplin update` answers `no_update_address` and starts nothing.
 
 ## Optional: update by itself
 
-With the setting `auto_update` on, the install starts that build itself. It is off in a new install.
+With the setting `auto_update` on, the install updates with nobody asking: it takes the release with its key, or with no key starts the build at its update link. It is off in a new install.
 
 ```sh
 npx poplin config auto_update on
@@ -142,7 +194,7 @@ npx poplin config auto_update on
 | a version newer than the install's is out                | nothing starts                                        |
 | the release does not change the database                 | it never starts by itself: you start it               |
 | 3 days passed since the install first knew of the version | it waits                                             |
-| an update link is saved                                  | nothing starts                                        |
+| the install holds its key, or an update link is saved    | nothing starts                                        |
 | it has not started that version, or a newer one, before  | it never starts one version twice                     |
 
 | Question                 | Answer                                                                                                 |
@@ -150,8 +202,10 @@ npx poplin config auto_update on
 | When it looks            | once a UTC day, right after it asked which version is the newest: a start comes 3 to 4 days after the version was first seen |
 | A release that changes the database | waits for you: press Update now in the dashboard, or run `poplin update`                    |
 | A start Cloudflare did not take     | tried again the next UTC day, once a day at most                                            |
+| A release that could not be fetched or checked | tried again the next UTC day: nothing was sent to Cloudflare                     |
 | A start with no answer from Cloudflare | not started again by itself, since it may have been taken: run `poplin update`           |
 | A build that failed after it started | not started again by itself: build again, or run `poplin update`                           |
+| Which version, with the key | the version that waited its 3 days, and no other                                                    |
 | Which version is built   | the newest release at the moment the build runs, as every build of the install: [Choose the version](#choose-the-version) |
 | Where it shows           | under Activity in the dashboard: `Started an update to 0.2.0 by itself`, by `sweep@poplin.invalid`    |
 | Switching it off         | `poplin config auto_update off`                                                                        |
@@ -202,4 +256,4 @@ nothing was changed
 | Where it shows       | the foot of the dashboard's side, on every page: `0.2.0 is out` and a link, What changed           |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
-| Updating to it       | `poplin update`, once an update link is saved; [Update the install](#update-the-install) has the way of every kind of install |
+| Updating to it       | `poplin update`, on an install that holds its key or has an update link saved; [Update the install](#update-the-install) has the way of every kind of install |

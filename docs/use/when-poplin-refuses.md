@@ -36,9 +36,13 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | -------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
 | `no_update_address`  | the install has no update link saved                        | put the link in `POPLIN_UPDATE_ADDRESS`, then `poplin update --save-address`; an install with no update link updates as [Update the install](../run/update.md#update-the-install) says |
 | `no_address_to_save` | `POPLIN_UPDATE_ADDRESS` holds no update link                | put the update link in it for this one command                 |
-| `no_update`          | no newer version is known to the install                    | `poplin update --anyway` updates all the same                  |
+| `no_update`          | no newer version is known to the install                    | an install with an update link builds again with `poplin update --anyway` |
 | `update_refused`     | Cloudflare refused to start the build, with the status shown | make a new update link and save it                             |
-| `update_unreachable` | Cloudflare did not answer in time; the build may have started | wait a minute, then try again                                |
+| `update_unreachable` | Cloudflare did not answer in time; the build may have started, or the new version may be in | wait a minute, then try again                |
+| `no_key`, `key_refused` | the install holds no key, or Cloudflare no longer takes it | press Repair on the dashboard's Domain screen                  |
+| `lacks_right`        | the install's key lacks the right shown                     | press Repair on the dashboard's Domain screen: it makes a key with the right |
+| `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../run/update.md#with-the-kept-key) has each reason |
+| `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, report it             |
 
 **Setting up an install**
 
