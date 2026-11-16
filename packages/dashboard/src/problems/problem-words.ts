@@ -38,6 +38,20 @@ export function problemCount(count: number): string {
 }
 
 /**
+ * What to do about a problem, as the screen it is acted on says it: the words that lead to that screen are left out there, so "Open Domain and press Check." is "Press Check." on Domain.
+ *
+ * @param here - the screen that says it; left out, a screen the problem is not acted on, which says the words whole
+ */
+export function todoAt(problem: Pick<Problem, "todo" | "home">, here?: keyof typeof HOMES): string {
+  const lead = `Open ${HOMES[problem.home].label} and `;
+  if (here !== problem.home || !problem.todo.startsWith(lead)) return problem.todo;
+
+  const rest = problem.todo.slice(lead.length);
+
+  return `${rest.slice(0, 1).toUpperCase()}${rest.slice(1)}`;
+}
+
+/**
  * The text of a problem for a report: its kind, its times in UTC, how often, the version, and the failure's name and cleaned message. Nothing of a request is in it.
  */
 export function detailsOf(problem: Problem): string {

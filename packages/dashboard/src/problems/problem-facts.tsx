@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { copy } from "@/lib/notify";
 import { momentIn, useChosenTimeZone } from "@/lib/timezone";
-import { detailsOf, howOften } from "@/problems/problem-words";
+import { detailsOf, type HOMES, howOften, todoAt } from "@/problems/problem-words";
 import type { Problem } from "@/problems/problems-queries";
 
 /** What a copy says when it worked, and when the browser copies nothing. */
@@ -26,9 +26,13 @@ export function ProblemWhen({ problem }: { readonly problem: Problem }): ReactNo
 
 /**
  * What to do about a problem. A command in it stands out as one.
+ *
+ * @param here - the screen that draws it, where that is one a problem is acted on: its own problems then do not lead to it
  */
-export function ProblemTodo({ problem }: { readonly problem: Problem }): ReactNode {
-  return problem.todo.split("`").map((part, at) => (at % 2 === 1 ? <code key={part}>{part}</code> : part));
+export function ProblemTodo({ problem, here }: { readonly problem: Problem; readonly here?: keyof typeof HOMES }): ReactNode {
+  return todoAt(problem, here)
+    .split("`")
+    .map((part, at) => (at % 2 === 1 ? <code key={part}>{part}</code> : part));
 }
 
 /** The button that copies a problem's details for a report. */
