@@ -30,7 +30,8 @@ function read(line: string, env?: Readonly<Record<string, string | undefined>>, 
 describe("the proof of a removal", () => {
   // Drift: the proof is the one thing between a line and a removed install. A plan that removes without one would be a removal nobody confirmed.
   test.each([
-    ["uninstall stand-in --no-place --dry-run", { asking: "never", mode: { mode: "dry-run" } }],
+    ["uninstall stand-in --no-place --dry-run", { asking: "never", mode: { mode: "dry-run", data: "remove" } }],
+    ["uninstall stand-in --no-place --dry-run --keep-data", { asking: "never", mode: { mode: "dry-run", data: "keep" } }],
     ["uninstall stand-in --no-place --confirm poplin.example.com", { asking: "never", mode: { mode: "apply", confirm: { by: "flag", typed: "poplin.example.com" }, data: "remove" } }],
     ["uninstall stand-in --no-place --confirm=poplin.example.com --keep-data --yes", { asking: "never", mode: { mode: "apply", confirm: { by: "flag", typed: "poplin.example.com" }, data: "keep" } }],
     ["uninstall stand-in --no-place", { missing: ["confirm"] }],
@@ -47,7 +48,7 @@ describe("the proof of a removal", () => {
   test("on a terminal the proof is typed unless the line gave it, and a dry run asks for none: without this a person is asked to confirm a list", () => {
     expect(read("uninstall stand-in --no-place", HELD, true)).toEqual({ asking: "terminal", mode: { mode: "apply", confirm: { by: "typing" }, data: "remove" } });
     expect(read("uninstall stand-in --no-place --confirm poplin.example.com --keep-data", HELD, true)).toEqual({ asking: "terminal", mode: { mode: "apply", confirm: { by: "flag", typed: "poplin.example.com" }, data: "keep" } });
-    expect(read("uninstall stand-in --no-place --dry-run", HELD, true)).toEqual({ asking: "terminal", mode: { mode: "dry-run" } });
+    expect(read("uninstall stand-in --no-place --dry-run", HELD, true)).toEqual({ asking: "terminal", mode: { mode: "dry-run", data: "remove" } });
   });
 });
 
@@ -55,7 +56,6 @@ describe("a line that is written wrong", () => {
   // Drift: each refusal is one line a person acts on. Commander's own words would name neither the command nor the way out.
   test.each([
     ["uninstall stand-in --no-place --dry-run --confirm poplin.example.com", ["poplin uninstall: --dry-run removes nothing: leave out --confirm"]],
-    ["uninstall stand-in --no-place --dry-run --keep-data", ["poplin uninstall: --dry-run removes nothing: leave out --keep-data"]],
     ["uninstall stand-in --no-place --confirm=", ["poplin uninstall: --confirm takes the install's address", "a run with --dry-run shows it"]],
     ["uninstall stand-in --no-place --force", ["poplin uninstall: no option --force", "The proof of a removal is the install's address: --confirm <address>"]],
     ["uninstall stand-in --no-place --login you@example.com", ["poplin uninstall: no option --login", "uninstall takes no login: the install that is there says who logs in"]],

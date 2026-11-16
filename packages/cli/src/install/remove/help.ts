@@ -30,7 +30,7 @@ function commandHelp(providers: readonly Provider[]): string {
     ["A run lists what it would remove, then asks you to type the install's address.", "A run that asks nothing takes it with --confirm; --yes alone confirms nothing."],
     [...DRY_RUN_HELP],
     [...TOKEN_HELP],
-    ["It logs no computer out: run poplin logout on each one."],
+    ["It logs no computer out: run poplin logout on each one first."],
     ...(own.length === 0 ? [] : [indented(columns(own))]),
   ]);
 }
