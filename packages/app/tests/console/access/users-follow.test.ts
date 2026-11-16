@@ -105,6 +105,56 @@ describe("followUsers", () => {
     expect([await waits(opened), (await opened.install.database.readSettings())?.logins, await problems(opened)]).toEqual([true, [opened.owner, BO], noted ? ["users_not_carried"] : []]);
   });
 
+  const halves: readonly { readonly refusal: FollowRefusal; readonly why: "half_retried" | "half_refused"; readonly sentence: string; readonly noted: boolean }[] = [
+    { refusal: "unreachable", why: "half_retried", sentence: "The login list at Example Cloud was written, but the change is not complete; the rest is tried again by itself.", noted: false },
+    { refusal: "lacks_right", why: "half_refused", sentence: "The login list at Example Cloud was written, but the change is not complete. Open Domain and press Repair.", noted: true },
+    { refusal: "key_refused", why: "half_refused", sentence: "The login list at Example Cloud was written, but the change is not complete. Open Domain and press Repair.", noted: true },
+  ];
+
+  // Drift: the provider took the list and refused what else follows the users. Told "the login list there is as it was", an admin would think a removed user still gets in, or add a user twice.
+  test.each(halves)("a try that wrote the list and was answered $refusal for the rest says the change is not complete, and claims nothing of the list", async ({ refusal, why, sentence, noted }) => {
+    const opened = await openOwned();
+    await added(opened, BO);
+    const follow: UsersFollow = { where: "Example Cloud", holdsKey: () => true, push: async () => ({ ok: false, refusal, written: true }) };
+
+    expect(await followUsers(opened.install, follow)).toEqual({ carried: false, why, sentence });
+    expect([await waits(opened), await problems(opened)]).toEqual([true, noted ? ["users_not_carried"] : []]);
+  });
+
+  // Drift: a scheduled retry reads [owner, bo] and its write of the list is slow. Meanwhile cy is added, carried, and settled. The retry's older list then lands, and its request for the rest fails.
+  // Answered as a plain refusal, nothing would wait: the provider would hold the list without cy for good, and cy could never log in.
+  test("a retry whose older list lands after a newer one was settled, and which is then refused the rest, leaves the change waiting", async () => {
+    const opened = await openOwned();
+    await added(opened, BO);
+    const provider: { held: readonly Login[] } = { held: [] };
+    const newer: UsersFollow = {
+      where: "Example Cloud",
+      holdsKey: () => true,
+      push: async (logins) => {
+        provider.held = logins;
+
+        return { ok: true };
+      },
+    };
+    const retry: UsersFollow = {
+      ...newer,
+      push: async (logins) => {
+        await added(opened, CY);
+        const settled = await followUsers(opened.install, newer);
+        const between = [settled, provider.held, await waits(opened)];
+        provider.held = logins;
+        expect(between).toEqual([{ carried: true }, [opened.owner, BO, CY], false]);
+
+        return { ok: false, refusal: "unreachable", written: true };
+      },
+    };
+    const followed = await followUsers(opened.install, retry);
+
+    expect([followed.carried, provider.held, await waits(opened)]).toEqual([false, [opened.owner, BO], true]);
+    expect(await followUsers(opened.install, newer)).toEqual({ carried: true });
+    expect([provider.held, await waits(opened)]).toEqual([[opened.owner, BO, CY], false]);
+  });
+
   // Drift: two changes close together. A list carried while another admin adds a user is stale the moment it lands; settled as it is, the provider would keep it and the second user could not log in.
   test("a list that changed while it was carried is carried again, so the provider ends with the latest", async () => {
     const opened = await openOwned();
@@ -170,6 +220,15 @@ describe("followUsers", () => {
     const followed = await followUsers(opened.install, fakeFollow(() => "unreachable"));
 
     expect(followed).toEqual({ carried: false, why: "forgotten", sentence: "The login list at Example Cloud is not up to date. Open Domain and press Repair." });
+    expect(await problems(opened)).toEqual(["users_not_carried"]);
+  });
+
+  // Drift: the same install, and a try that wrote the list before it was refused the rest. "The login list is not up to date" would be false: it is the rest that is behind.
+  test("on an install that keeps no run of its domain, a try that wrote the list and was refused the rest says the change is not complete", async () => {
+    const opened = await openOwned();
+    const follow: UsersFollow = { where: "Example Cloud", holdsKey: () => true, push: async () => ({ ok: false, refusal: "unreachable", written: true }) };
+
+    expect(await followUsers(opened.install, follow)).toEqual({ carried: false, why: "half_refused", sentence: "The login list at Example Cloud was written, but the change is not complete. Open Domain and press Repair." });
     expect(await problems(opened)).toEqual(["users_not_carried"]);
   });
 });

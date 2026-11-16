@@ -5,11 +5,13 @@
 //   the key is refused, or lacks a right       waits     noted as a problem of the domain
 //   the list is not at the provider            waits     noted as a problem of the domain
 //   the provider gave no usable answer         waits     the scheduled run tries again
+//   the list was written, the rest refused     waits     as its refusal above, in words that claim nothing of the list
 //   the same, on an install that keeps no run of its domain: nothing remembers that the change waits, so it is noted as a problem too
 //
 // The change of the users is stored before any of this, and stands whatever the provider answers.
 // The list carried is read after the change was stored, under a mark set in the same step. The change is settled only if the stored logins are still that list and no mark was set since: by a later change, or by another try at the provider.
 // A list that is stale by then is carried once more, and where that is too the change is left waiting.
+// A try the provider refused sets a mark anew before it answers: its write of the list may have landed after a newer one that was settled meanwhile.
 
 import { noteProblem } from "@poplin/core/src/actions/problems";
 import type { Install } from "@poplin/core/src/actions/records";
@@ -28,6 +30,8 @@ const SENTENCES: Readonly<Record<Waiting, string>> = {
   not_made: "The login list at {where} is missing. Open Domain and press Repair.",
   unreachable: "The login list at {where} was not reached; it is tried again by itself.",
   forgotten: "The login list at {where} is not up to date. Open Domain and press Repair.",
+  half_retried: "The login list at {where} was written, but the change is not complete; the rest is tried again by itself.",
+  half_refused: "The login list at {where} was written, but the change is not complete. Open Domain and press Repair.",
   changed_again: "The users changed again meanwhile; the login list at {where} is brought up to date by itself.",
 };
 
@@ -37,11 +41,14 @@ const NOTED: readonly FollowRefusal[] = ["key_refused", "lacks_right", "not_made
 /** Why the provider's list did not take the users: one of the four answers of a call made with the install's key, or `not_made` for a list that is not at the provider, which a repair makes. */
 export type FollowRefusal = KeyRefusal | "not_made";
 
-/** Why a change waits: a refusal of the provider's side, users that changed again while they were carried, or, as `forgotten`, a try that failed on an install with nothing to remember it by. */
-type Waiting = FollowRefusal | "changed_again" | "forgotten";
+/** Why a change waits: a refusal of the provider's side, users that changed again while they were carried, or as `forgotten` a try that failed on an install that remembers none. The `half` ones are a try that wrote the list and was refused the rest. */
+type Waiting = FollowRefusal | "changed_again" | "forgotten" | "half_retried" | "half_refused";
 
-/** What one try at the provider answered. */
-type Pushed = { readonly ok: true } | { readonly ok: false; readonly refusal: FollowRefusal };
+/** What one try at the provider answered. A refusal says `written` where the list itself took the users and what else follows them did not. */
+type Pushed = { readonly ok: true } | { readonly ok: false; readonly refusal: FollowRefusal; readonly written?: true };
+
+/** A try at the provider that was refused. */
+type Refusal = Extract<Pushed, { readonly ok: false }>;
 
 /** The provider's side of the users: the list of who may log in, and whatever else there follows the first of them. */
 export interface UsersFollow {
@@ -66,18 +73,32 @@ function same(left: readonly Login[], right: readonly Login[]): boolean {
   return left.length === right.length && left.every((login, at) => login === right[at]);
 }
 
-/** Leave a change waiting after a try the provider refused, and note the one no later try mends: a refusal a person must repair, and any refusal on an install that keeps no run of its domain to remember the change by. */
-async function refused(install: Pick<Install, "database" | "now">, follow: UsersFollow, refusal: FollowRefusal, remembers: boolean): Promise<Followed> {
-  if (!remembers || NOTED.includes(refusal)) await noteProblem(install, "users_not_carried");
+/** The words of a refusal: its own, or for a try that wrote the list those that claim nothing of the list. A later try mends some, but none on an install that remembers nothing: there a person is told to repair. */
+function waitingOf(pushed: Refusal, remembers: boolean): Waiting {
+  const mends = remembers && !NOTED.includes(pushed.refusal);
+  if (pushed.written === true) return mends ? "half_retried" : "half_refused";
 
-  return waits(follow, !remembers && refusal === "unreachable" ? "forgotten" : refusal);
+  return mends || NOTED.includes(pushed.refusal) ? pushed.refusal : "forgotten";
+}
+
+/**
+ * Leave a change waiting after a try the provider refused, and note the one no later try mends: a refusal a person must repair, and any refusal on an install that keeps no run of its domain to remember the change by.
+ *
+ * @param since - the mark the try began under, `undefined` on an install that keeps no run. A mark is set anew whatever became of that one: the try may have written a list that is stale by now, after another try settled a newer one
+ */
+async function refused(install: Pick<Install, "database" | "now">, follow: UsersFollow, pushed: Refusal, since: number | undefined): Promise<Followed> {
+  const remembers = since !== undefined;
+  if (remembers) await install.database.settleUsers({ logins: null, since }, install.now());
+  if (!remembers || NOTED.includes(pushed.refusal)) await noteProblem(install, "users_not_carried");
+
+  return waits(follow, waitingOf(pushed, remembers));
 }
 
 /**
  * Carry the users to the provider after a change of them was stored, and settle the change where the provider took them.
  *
  * Each try marks the users as waiting and reads them in one statement, writes them to the provider, and settles in a second statement, which lets the mark go only if nothing set one meanwhile.
- * So a try the provider refused leaves the change waiting with nothing more written, and an install with no key is asked nothing at all.
+ * A try the provider refused sets the mark anew in one more statement, and an install with no key is asked nothing at all.
  *
  * @returns whether the provider holds the stored users now. A refusal leaves the change waiting, and one that no later try mends is noted as the problem `users_not_carried`
  * @throws {Error} the database failed: the change waits on, unless the failure was of the statement that settles a list another try has since replaced at the provider
@@ -95,7 +116,7 @@ export async function followUsers(install: Pick<Install, "database" | "now">, fo
 
     remembers = claimed.mark !== undefined;
     const pushed = await follow.push(logins);
-    if (!pushed.ok) return refused(install, follow, pushed.refusal, remembers);
+    if (!pushed.ok) return refused(install, follow, pushed, claimed.mark);
 
     const settled = await install.database.settleUsers({ logins, since: claimed.mark ?? 0 }, install.now());
     if (!settled.waits && settled.logins !== undefined && same(settled.logins, logins)) return { carried: true };

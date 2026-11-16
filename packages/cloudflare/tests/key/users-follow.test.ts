@@ -92,11 +92,12 @@ describe("createUsersFollow", () => {
     { name: "a key with no right for the policy", answers: { policyWrite: () => refusal(403, 10_000, "Authentication error") }, ends: { ok: false, refusal: "lacks_right" }, written: 1 },
     { name: "Cloudflare failing while the policy is read", answers: { policies: DOWN }, ends: { ok: false, refusal: "unreachable" }, written: 0 },
     { name: "an account with no policy of the logins", answers: { policies: (asked) => page(asked, []) }, ends: { ok: false, refusal: "not_made" }, written: 0 },
-    { name: "a key with no right for the alert, after the policy was written", answers: { alerts: () => refusal(403, 10_000, "Authentication error") }, ends: { ok: false, refusal: "lacks_right" }, written: 1 },
-    { name: "Cloudflare failing while the alert is written", answers: { alertWrite: DOWN }, ends: { ok: false, refusal: "unreachable" }, written: 4 },
+    { name: "a key with no right for the alert, after the policy was written", answers: { alerts: () => refusal(403, 10_000, "Authentication error") }, ends: { ok: false, refusal: "lacks_right", written: true }, written: 1 },
+    { name: "Cloudflare failing while the alert is written", answers: { alertWrite: DOWN }, ends: { ok: false, refusal: "unreachable", written: true }, written: 4 },
   ];
 
   // Drift: each answer is one of the refusals a screen has a sentence for. A try that stopped at the alert is no success, so the change goes on waiting and the alert is tried again.
+  // It says that the policy was written, so no screen tells a person the login list is as it was.
   test.each(refused)("$name ends as $ends, and no text of the answer holds the key", async ({ answers, ends, written }) => {
     await withFake(account(answers), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT);

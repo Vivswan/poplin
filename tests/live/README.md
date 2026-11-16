@@ -194,18 +194,18 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   861 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the checks, as the harness counts them   864 on the local fake, a few more with the demo's check: every site they publish, change, and remove
 a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 390
 the harness's own statements             18: three tokens in and out, and the caps
-a usual run                              about 917 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
+a usual run                              about 920 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
 a day of 40 such runs                    about 42,000 of the 100,000
 ```
 
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 861 of at most 1100
+Rows written this run: 864 of at most 1100
 ```
 
 ## The backup drill
@@ -281,7 +281,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`                                                           |
-| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call |
+| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `users-follow`: no login list exists |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |

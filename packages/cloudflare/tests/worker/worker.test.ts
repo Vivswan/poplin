@@ -1254,8 +1254,8 @@ describe("the rows the live checks count", () => {
         "put back from a backup, with three versions": [23, 23],
         // An upload that is given up was counted with the finish it never had.
         "an upload begun, asked what it lacks, and given up": [9, 24],
-        // Three rows more are written where the logins change after a check of the domain: the mark that they changed, then the mark of the try at Cloudflare and its settling, or the problem noted where Cloudflare refused them.
-        "a setting changed": [2, 5],
+        // Four rows more are written where the logins change after a check of the domain and Cloudflare refuses them: the mark that they changed, the mark of the try, the mark set anew, and the problem noted.
+        "a setting changed": [2, 6],
         "a fourth version, which drops two once the install keeps two": [19, 19],
         "a new site that runs out": [20, 20],
         "who may open it and its title changed at once": [5, 5],
