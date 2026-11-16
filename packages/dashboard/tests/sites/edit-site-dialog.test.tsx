@@ -1,0 +1,58 @@
+// The dialog that changes how a site is named, where the source cannot say it alone: what an opening starts from after one that was left.
+
+import { clearPage } from "../lib/support/page";
+
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+
+import type { Site } from "@/lib/sites";
+import { EditSiteDialog } from "@/sites/edit-site-dialog";
+
+/** The site the dialog is opened for. */
+const SITE = {
+  id: "abc123def456",
+  label: "trip-notes--abc123def456",
+  name: "trip-notes",
+  public_name: null,
+  title: "Trip notes",
+  title_typed: true,
+  access: "private",
+} as unknown as Site;
+
+/** What a person types and then leaves. */
+const DRAFT = { title: "Draft X", name: "ab" } as const;
+
+/** The dialog over a site, or closed. */
+function Editing({ site }: { readonly site: Site | undefined }): ReactNode {
+  return <EditSiteDialog site={site} onClose={() => undefined} onSave={async () => undefined} />;
+}
+
+/** What the two fields hold, and whether Save is on. */
+function held(): readonly [title: string, name: string, save: boolean] {
+  const [title, name] = ["Title", "Name"].map((label) => (screen.getByRole("textbox", { name: label }) as HTMLInputElement).value);
+
+  return [title ?? "", name ?? "", !screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")];
+}
+
+afterEach(cleanup);
+
+afterAll(clearPage);
+
+describe("the dialog that edits a site", () => {
+  // Drift: the dialog is kept while it is closed, so what was typed and left by Cancel would be there at the next opening for the same site, with Save lit over a change nobody means.
+  test("opened again for the same site after it was left starts from what the site holds", async () => {
+    const { rerender } = render(<Editing site={SITE} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: DRAFT.title } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: DRAFT.name } });
+    const typed = held();
+    rerender(<Editing site={undefined} />);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    rerender(<Editing site={SITE} />);
+
+    expect([typed, held()]).toEqual([
+      [DRAFT.title, DRAFT.name, true],
+      ["Trip notes", "trip-notes", false],
+    ]);
+  });
+});

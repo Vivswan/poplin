@@ -102,11 +102,16 @@ export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDial
   const [refusal, setRefusal] = useState<NamingRefusal>();
   const [busy, setBusy] = useState(false);
   const fields = { title: useRef<HTMLInputElement>(null), name: useRef<HTMLInputElement>(null) };
-  if (site !== undefined && site !== shown) {
-    setShown(site);
-    setTitle(typedTitle(site));
-    setName(site.name);
-    setRefusal(undefined);
+  // Every opening starts from what the site holds: what was typed and then left by Cancel, Close, or Escape is not there the next time.
+  const [asked, setAsked] = useState(site);
+  if (site !== asked) {
+    setAsked(site);
+    if (site !== undefined) {
+      setShown(site);
+      setTitle(typedTitle(site));
+      setName(site.name);
+      setRefusal(undefined);
+    }
   }
 
   // A field left as it was opened is not sent, whatever it holds: only what a person typed is changed.
