@@ -3,6 +3,7 @@
 //                        database calls                                                        other calls           in all
 //   the run's start       1: the last asking, the settings, and the walk's place, read together  0                      1
 //   the day's first run   2: that, and the answer written                                        1: the website asked   3
+//   the login repaired    8: the users carried anew where their policy was written, an audit entry, a problem noted, on the run that begins a UTC day   24: 14 and that carry's 10, and one for each further page of a list   32
 //   users or rules wait   1: the kept run of the domain read, on an install that holds a key           0                      1
 //   either carried        6 for the users, 5 for the rules: that read once, then 2 x (the mark set with what is stored read, the settling), a problem noted   10 each: 2 x 5 to Cloudflare   16, 15
 //   an update             5: the try, the audit entry, and the try taken back or a problem      11: the release read,   16
@@ -25,13 +26,15 @@
 
 import { startDueUpdate } from "@poplin/core/src/actions/auto-update";
 import { type Asking, checkForUpdate } from "@poplin/core/src/actions/check-update";
-import { meterNoted } from "@poplin/core/src/actions/problems";
+import { meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Updating } from "@poplin/core/src/actions/start-update";
 import { SWEEP_SPARE_WRITES, SWEEPER, sweepExpired } from "@poplin/core/src/actions/sweep";
+import type { SettingValues } from "@poplin/core/src/records/settings";
 import { followUsers, type UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import { followRules, type RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 
+import type { LoginRepair } from "../install/pieces/access/login-repair";
 import { RULES_PUSH_CALLS } from "../../with-domain/pieces/rules/rules-follow";
 
 /** How many sites or uploads one step looks at. */
@@ -58,16 +61,23 @@ const RULES_CALLS = 2 * RULES_PUSH_CALLS;
 /** The most requests an update sends: seven to the website and the release's page, the redirect of each file among them, and four to Cloudflare's API. */
 const SELF_UPDATE_REQUESTS = 11;
 
+/** How far apart two runs are, by the schedule `INSTALL_OBJECTS.sweepCron` states: a quarter of an hour. */
+const RUN_EVERY_MS = 900_000;
+
+/** The milliseconds of one UTC day. */
+const DAY_MS = 86_400_000;
+
 /** Where a walk begins: at the sites that expired. The steps go on from there through the trash, the uploads, and the leftovers. */
 const START: NonNullable<Place> = { trash: false };
 
 /** Where the walk stands, as the database keeps it between two runs; `undefined` once it reached its end. */
 type Place = Awaited<ReturnType<Install["database"]["readSweepPlace"]>>;
 
-/** The version the install runs, what updates it, and the users' and the guard rules' side at Cloudflare. */
+/** The version the install runs, what updates it, and the login's, the users', and the guard rules' side at Cloudflare. */
 interface Running {
   readonly version: string;
   readonly updating: Updating;
+  readonly login: LoginRepair;
   readonly follow: UsersFollow;
   readonly rules: RulesFollow;
 }
@@ -104,6 +114,34 @@ function fitsAnotherStep(tally: Tally, place: NonNullable<Place>): boolean {
   return database <= RUN_CALLS.database && all <= RUN_CALLS.all;
 }
 
+/** Whether a run is the one that begins a UTC day: the one of a day's 96 whose clock stands in the day's first quarter of an hour. An install with `update_check` off never asks the day's question, so the clock tells. */
+function beginsDay(now: number): boolean {
+  return now % DAY_MS < RUN_EVERY_MS;
+}
+
+/**
+ * Put the login in front of the install back, where the install holds a key to do it with: what is missing or differs is written, and a login that stands costs reads alone.
+ * What was written is kept as an audit entry the sweep signs.
+ * A repair that stopped is noted as a problem, but for one Cloudflare gave no answer to: the next day's run tries again.
+ *
+ * @param logins - the users the login is made to let through, as the run read them
+ */
+async function repairLogin(install: Install, running: Pick<Running, "login" | "follow">, tally: Tally, logins: SettingValues["logins"]): Promise<void> {
+  if (!running.login.holdsKey()) return;
+
+  const { wrote, users, calls, refusal } = await running.login.repair(logins);
+  tally.web += calls;
+  // The users may have changed since the run read them: where their policy was written, they are carried anew, as stored now.
+  if (users) {
+    tally.web += FOLLOW_CALLS;
+    await followUsers(install, running.follow);
+  }
+
+  if (wrote.length > 0) await install.database.appendAudit({ action: "domain_synced", detail: { run: "repair", from: "sweep", changed: [...wrote] } }, { by: SWEEPER.holder, at: install.now() });
+
+  if (refusal !== undefined && refusal !== "unreachable") await noteProblem(install, "login_not_repaired", new Error(refusal));
+}
+
 /** Carry to Cloudflare what still waits there, where the install holds a key to carry it with: a change of the users, and a changed setting of the guard rules. A refusal leaves the change waiting for the next run. */
 async function carryWaiting(install: Install, running: Pick<Running, "follow" | "rules">, tally: Tally): Promise<void> {
   if (!running.follow.holdsKey()) return;
@@ -124,10 +162,10 @@ async function carryWaiting(install: Install, running: Pick<Running, "follow" | 
  * Run the sweep for one scheduled invocation: go on where the run before stopped, and keep where this one stops.
  *
  * The place is kept in the database, since Cloudflare may start a new instance for every run. Only what is due is looked at: a run takes 5 due items when each takes a whole removal, and 25 when each takes one change.
- * The first run of a UTC day also writes which version of poplin is the newest, and may start an update: either leaves the steps fewer calls.
+ * The first run of a UTC day also writes which version of poplin is the newest and may start an update, and the run that begins the day repairs the login: each leaves the steps fewer calls.
  *
  * @param asking - what sends the day's one request for the newest version, and where to
- * @param running - the version the install runs and what updates it, for the update an install starts by itself, and the users' and the guard rules' side at Cloudflare
+ * @param running - the version the install runs and what updates it, for the update an install starts by itself, and the login's, the users', and the guard rules' side at Cloudflare
  * @throws {Error} the sweep was refused, or the database failed; what was moved or removed before stays so, and the next run begins where this one began
  */
 export async function runSweep(install: Install, asking: Asking, running: Running): Promise<void> {
@@ -141,6 +179,7 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   const taking = running.updating.self;
   const self = { ...taking, ready: counted({ ready: taking.ready }, tally, "web", SELF_UPDATE_REQUESTS).ready };
   if (learned !== undefined) await startDueUpdate(watched, { ...learned, version: running.version }, { ...running.updating, self });
+  if (beginsDay(install.now()) && start.settings !== undefined) await repairLogin(watched, running, tally, start.settings.logins);
   await carryWaiting(watched, running, tally);
 
   let place: Place = start.place ?? START;

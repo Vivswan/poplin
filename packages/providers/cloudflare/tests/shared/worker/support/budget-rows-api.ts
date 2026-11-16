@@ -418,7 +418,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).problems.$get({ query: {} });
     },
     status: 200,
-    budget: { queries: 2, read: 106, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 113, reads: 0, writes: 0 },
   },
   {
     group,

@@ -140,6 +140,11 @@ function setupRun(name: string, budget: Budget, path: string, body: Readonly<Rec
   };
 }
 
+/** What Cloudflare answers a call the key has no right for. */
+function noRight(): Response {
+  return Response.json({ success: false, errors: [{ code: 10_000, message: "Authentication error" }], messages: [], result: null }, { status: 403 });
+}
+
 /** One scheduled run on the measured instance, with the bucket's list pages cut short when asked. */
 function run(short: boolean): Step {
   return async (measured: Measured) => {
@@ -149,7 +154,7 @@ function run(short: boolean): Step {
   };
 }
 
-/** Seed the costliest run there is: the first of a day, on which an update is due, with five sites past their days in the trash that each take a whole removal. */
+/** Seed the costliest run there is: the first of a day, on which an update is due and the login's repair is refused, with five sites past their days in the trash that each take a whole removal. */
 async function costliestRun(stage: Stage): Promise<void> {
   const { database } = stage.install;
   const release = await ownRelease("999.0.0");
@@ -162,7 +167,8 @@ async function costliestRun(stage: Stage): Promise<void> {
 
   stage.w.clock.now += 8 * DAY_MS;
   stage.outside.latest = release.latest;
-  stage.outside.cloudflare = release.cloudflare;
+  // Cloudflare refuses the login's repair for a right, so the run notes its problem.
+  stage.outside.cloudflare = async (input, init) => (new URL(new Request(input, init).url).pathname.includes("/access/") ? noRight() : release.cloudflare(input, init));
   stage.keptKey = OWN_KEY;
 }
 
@@ -379,7 +385,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     group: BACKGROUND,
     name: "scheduled run: the costliest, new instance",
     start: "new",
-    // Worst: Cloudflare starts an instance for the run, the day's first, on which an update is due, and the walk's first step meets five sites past the trash that each take a whole removal of 15 list pages.
+    // Worst: Cloudflare starts an instance for the run, the day's first, on which an update is due and the login's repair notes a problem, and the walk's first step meets five sites past the trash that each take a whole removal of 15 list pages.
     // By its own count a run stops at 40 queries, and the start of its instance adds to them: a costlier run than this one fails here before it is cut off.
     arrange: async (stage) => {
       await costliestRun(stage);

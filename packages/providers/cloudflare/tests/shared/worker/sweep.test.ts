@@ -4,12 +4,13 @@ import { reset } from "cloudflare:test";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
+import type { Login } from "@poplin/core/src/auth/logins";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import { sha256Of } from "@poplin/core/src/storage/storage";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { INSTALL_OBJECTS } from "../../../src/shared/install/install-objects";
-import { ACCOUNT, emptyAccount, TOKEN } from "../install/support/fake-install";
+import { ACCOUNT, emptyAccount, TEAM, TOKEN } from "../install/support/fake-install";
 import type { Asked } from "../install/support/replies";
 import { ADMIN, api, ask, BINDINGS, cloudflareOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER, page, problemsOf } from "./support/install";
 import { publish, refusingDatabase, send, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
@@ -26,6 +27,9 @@ const WHOLE_REMOVAL = 15;
 
 /** What a step over five sat-out sites costs when each takes a whole removal: the listing of the due ones, the day's count of writes to the bucket, and per site a change, 30 bucket calls, and the leftover forgotten. */
 const MOST_STEP_CALLS = 162;
+
+/** The requests the run's table says a repair of the login sends at the most with the carry of the users after it, where each list of the account fits one page. */
+const MOST_REPAIR_CALLS = 24;
 
 /** The one file of a site made only to be swept. */
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
@@ -49,6 +53,97 @@ beforeEach(async () => {
 });
 
 describe("the scheduled run", () => {
+  // Drift: with the login in front of the whole dashboard, an application deleted at Cloudflare shuts every user out, and nothing but this run puts it back with no person.
+  // A run that wrote a login that stands, or asked on each of a day's 96 runs, would spend the account's calls for nothing.
+  test("the run that begins a day puts back a login that was removed at Cloudflare, for the stored users and inside its count of calls, and Activity says so; a login that stands is read and not written, and no other run of the day asks", async () => {
+    const account = emptyAccount();
+    const asked: Asked[] = [];
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    const worker = instance(w, cloudflareOf(account, asked));
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    const written = (): string[] => asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path}`);
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+
+    await sweep(worker, w, keyed);
+    const first = { calls: asked.length, writes: written().length };
+    const made = {
+      applications: account.applications.map((application) => application.name).sort(),
+      users: account.policies.filter((policy) => policy.name === INSTALL_OBJECTS.accessPolicy).map((policy) => policy.include),
+      variable: account.bindings.find((binding) => binding.name === "ACCESS"),
+    };
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
+    const sameDay = asked.length - first.calls;
+    wait(w, 23.75);
+    await sweep(worker, w, keyed);
+    const nextDay = { calls: asked.length - first.calls, writes: written().length - first.writes };
+    const said = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "domain_synced").map(({ by, detail }) => ({ by, detail }));
+
+    expect(made).toEqual({
+      applications: [INSTALL_OBJECTS.accessApplication, INSTALL_OBJECTS.accessOpenApplication],
+      users: [[{ email: { email: OWNER } }]],
+      variable: { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === INSTALL_OBJECTS.accessApplication)?.aud } },
+    });
+    expect([first.calls <= MOST_REPAIR_CALLS, first.writes, sameDay, nextDay.calls > 0, nextDay.writes]).toEqual([true, 5, 0, true, 0]);
+    expect(said).toEqual([
+      {
+        by: "sweep@poplin.invalid",
+        detail: { run: "repair", from: "sweep", changed: [INSTALL_OBJECTS.accessOpenPolicy, INSTALL_OBJECTS.accessOpenApplication, INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessApplication, "ACCESS"] },
+      },
+    ]);
+    expect(JSON.stringify([said, await problemsOf(w)])).not.toContain(TOKEN);
+  });
+
+  // Drift: a repair that failed and said nothing leaves the owner to learn of a broken login by being shut out; one that threw would stop the run before it removes a single expired site.
+  test.each([
+    ["a key Cloudflare no longer takes", { status: 401, code: 10_000 }, [["login_not_repaired", 1, "key_refused"]]],
+    ["a key that lacks the right", { status: 403, code: 10_000 }, [["login_not_repaired", 1, "lacks_right"]]],
+    ["a Cloudflare that gives no usable answer", { status: 503, code: 0 }, []],
+  ] as const)("the run that begins a day, with %s, notes what a person must repair, writes nothing, and still moves an expired site to the trash", async (_name, refuseAs, problems) => {
+    const account = emptyAccount();
+    const asked: Asked[] = [];
+    account.refuse = `GET /accounts/${ACCOUNT}/access/policies`;
+    account.refuseAs = refuseAs;
+    const worker = instance(w, cloudflareOf(account, asked));
+    await publish(instance(w), await tokenOf(w, "publisher"), { name: "brief", expires: "1h" }, [page("<p>brief</p>")]);
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+
+    await sweep(worker, w, { ...BINDINGS, KEPT_KEY: TOKEN });
+
+    expect([await problemsOf(w), asked.filter((entry) => entry.method !== "GET"), account.applications]).toEqual([problems, [], []]);
+    expect(await states()).toEqual({ live: 0, trash: 1 });
+  });
+
+  // Drift: a repair that stopped half way wrote four objects at Cloudflare; left out of Activity, nothing in the install would say they were made.
+  // And a policy it wrote from users read before a change of them would shut the newest user out until the next day, on an install that keeps no run of its domain too.
+  test("the run that begins a day, refused the write of the Worker's variable, says in Activity what it wrote before and notes the problem; a user added while it wrote the policy is in the policy when the run ends", async () => {
+    const account = emptyAccount();
+    const asked: Asked[] = [];
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    const answers = cloudflareOf(account, asked);
+    const logins = (): unknown => account.policies.filter((policy) => policy.name === INSTALL_OBJECTS.accessPolicy).map((policy) => policy.include);
+    // The moment Cloudflare holds the policy the repair wrote, another user is stored, as an admin's add in another request stores one.
+    const worker = instance(w, async (input, init) => {
+      const before = account.policies.length;
+      const answered = await answers(input, init);
+      if (before === 1 && account.policies.length === 2) await database.addLogin("bo@example.com" as Login, { by: OWNER, at: w.clock.now });
+
+      return answered;
+    });
+    account.refuse = `PATCH /accounts/${ACCOUNT}/workers/scripts/poplin/settings`;
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+
+    await sweep(worker, w, keyed);
+    const said = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "domain_synced" && entry.detail.from === "sweep").map((entry) => entry.detail.changed);
+
+    expect(said).toEqual([[INSTALL_OBJECTS.accessOpenPolicy, INSTALL_OBJECTS.accessOpenApplication, INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessApplication]]);
+    expect(await problemsOf(w)).toEqual([["login_not_repaired", 1, "lacks_right"]]);
+    expect([await database.readDomainCheck(), logins()]).toEqual([undefined, [[{ email: { email: "bo@example.com" } }, { email: { email: OWNER } }]]]);
+  });
+
   // Drift: a user added while Cloudflare refused the list can log in only once the list is carried. Without the run nothing carries it but a person's repair, and a run that carried with nothing waiting would call Cloudflare every 15 minutes for nothing.
   test("a change of the users that Cloudflare did not take is carried by the next run, which settles it, and a run with nothing waiting asks Cloudflare nothing", async () => {
     const account = emptyAccount();

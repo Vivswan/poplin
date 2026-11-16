@@ -25,7 +25,7 @@ import type { UploadKey } from "../install/key/upload-key";
 import { createRulesFollow } from "../../with-domain/pieces/rules/rules-follow";
 import type { AccountAddresses } from "../../without-domain/address-layout";
 import type { Connection } from "../install/client";
-import type { DomainLayout } from "../../with-domain/layout";
+import { type DomainLayout, privateSitesPattern } from "../../with-domain/layout";
 import { type BoundInstall, readInstallBinding } from "../install/kind/zone-binding";
 import { createPathPlug, givePathKey } from "../../without-domain/path-plug";
 import { createDomainPlug, giveKey } from "../../with-domain/zone-plug";
@@ -75,6 +75,9 @@ export interface InstallHosts {
   /** The hostname of the dashboard, the login, the API, and the setup page. */
   readonly adminHost: Hostname;
 
+  /** What the login guards as the private sites: a pattern of hostnames, or one host whole. */
+  readonly privateSites: string;
+
   /** How the addresses of the install's sites are read and written. */
   readonly addresses: SiteAddresses;
 
@@ -113,7 +116,7 @@ function domainHosts(layout: DomainLayout): InstallHosts {
     return { key, domain: createDomainPlug({ ...placed, key, kept: own.kept }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
   }
 
-  return { kind: "domain", adminHost: layout.adminHostname, addresses: hostnameAddresses(layout), layout: { kind: "hostname", public_word: layout.publicWord }, partOf, sideOf };
+  return { kind: "domain", adminHost: layout.adminHostname, privateSites: privateSitesPattern(layout), addresses: hostnameAddresses(layout), layout: { kind: "hostname", public_word: layout.publicWord }, partOf, sideOf };
 }
 
 function accountHosts(layout: AccountAddresses): InstallHosts {
@@ -127,6 +130,7 @@ function accountHosts(layout: AccountAddresses): InstallHosts {
   return {
     kind: "account address",
     adminHost: layout.adminHost,
+    privateSites: layout.privateHost,
     addresses: pathAddresses(layout),
     layout: { kind: "path", sites_host: layout.sitesHost, private_host: layout.privateHost },
     partOf: (hostname) => (hostname === layout.adminHost ? "admin" : "site"),
