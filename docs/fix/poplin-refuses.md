@@ -29,6 +29,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `too_many_requests`                            | asked too often                                    | wait a minute                                                 |
 | `allowance_spent`                              | a day's allowance is used up: the database's, or `max_storage_writes_per_day` | wait until 00:00 UTC; asking sooner is refused the same way  |
 | `internal`, `crashed`                          | something failed                                   | try again; `poplin doctor` reports on the install             |
+| `logins_not_ended`                             | Cloudflare did not end the dashboard's logins, or gave no answer | open Domain in the dashboard and press Repair, then ask again |
 
 **Updating an install**
 

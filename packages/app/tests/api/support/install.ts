@@ -61,7 +61,7 @@ export interface Answered {
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
  * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`.
- * `users` stands in for the provider's side of the users: `pushed` holds every list of logins handed over, and `takes` says whether the provider takes them; it starts as an install with no key, which takes none.
+ * `users` stands in for the provider's side of the users: `pushed` holds every list of logins handed over, `ended` counts the tries to end every login, and `takes` says whether the provider takes either; it starts with no key, and takes none.
  *
  * `provider` stands in for the install's provider: `sent` holds the method, the redirect mode, the body, and the address of every request to start a rebuild, and `status` is what the next one is answered with.
  */
@@ -73,7 +73,7 @@ export interface ApiInstall {
   readonly counters: MemoryCounters;
   readonly clock: { now: number };
   readonly provider: { status: number; readonly sent: unknown[][] };
-  readonly users: { takes: boolean; readonly pushed: (readonly string[])[] };
+  readonly users: { takes: boolean; readonly pushed: (readonly string[])[]; ended: number };
   readonly tokens: { readonly admin: string; readonly owner: string; readonly stranger: string };
   readonly reported: unknown[];
   readonly keys: () => Promise<string[]>;
@@ -174,7 +174,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const reported: unknown[] = [];
   const counters = new MemoryCounters();
   const provider: ApiInstall["provider"] = { status: 200, sent: [] };
-  const users: ApiInstall["users"] = { takes: false, pushed: [] };
+  const users: ApiInstall["users"] = { takes: false, pushed: [], ended: 0 };
   const said = v.parse(ADDRESS_LAYOUT, layout);
   const addresses = addressesUnder(said.kind === "hostname" ? said.public_word : DEFAULT_PUBLIC_WORD);
   const api = createApi({
@@ -200,6 +200,11 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
 
         return users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
       },
+    },
+    endLogins: async () => {
+      users.ended += 1;
+
+      return users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
     },
     rebuild: {
       accepts: (address) => address.href === REBUILD_ADDRESS,

@@ -338,8 +338,12 @@ describe("createApi", () => {
     // Drift: a token names no email, so the API is the way a list of new emails alone would reach the store and shut the dashboard on everyone.
     const shut = await answered(install.routes.config.$patch({ json: { logins: ["new@example.com" as Login] }, query: {} }));
     expect([shut.status, shut.body.error]).toEqual([409, { code: "no_working_login", message: "the change would leave no login that works", about: "logins" }]);
-    const key = await install.database.ensureVisitorKey(new Uint8Array(32).fill(7), NOW);
-    expect([(await done((api) => api.sessions.$delete({ query: {} }))).body, await install.database.readVisitorKey()]).not.toEqual([{}, key.key]);
+    // Drift: a sign-out the provider did not take would answer as done, or one it took would leave no entry of who asked.
+    const kept = await answered(install.routes.sessions.$delete({ query: {} }));
+    expect([kept.status, kept.body.error, install.users.ended]).toEqual([409, { code: "logins_not_ended", message: "the install's provider did not end the dashboard's logins, or gave no answer", about: "no_key" }, 1]);
+    install.users.takes = true;
+    expect([(await done((api) => api.sessions.$delete({ query: {} }))).body, install.users.ended]).toEqual([{}, 2]);
+    install.users.takes = false;
     expect(((await done((api) => api.audit.$get({ query: { limit: "3" } }))).body.entries as { action: string }[]).map((entry) => entry.action)).toEqual(["signed_everyone_out", "settings_changed", "restore"]);
     // Drift: the note of the last check of the domain is what `poplin doctor` prints; an answer of another form is one the command cannot read, so it would report a failure of the install where a login is broken.
     const ada = "ada@example.com" as Login;

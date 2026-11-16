@@ -1,5 +1,6 @@
 // A console the tests ask requests of: the dashboard tests' install, with the console built over it and helpers that send what its client would.
 
+import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import { parseLogin, parseLogins } from "@poplin/core/src/auth/logins";
 
 import { createConsole } from "../../../src/console/console";
@@ -41,6 +42,9 @@ interface Opened {
 
   /** Every address the provider was asked to start a rebuild at, in order. */
   readonly rebuilds: readonly string[];
+
+  /** The stand-in for the provider's way to end every login: `answer` is what the next try is answered, done unless a test sets a refusal, and `asked` counts the tries. */
+  readonly logins: { answer: Awaited<ReturnType<EndLogins>>; asked: number };
 
   /** Ask anything at all, as it is: no login, origin, or type is added. */
   readonly fetch: (request: Request) => Promise<Response>;
@@ -87,6 +91,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
     return { ok: false, refusal: who.refusal === "not-a-user" ? who.refusal : PROVIDER_REFUSALS[who.refusal as keyof typeof PROVIDER_REFUSALS] };
   };
   const rebuilds: string[] = [];
+  const logins: Opened["logins"] = { answer: { ok: true }, asked: 0 };
   const startRebuild = async (address: string): Promise<Response> => {
     rebuilds.push(address);
 
@@ -105,6 +110,11 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
     demo: { reset: "/reset" },
     domain,
     ...(follow === undefined ? {} : { follow }),
+    endLogins: async () => {
+      logins.asked += 1;
+
+      return logins.answer;
+    },
     ...codeCounts(opened.counters),
   });
   const client = { ...opened.proof, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };
@@ -112,6 +122,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
   return {
     base: opened,
     rebuilds,
+    logins,
     fetch: (request) => built.fetch(request),
     get: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`, { headers: opened.proof })),
     getLoggedOut: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`)),

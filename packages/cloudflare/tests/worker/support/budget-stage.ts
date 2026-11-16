@@ -5,8 +5,10 @@ import type { Install } from "@poplin/core/src/actions/records";
 import { hc } from "hono/client";
 import type { Bindings } from "../../../src/worker/bindings";
 import type { Outside } from "../../../src/worker/start";
+import { INSTALL_OBJECTS } from "../../../src/zone/install-objects";
+import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { emptyTally, type Tally, talliedBindings } from "./call-tally";
-import { ADMIN, type ApiCalls, accessHeaders, ask, BINDINGS, installOf, instance, OWNER, type Published, page, publish, send, type TestFile, tokenOf, type Worker, type World, world } from "./install";
+import { ADMIN, type ApiCalls, accessHeaders, ask, BINDINGS, cloudflareOf, installOf, instance, OWNER, type Published, page, publish, send, type TestFile, tokenOf, type Worker, type World, world } from "./install";
 
 /** How long ago the login of a row's session began: past the minutes in which a page still writes the login's Activity line. */
 const LOGIN_AGE_MS = 3_600_000;
@@ -136,6 +138,14 @@ async function stageOf(): Promise<Stage> {
 /** A new admin token of the stage's install. */
 export function adminToken(stage: Stage): Promise<string> {
   return tokenOf(stage.w, "admin");
+}
+
+/** Give the measured install a key, and an account that holds its guarded application, so every login can be ended there. */
+export function endsLogins(stage: Stage): void {
+  const account = emptyAccount();
+  account.applications.push({ id: "app-1", name: INSTALL_OBJECTS.accessApplication });
+  stage.outside.cloudflare = cloudflareOf(account, []);
+  stage.keptKey = TOKEN;
 }
 
 /**

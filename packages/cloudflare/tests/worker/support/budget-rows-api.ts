@@ -3,7 +3,7 @@
 import { decideLogin } from "@poplin/core/src/actions/computer-logins";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { ADMIN, done, OWNER } from "./install";
-import { adminToken, apiOf, type BudgetRow, get, sql, type Stage, unmeasured } from "./budget-stage";
+import { adminToken, apiOf, type BudgetRow, endsLogins, get, sql, type Stage, unmeasured } from "./budget-stage";
 import { manyEntries, manyProblems, manySites, manyTokens, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
 
 /** The group of every row here. */
@@ -354,9 +354,10 @@ export const API_ROWS: readonly BudgetRow[] = [
     group,
     name: "sign everyone out",
     route: "DELETE /api/sessions",
-    // A new visitor key and one audit entry.
+    // One audit entry, once Cloudflare took the request made with the kept key: that call is none of the database's.
     arrange: async (stage) => {
       const token = await adminToken(stage);
+      endsLogins(stage);
 
       return (measured) => apiOf(measured, token).sessions.$delete({ query: {} });
     },

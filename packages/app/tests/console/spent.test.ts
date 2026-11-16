@@ -25,7 +25,7 @@ describe("a console whose install meets a day's allowance that is used up", () =
   // Drift: the client shows the sentence of a refusal it is sent, and has none of its own for a status of 500.
   test("answers a change with the refusal and the wait, as the JSON its client reads", async () => {
     const opened = await openConsole("/next");
-    opened.base.install.database.rotateVisitorKey = () => Promise.reject(new AllowanceSpent("writing"));
+    opened.base.install.database.appendAudit = () => Promise.reject(new AllowanceSpent("writing"));
 
     const answer = await opened.change("/data/settings/sign-everyone-out", {});
 
@@ -45,7 +45,7 @@ describe("a console whose install meets a day's allowance that is used up", () =
   test("hands any other failure to its host", async () => {
     const opened = await openConsole("/next");
     const fault = new Error("the database is away");
-    opened.base.install.database.rotateVisitorKey = () => Promise.reject(fault);
+    opened.base.install.database.appendAudit = () => Promise.reject(fault);
 
     expect(opened.change("/data/settings/sign-everyone-out", {})).rejects.toBe(fault);
   });

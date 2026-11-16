@@ -27,7 +27,7 @@ import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollbac
 import { updateSite } from "@poplin/core/src/actions/set";
 import { getSite } from "@poplin/core/src/actions/show";
 import { showUpload } from "@poplin/core/src/actions/show-upload";
-import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
+import { type EndLogins, signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { type Rebuilding, START_OPTIONS, startUpdate } from "@poplin/core/src/actions/start-update";
 import { removeUpdateAddress, type UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
@@ -89,6 +89,9 @@ export interface ApiDeps extends Install, Gate {
 
   /** The provider's side of the users: a change of the logins is carried there by itself. Without it a change waits for a repair. */
   readonly follow?: UsersFollow;
+
+  /** Ends every login of the dashboard at the provider. Without it nobody can be signed out here. */
+  readonly endLogins?: EndLogins;
 }
 
 /** Declare every route of one install. The type of what it returns is what a client is typed from, so it is inferred, never written. */
@@ -182,7 +185,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
 
       return respond(await carried(await changeConfig(context.var.install, context.var.actor, changes), typeof changes === "object" && changes !== null && "logins" in changes));
     })
-    .delete("/sessions", token, install, noQuery, async (context) => respond(await signEveryoneOut(context.var.install, context.var.actor)))
+    .delete("/sessions", token, install, noQuery, async (context) => respond(await signEveryoneOut(context.var.install, context.var.actor, deps.endLogins)))
     .get("/audit", token, install, queried(AUDIT_QUERY), async (context) => respond(await listAudit(context.var.install, context.var.actor, context.req.valid("query"))))
     .get("/domain", token, install, noQuery, async (context) => respond(await domainState(context.var.install, context.var.actor)))
     .get("/problems", token, install, noQuery, async (context) => respond(await listProblems(context.var.install, context.var.actor, PROBLEM_DAYS)))
