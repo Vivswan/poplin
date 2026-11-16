@@ -175,7 +175,7 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   const server = await serverOf(request, io);
   if (typeof server !== "string") return refused(server);
 
-  const client = createClient({ server, fetch: io.fetch, timeoutMs: io.timeoutMs, stopped: io.stopped });
+  const client = createClient({ server, fetch: io.fetch, timeoutMs: io.timeoutMs, stopped: io.stopped, told: io.err, pause: io.pause });
   const computer = request.computer ?? plainComputerName(io.computer);
   const begun = await begin(client, { scope: request.publisher ? "publisher" : "admin", computer }, io);
   if (io.terminal.progress) io.status("");
