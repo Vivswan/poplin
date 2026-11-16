@@ -50,7 +50,6 @@ function outsideOf(from: World, asked: string[]): Outside {
       return Response.json({ success: true, errors: [], messages: [], result: { id: "token-1", status: "active" } });
     },
     latest: { fetch: async () => new Response("Not found\n", { status: 404 }) },
-    rebuild: async () => new Response(null, { status: 404 }),
   };
 }
 

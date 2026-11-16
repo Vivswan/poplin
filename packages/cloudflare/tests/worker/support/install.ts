@@ -134,13 +134,11 @@ export function cloudflareOf(account: Account, asked: Asked[]): NonNullable<Outs
  *
  * @param cloudflare - what answers the setup client's calls; left out, a call to Cloudflare fails the test
  * @param latest - what answers the day's question about the newest version; left out, a website that has no such file
- * @param rebuild - what answers a request to a Deploy Hook; left out, such a request fails the test
  */
-export function instance(from: World, cloudflare?: Outside["cloudflare"], latest: Outside["latest"] = NO_WEBSITE, rebuild?: Outside["rebuild"]): Worker {
+export function instance(from: World, cloudflare?: Outside["cloudflare"], latest: Outside["latest"] = NO_WEBSITE): Worker {
   const unasked: NonNullable<Outside["cloudflare"]> = async () => Promise.reject(new Error("the test asked Cloudflare and gave it no stand-in"));
-  const unbuilt: Outside["rebuild"] = async () => Promise.reject(new Error("the test asked for a build and gave it no stand-in"));
 
-  return createWorker({ now: () => from.clock.now, fetch: from.certs.fetch, cloudflare: cloudflare ?? unasked, latest, rebuild: rebuild ?? unbuilt });
+  return createWorker({ now: () => from.clock.now, fetch: from.certs.fetch, cloudflare: cloudflare ?? unasked, latest });
 }
 
 export async function ask(worker: Worker, url: string, init: RequestInit = {}, bindings: Bindings = BINDINGS): Promise<Response> {

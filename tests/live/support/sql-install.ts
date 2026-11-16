@@ -75,7 +75,7 @@ export async function openSqlInstall(): Promise<SqlInstall> {
     layout: { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD },
     counters,
     visitorOf: async () => "one-visitor",
-    rebuild: { accepts: () => false, fetch: async () => Promise.reject(new Error("the fake starts no build")) },
+    update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
   });
 
   const sql: SqlInstall["sql"] = async (statement, params = []) => (await driver.batch([{ sql: statement, params: [...params] }]))[0]?.rows ?? [];

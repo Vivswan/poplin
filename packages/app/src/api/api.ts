@@ -28,8 +28,7 @@ import { updateSite } from "@poplin/core/src/actions/set";
 import { getSite } from "@poplin/core/src/actions/show";
 import { showUpload } from "@poplin/core/src/actions/show-upload";
 import { type EndLogins, signEveryoneOut } from "@poplin/core/src/actions/sign-out";
-import { type Rebuilding, START_OPTIONS, startUpdate } from "@poplin/core/src/actions/start-update";
-import { removeUpdateAddress, type UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
+import { type SelfUpdate, startUpdate } from "@poplin/core/src/actions/start-update";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
@@ -44,7 +43,7 @@ import { holding, type Later } from "../console/later";
 import { carryRules, namesRule, type RulesFollow } from "../console/settings/rules-follow";
 import { carries, counted, type Gate, metered, namesSite, sent } from "./asked";
 import { authenticate, type ReadToken } from "./authenticate";
-import { answerWhoami, beginWithAddress, checked, FILE_QUERY, saveAddress, storeBody, ticketed } from "./handlers";
+import { answerUpdateState, answerWhoami, beginWithAddress, checked, FILE_QUERY, storeBody, ticketed } from "./handlers";
 import { queried } from "./query";
 import { refusal, respond, respondFile, spentRefusal, writesSpentRefusal } from "./respond";
 
@@ -86,8 +85,8 @@ export interface ApiDeps extends Install, Gate {
   /** Told of every failure a request ends in, before the request is answered 500. */
   readonly report?: (error: unknown) => void;
 
-  /** How the provider starts a rebuild of the install: which addresses it takes, and what sends the one request. The starts are counted in `counters`. */
-  readonly rebuild: Omit<Rebuilding, "counters">;
+  /** What takes a release and puts it in place of the running code. The starts are counted in `counters`. */
+  readonly update: SelfUpdate;
 
   /** The provider's side of the users: a change of the logins is carried there by itself. Without it a change waits for a repair. */
   readonly follow?: UsersFollow;
@@ -121,7 +120,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
   const json = carries("json");
   const noQuery = queried(NO_QUERY);
   const site = namesSite();
-  const rebuilding = { ...deps.rebuild, counters: deps.counters };
+  const updating = { self: deps.update, counters: deps.counters };
 
   return new Hono()
     .basePath("/api")
@@ -206,14 +205,8 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     .get("/domain", token, install, noQuery, async (context) => respond(await domainState(context.var.install, context.var.actor)))
     .get("/problems", token, install, noQuery, async (context) => respond(await listProblems(context.var.install, context.var.actor, PROBLEM_DAYS)))
 
-    .post("/update", token, install, queried(START_OPTIONS), async (context) => {
-      return respond(await startUpdate(context.var.install, context.var.actor, { ...context.req.valid("query"), version: deps.version }, rebuilding));
-    })
-    .get("/update/address", token, install, noQuery, async (context) => respond(await updateAddressState(context.var.install, context.var.actor)))
-    .put("/update/address", token, install, json, noQuery, sent<v.InferInput<typeof UPDATE_ADDRESS_REQUEST>>(JSON_BYTES), async (context) => {
-      return respond(await saveAddress(context.var.install, context.var.actor, context.req.valid("json"), deps.rebuild.accepts));
-    })
-    .delete("/update/address", token, install, noQuery, async (context) => respond(await removeUpdateAddress(context.var.install, context.var.actor)));
+    .get("/update", token, install, noQuery, async (context) => respond(await answerUpdateState(context.var.install, context.var.actor, { version: deps.version, key: deps.update.holdsKey() })))
+    .post("/update", token, install, noQuery, async (context) => respond(await startUpdate(context.var.install, context.var.actor, { version: deps.version }, updating)));
 }
 
 /** The API of one install, as a client is typed from it: every route's method, path, query, body, and answers. */

@@ -8,6 +8,7 @@ import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";
 import { type Budget, type BudgetRow, endsLogins, get, type Measured, post, sessionOf, sql, type Stage, unmeasured } from "./budget-stage";
 import { endedTokens, manyEntries, manyProblems, manySites, manyTokens, newLinks, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
+import { OWN_KEY, ownRelease } from "./own-release";
 
 /** The group of every row here. */
 const group = "Each dashboard screen";
@@ -29,9 +30,6 @@ async function carriesRules(stage: Stage): Promise<void> {
 
 /** A release newer than any build, as the install keeps it once it has learned of one. */
 const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA + 1 };
-
-/** An address the provider starts a rebuild at, in the form Cloudflare gives a Deploy Hook. */
-const HOOK = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
 /** The versions a site keeps under the first settings of the tests' install. */
 const KEPT = 3;
@@ -71,11 +69,10 @@ function data(measured: Measured, session: Record<string, string>, path: string)
   return get(measured, `${ADMIN}/data${path}`, session);
 }
 
-/** Keep everything the frame reads: a newer release, the address a rebuild starts at, and a domain check that found a piece to fix. */
+/** Keep everything the frame reads: a newer release and a domain check that found a piece to fix. */
 async function fullFrame(stage: Stage): Promise<void> {
   const { now } = stage.w.clock;
   await stage.install.database.keepUpdateCheck({ checked_at: now, news: NEWER });
-  await stage.install.database.keepUpdateAddress(HOOK, { by: OWNER, at: now });
   await sql(`INSERT INTO domain_check (id, ran_at, ran_by, run, pieces, users_changed_at) VALUES (1, ?1, ?2, 'check', '[]', ?1)`, now, OWNER);
 }
 
@@ -109,7 +106,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   {
     group,
     name: "open the dashboard: the page",
-    // Worst: the frame has a newer release, a rebuild address, and a note on the domain to read, and it is the instance's first page, which asks once whether anybody has logged in. Every later page is one query less.
+    // Worst: the frame has a newer release and a note on the domain to read, and it is the instance's first page, which asks once whether anybody has logged in. Every later page is one query less.
     arrange: async (stage) => {
       await fullFrame(stage);
       const session = await sessionOf(stage);
@@ -123,7 +120,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     group,
     name: "the frame around every screen",
     route: "GET /data/frame",
-    // Worst: the frame has a newer release, a rebuild address, and a note on the domain to read.
+    // Worst: the frame has a newer release and a note on the domain to read.
     arrange: async (stage) => {
       await fullFrame(stage);
       const session = await sessionOf(stage);
@@ -137,10 +134,12 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     group,
     name: "start an update from the frame",
     route: "POST /data/update",
-    // Worst: an address is saved and a newer release is known, so the build is started and the start written to the log.
+    // Worst: the install holds its key and a newer release is out, so its files are fetched, checked, and put in place, and the start is written to the log.
     arrange: async (stage) => {
-      await fullFrame(stage);
-      stage.outside.rebuild = async () => new Response(null, { status: 204 });
+      const release = await ownRelease(NEWER.version);
+      stage.outside.cloudflare = release.cloudflare;
+      stage.outside.latest = release.latest;
+      stage.keptKey = OWN_KEY;
       const session = await sessionOf(stage);
 
       return (measured) => post(measured, "/data/update", {}, session);
@@ -548,7 +547,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     name: "Settings screen",
     guide: "Open the Settings screen",
     route: "GET /data/settings",
-    // Worst: a rebuild address is saved, which the screen reads beside the settings.
+    // Every setting is read in one question.
     arrange: async (stage) => {
       await fullFrame(stage);
       const session = await sessionOf(stage);
@@ -584,34 +583,6 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     },
     status: 200,
     budget: { queries: 5, reads: 0, writes: 0 },
-  },
-  {
-    group,
-    name: "Settings screen: save a rebuild address",
-    route: "POST /data/settings/update-address",
-    // Worst: another address is saved already, which the new one replaces.
-    arrange: async (stage) => {
-      await fullFrame(stage);
-      const session = await sessionOf(stage);
-
-      return (measured) => post(measured, "/data/settings/update-address", { address: `${HOOK.slice(0, -1)}1` }, session);
-    },
-    status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
-  },
-  {
-    group,
-    name: "Settings screen: remove the rebuild address",
-    route: "POST /data/settings/update-address/remove",
-    // Worst: one is saved, so it is removed and the removal written to the log.
-    arrange: async (stage) => {
-      await fullFrame(stage);
-      const session = await sessionOf(stage);
-
-      return (measured) => post(measured, "/data/settings/update-address/remove", {}, session);
-    },
-    status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,

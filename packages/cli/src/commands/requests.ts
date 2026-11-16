@@ -71,8 +71,8 @@ interface Words {
 /** What `config` does: show every setting, show one, or give one a value in core's text form. */
 type ConfigAction = { readonly kind: "show-all" } | { readonly kind: "show"; readonly key: SettingKey } | { readonly kind: "change"; readonly key: SettingKey; readonly value: string };
 
-/** What `update` does: start the rebuild, say what one would start from, or save or remove the address it starts at. */
-type UpdateAction = "start" | "check" | "save" | "forget";
+/** What `update` does: take the newest release, or say what a start would come to. */
+type UpdateAction = "start" | "check";
 
 /** A publish makes a new site, named after the path unless `name` is given, or updates the site it names. */
 type PublishTarget<Site> = { readonly kind: "create"; readonly name?: SiteName } | { readonly kind: "update"; readonly site: Site };
@@ -94,7 +94,7 @@ type Asked<Site> =
   | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)
   | ({ readonly kind: "setup"; readonly check: boolean; readonly domain?: string; readonly login?: string } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
-  | ({ readonly kind: "update"; readonly action: UpdateAction; readonly anyway: boolean } & Install)
+  | ({ readonly kind: "update"; readonly action: UpdateAction } & Install)
   | ({ readonly kind: "export"; readonly site?: Site; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
   | ({ readonly kind: "import"; readonly zip: string; readonly site?: Site; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
   | { readonly kind: "mcp" };
@@ -276,19 +276,7 @@ function config(words: Words): TypedRequest | UsageError {
 }
 
 function update(words: Words): TypedRequest | UsageError {
-  const asked: readonly (readonly [flag: string, action: UpdateAction])[] = [
-    ["--check", "check"],
-    ["--save-address", "save"],
-    ["--forget-address", "forget"],
-  ];
-  const given = asked.filter(([flag]) => words.flags.has(flag));
-  const anyway = words.flags.has("--anyway");
-  const [first, second] = given;
-  if (second !== undefined || (first !== undefined && anyway)) {
-    return usageError("poplin update takes one of --check, --anyway, --save-address, and --forget-address at a time", "poplin help update");
-  }
-
-  return withInstall(words, (install) => ({ kind: "update", action: first?.[1] ?? "start", anyway, ...install }));
+  return withInstall(words, (install) => ({ kind: "update", action: words.flags.has("--check") ? "check" : "start", ...install }));
 }
 
 function exportSites(words: Words): TypedRequest | UsageError {

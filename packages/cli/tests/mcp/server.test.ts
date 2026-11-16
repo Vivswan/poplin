@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { hc } from "hono/client";
 
 import type { Api } from "../../../app/src/api/api";
-import { answered, LIMITS, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
+import { answered, LIMITS, ORIGIN } from "../../../app/tests/api/support/install";
 import { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { cleanUp, folderOf } from "../commands/support/harness";
 import { type Answer, type McpBench, openMcp } from "./support/bench";
@@ -418,10 +418,9 @@ describe("the MCP server", () => {
     },
   );
 
-  // Drift: an agent that could start an update, or change where one is started, would replace the code of the install it publishes to. No tool is one, and no tool's call goes near those routes.
-  test("no tool starts an update or touches the update link: each one, called so that it reaches the install, asks only for sites", async () => {
+  // Drift: an agent that could start an update would replace the code of the install it publishes to. No tool is one, and no tool's call goes near that route.
+  test("no tool starts an update: each one, called so that it reaches the install, asks only for sites", async () => {
     const { bench, site } = await withSite();
-    await bench.install.database.keepUpdateAddress(REBUILD_ADDRESS, { by: "ada@example.com" as never, at: NOW });
     const path = folderOf("again", { "index.html": "<title>Again</title>" });
     // A tool the server gains does not compile until it is called here.
     const inputs: Readonly<Record<keyof typeof TOOL_INPUTS, Record<string, unknown>>> = {
@@ -443,11 +442,11 @@ describe("the MCP server", () => {
     }
 
     const { update } = hc<Api>(ORIGIN).api;
-    const paths: readonly string[] = [update.$path(), update.address.$path()];
+    const paths: readonly string[] = [update.$path()];
 
     expect(silent).toEqual([]);
     expect(bench.sent.filter((line) => paths.some((path) => line.includes(path)))).toEqual([]);
-    expect([bench.install.provider.sent, (await bench.install.database.readUpdateAddress())?.address]).toEqual([[], REBUILD_ADDRESS]);
+    expect(bench.install.host.put).toEqual([]);
   });
 
   test("a token never leaves the server, whoever puts it into a message: the install's answer, the agent's own arguments, or a tool name", async () => {

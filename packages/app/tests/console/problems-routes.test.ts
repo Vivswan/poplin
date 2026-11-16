@@ -104,7 +104,7 @@ describe("what the frame marks at the side", () => {
     expect(after.marks).toEqual({
       usage: { count: 1, says: "The daily limit of requests was reached" },
       domain: { count: 1, says: "The login could not be checked" },
-      settings: { count: 1, says: "The update did not start" },
+      settings: { count: 1, says: "An update did not go as it should" },
     });
     expect(after.recent.map((problem) => problem.kind)).toEqual(["requests_limit_reached", "login_unchecked", "update_failed"]);
   });

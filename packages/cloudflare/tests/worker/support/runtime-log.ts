@@ -15,12 +15,12 @@ const KNOWN: readonly Known[] = [
 
   // Cloudflare's SDK reads an empty form as text before a client's first form request.
   // That is once in each of the four tests of setup.test.ts that write a variable onto the Worker, of the three rows of request-budget.test.ts that repair, and in the one test of start.test.ts that writes the key there.
-  // And once in the one test of sweep.test.ts that uploads a release.
+  // And once wherever a release is uploaded: in the one test of sweep.test.ts and the one of worker.test.ts, and in the three rows of request-budget.test.ts that take an update.
   {
     line:
       'console warning; message = Called .text() on an HTTP body which does not appear to be text. The body\'s Content-Type is "multipart/form-data; boundary=". ' +
       "The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.",
-    most: 9,
+    most: 13,
   },
 ];
 

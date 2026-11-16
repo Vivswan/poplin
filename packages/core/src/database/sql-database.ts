@@ -17,7 +17,7 @@ import { computerLoginFromRow } from "../records/computer-login";
 import type { Problem } from "../records/problem";
 import { LOGIN, SITE_ID } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
-import { visitorKeyFromRow, visitorKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
+import { visitorKeyFromRow, visitorKeyToText } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import { AUTO_START, type AutoStart, UPDATE_CHECK, type UpdateCheck } from "../records/update";
@@ -195,9 +195,6 @@ const READ_SETTINGS = built(BUILD.select({ value: settings.value }).from(setting
 /** The visitor key, as hex text. */
 const READ_VISITOR_KEY = built(BUILD.select({ value: secrets.value }).from(secrets).where(eq(secrets.name, "visitor_key")));
 
-/** The address that starts a rebuild, and when it was saved. */
-const READ_UPDATE_ADDRESS = built(BUILD.select({ value: secrets.value, created_at: secrets.created_at }).from(secrets).where(eq(secrets.name, "update_address")));
-
 /** The last asking for a newer version, its news and its start as JSON text. */
 const READ_UPDATE_CHECK = built(
   BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1)),
@@ -250,13 +247,6 @@ function auditOfLogins(signed: Signed): Statement {
   const detail = fragment`json_object('logins', json_extract(${settings.value}, '$.logins'))`;
 
   return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, 'settings_changed', ${detail} FROM ${settings} WHERE ${settings.id} = 1 AND ${CHANGED}`);
-}
-
-/** A secret in place of the stored one of its name, or as the first. */
-function keepSecret(name: "visitor_key" | "update_address", value: string, at: number): Statement {
-  const kept = { value: fragment`excluded.${bare(secrets.value)}`, created_at: fragment`excluded.${bare(secrets.created_at)}` };
-
-  return built(BUILD.insert(secrets).values({ name, value, created_at: at }).onConflictDoUpdate({ target: secrets.name, set: kept }));
 }
 
 /** More requests on a day for a site, some of them page views, with the rows the database used, and the count of requests after them. */
@@ -381,12 +371,6 @@ function updateCheckIn(result: StatementResult | undefined): UpdateCheck | undef
   const check = v.safeParse(UPDATE_CHECK, { checked_at: row.checked_at, news, seen_at: row.seen_at, auto });
 
   return check.success ? check.output : undefined;
-}
-
-function updateAddressIn(result: StatementResult | undefined): UpdateAddress | undefined {
-  const row = result?.rows[0];
-
-  return row === undefined ? undefined : updateAddressFromRow(row);
 }
 
 function settingsIn(result: StatementResult | undefined): SettingValues | undefined {
@@ -1230,9 +1214,9 @@ export class SqlDatabase implements Database {
 
   async readFrame(now: number): Promise<FrameRecords> {
     const [yesterday] = daysUpTo(dayOf(now), 2);
-    const [stored, address, domain, update, noted] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_ADDRESS, domainCheckAsked(), READ_UPDATE_CHECK, problemsAsked(yesterday ?? dayOf(now))]);
+    const [stored, domain, update, noted] = await this.#driver.batch([READ_SETTINGS, domainCheckAsked(), READ_UPDATE_CHECK, problemsAsked(yesterday ?? dayOf(now))]);
 
-    return { settings: settingsIn(stored), updateAddress: updateAddressIn(address), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update), problems: problemsIn(noted) };
+    return { settings: settingsIn(stored), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update), problems: problemsIn(noted) };
   }
 
   async initSettings(values: SettingValues, signed: Signed): Promise<{ readonly kind: "done" | "already_set"; readonly values: SettingValues }> {
@@ -1315,22 +1299,6 @@ export class SqlDatabase implements Database {
     if (key === undefined) throw new Error("the visitor key was stored and is not there to read");
 
     return { kind: changed(inserted) ? "created" : "kept", key };
-  }
-
-  async readUpdateAddress(): Promise<UpdateAddress | undefined> {
-    const [read] = await this.#driver.batch([READ_UPDATE_ADDRESS]);
-
-    return updateAddressIn(read);
-  }
-
-  async keepUpdateAddress(address: string, signed: Signed): Promise<void> {
-    await this.#driver.batch([keepSecret("update_address", address, signed.at), auditPlain(signed, "update_address_set", {})]);
-  }
-
-  async forgetUpdateAddress(signed: Signed): Promise<{ readonly kind: "done" | "unchanged" }> {
-    const [removed] = await this.#driver.batch([built(BUILD.delete(secrets).where(eq(secrets.name, "update_address"))), auditPlain(signed, "update_address_removed", {})]);
-
-    return { kind: changed(removed) ? "done" : "unchanged" };
   }
 
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {

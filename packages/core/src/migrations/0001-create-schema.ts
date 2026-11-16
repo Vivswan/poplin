@@ -92,10 +92,10 @@ CREATE TABLE settings (
   updated_at INTEGER NOT NULL
 ) STRICT`;
 
-/** What the install keeps and no listing, export, or audit entry shows: the key the visitor limits are made from as lowercase hex, and the address that starts a rebuild of the install. */
+/** What the install keeps and no listing, export, or audit entry shows: the key the visitor limits are made from, as lowercase hex. */
 const SECRETS = `
 CREATE TABLE secrets (
-  name TEXT NOT NULL PRIMARY KEY CHECK (name IN ('visitor_key', 'update_address')),
+  name TEXT NOT NULL PRIMARY KEY CHECK (name IN ('visitor_key')),
   value TEXT NOT NULL,
   created_at INTEGER NOT NULL
 ) STRICT, WITHOUT ROWID`;

@@ -73,7 +73,7 @@ export const PROBLEM_WORDS: Readonly<Record<ProblemKind, ProblemWords>> = {
   count_unwritten: { sentence: "The day's count of storage writes was not saved", todo: "Nothing, unless it comes back.", home: "usage", setting: null },
   login_unwritten: { sentence: "A login was not written to Activity", todo: "Nothing. The login itself worked.", home: "usage", setting: null },
   login_unchecked: { sentence: "The login could not be checked", todo: "Open Domain and press Check.", home: "domain", setting: null },
-  update_failed: { sentence: "The update did not start", todo: "Check the update link in Settings, under Updates.", home: "settings", setting: null },
+  update_failed: { sentence: "An update did not go as it should", todo: "The details say what went wrong. To try again, press Update now.", home: "settings", setting: null },
   users_not_carried: { sentence: "A change of the users did not reach the login of the domain", todo: "Open Domain and press Repair.", home: "domain", setting: null },
   rules_not_carried: { sentence: "A changed setting did not reach every rule of the domain", todo: "Open Domain and press Repair.", home: "domain", setting: null },
   files_limit_reached: { sentence: "The daily limit of files was reached", todo: AFTER_MIDNIGHT, home: "usage", setting: "max_files_per_day" },

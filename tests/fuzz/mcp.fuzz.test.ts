@@ -14,7 +14,7 @@ import { run } from "../../packages/cli/src/commands/run";
 import { protocolMessages } from "../../packages/cli/tests/mcp/support/bench";
 import { TOOL_INPUTS } from "../../packages/core/src/actions/tool-inputs";
 import { STARTED_UPDATE } from "../../packages/core/src/actions/start-update";
-import { UPDATE_ADDRESS_STATE } from "../../packages/core/src/actions/update-address";
+import { UPDATE_STATE } from "../../packages/core/src/actions/update";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
@@ -132,7 +132,7 @@ async function updatePaths(): Promise<readonly string[]> {
   });
 
   await client.call(STARTED_UPDATE, (api) => api.update.$post({ query: {} }));
-  await client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$get({ query: {} }));
+  await client.call(UPDATE_STATE, (api) => api.update.$get({ query: {} }));
 
   return paths;
 }

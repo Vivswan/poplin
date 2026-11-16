@@ -49,7 +49,7 @@ Cloudflare keeps a history of the install's database, named `poplin`, and calls 
 
 | Time Travel         | Holds                                                                                                                                                             |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| brings back         | the records: sites and their versions, the settings, the logins, the tokens, the activity log, the counts of visits, the update link, the key the visitor limits are made from |
+| brings back         | the records: sites and their versions, the settings, the logins, the tokens, the activity log, the counts of visits, the key the visitor limits are made from |
 | does not bring back | a file. The files are in the bucket, which has no such history                                                                                                    |
 | reaches             | any minute of the last 7 days on the free plan                                                                                                                    |
 | is run with         | Cloudflare's own tool: `wrangler d1 time-travel restore poplin --timestamp=<moment>`                                                                              |

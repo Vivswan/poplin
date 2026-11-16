@@ -12,9 +12,7 @@ import type { UsageHost } from "../../../src/console/usage/records";
 import { admit, type Identify } from "../../../src/login/admit";
 import { createEntries } from "../../../src/login/entries";
 import { codeCounts, FREE_LIMITS, LOGIN_HEADER, ORIGIN, openOwned, USAGE_HOST, VERSION } from "./install";
-
-/** The one host the test console's provider starts rebuilds at. */
-export const REBUILD_HOST = "rebuilds.example.com";
+import { hostUpdate, type UpdateHost, updateHost } from "../../api/support/update-host";
 
 /** The header the stand-in reads the moment a login began from, in milliseconds since the epoch; left out, the login began an hour before the request. */
 export const SINCE_HEADER = "Test-Login-Since";
@@ -42,8 +40,8 @@ interface Opened {
   /** The install's helpers: `publish` makes a site, `owner` is the logged-in email. */
   readonly base: Awaited<ReturnType<typeof openOwned>>;
 
-  /** Every address the provider was asked to start a rebuild at, in order. */
-  readonly rebuilds: readonly string[];
+  /** The stand-in for the install's host: whether it holds the key an update is sent with, the newest release above the running version or `null`, what it refuses that release with, and every version it put in place. */
+  readonly host: UpdateHost;
 
   /** The stand-in for the provider's way to end every login: `answer` is what the next try is answered, done unless a test sets a refusal, and `asked` counts the tries. */
   readonly logins: { answer: Awaited<ReturnType<EndLogins>>; asked: number };
@@ -93,13 +91,8 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
 
     return { ok: false, refusal: who.refusal === "not-a-user" ? who.refusal : PROVIDER_REFUSALS[who.refusal as keyof typeof PROVIDER_REFUSALS] };
   };
-  const rebuilds: string[] = [];
   const logins: Opened["logins"] = { answer: { ok: true }, asked: 0 };
-  const startRebuild = async (address: string): Promise<Response> => {
-    rebuilds.push(address);
-
-    return new Response(null, { status: 204 });
-  };
+  const host = updateHost("1.1.0");
   const built = createConsole({
     install: opened.install,
     version: VERSION,
@@ -109,7 +102,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
     client: CLIENT,
     freeLimits: FREE_LIMITS,
     usage,
-    rebuild: { accepts: (address) => address.hostname === REBUILD_HOST, fetch: startRebuild },
+    update: hostUpdate(host),
     demo: { reset: "/reset" },
     domain,
     ...(follow === undefined ? {} : { follow }),
@@ -125,8 +118,8 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
 
   return {
     base: opened,
-    rebuilds,
     logins,
+    host,
     fetch: (request, later) => built.fetch(request, later),
     get: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`, { headers: opened.proof })),
     getLoggedOut: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`)),

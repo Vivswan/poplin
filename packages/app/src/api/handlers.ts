@@ -4,8 +4,7 @@ import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import { beginLogin, LOGIN_REQUEST } from "@poplin/core/src/actions/computer-logins";
 import { tokenObject, type WHOAMI_ANSWER } from "@poplin/core/src/actions/manage-tokens";
 import { type Install, type Refused, refuse } from "@poplin/core/src/actions/records";
-import { updateOf } from "@poplin/core/src/actions/update";
-import { saveUpdateAddress, UPDATE_ADDRESS_REQUEST } from "@poplin/core/src/actions/update-address";
+import { type UPDATE_STATE, updateOf } from "@poplin/core/src/actions/update";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import { REVIEW_PAGE } from "@poplin/core/src/api/routes";
 import { parseLoginSecret } from "@poplin/core/src/auth/computer-logins";
@@ -123,16 +122,19 @@ export async function beginWithAddress(install: Install, body: unknown, origin: 
 }
 
 /**
- * Save the address that starts a rebuild.
+ * Say what an update would start from, for an admin. Nothing is fetched and nothing is started.
  *
- * @param accepts - whether the host's provider starts rebuilds at an address
- * @returns the action's answer. A body of any other form is refused about `address`, never about a key it holds: the address may have been typed where a key goes
+ * @param running - the version of poplin the install runs, and whether its host holds the key an update is sent with
+ * @returns the version, the newer release the install knows of or `null`, and whether the key is held; `not_allowed` for anyone but an admin
  */
-export async function saveAddress(install: Install, actor: Actor, body: unknown, accepts: (address: URL) => boolean): Promise<AnswerOf<typeof saveUpdateAddress> | Refused<"bad_argument">> {
-  const sent = v.safeParse(UPDATE_ADDRESS_REQUEST, body);
-  if (!sent.success) return refuse("bad_argument", "address");
+export async function answerUpdateState(
+  install: Install,
+  actor: Actor,
+  running: { readonly version: string; readonly key: boolean },
+): Promise<({ readonly ok: true } & v.InferOutput<typeof UPDATE_STATE>) | Refused<"not_allowed">> {
+  if (actor.scope !== "admin") return refuse("not_allowed");
 
-  return saveUpdateAddress(install, actor, sent.output.address, accepts);
+  return { ok: true, version: running.version, update: (await updateOf(install, running.version)) ?? null, key: running.key };
 }
 
 /**

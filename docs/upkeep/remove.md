@@ -42,7 +42,6 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | Rate rule, if it is there             | `poplin: 300 requests per 10 seconds per address`                                                     | the domain's rate limiting rules                    |
 | the login application                 | `poplin`                                                                                              | Zero Trust, under Access, the applications          |
 | the login's policy                    | "poplin logins"                                                                                       | Zero Trust, under Access, the policies              |
-| the update link, if you made one      | a Deploy Hook of the Worker                                                                           | where [Update](update.md) says it is made           |
 | the Worker                            | `poplin`                                                                                              | Workers & Pages                                     |
 | the database                          | `poplin`                                                                                              | the account's D1 databases                          |
 | the bucket                            | `poplin-sites`                                                                                        | the account's R2 buckets                            |

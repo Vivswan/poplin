@@ -1,24 +1,13 @@
-// The one place a row of the secrets table becomes what the install uses: the visitor key as bytes, and the address that starts a rebuild. Neither leaves the database in any other record.
+// The one place a row of the secrets table becomes what the install uses: the visitor key as bytes. It leaves the database in no other record.
 
 import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
 import * as v from "valibot";
-
-import { MOMENT } from "./fields";
 
 /** The fewest bytes a visitor key holds. */
 const KEY_BYTES = 32;
 
 /** A row of the secrets table: the key as lowercase hex, whole bytes, at least 32 of them. */
 const SECRET_ROW = v.object({ value: v.pipe(v.string(), v.regex(/^(?:[0-9a-f]{2})+$/), v.minLength(KEY_BYTES * 2)) });
-
-/** A row of the secrets table that holds the address that starts a rebuild, with the moment it was saved. */
-const ADDRESS_ROW = v.object({ value: v.pipe(v.string(), v.startsWith("https://")), created_at: MOMENT });
-
-/** The address that starts a rebuild of the install, and when it was saved. */
-export interface UpdateAddress {
-  readonly address: string;
-  readonly since: number;
-}
 
 /**
  * Turn the bytes of a visitor key into the text a row holds.
@@ -42,16 +31,4 @@ export function visitorKeyFromRow(row: unknown): Uint8Array<ArrayBuffer> {
   if (!parsed.success) throw new Error("the stored visitor key is not a key");
 
   return hexToUint8Array(parsed.output.value);
-}
-
-/**
- * Turn a row of the secrets table into the address that starts a rebuild.
- *
- * @throws {Error} the row holds no such address; the message never quotes what is stored
- */
-export function updateAddressFromRow(row: unknown): UpdateAddress {
-  const parsed = v.safeParse(ADDRESS_ROW, row);
-  if (!parsed.success) throw new Error("the stored update link is not an address");
-
-  return { address: parsed.output.value, since: parsed.output.created_at };
 }

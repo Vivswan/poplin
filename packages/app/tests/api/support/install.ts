@@ -17,6 +17,7 @@ import * as v from "valibot";
 import { type Api, type ApiLimits, createApi } from "../../../src/api/api";
 import { MemoryCounters } from "../../../src/limits/memory-counters";
 import { addressesUnder } from "../../sites/support/layout";
+import { hostUpdate, type UpdateHost, updateHost } from "./update-host";
 
 /** The moment every test request arrives at, unless the test moves the clock. */
 export const NOW = 1_700_000_000_000;
@@ -32,9 +33,6 @@ export const INSTALL_VERSION = "7.8.9";
 
 /** The request header a test names its visitor in; every request without it comes from one visitor. */
 export const VISITOR_HEADER = "Test-Visitor";
-
-/** An address the test install's provider starts rebuilds at. Nothing answers there: every request to it is recorded by the install and answered by the test. */
-export const REBUILD_ADDRESS = "https://builds.provider.example/hooks/3f9c2a7e5b";
 
 /** The admin whose settings the install starts with. */
 const INSTALLER = "ada@example.com" as Login;
@@ -63,7 +61,7 @@ export interface Answered {
  * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`. `rules` stands in for the provider's side of the domain's rules, on an install that holds a key: `pushed` holds the values of every try.
  * `users` stands in for the provider's side of the users: `pushed` holds every list of logins handed over, `ended` counts the tries to end every login, and `takes` says whether the provider takes either; it starts with no key, and takes none.
  *
- * `provider` stands in for the install's provider: `sent` holds the method, the redirect mode, the body, and the address of every request to start a rebuild, and `status` is what the next one is answered with.
+ * `host` stands in for the install's host: `key` is whether it holds the key an update is sent with, `release` the newest release above the running version or `null`, `refusal` what it refuses that release with, and `put` every version it put in place.
  */
 export interface ApiInstall {
   readonly api: ReturnType<typeof createApi>;
@@ -71,8 +69,8 @@ export interface ApiInstall {
   readonly store: MemoryStore;
   readonly calls: { database: number; store: number };
   readonly counters: MemoryCounters;
+  readonly host: UpdateHost;
   readonly clock: { now: number };
-  readonly provider: { status: number; readonly sent: unknown[][] };
   readonly users: { takes: boolean; readonly pushed: (readonly string[])[]; ended: number };
   readonly rules: { readonly pushed: RuleSettings[] };
   readonly tokens: { readonly admin: string; readonly owner: string; readonly stranger: string };
@@ -174,7 +172,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const clock = { now: NOW };
   const reported: unknown[] = [];
   const counters = new MemoryCounters();
-  const provider: ApiInstall["provider"] = { status: 200, sent: [] };
+  const host = updateHost("7.9.0");
   const users: ApiInstall["users"] = { takes: false, pushed: [], ended: 0 };
   const rules: ApiInstall["rules"] = { pushed: [] };
   const said = v.parse(ADDRESS_LAYOUT, layout);
@@ -216,14 +214,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
         return { ok: true };
       },
     },
-    rebuild: {
-      accepts: (address) => address.href === REBUILD_ADDRESS,
-      fetch: async (address, init) => {
-        provider.sent.push([init.method, init.redirect, "body" in init ? init.body : "no body", address]);
-
-        return new Response(null, { status: provider.status, headers: { Location: "https://example.com/elsewhere" } });
-      },
-    },
+    update: hostUpdate(host),
   });
 
   const requests: Request[] = [];
@@ -247,7 +238,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     clock,
     users,
     rules,
-    provider,
+    host,
     tokens: { admin, owner, stranger },
     reported,
     keys: async () => (await store.list({ prefix: "" })).objects.map((object) => object.key),

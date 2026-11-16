@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import * as v from "valibot";
 
 import { refused, refuseInvalid, type Shared } from "./data";
+import { refusalSentence } from "./notices";
 
 /** The stretches of days the list offers, the shortest first. */
 const RANGES = ["7", "30"] as const;
@@ -42,11 +43,18 @@ export interface Marked {
 /** The frame of an install with no problem. */
 export const NOTHING_MARKED: Marked = { recent: [], marks: { usage: null, domain: null, settings: null } };
 
+/** What to do about a problem. An update that was refused is kept under the refusal's code and what it is about, so its advice is that refusal's own sentence. */
+function todoOf(problem: Problem): string {
+  if (problem.kind !== "update_failed" || problem.name === null) return PROBLEM_WORDS[problem.kind].todo;
+
+  return refusalSentence(problem.name, problem.message ?? undefined);
+}
+
 /** A problem with its words. In a console with no Domain screen a problem of the domain is acted on nowhere, so it belongs to the list on Usage. */
 function shown(problem: Problem, domain: boolean): ShownProblem {
   const words = PROBLEM_WORDS[problem.kind];
 
-  return { ...problem, ...words, home: words.home === "domain" && !domain ? "usage" : words.home };
+  return { ...problem, ...words, todo: todoOf(problem), home: words.home === "domain" && !domain ? "usage" : words.home };
 }
 
 /** The mark of one screen: its problems, and before them what else the screen must act on. */

@@ -23,8 +23,6 @@ const WORDS: Readonly<Record<Exclude<AuditEntry["action"], "domain_synced">, str
   login: "Logged in",
   login_allowed: "Allowed a token",
   login_denied: "Denied a token",
-  update_address_set: "Saved the update link",
-  update_address_removed: "Removed the update link",
   update_started: "Started an update",
 };
 

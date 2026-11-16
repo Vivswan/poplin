@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { TOKEN, usualPlug } from "./support/fake-plug";
-import { openConsole, REBUILD_HOST } from "./support/console";
+import { openConsole } from "./support/console";
 import { readShell } from "./support/shell";
 
 /** A release newer than the test console's version. */
@@ -16,9 +16,6 @@ const NOTHING_MARKED = { recent: [], marks: { usage: null, domain: null, setting
 /** A day, in milliseconds. */
 const DAY_MS = 86_400_000;
 
-/** The address the tests save as the one that starts a rebuild. */
-const ADDRESS = `https://${REBUILD_HOST}/start/a-long-secret-part`;
-
 type Opened = Awaited<ReturnType<typeof openConsole>>;
 
 /** Let the install know of the newer release, as its daily check would. */
@@ -27,12 +24,13 @@ async function learnRelease(opened: Opened): Promise<void> {
 }
 
 describe("the frame", () => {
-  // Drift: a release the install learned of would show in the side only after a reload, and the side would offer a start with no address to send it to.
+  // Drift: a release the install learned of would show in the side only after a reload, and the side would offer a start on an install whose host holds no key to send it with.
   test("answers the newer release, and whether an update can be started", async () => {
     const opened = await openConsole();
+    opened.host.key = false;
     const before = await (await opened.get("/data/frame")).json();
     await learnRelease(opened);
-    await opened.change("/data/settings/update-address", { address: ADDRESS });
+    opened.host.key = true;
 
     expect(before).toEqual({ ok: true, update: null, starts: false, domainNote: null, ...NOTHING_MARKED });
     expect(await (await opened.get("/data/frame")).json()).toEqual({
@@ -81,7 +79,6 @@ describe("the frame", () => {
   test("is what the shell page starts from", async () => {
     const opened = await openConsole();
     await learnRelease(opened);
-    await opened.change("/data/settings/update-address", { address: ADDRESS });
     const page = await (await opened.get("/")).text();
     const { ok, ...frame } = (await (await opened.get("/data/frame")).json()) as Record<string, unknown>;
 
@@ -91,44 +88,44 @@ describe("the frame", () => {
 });
 
 describe("starting an update", () => {
-  // Drift: the button would send nothing, send to another address than the saved one, or leave no line in the log.
-  test("sends one request to the saved address and writes it down", async () => {
+  // Drift: the button would put nothing in place, or leave no line in the log.
+  test("has the host put the newest release in place and writes it down", async () => {
     const opened = await openConsole();
-    await learnRelease(opened);
-    await opened.change("/data/settings/update-address", { address: ADDRESS });
     const response = await opened.change("/data/update", {});
-    const answer = await response.text();
 
-    expect([response.status, JSON.parse(answer)]).toEqual([200, { ok: true, to: "1.1.0" }]);
-    expect(opened.rebuilds).toEqual([ADDRESS]);
+    expect([response.status, await response.json(), opened.host.put]).toEqual([200, { ok: true, to: "1.1.0" }, ["1.1.0"]]);
     expect((await opened.base.audit()).map((entry) => entry.action)).toContain("update_started");
-    expect(answer).not.toContain("a-long-secret-part");
   });
 
-  // Drift: a refused start would be sent anyway, or would reach the admin as a code with no sentence.
-  test.each([
-    ["no address is saved", async (opened: Opened) => learnRelease(opened), "no_update_address"],
-    ["no newer version is known", async (opened: Opened) => void (await opened.change("/data/settings/update-address", { address: ADDRESS })), "no_update"],
-  ])("refuses while %s, with a sentence of its own, and sends nothing", async (_what, prepare, code) => {
+  // Drift: a refused start would reach the admin as a code with no sentence, and the list of problems would tell them to check a link that no longer exists.
+  test.each<{ readonly name: string; readonly host: Partial<Opened["host"]>; readonly status: number; readonly code: string; readonly about: string | null; readonly sentence: string; readonly noted: boolean }>([
+    { name: "the host holds no key", host: { key: false }, status: 409, code: "no_key", about: null, sentence: "poplin holds no key, so it cannot update itself. Open Domain and press Repair.", noted: false },
+    { name: "no newer version is out", host: { release: null }, status: 409, code: "no_update", about: null, sentence: "No newer version is known, so no update was started.", noted: false },
+    {
+      name: "the fetched files are not the published ones",
+      host: { refusal: { ok: false, code: "release_refused", about: "digest_differs" } },
+      status: 502,
+      code: "release_refused",
+      about: "digest_differs",
+      sentence: "The files fetched for the release are not the files poplin published. Nothing was changed. Try again; if it says this again, tell the project.",
+      noted: true,
+    },
+  ])("refuses while $name with a sentence of its own, puts nothing in place, and a problem it notes gives that sentence as what to do", async ({ host, status, code, about, sentence, noted }) => {
     const opened = await openConsole();
-    await prepare(opened);
+    Object.assign(opened.host, host);
     const response = await opened.change("/data/update", {});
-    const refusal = (await response.json()) as { readonly sentence: string };
+    const { recent } = (await (await opened.get("/data/frame")).json()) as { readonly recent: readonly { readonly kind: string; readonly todo: string }[] };
 
-    expect([response.status, refusal]).toMatchObject([409, { ok: false, code }]);
-    expect(refusal.sentence).not.toBe("The request was refused.");
-    expect(opened.rebuilds).toEqual([]);
+    expect([response.status, await response.json(), opened.host.put]).toEqual([status, { ok: false, code, about, sentence }, []]);
+    expect(recent.map(({ kind, todo }) => [kind, todo])).toEqual(noted ? [["update_failed", sentence]] : []);
   });
 
-  // Drift: a second press in the same minute would rebuild the install twice.
+  // Drift: a second press in the same minute would fetch and upload the release twice.
   test("takes one start a minute", async () => {
     const opened = await openConsole();
-    await learnRelease(opened);
-    await opened.change("/data/settings/update-address", { address: ADDRESS });
     await opened.change("/data/update", {});
     const second = await opened.change("/data/update", {});
 
-    expect(await second.json()).toMatchObject({ ok: false, code: "too_many_requests" });
-    expect(opened.rebuilds).toHaveLength(1);
+    expect([await second.json(), opened.host.put]).toMatchObject([{ ok: false, code: "too_many_requests" }, ["1.1.0"]]);
   });
 });

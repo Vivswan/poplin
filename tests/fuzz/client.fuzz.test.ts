@@ -22,7 +22,7 @@ import { SHOWN_UPLOAD } from "../../packages/core/src/actions/show-upload";
 import { SITE_ANSWER } from "../../packages/core/src/actions/site-object";
 import { STARTED_UPDATE } from "../../packages/core/src/actions/start-update";
 import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings";
-import { UPDATE_ADDRESS_STATE } from "../../packages/core/src/actions/update-address";
+import { UPDATE_STATE } from "../../packages/core/src/actions/update";
 import { BEGUN_UPLOAD } from "../../packages/core/src/actions/uploads";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
@@ -94,7 +94,7 @@ const NEAR_ANSWERS: readonly unknown[] = [
   { format: 1, sites: [], next: SITE.id },
   { format: 1, site: { id: SITE.id, name: SITE.name, live_version: 1, versions: [{ number: 1, files: 1, bytes: 1 }] } },
   { started: true, from: "1.4.0", to: null },
-  { set: true, since: 0 },
+  { version: "1.4.0", update: null, key: "yes" },
   { values: { versions_kept: "many" } },
   { left: [] },
   { left: [1, 2, 3] },
@@ -140,7 +140,7 @@ const CALLS: readonly ((client: Client) => Promise<Called<unknown>>)[] = [
   (client) => client.call(EXPORTED_FILES, (api) => api.export.sites[":site"].files.$get({ param: PARAM, query: { version: "1" } })),
   (client) => client.call(SETTINGS_ANSWER, (api) => api.config.$get({ query: {} })),
   (client) => client.call(STARTED_UPDATE, (api) => api.update.$post({ query: {} })),
-  (client) => client.call(UPDATE_ADDRESS_STATE, (api) => api.update.address.$get({ query: {} })),
+  (client) => client.call(UPDATE_STATE, (api) => api.update.$get({ query: {} })),
 ];
 
 const property = fuzzTarget(import.meta.file);

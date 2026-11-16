@@ -24,7 +24,7 @@ The login could not be checked     15 Nov 2026, 11:59 once        Domain
 | the sections button, on a phone         | the same sign, for all sections together                                         |
 | Problems, on the Usage screen           | every problem of the last 7 or 30 days; a press on a row opens it                |
 | the Domain screen                       | a login that could not be checked, with what to do                               |
-| Settings, under Updates                 | an update that did not start, with what to do                                    |
+| Settings, under Updates                 | an update that did not go as it should, with what to do                                    |
 | `poplin doctor`                         | the `problems` row: `failed` for a problem of today, `ok` for none or an older one |
 
 An opened problem says when it came, how often, and what to do. Copy the details copies its kind, its times, the version, and the failure for a report.
@@ -46,7 +46,7 @@ failed  problems  2 kinds today: request_failed, sweep_failed
 | `count_unwritten`        | The day's count of storage writes was not saved | nothing, unless it comes back                       |
 | `login_unwritten`        | A login was not written to Activity             | nothing: the login itself worked                    |
 | `login_unchecked`        | The login could not be checked                  | open Domain and press Check                         |
-| `update_failed`          | The update did not start                        | check the update link in Settings, under Updates    |
+| `update_failed`          | An update did not go as it should               | the sentence of what went wrong; for a key, open Domain and press Repair |
 | `users_not_carried`      | A change of the users did not reach the login of the domain | open Domain and press Repair            |
 | `rules_not_carried`      | A changed setting did not reach every rule of the domain | open Domain and press Repair               |
 | `files_limit_reached`    | The daily limit of files was reached            | wait for midnight UTC, or raise `max_files_per_day` |

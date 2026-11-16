@@ -1,4 +1,4 @@
-// What an install knows of the newest released poplin: the release it last learned of, and when it last asked. And the form of the address that starts its own rebuild.
+// What an install knows of the newest released poplin: the release it last learned of, and when it last asked.
 
 import prerelease from "semver/functions/prerelease";
 import valid from "semver/functions/valid";
@@ -12,9 +12,6 @@ const MOST_NOTES_LENGTH = 300;
 
 /** Where the project's releases are, as the package names its repository: the notes of a release the website publishes are that page or one under it. */
 const RELEASES = `${repository.url.replace(/^git\+/, "").replace(/\.git$/, "")}/releases`;
-
-/** The longest address that starts a rebuild. */
-const MOST_ADDRESS_LENGTH = 2048;
 
 /**
  * Whether a text is a released version as it is written: three whole numbers with dots between them, such as `0.2.0`.
@@ -103,21 +100,3 @@ export function publishedRelease(text: string): UpdateNews | null | undefined {
   return latest.output.version === null ? null : latest.output;
 }
 
-/**
- * Read a typed address as one that starts a rebuild of the install.
- *
- * The portable rules are checked here: `https`, no user or password, no port, no fragment, 2048 characters at most. Which hosts and paths count is the provider's to say.
- *
- * @param accepts - whether the host's provider starts rebuilds at this address
- * @returns the address as a URL writes it, or `undefined` for anything else; a request is sent to no address this refused
- */
-export function rebuildAddress(typed: string, accepts: (address: URL) => boolean): string | undefined {
-  if (typed.length > MOST_ADDRESS_LENGTH || !URL.canParse(typed)) return undefined;
-
-  const address = new URL(typed);
-  if (address.protocol !== "https:" || address.username !== "" || address.password !== "") return undefined;
-
-  if (address.port !== "" || address.hash !== "" || typed.includes("#")) return undefined;
-
-  return accepts(address) ? address.href : undefined;
-}

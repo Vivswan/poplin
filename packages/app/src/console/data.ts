@@ -2,7 +2,7 @@
 
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
-import type { Rebuilding } from "@poplin/core/src/actions/start-update";
+import type { Updating } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { Context, TypedResponse } from "hono";
@@ -40,8 +40,8 @@ interface Host {
   /** The free plan's limits a setting can be put above. */
   readonly freeLimits: FreeLimits;
 
-  /** How the host's provider starts a rebuild of the install, and where the starts of a minute are counted. */
-  readonly rebuilding: Rebuilding;
+  /** What updates the install, and where the starts of a minute are counted. */
+  readonly updating: Updating;
 
   /** The version of poplin the install runs. */
   readonly version: string;
