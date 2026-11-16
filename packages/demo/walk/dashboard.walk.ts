@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, isUnanswered, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
+import { arrive, isUnanswered, openPanel, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -53,9 +53,6 @@ const ADDED_EMAIL = "walk-user@example.com";
 
 /** What the Domain screen says at its top once a user was added or removed, until a repair. */
 const USERS_CHANGED = "Users changed. Press Repair.";
-
-/** The name of the button that opens the sections on a narrow screen: it says how many problems the sections hold, where they hold any. */
-const SECTIONS_BUTTON = /^Sections(, \d+ problems?)?$/;
 
 /** The kinds of file whose refusal breaks a screen. */
 const NEEDED_KINDS = ["document", "script", "stylesheet", "font"];
@@ -383,14 +380,6 @@ async function saveLog(page: Page): Promise<void> {
   const [first] = (await readFile(await file.path(), "utf8")).split("\r\n");
 
   expect([file.suggestedFilename(), first]).toEqual([expect.stringMatching(/^poplin-activity-\d{4}-\d{2}-\d{2}\.csv$/), "When (UTC),Who,What,Site,Title,Action"]);
-}
-
-/** Go to a section by its entry at the side, which a narrow screen keeps behind a button. A section whose screen holds a problem says how many after its name. */
-async function toSection(page: Page, label: string): Promise<void> {
-  const behind = page.getByRole("button", { name: SECTIONS_BUTTON });
-  if (await behind.isVisible()) await behind.click();
-
-  await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: new RegExp(`^${label}( \\d+ problems?)?$`) }).click();
 }
 
 /** The stops that open a screen from the side, each with the screen's name. */
