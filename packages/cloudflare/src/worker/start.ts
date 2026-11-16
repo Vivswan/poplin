@@ -12,6 +12,7 @@ import { createApi } from "@poplin/app/src/api/api";
 import type { Counters } from "@poplin/app/src/limits/limits";
 import type { DomainPlug, FirstRun } from "@poplin/app/src/console/domain/records";
 import type { InstallKey } from "@poplin/app/src/console/key/records";
+import type { UsageHost } from "@poplin/app/src/console/usage/records";
 import type { Identify } from "@poplin/app/src/login/login";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
@@ -29,6 +30,7 @@ import { D1Driver } from "../database/d1";
 import { createInstallKey } from "../key/install-key";
 import { readKeptKey } from "../key/kept-key";
 import { CloudflareCounters } from "../limits/counters";
+import { createUsageHost } from "../usage/usage-host";
 import { accessIdentity } from "../login/access-token";
 import { accessKeys } from "../login/keys";
 import { R2Store } from "../storage/r2";
@@ -117,6 +119,9 @@ export interface Instance {
 
   /** The key poplin keeps for Cloudflare: whether the install holds one, and whether Cloudflare still takes it. Nothing answers the key itself. */
   readonly key: Pick<InstallKey, "has" | "verify">;
+
+  /** Cloudflare's side of the Usage screen. */
+  readonly usage: UsageHost;
 
   /** The version of poplin the install runs. */
   readonly version: string;
@@ -331,6 +336,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
     domain: createDomainPlug({ ...own.value, layout, fetch: outside.cloudflare }),
     key: createInstallKey(kept, own.value.accountId),
+    usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), key: kept }),
     version: VERSION,
     rebuilding: { ...rebuild, counters },
   };

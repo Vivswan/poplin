@@ -17,6 +17,7 @@ import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
 import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
+import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
 import {
   ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
   PATHS, type Published, page, publish, send, spentDatabase, tokenOf, type World, under, wait, world,
@@ -645,6 +646,35 @@ describe("the product, from a token to an opened site", () => {
       [200, 304, 200, 200, 404, 302, 200],
       [{ today: 2, week: 2 }, { today: 1, week: 1 }],
       { site: 5, all: 6 },
+    ]);
+  });
+
+  // Drift: the rows are counted in the driver and written by the counters, two parts the instance must build over one driver; built over two, the Usage screen would show a day of no rows, and its links would lead to no account.
+  test("the Usage screen shows the rows the instance's database used: the ones a visitor's sampled request wrote to the day, the ones not written yet, and Cloudflare's pages of the Worker's account", async () => {
+    const worker = instance(w);
+    await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
+    const session = { headers: { Cookie: cookieOf(await logIn(worker, w)) } };
+    const { database, now } = await installOf(w);
+    const day = new Date(now()).toISOString().slice(0, 10);
+    const before = await database.readDayUse(day);
+    await ask(worker, "https://docs-page.example.com/");
+    const written = await database.readDayUse(day);
+    const usage = (await (await ask(worker, `${ADMIN}/data/usage`, session)).json()) as {
+      readonly host: string;
+      readonly official: unknown;
+      readonly lines: readonly { readonly what: string; readonly used: number; readonly about: boolean; readonly link: string | null }[];
+    };
+    const [read, wrote] = usage.lines.filter((line) => line.what.startsWith("rows_"));
+
+    expect([before.rows, written.requests, written.rows.read > 0, written.rows.written > 0]).toEqual([{ read: 0, written: 0 }, 1, true, true]);
+    expect([usage.host, usage.official, read?.about, wrote?.about, read?.link, (read?.used ?? 0) > written.rows.read, (wrote?.used ?? 0) >= written.rows.written + 2]).toEqual([
+      "Cloudflare",
+      null,
+      true,
+      true,
+      `https://dash.cloudflare.com/${EXAMPLE_ACCOUNT}/workers/d1`,
+      true,
+      true,
     ]);
   });
 

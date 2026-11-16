@@ -13,6 +13,7 @@
     "./src/console/shell": "./src/console/shell.ts",
     "./src/console/spent": "./src/console/spent.ts",
     "./src/console/settings/free-limits": "./src/console/settings/free-limits.ts",
+    "./src/console/usage/records": "./src/console/usage/records.ts",
     "./src/console/domain/records": "./src/console/domain/records.ts",
     "./src/console/domain/setup": "./src/console/domain/setup.ts",
     "./src/console/key/records": "./src/console/key/records.ts",

@@ -5,8 +5,9 @@ import { parseLogins } from "@poplin/core/src/auth/logins";
 
 import { createConsole } from "../../../src/console/console";
 import type { DomainPlug } from "../../../src/console/domain/records";
+import type { UsageHost } from "../../../src/console/usage/records";
 import { readSession } from "../../../src/login/session";
-import { codeCounts, FREE_LIMITS, ORIGIN, openOwned, VERSION } from "./install";
+import { codeCounts, FREE_LIMITS, ORIGIN, openOwned, USAGE_HOST, VERSION } from "./install";
 
 /** The one host the test console's provider starts rebuilds at. */
 export const REBUILD_HOST = "rebuilds.example.com";
@@ -49,8 +50,9 @@ interface Opened {
  *
  * @param base - the path the console sits under; the root when left out
  * @param domain - the provider's side of the install; left out, the console has no Domain screen
+ * @param usage - the host's side of the Usage screen; left out, a host that reads no figures of its own
  */
-export async function openConsole(base = "", domain?: DomainPlug): Promise<Opened> {
+export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST): Promise<Opened> {
   const opened = await openOwned();
   const { database } = opened.install;
 
@@ -76,6 +78,7 @@ export async function openConsole(base = "", domain?: DomainPlug): Promise<Opene
     base,
     client: CLIENT,
     freeLimits: FREE_LIMITS,
+    usage,
     rebuild: { accepts: (address) => address.hostname === REBUILD_HOST, fetch: startRebuild },
     demo: { reset: "/reset" },
     domain,

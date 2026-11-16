@@ -101,6 +101,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
     client: CLIENT_FILES,
     domain: instance.domain,
     freeLimits: FREE_LIMITS,
+    usage: instance.usage,
     rebuild: instance.rebuilding,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
