@@ -52,7 +52,10 @@ const CHECKS_ROWS = 922;
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
 
-/** One fake install, what the run knows of it, and the checks that do not pass on it, by id. `L1` is skipped unless the login is in front, and `demo` unless the install holds the demo's site: whole, or without its worker. */
+/** The checks skipped on an install with no login in front. */
+const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped" } as const;
+
+/** One fake install, what the run knows of it, and the checks that do not pass on it, by id. `L1` and `dashboard-login` are skipped unless the login is in front, and `demo` unless the install holds the demo's site: whole, or without its worker. */
 type Case = readonly [
   what: string,
   switches: FakeSwitches & { readonly noToken?: boolean; readonly demoSite?: "whole" | "no-worker" },
@@ -62,17 +65,19 @@ type Case = readonly [
 
 /** Every fake install the whole suite runs on. */
 const CASES: readonly Case[] = [
-  ["an install with no login in front passes every check but the login's and a person's", {}, {}, { L1: "skipped" }],
-  ["an install behind a login passes the login's check too", { access: true }, {}, {}],
-  ["an install that holds the demo's site passes the demo's check", { demoSite: "whole" }, {}, { L1: "skipped" }],
-  ["a demo's site that lost its worker fails the demo's check", { demoSite: "no-worker" }, {}, { L1: "skipped", demo: "failed" }],
-  ["an install whose routes miss the public word skips the public name's address", { noPublicRoute: true }, {}, { L1: "skipped", "public-name": "skipped" }],
+  ["an install with no login in front passes every check but the login's and a person's", {}, {}, NO_LOGIN],
+  ["an install behind a login passes the login's checks too", { access: true }, {}, {}],
+  ["an install whose login stands in front of the login path alone fails the check of the whole dashboard", { access: true, loginPathOnly: true }, {}, { "dashboard-login": "failed" }],
+  ["an install whose login stands in front of its setup page too fails the check of that open path", { access: true, setupBehindLogin: true }, {}, { "setup-open": "failed" }],
+  ["an install that holds the demo's site passes the demo's check", { demoSite: "whole" }, {}, NO_LOGIN],
+  ["a demo's site that lost its worker fails the demo's check", { demoSite: "no-worker" }, {}, { ...NO_LOGIN, demo: "failed" }],
+  ["an install whose routes miss the public word skips the public name's address", { noPublicRoute: true }, {}, { ...NO_LOGIN, "public-name": "skipped" }],
   [
     "a run told what the zone lacks skips the checks of each lacking rule, and the many-files publish it was not asked for",
     { noGuards: true },
     { "bot-block": "bots", "rate-rule": "rate", "guard-rules": "guards", "https-redirect": "redirect", "many-files": "asked" },
     {
-      L1: "skipped",
+      ...NO_LOGIN,
       crawler: "skipped",
       "burst-rate-rule": "skipped",
       "L8-method": "skipped",
@@ -85,23 +90,23 @@ const CASES: readonly Case[] = [
     "a run with no token skips every check that publishes and still makes the stranger's",
     { noToken: true },
     {},
-    { L1: "skipped", ...Object.fromEntries(WITH_TOKEN.map((id): [string, "skipped"] => [id, "skipped"])) },
+    { ...NO_LOGIN, ...Object.fromEntries(WITH_TOKEN.map((id): [string, "skipped"] => [id, "skipped"])) },
   ],
   [
     "an install that opens a letter p address with no login behind the request fails the checks of a private site",
     { leaksPrivate: true },
     {},
-    { L1: "skipped", private: "failed", L5: "failed" },
+    { ...NO_LOGIN, private: "failed", L5: "failed" },
   ],
-  ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, { L1: "skipped" }],
-  ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, { L1: "skipped" }],
-  ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { L1: "skipped", "burst-rate-rule": "failed" }],
-  ["an install with no limit of its own fails the check of that limit", { noOwnLimit: true }, {}, { L1: "skipped", "own-limit": "failed" }],
+  ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, NO_LOGIN],
+  ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, NO_LOGIN],
+  ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { ...NO_LOGIN, "burst-rate-rule": "failed" }],
+  ["an install with no limit of its own fails the check of that limit", { noOwnLimit: true }, {}, { ...NO_LOGIN, "own-limit": "failed" }],
   [
     "a zone whose rules are gone, on a run not told so, fails the checks of those rules",
     { noGuards: true },
     {},
-    { L1: "skipped", "L8-method": "failed", "L8-scanner": "failed", "L8-http": "failed" },
+    { ...NO_LOGIN, "L8-method": "failed", "L8-scanner": "failed", "L8-http": "failed" },
   ],
 ];
 
