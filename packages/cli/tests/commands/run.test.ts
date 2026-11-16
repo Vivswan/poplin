@@ -575,8 +575,6 @@ describe("run", () => {
     ["an address that is not https", undefined, "list --server http://poplin.example.com:8787", 2, "--server takes an https:// address with nothing after the host"],
     ["login with no install to ask", {}, "login", 3, "login needs the address of the install"],
     ["login at an address that is not https", {}, "login --server http://poplin.example.com:8787", 2, "--server takes an https:// address with nothing after the host"],
-    ["setup with no install to ask", {}, "setup", 3, "setup needs the address of the install"],
-    ["setup with no token to send", {}, "setup --server https://poplin.example.com", 1, "setup needs an account token of the install's provider, and POPLIN_SETUP_TOKEN holds none"],
   ])("%s sends nothing and exits with its own code", async (_name, env, line, code, sentence) => {
     const bench = await openBench();
 

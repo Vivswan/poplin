@@ -1,4 +1,4 @@
-// How one object of an install stands at its provider, in the words a person reads: the Domain screen and `poplin setup` say the same.
+// How one object of an install stands at its provider, in the words a person reads: the Domain screen says them.
 
 /** The words of each state a check or a repair answers for one object. `optional` is an object the token has no right for and the install works without. */
 const DOMAIN_STATE_WORDS: Readonly<Record<string, string>> = {

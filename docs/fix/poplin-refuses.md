@@ -85,20 +85,6 @@ Each entry of `blocked` names what blocks in `what`:
 | `newer_release` | the newest version needs a newer command                        | `npx poplin@latest install cloudflare`                           |
 | `bad_release`   | the release's files are not the ones poplin's website names; nothing was uploaded | run it again; if it comes back, report it      |
 
-**`poplin setup`**
-
-| Code                    | Means                                                       | What to do                                                    |
-| ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
-| `no_setup_server`       | `poplin setup` was given no address                         | `poplin setup --server https://poplin.your-name.workers.dev`  |
-| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no account token                 | put an account token in it                                    |
-| `setup_token_refused`   | the account token was refused, or it is of another account  | make one in the install's account                             |
-| `setup_provider_silent` | Cloudflare gave the install no answer, or asked it to wait  | try again in a minute                                         |
-| `setup_no_domain`       | the account token shows no such domain                      | give `--domain` a domain that is Active in the token's account |
-| `setup_bad_domain`      | `--domain` holds more than a domain, or one over 50 characters | the domain alone: `--domain example.com`                   |
-| `setup_bad_address`     | no `--domain`, and `--server` is not the Worker's own `workers.dev` address | give `--server` that address, or add `--domain <domain>`     |
-| `setup_bad_login`       | `--login` holds no email address                            | `--login <email>`                                             |
-| `setup_closed`          | nothing at that address takes a setup                       | check the address                                             |
-
 **Naming a site**
 
 | Code                          | Means                                         | What to do                                                    |
