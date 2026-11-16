@@ -1,4 +1,4 @@
-// The Usage screen in a browser: that the table fits its room, where the icons at a row's end stand, what a day's line is called, the lines of the host's own figures, and where the numbers of a phone's list end.
+// The Usage screen in a browser: that the table fits its room, where the icons at a row's end stand, what a day's line is called, the lines of the host's own figures, and where the numbers of a phone's list end, and where the list of Compare sites ends.
 
 import { expect, type Page } from "@playwright/test";
 
@@ -138,6 +138,34 @@ test.describe("on a phone, in the list of Usage", () => {
     expect([...new Set(ends.flatMap((line) => [line.used, line.limit]))]).toHaveLength(1);
   });
 });
+
+for (const screen of [SCREENS[0], { width: 390, height: 844 }]) {
+  test.describe(`on a screen ${screen.width} px wide, the opened list of Compare sites`, () => {
+    test.use({ viewport: screen });
+
+    // Drift: the list would be as high as the library makes it, which is no whole number of lines, so its last site is cut through its letters.
+    test("holds more sites than it shows, and ends on a whole line", async ({ page }) => {
+      await arrive(page);
+      await toSection(page, "Usage");
+      await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
+      const list = page.getByRole("listbox", { name: "Sites", exact: true });
+      await expect(list.getByRole("option").first()).toBeVisible();
+
+      // An opened list grows into place under a scale: the sizes read are those of its layout, which the scale leaves alone.
+      const read = (): Promise<{ scrolls: boolean; lines: number }> =>
+        list.evaluate((drawn) => {
+          const line = drawn.querySelector<HTMLElement>('[role="option"]')?.offsetHeight ?? 0;
+          const edges = Number.parseFloat(getComputedStyle(drawn).paddingTop) + Number.parseFloat(getComputedStyle(drawn).paddingBottom);
+
+          return { scrolls: drawn.scrollHeight > drawn.clientHeight, lines: (drawn.clientHeight - edges) / line };
+        });
+      await expect.poll(async () => (await read()).scrolls).toBe(true);
+      const { lines } = await read();
+
+      expect([lines > 1, Math.round(lines * 100) / 100]).toEqual([true, Math.round(lines)]);
+    });
+  });
+}
 
 test.describe("for a reader in UTC, whose date is the day of the numbers", () => {
   test.use({ timezoneId: "UTC" });

@@ -10,6 +10,10 @@ import { LOOK_COUNT, MOST_PICKED, type Option, type Picked, useOptions } from "@
 /** How long the typing rests before the list is read again, in milliseconds. */
 const REST = 200;
 
+/** How high the list of sites may be: the library's own height, cut down to whole lines over the 8 px of the list's edges. A line is 28 px, and 40 px under the width at which `index.css` makes it a finger high. */
+const WHOLE_LINES =
+  "[--line:1.75rem] max-[767.98px]:[--line:2.5rem] max-h-[calc(round(down,min(15.75rem,var(--available-height)_-_2.25rem)_-_0.5rem,var(--line))_+_0.5rem)]";
+
 /** What the picker is drawn from. */
 interface VisitsPickerProps {
   /** The sites picked now. */
@@ -84,7 +88,7 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
           </Button>
         </div>
         <ComboboxEmpty>No site found.</ComboboxEmpty>
-        <ComboboxList aria-label="Sites">
+        <ComboboxList aria-label="Sites" className={WHOLE_LINES}>
           {(option: Option) => (
             <ComboboxItem key={option.id} value={option} disabled={full && !picked.some((site) => site.id === option.id)}>
               <span className="min-w-0 truncate">{option.title}</span>
