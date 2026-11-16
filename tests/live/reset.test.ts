@@ -68,14 +68,14 @@ const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, s
 /** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo of three files: 3 removals, 85 for eleven sites and their 74 files, 12 for two more versions of one, 1 move to the trash, 4 for the demo. */
 const FIRST_RESET = 105;
 
-/** The rows the same reset counts: 3 removals at 14, 12 new sites at 25, the demo among them, 2 more versions at 19, and 1 move to the trash at 9. */
-const FIRST_RESET_ROWS = 389;
+/** The rows the same reset counts: 3 removals at 14, 12 new sites at 25, the demo among them, 2 more versions at 15, and 1 move to the trash at 9. */
+const FIRST_RESET_ROWS = 381;
 
 /** The rows of a site removed for good, as the harness counts one. */
 const REMOVAL_ROWS = 14;
 
 /** The rows of a new version of a site: what a reset that keeps every sample and updates the demo's site counts. */
-const DEMO_UPDATE_ROWS = 19;
+const DEMO_UPDATE_ROWS = 15;
 
 /** Every sample site, in the table's order: what a reset that finds each as its row ends says it kept. */
 const SAMPLES_IN_ORDER = ["handbook", "sales-report", "old-notes", "launch-deck", "team-site", "lisbon-trip", "winter-offer", "pricing", "spring-offer", "status-board", "checkout"];
@@ -114,6 +114,11 @@ const CHANGES: readonly Change[] = [
   { what: "a site kept as many versions under later numbers", change: publishOnto("sales-report", "sales-report"), anew: ["sales-report"] },
   { what: "a site stores another title of its entry page", change: sql("UPDATE sites SET page_title = 'Other' WHERE name = 'sales-report'"), anew: ["sales-report"] },
   { what: "the install was told to keep two versions of a site", change: sql("UPDATE settings SET value = json_set(value, '$.versions_kept', 2)"), anew: ["sales-report"] },
+  {
+    what: "the install was told to keep two versions of a site that holds the first and the third",
+    change: sql("UPDATE settings SET value = json_set(value, '$.versions_kept', 2)", "DELETE FROM versions WHERE number = 2 AND folder = (SELECT folder FROM sites WHERE name = 'sales-report')"),
+    anew: ["sales-report"],
+  },
   { what: "the trashed site came within a day of being removed for good", change: sql(`UPDATE sites SET trashed_at = ${FAKE_NOW - 6 * DAY_MS} WHERE name = 'old-notes'`), anew: ["old-notes"] },
   { what: "a site lost a version", change: sql("DELETE FROM versions WHERE number = 1 AND folder = (SELECT folder FROM sites WHERE name = 'sales-report')"), anew: ["sales-report"] },
   { what: "a site got a version more", change: publishOnto("status-board"), anew: ["status-board"] },
@@ -189,9 +194,9 @@ async function buildDemo(out: string, page = "<title>a demo</title>"): Promise<v
 }
 
 /** A change made in the install's database, as a person's change on the dashboard leaves it. */
-function sql(statement: string): Differ {
+function sql(...statements: readonly string[]): Differ {
   return async ({ install }) => {
-    await install.sql(statement);
+    for (const statement of statements) await install.sql(statement);
 
     return undefined;
   };

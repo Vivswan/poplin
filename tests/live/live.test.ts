@@ -89,15 +89,18 @@ describe.skipIf(!LIVE)("a deployed install", () => {
     const report = setting("POPLIN_LIVE_REPORT");
     if (report !== undefined) writeFileSync(report, outcomeTable(outcomes));
 
-    try {
-      await opened?.sweep();
-    } finally {
-      opened?.close();
-      console.log(`Bucket writes and lists the checks asked for: ${meter.spent()}`);
-      console.log(`Rows written this run: ${rows.written()} of at most ${ROW_CEILINGS.checks}`);
-    }
+    // A meter that stopped the run holds back the sweep's removals too, so the sweep then fails: the stop is what the run says, and the reset removes what is left.
+    const swept = await Promise.resolve(opened?.sweep()).then(
+      () => undefined,
+      (error: unknown) => ({ error }),
+    );
+    opened?.close();
+    console.log(`Bucket writes and lists the checks asked for: ${meter.spent()}`);
+    console.log(`Rows written this run: ${rows.written()} of at most ${ROW_CEILINGS.checks}`);
 
     const stopped = meter.stopped() ?? rows.stopped();
+    if (stopped === undefined && swept !== undefined) throw swept.error;
+
     if (stopped === undefined) return;
 
     console.log(`::error::The live checks ${stopped}.`);

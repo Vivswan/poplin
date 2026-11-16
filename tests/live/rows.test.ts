@@ -54,15 +54,17 @@ describe("the meter of rows written", () => {
   });
 
   // A visit's rows are known by its answer alone, so it is sent before it is counted: visits that passed the ceiling unseen would leave a run green past it.
-  test("the visit that takes the count past the ceiling stops the step, and the request that writes after it is held back", async () => {
+  test("the visit that takes the count past the ceiling stops the step, and the visit and the request that writes after it are held back, while a listing still goes out", async () => {
     const install = fake();
     const meter = meterRows(install.fetch, 3);
-    const visits = [(await meter.fetch(SITE, {})).status, (await meter.fetch(SITE, {})).status];
+    const visits = [(await meter.fetch(SITE, {})).status, (await meter.fetch(SITE, {})).status, (await meter.fetch(SITE, {})).status];
     const change = await meter.fetch(`${SERVER}/api/config`, json("PATCH", {}));
+    const listing = await meter.fetch(`${SERVER}/api/sites`, {});
 
-    expect({ visits, change: change.status, written: meter.written(), stopped: meter.stopped() }).toEqual({
-      visits: [200, 200],
+    expect({ visits, change: change.status, listing: listing.status, written: meter.written(), stopped: meter.stopped() }).toEqual({
+      visits: [200, 200, 403],
       change: 403,
+      listing: 200,
       written: 4,
       stopped: "passed its ceiling of 3 rows written to the database",
     });
