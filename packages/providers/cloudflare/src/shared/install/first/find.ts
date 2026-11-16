@@ -1,7 +1,7 @@
 // What a token finds of poplin in an account, read before an install makes anything. Every name is fixed, so an install is found by its names and by the marks its own Worker carries.
 //
 //   1  the account     the one the domain's zone is in, or the one the token shows
-//   2  the Worker      `poplin`: none, poplin's own by its bindings, or somebody else's
+//   2  the Worker      `poplin`: none, poplin's own by its bindings, an install's that lost a binding, or somebody else's
 //   3  the version     of a whole install, from the tag of its latest version
 //   4  the database    `poplin`, by its name
 //   5  the bucket      `poplin-sites`, by its name; a refusal here says the token lacks the storage right, or that storage is switched off
@@ -22,6 +22,7 @@ import { listBuckets, planBucket } from "../pieces/bucket/bucket";
 import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare, findZones } from "../client";
 import { planDatabase } from "../pieces/database/database";
 import { INSTALL_OBJECTS } from "../install-objects";
+import { workflowNameOf } from "../../jobs/workflow-name";
 import type { DomainLayout } from "../../../with-domain/layout";
 import { type ListedBinding, readWorker } from "../pieces/variables/variables";
 import { type BoundInstall, readInstallBinding } from "../kind/zone-binding";
@@ -41,12 +42,22 @@ const VERSION_TAG = "workers/tag";
 /** A version as Cloudflare lists it, read no further than its annotations. */
 const LISTED_VERSION = v.object({ annotations: v.optional(v.record(v.string(), v.unknown())) });
 
+/** What the Worker of an install is bound to beside its name, each as a person is told it. */
+const BOUND = [
+  { name: INSTALL_OBJECTS.bucketBinding, type: "r2_bucket", told: `${INSTALL_OBJECTS.bucketBinding} (R2 bucket ${INSTALL_OBJECTS.bucket})` },
+  { name: INSTALL_OBJECTS.databaseBinding, type: "d1", told: `${INSTALL_OBJECTS.databaseBinding} (D1 database ${INSTALL_OBJECTS.database})` },
+  { name: INSTALL_OBJECTS.jobsBinding, type: "workflow", told: `${INSTALL_OBJECTS.jobsBinding} (Workflow ${workflowNameOf(SCRIPT)}, class ${INSTALL_OBJECTS.jobsClass})` },
+] as const;
+
+/** A list as a sentence says it. */
+const LISTED = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
 /** What each state is told in. */
 const WORDS = {
   token: "Cloudflare refused the token, or the token shows no account.",
   otherAccount: "The token does not show that account.",
   unreachable: "Cloudflare gave no usable answer.",
-  held: `A Worker named ${SCRIPT} is in this account and is not poplin's. Rename or delete it, then run this again.`,
+  held: `A Worker named ${SCRIPT} is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again.`,
   storage: "R2 is not switched on for this account, or the token may not use it. Switch R2 on in your browser, and check that the token has Workers R2 Storage: Edit.",
   loginOff: "Access is not switched on for this account. Open Zero Trust and pick a plan (Free works): until then nobody can log in.",
   lacks: "The token lacks a permission. Add this one",
@@ -161,16 +172,38 @@ async function accountOf(connection: Connection, where: Where): Promise<string |
   return { state: "refused", why: "no_domain", words: `The token shows no active domain ${where.layout.domain}. Add the domain to the account, or choose it under Zone Resources on the token's form.` };
 }
 
+/** Whether a Worker says it is poplin's: its `WORKER_NAME` is the install's own name. */
+function isNamed(bindings: readonly ListedBinding[]): boolean {
+  return bindings.some((binding) => binding.name === INSTALL_OBJECTS.workerBinding && binding.type === "plain_text" && binding.text === SCRIPT);
+}
+
+/** What a Worker lacks of the three things an install's Worker is bound to, each as a person is told it. */
+function lackedBy(bindings: readonly ListedBinding[]): string[] {
+  return BOUND.filter((mark) => !bindings.some((binding) => binding.name === mark.name && binding.type === mark.type)).map((mark) => mark.told);
+}
+
 /**
  * Tell whether a Worker is poplin's by the marks its bindings carry.
  *
  * @param bindings - every binding of the Worker named `poplin`, as Cloudflare lists them
  */
 export function isOwn(bindings: readonly ListedBinding[]): boolean {
-  const bound = (name: string, type: string): boolean => bindings.some((binding) => binding.name === name && binding.type === type);
-  const named = bindings.some((binding) => binding.name === INSTALL_OBJECTS.workerBinding && binding.type === "plain_text" && binding.text === SCRIPT);
+  return isNamed(bindings) && lackedBy(bindings).length === 0;
+}
 
-  return named && bound(INSTALL_OBJECTS.bucketBinding, "r2_bucket") && bound(INSTALL_OBJECTS.databaseBinding, "d1") && bound(INSTALL_OBJECTS.jobsBinding, "workflow");
+/** Why a Worker of the name that is not poplin's own stops a run: a stranger, or an install that lost a binding, which is told with what it lacks and the command that takes it once that is back. Neither is told to be deleted. */
+function heldWords(bindings: readonly ListedBinding[]): string {
+  if (!isNamed(bindings)) return WORDS.held;
+
+  const lacked = lackedBy(bindings);
+  const back = lacked.length === 1 ? "the binding" : "the bindings";
+  // With its bindings back, a Worker that is set is found whole, which a repair takes; one that is not set is found started, which an install goes on from.
+  const next = boundInstall(bindings) === undefined ? "poplin install again" : "poplin doctor --repair";
+
+  return (
+    `A Worker named ${SCRIPT} is in this account. It carries poplin's name and lacks ${LISTED.format(lacked)}: it looks like an install that was deployed again by hand. ` +
+    `Keep it: it may hold the install's keys. Put ${back} back on the Worker's Bindings page in your browser, then run ${next}.`
+  );
 }
 
 /**
@@ -288,7 +321,7 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
 
   if (bindings.value === undefined) return standing(place, false, rights);
 
-  if (!isOwn(bindings.value)) return { state: "held", words: WORDS.held, address: pagesOf(accountId).worker };
+  if (!isOwn(bindings.value)) return { state: "held", words: heldWords(bindings.value), address: pagesOf(accountId).worker };
 
   const address = dashboardOf(bindings.value);
 

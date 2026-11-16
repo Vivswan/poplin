@@ -65,6 +65,27 @@ describe("the states of an account", () => {
     for (const where of [DOMAIN, NONE]) expect((await found(account, where)).found).toMatchObject(state);
   });
 
+  // Drift: a person or an agent does what the stop says. A real install whose Worker lost a binding, told as a stranger to delete, loses both keys and leaves everything else behind.
+  test.each([
+    [
+      "a set install whose Worker lost its Workflow",
+      [...MARKS.filter((mark) => mark.name !== "JOBS"), ...SET],
+      "A Worker named poplin is in this account. It carries poplin's name and lacks JOBS (Workflow poplin-jobs, class PoplinJobs): it looks like an install that was deployed again by hand. " +
+        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run poplin doctor --repair.",
+    ],
+    [
+      "a Worker that is not set and kept its name alone",
+      MARKS.slice(3),
+      "A Worker named poplin is in this account. It carries poplin's name and lacks SITES (R2 bucket poplin-sites), DB (D1 database poplin), and JOBS (Workflow poplin-jobs, class PoplinJobs): it looks like an install that was deployed again by hand. " +
+        "Keep it: it may hold the install's keys. Put the bindings back on the Worker's Bindings page in your browser, then run poplin install again.",
+    ],
+    ["a Worker with none of poplin's name", MARKS.slice(0, 3), "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again."],
+  ] as const)("tells %s in words that never say to delete it", async (_, bindings, words) => {
+    const address = `https://dash.cloudflare.com/${ACCOUNT}/workers/services/view/poplin`;
+
+    for (const where of [DOMAIN, NONE]) expect((await found(fresh({ noWorker: false, bindings: [...bindings] }), where)).shown).toEqual({ state: "held", words, address });
+  });
+
   // Drift: a whole install is never touched by an install. Its version and its address are what the command tells the person in place of making anything.
   test("a set install is found whole, with the version its latest upload was tagged with, its dashboard's address, and the newest release; one with no tag is whole with no version", async () => {
     const account = fresh({ noWorker: false, bindings: [...MARKS, ...SET], versions: [{ id: "version-2", number: 2, annotations: { "workers/tag": "0.2.0" } }, { id: "version-1", number: 1, annotations: { "workers/tag": "0.1.0" } }] });
