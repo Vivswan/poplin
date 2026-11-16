@@ -24,10 +24,12 @@
 // those was stored reads low by it, until the next answer. A request whose answer or whose write failed stays in `own` until midnight.
 // Each Worker instance trusts what it last read for half a minute, so most requests read no database row.
 
-import type { Database, RequestCounts } from "@poplin/core/src/database/database";
+import type { Database, RequestCounts, RowsUsed } from "@poplin/core/src/database/database";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 
 import type { CountedDay, Counters, DayRoom, DayWindow, MinuteWindow, Taken } from "@poplin/app/src/limits/limits";
+
+import type { D1Driver } from "../database/d1";
 
 /** The `simple.limit` of the binding in wrangler.jsonc. The two must be equal, or every per-minute setting is off by their ratio. */
 const BINDING_LIMIT = 1_000_000;
@@ -47,6 +49,9 @@ const FRESH_MS = 30_000;
 /** How many sites' counts an instance remembers before it forgets the ones it took no request of and was not asked about for half a minute. A site it took a request of is held all day. */
 const MOST_SITES_REMEMBERED = 1000;
 
+/** No rows of the database: what a write carries for an instance that counts none. */
+const NO_ROWS: RowsUsed = { read: 0, written: 0 };
+
 /** How many days an instance holds counts of: the day, and the one before it while its last writes come back. */
 const DAYS_HELD = 2;
 
@@ -65,6 +70,9 @@ interface Parts {
 
   /** Draws a number from 0 up to 1, to pick the requests that are sampled; `Math.random` when absent. */
   readonly random?: () => number;
+
+  /** The rows D1 used for this instance, day by day, which a day's write takes along and a failed write puts back; none are carried when absent. */
+  readonly rows?: Pick<D1Driver, "takeRows" | "returnRows">;
 }
 
 /** One count as an instance holds it, of a site or of all sites on one day. */
@@ -109,12 +117,15 @@ export class CloudflareCounters implements Counters {
 
   readonly #random: () => number;
 
+  readonly #rows: Parts["rows"];
+
   readonly #days = new Map<string, Day>();
 
   constructor(parts: Parts) {
     this.#limiter = parts.limiter;
     this.#database = parts.database;
     this.#random = parts.random ?? Math.random;
+    this.#rows = parts.rows;
   }
 
   async takeMinute(window: MinuteWindow): Promise<Taken> {
@@ -173,11 +184,15 @@ export class CloudflareCounters implements Counters {
     const tallies = this.#held(day, site);
     for (const tally of tallies) tally.sent += requests;
 
+    // The write takes along every row D1 used for this instance on its day since the last write, whole and unscaled. What an instance holds when it or the day ends is never written, so a day's rows can read low.
+    const rows: RowsUsed = this.#rows?.takeRows(day) ?? NO_ROWS;
+
     try {
-      this.#learn(counted, await this.#database.addRequests({ day, site, requests, views: counted.page ? requests : 0 }), now);
+      this.#learn(counted, await this.#database.addRequests({ day, site, requests, views: counted.page ? requests : 0, rows }), now);
     } catch (error) {
       // Not written, so no answer of the database holds it: taken off again, an answer is not read low by it.
       for (const tally of tallies) tally.sent -= requests;
+      this.#rows?.returnRows(day, rows);
 
       throw error;
     }

@@ -240,6 +240,7 @@ function readVariables(env: Bindings): {
  */
 async function startUnset(given: {
   readonly database: Database;
+  readonly driver: D1Driver;
   readonly env: Bindings;
   readonly outside: Outside;
   readonly refused: readonly RefusedBinding[];
@@ -252,7 +253,7 @@ async function startUnset(given: {
   const key = await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), outside.now());
   const unset: Unset = {
     database,
-    counters: new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database }),
+    counters: new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: given.driver }),
     first: createFirstRun({ script, fetch: outside.cloudflare }),
     secrets: await derivedSecret(key.key),
   };
@@ -274,7 +275,8 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   if (!nothingSet) return { ok: false, failure: { kind: "binding", refused } };
 
   const now = outside.now();
-  const opened = await openDatabase(new D1Driver(env.DB), now);
+  const driver = new D1Driver(env.DB, outside.now);
+  const opened = await openDatabase(driver, now);
   if (opened.kind === "newer") return { ok: false, failure: { kind: "newer" } };
 
   if (opened.kind !== "open") {
@@ -287,7 +289,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const settled = await hasSettings(database);
   if (typeof settled !== "boolean") return settled;
 
-  if (!zone.ok || !own.ok) return startUnset({ database, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
+  if (!zone.ok || !own.ok) return startUnset({ database, driver, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
 
   const unset = settled ? undefined : await ensureSettings(database, env.FIRST_SETTINGS, now);
   if (unset !== undefined) return unset;
@@ -304,7 +306,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     publicAddressOf: addresses.publicAddressOf,
     reservedNames: addresses.reservedNames,
   };
-  const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database });
+  const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: driver });
   const rebuild = { accepts: isDeployHook, fetch: outside.rebuild };
   const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
   const api = createApi({

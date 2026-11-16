@@ -125,13 +125,15 @@ CREATE TABLE audit (
   CHECK ((site_id IS NULL) = (site_name IS NULL))
 ) STRICT`;
 
-/** A day's requests, and how many of them opened a page. A row lives a year, so it does not refer to the sites table. */
+/** A day's requests, and how many of them opened a page. A row lives a year, so it does not refer to the sites table. The row of all sites also holds the rows the database read and wrote on the day, as far as they were counted. */
 const REQUEST_COUNTS = `
 CREATE TABLE request_counts (
   day TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
   site TEXT NOT NULL,
   requests INTEGER NOT NULL CHECK (requests >= 1),
   views INTEGER NOT NULL DEFAULT 0 CHECK (views >= 0 AND views <= requests),
+  rows_read INTEGER NOT NULL DEFAULT 0 CHECK (rows_read >= 0),
+  rows_written INTEGER NOT NULL DEFAULT 0 CHECK (rows_written >= 0),
   PRIMARY KEY (day, site)
 ) STRICT, WITHOUT ROWID`;
 
