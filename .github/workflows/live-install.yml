@@ -7,6 +7,7 @@
 #   a push -> wait for that commit's `all-green` check -> build the Worker bundle
 #     -> make the standing test install match the commit -> run packages/providers/cloudflare/live against it -> put the install back
 #   a run by hand with `start_over` ticked -> the same steps, and the one that makes the install match first removes it with `poplin uninstall`, then makes it from nothing
+#   a run by hand with `upgrade` ticked -> first the job `upgrade`: the older build installed with its own commands, filled, and updated to this commit's build; then the same steps
 #
 #   make the install match: `poplin install` where the account holds none, and where it holds one the commit's build by the upload of an update, then `poplin doctor --repair`
 #   midnight UTC -> the same steps for main as it is, with one check more: a copy too large for one request, which the install's job finishes
@@ -40,6 +41,10 @@ on:
         description: First remove the test install from its account
         type: boolean
         default: false
+      upgrade:
+        description: First install the older build, fill it, and update it to the commit's build
+        type: boolean
+        default: false
     # The names the steps read. A caller must hand each name over, and the value may be empty: the one a step reads is the secret of the job's environment.
     secrets:
       CLOUDFLARE_API_TOKEN:
@@ -56,8 +61,44 @@ permissions:
   contents: read
 
 jobs:
+  # An install the older build made and filled takes this commit's build as an update, and must answer as before. It removes the test install
+  # and writes rows and files of its own, so only a run by hand with the box ticked makes it: packages/providers/cloudflare/live/README.md says what it costs.
+  upgrade:
+    if: inputs.upgrade && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    env:
+      POPLIN_LIVE_INSTALL: ${{ inputs.kind }}
+    concurrency:
+      group: live-checks-${{ inputs.kind }}
+      cancel-in-progress: false
+      queue: max
+    steps:
+      # The older build is a commit or a tag of the history, so the whole history is fetched.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      # No secret reaches this step: it installs the packages of a tree of the history and builds it.
+      - name: Put the older build in a folder, build it, and give this checkout a version above it
+        timeout-minutes: 10
+        run: bun run --silent --cwd packages/providers/cloudflare live:upgrade-builds "$RUNNER_TEMP/poplin-older"
+      - name: Build the Worker bundle
+        run: bun run --cwd packages/providers/cloudflare build
+      - name: Upgrade an install of the older build to this commit's
+        timeout-minutes: 40
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+        run: bun run --silent --cwd packages/providers/cloudflare live:upgrade "$RUNNER_TEMP/poplin-older"
+
+  # After the upgrade where one was asked for, whatever it came to: these steps put the install back to the commit's own build and the samples.
   checks:
-    if: github.ref == 'refs/heads/main'
+    needs: [upgrade]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 85
     environment: ${{ inputs.environment }}

@@ -262,7 +262,7 @@ describe("the lanes of the live workflows", () => {
   test("every job that is handed a secret waits in the lane of its kind, which keeps each waiting job, the midnight reset among them", () => {
     const touching = Object.entries(STEPS.jobs).filter(([, job]) => job.steps?.some(holdsSecret));
 
-    expect(Object.fromEntries(touching.map(([name, job]) => [name, job.concurrency]))).toEqual({ checks: LANE, reset: LANE });
+    expect(Object.fromEntries(touching.map(([name, job]) => [name, job.concurrency]))).toEqual({ upgrade: LANE, checks: LANE, reset: LANE });
   });
 
   test("a waiting run is replaced by a newer run of its own workflow and event alone, so a push never takes the place of the midnight run or of the other kind's run", () => {
@@ -272,6 +272,17 @@ describe("the lanes of the live workflows", () => {
       // biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.
       "account address": { group: "live-checks-account-address-${{ github.event_name }}", "cancel-in-progress": false },
     });
+  });
+});
+
+describe("the upgrade of the live workflows", () => {
+  // Drift: the older build is a tree of the history whose packages are installed and whose build is run. A secret in that step's reach would be in the reach of every package of an old lockfile.
+  test("the older build is installed and built in a step that is handed no secret, before the first step that is", () => {
+    const steps = STEPS.jobs.upgrade?.steps ?? [];
+    const builds = steps.findIndex((step) => step.run?.includes("live:upgrade-builds"));
+    const first = steps.findIndex(holdsSecret);
+
+    expect([builds >= 0 && builds < first, holdsSecret(steps[builds] ?? {}), steps[first]?.run?.includes("live:upgrade ")]).toEqual([true, false, true]);
   });
 });
 
