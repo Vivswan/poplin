@@ -291,7 +291,7 @@ nothing was changed
 | What is checked      | one file on the project's website, `latest.json`, which names the newest release a build can take  |
 | How often            | once a UTC day, by the install itself; a day with no answer is tried again the next day            |
 | What is sent         | a plain request for the file: no version, no id, and no address of the install is put in it        |
-| What Cloudflare adds | a `CF-Worker` header on every request a Worker sends, which names the install's domain             |
+| What Cloudflare adds | a `CF-Worker` header on every request a Worker sends. It names where the Worker runs: the account's `workers.dev` name, or the install's domain |
 | Where it shows       | the foot of the dashboard's side, on every page: `0.2.0 is out` and a link, What changed           |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
