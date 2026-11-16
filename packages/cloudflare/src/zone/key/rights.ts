@@ -1,9 +1,10 @@
 // What the key poplin keeps may do: every right, by the policy it belongs to, in the name Cloudflare's list of permission groups gives it.
 //
 //   policy    allowed on              rights
-//   account   the install's account   usage figures, the login and who it lets in, the team's domain, the budget alert
+//   account   the install's account   usage figures, the login and who it lets in, the team's domain, the budget alert, and the Worker's code: an update the install takes by itself
 //   zone      the install's zone      reading the zone, its records, its routes, its redirect rules, and its bot switches; writing its WAF rules
 //
+// Cloudflare takes the right to write a Worker for a whole account alone: a key limited to one Worker is refused on every call, so the key can replace any Worker of the account.
 // A group is found by its name each time a key is made, so no id of Cloudflare's is written here.
 
 /** The right the usage figures are read with. */
@@ -13,7 +14,7 @@ export const USAGE_RIGHT = "Account Analytics Read";
 const POLICIES = [
   {
     scope: "com.cloudflare.api.account",
-    rights: [USAGE_RIGHT, "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write"],
+    rights: [USAGE_RIGHT, "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write", "Workers Scripts Write"],
     resource: (place: KeyPlace): string | undefined => `com.cloudflare.api.account.${place.accountId}`,
   },
   {

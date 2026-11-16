@@ -52,8 +52,8 @@ const CREATE = `POST /accounts/${ACCOUNT}/tokens`;
 /** What a maker with no right for a call is answered. */
 const NOT_PERMITTED = { ok: false, failure: "refused", status: 403, errors: [{ code: 10000, message: `Authentication error for Bearer ${TOKEN}` }] };
 
-/** The rights a key is kept from: what changes a record, a route, a redirect, a bot switch, or a Worker, and what makes another key. */
-const KEPT_FROM = ["DNS Write", "Workers Routes Write", "Dynamic URL Redirects Write", "Bot Management Write", "Workers Scripts Write", "Account API Tokens Write"];
+/** The rights a key is kept from: what changes a record, a route, a redirect, or a bot switch, and what makes another key. */
+const KEPT_FROM = ["DNS Write", "Workers Routes Write", "Dynamic URL Redirects Write", "Bot Management Write", "Account API Tokens Write"];
 
 /** Every way a run can go. */
 const rows: readonly Row[] = [
@@ -192,6 +192,8 @@ describe("mintKey", () => {
         // Every id sent is one Cloudflare lists under the scope of the policy that carries it: of the two groups named Access: Apps and Policies Write, the account's. None is a right the key is kept from.
         expect(sent.map((groups) => [...new Set(groups.flatMap((group) => (group?.scopes ?? ["an id Cloudflare does not list"]) as string[]))])).toEqual(scopes.slice(0, resources.length).map((scope) => [scope]));
         expect(sent.flat().map((group) => String(group?.name)).filter((right) => KEPT_FROM.includes(right))).toEqual([]);
+        // The right an update of the install's own code is made with is on the account's policy: without it every update the install takes by itself is refused for the right.
+        expect(sent.map((groups) => groups.some((group) => group?.name === "Workers Scripts Write"))).toEqual(resources.map((_, index) => index === 0));
       },
     );
   });
