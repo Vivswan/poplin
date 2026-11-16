@@ -1,4 +1,4 @@
-// How a change is sent and its result said: one line at the edge of the screen, with Undo where one press takes the change back.
+// How a change is sent and its result said: one line at the edge of the screen, with Undo where one press takes the change back. A newer result takes the place of the one before it.
 
 import { createElement, type ReactElement } from "react";
 import { toast } from "sonner";
@@ -48,24 +48,18 @@ function wordsOf(text: string, name: string | undefined): ReactElement {
 }
 
 /**
- * Make room for a line: a phone shows one line at a time, the newest, since each lies over the screen's last controls. A line of work that goes on stays: its button is the one way to stop the work.
+ * Make room for a line: one result shows at a time, the newest, on every screen. A wide screen says it inside the header's band and a phone over the screen's last controls, and neither has room for a second.
+ * A line of work that goes on stays: its button is the one way to stop the work.
  *
  * @param id - the id of the line that is said next; one shown under it is said again in its place, and stays
  */
 function makeRoom(id?: string): void {
-  if (!window.matchMedia(PHONE).matches) return;
-
   for (const shown of toast.getToasts()) if (shown.id !== id && !goesOn(shown)) toast.dismiss(shown.id);
 }
 
 /** Whether a line says work that goes on. */
 function goesOn(line: ReturnType<typeof toast.getToasts>[number]): boolean {
   return "type" in line && line.type === "loading";
-}
-
-/** Leave of the lines that are shown the newest alone, and those of work that goes on: for a screen that became as narrow as a phone while several were shown. */
-export function leaveNewest(): void {
-  for (const older of toast.getToasts().slice(0, -1)) if (!goesOn(older)) toast.dismiss(older.id);
 }
 
 /**
