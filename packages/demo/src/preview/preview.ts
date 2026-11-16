@@ -1,6 +1,6 @@
 // The demo's wiring: two installs in memory and every piece of the app mounted on one origin. It names no runtime: the host hands in the SQL driver and the sample sites.
 //
-//   /...                     the dashboard of the seeded install, as its sample admin; `/login` stands in for the provider's login
+//   /...                     the dashboard of the seeded install, as its sample admin; `?as=` asks as somebody the provider's login would not let in
 //   /served/<host label>/... a site as serving answers it at that hostname; `?as=visitor` asks as a stranger
 //   /api/...                 the API of the seeded install
 //   /setup/<state>/...       the setup screen over a domain plug held in that state; `first` is an install with nothing set, `shut` a page that is closed
@@ -15,13 +15,10 @@ import { createApi } from "../../../app/src/api/api";
 import { createConsole } from "../../../app/src/console/console";
 import { createSetupConsole } from "../../../app/src/console/setup-console";
 import type { ClientFiles } from "../../../app/src/console/shell";
-import { logIn } from "../../../app/src/login/login";
 import { serveSite } from "../../../app/src/sites/serve";
 import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
 import type { Rebuilding } from "../../../core/src/actions/start-update";
 import { parseLoginSecret } from "../../../core/src/auth/computer-logins";
-import { importSessionKey } from "../../../core/src/auth/cookie";
-import { parseLogins } from "../../../core/src/auth/logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
 import { OWN_SCHEMA } from "../../../core/src/database/open";
 import { DEFAULT_PUBLIC_WORD } from "../../../core/src/names/marker";
@@ -31,7 +28,7 @@ import { addressNow } from "./address-now";
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
-import { galleryPage, loginPage, missingPage, plainPage, terminalPage } from "./own-pages";
+import { galleryPage, missingPage, plainPage, terminalPage } from "./own-pages";
 import { type RealSites, realAddresses } from "./real-sites";
 import { keepLoginsWaiting, SEEDED_DAYS, type Samples, seedWorld } from "./seed";
 import { ADDRESSES, openWorld, type World } from "./world";
@@ -90,6 +87,9 @@ const RESET_PATH = "/reset";
 
 /** Every address a reset is posted to: the mount of the empty install writes its own prefix before the path its dashboard names. */
 const RESET_PATHS = [RESET_PATH, `${EMPTY_PREFIX}${RESET_PATH}`];
+
+/** Who the address asked as, when not as the sample admin, and why the stand-in for the provider's login then admits nobody. */
+const REFUSED_AS = { visitor: "no-proof", removed: "not-a-user", unchecked: "unchecked" } as const;
 
 /** The headers of the preview's own answers. */
 const OWN_HEADERS = { "Cache-Control": "no-store", "Content-Type": "text/html; charset=utf-8" } as const;
@@ -167,36 +167,22 @@ function countsOf(world: World): Pick<Parameters<typeof createConsole>[0], "coun
   };
 }
 
-/** The session of every request: the sample admin, unless the address asked as a visitor. */
-function sessionOf(world: World): Parameters<typeof createConsole>[0]["readSession"] {
-  return async (headers) => (previewValue(headers, "as") === "visitor" ? { ok: false } : { ok: true, value: world.admin.holder });
+/** Why a request is admitted by nobody: its address asked as one of `REFUSED_AS`. None for every other request, which is the sample admin's. */
+function refusalOf(headers: Headers): (typeof REFUSED_AS)[keyof typeof REFUSED_AS] | undefined {
+  const as = previewValue(headers, "as");
+
+  return as !== undefined && Object.hasOwn(REFUSED_AS, as) ? REFUSED_AS[as as keyof typeof REFUSED_AS] : undefined;
 }
 
-/** The stand-in for the provider's login: a page that says so, then the product's own login decision for the choice made on it. */
-async function answerLogin(request: Request, world: World): Promise<Response> {
-  const url = new URL(request.url);
-  const choice = previewValue(request.headers, "preview-login");
-  if (choice === undefined) return new Response(await loginPage(`${url.pathname}${url.search}`), { headers: OWN_HEADERS });
+/** The stand-in for the provider's login, which the preview has none of: every request is the sample admin's, unless its address asked as somebody who is not let in. */
+function admitOf(world: World): Parameters<typeof createConsole>[0]["admit"] {
+  const since = world.install.now();
 
-  const { database, now } = world.install;
-  const logins = parseLogins((await database.readSettings())?.logins ?? []);
-  const key = await database.readSigningKey();
-  if (!logins.ok || key === undefined) throw new Error("the preview's install lost its logins or its key");
+  return async (headers) => {
+    const refusal = refusalOf(headers);
 
-  const outcome = await logIn(request.headers, {
-    identify: async () => (choice === "admin" ? { ok: true, value: world.admin.holder } : { ok: false, refusal: "refused" }),
-    logins: logins.value,
-    sessionKey: await importSessionKey(key),
-    now: now(),
-    returnTo: url.searchParams.get("return"),
-  });
-
-  // The two answers the host gives around the decision: its refusal, and the way back.
-  if (!outcome.ok) return new Response("Forbidden\n", { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } });
-
-  await database.appendAudit({ action: "login", detail: {} }, { by: outcome.email, at: now() });
-
-  return new Response(null, { status: 302, headers: { Location: outcome.location, "Set-Cookie": outcome.setCookie } });
+    return refusal === undefined ? { ok: true, actor: world.admin, since } : { ok: false, refusal };
+  };
 }
 
 /**
@@ -206,12 +192,12 @@ async function answerLogin(request: Request, world: World): Promise<Response> {
  */
 function dashboardMount(world: World, prefix: string, host: Host): Mount {
   const base = `${host.base ?? ""}${prefix}`;
-  const login = `${base}/login`;
   const dashboard = createConsole({
     install: world.install,
     version: host.version,
-    readSession: sessionOf(world),
-    loginPath: login,
+    admit: admitOf(world),
+    // No login happens here, so Activity gains no line of one.
+    entered: async () => undefined,
     base,
     client: host.client,
     freeLimits: FREE_LIMITS,
@@ -221,9 +207,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
     domain: changingPlug(),
     ...countsOf(world),
   });
-  const answer: Mount["answer"] = (request) => (new URL(request.url).pathname === login ? answerLogin(request, world) : dashboard.fetch(request));
-
-  return { prefix, origin: ADMIN_ORIGIN, base, holds: "pages", answer };
+  return { prefix, origin: ADMIN_ORIGIN, base, holds: "pages", answer: dashboard.fetch };
 }
 
 function apiMount(world: World, version: string): Mount {
@@ -257,7 +241,7 @@ function siteMount(world: World, label: string): Mount {
     const settings = await database.readSettings();
     if (settings === undefined) throw new Error("the preview's install lost its settings");
 
-    return serveSite(request, { database, store, settings, addresses: ADDRESSES, identify: sessionOf(world), now });
+    return serveSite(request, { database, store, settings, addresses: ADDRESSES, identify: async (headers) => ({ ok: refusalOf(headers) === undefined }), now });
   };
 
   return { prefix: `${SERVED_PREFIX}/${label}`, origin: siteOrigin(label), base: "", holds: "site", answer };

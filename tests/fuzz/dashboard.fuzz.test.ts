@@ -1,8 +1,12 @@
-// Anyone can send the admin hostname any method, path, headers, and body: the dashboard must answer each without throwing or failing, show nothing of the install without a session, and change nothing unless a logged-in page of its own sent JSON.
+// Anyone can send the admin hostname any method, path, headers, and body: the dashboard must answer each without throwing or failing.
+// It must show nothing of the install to a request no user's login vouches for, and change nothing unless a user's page of its own sent JSON.
 //
-// A change has two guards: its `Origin` and `Sec-Fetch-Site` name the dashboard's own page, and it is JSON. A browser counts every site of the install as the same site as the dashboard, so the session alone tells nothing of the page that sent it.
+// Who asks is the email the stand-in for the provider's login vouches for, checked against the users as they are at that request: the run itself adds users.
+// The logins drawn are the owner, a user only once a run has added them, an email that is never a user, words that are no email, and no header at all.
+// A request that is not admitted is answered one of `REFUSED`, word for word under its own status: the sentence on a page, the refusal on a data route, nothing to a HEAD request.
+// A change has two guards: its `Origin` and `Sec-Fetch-Site` name the dashboard's own page, and it is JSON. A browser counts every site of the install as the same site as the dashboard, so the login alone tells nothing of the page that sent it.
 // The paths that would do a change name their site by its public name: that stays a reference through a new link, so they keep working for the whole run.
-// A published answer is a page, a redirect to the login, the answer of a session that ended, or a refusal under a status the console's own table gives: never a failure of the server, 500 and up.
+// A published answer is a page, the refusal of a request that is not admitted, or a refusal under a status the console's own table gives: never a failure of the server, 500 and up.
 
 import { expect, test } from "bun:test";
 import fc from "fast-check";
@@ -10,11 +14,11 @@ import fc from "fast-check";
 import { CONSOLE_REFUSAL_STATUSES } from "../../packages/app/src/console/data";
 import { openConsole } from "../../packages/app/tests/console/support/console";
 import { readShell } from "../../packages/app/tests/console/support/shell";
-import { ORIGIN } from "../../packages/app/tests/console/support/install";
+import { LOGIN_HEADER, ORIGIN } from "../../packages/app/tests/console/support/install";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
-const ANSWERS = [200, 302, 401, ...CONSOLE_REFUSAL_STATUSES.filter((status) => status < 500)];
+const ANSWERS = [200, 401, ...CONSOLE_REFUSAL_STATUSES.filter((status) => status < 500)];
 const METHODS = ["GET", "HEAD", "POST", "POST", "POST", "POST", "POST", "PUT", "DELETE", "OPTIONS"];
 const JSON_TYPE = "application/json";
 const FORM = "application/x-www-form-urlencoded";
@@ -22,8 +26,13 @@ const TYPES = [JSON_TYPE, JSON_TYPE, JSON_TYPE, JSON_TYPE, `${JSON_TYPE}; charse
 const ORIGINS = [ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "https://shop-page.example.com", "null", "", "https://poplin.example.com:444", "HTTPS://POPLIN.EXAMPLE.COM"];
 const FETCH_SITES = ["same-origin", "same-origin", "same-origin", "same-origin", "same-origin", "same-site", "cross-site", "none", ""];
 const CHANGES = ["settings", "make-live", "new-link", "delete", "restore", "naming", "access", "constructor", "__proto__", ""];
-const LOGIN = `${ORIGIN}/login?return=`;
-const LOGGED_OUT = JSON.stringify({ ok: false, code: "no_session", about: null, sentence: "Log in again." });
+const NO_LOGIN = "No login was checked for this request. Open the dashboard's address again.";
+const NOT_A_USER = "This email is not a user of this install.";
+
+const REFUSED: Readonly<Record<number, readonly string[]>> = {
+  401: [JSON.stringify({ ok: false, code: "no_login", about: null, sentence: NO_LOGIN }), ""],
+  403: [`${NO_LOGIN}\n`, `${NOT_A_USER}\n`, JSON.stringify({ ok: false, code: "not_a_user", about: null, sentence: NOT_A_USER }), ""],
+};
 
 const property = fuzzTarget(import.meta.file);
 
@@ -33,9 +42,10 @@ const report = await base.publish("report");
 const shop = await base.publish("shop", "public");
 const old = await base.publish("old");
 await base.install.database.trashSite(old.id, { by: base.owner, at: base.clock.now });
+// The owner has logged in before the run: the first login ever writes its line from whatever page it opens, which is a change no request of the property asks for.
+await base.install.database.noteLogin(base.owner, { since: base.clock.now, at: base.clock.now });
 
 const LABELS = [`report--${report.id}`, `shop--${shop.id}`, `old--${old.id}`, "shop", report.id, "report--000000000000", "nope"];
-const signingKey = await base.install.database.readSigningKey();
 
 const knownPaths = fc.oneof(
   fc.constantFrom("/", "/?view=trash", "/tokens", "/tokens/review/0123456789abcdef", "/settings", "/activity", "/usage", "/domain", "/login", "/api/sites", "/*", "/assets/app-4f1c.js", "/assets/other.js"),
@@ -47,7 +57,7 @@ const knownPaths = fc.oneof(
 );
 const changePaths = fc.constantFrom("/data/sites/shop/new-link", "/data/sites/shop/delete", "/data/sites/shop/restore", "/data/sites/shop/settings", "/data/sites/shop/naming", "/data/settings", "/data/settings/sign-everyone-out", "/data/people/add");
 const paths = fc.oneof({ arbitrary: changePaths, weight: 3 }, { arbitrary: knownPaths, weight: 3 }, { arbitrary: hostile(knownPaths), weight: 2 });
-const cookies = fc.constantFrom(base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, base.cookie, `${base.cookie}x`, "__Host-poplin-session=", "theme=dark", undefined);
+const logins = fc.constantFrom(base.owner, base.owner, base.owner, base.owner, base.owner, base.owner, "next@example.com", "mallory@example.com", `${base.owner}x`, "nobody", "", undefined);
 const words = fc.constantFrom("private", "unlisted", "public", "previous", "1", "2", "yes", "on", "off", "never", "7d", "2030-01-01", "9GB", "50GB", "docs", "gallery", "<script>alert(1)</script>", "next@example.com", ...LABELS);
 const values = fc.oneof({ arbitrary: words, weight: 3 }, { arbitrary: hostile(words), weight: 1 }, { arbitrary: fc.string(), weight: 1 }, { arbitrary: fc.constantFrom(true, false, 1, null), weight: 1 });
 const fields = fc.dictionary(
@@ -64,7 +74,7 @@ async function stored(): Promise<string> {
     await database.listSites({ trash: false, limit: 100 }),
     await database.listSites({ trash: true, limit: 100 }),
     await database.readSettings(),
-    Array.from((await database.readSigningKey()) ?? []),
+    Array.from((await database.readVisitorKey()) ?? []),
     (await database.listAudit({ limit: 1 }))[0]?.seq,
   ];
 
@@ -74,7 +84,7 @@ async function stored(): Promise<string> {
 const requests = fc.record({
   path: paths,
   method: fc.constantFrom(...METHODS),
-  cookie: cookies,
+  login: logins,
   origin: fc.constantFrom(...ORIGINS),
   fetchSite: fc.constantFrom(...FETCH_SITES),
   type: fc.constantFrom(...TYPES),
@@ -86,7 +96,7 @@ type Asked = typeof requests extends fc.Arbitrary<infer Drawn> ? Drawn : never;
 
 function requestOf(asked: Asked): Request {
   const headers = new Headers({ Origin: asked.origin, "Sec-Fetch-Site": asked.fetchSite, "Content-Type": asked.type });
-  if (asked.cookie !== undefined) headers.set("Cookie", asked.cookie);
+  if (asked.login !== undefined) headers.set(LOGIN_HEADER, asked.login);
 
   const body = asked.method === "GET" || asked.method === "HEAD" ? undefined : asked.body;
 
@@ -100,14 +110,9 @@ function isChange(asked: Pick<Asked, "method" | "type" | "origin" | "fetchSite">
   return asked.method === "POST" && ownPage && asked.type.split(";")[0]?.trim().toLowerCase() === JSON_TYPE;
 }
 
-/** Whether an answer shows nothing of the install: the way to the login, a data route's refusal of a request without a session, or a file of the client, which holds nothing of it. */
-function showsNothing(response: Response, page: string, address: URL): boolean {
-  if (page === "" && response.status === 302 && (response.headers.get("Location") ?? "").startsWith(LOGIN)) return true;
-
-  // A HEAD request gets the refusal's headers alone.
-  if (response.status === 401 && (page === LOGGED_OUT || page === "")) return true;
-
-  return address.pathname.startsWith("/assets/") && (response.status === 404 || page === "// the client" || page === "");
+/** Whether an answer shows nothing of the install: one of the refusals of a request that is not admitted, word for word, under its own status. */
+function showsNothing(response: Response, page: string): boolean {
+  return (REFUSED[response.status] ?? []).includes(page);
 }
 
 /** Whether an answer carries the dashboard's headers: never framed, its policy, and kept by no browser but for a file of the client. */
@@ -131,21 +136,17 @@ async function runsOther(response: Response, page: string): Promise<boolean> {
 async function factsOf(asked: Asked): Promise<Readonly<Record<string, boolean>>> {
   const address = new URL(`${ORIGIN}${asked.path}`);
 
-  // Whether the request carries the owner's session is decided here, apart from anything the dashboard answers: the cookie is the minted one and the owner is still a login.
-  const logins = (await base.install.database.readSettings())?.logins ?? [];
-  const loggedIn = asked.cookie === base.cookie && logins.includes(base.owner);
+  // Whether a user asks is decided here, apart from anything the dashboard answers: the email the request names is one of the users as they are now.
+  const users: readonly string[] = (await base.install.database.readSettings())?.logins ?? [];
+  const loggedIn = asked.login !== undefined && users.includes(asked.login);
   const before = await stored();
   const response = await opened.fetch(requestOf(asked));
   const page = await response.text();
   const after = await stored();
 
-  // A sign-out that was rightly done would end the session of every later run, so the key the cookie was signed with goes back.
-  const key = await base.install.database.readSigningKey();
-  if (signingKey !== undefined && String(key) !== String(signingKey)) await base.install.database.rotateSigningKey(signingKey, { by: base.owner, at: base.clock.now });
-
   return {
     published: ANSWERS.includes(response.status),
-    shownToStranger: !loggedIn && !showsNothing(response, page, address),
+    shownToStranger: !loggedIn && !showsNothing(response, page),
     changedUnasked: !(loggedIn && isChange(asked)) && after !== before,
     guarded: isGuarded(response, address),
     script: await runsOther(response, page),
@@ -153,7 +154,7 @@ async function factsOf(asked: Asked): Promise<Readonly<Record<string, boolean>>>
 }
 
 property(
-  "any request gets a published answer, a page only with a session, and a change only from a logged-in page of the dashboard that sent it as JSON",
+  "any request gets a published answer, anything of the install only as a user, and a change only from a page of the dashboard that a user sent as JSON",
   fc.asyncProperty(requests, async (asked) => {
     const address = `${ORIGIN}${asked.path}`;
     fc.pre(URL.canParse(address) && new URL(address).origin === ORIGIN);
@@ -167,7 +168,7 @@ test.each([
   ["/*", 404],
   ["/data/*", 404],
 ] as const)("a change sent to the literal path %s by a logged-in page is answered %d and changes nothing", async (path, status) => {
-  const asked = { path, method: "POST", cookie: base.cookie, origin: ORIGIN, fetchSite: "same-origin", type: JSON_TYPE, body: "{}" };
+  const asked = { path, method: "POST", login: base.owner, origin: ORIGIN, fetchSite: "same-origin", type: JSON_TYPE, body: "{}" };
   const before = await stored();
   const response = await opened.fetch(requestOf(asked));
 
@@ -179,7 +180,7 @@ test("a change sent as JSON by a logged-in page is done", async () => {
   // A site made here: the property's own runs may have left any other in the trash, where a rename is refused.
   const fresh = await base.publish("control");
   const before = await stored();
-  const facts = await factsOf({ path: `/data/sites/control--${fresh.id}/naming`, method: "POST", cookie: base.cookie, origin: ORIGIN, fetchSite: "same-origin", type: JSON_TYPE, body: JSON.stringify({ title: "A control" }) });
+  const facts = await factsOf({ path: `/data/sites/control--${fresh.id}/naming`, method: "POST", login: base.owner, origin: ORIGIN, fetchSite: "same-origin", type: JSON_TYPE, body: JSON.stringify({ title: "A control" }) });
 
   expect([facts, (await stored()) === before]).toEqual([{ published: true, shownToStranger: false, changedUnasked: false, guarded: true, script: false }, false]);
 });

@@ -1,11 +1,11 @@
-// One Worker instance made ready: its bindings read, its database opened and brought up to date, the first settings and the signing key stored, and every piece built over them.
+// One Worker instance made ready: its bindings read, its database opened and brought up to date, the first settings and the visitor key stored, and every piece built over them.
 //
 //   ZONE, ACCOUNT_ID, WORKER_NAME   read and checked                     else `binding`, naming every one that is refused
 //   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`: its setup page alone, until somebody has logged in
-//   ACCESS             read and checked; absent, the login stays shut    else `binding`
+//   ACCESS             read and checked; absent, nobody is admitted      else `binding`
 //   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`
 //   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`
-//   signing key        stored, only while none exists
+//   visitor key        stored, only while none exists
 //   KEPT_KEY           read once; absent or no key, the install holds none   never a fault, and never quoted
 
 import { createApi } from "@poplin/app/src/api/api";
@@ -14,7 +14,8 @@ import type { DomainPlug, FirstRun } from "@poplin/app/src/console/domain/record
 import type { InstallKey } from "@poplin/app/src/console/key/records";
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import type { UsageHost } from "@poplin/app/src/console/usage/records";
-import type { Identify } from "@poplin/app/src/login/login";
+import type { Identify } from "@poplin/app/src/login/admit";
+import { createEntries } from "@poplin/app/src/login/entries";
 import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
@@ -52,7 +53,7 @@ import { readOwnWorker } from "./own-worker";
 /** What one request to the API may carry. Cloudflare's Free plan ends a request body at 100 MB, and core ends a manifest at 1.5 MB itself. */
 const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000 } as const;
 
-/** The bytes of a new signing key. */
+/** The bytes of a new visitor key. */
 const KEY_BYTES = 32;
 
 /** The text form of every setting, as the binding holds it. */
@@ -62,10 +63,13 @@ const SETTING_TEXTS = v.record(v.string(), v.string());
 const SETTING_KEYS = Object.keys(SETTING_VALUES.entries);
 
 /** The refusal of every login on an install whose Access application setup has not made yet. */
-export const NO_ACCESS = "not-set-up";
+const NO_ACCESS = "not-set-up";
 
 /** The login of a Worker with no `ACCESS` variable: nobody is anybody. */
 const NOBODY: Identify<string> = async () => ({ ok: false, refusal: NO_ACCESS });
+
+/** The refusal of Access while its keys cannot be had. */
+const KEYS_UNAVAILABLE = "keys-unavailable";
 
 /** The version of poplin this Worker was built from: the one the released package states, read when the Worker is bundled. */
 const VERSION: string = version;
@@ -114,8 +118,11 @@ export interface Instance {
   /** Answers every path under `/api`. */
   readonly api: ReturnType<typeof createApi>;
 
-  /** Decides who a request to the login path or to a private site's address is from. Without an `ACCESS` variable it refuses everyone as `NO_ACCESS`. */
+  /** Decides who a request to the dashboard or to a private site's address is from. Without an `ACCESS` variable it refuses everyone as `NO_ACCESS`. */
   readonly identify: Identify<string>;
+
+  /** Writes the Activity line of a login, once for each login at Access; it is told every dashboard page a user opens. */
+  readonly entered: ReturnType<typeof createEntries>;
 
   /** The install's side at Cloudflare, for setup and the Domain tab. */
   readonly domain: DomainPlug;
@@ -168,6 +175,20 @@ export type Failure =
 /** An instance, or why there is none. */
 export type Started = { readonly ok: true; readonly instance: Instance } | { readonly ok: false; readonly failure: Failure };
 
+/**
+ * Say what a refusal of an instance's login means to the dashboard.
+ *
+ * @param refusal - what `identify` answered, or `not-a-user` for a verified email that is no user
+ * @returns `unchecked` while the team's keys cannot be had, `not-set-up` on an install without its `ACCESS` variable, `not-a-user` as it is, and `no-proof` for every other
+ */
+export function whyRefused(refusal: string): "no-proof" | "not-a-user" | "unchecked" | "not-set-up" {
+  if (refusal === KEYS_UNAVAILABLE) return "unchecked";
+
+  if (refusal === NO_ACCESS) return "not-set-up";
+
+  return refusal === "not-a-user" ? refusal : "no-proof";
+}
+
 function badBinding(binding: RefusedBinding["binding"], refusal: string): Started {
   return { ok: false, failure: { kind: "binding", refused: [{ binding, refusal }] } };
 }
@@ -203,7 +224,7 @@ async function ensureSettings(database: Database, binding: unknown, now: number)
 }
 
 /**
- * Read the settings and the signing key the install holds, in one question, so that settings another build wrote stop the start with their own reason.
+ * Read the settings and the visitor key the install holds, in one question, so that settings another build wrote stop the start with their own reason.
  *
  * @returns the two, each `undefined` before it was stored; or the failure, logged by the key that is wrong and never by a value
  * @throws whatever the database rejects with
@@ -224,7 +245,7 @@ async function readStored(database: Database): Promise<SettingsAndKey | Extract<
   }
 }
 
-/** Read the Worker's variables, and list every one that cannot be used. An absent `ACCESS` is no fault: the login stays shut until setup writes it. */
+/** Read the Worker's variables, and list every one that cannot be used. An absent `ACCESS` is no fault: nobody is admitted until setup writes it. */
 function readVariables(env: Bindings): {
   readonly zone: ReturnType<typeof readZoneBinding>;
   readonly own: ReturnType<typeof readOwnWorker>;
@@ -261,7 +282,7 @@ async function startUnset(given: {
   const { database, env, outside, refused, script, settled } = given;
   if (script === undefined || settled) return { ok: false, failure: { kind: "binding", refused } };
 
-  const key = await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), outside.now());
+  const key = await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), outside.now());
   const unset: Unset = {
     database,
     counters: new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: given.driver }),
@@ -307,7 +328,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   if (unset !== undefined) return unset;
 
   // An install that holds its key is asked for it no more: only the first start of an install makes one.
-  if (stored.key === undefined) await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);
+  if (stored.key === undefined) await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);
 
   const layout = zone.value;
   const addresses = hostnameAddresses(layout);
@@ -345,6 +366,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     counters,
     servedByName: new Map(),
     api,
+    entered: createEntries(install, (error) => logFault("a login was not written to the audit log", error)),
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
     domain: createDomainPlug({ ...placed, key }),
     key,

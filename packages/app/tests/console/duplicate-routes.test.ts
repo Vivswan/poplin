@@ -7,6 +7,7 @@ import { MemoryStore } from "@poplin/core/src/storage/memory";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
 
 import { openConsole } from "./support/console";
+import { LOGIN_HEADER } from "./support/install";
 
 /** The most calls to the database one request of a copy may make here: the 44 a copy is held to, less a host's start of 2 and its 2 for counting the day's listings, which no test install makes. The test console's session costs 2 calls, a host's 1. */
 const MOST_DATABASE_CALLS = 40;
@@ -201,9 +202,9 @@ describe("a cancelled copy", () => {
 });
 
 describe("the copy routes", () => {
-  // Drift: a page of another site could make copies with a visitor's session until the install is full, or anyone could with none.
+  // Drift: a page of another site could make copies with a visitor's login until the install is full, or anyone could with none.
   test.each([
-    ["no session", { Cookie: "" }, 401],
+    ["no login", { [LOGIN_HEADER]: "" }, 401],
     ["a request from another site", { Origin: "https://other.example.com", "Sec-Fetch-Site": "cross-site", "Content-Type": "text/plain" }, 403],
   ])("refuse %s and copy nothing", async (_name, headers, status) => {
     const opened = await openConsole();

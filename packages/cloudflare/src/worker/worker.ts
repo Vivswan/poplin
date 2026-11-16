@@ -1,22 +1,23 @@
 // The Worker: every request and every scheduled run enters here.
 //
 //   <admin hostname>/api and below   the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
-//   <admin hostname>/login           the login, which checks the Access token itself
 //   <admin hostname>/setup and below the setup page, which answers only until somebody has logged in
-//   <admin hostname>/...             the dashboard, which checks the session cookie itself
+//   <admin hostname>/...             the dashboard: the Access token and the users, on every request
 //   the Worker's workers.dev address the setup page and nothing else of the install: it is the one address that resolves before setup made the records
 //   any other hostname               the Access token under `p`, the limits, then serving; one that is no site's gets serving's own 404
+//
+// Access stands in front of the whole admin hostname at the edge, but for the paths of `INSTALL_OBJECTS.openPaths`. Each of those has its answer in `OPEN`, and every other path is the dashboard's.
+// The dashboard keeps no session of its own: the token Access puts on a request is checked on each one, and its email against the users.
 //
 // An instance starts on its first request, and every request that arrives meanwhile waits on that one start.
 // Only a start that succeeded is kept. A failed one is answered to the requests that waited on it, and the next request starts again.
 //
-// A site request trusts settings and logins read up to a minute ago. The login and the dashboard read them anew on every request,
-// so a removed login loses the dashboard at once and the private sites within the minute. A dashboard request that only reads uses that one read for all it answers.
-// The session cookie is the dashboard's alone: "sign everyone out" ends the dashboard's sessions, and a private site's login is Access's own.
+// A site request trusts settings and users read up to a minute ago. The dashboard reads them anew on every request,
+// so a removed user loses the dashboard at once and the private sites within the minute. A dashboard request that only reads uses that one read for all it answers.
 
 import { createConsole } from "@poplin/app/src/console/console";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
-import { readSession } from "@poplin/app/src/login/session";
+import { admit } from "@poplin/app/src/login/admit";
 import { toHttps } from "@poplin/app/src/transport/to-https";
 import { meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
 import type { Install } from "@poplin/core/src/actions/records";
@@ -29,19 +30,15 @@ import type { Bindings } from "./bindings";
 import { CLIENT_FILES } from "./client-files";
 import { faultOf, logFault } from "./fault";
 import { createHolding, type Held, SETTINGS_LIFETIME_MS, type SiteHeld } from "./held";
-import { answerLogin } from "./login";
 import { answerSite } from "./site";
 import { answerFirstSetup, answerSetup, isSetupPath } from "./setup";
 import { answerSpent } from "./spent";
-import { type Failure, type Instance, type Outside, type Started, startInstance } from "./start";
+import { type Failure, type Instance, type Outside, type Started, startInstance, whyRefused } from "./start";
 import { runSweep } from "./sweep";
 import { plain } from "./util";
 
-/** The login and the dashboard trust no earlier read. */
+/** The dashboard and the setup page trust no earlier read. */
 const FRESH = 0;
-
-/** Where the API answers, and everything below it. */
-const API_PATH = "/api";
 
 /** The answer to a request that met a failure of the database or the bucket. */
 const TRY_AGAIN = "Something went wrong. Try again.";
@@ -60,6 +57,12 @@ const SETUP = "/setup";
 
 /** Where the variables of an install come from, for a person whose Worker lost or mistyped one. */
 const SET_THEM = "Setup writes them, and so does the OpenTofu module. In the Cloudflare dashboard they are under Workers & Pages, this Worker, Settings, Variables and Secrets.";
+
+/** What answers each path Access lets past its login, and everything below it. A path the list gains has no answer here until one is written, and the Worker does not build without it. */
+const OPEN: Readonly<Record<(typeof INSTALL_OBJECTS.openPaths)[number], (request: Request, instance: Instance, ways: Ways) => Promise<Response>>> = {
+  "/api": async (request, instance) => instance.api.fetch(request),
+  "/setup": async (request, instance, ways) => answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen),
+};
 
 /** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, the same for a site request, and whether the setup page is open. */
 interface Ways {
@@ -90,18 +93,28 @@ function failureAnswer(request: Request, failure: Stopped): Response {
   return plain(request, 503, failureText(failure));
 }
 
-/** Where the dashboard answers: every path of the admin hostname that is neither the API nor the login. */
+/** Where the dashboard answers: every path of the admin hostname that Access guards. Who asks is decided on each request, from its Access token and the users just read. */
 async function answerDashboard(request: Request, instance: Instance, held: Held): Promise<Response> {
   const now = instance.install.now();
   // As the API does: every listing of the bucket this request makes is counted against the day, and written down once. What goes wrong with the count is noted.
   const meter = meterNoted(instance.install);
-  // A request that changes nothing takes the settings its session was just checked against. A change reads them itself, inside its own step.
+  // A request that changes nothing takes the settings its user was just checked against. A change reads them itself, inside its own step.
   const known = request.method === "GET" ? { knownSettings: held.settings } : {};
   const dashboard = createConsole({
     install: { ...instance.install, store: meter.store, ...known },
     version: instance.version,
-    readSession: (headers) => readSession(headers, { key: held.sessionKey, logins: held.logins, now }),
-    loginPath: INSTALL_OBJECTS.loginPath,
+    admit: async (headers) => {
+      const who = await admit(headers, { identify: instance.identify, logins: held.logins, now });
+      if (who.ok) return who;
+
+      // Logged by its kind, never with a value of the request.
+      console.warn(`poplin: a request for the dashboard was refused: ${who.refusal}`);
+      const refusal = whyRefused(who.refusal);
+      if (refusal === "unchecked") await noteProblem(instance.install, "login_unchecked");
+
+      return { ok: false, refusal };
+    },
+    entered: instance.entered,
     base: "",
     client: CLIENT_FILES,
     domain: instance.domain,
@@ -129,14 +142,11 @@ async function answerOwnAddress(request: Request, instance: Instance, ways: Ways
   return plain(request, 404, "Not found.");
 }
 
-/** The admin hostname: the API, the login, the setup page, and the dashboard, each of which checks who asks by itself. */
+/** The admin hostname: an open path is answered by its own piece, which checks who asks by itself, and every other path by the dashboard. */
 async function answerAdmin(request: Request, instance: Instance, ways: Ways): Promise<Response> {
   const { pathname } = new URL(request.url);
-  if (pathname === API_PATH || pathname.startsWith(`${API_PATH}/`)) return instance.api.fetch(request);
-
-  if (pathname === INSTALL_OBJECTS.loginPath) return answerLogin(request, instance, await ways.held(FRESH));
-
-  if (isSetupPath(pathname)) return answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen);
+  const open = INSTALL_OBJECTS.openPaths.find((path) => pathname === path || pathname.startsWith(`${path}/`));
+  if (open !== undefined) return OPEN[open](request, instance, ways);
 
   return answerDashboard(request, instance, await ways.held(FRESH));
 }

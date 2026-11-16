@@ -23,10 +23,10 @@ const COLUMNS: readonly ColumnSpec<Person>[] = [
   { id: "email", header: "Email", fixed: true, cell: (person) => <span title={person.email}>{person.email}</span> },
 ];
 
-/** The question before every session is ended. */
+/** The question before the install's stored key is replaced. */
 const SIGN_OUT: Question = {
   title: "Sign everyone out?",
-  says: "Every browser has to log in again, this one too.",
+  says: "Every visitor's limit starts again. Nobody is logged out.",
   yes: "Sign everyone out",
   removes: true,
 };

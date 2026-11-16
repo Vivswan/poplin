@@ -310,8 +310,8 @@ describe("the total of the log", () => {
     expect([response.status, await response.json()]).toEqual([status, answer]);
   });
 
-  // Drift: the count is of the install's whole history; without a session it would tell a stranger how busy the install is.
-  test("is answered to nobody without a session", async () => {
+  // Drift: the count is of the install's whole history; without a login it would tell a stranger how busy the install is.
+  test("is answered to nobody without a login", async () => {
     const opened = await openConsole();
 
     expect((await opened.getLoggedOut("/data/activity/total")).status).toBe(401);
@@ -471,8 +471,8 @@ describe("the log as a file", () => {
     expect([response.status, await response.json()]).toEqual([400, { ok: false, code: "bad_argument", about, sentence: `The value of ${about} is not one it takes.` }]);
   });
 
-  // Drift: the file is the install's whole history; without a session it would be handed to anyone who knows the address.
-  test("is answered to nobody without a session, nor is the place a file ends", async () => {
+  // Drift: the file is the install's whole history; without a login it would be handed to anyone who knows the address.
+  test("is answered to nobody without a login, nor is the place a file ends", async () => {
     const opened = await openConsole();
 
     expect([(await opened.getLoggedOut("/data/activity/download")).status, (await opened.getLoggedOut("/data/activity/download/next")).status]).toEqual([401, 401]);

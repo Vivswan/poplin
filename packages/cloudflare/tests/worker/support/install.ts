@@ -35,6 +35,9 @@ export const PATHS: ApiCalls = hc<Api>(ADMIN).api;
 /** The milliseconds of one hour. */
 const HOUR_MS = 3_600_000;
 
+/** How long a login at Access lasts, in seconds: 720 hours, as the install's Access application is made. */
+const ACCESS_SESSION_SECONDS = 2_592_000;
+
 /** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
 const MINUTE_MS = 60_000;
 
@@ -228,9 +231,19 @@ export async function accessHeaders(from: World, changes: Record<string, unknown
   return { "Cf-Access-Jwt-Assertion": await sign(by, { email: OWNER, iat: seconds - 10, nbf: seconds - 10, exp: seconds + 3600, ...changes }, from.team.kid) };
 }
 
-/** Ask the login path as Access sends a person on: with the team's token for the owner. */
-export async function logIn(worker: Worker, from: World, address = `${ADMIN}/login`): Promise<Response> {
-  return ask(worker, address, { headers: await accessHeaders(from) });
+/**
+ * Log the owner in as a person does: Access issues its token, and the first page of the dashboard is opened with it, which writes the login's Activity line and shuts the setup page.
+ *
+ * @param bindings - the bindings that page is asked on; the simulated ones when left out
+ * @returns the headers Access puts on every request of that login, live for the 30 days an Access session lasts
+ * @throws {Error} the page was not answered
+ */
+export async function logIn(worker: Worker, from: World, bindings: Bindings = BINDINGS): Promise<Record<string, string>> {
+  const headers = await accessHeaders(from, { exp: Math.floor(from.clock.now / 1000) + ACCESS_SESSION_SECONDS });
+  const opened = await ask(worker, `${ADMIN}/`, { headers }, bindings);
+  if (opened.status !== 200) throw new Error(`the dashboard answered the login's first page ${opened.status}: ${await opened.text()}`);
+
+  return headers;
 }
 
 /** Write a site's label address under a letter: `p` is the address behind Access, `u` the open one. */
@@ -241,19 +254,12 @@ export function under(site: Pick<Published, "label">, letter: "p" | "u"): string
 /**
  * Send a change as the dashboard's client and the setup page's client send it: a POST of JSON from a page of the same origin.
  *
- * @param headers - laid over the client's own, such as a session's `Cookie`
+ * @param headers - laid over the client's own, such as the token Access puts on a user's request
  */
 export function send(worker: Worker, url: string, body: unknown, headers: Record<string, string> = {}, bindings: Bindings = BINDINGS): Promise<Response> {
   const client = { "Content-Type": "application/json", Origin: new URL(url).origin, "Sec-Fetch-Site": "same-origin" };
 
   return ask(worker, url, { method: "POST", headers: { ...client, ...headers }, body: JSON.stringify(body) }, bindings);
-}
-
-/** The `Cookie` header a browser sends after a login's `Set-Cookie`. */
-export function cookieOf(login: Response): string {
-  const set = login.headers.get("Set-Cookie") ?? "";
-
-  return set.slice(0, set.indexOf(";"));
 }
 
 /** The bindings with every call to the database and the bucket counted. Preparing a statement calls nothing. */

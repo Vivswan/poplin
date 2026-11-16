@@ -25,7 +25,7 @@ describe("a console whose install meets a day's allowance that is used up", () =
   // Drift: the client shows the sentence of a refusal it is sent, and has none of its own for a status of 500.
   test("answers a change with the refusal and the wait, as the JSON its client reads", async () => {
     const opened = await openConsole("/next");
-    opened.base.install.database.rotateSigningKey = () => Promise.reject(new AllowanceSpent("writing"));
+    opened.base.install.database.rotateVisitorKey = () => Promise.reject(new AllowanceSpent("writing"));
 
     const answer = await opened.change("/data/settings/sign-everyone-out", {});
 
@@ -35,7 +35,7 @@ describe("a console whose install meets a day's allowance that is used up", () =
   // Drift: a page has no client yet to draw a refusal, and the frame it would be drawn in reads the database, which one that gives no more reading cannot.
   test("answers a page in plain words with the wait", async () => {
     const opened = await openConsole("/next");
-    // The session is read before it; the frame's own read is the one that meets the spent day.
+    // The users are read before it; the frame's own read is the one that meets the spent day.
     opened.base.install.database.readFrame = () => Promise.reject(new AllowanceSpent("reading"));
 
     expect(await told(await opened.get("/settings"))).toEqual([503, WAIT, "no-store", `${SENTENCES.no_more_reading}\n`]);
@@ -45,7 +45,7 @@ describe("a console whose install meets a day's allowance that is used up", () =
   test("hands any other failure to its host", async () => {
     const opened = await openConsole("/next");
     const fault = new Error("the database is away");
-    opened.base.install.database.rotateSigningKey = () => Promise.reject(fault);
+    opened.base.install.database.rotateVisitorKey = () => Promise.reject(fault);
 
     expect(opened.change("/data/settings/sign-everyone-out", {})).rejects.toBe(fault);
   });

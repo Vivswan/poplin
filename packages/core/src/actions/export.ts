@@ -1,4 +1,4 @@
-// Export: what a backup is made from, read by an admin a page at a time. Nothing changes, and no token, signing key, or audit entry is read.
+// Export: what a backup is made from, read by an admin a page at a time. Nothing changes, and no token, visitor key, or audit entry is read.
 
 import * as v from "valibot";
 

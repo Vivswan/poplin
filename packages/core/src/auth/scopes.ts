@@ -5,7 +5,7 @@ import type { Holder } from "../records/fields";
 /** What a credential is allowed to reach; there is no third value. */
 export type Scope = "publisher" | "admin";
 
-/** Whoever presents a credential. `holder` is the token's id, or the email behind a session. */
+/** Whoever presents a credential. `holder` is the token's id, or the email of a user in a browser. */
 export type Actor = { readonly scope: Scope; readonly holder: Holder };
 
 /**

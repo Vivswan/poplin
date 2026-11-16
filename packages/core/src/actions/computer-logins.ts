@@ -100,7 +100,7 @@ function loginObject(login: ComputerLogin): LoginObject {
   return { id: login.id, scope: login.scope, computer: login.computer, asked: login.createdAt, expires: login.expiresAt };
 }
 
-/** The email of an admin behind a session. A token allows no computer in, so no token outlives its own expiry through a login it allowed. */
+/** The email of an admin in a browser. A token allows no computer in, so no token outlives its own expiry through a login it allowed. */
 function personOf(actor: Actor): Login | undefined {
   if (actor.scope !== "admin" || !v.is(LOGIN, actor.holder)) return undefined;
 
@@ -150,7 +150,7 @@ export async function beginLogin(
 /**
  * List every login that waits to be allowed or denied, the newest first.
  *
- * @returns the logins, at most as many as may wait at one moment, or `not_allowed` for anyone but an admin behind a session
+ * @returns the logins, at most as many as may wait at one moment, or `not_allowed` for anyone but an admin in a browser
  */
 export async function listLogins(install: Install, actor: Actor): Promise<{ readonly ok: true; readonly logins: readonly LoginObject[] } | Refused<"not_allowed">> {
   if (personOf(actor) === undefined) return refuse("not_allowed");
@@ -162,7 +162,7 @@ export async function listLogins(install: Install, actor: Actor): Promise<{ read
  * Show one waiting login.
  *
  * @param id - the login's id, as an address or a request carried it
- * @returns the login, `not_allowed` for anyone but an admin behind a session, or `no_such_login` for an id of no login and for a login that was decided or ran out
+ * @returns the login, `not_allowed` for anyone but an admin in a browser, or `no_such_login` for an id of no login and for a login that was decided or ran out
  */
 export async function showLogin(install: Install, actor: Actor, id: string): Promise<{ readonly ok: true; readonly login: LoginObject } | Refused<"not_allowed" | "no_such_login">> {
   if (personOf(actor) === undefined) return refuse("not_allowed");
@@ -179,7 +179,7 @@ export async function showLogin(install: Install, actor: Actor, id: string): Pro
  * An admin may allow a computer for less than it asked, never for more. Only one who sees the terminal allows it: the letters are in no answer and no address.
  *
  * @param decision - the login's id and whether the computer is let in; for one that is, its scope and the letters its code ends with, as typed; anything is taken and checked
- * @returns the login as it was decided, `not_allowed` for anyone but an admin behind a session, `not_confirmed` for letters that are not the code's last four or the whole code, `bad_argument` about `scope` for more than was asked, or `no_such_login`
+ * @returns the login as it was decided, `not_allowed` for anyone but an admin in a browser, `not_confirmed` for letters that are not the code's last four or the whole code, `bad_argument` about `scope` for more than was asked, or `no_such_login`
  * @throws {Error} the database failed
  */
 export async function decideLogin(

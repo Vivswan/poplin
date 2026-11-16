@@ -53,7 +53,7 @@ export interface AccessActions {
   /** Copies the command that logs a computer in, and says so. */
   readonly copyCommand: (command: string) => Promise<void>;
 
-  /** Ends every session of the dashboard, this one included: the page is then asked for again, which leads to the login. */
+  /** Replaces the install's stored key, which starts every visitor's limit again; the page is then asked for again. */
   readonly signEveryoneOut: () => Promise<void>;
 }
 

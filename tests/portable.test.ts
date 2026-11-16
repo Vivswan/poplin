@@ -552,7 +552,7 @@ describe("provider code stays out of the portable packages", () => {
 
   test("drift: every portable place is walked, tests included, and an allowed finding is passed over only while it is there", () => {
     const leak = 'const address = request.headers.get("CF-Connecting-IP");\n';
-    const places = [...PORTABLE_PLACES, "packages/app/src/login/session.ts", "packages/app/tests/login/session.test.ts"].sort();
+    const places = [...PORTABLE_PLACES, "packages/app/src/login/admit.ts", "packages/app/tests/login/admit.test.ts"].sort();
     using tree = plantedRepository(Object.fromEntries(places.map((path) => [path, leak])));
     const everyPlace = places.map((path) => `provider header: ${path}:1: CF-Connecting-IP`);
 
@@ -570,7 +570,7 @@ describe("provider code stays out of the portable packages", () => {
       "// One removal stays inside the subrequests a Worker request gets on Cloudflare's Free plan.",
       'import { parseHostname } from "@poplin/app/src/names/hostname";',
       'import { open } from "../database/open";',
-      'import { readSession } from "@poplin/app/src/login/session";',
+      'import { admit } from "@poplin/app/src/login/admit";',
       'import * as v from "valibot";',
       "const home = machine.env.HOME ?? process.env.HOME;",
       "const tables = \"SELECT name FROM sqlite_master WHERE name NOT LIKE '_cf_%'\";",

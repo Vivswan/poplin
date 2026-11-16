@@ -84,10 +84,10 @@ test.each([
   expect([response.status, await response.json()]).toMatchObject([400, { ok: false, code: "bad_argument", about }]);
 });
 
-// Drift: the counts of every site would be read without a session.
-test("answers 401 in JSON without a session", async () => {
+// Drift: the counts of every site would be read without a login.
+test("answers 401 in JSON without a login", async () => {
   const opened = await openConsole();
   const response = await opened.getLoggedOut("/data/usage/visits?range=30");
 
-  expect([response.status, await response.json()]).toMatchObject([401, { ok: false, code: "no_session" }]);
+  expect([response.status, await response.json()]).toMatchObject([401, { ok: false, code: "no_login" }]);
 });

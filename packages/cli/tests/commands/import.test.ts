@@ -123,7 +123,7 @@ describe("import", () => {
   test("a backup holds the layout's entries and nothing else, and no token of the install: without this a zip handed to someone hands them the install", async () => {
     const bench = await openBench();
     const { notes } = await filled(bench);
-    await bench.install.database.ensureSigningKey(new Uint8Array(32).fill(7), 0);
+    await bench.install.database.ensureVisitorKey(new Uint8Array(32).fill(7), 0);
 
     const entries = await readZip(await exportedZip(bench));
     const names = entries.map(([name]) => name);

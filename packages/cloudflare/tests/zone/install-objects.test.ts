@@ -34,8 +34,8 @@ const LIMIT = { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_
 
 type SharedKey = Exclude<keyof typeof INSTALL_OBJECTS, (typeof PLUG_ALONE)[number]>;
 
-/** What the module does not declare: the names the setup client writes alone, and the path the Worker answers its own login at. */
-const PLUG_ALONE = ["keyBinding", "keyName", "loginPath"] as const satisfies readonly (keyof typeof INSTALL_OBJECTS)[];
+/** What the module does not declare: the names the setup client writes alone. */
+const PLUG_ALONE = ["keyBinding", "keyName"] as const satisfies readonly (keyof typeof INSTALL_OBJECTS)[];
 
 /** Where the module writes each shared value: the file, and the text around it. `%v` stands for the value as HCL writes it, `%i` for the value inside a longer HCL text, and `%l` for a list written one entry a line. */
 const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string]>> = {

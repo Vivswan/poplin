@@ -1,5 +1,5 @@
 // Anyone can begin a login, ask for its token, and send the dashboard any decision, as JSON or as a form, from any origin.
-// Across any order of those steps, a token must come out only for a login the admin allowed in a JSON request under their session with the letters its terminal shows, once, to the holder of its secret.
+// Across any order of those steps, a token must come out only for a login the admin allowed in a JSON request under their login with the letters its terminal shows, once, to the holder of its secret.
 // No secret or token may show up anywhere else, and the letters a person types may show up in nothing the dashboard answers.
 
 import { expect } from "bun:test";
@@ -17,7 +17,7 @@ import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
 const ADA = "ada@example.com" as Login;
-const SESSION = "session=ada";
+const AS_ADA = { "Test-Login": "ada" } as const;
 const JSON_TYPE = "application/json";
 const FORM = "application/x-www-form-urlencoded";
 const INTERVAL_MS = 5000;
@@ -132,8 +132,8 @@ async function openDesk(): Promise<Desk> {
     dashboard: createConsole({
       install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
       version: "1.0.0",
-      readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
-      loginPath: "/login",
+      admit: async (headers) => (headers.get("Test-Login") === AS_ADA["Test-Login"] ? { ok: true, actor: { scope: "admin", holder: ADA }, since: 0 } : { ok: false, refusal: "no-proof" }),
+      entered: async () => undefined,
       base: "",
       client: CLIENT,
       freeLimits: FREE_LIMITS,
@@ -198,7 +198,7 @@ async function ask(desk: Desk, login: Known, presented: string | undefined): Pro
   expect(answered.body.record).toMatchObject({ scope: login.scope });
 }
 
-/** The status the dashboard's guard refuses a decision with before it is read, `undefined` for one it lets through: no session, then anything a page of another origin sent, then any form. */
+/** The status the dashboard's guard refuses a decision with before it is read, `undefined` for one it lets through: no login, then anything a page of another origin sent, then any form. */
 function guarded(step: Extract<Step, { kind: "decide" }>): number | undefined {
   if (!step.session) return 401;
 
@@ -215,7 +215,7 @@ async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "dec
   const body = step.json ? JSON.stringify(decision) : new URLSearchParams(Object.entries(decision).map(([key, value]) => [key, String(value)])).toString();
 
   const headers = new Headers({ Origin: step.origin, "Sec-Fetch-Site": step.origin === ORIGIN ? "same-origin" : "cross-site", "Content-Type": step.json ? JSON_TYPE : FORM });
-  if (step.session) headers.set("Cookie", SESSION);
+  if (step.session) headers.set("Test-Login", AS_ADA["Test-Login"]);
 
   const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/data/logins/decide`, { method: "POST", headers, body }));
   desk.texts.push(await answer.text());
@@ -223,7 +223,7 @@ async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "dec
   const refusal = guarded(step);
   if (refusal !== undefined) expect(answer.status).toBe(refusal);
 
-  // A page of another origin is refused whatever it sends, and a page with no origin of its own, which sends `null`, is one. The session, the dashboard's own page, and the media type guard the request; the letters are what only the terminal's reader has.
+  // A page of another origin is refused whatever it sends, and a page with no origin of its own, which sends `null`, is one. The login, the dashboard's own page, and the media type guard the request; the letters are what only the terminal's reader has.
   const taken = refusal === undefined && (step.typed === "terminal" || !step.allow);
   if (taken && login.state === "pending" && desk.install.clock.now < login.expiresAt) login.state = step.allow ? "allowed" : "denied";
 }
@@ -231,8 +231,8 @@ async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "dec
 async function look(desk: Desk, login: Known, named: string | undefined): Promise<void> {
   // A lone surrogate does not survive an address, so the name is read as the address carries it.
   const asked = (named ?? login.id).toWellFormed();
-  const page = await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/review/${encodeURIComponent(asked)}`, { headers: { Cookie: SESSION } }));
-  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/data/logins/${encodeURIComponent(asked)}`, { headers: { Cookie: SESSION } }));
+  const page = await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/review/${encodeURIComponent(asked)}`, { headers: AS_ADA }));
+  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/data/logins/${encodeURIComponent(asked)}`, { headers: AS_ADA }));
   const found = await answer.text();
   desk.texts.push(await page.text(), found);
 
@@ -275,12 +275,12 @@ async function take(desk: Desk, step: Step): Promise<void> {
 }
 
 property(
-  "over any order of steps a token comes out only for a login the admin allowed in a JSON request under their session with its terminal letters, once, and no secret, token, or half of a code is in any other answer, page, address, or audit entry",
+  "over any order of steps a token comes out only for a login the admin allowed in a JSON request under their login with its terminal letters, once, and no secret, token, or half of a code is in any other answer, page, address, or audit entry",
   fc.asyncProperty(fc.array(steps, { minLength: 1, maxLength: 40 }), async (taken) => {
     const desk = await openDesk();
     const tokensBefore = (await desk.install.database.listTokens()).length;
     // The page as it is before any login: four letters that stand in it by chance say nothing of a code.
-    const blank = await (await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/list`, { headers: { Cookie: SESSION } }))).text();
+    const blank = await (await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/list`, { headers: AS_ADA }))).text();
 
     for (const step of taken) await take(desk, step);
 
