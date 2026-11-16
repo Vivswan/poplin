@@ -13,6 +13,7 @@ import type { Counters } from "@poplin/app/src/limits/limits";
 import type { DomainPlug, FirstRun } from "@poplin/app/src/console/domain/records";
 import type { InstallKey } from "@poplin/app/src/console/key/records";
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
+import type { RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 import type { UsageHost } from "@poplin/app/src/console/usage/records";
 import type { Identify } from "@poplin/app/src/login/admit";
 import { createEntries } from "@poplin/app/src/login/entries";
@@ -33,6 +34,7 @@ import { D1Driver } from "../database/d1";
 import { createInstallKey } from "../key/install-key";
 import { readKeptKey } from "../key/kept-key";
 import { createEndLogins } from "../key/logins-end";
+import { createRulesFollow } from "../key/rules-follow";
 import { createUsersFollow } from "../key/users-follow";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
@@ -138,6 +140,9 @@ export interface Instance {
 
   /** Ends every login of the dashboard at Cloudflare, with the kept key. */
   readonly endLogins: EndLogins;
+
+  /** The guard rules' side at Cloudflare: a change of a setting they are written from is carried there with the kept key. */
+  readonly rules: RulesFollow;
 
   /** Cloudflare's side of the Usage screen. */
   readonly usage: UsageHost;
@@ -360,8 +365,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const rebuild = { accepts: isDeployHook, fetch: outside.rebuild, self };
   const placed = { ...own.value, layout, fetch: outside.cloudflare };
   const key: InstallKey = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
-  const follow = createUsersFollow(kept, own.value.accountId);
-  const endLogins = createEndLogins(kept, own.value.accountId);
+  const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules: createRulesFollow(kept, { accountId: own.value.accountId, layout }) };
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),
@@ -372,8 +376,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     counters,
     visitorOf: (request) => visitorOf(request, database),
     rebuild,
-    follow,
-    endLogins,
+    ...carried,
   });
 
   const instance: Instance = {
@@ -387,8 +390,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
     domain: createDomainPlug({ ...placed, key }),
     key,
-    follow,
-    endLogins,
+    ...carried,
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), key: kept }),
     version: VERSION,
     rebuilding: { ...rebuild, counters },

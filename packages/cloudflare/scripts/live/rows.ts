@@ -7,7 +7,8 @@
 //   PATCH  /api/sites/:site                who may open it 3, any other setting 2, both 5, and 1 where it is told an expiry
 //   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 6    POST /api/sites/:site/rollback 2
 //   POST   /api/sites/:site/duplicate      the request that begins a copy 21, each one that goes on with it 16
-//   PATCH  /api/config 6                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
+//   PATCH  /api/config                     6, and 3 where it names a setting of the guard rules
+//   POST   /api/logins 3                   DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
 //
@@ -18,6 +19,8 @@
 // A request that would pass the ceiling is not sent, and every one after it: each is answered here as refused, with a 403, which the CLI does not send again.
 // A request that changes something on a route with no price is refused the same way, so a check that grows a new kind of write stops red until it has one.
 // The count is the harness's own, not the database's. The sweep later drops the row of each finished upload, 5 rows more, which no request of a run makes, and up to 125 rows a run of what is over 90 days old.
+
+import { RULE_SETTINGS } from "@poplin/core/src/records/settings";
 
 import type { Fetch } from "../../../cli/src/client/client";
 import type { Declared } from "./budget";
@@ -48,6 +51,9 @@ const REMOVED = { trash: 6, forever: 13 } as const;
 
 /** The rows of a change to a site: of who may open it, and of any other setting. Both are written where a request asks for both. */
 const CHANGED = { access: 3, details: 2 } as const;
+
+/** The rows of a change to the settings at most: 6 for the change, its entry in the log, and the users carried, and 3 more where it names a setting of the guard rules, which are marked, carried, and settled too. */
+const CONFIG = { any: 6, rules: 3 } as const;
 
 /** The keys of a change that say who may open a site. */
 const ACCESS_KEYS: ReadonlySet<string> = new Set(["access", "public_name"]);
@@ -88,7 +94,7 @@ const PRICES = [
   { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },
   { method: "POST", path: "/api/sites/:site/rollback", rows: () => 2 },
   { method: "POST", path: "/api/sites/:site/duplicate", rows: (asked) => (asked.body.upload === undefined ? COPIED.begun : COPIED.goneOn) },
-  { method: "PATCH", path: "/api/config", rows: () => 6 },
+  { method: "PATCH", path: "/api/config", rows: (asked) => CONFIG.any + (RULE_SETTINGS.some((key) => key in asked.body) ? CONFIG.rules : 0) },
   { method: "POST", path: "/api/logins", rows: () => 3 },
   { method: "GET", path: "/api/export/sites/:site/files", rows: () => 1 },
 ] as const satisfies readonly (Declared & { readonly rows: (asked: Asked) => number })[];

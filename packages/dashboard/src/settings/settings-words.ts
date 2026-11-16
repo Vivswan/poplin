@@ -99,7 +99,7 @@ interface Words {
 }
 
 /** One block as it is drawn: its heading and its rows, in the order of the words; a setting that has none comes last. */
-interface Block {
+export interface Block {
   readonly id: BlockId;
   readonly heading: string;
   readonly rows: readonly Row[];

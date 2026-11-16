@@ -20,6 +20,13 @@ function carriesUsers(stage: Stage): void {
   stage.keptKey = TOKEN;
 }
 
+/** Give the measured install a key, a zone at Cloudflare with no guard rule yet, and a kept run of its domain, so a changed setting of the guard rules is remembered and carried there. */
+async function carriesRules(stage: Stage): Promise<void> {
+  stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
+  stage.keptKey = TOKEN;
+  await stage.install.database.keepDomainCheck({ ran_at: stage.w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+}
+
 /** A release newer than any build, as the install keeps it once it has learned of one. */
 const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA + 1 };
 
@@ -511,7 +518,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/problems?days=30");
     },
     status: 200,
-    budget: { queries: 2, read: 332, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 362, reads: 0, writes: 0 },
   },
   {
     group,
@@ -563,6 +570,20 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     },
     status: 200,
     budget: { queries: 3, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "Settings screen: save a setting of the guard rules, carried to Cloudflare",
+    route: "POST /data/settings",
+    // On an install that holds its key the guard rules are then written at Cloudflare, between two statements more: the settings read under a mark, and the change settled.
+    arrange: async (stage) => {
+      const session = await sessionOf(stage);
+      await carriesRules(stage);
+
+      return (measured) => post(measured, "/data/settings", { texts: { outside_pages: "allowed", search_engines_allowed: "on" } }, session);
+    },
+    status: 200,
+    budget: { queries: 5, reads: 0, writes: 0 },
   },
   {
     group,
