@@ -46,6 +46,17 @@ async function remove(connection: Connection, accountId: string, id: string): Pr
   }
 }
 
+/**
+ * Delete tokens of the account that no install holds.
+ *
+ * @returns `false` when one may be left: a token could not be deleted
+ */
+export async function removeKeys(connection: Connection, accountId: string, ids: readonly string[]): Promise<boolean> {
+  const removed = await Promise.all(ids.map((id) => remove(connection, accountId, id)));
+
+  return !removed.includes(false);
+}
+
 /** Delete every token of the key's name but the one just kept, ended ones included. `false` when one may be left: the list failed in any way, or a token could not be deleted. */
 async function removeOthers(connection: Connection, place: KeyPlace & { readonly name: string }, keptId: string): Promise<boolean> {
   try {
@@ -53,9 +64,10 @@ async function removeOthers(connection: Connection, place: KeyPlace & { readonly
     if (!listed.ok) return false;
 
     const others = listed.value.filter((token) => token.name === place.name && token.id !== keptId);
-    const removed = await Promise.all(others.map((other) => other.id !== undefined && remove(connection, place.accountId, other.id)));
+    const ids = others.flatMap((other) => other.id ?? []);
+    const removed = await removeKeys(connection, place.accountId, ids);
 
-    return !removed.includes(false);
+    return removed && ids.length === others.length;
   } catch {
     return false;
   }

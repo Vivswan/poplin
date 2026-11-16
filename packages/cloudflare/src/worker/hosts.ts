@@ -103,7 +103,7 @@ function domainHosts(layout: DomainLayout): InstallHosts {
 
   function sideOf(own: Own): Side {
     const placed = { accountId: own.accountId, script: own.script, layout, fetch: own.fetch };
-    const key: InstallKey = createInstallKey(own.kept, own.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
+    const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
 
     return { key, domain: createDomainPlug({ ...placed, key }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
   }
