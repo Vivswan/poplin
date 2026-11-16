@@ -442,6 +442,27 @@ describe("a run that is blocked", () => {
     expect(plain.fetched).toEqual([]);
     expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, address: null, release: null, blocked: [{ what: "bad_release" }] });
   });
+
+  // Drift: a run that is blocked before its first row has started nothing, so `0 not done` beside exit 1 and `it goes on from what stands` say what is not so, of a project with no release yet as of an account with no address.
+  test("before its first row says that nothing was changed and when to run again, and counts nothing: without this a run that started nothing ends `0 not done`", async () => {
+    const account = emptyAccount();
+    const none: Blocked = { what: "no_release", words: "No release of poplin is published yet.", address: "https://example.com" };
+    account.installed = { ...installedOf([], { ready: false, blocked: [none] }), address: undefined, release: undefined };
+
+    const plain = await runLine(RUN, account, { env: HELD });
+    const json = await runLine(`${RUN} --json`, account, { env: HELD });
+
+    expect([plain.code, plain.out.slice(1)]).toEqual([
+      1,
+      [
+        "No release of poplin is published yet.",
+        "  https://example.com",
+        "nothing was changed. Run this command again once what the lines above say is no longer so.",
+        "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",
+      ],
+    ]);
+    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, rows: [], blocked: [{ what: "no_release" }], next: { step: "install", command: "npx poplin install stand-in" } });
+  });
 });
 
 describe("the token", () => {

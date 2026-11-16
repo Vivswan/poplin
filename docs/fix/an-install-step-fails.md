@@ -54,14 +54,15 @@ A row says what happened to one piece. [Step 4 of Install](../start/install.md#4
 
 ## The second run
 
-The last line of a run that left something undone names the command that goes on. It is one of two:
+The last line of a run that left something undone names the command that goes on. It is one of three:
 
 | The last line says                               | The install is                                        | Run, after the fix                                         |
 | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
 | `Run this command again`                         | started, and not set yet                              | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `An install was started here and not finished`, and goes on. The other place is refused |
 | `Run npx poplin doctor --repair`                 | set: its address is written, and pieces are missing   | `npx poplin doctor --repair`, with the same token          |
+| `nothing was changed. Run this command again once what the lines above say is no longer so.` | as it was before the run: the run printed no row, and changed nothing | the same line, once the line above it no longer holds: [Before any change](#before-any-change) has each |
 
-Both go on from what stands: every piece reads before it writes. `poplin install` only makes a new install, so a second `install` on one that is set says `This account already holds poplin`, and changes nothing.
+The first two go on from what stands: every piece reads before it writes. `poplin install` only makes a new install, so a second `install` on one that is set says `This account already holds poplin`, and changes nothing.
 
 **A run that went on with Zero Trust switched off** is finished this way. Switch Zero Trust on first, then:
 
