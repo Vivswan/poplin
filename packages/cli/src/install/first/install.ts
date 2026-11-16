@@ -32,6 +32,9 @@ const FOUND_WORDS: Readonly<Record<Found<unknown, unknown>["state"], string>> = 
   refused: "no",
 };
 
+/** What goes on from a run that left something undone, as its last lines name it: this command where the install is not found whole yet, and the repair where it is. */
+const [AGAIN, REPAIR] = ["this command again", "npx poplin doctor --repair"] as const;
+
 /** What a look came to that a run goes on from, with the place the provider was last asked about. */
 interface Ground {
   readonly found: Startable<unknown>;
@@ -147,13 +150,27 @@ async function waited(installed: Extract<Installed, { readonly ok: true }>, mode
   return installAnswers(address, ends);
 }
 
+/**
+ * Say which command goes on from a run that left something undone, as a sentence names it.
+ *
+ * A run that got as far as writing where the install answers has made an install that is found whole: this command makes no change to it, and the repair finishes it.
+ * So the account is looked in once more, and what is found there says which.
+ */
+async function nextAfter(ground: Ground, request: InstallRequest, ends: InstallEnds): Promise<string> {
+  const found = await request.provider.find(request.token, ground.where, ends.reach);
+
+  return found.state === "whole" ? REPAIR : AGAIN;
+}
+
 /** Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. */
 async function ended(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<Ended> {
   const { mode } = request;
   const answers = await waited(installed, mode, ends, show);
   const value = runValue(installed, mode.mode, ground.found.state, answers);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
-  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers);
+  const next = mode.mode === "dry-run" || installed.ready ? AGAIN : await nextAfter(ground, request, ends);
+  const done = `poplin${installed.release === undefined ? "" : ` ${installed.release}`} is installed.`;
+  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next });
 
   for (const line of lines) show.line(line.tone, line.text);
 

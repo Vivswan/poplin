@@ -300,6 +300,21 @@ describe("what a run comes to", () => {
     expect(ran.fetched).toEqual([]);
   });
 
+  test("a run that left something undone names the command that goes on, the repair once the install is found whole and install again while it is not: without this the last line sends a person to a command that refuses", async () => {
+    const undone: Row[] = [{ object: "Login", state: "block", detail: "the login product is not switched on" }];
+    const whole: Found<Where, Place> = { state: "whole", place: PLACE, version: "0.1.0", address: ADDRESS, newest: "0.1.0" };
+    const lastLines = async (after: Found<Where, Place>): Promise<string[]> => {
+      const account = accountWith({ state: "none", place: PLACE, notes: [] }, after);
+      account.installed = installedOf([...FRESH, ...undone], { ready: false, steps: [{ text: "Switch on the login product", address: "https://host.example.com/login" }] });
+      const ran = await runLine(`${RUN} --no-wait`, account, { env: HELD });
+
+      return [String(ran.code), ...ran.out.filter((line) => line.includes("then run") || line.includes("not done"))];
+    };
+
+    expect(await lastLines(whole)).toEqual(["1", "Do this in your browser, then run npx poplin doctor --repair:", "1 not done. Run npx poplin doctor --repair: it goes on from what stands."]);
+    expect(await lastLines({ state: "started", place: PLACE, notes: [] })).toEqual(["1", "Do this in your browser, then run this command again:", "1 not done. Run this command again: it goes on from what stands."]);
+  });
+
   test("an install that does not answer in 5 minutes exits 1 and offers no login: without this a person is sent to an address that shows nothing", async () => {
     const ran = await runLine(`${RUN} --log-in --json`, emptyAccount(), { env: HELD, statuses: [503] });
     const plain = await runLine(RUN, emptyAccount(), { env: HELD, statuses: [503] });

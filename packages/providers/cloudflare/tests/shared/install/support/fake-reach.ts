@@ -8,11 +8,14 @@ import type { Reach } from "@poplin/core/src/install/installer";
 import { releaseDigest } from "@poplin/core/src/records/release";
 import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/deploy/bundle-manifest";
 import { bundleAsset, MANIFEST_FILE } from "../../../../src/shared/release/deploy/release-source";
-import { type Account, answer } from "./fake-install";
+import { type Account, answer, answerQuery } from "./fake-install";
 import { type Asked, bodyOf } from "./replies";
 
 /** Where the SDK sends a call when it is told no other place. */
 const API = "https://api.cloudflare.com/client/v4";
+
+/** The query route of a database, which the fake answers from the install's own store where a test gave it one. */
+const QUERY_ROUTE = /\/d1\/database\/[^/]+\/query$/;
 
 /** The version of the release the project's website names. */
 export const RELEASE = "0.3.0";
@@ -71,7 +74,7 @@ export async function worldOf(account: Account, meets: Meets = {}): Promise<Worl
       const entry = { method: request.method, path: `${url.pathname.slice(new URL(API).pathname.length)}${url.search}`, key: request.headers.get("authorization"), body: await bodyOf(request) };
       asked.push(entry);
 
-      return answer(account, entry);
+      return account.store !== undefined && QUERY_ROUTE.test(url.pathname) ? answerQuery(account, entry) : answer(account, entry);
     }
 
     fetched.push(address);

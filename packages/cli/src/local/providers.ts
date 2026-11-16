@@ -30,6 +30,7 @@ const SHAPE = v.object({
   find: v.function(),
   install: v.function(),
   remove: v.function(),
+  repair: v.function(),
 });
 
 /** The error of a folder that is not there. */

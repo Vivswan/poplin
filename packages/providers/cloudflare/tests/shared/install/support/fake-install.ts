@@ -1,5 +1,6 @@
 // A whole account at the fake Cloudflare API, kept in memory: it answers every request the zone plug and an install send and applies each change, so a second run reads what the first one wrote.
 
+import type { SqlValue } from "@poplin/core/src/database/driver";
 import { EXAMPLE_ACCOUNT } from "../../worker/support/example-bindings";
 import { type Asked, page, refusal, reply } from "./replies";
 
@@ -86,6 +87,9 @@ export interface Account {
 
   /** The account's D1 databases. */
   databases: Row[];
+
+  /** What the database the Worker is bound to holds, asked through the query route with core's own statements; left out, the route answers the count of sites alone. */
+  store?: { readonly call: (sql: string, params: readonly SqlValue[]) => Promise<readonly unknown[]> };
 
   /** The account's notification policies. */
   alerts: Row[];
@@ -417,6 +421,23 @@ function switches(account: Account, asked: Asked, parts: readonly string[]): Res
   return reply(account.switches);
 }
 
+/**
+ * The query route of a database a test gave a store: the statements of one call joined by semicolons in `sql`, answered one result a statement from that store.
+ * A statement that fails is a refusal with SQLite's own words, and nothing of the call is kept. A body of another shape is answered with no result, as at Cloudflare.
+ */
+async function storeQueried(account: Account, asked: Asked): Promise<Response> {
+  const { sql, params } = (asked.body ?? {}) as { readonly sql?: unknown; readonly params?: readonly SqlValue[] };
+  if (account.store === undefined) return refusal(404, 7404, "The database was not found");
+
+  if (typeof sql !== "string") return reply([]);
+
+  try {
+    return reply(await account.store.call(sql, params ?? []));
+  } catch (error) {
+    return refusal(400, 7500, error instanceof Error ? error.message : "the statement failed");
+  }
+}
+
 /** Answer a request of the install's own account by the kind of object its path names. */
 function inAccount(account: Account, asked: Asked, parts: readonly string[]): Response {
   const kind = parts.slice(2, 4).join("/");
@@ -458,6 +479,20 @@ function keptFrom(asked: Asked, path: string): boolean {
   return asked.key === `Bearer ${KEPT}` && (asked.method !== "GET" || KEPT_FROM.test(path));
 }
 
+/** Refuse a request the install's own account does not take from its sender: a token the fake does not know or of another account, the kept key where it has no right, and a call a test set to be refused. `undefined` for a request that is taken. */
+function barred(account: Account, asked: Asked, path: string): Response | undefined {
+  const owner = ACCOUNT_OF[asked.key ?? ""];
+  if (owner === undefined) return refusal(401, 10000, "Authentication error");
+
+  if (owner !== ACCOUNT || keptFrom(asked, path)) return refusal(403, 10000, "Authentication error");
+
+  const call = `${asked.method} ${path}`;
+  const refused = [account.refuse ?? []].flat().some((entry) => (entry.endsWith("*") ? call.startsWith(entry.slice(0, -1)) : entry === call));
+  const quoted = account.refuseQuotes === true ? ` in ${JSON.stringify(asked.body)}` : "";
+
+  return refused ? refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}${quoted}`) : undefined;
+}
+
 /**
  * Answer one request as the account's API would.
  *
@@ -477,14 +512,18 @@ export function answer(account: Account, asked: Asked): Response {
   if (path === "/accounts") return page(asked, [{ id: owner, name: "An account" }, ...(owner === ACCOUNT ? (account.alsoShown ?? []) : [])]);
 
   // A token of another account reads its own free address, and reaches nothing of this account.
-  if (owner !== ACCOUNT) return path === `/accounts/${owner}/workers/subdomain` ? reply({ subdomain: FREE_ADDRESSES[owner] }) : refusal(403, 10000, "Authentication error");
+  if (owner !== ACCOUNT && path === `/accounts/${owner}/workers/subdomain`) return reply({ subdomain: FREE_ADDRESSES[owner] });
 
-  if (keptFrom(asked, path)) return refusal(403, 10000, "Authentication error");
+  return barred(account, asked, path) ?? inAccount(account, asked, path.split("/").slice(1));
+}
 
-  const call = `${asked.method} ${path}`;
-  const refused = [account.refuse ?? []].flat().some((entry) => (entry.endsWith("*") ? call.startsWith(entry.slice(0, -1)) : entry === call));
-  const quoted = account.refuseQuotes === true ? ` in ${JSON.stringify(asked.body)}` : "";
-  if (refused) return refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}${quoted}`);
+/**
+ * Answer one call of the query route of an account whose database has a store, which is answered later than every other request.
+ *
+ * @returns the reply: a refusal as `answer` gives it, or one result a statement
+ */
+export async function answerQuery(account: Account, asked: Asked): Promise<Response> {
+  const [path = ""] = asked.path.split("?");
 
-  return inAccount(account, asked, path.split("/").slice(1));
+  return barred(account, asked, path) ?? storeQueried(account, asked);
 }

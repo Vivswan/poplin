@@ -3,6 +3,7 @@
 //   the arguments -> read -> Where (or the questions still open)
 //   the token     -> find -> Found: nothing there, data left behind, a start not finished, a whole install, a name held, a block
 //   Found that a run can go on from -> install -> every row, in the order of the work, and whether it is ready
+//   Found that is a whole install   -> repair  -> every row of what was mended, and of the user it was asked to add
 //
 // Each answer is checked once, where it is read: what `read` and `token` give is taken by the later steps as it is.
 // `find` only reads. `install` with a dry run only reads too, and lists the rows a run would work through: the same objects, in the same order.
@@ -182,6 +183,27 @@ export type Removed =
   | { readonly ok: true; readonly rows: readonly RemovalRow[]; readonly blocked: readonly Blocked[]; readonly confirm: string; readonly ready: boolean }
   | { readonly ok: false; readonly why: "unreachable" | "other_place" | "not_confirmed" | "changed"; readonly words: string };
 
+/** An install that is set, as `find` answers it: the one state a repair goes on from. */
+export type Whole<Place> = Extract<Found<never, Place>, { readonly state: "whole" }>;
+
+/** What a repair is asked for: whether it changes anything, and the email of one more person to let log in, or `undefined` for none. */
+export interface Mend {
+  readonly run: Run;
+  readonly addUser: Login | undefined;
+}
+
+/**
+ * What a repair came to.
+ *
+ * `rows` are the same objects in the same order for a dry run and the run after it, the user a repair adds among them. `ready` is true for a run that left nothing undone, and for a dry run of one that would.
+ * `address` is where the install's dashboard is.
+ * The second shape is a repair that changed nothing: the provider gave no answer, or refused the token at the install; the install answers at `elsewhere` than the place named;
+ * its records are of `another` poplin than this one; or it `changed` since it was found, and is no whole install now.
+ */
+export type Repaired =
+  | { readonly ok: true; readonly rows: readonly Row[]; readonly steps: readonly Step[]; readonly blocked: readonly Blocked[]; readonly address: string; readonly ready: boolean }
+  | { readonly ok: false; readonly why: "unreachable" | "token" | "elsewhere" | "another" | "changed"; readonly words: string };
+
 /**
  * One provider, as the command works through it. `Where` is the provider's own answer of where the install goes, and `Place` what it found with a token: the command holds both and looks into neither.
  */
@@ -221,4 +243,13 @@ export interface Installer<Where, Place> {
 
   /** Remove the install and nothing else, or with a dry run list what a run would remove. `say` is told each row as it is settled. */
   remove(found: Removable<Place>, where: Where, removal: Removal, reach: Reach, say: (row: RemovalRow) => void): Promise<Removed>;
+
+  /**
+   * Mend an install that is set, with the token alone, or with a dry run say what a run would change. It needs no login of the install, and reads the install's own settings from its records.
+   *
+   * A user is added only once the provider took a change of who may log in from this token, in this run: a token that may only read adds nobody.
+   *
+   * @param where - the place a person named, which must be the install's own
+   */
+  repair(found: Whole<Place>, where: Where, mend: Mend, reach: Reach, say: (row: Row) => void): Promise<Repaired>;
 }

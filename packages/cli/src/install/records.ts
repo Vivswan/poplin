@@ -61,6 +61,7 @@ export type InstallRequest = { readonly provider: Provider; readonly json: boole
  *
  * `usage` is a line written wrong, and `missing_answer` a run that asks nothing and lacks one. The rest are what the provider's account holds, or that it gave no answer.
  * `no_install`, `other_place`, `not_confirmed`, and `changed` are a removal's: nothing to remove, an install of another place than the one named, a typed name that is not the install's, and an account that changed since the look.
+ * A repair has `no_install`, `other_place`, and `changed` too, and an install that is `unfinished`, or whose records are of `another_version` of the product.
  */
 export type Stop =
   | { readonly problem: "usage"; readonly exit: 2; readonly lines: readonly string[] }
@@ -69,7 +70,7 @@ export type Stop =
   | { readonly problem: "already_installed"; readonly exit: 1; readonly version: string | undefined; readonly address: string; readonly newest: string | undefined }
   | { readonly problem: "leftover" | "name_held"; readonly exit: 1; readonly words: string; readonly address: string }
   | { readonly problem: "blocked"; readonly exit: 1; readonly blocked: readonly Blocked[] }
-  | { readonly problem: "token_refused" | "no_domain" | "stopped" | "crashed" | "no_install" | "other_place" | "not_confirmed" | "changed"; readonly exit: 1; readonly words: string }
+  | { readonly problem: "token_refused" | "no_domain" | "stopped" | "crashed" | "no_install" | "other_place" | "not_confirmed" | "changed" | "unfinished" | "another_version"; readonly exit: 1; readonly words: string }
   | { readonly problem: "unreachable"; readonly exit: 5; readonly words: string };
 
 /**

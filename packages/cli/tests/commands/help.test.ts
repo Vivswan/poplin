@@ -33,6 +33,7 @@ const FLAG_VALUES: Readonly<Record<string, string>> = {
   "update --to": "0.2.0",
   "--server": "poplin.example.com",
   "--out": "backup.zip",
+  "--add-user": "you@example.com",
 };
 
 /** A word for each argument a command needs. */
@@ -51,13 +52,17 @@ const PRINTED: readonly (readonly [line: string, key: string, named: string])[] 
   ["logout --json", "revoked", "revoked"],
 ];
 
-/** What a flag needs beside it to be a whole command: `set` needs a setting, and a public name goes with `--public`. */
+/** What a flag needs beside it to be a whole command: `set` needs a setting, a public name goes with `--public`, and the options of a repair go with `--repair`. */
 const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "set --public-name": ["--public"],
   "publish --public-name": ["--public"],
   "set --json": ["--private"],
   "set --server": ["--private"],
   "import --logins": ["--settings"],
+  "doctor --dry-run": ["--repair"],
+  "doctor --add-user": ["--repair"],
+  "doctor --yes": ["--repair"],
+  "doctor --token-stdin": ["--repair"],
 };
 
 function lineWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string[] {
@@ -79,13 +84,14 @@ function isPrinted(help: string, flag: CommandSpec["flags"][number]): boolean {
   return help.includes(`\n  ${flag.value === undefined ? flag.name : `${flag.name} ${flag.value}`} `);
 }
 
-/** The kind a line with this flag answers with: the two flags every command takes answer for themselves. */
+/** The kind a line with this flag answers with: the two flags every command takes answer for themselves, and so does the one that makes `doctor` a repair. */
 function kindWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string {
   if (flag.name === "--help") return "help";
 
   if (flag.name === "--version") return "version";
 
-  return spec.name;
+  // A line of `doctor` that carries `--repair` is a repair, whose own parser reads the rest.
+  return spec.name === "doctor" && lineWith(spec, flag).includes("--repair") ? "provider" : spec.name;
 }
 
 afterEach(cleanUp);

@@ -1,9 +1,9 @@
-// A made-up provider and a bench for `poplin install`: the command runs in process against an account held in memory, and everything it printed and asked is kept.
+// A made-up provider and a bench for `poplin install` and `poplin doctor --repair`: the command runs in process against an account held in memory, and everything it printed and asked is kept.
 //
 // The provider is no real one: its options, its words, and its token's form are its own, so the command is proven to work through the interface alone.
 
 import type { Login } from "../../../../core/src/auth/logins";
-import type { Found, Given, Installed, Installer, Question, Read, Removable, Removal, RemovalRow, Removed, Row, Run, Startable, Token } from "../../../../core/src/install/installer";
+import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, Whole } from "../../../../core/src/install/installer";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
 import type { InstallEnds } from "../../../src/install/records";
@@ -67,6 +67,12 @@ export interface Account {
 
   /** What each call of `remove` was handed. */
   readonly removals: { readonly found: Removable<Place>; readonly where: Where; readonly removal: Removal }[];
+
+  /** What a repair comes to; one that leaves every row of the fresh install unless given. */
+  repaired: Repaired | undefined;
+
+  /** What each call of `repair` was handed. */
+  readonly repairs: { readonly found: Whole<Place>; readonly where: Where; readonly mend: Mend }[];
 }
 
 /** How one command line is run. */
@@ -162,9 +168,25 @@ export function installedOf(rows: readonly Row[], more: Partial<Pick<Extract<Ins
   return { ok: true, rows, steps: more.steps ?? [], blocked: more.blocked ?? [], release: "0.1.0", address: ADDRESS, ready: more.ready ?? true, proof: "reads" };
 }
 
+/** What a repair of some rows comes to. */
+export function repairedOf(rows: readonly Row[], more: Partial<Pick<Extract<Repaired, { readonly ok: true }>, "blocked" | "steps" | "ready">> = {}): Extract<Repaired, { readonly ok: true }> {
+  return { ok: true, rows, steps: more.steps ?? [], blocked: more.blocked ?? [], address: ADDRESS, ready: more.ready ?? true };
+}
+
 /** An account that holds nothing of the product. */
 export function emptyAccount(): Account {
-  return { scenes: [{ state: "none", place: { token: TOKEN as Token }, notes: [] }], installed: undefined, crash: undefined, finds: [], runs: [], changes: 0, removed: undefined, removals: [] };
+  return {
+    scenes: [{ state: "none", place: { token: TOKEN as Token }, notes: [] }],
+    installed: undefined,
+    crash: undefined,
+    finds: [],
+    runs: [],
+    changes: 0,
+    removed: undefined,
+    removals: [],
+    repaired: undefined,
+    repairs: [],
+  };
 }
 
 /** What a removal of some rows comes to; the install's address is what a person types. */
@@ -230,6 +252,17 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
       if (removal.run === "apply") account.changes += removed.rows.filter((row) => row.state === "remove").length;
 
       return removed;
+    },
+    repair: async (found, where, mend, _reach, say) => {
+      account.repairs.push({ found, where, mend });
+      const repaired = account.repaired ?? repairedOf(FRESH.map((row) => (row.state === "make" ? { ...row, state: "leave" } : row)));
+      if (!repaired.ok) return repaired;
+
+      for (const row of repaired.rows) say(row);
+
+      if (mend.run === "apply") account.changes += repaired.rows.filter((row) => row.state === "make" || row.state === "change").length;
+
+      return repaired;
     },
   };
 }

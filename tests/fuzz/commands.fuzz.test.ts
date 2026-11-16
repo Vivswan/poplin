@@ -11,7 +11,8 @@ import { hostile } from "./hostile";
 
 const COMMAND_NAMES: readonly string[] = COMMANDS.map((spec) => spec.name);
 const FLAG_NAMES = [...new Set(COMMANDS.flatMap((spec) => spec.flags.map((flag): string => flag.name)))];
-const DECLARED_KINDS = new Set([...COMMAND_NAMES, "version", "usage-error"]);
+const HANDED_ON = "provider";
+const DECLARED_KINDS = new Set([...COMMAND_NAMES, "version", "usage-error", HANDED_ON]);
 const VALUES = [
   "report--k3f9x2ab71qz",
   "k3f9x2ab71qz",
@@ -68,7 +69,8 @@ property(
   "a request is only ever built from flags its command lists, so a mistyped flag is never dropped and the rest of the line run",
   fc.property(lines, (line) => {
     const parsed = parseCommand(line);
-    if (parsed.kind === "usage-error" || parsed.kind === "help" || parsed.kind === "version") return;
+    // A line of `doctor` that carries `--repair` is handed on unread: the repair's own parser refuses what is wrong in it.
+    if (parsed.kind === "usage-error" || parsed.kind === "help" || parsed.kind === "version" || parsed.kind === HANDED_ON) return;
 
     const end = line.indexOf("--");
     const typed = line.slice(0, end === -1 ? line.length : end).filter((word) => word.startsWith("-") && word !== "-");

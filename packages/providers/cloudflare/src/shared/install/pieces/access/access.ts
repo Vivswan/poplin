@@ -236,9 +236,10 @@ export async function readLoginFacts(connection: Connection, accountId: string):
  * Write the install's logins into the policy that lets them through, and nothing else of Access: no application is read or changed.
  *
  * @param logins - every email let through, in any order
+ * @param send - `always` writes the policy even where it lets through exactly these emails already: Cloudflare taking that write proves that the key may change who logs in, which reading the policy does not
  * @returns `true` once the policy lets through exactly these emails, which it may have done already, and `false` on an account with no such policy, where nothing is written
  */
-export async function writeLogins(connection: Connection, accountId: string, logins: readonly string[]): Promise<CloudflareResult<boolean>> {
+export async function writeLogins(connection: Connection, accountId: string, logins: readonly string[], send: "changes" | "always" = "changes"): Promise<CloudflareResult<boolean>> {
   const policies = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
   if (!policies.ok) return policies;
 
@@ -247,7 +248,7 @@ export async function writeLogins(connection: Connection, accountId: string, log
   if (held === undefined || id === undefined) return { ok: true, value: false };
 
   const wanted = loginsPolicy(logins);
-  if (decidesExactly({ ...held, id }, wanted)) return { ok: true, value: true };
+  if (send === "changes" && decidesExactly({ ...held, id }, wanted)) return { ok: true, value: true };
 
   const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(id, policyBody(accountId, wanted)));
 

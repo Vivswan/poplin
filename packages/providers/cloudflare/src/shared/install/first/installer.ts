@@ -11,9 +11,8 @@
 // Every piece reads before it writes, so a run that stopped is run again and goes on from what stands.
 // This file asks nothing and prints nothing: the command asks the questions it declares, and words the rows it answers.
 
-import type { DomainRow } from "@poplin/app/src/console/domain/records";
 import type { Login } from "@poplin/core/src/auth/logins";
-import type { Blocked, Given, Installed, Installer, OptionRow, Question, Reach, Read, Row, RowState, Run, Startable, Step, Token } from "@poplin/core/src/install/installer";
+import type { Blocked, Given, Installed, Installer, OptionRow, Question, Reach, Read, Row, Run, Startable, Step, Token } from "@poplin/core/src/install/installer";
 import { newestPinned } from "@poplin/core/src/records/release";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
@@ -34,6 +33,8 @@ import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts
 import { findInstall, type Place, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { firstBindings } from "./first-bindings";
+import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "./rows";
+import { repair } from "../upkeep/repair/repair";
 
 /** The name of the install's Worker. */
 const SCRIPT = INSTALL_OBJECTS.worker;
@@ -61,21 +62,12 @@ const WORDS = {
   badRelease: "The release's files are not the ones the project published. Nothing was uploaded.",
   newerRelease: "This release needs a newer poplin: run npx poplin@latest install",
   noAddress: "This account has no free address yet, or one whose name is too long for the login. Open Workers & Pages in your browser and set the account's subdomain.",
-  lacks: "The token lacks a permission. Add this one",
+  lacks: LACKS,
   refusedLater: "Cloudflare refused the token before the install was finished",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
 const UNREACHABLE: Installed = { ok: false, why: "unreachable", words: "Cloudflare or the project's website gave no usable answer." };
-
-/** The states of a row that leave a run not done. */
-const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);
-
-/** What each state of a repair's row is as a row of an install: a check's `missing` is what a run makes, and after a run it is what the run could not make. */
-const STATES: Readonly<Record<Mode, Readonly<Record<DomainRow["state"], RowState>>>> = {
-  plan: { present: "leave", missing: "make", differs: "change", "left-out": "leave-out", optional: "leave-out", created: "make", changed: "change", removed: "remove", failed: "fail", "not-run": "not-run" },
-  apply: { present: "leave", missing: "block", differs: "block", "left-out": "leave-out", optional: "leave-out", created: "make", changed: "change", removed: "remove", failed: "fail", "not-run": "not-run" },
-};
 
 /** What an install makes that no repair does, so that its token needs the permission for it. */
 const MADE_FIRST = ["R2 bucket"] as const;
@@ -168,13 +160,9 @@ function tokenHelp(): string[] {
 
 /** Why a call failed, with nothing Cloudflare said but its status. */
 function whyOf(failure: NotWritten): string {
-  if (failure.failure === "needs-hand") return WORDS.newerRelease;
+  if (failure.failure === "refused" || failure.failure === "rate-limited" || failure.failure === "network") return failureWords(failure);
 
-  if (failure.failure === "no-id") return "Cloudflare named no database";
-
-  if (failure.failure === "refused") return `refused with status ${failure.status}`;
-
-  return failure.failure === "rate-limited" ? "Cloudflare asked to wait" : "no answer from Cloudflare";
+  return failure.failure === "needs-hand" ? WORDS.newerRelease : "Cloudflare named no database";
 }
 
 /** Add a row to the run and tell the command. */
@@ -317,20 +305,6 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 }
 
 /**
- * A row of the repair as a row of the install.
- *
- * Where Access is off, the rows that wait for it are blocked in a dry run too: a run cannot make them.
- * Where it is on, a dry run names the login's variable as a run does, with no word on when it is written.
- */
-function rowOf(row: DomainRow, mode: Mode, loginOff: boolean): Row {
-  const login = row.state === "missing" && row.detail.startsWith(`${INSTALL_OBJECTS.accessBinding}:`);
-  const waits = loginOff && row.state === "missing" && (login || row.object.startsWith("Access"));
-  const state = waits || (row.state === "failed" && row.right !== undefined) ? "block" : STATES[mode][row.state];
-
-  return { object: row.object, state, detail: login && !waits ? INSTALL_OBJECTS.accessBinding : row.detail, ...(row.right === undefined ? {} : { right: row.right }) };
-}
-
-/**
  * Finish the install with the repair of its kind and its first login: the code the dashboard's Domain screen runs, on a Worker with nothing set.
  *
  * The repair is given the account the token was found in, so it looks for no other.
@@ -360,9 +334,7 @@ async function finish(work: Work, target: Target, login: Login, reach: Reach): P
 
 /** What a run came to, from what it gathered. Each permission a row names as lacking is a block too, once. */
 function done(work: Work, known: { readonly release?: string; readonly address?: string }): Installed {
-  const rights = [...new Set(work.rows.flatMap((row) => (row.right === undefined ? [] : [row.right])))];
-  const lacking = rights.map((right): Blocked => ({ what: "right_lacking", right, words: `${WORDS.lacks}: ${right}`, address: work.form }));
-  const blocked = [...work.blocked, ...lacking];
+  const blocked = [...work.blocked, ...lackingOf(work.rows, work.form)];
   const ready = blocked.length === 0 && !work.rows.some((row) => UNDONE.has(row.state));
 
   return { ok: true, rows: work.rows, steps: work.steps, blocked, release: known.release, address: known.address, ready, proof: "reads" };
@@ -422,4 +394,5 @@ export const installer: Installer<Where, Place> = {
   find: (token, where, reach) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor }),
   install,
   remove: (found, where, removal, _reach, say) => removeInstall(found, where, removal, tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST).tokenLink, say),
+  repair,
 };

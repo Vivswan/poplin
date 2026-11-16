@@ -32,6 +32,9 @@ const REFUSALS: Readonly<Record<Refusal, string>> = {
   "no-site-address": "it is not the address of a site, such as report--k3f9x2ab71qz-p-poplin.example.com",
 };
 
+/** The options of `poplin doctor` that mean something in a repair alone. */
+const REPAIR_ALONE = ["--add-user", "--yes", "--token-stdin"] as const;
+
 /** The command of every request: each command of the table but `help`, which asks nothing of an install. */
 const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words, now: number) => TypedRequest | UsageError } = {
   publish,
@@ -48,7 +51,7 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   whoami: (words) => withInstall(words, (install) => ({ kind: "whoami", ...install })),
   setup,
   config,
-  doctor: (words) => withInstall(words, (install) => ({ kind: "doctor", ...install })),
+  doctor,
   update,
   export: exportSites,
   import: importBackup,
@@ -241,6 +244,16 @@ function login(words: Words): TypedRequest | UsageError {
   if (computer === undefined) return withInstall(words, (install) => ({ ...asked, ...install }));
 
   return withInstall(words, (install) => ({ ...asked, computer, ...install }));
+}
+
+/** A check of the install with this computer's login. The options of a repair are refused here: a line that carries `--repair` is read by the repair's own parser and never comes this far. */
+function doctor(words: Words): TypedRequest | UsageError {
+  if (words.flags.has("--dry-run")) return usageError("poplin doctor changes nothing already: --dry-run goes with --repair");
+
+  const stray = REPAIR_ALONE.find((flag) => words.flags.has(flag));
+  if (stray !== undefined) return usageError(`${stray} goes with --repair`);
+
+  return withInstall(words, (install) => ({ kind: "doctor", ...install }));
 }
 
 function setup(words: Words): TypedRequest | UsageError {

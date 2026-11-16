@@ -6,6 +6,9 @@ export const HELP_FLAG = "--help";
 /** The flag that asks for the version. */
 export const VERSION_FLAG = "--version";
 
+/** The flag that turns `poplin doctor` into a repair with an account token, whose words its own parser reads. */
+export const REPAIR_FLAG = "--repair";
+
 /** The two flags every command takes. */
 const EVERYWHERE: readonly FlagSpec[] = [
   { name: HELP_FLAG, about: "show this help" },
@@ -239,10 +242,24 @@ export const COMMANDS = [
   {
     name: "doctor",
     group: "the install",
-    about: "check that the install works, and report",
+    about: "check that the install works, and report; --repair mends it",
     arguments: [],
-    flags: installFlags("the checks and the versions"),
+    flags: [
+      { name: REPAIR_FLAG, about: "mend the install at its provider, with an account token" },
+      { name: "--dry-run", about: "with --repair: say what it would change, and change nothing" },
+      { name: "--add-user", value: "<email>", about: "with --repair: let one more person log in" },
+      { name: "--yes", about: "with --repair: ask nothing" },
+      { name: "--token-stdin", about: "with --repair: read the account token from standard input" },
+      ...installFlags("the checks and the versions, or what --repair came to"),
+    ],
     examples: ["poplin doctor"],
+    notes: [
+      "--repair needs an account token and no login, so it is the way back in:",
+      "  poplin doctor --repair --dry-run",
+      "  poplin doctor --repair --add-user you@example.com",
+      "It takes no --server. Its own help lists the options of the provider and",
+      "how the token is given: poplin doctor --repair --help",
+    ],
   },
   {
     name: "update",

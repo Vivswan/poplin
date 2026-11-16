@@ -66,7 +66,7 @@ const BOTS_RULE = "bots rule";
 const OPEN_PATHS = INSTALL_OBJECTS.accessOpenApplication;
 
 /** What the Access rows say on an account whose Access is switched off. */
-const ACCESS_OFF = "Access is off for the account";
+export const ACCESS_OFF = "Access is off for the account";
 
 /** What to do about it: no API switches Access on. */
 const ACCESS_STEP = "Open Zero Trust and pick a plan (Free works): that switches Access on.";
