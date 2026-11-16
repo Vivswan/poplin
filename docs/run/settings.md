@@ -94,7 +94,7 @@ To remove another user, choose Remove in the menu at the end of that user's row,
 
 A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
-Sign everyone out, on the same tab, makes every browser log in to the dashboard again, yours too. [Security](../about/security.md#hardening) says what it ends and what it leaves.
+Sign everyone out, on the same tab, replaces the install's stored key: every visitor's limit starts again, and nobody is logged out. [Security](../about/security.md#hardening) says what it ends and what it leaves.
 
 ## This computer
 

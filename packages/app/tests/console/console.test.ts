@@ -1,12 +1,12 @@
-// The console's server side: the shell page and its policy, the client's files, the session on every data route, the guard on changes, and how a refusal reaches the client.
+// The console's server side: the shell page and its policy, the client's files, the admission of every request, the guard on changes, and how a refusal reaches the client.
 
 import { describe, expect, test } from "bun:test";
 import { html } from "hono/html";
 
 import { ICON_FILE, shellPage } from "../../src/console/shell";
 import { DEFAULT_ICON } from "../../src/sites/default-icon";
-import { openConsole } from "./support/console";
-import { ORIGIN } from "./support/install";
+import { openConsole, SINCE_HEADER } from "./support/console";
+import { LOGIN_HEADER, ORIGIN } from "./support/install";
 import { readShell } from "./support/shell";
 
 const DASHBOARD = ORIGIN;
@@ -60,13 +60,68 @@ describe("the shell page", () => {
     expect([shell.boot, shell.runs, shell.scripts]).toEqual([boot, 0, ["/assets/app-4f1c.js"]]);
   });
 
-  // Drift: a page asked for without a session would be drawn, or the login would lose the address to come back to.
-  test("sends a visitor without a session to the login, to come back to the same address", async () => {
-    const opened = await openConsole("/next");
-    const response = await opened.getLoggedOut("/sites/a-site?q=x");
+  // Drift: one line would be written for every page a person opens, which a busy day pays for in rows, or a new login would leave no line, and the setup page would stay open after the first one.
+  test("writes one Activity line for each login at the provider, from a page opened within five minutes of it, and none from a data route", async () => {
+    const opened = await openConsole();
+    const { clock, proof } = opened.base;
+    const logins = async (): Promise<number> => (await opened.base.audit()).filter((entry) => entry.action === "login").length;
+    const open = (path: string, since: number): Promise<Response> => opened.fetch(new Request(`${DASHBOARD}${path}`, { headers: { ...proof, [SINCE_HEADER]: String(since) } }));
+    const first = clock.now - 1000;
+    const counts: number[] = [];
+    for (const [path, since, later] of [
+      ["/data/frame", first, 0],
+      ["/", first, 0],
+      ["/settings", first, 1000],
+      ["/", first - 3_600_000, 0],
+      ["/", first + 60_000, 61_000],
+      ["/", first + 60_000, 400_000],
+    ] as const) {
+      clock.now += later;
+      await open(path, since);
+      counts.push(await logins());
+    }
 
-    expect(response.status).toBe(302);
-    expect(response.headers.get("Location")).toBe("https://poplin.example.com/login?return=%2Fnext%2Fsites%2Fa-site%3Fq%3Dx");
+    expect([counts, await opened.base.install.database.hasLoggedIn()]).toEqual([[0, 1, 1, 1, 2, 2], true]);
+  });
+});
+
+describe("a request that is not admitted", () => {
+  // Drift: a path of the dashboard would answer something of the install to a request no login vouches for, an email that is no user, or a login nobody could check; or a script's call would get a page where it reads JSON.
+  test.each([
+    ["no login behind it", "", { page: 403, data: 401, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again.", wait: null }],
+    ["a word that is no email where the login goes", "nobody", { page: 403, data: 401, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again.", wait: null }],
+    ["a verified email that is no user", "mallory@example.com", { page: 403, data: 403, code: "not_a_user", sentence: "This email is not a user of this install.", wait: null }],
+    ["a login that cannot be checked now", "keys-down", { page: 503, data: 503, code: "login_unchecked", sentence: "The login cannot be checked right now. Try again.", wait: "60" }],
+    ["an install with no login in front yet", "nothing-set", { page: 503, data: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first.", wait: null }],
+  ])("with %s gets one sentence and nothing of the install, on a page, a file of the client, and a data route", async (_case, login, { page, data, code, sentence, wait }) => {
+    const opened = await openConsole("/next");
+    await opened.base.publish("a-site", "private");
+    const ask = (path: string, method = "GET"): Promise<Response> =>
+      opened.fetch(new Request(`${DASHBOARD}/next${path}`, { method, headers: { [LOGIN_HEADER]: login, Origin: DASHBOARD, "Content-Type": "application/json" }, ...(method === "POST" ? { body: "{}" } : {}) }));
+    const pages = await Promise.all(["/", "/sites/a-site?q=x", "/assets/app-4f1c.js", "/favicon.ico", "/data"].map((path) => ask(path)));
+    const calls = [await ask("/data/sites"), await ask("/data/frame"), await ask("/data/settings/sign-everyone-out", "POST")];
+
+    expect(await Promise.all(pages.map(async (answer) => [answer.status, await answer.text()]))).toEqual(pages.map(() => [page, `${sentence}\n`]));
+    expect(await Promise.all(calls.map(async (answer) => [answer.status, await answer.json()]))).toEqual(calls.map(() => [data, { ok: false, code, about: null, sentence }]));
+    expect([...pages, ...calls].map((answer) => [answer.headers.get("Cache-Control"), answer.headers.get("Retry-After"), answer.headers.get("Set-Cookie"), answer.headers.get("Location")])).toEqual(
+      [...pages, ...calls].map(() => ["no-store", wait, null, null]),
+    );
+    expect((await opened.base.audit()).map((entry) => entry.action)).not.toContain("signed_everyone_out");
+  });
+
+  // Drift: a user who was removed would go on reading and changing the install until some session of theirs ran out.
+  test("is a user from the request after the one that removed them: nothing is kept between two requests", async () => {
+    const opened = await openConsole();
+    const { owner, proof } = opened.base;
+    const second = { [LOGIN_HEADER]: "bo@example.com" };
+    const asBo = (path: string): Promise<Response> => opened.fetch(new Request(`${DASHBOARD}${path}`, { headers: second }));
+    const before = [(await asBo("/data/sites")).status, (await asBo("/")).status];
+    await opened.change("/data/people/add", { login: "bo@example.com" });
+    const during = [(await asBo("/data/sites")).status, (await asBo("/")).status];
+    await opened.change("/data/people/remove", { login: "bo@example.com" });
+    const after = [(await asBo("/data/sites")).status, (await asBo("/")).status, (await opened.fetch(new Request(`${DASHBOARD}/data/sites`, { headers: proof }))).status];
+
+    expect([owner === "bo@example.com", before, during, after]).toEqual([false, [403, 403], [200, 200], [403, 403, 200]]);
   });
 });
 
@@ -84,20 +139,20 @@ test.each([
 });
 
 describe("the client's files", () => {
-  // Drift: the login page's visitor could not load the files, a name the build did not write would answer something, or every page load would ask the host for the whole script again.
-  test("are answered without a session for a browser to keep for good, and a file that is not there is 404", async () => {
+  // Drift: a name the build did not write would answer something, or every page load would ask the host for the whole script again.
+  test("are answered for a browser to keep for good, and a file that is not there is 404", async () => {
     const opened = await openConsole("/next");
-    const script = await opened.getLoggedOut("/assets/app-4f1c.js");
+    const script = await opened.get("/assets/app-4f1c.js");
 
     expect([script.status, script.headers.get("Content-Type"), await script.text()]).toEqual([200, "text/javascript; charset=utf-8", "// the client"]);
     expect(script.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
-    expect((await opened.getLoggedOut("/assets/other.js")).status).toBe(404);
+    expect((await opened.get("/assets/other.js")).status).toBe(404);
   });
 
-  // Drift: the tab would show a browser's placeholder beside the dashboard's name, the icon would need a session the login page's visitor has none of, or a redrawn icon would keep the name a browser holds the old one under for good.
+  // Drift: the tab would show a browser's placeholder beside the dashboard's name, or a redrawn icon would keep the name a browser holds the old one under for good.
   test("hold poplin's icon under a name with the hash of its content, kept for good, and under the name a browser asks for unbidden, kept a day", async () => {
     const opened = await openConsole("/next");
-    const [named, unbidden] = [await opened.getLoggedOut(`/assets/${ICON_FILE}`), await opened.getLoggedOut("/favicon.ico")];
+    const [named, unbidden] = [await opened.get(`/assets/${ICON_FILE}`), await opened.get("/favicon.ico")];
     const hash = new Bun.CryptoHasher("sha256").update(DEFAULT_ICON).digest("hex").slice(0, 8);
 
     expect([named.status, named.headers.get("Content-Type"), named.headers.get("Cache-Control"), await named.text()]).toEqual([200, "image/svg+xml", "public, max-age=31536000, immutable", DEFAULT_ICON]);
@@ -164,13 +219,13 @@ describe("the data routes", () => {
     expect([response.status, await response.json()]).toMatchObject([400, { ok: false, code: "bad_argument", about: "after" }]);
   });
 
-  // Drift: data would be read without a session, or the client would be sent a login page where it expects JSON.
-  test("answer 401 in JSON without a session", async () => {
+  // Drift: data would be read without a login, or the client would be sent a login page where it expects JSON.
+  test("answer 401 in JSON without a login", async () => {
     const opened = await openConsole();
     const response = await opened.getLoggedOut("/data/sites");
 
     expect(response.status).toBe(401);
-    expect(await response.json()).toMatchObject({ ok: false, code: "no_session" });
+    expect(await response.json()).toMatchObject({ ok: false, code: "no_login" });
   });
 
   // Drift: a data route nobody wrote would answer the shell page, and the client would fail on HTML.
@@ -217,7 +272,7 @@ describe("a change", () => {
     expect(response.status).toBe(404);
   });
 
-  // Drift: a page of a site of the same install, which a browser counts as the same site as the dashboard and sends the session along for, could change a site as the owner; so could a page of any other origin.
+  // Drift: a page of a site of the same install, which a browser counts as the same site as the dashboard and sends the login along for, could change a site as the owner; so could a page of any other origin.
   test.each([
     ["JSON from the dashboard's own page", { ...JSON_TYPE, Origin: DASHBOARD, "Sec-Fetch-Site": "same-origin" }, 200],
     ["JSON that names the dashboard in `Origin` alone", { ...JSON_TYPE, Origin: DASHBOARD }, 200],
@@ -242,7 +297,7 @@ describe("a change", () => {
     const site = await opened.base.publish("first-name", "private");
     const body = headers["Content-Type"] === "application/json" ? JSON.stringify({ name: "second-name" }) : "name=second-name";
     const address = `${DASHBOARD}/data/sites/${site.name}--${site.id}/naming`;
-    const response = await opened.fetch(new Request(address, { method: "POST", headers: { ...headers, Cookie: opened.base.cookie }, body }));
+    const response = await opened.fetch(new Request(address, { method: "POST", headers: { ...headers, ...opened.base.proof }, body }));
     const listed = (await (await opened.get("/data/sites")).json()) as Listed;
 
     expect([response.status, listed.sites.map((entry) => entry.name)]).toEqual([status, [status === 200 ? "second-name" : "first-name"]]);
@@ -263,11 +318,11 @@ describe("a change", () => {
     expect(listed.sites.map((entry) => entry.name)).toEqual(["first-name"]);
   });
 
-  // Drift: a change without a session would be done.
-  test("without a session answers 401 and changes nothing", async () => {
+  // Drift: a change without a login would be done.
+  test("without a login answers 401 and changes nothing", async () => {
     const opened = await openConsole();
     const site = await opened.base.publish("first-name", "private");
-    const response = await opened.change(`/data/sites/${site.name}--${site.id}/naming`, { name: "second-name" }, { Cookie: "" });
+    const response = await opened.change(`/data/sites/${site.name}--${site.id}/naming`, { name: "second-name" }, { [LOGIN_HEADER]: "" });
 
     const listed = (await (await opened.get("/data/sites")).json()) as Listed;
 

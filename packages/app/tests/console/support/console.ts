@@ -1,17 +1,26 @@
 // A console the tests ask requests of: the dashboard tests' install, with the console built over it and helpers that send what its client would.
 
-import { importSessionKey } from "@poplin/core/src/auth/cookie";
-import { parseLogins } from "@poplin/core/src/auth/logins";
+import { parseLogin, parseLogins } from "@poplin/core/src/auth/logins";
 
 import { createConsole } from "../../../src/console/console";
 import type { DomainPlug } from "../../../src/console/domain/records";
 import type { UsersFollow } from "../../../src/console/access/users-follow";
 import type { UsageHost } from "../../../src/console/usage/records";
-import { readSession } from "../../../src/login/session";
-import { codeCounts, FREE_LIMITS, ORIGIN, openOwned, USAGE_HOST, VERSION } from "./install";
+import { admit, type Identify } from "../../../src/login/admit";
+import { createEntries } from "../../../src/login/entries";
+import { codeCounts, FREE_LIMITS, LOGIN_HEADER, ORIGIN, openOwned, USAGE_HOST, VERSION } from "./install";
 
 /** The one host the test console's provider starts rebuilds at. */
 export const REBUILD_HOST = "rebuilds.example.com";
+
+/** The header the stand-in reads the moment a login began from, in milliseconds since the epoch; left out, the login began an hour before the request. */
+export const SINCE_HEADER = "Test-Login-Since";
+
+/** What the stand-in for a provider's login refuses a request as, by the word its header holds where an email would be, and what a host tells the console each means. */
+const PROVIDER_REFUSALS = { "keys-down": "unchecked", "nothing-set": "not-set-up", "": "no-proof" } as const;
+
+/** How long before a request its login began, where the request does not say. */
+const HOUR_MS = 3_600_000;
 
 /** The files the test console answers as its client's build, under names that hold a hash as a build's do. */
 const ASSETS: Readonly<Record<string, { readonly body: string; readonly type: string }>> = {
@@ -33,18 +42,27 @@ interface Opened {
   /** Every address the provider was asked to start a rebuild at, in order. */
   readonly rebuilds: readonly string[];
 
-  /** Ask anything at all, as it is: no session, origin, or type is added. */
+  /** Ask anything at all, as it is: no login, origin, or type is added. */
   readonly fetch: (request: Request) => Promise<Response>;
 
   /** Ask as the owner. */
   readonly get: (path: string) => Promise<Response>;
 
-  /** Ask with no session. */
+  /** Ask with no login behind the request. */
   readonly getLoggedOut: (path: string) => Promise<Response>;
 
   /** Send a change as the client does: JSON, from a page of the console's own origin. `headers` lay over the client's own. */
   readonly change: (path: string, body: unknown, headers?: Readonly<Record<string, string>>) => Promise<Response>;
 }
+
+/** The tests' stand-in for a provider's login: it vouches for the email the request's header names, and refuses a header that holds one of its own words or no email. */
+const identify: Identify<string> = async (headers, now) => {
+  const named = headers.get(LOGIN_HEADER) ?? "";
+  const email = parseLogin(named);
+  if (!email.ok) return { ok: false, refusal: Object.hasOwn(PROVIDER_REFUSALS, named) ? named : "" };
+
+  return { ok: true, value: email.value, since: Number(headers.get(SINCE_HEADER) ?? now - HOUR_MS) };
+};
 
 /**
  * Open a console over a fresh install with one login.
@@ -58,13 +76,15 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
   const opened = await openOwned();
   const { database } = opened.install;
 
-  // As a host would: the key and the logins are read on every request.
-  const sessionOf: Parameters<typeof createConsole>[0]["readSession"] = async (headers) => {
-    const stored = await database.readSigningKey();
+  // As a host would: the users are read on every request.
+  const admitOf: Parameters<typeof createConsole>[0]["admit"] = async (headers) => {
     const logins = parseLogins((await database.readSettings())?.logins ?? []);
-    if (stored === undefined || !logins.ok) return { ok: false };
+    if (!logins.ok) return { ok: false, refusal: "no-proof" };
 
-    return readSession(headers, { key: await importSessionKey(stored), logins: logins.value, now: opened.clock.now });
+    const who = await admit(headers, { identify, logins: logins.value, now: opened.clock.now });
+    if (who.ok) return who;
+
+    return { ok: false, refusal: who.refusal === "not-a-user" ? who.refusal : PROVIDER_REFUSALS[who.refusal as keyof typeof PROVIDER_REFUSALS] };
   };
   const rebuilds: string[] = [];
   const startRebuild = async (address: string): Promise<Response> => {
@@ -75,8 +95,8 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
   const built = createConsole({
     install: opened.install,
     version: VERSION,
-    readSession: sessionOf,
-    loginPath: "/login",
+    admit: admitOf,
+    entered: createEntries(opened.install, () => undefined),
     base,
     client: CLIENT,
     freeLimits: FREE_LIMITS,
@@ -87,13 +107,13 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
     ...(follow === undefined ? {} : { follow }),
     ...codeCounts(opened.counters),
   });
-  const client = { Cookie: opened.cookie, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };
+  const client = { ...opened.proof, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };
 
   return {
     base: opened,
     rebuilds,
     fetch: (request) => built.fetch(request),
-    get: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`, { headers: { Cookie: opened.cookie } })),
+    get: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`, { headers: opened.proof })),
     getLoggedOut: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`)),
     change: (path, body, headers = {}) =>
       built.fetch(

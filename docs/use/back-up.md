@@ -21,7 +21,7 @@ Export downloads sites and the settings as one zip, and import puts them back; [
 
 Every other example runs the same way, with `npx` before `poplin`.
 
-- **The zip holds plain files.** It holds no token and no signing key.
+- **The zip holds plain files.** It holds no token and no key of the install.
 - **Nothing is overwritten.** A site the install already has is skipped.
 
 ## What a restore brings back
@@ -49,7 +49,7 @@ Cloudflare keeps a history of the install's database, named `poplin`, and calls 
 
 | Time Travel         | Holds                                                                                                                                                             |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| brings back         | the records: sites and their versions, the settings, the logins, the tokens, the activity log, the counts of visits, the update link, the key that signs sessions |
+| brings back         | the records: sites and their versions, the settings, the logins, the tokens, the activity log, the counts of visits, the update link, the key the visitor limits are made from |
 | does not bring back | a file. The files are in the bucket, which has no such history                                                                                                    |
 | reaches             | any minute of the last 7 days on the free plan                                                                                                                    |
 | is run with         | Cloudflare's own tool: `wrangler d1 time-travel restore poplin --timestamp=<moment>`                                                                              |

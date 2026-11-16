@@ -6,7 +6,10 @@ import { hc } from "hono/client";
 import type { Bindings } from "../../../src/worker/bindings";
 import type { Outside } from "../../../src/worker/start";
 import { emptyTally, type Tally, talliedBindings } from "./call-tally";
-import { ADMIN, type ApiCalls, ask, BINDINGS, cookieOf, installOf, instance, logIn, type Published, page, publish, send, type TestFile, tokenOf, type Worker, type World, world } from "./install";
+import { ADMIN, type ApiCalls, accessHeaders, ask, BINDINGS, installOf, instance, OWNER, type Published, page, publish, send, type TestFile, tokenOf, type Worker, type World, world } from "./install";
+
+/** How long ago the login of a row's session began: past the minutes in which a page still writes the login's Activity line. */
+const LOGIN_AGE_MS = 3_600_000;
 
 /** How far the clock moves before a measured request to an instance that has answered one: past the minute a site request trusts the settings for, so the request reads them again. */
 const SETTINGS_LAPSE_MS = 61_000;
@@ -122,7 +125,7 @@ declare module "vitest" {
   }
 }
 
-/** A row's stage on an empty install that has started once: its schema, its first settings, and its signing key are there. */
+/** A row's stage on an empty install that has started once: its schema, its first settings, and its visitor key are there. */
 async function stageOf(): Promise<Stage> {
   const w = await world();
   await ask(instance(w), `${ADMIN}/api/whoami`);
@@ -135,9 +138,16 @@ export function adminToken(stage: Stage): Promise<string> {
   return tokenOf(stage.w, "admin");
 }
 
-/** The `Cookie` header of the owner, logged in on an instance of the stage's own. The setup page is shut from then on. */
+/**
+ * The headers Access puts on the owner's requests, for a login that began an hour ago and whose Activity line the log holds.
+ * The setup page is shut from then on, and no page of that login writes or asks anything for its line.
+ */
 export async function sessionOf(stage: Stage): Promise<Record<string, string>> {
-  return { Cookie: cookieOf(await logIn(instance(stage.w), stage.w)) };
+  const { now } = stage.w.clock;
+  const began = Math.floor((now - LOGIN_AGE_MS) / 1000);
+  await stage.install.database.appendAudit({ action: "login", detail: {} }, { by: OWNER, at: now - LOGIN_AGE_MS });
+
+  return accessHeaders(stage.w, { iat: began, nbf: began });
 }
 
 /** Publish a site through the API of an instance that is not measured. */

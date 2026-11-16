@@ -1,17 +1,19 @@
-// The console: the dashboard as an application in the browser. One shell page loads the client's script and stylesheet, and the client reads and changes the install through JSON routes under the same session.
+// The console: the dashboard as an application in the browser. One shell page loads the client's script and stylesheet, and the client reads and changes the install through JSON routes.
 //
-//   GET  <base>/assets/<file>   the console's icon and the client's script, stylesheet, and fonts, each under a name that holds a hash of its content; no session, and a browser keeps them for good
-//   GET  <base>/favicon.ico      the same icon under the name a browser asks for unbidden; no session
+//   GET  <base>/assets/<file>   the console's icon and the client's script, stylesheet, and fonts, each under a name that holds a hash of its content; a browser keeps them for good
+//   GET  <base>/favicon.ico      the same icon under the name a browser asks for unbidden
 //   GET  <base>/data/...        what a screen shows, as JSON; each screen's routes are in its own `*-routes.ts`, chained on in `routes.ts`
 //   POST <base>/data/...        one change, as JSON
 //   GET  <base>/...             the shell page, whatever the path: the client draws the screen the path names
 //
-// A read needs the session. A change needs it too, and is refused when its headers name any page but this origin's own: a browser counts every site of the install as the same site as the dashboard and sends the session along.
-// A change is also JSON and nothing else, which a page of another origin cannot send unless this origin lets it, and it never does.
+// Every request is asked who it is from, a file of the client included, and the console keeps no answer: the next request is asked again.
+// A change is also refused when its headers name any page but this origin's own: a browser counts every site of the install as the same site as the dashboard and sends the login along.
+// A change is JSON and nothing else, which a page of another origin cannot send unless this origin lets it, and it never does.
 
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
+import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -32,11 +34,16 @@ import type { UsersFollow } from "./access/users-follow";
 /** The title of every page of the dashboard, the same on every install. */
 const TITLE = "poplin";
 
-/** What a request whose session cannot be read is taken to carry. */
-const NO_SESSION = { ok: false } as const;
+/** What a request that is not admitted is answered, by why. Only `no-proof` is 401 on a data route, which the client takes as a login that ended: no other refusal may be, or a removed user's page would load without end. */
+const REFUSALS = {
+  "no-proof": { data: 401, page: 403, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again." },
+  "not-a-user": { data: 403, page: 403, code: "not_a_user", sentence: "This email is not a user of this install." },
+  unchecked: { data: 503, page: 503, code: "login_unchecked", sentence: "The login cannot be checked right now. Try again." },
+  "not-set-up": { data: 503, page: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first." },
+} as const;
 
-/** What a data route answers a request without a session: the client then loads the page again, which leads to the login. */
-const LOGGED_OUT = { ok: false, code: "no_session", about: null, sentence: "Log in again." } as const;
+/** How long a client waits before it asks again after a login that could not be checked, in seconds. */
+const CHECK_AGAIN_SECONDS = "60";
 
 /** The policy of every answer: the page runs only the console's own script and reads only this origin. Styles may also be inline: the components set their positions and sizes that way. */
 export const POLICY = {
@@ -51,19 +58,25 @@ export const POLICY = {
   baseUri: ["'none'"],
 };
 
+/**
+ * Who a request is from, with the moment the provider's login began, or why nobody is admitted.
+ * `no-proof` is a request no login vouches for, `unchecked` a login that cannot be checked right now, and `not-set-up` an install with no login in front of it yet.
+ */
+type Admitted = { readonly ok: true; readonly actor: Actor & { readonly holder: Login }; readonly since: number } | { readonly ok: false; readonly refusal: keyof typeof REFUSALS };
+
 /** What a console is built from. */
 interface ConsoleParts extends CodeTries {
   /** The install the actions work on. */
   readonly install: Install;
 
-  /** Reads who a request's session names. */
-  readonly readSession: (headers: Headers) => Promise<{ readonly ok: true; readonly value: Login } | { readonly ok: false }>;
+  /** Decides who a request is from, by the login it carries and the install's users as they are now. It is asked on every request. */
+  readonly admit: (headers: Headers) => Promise<Admitted>;
+
+  /** Told of every page an admitted person opens, with the moment the provider's login began: one Activity line per login is written from it. */
+  readonly entered: (who: { readonly email: Login; readonly since: number }) => Promise<void>;
 
   /** The version of poplin the install runs. */
   readonly version: string;
-
-  /** The path of this origin where a login starts. */
-  readonly loginPath: string;
 
   /** The path every route of the console starts with; empty for the root. */
   readonly base: string;
@@ -95,15 +108,14 @@ interface Console {
   readonly fetch: (request: Request) => Promise<Response>;
 }
 
-/** Ask every request for its session. Without one a data route answers 401 and a page is sent to the login, to come back to the same address. */
-function sessionCheck(parts: ConsoleParts): MiddlewareHandler<Shared> {
+/** Ask every request who it is from. One that is not admitted reads nothing of the install: a data route answers the refusal as JSON, and any other path as one plain sentence. */
+function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
   return async (context, next) => {
-    const url = new URL(context.req.url);
-    const who = await parts.readSession(context.req.raw.headers).catch(() => NO_SESSION);
+    const who = await parts.admit(context.req.raw.headers);
     if (who.ok) {
-      // Every email in the logins is an admin: the console has no other view.
-      context.set("asker", { install: parts.install, actor: { scope: "admin", holder: who.value } });
-      context.set("email", who.value);
+      context.set("asker", { install: parts.install, actor: who.actor });
+      context.set("email", who.actor.holder);
+      context.set("since", who.since);
       context.set("domain", parts.domain);
       context.set("follow", parts.follow);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
@@ -112,12 +124,13 @@ function sessionCheck(parts: ConsoleParts): MiddlewareHandler<Shared> {
       return next();
     }
 
-    if (url.pathname.startsWith(`${parts.base}/data/`)) return context.json(LOGGED_OUT, 401);
+    const { data, page, code, sentence } = REFUSALS[who.refusal];
+    context.header("Cache-Control", "no-store");
+    if (who.refusal === "unchecked") context.header("Retry-After", CHECK_AGAIN_SECONDS);
 
-    const login = new URL(parts.loginPath, url.origin);
-    login.searchParams.set("return", `${url.pathname}${url.search}`);
+    if (new URL(context.req.url).pathname.startsWith(`${parts.base}/data/`)) return context.json({ ok: false, code, about: null, sentence }, data);
 
-    return context.redirect(login.href, 302);
+    return context.text(`${sentence}\n`, page);
   };
 }
 
@@ -144,7 +157,8 @@ const jsonOnly: MiddlewareHandler<Shared> = async (context, next) => {
 /**
  * Build the console.
  *
- * @returns a handler for every request under the console's base path. A page without a session is sent to the login, and a data route without one answers 401.
+ * @returns a handler for every request under the console's base path. A request that is not admitted gets a refusal and nothing of the install:
+ * 401 from a data route and 403 from a page with no login behind it, 403 for an email that is no user, 503 while the login cannot be checked.
  * Its `fetch` rejects with whatever a request failed with, but for a day's allowance used up, which it answers
  */
 export function createConsole(parts: ConsoleParts): Console {
@@ -157,7 +171,8 @@ export function createConsole(parts: ConsoleParts): Console {
 
   app.use(secureHeaders({ contentSecurityPolicy: POLICY, xFrameOptions: "DENY", referrerPolicy: "same-origin" }));
 
-  // The client's files hold nothing of the install, so they are answered before the session is asked for.
+  app.use(admitted(parts));
+
   app.get("/assets/:name", async (context) => {
     const asset = await assetOf(parts.client, context.req.param("name"));
     if (asset === undefined) return context.notFound();
@@ -168,7 +183,7 @@ export function createConsole(parts: ConsoleParts): Console {
   // A browser asks for this name unbidden, before any page says where the icon is: it gets the icon, not the page.
   app.get("/favicon.ico", (context) => context.body(ICON.body, 200, { "Content-Type": ICON.type, "Cache-Control": KEPT_A_DAY }));
 
-  app.use(noStore, sessionCheck(parts));
+  app.use(noStore);
   app.post("*", bodyLimit({ maxSize: MOST_BODY_BYTES, onError: (context) => refused(context, { code: "too_large" }) }), ownPageOnly, jsonOnly);
 
   app.route("/data", dataRoutes);
@@ -176,6 +191,7 @@ export function createConsole(parts: ConsoleParts): Console {
 
   app.get("*", async (context) => {
     const { install, actor } = context.get("asker");
+    await parts.entered({ email: context.get("email"), since: context.get("since") });
     const frame = await frameOf(install, actor, { version: parts.version, domain: parts.domain !== undefined, selfCarried: parts.follow?.holdsKey() === true });
 
     const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };

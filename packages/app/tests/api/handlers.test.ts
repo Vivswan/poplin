@@ -35,8 +35,8 @@ interface Backup {
   readonly material: string;
 }
 
-/** The bytes of the signing key the source install is given, so a leak of it is found by value. */
-const SIGNING_KEY = new Uint8Array(32).fill(0xa7);
+/** The bytes of the visitor key the source install is given, so a leak of it is found by value. */
+const VISITOR_KEY = new Uint8Array(32).fill(0xa7);
 
 /** The note of a token the source install issues: it sits in the tokens table and in the audit log, and nowhere a backup may reach. */
 const CANARY = "canary-note-5d1";
@@ -69,7 +69,7 @@ async function published(install: ApiInstall, asked: Publish, files: Readonly<Re
   return part(finished, "site").id as string;
 }
 
-/** An install with a private, an unlisted, and a public site, one in the trash, and one that keeps three versions and is live at its second; with a signing key and a token whose note is the canary. */
+/** An install with a private, an unlisted, and a public site, one in the trash, and one that keeps three versions and is live at its second; with a visitor key and a token whose note is the canary. */
 async function source(): Promise<ApiInstall & { readonly ids: Readonly<Record<"report" | "notes" | "docs" | "gone" | "manual", string>> }> {
   const install = await openApi();
   const report = await published(install, { name: "report" }, pages("report"));
@@ -85,7 +85,7 @@ async function source(): Promise<ApiInstall & { readonly ids: Readonly<Record<"r
   await install.routes.sites[":site"].rollback.$post({ param: { site: manual }, json: { version: 2 }, query: {} });
   await install.routes.sites[":site"].$delete({ param: { site: gone }, query: {} });
   await install.routes.tokens.$post({ json: { scope: "publisher", note: CANARY }, query: {} });
-  await install.database.ensureSigningKey(SIGNING_KEY, NOW);
+  await install.database.ensureVisitorKey(VISITOR_KEY, NOW);
 
   return { ...install, ids: { report, notes, docs, gone, manual } };
 }
@@ -294,12 +294,12 @@ describe("an export imported into another install", () => {
   });
 
   // Drift: a backup is copied to laptops and buckets; a credential or the log inside it would turn every copy into a way in, and no reader of the zip would notice.
-  test("nothing any export route answers holds a token, a token's hash, the signing key, or an audit entry", async () => {
+  test("nothing any export route answers holds a token, a token's hash, the visitor key, or an audit entry", async () => {
     const first = await source();
     const { material } = await exportAll(first, true);
     const records = await first.database.listTokens();
     const owner = records.find((record) => first.tokens.owner.includes(record.id))?.id ?? "";
-    const key = [Buffer.from(SIGNING_KEY).toString("hex"), Buffer.from(SIGNING_KEY).toString("base64"), Buffer.from(SIGNING_KEY).toString("latin1")];
+    const key = [Buffer.from(VISITOR_KEY).toString("hex"), Buffer.from(VISITOR_KEY).toString("base64"), Buffer.from(VISITOR_KEY).toString("latin1")];
     const secrets = [...Object.values(first.tokens), ...Object.values(first.tokens).map((token) => token.split("_")[2] ?? ""), ...records.map((record) => record.hash), ...key, CANARY, "token_added"];
 
     // The control: the search does find what a backup is meant to hold, a site's owner among it.

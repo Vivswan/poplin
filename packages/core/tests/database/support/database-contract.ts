@@ -32,7 +32,7 @@ import {
   made,
   opened,
 } from "./database-fixtures";
-import { computerLogins, loginRoom, signingKey, tokensAndSettings } from "./login-contract";
+import { computerLogins, loginRoom, visitorKey, tokensAndSettings } from "./login-contract";
 import { backups, sites, sizes, versionContents, versions } from "./site-contract";
 import { declaredFiles, storageWrites, uploadFiles, uploads } from "./upload-contract";
 
@@ -45,7 +45,7 @@ const DAY_START = 1_699_920_000_000;
 function emptyInstall(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: an empty install`, () => {
     // Drift: every read is asked before the first write; one that threw or made something up on an install with nothing in it would break setup.
-    test("a new database holds no site, token, settings, signing key, or audit entry, and its totals are zero", async () => {
+    test("a new database holds no site, token, settings, visitor key, or audit entry, and its totals are zero", async () => {
       const database = await opened(makeDatabase);
 
       expect<unknown>([
@@ -59,7 +59,7 @@ function emptyInstall(label: string, makeDatabase: DatabaseFactory): void {
         await database.listTokens(),
         await database.getToken(ADA),
         await database.readSettings(),
-        await database.readSigningKey(),
+        await database.readVisitorKey(),
         await database.listAudit({ limit: 100 }),
       ]).toEqual([{ sites: [] }, { sites: [] }, { sites: [] }, undefined, undefined, undefined, NOTHING, [], undefined, undefined, undefined, []]);
     });
@@ -68,7 +68,7 @@ function emptyInstall(label: string, makeDatabase: DatabaseFactory): void {
 
 function updateAddress(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the address that starts a rebuild`, () => {
-    // Drift: the address is a credential kept beside the signing key. A listing, an export, or an audit entry that carried it would hand whoever reads a backup the power to start builds.
+    // Drift: the address is a credential kept beside the visitor key. A listing, an export, or an audit entry that carried it would hand whoever reads a backup the power to start builds.
     test("one address is kept, replaced, and removed, each audited once, and nothing but its own read holds it", async () => {
       const database = await opened(makeDatabase);
       await database.initSettings(SETTINGS, BY_ADA);
@@ -98,7 +98,7 @@ function updateAddress(label: string, makeDatabase: DatabaseFactory): void {
         [BO, "update_address_set", {}],
         [ADA, "update_address_removed", {}],
       ]);
-      expect(await database.readSigningKey()).toBeUndefined();
+      expect(await database.readVisitorKey()).toBeUndefined();
     });
   });
 }
@@ -532,7 +532,7 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
     test("a lookup for serving gives the site as the plain lookup does and, only when asked, the day's counts and the settings with the key, each as its own read gives it", async () => {
       const database = await opened(makeDatabase);
       await database.initSettings(SETTINGS, BY_ADA);
-      await database.ensureSigningKey(new Uint8Array(32).fill(7), NOW);
+      await database.ensureVisitorKey(new Uint8Array(32).fill(7), NOW);
       const site = await made(database, draft("report" as SiteName, "public", DOCS));
       const day = new Date(NOW).toISOString().slice(0, 10);
       await database.addRequests({ day, site: site.id, requests: 5, views: 2 });
@@ -634,7 +634,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   versions(label, makeDatabase);
   sizes(label, makeDatabase);
   backups(label, makeDatabase);
-  signingKey(label, makeDatabase);
+  visitorKey(label, makeDatabase);
   updateAddress(label, makeDatabase);
   auditLog(label, makeDatabase);
   everLoggedIn(label, makeDatabase);

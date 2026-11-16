@@ -66,11 +66,11 @@ describe("the list of problems", () => {
   });
 
   // Drift: the list names what broke inside the install, which only a logged-in admin reads.
-  test("is answered to nobody without a session", async () => {
+  test("is answered to nobody without a login", async () => {
     const opened = await openConsole();
     const answer = await opened.getLoggedOut("/data/problems?days=7");
 
-    expect([answer.status, ((await answer.json()) as { readonly code: string }).code]).toEqual([401, "no_session"]);
+    expect([answer.status, ((await answer.json()) as { readonly code: string }).code]).toEqual([401, "no_login"]);
   });
 });
 

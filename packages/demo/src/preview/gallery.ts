@@ -146,8 +146,9 @@ function dashboardEntries(): Entry[] {
     { group: "Dashboard", name: "No such screen", path: "/nothing" },
     { group: "Access: allow this computer", name: "The logins that wait: what each terminal prints", path: "/state/allow/waiting" },
     { group: "Access: allow this computer", name: "Login not found, decided, or run out", path: `${REVIEW_PAGE}/${NO_LOGIN}` },
-    { group: "The login", name: "No session: the way to the login", path: "/settings?as=visitor" },
-    { group: "The login", name: "Login refused", path: "/login?preview-login=refused", status: 403 },
+    { group: "The login", name: "No login behind the request", path: "/settings?as=visitor", status: 403 },
+    { group: "The login", name: "An email that is no user", path: "/settings?as=removed", status: 403 },
+    { group: "The login", name: "A login that cannot be checked", path: "/settings?as=unchecked", status: 503 },
   ];
 }
 

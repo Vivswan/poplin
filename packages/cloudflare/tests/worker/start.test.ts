@@ -7,7 +7,7 @@ import { type Outside, startInstance } from "../../src/worker/start";
 import { emptyAccount, KEY_VALUE_START, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
 import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
-import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, cookieOf, instance, send, tokenOf, type World, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, instance, send, tokenOf, type World, world } from "./support/install";
 
 /** A key in the form the reader takes, and nothing like one Cloudflare makes. */
 const KEY = "kept-key-of-the-test";
@@ -102,7 +102,7 @@ describe("the kept key of an instance", () => {
     const worker = instance(w);
     const token = await tokenOf(w, "admin");
     // The instance is made on its first request, so every request here carries the secret.
-    const session = { Cookie: cookieOf(await ask(worker, `${ADMIN}/login`, { headers: await accessHeaders(w) }, KEYED)) };
+    const session = await accessHeaders(w);
     const bearer = { Authorization: `Bearer ${token}` };
     const answers: Response[] = [];
 

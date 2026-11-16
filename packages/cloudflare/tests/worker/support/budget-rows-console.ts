@@ -102,7 +102,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   {
     group,
     name: "open the dashboard: the page",
-    // Worst: the frame has a newer release, a rebuild address, and a note on the domain to read.
+    // Worst: the frame has a newer release, a rebuild address, and a note on the domain to read, and it is the instance's first page, which asks once whether anybody has logged in. Every later page is one query less.
     arrange: async (stage) => {
       await fullFrame(stage);
       const session = await sessionOf(stage);
@@ -110,7 +110,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${ADMIN}/`, session);
     },
     status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
+    budget: { queries: 3, reads: 0, writes: 0 },
   },
   {
     group,
@@ -596,7 +596,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     group,
     name: "Settings screen: sign everyone out",
     route: "POST /data/settings/sign-everyone-out",
-    // A new signing key and one audit entry.
+    // A new visitor key and one audit entry.
     arrange: async (stage) => {
       const session = await sessionOf(stage);
 
@@ -659,8 +659,12 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   {
     group,
     name: "a file of the dashboard's client",
-    // The client's files ride in the Worker: the session's settings are read before the path is known, and nothing else.
-    arrange: async () => (measured) => get(measured, `${ADMIN}/favicon.ico`),
+    // The client's files ride in the Worker: the users are read with the settings to admit the request, and nothing else.
+    arrange: async (stage) => {
+      const session = await sessionOf(stage);
+
+      return (measured) => get(measured, `${ADMIN}/favicon.ico`, session);
+    },
     status: 200,
     budget: { queries: 1, reads: 0, writes: 0 },
   },

@@ -46,7 +46,7 @@ interface Asked {
   /** Reads the settings the provider's side is made to match. The plug asks only once the token is proven. */
   readonly settings: ReadSettings;
 
-  /** Who the audit entry names; left out where no session says, it names the first stored login. */
+  /** Who the audit entry names; left out where no login says, it names the first stored login. */
   readonly by?: AuditEntry["by"];
 
   /** The page the form was on. */

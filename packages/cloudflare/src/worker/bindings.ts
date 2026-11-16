@@ -17,7 +17,7 @@ export interface Bindings {
   /** The first settings in their text form, unchecked: the logins, and any other setting that does not start at its default. The Worker stores them while it has no settings, and never reads them once it has. */
   readonly FIRST_SETTINGS: unknown;
 
-  /** The Access application in front of the login path and of every private site, unchecked: the team's domain and the application's audience tag. Setup writes it; a Worker without it answers setup alone. */
+  /** The Access application in front of the dashboard and of every private site, unchecked: the team's domain and the application's audience tag. Setup writes it; a Worker without it answers setup alone. */
   readonly ACCESS: unknown;
 
   /** The id of the Cloudflare account the Worker runs in, unchecked. Setup writes it beside the domain, and from then on acts on that account alone. */

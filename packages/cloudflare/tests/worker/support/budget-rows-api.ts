@@ -354,7 +354,7 @@ export const API_ROWS: readonly BudgetRow[] = [
     group,
     name: "sign everyone out",
     route: "DELETE /api/sessions",
-    // A new signing key and one audit entry.
+    // A new visitor key and one audit entry.
     arrange: async (stage) => {
       const token = await adminToken(stage);
 

@@ -2,6 +2,7 @@
 
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
+import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { Context, TypedResponse } from "hono";
 import * as v from "valibot";
@@ -56,8 +57,11 @@ export interface Shared {
     /** The provider's side of the install, where the console was built with one. */
     domain: DomainPlug | undefined;
 
-    /** The email the session names. */
-    email: string;
+    /** The email of the user who asks. */
+    email: Login;
+
+    /** When the provider's login behind the request began, in milliseconds since the epoch. */
+    since: number;
 
     /** The provider's side of the users, where the console was built with one: a change of them is carried there by itself. */
     follow: UsersFollow | undefined;

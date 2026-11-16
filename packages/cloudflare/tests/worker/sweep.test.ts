@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { ACCOUNT, emptyAccount, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
-import { accessHeaders, ADMIN, api, ask, BINDINGS, cloudflareOf, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf } from "./support/install";
+import { ADMIN, api, ask, BINDINGS, cloudflareOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER, page, problemsOf } from "./support/install";
 import { publish, refusingDatabase, send, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
@@ -54,7 +54,7 @@ describe("the scheduled run", () => {
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
     const worker = instance(w, cloudflareOf(account, asked));
-    const session = { Cookie: cookieOf(await ask(worker, `${ADMIN}/login`, { headers: await accessHeaders(w) }, keyed)) };
+    const session = await logIn(worker, w, keyed);
     const { database } = await installOf(w);
     await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
     const waits = async (): Promise<boolean | undefined> => database.readDomainCheck().then((kept) => (kept === undefined ? undefined : kept.users_changed_at !== null));

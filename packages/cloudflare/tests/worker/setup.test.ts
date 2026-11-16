@@ -7,7 +7,7 @@ import { readShell } from "../../../app/tests/console/support/shell";
 import type { Bindings } from "../../src/worker/bindings";
 import { type Account, emptyAccount, OTHER_TOKEN, TEAM, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
-import { ADMIN, accessHeaders, ask, awayFromMinuteEnd, BINDINGS, cloudflareOf, cookieOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, send, sweep, type World, tokenOf, under, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, awayFromMinuteEnd, BINDINGS, cloudflareOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, send, sweep, type World, tokenOf, under, world } from "./support/install";
 
 /** The Worker's own address, which Cloudflare gives it whatever its routes. */
 const OWN = "https://poplin.example-account.workers.dev";
@@ -86,7 +86,7 @@ describe("the setup page", () => {
     const opened = await readShell((await before[1]?.text()) ?? "");
     const [script = ""] = opened.scripts;
     const file = await ask(worker, `${OWN}${script}`);
-    const login = await logIn(worker, w);
+    await logIn(worker, w);
     const after = [await ask(worker, `${ADMIN}/setup`), await ask(worker, `${OWN}/setup`), await ask(instance(w), `${ADMIN}/setup`), await ask(worker, `${OWN}/`), await ask(worker, `${OWN}${script}`)];
     const posted = await repair(worker, `${ADMIN}/setup`, { token: TOKEN });
 
@@ -94,16 +94,15 @@ describe("the setup page", () => {
     // Drift: the page is the one place a token of the whole account is typed into; under a looser policy a script of another origin could read it.
     expect([before[0]?.headers.get("Content-Security-Policy"), before[0]?.headers.get("Cache-Control")]).toEqual([POLICY, "no-store"]);
     expect([(opened.boot as SetupBoot).setup.boxes, script.startsWith("/setup/assets/"), file.status, file.headers.get("Content-Type")]).toEqual(["login", true, 200, "text/javascript;charset=utf-8"]);
-    expect(login.status).toBe(302);
     expect([...after, posted].map((answer) => answer.status)).toEqual([404, 404, 404, 404, 404, 404]);
     expect(asked).toEqual([]);
   });
 
   // Drift: the Worker's own address is beside every route and every rule of the zone, and in front of no Access application: anything of the install answered there would be reached around all of them.
-  test("is all the Worker's own address answers: no site, no API, no login, and no dashboard page or data, with or without a token or a session", async () => {
+  test("is all the Worker's own address answers: no site, no API, and no dashboard page or data, with or without a token of the API or of Access", async () => {
     const worker = instance(w);
     const token = await tokenOf(w, "admin");
-    const session = { Cookie: cookieOf(await logIn(worker, w)), Authorization: `Bearer ${token}`, ...(await accessHeaders(w)) };
+    const session = { ...(await logIn(worker, w)), Authorization: `Bearer ${token}` };
     const paths = ["/", "/api/whoami", "/api/sites", "/login", "/settings", "/domain", "/data/sites", "/data/settings", "/index.html"];
     const answers = await Promise.all(paths.map((path) => ask(worker, `${OWN}${path}`, { headers: session })));
 
@@ -193,12 +192,12 @@ describe("the setup page", () => {
     const strangerSaid = await stranger.text();
     const between = [await logins(), JSON.stringify(account.policies).includes(OWNER), JSON.stringify(account.policies).includes(meant)];
     const corrected = await call({ token: TOKEN, login: meant });
-    const old = await logIn(worker, w);
+    const old = await ask(worker, `${ADMIN}/`, { headers: await accessHeaders(w) });
 
     expect([first.status, stranger.status, strangerSaid]).toEqual([200, 403, JSON.stringify({ ok: false, refusal: "token" })]);
     expect(between).toEqual([[OWNER], true, false]);
     expect([corrected.status, (await corrected.json<{ expects?: string }>()).expects, await logins()]).toEqual([200, meant, [meant]]);
-    expect([JSON.stringify(account.policies).includes(OWNER), JSON.stringify(account.policies).includes(meant), old.status === 302]).toEqual([false, true, false]);
+    expect([JSON.stringify(account.policies).includes(OWNER), JSON.stringify(account.policies).includes(meant), old.status]).toEqual([false, true, 403]);
   });
 
   // Drift: the page takes a secret from anyone who finds it, so its only guard against guessing is the count of tries.
@@ -218,21 +217,23 @@ describe("the setup page", () => {
 });
 
 describe("an install whose setup has not written ACCESS", () => {
-  // Drift: a Worker that refused to start without the variable could never show the page that writes it; one that started and let the login through would let anyone in.
-  test("answers setup, keeps the login and every private address shut, and lets the owner in once the variable is there", async () => {
+  // Drift: a Worker that refused to start without the variable could never show the page that writes it; one that started and admitted a token it has nothing to check with would let anyone in.
+  test("answers setup, keeps the dashboard and every private address shut, and lets the owner in once the variable is there", async () => {
     const unfinished = instance(w, cloudflareOf(account, asked));
     const headers = await accessHeaders(w);
     const setup = await ask(unfinished, `${OWN}/setup`, {}, UNFINISHED);
-    const login = await ask(unfinished, `${ADMIN}/login`, { headers }, UNFINISHED);
+    const login = await ask(unfinished, `${ADMIN}/`, { headers }, UNFINISHED);
+    const data = await ask(unfinished, `${ADMIN}/data/frame`, { headers }, UNFINISHED);
 
     const site = await publish(instance(w), await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
     const shut = await ask(unfinished, `${under(site, "p")}/`, { headers }, UNFINISHED);
     const opened = await ask(instance(w), `${under(site, "p")}/`, { headers });
-    const finished = await logIn(instance(w), w);
+    // The helper throws unless the owner's first page is answered.
+    await logIn(instance(w), w);
 
     expect([setup.status, login.status, await login.text(), login.headers.get("Set-Cookie")]).toEqual([200, 503, "The login is not set up yet. Finish the setup of this install first.\n", null]);
+    expect([data.status, ((await data.json()) as { code: string }).code]).toEqual([503, "login_not_set_up"]);
     expect([shut.status, (await shut.text()).includes("report"), opened.status, await opened.text()]).toEqual([404, false, 200, "<h1>report</h1>"]);
-    expect(finished.status).toBe(302);
   });
 });
 
@@ -315,9 +316,9 @@ describe("the Domain screen", () => {
   }
 
   // Drift: the screen is the only place a login added in Settings reaches Cloudflare's login from, and it was built and never mounted once before.
-  test("is there for a logged-in admin with the token's rights, checks without a change, repairs with the pasted token, and is the login to anyone else", async () => {
+  test("is there for a logged-in admin with the token's rights, checks without a change, repairs with the pasted token, and is refused to anyone else", async () => {
     const worker = instance(w, cloudflareOf(account, asked));
-    const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const session = await logIn(worker, w);
     const strangers = [await ask(worker, `${ADMIN}/domain`), await ask(worker, `${ADMIN}/data/domain`), await send(worker, `${ADMIN}/data/domain/repair`, { token: TOKEN })];
     const shell = await ask(worker, `${ADMIN}/domain`, { headers: session });
     const opened = await ask(worker, `${ADMIN}/data/domain`, { headers: session });
@@ -327,7 +328,7 @@ describe("the Domain screen", () => {
     const none = writes();
     const repaired = await send(worker, `${ADMIN}/data/domain/repair`, { token: TOKEN }, session);
 
-    expect(strangers.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[302, `${ADMIN}/login?return=${encodeURIComponent("/domain")}`], [401, null], [401, null]]);
+    expect(strangers.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[403, null], [401, null], [401, null]]);
     expect([asked.length > 0, shell.status, ((await readShell(await shell.text())).boot as { domain: boolean }).domain]).toEqual([true, 200, true]);
     expect([form.tokenRights.includes("Workers Scripts: Edit"), form.tokenRights.includes("Zone Settings: Read")]).toEqual([true, true]);
     // Drift: the link carries nine rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.

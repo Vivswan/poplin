@@ -14,8 +14,8 @@ import { type Bench, cleanUp, jsonOf, openBench, type Ran } from "./support/harn
 /** The admin who sits at the dashboard. */
 const ADA = "ada@example.com" as Email;
 
-/** The cookie the test dashboard takes for Ada's session. */
-const SESSION = "session=ada";
+/** The header the test dashboard takes for Ada's login, where a provider's verified token would be. */
+const AS_ADA = { "Test-Login": "ada" } as const;
 
 /** The form of a login's secret and of a token, wherever one sits in a text. */
 const CREDENTIAL = /poplin_login_[0-9a-f]{16}_[0-9a-f]{64}|poplin_[0-9a-f]{16}_[0-9a-f]{64}/g;
@@ -28,7 +28,7 @@ interface SendOptions {
   /** Whether the decision goes as a form, which a page of any origin can send; it goes as JSON unless said. */
   readonly form?: boolean;
 
-  /** Whether the decision carries the admin's session; it does unless said. */
+  /** Whether the decision carries the admin's login; it does unless said. */
   readonly session?: boolean;
 }
 
@@ -56,7 +56,7 @@ interface Desk {
   /** Every secret and token the API answered with. */
   readonly credentials: Set<string>;
 
-  /** Ask the dashboard for a page or for data, with the admin's session unless said. */
+  /** Ask the dashboard for a page or for data, with the admin's login unless said. */
   readonly get: (path: string, session?: boolean) => Promise<Response>;
 
   /** Send a decision on a login as the dashboard's client does. */
@@ -81,8 +81,8 @@ async function openDesk(): Promise<Desk> {
   const dashboard = createConsole({
     install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
     version: "1.0.0",
-    readSession: async (headers) => (headers.get("Cookie") === SESSION ? { ok: true, value: ADA } : { ok: false }),
-    loginPath: "/login",
+    admit: async (headers) => (headers.get("Test-Login") === AS_ADA["Test-Login"] ? { ok: true, actor: { scope: "admin", holder: ADA }, since: 0 } : { ok: false, refusal: "no-proof" }),
+    entered: async () => undefined,
     base: "",
     client: CLIENT,
     freeLimits: FREE_LIMITS,
@@ -101,7 +101,7 @@ async function openDesk(): Promise<Desk> {
   };
 
   const get: Desk["get"] = async (path, session = true) => {
-    const answer = await dashboard.fetch(new Request(new URL(path, ORIGIN), { headers: session ? { Cookie: SESSION } : {} }));
+    const answer = await dashboard.fetch(new Request(new URL(path, ORIGIN), { headers: session ? AS_ADA : {} }));
     pages.push(await answer.clone().text());
 
     return answer;
@@ -110,7 +110,7 @@ async function openDesk(): Promise<Desk> {
   const decide: Desk["decide"] = async (decision, options = {}) => {
     const body = options.form === true ? new URLSearchParams(Object.entries(decision).map(([key, value]) => [key, String(value)])).toString() : JSON.stringify(decision);
     const type = options.form === true ? "application/x-www-form-urlencoded" : "application/json";
-    const headers = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": type, ...(options.session === false ? {} : { Cookie: SESSION }) };
+    const headers = { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": type, ...(options.session === false ? {} : AS_ADA) };
     const answer = await dashboard.fetch(new Request(new URL("/data/logins/decide", ORIGIN), { method: "POST", headers, body }));
     pages.push(await answer.clone().text());
 
@@ -241,7 +241,7 @@ describe("logIn", () => {
 
   // Drift: a link an attacker sent the admin, or a page of another origin posting for them, must not let a computer in; each row is one way to press Allow that is not the admin choosing to.
   test.each([
-    ["with no session", { session: false }, "terminal", 401, "no_session"],
+    ["with no login behind it", { session: false }, "terminal", 401, "no_login"],
     ["as a form, which a page of any origin can send", { form: true }, "terminal", 415, "not_json"],
     ["with letters that are not the terminal's", {}, "other", 400, "not_confirmed"],
     ["with no letters", {}, "none", 400, "bad_argument"],

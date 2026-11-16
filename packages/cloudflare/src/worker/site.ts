@@ -8,7 +8,7 @@
 // The one query finds the site and reads beside it what the instance holds no longer: the settings once their minute ran out, and the site's count of the day once its half minute did.
 // Under `p`, and at an address that names no site, the settings are read first and on their own: the login is checked before any site is looked up.
 //
-// Access stands in front of every `p` address at the edge. The token it puts on a request is checked here all the same, and the email against the logins of the last minute.
+// Access stands in front of every `p` address at the edge. The token it puts on a request is checked here all the same, and the email against the users of the last minute.
 // A request under `p` without that proof came around Access: it is looked up nowhere.
 // Only a request the site's files are read for counts against the site. Every other counts against its visitor's minute alone, so the limits tell nobody whether a private id exists.
 // The limits count the request against its day before it is served, and its one write comes after the answer, since only the answer says whether a page was opened.
@@ -17,16 +17,16 @@
 import { checkSiteLimits, countRequest, isPageView, takeVisitorMinute } from "@poplin/app/src/limits/limits";
 import { refusalResponse } from "@poplin/app/src/limits/refusal";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
+import { admit } from "@poplin/app/src/login/admit";
 import { serveSite } from "@poplin/app/src/sites/serve";
 import { noteProblem } from "@poplin/core/src/actions/problems";
-import { isLogin } from "@poplin/core/src/auth/logins";
 import type { Address, ServedLookup, ServedSite } from "@poplin/core/src/database/database";
 import type { Site } from "@poplin/core/src/records/site";
 import { dayOf } from "@poplin/core/src/records/views";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import { clientAddress } from "../limits/client-address";
 import type { Held, SiteHeld } from "./held";
-import type { Instance } from "./start";
+import { type Instance, whyRefused } from "./start";
 import { plain } from "./util";
 
 /** A request the limits let through, counted against no site's day. */
@@ -121,13 +121,12 @@ function sameAddress(one: Address, other: Address | undefined): boolean {
 async function proofOf(request: Request, addressed: Addressed, context: { readonly instance: Instance; readonly held: Held; readonly now: number }): Promise<Proof> {
   if (addressed.kind !== "site" || addressed.letter !== "p") return NOT_ASKED;
 
-  const identity = await context.instance.identify(request.headers, context.now);
-  if (identity.ok && isLogin(context.held.logins, identity.value)) return { kind: "vouched" };
+  const who = await admit(request.headers, { identify: context.instance.identify, logins: context.held.logins, now: context.now });
+  if (who.ok) return { kind: "vouched" };
 
-  const refusal = identity.ok ? "not-a-login" : identity.refusal;
-  console.warn(`poplin: a request for a private site was refused: ${refusal}`);
+  console.warn(`poplin: a request for a private site was refused: ${who.refusal}`);
 
-  return refusal === "keys-unavailable" ? { kind: "unchecked" } : { kind: "refused" };
+  return whyRefused(who.refusal) === "unchecked" ? { kind: "unchecked" } : { kind: "refused" };
 }
 
 /** Count a request against its visitor's minute, by the visitor limit and the secret of what the instance holds. */

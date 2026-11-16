@@ -40,13 +40,13 @@ export const SIZE = { bytes: 1000, files: 4 };
 /** What an install with no site holds. */
 export const NOTHING: Totals = { sites: 0, trashed_sites: 0, bytes: 0, files: 0 };
 
-/** A signing key of one repeated byte, so a leak of it shows which key leaked. */
+/** A visitor key of one repeated byte, so a leak of it shows which key leaked. */
 export const FIRST_KEY = new Uint8Array(32).fill(0xa1);
 
-/** A second signing key, of another byte. */
+/** A second visitor key, of another byte. */
 export const SECOND_KEY = new Uint8Array(32).fill(0xb2);
 
-/** A third signing key, of another byte again. */
+/** A third visitor key, of another byte again. */
 export const THIRD_KEY = new Uint8Array(32).fill(0xc3);
 
 /** A UTC day requests are counted on. */
