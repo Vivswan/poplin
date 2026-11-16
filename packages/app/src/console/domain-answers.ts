@@ -40,7 +40,7 @@ const REPAIRED: readonly DomainState[] = ["created", "changed", "removed"];
 const KEPT: Readonly<Record<Exclude<KeptPiece["state"], "unread"> | UnreadReason, Pick<ShownRow, "state" | "tone"> & { readonly counts: DomainState }>> = {
   ok: { state: "present", tone: "good", counts: "present" },
   needs_repair: { state: "needs repair", tone: "bad", counts: "missing" },
-  not_set_up: { state: "not set up", tone: "idle", counts: "left-out" },
+  not_set_up: { state: "optional", tone: "idle", counts: "left-out" },
   failed: { state: "failed", tone: "bad", counts: "failed" },
   missing_right: { state: "failed", tone: "bad", counts: "failed" },
   not_run: { state: "not run", tone: "idle", counts: "failed" },
