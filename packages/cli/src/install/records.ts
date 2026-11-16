@@ -80,7 +80,8 @@ export type Stop =
   | { readonly problem: "no_provider"; readonly exit: 1; readonly lines: readonly string[] }
   | ({ readonly problem: "already_installed"; readonly exit: 1; readonly version: string | undefined; readonly address: string; readonly newest: string | undefined; readonly next: Next } & Mending)
   | { readonly problem: "no_install" | "unfinished" | "another_version"; readonly exit: 1; readonly words: string; readonly next: Next }
-  | { readonly problem: "leftover" | "name_held"; readonly exit: 1; readonly words: string; readonly address: string }
+  | { readonly problem: "leftover"; readonly exit: 1; readonly words: string; readonly address: string }
+  | { readonly problem: "name_held"; readonly exit: 1; readonly words: string; readonly address: string; readonly next: Next }
   | { readonly problem: "blocked"; readonly exit: 1; readonly blocked: readonly Blocked[] }
   | { readonly problem: "token_refused" | "no_domain" | "stopped" | "crashed" | "other_place" | "not_confirmed" | "changed"; readonly exit: 1; readonly words: string }
   | { readonly problem: "unreachable"; readonly exit: 5; readonly words: string };

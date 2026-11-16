@@ -49,6 +49,9 @@ const BOUND = [
   { name: INSTALL_OBJECTS.jobsBinding, type: "workflow", told: `${INSTALL_OBJECTS.jobsBinding} (Workflow ${workflowNameOf(SCRIPT)}, class ${INSTALL_OBJECTS.jobsClass})` },
 ] as const;
 
+/** The command that takes an install whose Worker has its bindings back, as its sentence names it. */
+const HELD_COMMANDS = { install: "poplin install again", repair: "poplin doctor --repair" } as const;
+
 /** A list as a sentence says it. */
 const LISTED = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
@@ -192,18 +195,18 @@ export function isOwn(bindings: readonly ListedBinding[]): boolean {
 }
 
 /** Why a Worker of the name that is not poplin's own stops a run: a stranger, or an install that lost a binding, which is told with what it lacks and the command that takes it once that is back. Neither is told to be deleted. */
-function heldWords(bindings: readonly ListedBinding[]): string {
-  if (!isNamed(bindings)) return WORDS.held;
+function heldBy(bindings: readonly ListedBinding[]): Pick<Extract<FoundHere, { readonly state: "held" }>, "words" | "after"> {
+  if (!isNamed(bindings)) return { words: WORDS.held, after: "again" };
 
   const lacked = lackedBy(bindings);
   const back = lacked.length === 1 ? "the binding" : "the bindings";
   // With its bindings back, a Worker that is set is found whole, which a repair takes; one that is not set is found started, which an install goes on from.
-  const next = boundInstall(bindings) === undefined ? "poplin install again" : "poplin doctor --repair";
-
-  return (
+  const after = boundInstall(bindings) === undefined ? "install" : "repair";
+  const words =
     `A Worker named ${SCRIPT} is in this account. It carries poplin's name and lacks ${LISTED.format(lacked)}: it looks like an install that was deployed again by hand. ` +
-    `Keep it: it may hold the install's keys. Put ${back} back on the Worker's Bindings page in your browser, then run ${next}.`
-  );
+    `Keep it: it may hold the install's keys. Put ${back} back on the Worker's Bindings page in your browser, then run ${HELD_COMMANDS[after]}.`;
+
+  return { words, after };
 }
 
 /**
@@ -322,7 +325,7 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
 
   if (bindings.value === undefined) return standing(place, false, rights);
 
-  if (!isOwn(bindings.value)) return { state: "held", words: heldWords(bindings.value), address: pagesOf(accountId).worker };
+  if (!isOwn(bindings.value)) return { state: "held", ...heldBy(bindings.value), address: pagesOf(accountId).worker };
 
   const address = dashboardOf(bindings.value);
 

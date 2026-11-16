@@ -289,7 +289,7 @@ describe("what a look finds", () => {
   });
 
   test.each([
-    ["a held name", { state: "held", words: "A program named poplin is in this account and is not poplin's. Rename or delete it, then run this again.", address: "https://host.example.com/programs" }, 1, "name_held"],
+    ["a held name", { state: "held", words: "A program named poplin is in this account and is not poplin's. Rename or delete it, then run this again.", address: "https://host.example.com/programs", after: "again" }, 1, "name_held"],
     ["a block", { state: "blocked", blocked: [{ what: "storage_off", words: "Storage is not switched on for this account", address: "https://host.example.com/storage" }] }, 1, "blocked"],
     ["a refused token", { state: "refused", why: "token", words: "the account token was refused" }, 1, "token_refused"],
     ["a place the token does not show", { state: "refused", why: "no_domain", words: "the account token shows no such place" }, 1, "no_domain"],

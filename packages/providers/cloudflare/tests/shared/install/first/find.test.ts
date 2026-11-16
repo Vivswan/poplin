@@ -76,18 +76,20 @@ describe("the states of an account", () => {
       [...MARKS.filter((mark) => mark.name !== "JOBS"), ...SET],
       "A Worker named poplin is in this account. It carries poplin's name and lacks JOBS (Workflow poplin-jobs, class PoplinJobs): it looks like an install that was deployed again by hand. " +
         "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run poplin doctor --repair.",
+      "repair",
     ],
     [
       "a Worker that is not set and kept its name alone",
       MARKS.slice(3),
       "A Worker named poplin is in this account. It carries poplin's name and lacks SITES (R2 bucket poplin-sites), DB (D1 database poplin), and JOBS (Workflow poplin-jobs, class PoplinJobs): it looks like an install that was deployed again by hand. " +
         "Keep it: it may hold the install's keys. Put the bindings back on the Worker's Bindings page in your browser, then run poplin install again.",
+      "install",
     ],
-    ["a Worker with none of poplin's name", MARKS.slice(0, 3), "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again."],
-  ] as const)("tells %s in words that never say to delete it", async (_, bindings, words) => {
+    ["a Worker with none of poplin's name", MARKS.slice(0, 3), "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again.", "again"],
+  ] as const)("tells %s in words that never say to delete it, and names the command its words name for a program", async (_, bindings, words, after) => {
     const address = `https://dash.cloudflare.com/${ACCOUNT}/workers/services/view/poplin`;
 
-    for (const where of [DOMAIN, NONE]) expect((await found(fresh({ noWorker: false, bindings: [...bindings] }), where)).shown).toEqual({ state: "held", words, address });
+    for (const where of [DOMAIN, NONE]) expect((await found(fresh({ noWorker: false, bindings: [...bindings] }), where)).shown).toEqual({ state: "held", words, address, after });
   });
 
   // Drift: a whole install is never touched by an install. Its version and its address are what the command tells the person in place of making anything.

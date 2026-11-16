@@ -5,7 +5,7 @@ import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/i
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
 import type { Next, Provider, Stop } from "../records";
-import { changesIn, DRY_RUN_HELP, dryRunLines, followed, type Line, NEXT, optionLines, repairAfter, rowValues, runLines, UNCHANGED } from "../report";
+import { changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, repairAfter, rowValues, runLines, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -55,7 +55,7 @@ export function stopOf(found: NotWhole, provider: Provider): Stop {
 
   if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
 
-  if (found.state === "held") return { problem: "name_held", exit: 1, words: found.words, address: found.address };
+  if (found.state === "held") return heldStop(found, NEXT.repair(), provider);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
