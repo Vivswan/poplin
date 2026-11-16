@@ -13,8 +13,8 @@ const CUT = "...";
 /** The most characters of a message that are read at all. */
 const MOST_READ = 2000;
 
-/** Text between double quotes or backticks, and between single quotes that open after no letter: a quoted value, never an apostrophe. */
-const QUOTED = /"[^"]*"|`[^`]*`|(?<![A-Za-z])'[^']*'/g;
+/** Text from a double quote, a backtick, or a single quote that opens after no letter, to the quote that closes it or to the end of what is read: a quoted value, never an apostrophe. */
+const QUOTED = /"[^"]*(?:"|$)|`[^`]*(?:`|$)|(?<![A-Za-z])'[^']*(?:'|$)/g;
 
 /** A word of letters, underscores, and apostrophes, or a short number such as a status, in brackets or before one mark of punctuation. The word itself is the one group. */
 const KEPT_WORD = /^\(?([A-Za-z][A-Za-z_']{0,39}|\d{1,6})\)?[.,:;!?]?$/;

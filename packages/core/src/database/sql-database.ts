@@ -763,7 +763,7 @@ export class SqlDatabase implements Database {
     return { kind: "name_taken" };
   }
 
-  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full" | "writes_full">> {
+  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full"> | (Refused<"day_full" | "writes_full"> & { readonly left: number })> {
     requireDay(room.day);
     const manifest = manifestToText(upload.manifest);
     const bytes = upload.manifest.reduce((sum, file) => sum + file.size, 0);
@@ -802,10 +802,12 @@ export class SqlDatabase implements Database {
 
     if (room.sites !== null && Number(measured?.sites) >= room.sites) return { kind: "sites_full" };
 
-    // Only a refused upload pays for the read that says which bound of the day it did not fit.
-    const [day] = await this.#driver.batch([written(fragment`SELECT ${dayFiles} AS files`)]);
+    // Only a refused upload pays for the read that says which bound of the day it did not fit, and how much of that bound is left.
+    const [day] = await this.#driver.batch([written(fragment`SELECT ${dayFiles} AS files, ${writesOf(room.day)} AS writes`)]);
+    const declared = Number(day?.rows[0]?.files);
+    if (declared + checked.files > room.dayFiles) return { kind: "day_full", left: Math.max(0, room.dayFiles - declared) };
 
-    return { kind: Number(day?.rows[0]?.files) + checked.files > room.dayFiles ? "day_full" : "writes_full" };
+    return { kind: "writes_full", left: Math.max(0, room.dayWrites - Number(day?.rows[0]?.writes)) };
   }
 
   async getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined> {

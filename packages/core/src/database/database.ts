@@ -669,10 +669,14 @@ export interface Database {
    *
    * The files it declares and the writes it makes are added to the counts of its day in the same step, and the counts of the days before the day before it are dropped.
    *
-   * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`, `day`, `writes`; of uploads recorded at the same moment only those that fit together are kept
+   * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`, `day`, `writes`; of uploads recorded at the same moment only those that fit together are kept.
+   * `left` is how much of the day's bound was still free: files for `day_full`, writes for `writes_full`, and 0 for a day that is used up
    * @throws {Error} a value breaks its field rule, the manifest is empty or names a path twice, or the id or the folder and number are already an upload's
    */
-  addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full" | "day_full" | "writes_full">>;
+  addUpload(
+    upload: NewUpload,
+    room: UploadRoom,
+  ): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full"> | (Refused<"day_full" | "writes_full"> & { readonly left: number })>;
 
   /** The upload with this id and its manifest, which is empty once the upload is finished or abandoned. */
   getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined>;

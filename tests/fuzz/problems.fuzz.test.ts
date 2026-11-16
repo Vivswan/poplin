@@ -16,6 +16,8 @@ const SHAPES: Readonly<Record<string, RegExp>> = {
   "a key and its value": /[=&%#\\<>]/,
 };
 
+const SECRET = "salary";
+
 const property = fuzzTarget(import.meta.file);
 
 const hex = (length: number): fc.Arbitrary<string> => fc.string({ unit: fc.constantFrom(..."0123456789abcdef"), minLength: length, maxLength: length });
@@ -37,6 +39,16 @@ property(
     const left = Object.keys(SHAPES).filter((shape) => SHAPES[shape]?.test(text.replaceAll("...", " ")));
 
     expect([left, (kept.message ?? "").length <= 200]).toEqual([[], true]);
+  }),
+);
+
+// A value in quotes can be plain words, which no shape above gives away: `SECRET` stands for one.
+property(
+  "nothing of a quoted value is kept, whether its closing quote is read, lies beyond what is read, or is missing",
+  fc.property(fc.array(words, { maxLength: 6 }), fc.constantFrom('"', "`", "'"), fc.integer({ min: 1, max: 400 }), fc.boolean(), (parts, quote, times, closes) => {
+    const message = [...parts, `${quote}${`${SECRET} `.repeat(times)}${closes ? quote : ""}`, "failed"].join(" ");
+
+    expect(problemDetail(new Error(message)).message ?? "").not.toContain(SECRET);
   }),
 );
 

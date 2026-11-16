@@ -168,7 +168,7 @@ export async function beginImport(
 
   const upload = { ...placed, id: mintUploadId(), owner: actor.holder, manifest: files, created_at: entered.signed.at };
   const added = await install.database.addUpload(upload, roomUnder(entered.settings, { makesSite: true, writes: files.length }, entered.signed.at));
-  if (added.kind !== "done") return refuseFull(install, added.kind);
+  if (added.kind !== "done") return refuseFull(install, added);
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);
 

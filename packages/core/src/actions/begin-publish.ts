@@ -37,8 +37,8 @@ const FULL = {
   writes_full: refuse("allowance_spent", "max_storage_writes_per_day"),
 } as const;
 
-/** The problem noted for each bound that is a limit of the day. */
-const DAY_LIMITS: Partial<Record<keyof typeof FULL, ProblemKind>> = { day_full: "files_limit_reached", writes_full: "writes_limit_reached" };
+/** The problem noted for each bound that is a limit of the day, once the day is used up. */
+const DAY_LIMITS = { day_full: "files_limit_reached", writes_full: "writes_limit_reached" } as const satisfies Partial<Record<keyof typeof FULL, ProblemKind>>;
 
 /** Measures a manifest as the database stores it. */
 const UTF8 = new TextEncoder();
@@ -65,6 +65,9 @@ export interface UploadLimits {
 
 /** What bounds the files a publish declares: what one request can carry, and the most files `max_files_per_publish` allows. */
 type ManifestBounds = UploadLimits & { readonly perPublish: number };
+
+/** What the database answers for an upload it did not record. */
+type NotAdded = Exclude<Awaited<ReturnType<Database["addUpload"]>>, { readonly kind: "done" }>;
 
 /** The codes a publish may be refused with as it begins. */
 type BeginCode =
@@ -141,15 +144,14 @@ export function checkManifest(
 }
 
 /**
- * Refuse an upload that did not fit its room. A bound that is a limit of the day is noted as a problem, once on the day it is reached.
+ * Refuse an upload that did not fit its room. A limit of the day is noted as a problem only once the day is used up: an upload too large for what is left is refused and nothing more, since a smaller one still fits.
  *
- * @param bound - the bound the database said the upload did not fit
+ * @param full - what the database said the upload did not fit
  */
-export async function refuseFull<Bound extends keyof typeof FULL>(install: Pick<Install, "database" | "now">, bound: Bound): Promise<(typeof FULL)[Bound]> {
-  const reached = DAY_LIMITS[bound];
-  if (reached !== undefined) await noteProblem(install, reached);
+export async function refuseFull(install: Pick<Install, "database" | "now">, full: NotAdded): Promise<(typeof FULL)[keyof typeof FULL]> {
+  if ("left" in full && full.left === 0) await noteProblem(install, DAY_LIMITS[full.kind]);
 
-  return FULL[bound];
+  return FULL[full.kind];
 }
 
 /**
@@ -299,7 +301,7 @@ export async function beginPublish(
 
   const upload = { id: mintUploadId(), folder: planned.folder, number: planned.number, owner: actor.holder, plan: planned.plan, manifest: files, created_at: install.now() };
   const added = await install.database.addUpload(upload, planned.room);
-  if (added.kind !== "done") return refuseFull(install, added.kind);
+  if (added.kind !== "done") return refuseFull(install, added);
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);
 

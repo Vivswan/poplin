@@ -28,6 +28,19 @@ describe("problemDetail", () => {
     expect(problemDetail(new Error(message))).toEqual({ name: "Error", message: kept });
   });
 
+  // Drift: only the first 2,000 characters are read, so a quoted value whose closing quote lies beyond them, or was never written, would be kept as plain words.
+  test.each<readonly [what: string, quote: string]>([
+    ["double quotes", '"'],
+    ["backticks", "`"],
+    ["single quotes", "'"],
+  ])("a quoted value that runs to the end of what is read is cut, in %s", (_what, quote) => {
+    const beyond = `unexpected bytes ${quote}${"private salary ".repeat(150)}${quote} in body`;
+    const unclosed = `unexpected bytes ${quote}private salary`;
+    const closed = `unexpected bytes ${quote}private salary${quote} in body`;
+
+    expect([beyond, unclosed, closed].map((message) => problemDetail(message).message)).toEqual(["unexpected bytes ...", "unexpected bytes ...", "unexpected bytes ... in body"]);
+  });
+
   // Drift: the row's column holds 200 characters and the database refuses more, so a long message would lose the whole note.
   test("a long message is cut to 200 characters, the last three saying so", () => {
     const { message } = problemDetail(new Error("word ".repeat(400)));
