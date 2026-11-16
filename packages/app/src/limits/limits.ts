@@ -155,17 +155,6 @@ export async function takeVisitorMinute(asked: Pick<Asked, "visitor" | "now"> & 
 }
 
 /**
- * Decide whether a request for a site may proceed, and count it against its minutes and its day when it may. `countRequest` writes the day's count once the request is answered.
- *
- * @returns `ok` with `requests`, what `countRequest` is handed, or the first limit that refused in the order visitor, site, day, site-share; a day limit is lifted at the next midnight UTC
- */
-export async function checkLimits(asked: Asked, counters: Counters): Promise<Verdict> {
-  const visitor = await takeVisitorMinute(asked, counters);
-
-  return visitor.ok ? checkSiteLimits(asked, counters) : visitor;
-}
-
-/**
  * Decide the limits of a served site for a request whose visitor's minute is taken already: the site's minute, then the day and the site's share of it.
  *
  * @returns `ok` with `requests`, what `countRequest` is handed, or the first limit that refused in the order site, day, site-share
@@ -201,7 +190,7 @@ export function isPageView(request: Request, response: Response): boolean {
  *
  * Nothing of the visitor is counted or kept: no address, no key, no header. A count that fails is one request uncounted, never a request refused.
  *
- * @param counted - the site that answered, the time of the request, the `requests` `checkLimits` answered for it, and whether the answer was a page, from `isPageView`
+ * @param counted - the site that answered, the time of the request, the `requests` `checkSiteLimits` answered for it, and whether the answer was a page, from `isPageView`
  */
 export async function countRequest(
   counted: { readonly site: SiteId; readonly now: number; readonly requests: number; readonly page: boolean },
