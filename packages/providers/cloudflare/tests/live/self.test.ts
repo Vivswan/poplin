@@ -354,21 +354,29 @@ describe("the live checks, against a local fake", () => {
     expect(await drillOn(refusal)).toMatchObject({ said: [], result: "failed", failure: expect.stringMatching(failure), left });
   }, RUN_MS);
 
-  // Drift: a tool call that failed said nothing of why, so a run that met one stray answer could not be read; and the answer's own words may quote an address, which a log must not hold.
-  test("a tool call the install refuses says the problem's code and the status, and nothing else of the answer", async () => {
+  // Drift: a tool call that failed said nothing of why, so a run that met one stray answer, or a request that never left, could not be read.
+  // The words of an answer and of a runtime's failure may quote an address, which a log must not hold.
+  test.each<[string, (input: string) => Promise<Response>, string]>([
+    [
+      "a tool call the install refuses says the problem's code and the status, and nothing else of the answer",
+      async (input) => Response.json({ error: { code: "forbidden", message: `Refused at ${input}.` } }, { status: 403 }),
+      "problem forbidden, last status of 400 or more: 403",
+    ],
+    [
+      "a tool call whose request gets no answer says the code of what caused the failure, and none of its words",
+      async (input) => Promise.reject(new TypeError(`fetch failed for ${input}`, { cause: Object.assign(new Error(`the certificate of ${input}`), { code: "CERT_HAS_EXPIRED" }) })),
+      "problem unreachable, no answer of status 400 or more, requests with no answer: CERT_HAS_EXPIRED",
+    ],
+  ])("%s", async (_what, answer, met) => {
     const fake = await openFake();
-    const refusing: Fetch = async (input, init) => {
-      if (init.method !== "POST" || new URL(input).pathname !== "/api/uploads") return fake.fetch(input, init);
-
-      return Response.json({ error: { code: "forbidden", message: `Refused at ${input}.` } }, { status: 403 });
-    };
-    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: refusing, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY };
+    const failing: Fetch = async (input, init) => (init.method === "POST" && new URL(input).pathname === "/api/uploads" ? answer(input) : fake.fetch(input, init));
+    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: failing, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY };
     const { bench, close } = openBench({ ...parts, say: () => undefined });
     OPENED.push(close);
 
     const failure = await bench.mcp("publish_site", { path: bench.folder("<p>refused</p>"), name: "refused" }).then(() => "no failure", String);
 
-    expect(failure).toBe("Error: the MCP tool publish_site answered an error: problem forbidden, last status of 400 or more: 403");
+    expect(failure).toBe(`Error: the MCP tool publish_site answered an error: ${met}`);
   }, RUN_MS);
 
   // Drift: the line is how a person reading a run learns whether files went straight to the bucket. One that said "used" for a file that went through the install would hide a key the bucket refuses.

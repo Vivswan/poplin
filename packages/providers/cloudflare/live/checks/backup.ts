@@ -70,7 +70,7 @@ async function restoreAndCompare(bench: Bench, made: readonly LiveSite[]): Promi
     // The counts, and of each site that failed its problem's code and the last status: the answer's other keys hold the zip's path and the site's label, which a failure would print.
     const ran = await bench.cli("import", zip);
     const { imported, skipped, failed, sites } = ran.value;
-    const met = (Array.isArray(sites) ? sites : []).filter((site) => site?.result === "failed").map((site) => failureOf(site, ran.refused));
+    const met = (Array.isArray(sites) ? sites : []).filter((site) => site?.result === "failed").map((site) => failureOf(site, ran.met));
     expect({ imported, skipped, failed, met }).toEqual({ imported: 1, skipped: 0, failed: 0, met: [] });
   }
 
