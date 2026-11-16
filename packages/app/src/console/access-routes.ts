@@ -3,8 +3,8 @@
 //   GET  /logins                   the newest logins that wait, and how many more wait
 //   GET  /logins/<id>              one waiting login, to review: no part of its code
 //   POST /logins/decide            deny a login, or allow it with the scope the person chose and the end of its code, which they typed; counted as a try at a code
-//   GET  /people                   the emails that can log in, and which one asks
-//   POST /people/add, /remove      one email in, or out, in one step each; the users are then carried to the provider's list, and `note` is the sentence of a change that did not reach it
+//   GET  /people                   the emails that can log in, which one asks, and how many tokens that work each is behind
+//   POST /people/add, /remove      one email in, or out with every token that user allowed, in one step each; the users are then carried to the provider's list, and `note` is the sentence of a change that did not reach it
 //   GET  /tokens                   every token that works, never its value; ?sort= with ?dir=; and the newest that ended
 //   POST /tokens/<id>/remove       the token stops working, and is listed among the ended ones
 
@@ -12,7 +12,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { decideLogin, listLogins, showLogin } from "@poplin/core/src/actions/computer-logins";
 import { readConfig } from "@poplin/core/src/actions/config";
 import { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
-import { listTokenStates, revokeToken } from "@poplin/core/src/actions/manage-tokens";
+import { countUserTokens, listTokenStates, revokeToken } from "@poplin/core/src/actions/manage-tokens";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import * as v from "valibot";
 
@@ -116,8 +116,12 @@ export const accessRoutes = new Hono<Shared>()
   .get("/people", async (context) => {
     const { install, actor } = context.get("asker");
     const config = await readConfig(install, actor);
+    if (!config.ok) return refused(context, config);
 
-    return config.ok ? context.json({ ok: true as const, logins: config.values.logins, you: context.get("email") }) : refused(context, config);
+    const counted = await countUserTokens(install, actor);
+    if (!counted.ok) return refused(context, counted);
+
+    return context.json({ ok: true as const, logins: config.values.logins, you: context.get("email"), tokens: counted.counts });
   })
   .post("/people/add", vValidator("json", PERSON, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

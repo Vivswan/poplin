@@ -35,7 +35,7 @@ const WITH_DETAIL: Readonly<Partial<Record<AuditEntry["action"], (detail: AuditE
   access: (detail) => (typeof detail.access === "string" ? `Made it ${detail.access}` : undefined),
   details: expiryWords,
   token_added: (detail) => named("Added the token", detail.note),
-  token_revoked: (detail) => named("Removed the token", detail.note),
+  token_revoked: (detail) => named(typeof detail.user === "string" ? "Removed with its user, the token" : "Removed the token", detail.note),
   login_allowed: (detail) => named("Allowed the token", detail.computer),
   login_denied: (detail) => named("Denied the token", detail.computer),
   update_started: (detail) => (typeof detail.to === "string" ? `Started an update to ${detail.to}${detail.automatic === true ? " by itself" : ""}` : undefined),

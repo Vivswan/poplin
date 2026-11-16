@@ -68,7 +68,7 @@ CREATE TABLE earlier_ids (
   folder TEXT NOT NULL REFERENCES sites (folder) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID`;
 
-/** The hashed record of every token. Only an admin token expires. A removed token keeps its row for a time, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
+/** The hashed record of every token; only an admin token expires. `allowed_by` is the user behind it. A removed token keeps its row for a time, with when and by whom, and `user_removed` when its user went; `end_at` is its removal, else its expiry. */
 const TOKENS = `
 CREATE TABLE tokens (
   id TEXT NOT NULL PRIMARY KEY,
@@ -77,11 +77,14 @@ CREATE TABLE tokens (
   note TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   expires_at INTEGER,
+  allowed_by TEXT NOT NULL,
   removed_at INTEGER,
   removed_by TEXT,
+  user_removed INTEGER NOT NULL DEFAULT 0 CHECK (user_removed IN (0, 1)),
   end_at INTEGER GENERATED ALWAYS AS (coalesce(removed_at, expires_at)) VIRTUAL,
   CHECK ((scope = 'admin') = (expires_at IS NOT NULL)),
-  CHECK ((removed_at IS NULL) = (removed_by IS NULL))
+  CHECK ((removed_at IS NULL) = (removed_by IS NULL)),
+  CHECK (user_removed = 0 OR removed_at IS NOT NULL)
 ) STRICT, WITHOUT ROWID`;
 
 /** The settings of the whole install, in one row. */
@@ -353,6 +356,7 @@ export const CREATE_SCHEMA: Step = {
     "CREATE INDEX audit_logins ON audit (action, actor, at) WHERE action = 'login'",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",
     "CREATE INDEX tokens_by_end ON tokens (end_at DESC, id DESC)",
+    "CREATE INDEX tokens_by_user ON tokens (allowed_by, expires_at) WHERE removed_at IS NULL",
     "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
     "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",
     "CREATE INDEX logins_by_visitor ON logins (state, visitor, created_at, expires_at)",

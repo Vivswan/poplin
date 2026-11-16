@@ -30,10 +30,10 @@ export type TokenRecord = { readonly id: TokenId; readonly hash: string; readonl
 /**
  * What is told of a token that ended: never its hash. `endedAt` is when it was removed, or when it ran out.
  *
- * A token removed after it ran out counts as removed, at its removal.
+ * A token removed after it ran out counts as removed, at its removal. `user_removed` is a token that ended because the user behind it was removed, and `by` is who removed that user.
  */
 export type EndedToken = { readonly id: TokenId; readonly note: string; readonly createdAt: number; readonly endedAt: number } & (
-  | { readonly how: "removed"; readonly scope: Scope; readonly by: Holder }
+  | { readonly how: "removed" | "user_removed"; readonly scope: Scope; readonly by: Holder }
   | { readonly how: "ran_out"; readonly scope: "admin" }
 );
 

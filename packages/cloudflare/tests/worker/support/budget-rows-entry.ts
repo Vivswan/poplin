@@ -332,7 +332,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${ADMIN}/api/whoami`);
     },
     status: 401,
-    budget: { queries: 6, read: 50, reads: 0, writes: 0 },
+    budget: { queries: 6, read: 52, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,

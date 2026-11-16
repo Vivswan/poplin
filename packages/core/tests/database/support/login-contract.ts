@@ -331,6 +331,97 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       await expect(database.addLogin("Bo@Example.com" as Login, BY_ADA)).rejects.toThrow();
       await expect(database.removeLogin("" as Login, BY_ADA)).rejects.toThrow();
     });
+
+    // Drift: a token is its user's. A removal that left the user's tokens alive would keep that person in through every computer they allowed; one that ended a token of a user who stays would break a working agent.
+    test("removing a user ends each token that user is behind, in the same step and each with its entry; a refused removal, a token that ran out, and the tokens of a user who stays are left as they were", async () => {
+      const database = await opened(makeDatabase);
+      const bo = "bo@example.com" as Login;
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo] }, BY_ADA);
+      const token = async (scope: "admin" | "publisher", note: string, now = NOW): Promise<TokenRecord> => (await mintToken({ scope, note, now })).record;
+      const [stays, laptop, ci, old] = [await token("publisher", "stays"), await token("admin", "laptop", NOW + 1), await token("publisher", "ci", NOW + 2), await token("admin", "old", NOW - 31 * 86_400_000)];
+      await database.addToken(stays, { by: ADMIN, at: NOW });
+      for (const made of [laptop, old]) await database.addToken(made, { by: bo, at: NOW });
+      // One made by a token is its maker's user's, and so is one that user allowed from a terminal.
+      await database.addToken(ci, { by: laptop.id, at: NOW });
+      const login = await pendingLogin();
+      const agent = await token("publisher", "agent", NOW + 3);
+      await database.addComputerLogin(login, ROOM);
+      await database.decideComputerLogin(login.code, { state: "allowed", by: bo, at: NOW });
+      await database.redeemComputerLogin(login.id, agent);
+      // An approval the user gave and no terminal collected yet goes with the user too.
+      const waiting = await pendingLogin();
+      await database.addComputerLogin(waiting, ROOM);
+      await database.decideComputerLogin(waiting.code, { state: "allowed", by: bo, at: NOW });
+      const held = [...(await database.countUserTokens(NOW + 4))].sort();
+      const working = async (): Promise<string[]> => (await database.listTokenStates(NOW + 9, 50)).live.map(({ note }) => note).sort();
+
+      const refused = await database.removeLogin(ADMIN, { by: ADMIN, at: NOW + 4 });
+      const untouched = await working();
+      const removed = await database.removeLogin(bo, { by: ADMIN, at: NOW + 5 });
+      const again = await database.removeLogin(bo, { by: ADMIN, at: NOW + 6 });
+      // A request that was let in before the removal and stores its token after it stores none: the user behind the token that signs is gone, though one such token only ran out, and so is the user who allowed the waiting login.
+      const late = [
+        await database.addToken(await token("publisher", "late"), { by: laptop.id, at: NOW + 6 }),
+        await database.addToken(await token("publisher", "late"), { by: old.id, at: NOW + 6 }),
+        await database.redeemComputerLogin(waiting.id, await token("publisher", "late", NOW + 6)),
+      ];
+      await database.addLogin(bo, { by: ADMIN, at: NOW + 7 });
+      const states = await database.listTokenStates(NOW + 9, 50);
+      const went = (made: TokenRecord): unknown => ({ id: made.id, scope: made.scope, note: made.note, createdAt: made.createdAt, endedAt: NOW + 5, how: "user_removed", by: ADMIN });
+
+      expect<unknown>([held, refused.kind, untouched, removed.kind, again.kind]).toEqual([
+        [
+          [ADMIN, 1],
+          [bo, 3],
+        ],
+        "no_working_login",
+        ["agent", "ci", "laptop", "stays"],
+        "done",
+        "unchanged",
+      ]);
+      expect<unknown>([states.live, [...states.ended].sort((left, right) => left.note.localeCompare(right.note)), [...(await database.countUserTokens(NOW + 9))]]).toEqual([
+        [stays],
+        [went(agent), went(ci), went(laptop), { id: old.id, scope: "admin", note: "old", createdAt: old.createdAt, endedAt: old.createdAt + 30 * 86_400_000, how: "ran_out" }],
+        [[ADMIN, 1]],
+      ]);
+      expect(await Promise.all([laptop, ci, agent].map((made) => database.getToken(made.id)))).toEqual([undefined, undefined, undefined]);
+      expect(late).toEqual([{ kind: "signer_gone" }, { kind: "signer_gone" }, { kind: "not_allowed" }]);
+      expect(await auditDetails(database, "token_revoked")).toEqual([
+        { token: laptop.id, scope: "admin", note: "laptop", user: bo },
+        { token: ci.id, scope: "publisher", note: "ci", user: bo },
+        { token: agent.id, scope: "publisher", note: "agent", user: bo },
+      ]);
+    });
+
+    // Drift: `poplin config logins` and an import replace the whole list. A list that dropped a user and kept that user's tokens would be the way round the removal.
+    test("a list of logins that leaves users out ends their tokens with it, and a list that keeps everyone ends none", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy] }, BY_ADA);
+      const minted = await Promise.all(["ada", "bo", "cy"].map((note) => mintToken({ scope: "publisher", note, now: NOW })));
+      const [ofAda, ofBo, ofCy] = minted.map((mint) => mint.record);
+      if (ofAda === undefined || ofBo === undefined || ofCy === undefined) throw new Error("the tokens were not minted");
+
+      await database.addToken(ofAda, { by: ADMIN, at: NOW });
+      await database.addToken(ofBo, { by: bo, at: NOW });
+      await database.addToken(ofCy, { by: cy, at: NOW });
+      const live = async (): Promise<string[]> => (await database.listTokens()).map(({ note }) => note).sort();
+
+      await database.changeSettings({ logins: [cy, bo, ADMIN], trash_days: 9 }, { by: ADMIN, at: NOW + 1 });
+      const kept = await live();
+      await database.changeSettings({ logins: [ADMIN, "di@example.com" as Login] }, { by: ADMIN, at: NOW + 2 });
+
+      expect([kept, await live()]).toEqual([["ada", "bo", "cy"], ["ada"]]);
+      expect((await database.listTokenStates(NOW + 3, 50)).ended.map(({ note, how, endedAt }) => [note, how, endedAt]).sort()).toEqual([
+        ["bo", "user_removed", NOW + 2],
+        ["cy", "user_removed", NOW + 2],
+      ]);
+      expect((await auditTrail(database)).slice(-3).map(({ action, by }) => [action, by])).toEqual([
+        ["token_revoked", ADMIN],
+        ["token_revoked", ADMIN],
+        ["settings_changed", ADMIN],
+      ]);
+    });
   });
 }
 
@@ -425,6 +516,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
     // Drift: an admin may let a computer in for less than it asked. A lowered login that kept its scope would hand out an admin's token after the admin chose a publisher's, and the audit log would name the wrong one.
     test("a login allowed as a publisher is stored, audited, and redeemed as a publisher's, and a denied one keeps what it asked", async () => {
       const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
       const asks = async (): Promise<PendingLogin> => ({ ...(await pendingLogin()), scope: "admin" });
       const [lowered, kept, denied] = [await asks(), await asks(), await asks()];
       for (const login of [lowered, kept, denied]) await database.addComputerLogin(login, ROOM);
@@ -443,6 +535,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
         ["admin", "denied"],
       ]);
       expect((await auditTrail(database)).map((entry) => [entry.action, entry.detail])).toEqual([
+        ["settings_set", {}],
         ["login_allowed", { scope: "publisher", computer: "laptop" }],
         ["login_allowed", { scope: "admin", computer: "laptop" }],
         ["login_denied", { scope: "admin", computer: "laptop" }],
@@ -466,6 +559,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
     // Drift: the token is handed out once; a login that stayed after its token was stored, or two callers both served, would mint a second token nobody allowed.
     test("an allowed login gives one token, signed by who allowed it, and is gone; no other login gives any", async () => {
       const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
       const [allowed, pending, denied, stale] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin(), pendingLogin()]);
       for (const login of [allowed, pending, denied, stale]) await database.addComputerLogin(login, ROOM);
       for (const login of [allowed, stale]) await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
