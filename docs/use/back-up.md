@@ -57,3 +57,12 @@ Cloudflare keeps a history of the install's database, named `poplin`, and calls 
 - **It overwrites the database in place.** The command prints a bookmark that undoes the restore.
 - **A site deleted for good stays gone.** Its record comes back and its files do not, so a browser that holds no copy of a page gets a 404.
 - **The export stays the backup.** It alone holds the files, and it outlasts the 7 days.
+
+### Before the install is used again
+
+The restore also undoes what was removed after the moment it goes back to. Go through this list first.
+
+| After the restore                                             | So                                                         | Do                                                                           |
+| ------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| a token removed after that moment is a token again            | it works again, unless it ran out since                    | Access, Tokens: remove it again. It is in the list above Removed tokens      |
+| a user removed after that moment is a user again              | their email is in `logins` again                           | Access, Users: remove them again, before the next Repair                     |
