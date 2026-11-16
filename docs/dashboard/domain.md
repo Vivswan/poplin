@@ -39,6 +39,8 @@ Three rows are Cloudflare's login:
 
 The row `Key` is the key poplin keeps at Cloudflare. Repair makes one where the install has none, or one Cloudflare no longer takes: [The kept key](../about/security.md#the-kept-key).
 
+The row `Upload key` is the key that sends a publish's files straight to the bucket. Repair makes it the same way: [The upload key](../about/security.md#the-upload-key). An install without it still publishes, through the Worker.
+
 ## Without a domain
 
 On an install [without a domain](../start/without-a-domain.md) the screen is the same, with other rows. Its first line says `No domain: your sites answer at Cloudflare's free address.`
@@ -51,6 +53,7 @@ On an install [without a domain](../start/without-a-domain.md) the screen is the
 | Access open paths  | the paths a program reaches without the login                          |
 | Worker variable    | what the Worker reads at its start                                     |
 | Key                | [the key poplin keeps](../about/security.md#the-kept-key)              |
+| Upload key         | [the key that sends files straight to the bucket](../about/security.md#the-upload-key) |
 | D1 database        | the database of the install                                            |
 
 It has no DNS record, route, or rule, and its account token needs no permission of a zone. The optional parts below are of an install under a domain.

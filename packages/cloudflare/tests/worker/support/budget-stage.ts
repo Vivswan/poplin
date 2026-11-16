@@ -33,6 +33,9 @@ export interface Stage {
 
   /** The Workflow the measured instance is bound to. A row sets it to measure an install that has one; left alone, the install has none. */
   jobs?: Workflow<Job>;
+
+  /** The upload key the measured instance holds, as its secret's text. A row sets it to measure an install that sends files straight to the bucket; left alone, the install holds none. */
+  uploadKey?: string;
 }
 
 /** The instance a row's request is sent to, and the counted bindings every request to it carries. */
@@ -215,7 +218,8 @@ export async function costOf(row: BudgetRow): Promise<Cost> {
   const stage = await stageOf();
   const step = await row.arrange(stage);
   const tally = emptyTally();
-  const bindings = { ...talliedBindings(tally), ...(stage.keptKey === undefined ? {} : { KEPT_KEY: stage.keptKey }), ...(stage.jobs === undefined ? {} : { JOBS: stage.jobs }) };
+  const secrets = { ...(stage.keptKey === undefined ? {} : { KEPT_KEY: stage.keptKey }), ...(stage.uploadKey === undefined ? {} : { UPLOAD_KEY: stage.uploadKey }) };
+  const bindings = { ...talliedBindings(tally), ...secrets, ...(stage.jobs === undefined ? {} : { JOBS: stage.jobs }) };
   const measured: Measured = { worker: instance(stage.w, stage.outside.cloudflare, stage.outside.latest), bindings, w: stage.w };
 
   if (row.start !== "new") {

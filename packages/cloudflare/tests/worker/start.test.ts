@@ -3,11 +3,12 @@
 
 import { reset } from "cloudflare:test";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { sha256Of } from "@poplin/core/src/storage/storage";
 import { type Outside, startInstance } from "../../src/worker/start";
 import { emptyAccount, KEY_VALUE_START, TOKEN } from "../zone/support/fake-install";
 import type { Asked } from "../zone/support/replies";
 import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
-import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, instance, send, tokenOf, type World, world } from "./support/install";
+import { ADMIN, accessHeaders, api, ask, BINDINGS, cloudflareOf, done, instance, page, send, tokenOf, type World, world } from "./support/install";
 
 /** A key in the form the reader takes, and nothing like one Cloudflare makes. */
 const KEY = "kept-key-of-the-test";
@@ -156,5 +157,36 @@ describe("a schema step that fails at the start", () => {
     expect(started).toEqual({ ok: false, failure: { kind: "failed" } });
     expect(printed.map((line) => line.split("\n")[0])).toEqual(["Error: poplin: step 1 of the database's schema failed and nothing of it was kept (RangeError)"]);
     expect(printed.filter((line) => line.includes(stored) || line.includes("UNIQUE"))).toEqual([]);
+  });
+});
+
+describe("the upload key of an instance", () => {
+  /** The secret part of the key every case here holds: no answer may carry it. */
+  const SECRET = "5".repeat(64);
+
+  /** The upload key as the Worker keeps it, made so long before the clock's time. */
+  const keyMade = (agoMs: number): string => JSON.stringify({ id: "0123456789abcdef0123456789abcdef", secret: SECRET, bucket: "poplin-sites", minted_at: w.clock.now - agoMs });
+
+  const ages: readonly { readonly name: string; readonly secret: () => unknown; readonly direct: boolean }[] = [
+    { name: "no upload key", secret: () => undefined, direct: false },
+    { name: "a secret that is no upload key", secret: () => "kept-key-of-the-test", direct: false },
+    { name: "an upload key made one second short of two and a half minutes ago", secret: () => keyMade(149_000), direct: false },
+    { name: "an upload key made two and a half minutes ago", secret: () => keyMade(150_000), direct: true },
+    { name: "an upload key the clock dates to a moment that is still to come", secret: () => keyMade(-60_000), direct: false },
+  ];
+
+  // Drift: the bucket refuses a new key for about two minutes. An install that signed with it at once would hand out tickets the bucket refuses, on the first publish after every setup and every repair.
+  test.each(ages)("$name: a begun publish is handed tickets $direct for the bucket, and no answer holds the key's secret", async ({ secret, direct }) => {
+    const worker = instance(w);
+    const token = await tokenOf(w, "admin");
+    const file = page("<p>a page</p>");
+    const files = [{ path: file.path, size: file.body.byteLength, content_type: file.type, sha256: await sha256Of(file.body) }];
+    const calls = api(worker, token, (input, init) => ask(worker, input, init, { ...BINDINGS, UPLOAD_KEY: secret() }));
+    const begun = await calls.uploads.$post({ query: {}, json: { name: "report", files } });
+    const text = await begun.clone().text();
+    const { upload, tickets } = await done<{ upload: { id: string }; tickets: { url: string }[] }>(begun);
+    const places = tickets.map((ticket) => (URL.canParse(ticket.url) ? new URL(ticket.url).origin : ticket.url.replace(upload.id, ":upload")));
+
+    expect([places, text.includes(SECRET)]).toEqual([[direct ? `https://${EXAMPLE_ACCOUNT}.r2.cloudflarestorage.com` : "/api/uploads/:upload/file?path=index.html"], false]);
   });
 });

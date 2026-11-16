@@ -727,6 +727,41 @@ describe("the staged publish over HTTP", () => {
     ]);
   });
 
+  // Drift: one place picks between the two ways a file goes. A host's tickets that were not handed out would send every file through the install for ever; a sender that could not turn back to the install would fail where the store refuses.
+  test("a host with tickets of its own hands those out as an upload begins and when more are asked for; a sender that asks through the install gets the install's own route, and each upload that turns so is noted once", async () => {
+    const install = await openApi();
+    const asOwner = install.as(install.tokens.owner);
+    const ask = async (upload: string, json: { paths: string[]; through?: "install" }): Promise<string[]> =>
+      ((await answered(asOwner.uploads[":upload"].tickets.$post({ param: { upload }, json, query: {} }))).body.tickets as { url: string }[]).map((ticket) => ticket.url.replace(upload, ":upload"));
+    const own = ["/api/uploads/:upload/file?path=index.html"];
+    const noted = async (): Promise<(string | number)[][]> => (await install.database.listProblems(dayOf(NOW))).map(({ kind, count }) => [kind, count]);
+
+    // A host with no tickets: the install's own route, and a sender that names it is told nothing new and noted for nothing.
+    const plain = await staged(install, { name: "plain" });
+    const without = [await ask(plain, { paths: ["index.html"] }), await ask(plain, { paths: ["index.html"], through: "install" }), await noted()];
+
+    install.direct.tickets = { issue: async (_upload, files) => files.map(({ file, key }) => ({ path: file.path, url: `https://store.example.net/${key.split("/").slice(1).join("/")}`, method: "PUT", headers: {}, expires: NOW + 600_000 })) };
+    const begun = await answered(asOwner.uploads.$post({ json: { name: "report", files: manifest(PAGES) }, query: {} }));
+    const upload = part(begun, "upload").id as string;
+    const past = ["https://store.example.net/v1/index.html"];
+    const handed = [(begun.body.tickets as { url: string }[]).map((ticket) => ticket.url)[0], await ask(upload, { paths: ["index.html"] })];
+    // A sender that names an upload it has none of is refused, and noted for nothing.
+    const refused = await answered(asOwner.uploads[":upload"].tickets.$post({ param: { upload: NO_UPLOAD }, json: { paths: ["index.html"], through: "install" }, query: {} }));
+    const unnoted = [refused.status, await noted()];
+    // Two calls at once for one upload, as two lanes of one publish send them, are one turn.
+    const turned = await Promise.all([ask(upload, { paths: ["index.html"], through: "install" }), ask(upload, { paths: ["index.html"], through: "install" })]);
+
+    // An hour on, a second upload turns, in two calls as a publish of more than a hundred files does: one more is counted, not two.
+    install.clock.now += 3_600_000;
+    const later = await staged(install, { name: "later" });
+    const again = [await ask(later, { paths: ["index.html"], through: "install" }), await ask(later, { paths: ["index.html"], through: "install" })];
+    // The first upload goes on after the second turned: it was noted already, and is counted no more.
+    const back = await ask(upload, { paths: ["index.html"], through: "install" });
+
+    expect([without, unnoted]).toEqual([[own, own, []], [404, []]]);
+    expect([handed, turned, again, back, await noted()]).toEqual([[past[0], past], [own, own], [own, own], own, [["direct_upload_refused", 2]]]);
+  });
+
   // Drift: a call for tickets is bounded to a hundred paths of the upload's own manifest; one that answered more, or a path nobody declared, would hand out leave nobody counted.
   test("tickets are refused for no path, more than a hundred, a path twice, a path the manifest does not name, and an upload that is finished", async () => {
     const install = await openApi();

@@ -2,7 +2,9 @@
 
 import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import { beginLogin, LOGIN_REQUEST } from "@poplin/core/src/actions/computer-logins";
+import { issueTickets, type TICKETS_REQUEST } from "@poplin/core/src/actions/issue-tickets";
 import { tokenObject, type WHOAMI_ANSWER } from "@poplin/core/src/actions/manage-tokens";
+import { noteProblem } from "@poplin/core/src/actions/problems";
 import { type Install, type Refused, refuse } from "@poplin/core/src/actions/records";
 import { type UPDATE_STATE, updateOf } from "@poplin/core/src/actions/update";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
@@ -32,6 +34,12 @@ const ROUTE_TICKETS: Tickets = {
     });
   },
 };
+
+/** The host's tickets that send a file straight to the store, past the install, asked for as each request comes: `undefined` while the host has none to hand out. */
+export type Direct = () => Tickets | undefined;
+
+/** The uploads each install noted as turned back to its own route, so the calls that go on with one of them are noted no more. */
+const TURNED = new WeakMap<Install["database"], Set<string>>();
 
 /** What an action answers, behind its promise. */
 type AnswerOf<Action extends (...parameters: never[]) => Promise<unknown>> = Awaited<ReturnType<Action>>;
@@ -80,12 +88,35 @@ export async function checked<Schema extends v.GenericSchema, Answer>(
 }
 
 /**
- * Give an install the tickets its uploads' files are sent by, for a request that begins an upload or asks for tickets.
+ * Give an install the tickets its uploads' files are sent by, for a request that begins an upload or asks for tickets. This is the one place that picks between the two ways a file goes.
  *
- * @returns the install with `ROUTE_TICKETS`
+ * @param direct - the host's tickets past the install; absent on a host that has none
+ * @returns the install with the host's tickets while it hands any out, else with `ROUTE_TICKETS`
  */
-export function ticketed(install: Install): Install {
-  return { ...install, tickets: ROUTE_TICKETS };
+export function ticketed(install: Install, direct?: Direct): Install {
+  return { ...install, tickets: direct?.() ?? ROUTE_TICKETS };
+}
+
+/**
+ * Hand out more tickets of a pending upload, of the kind its sender asks for: the ones `ticketed` picks, or with `through` the install's own route, after the store refused the sender's files.
+ *
+ * @param asked - the upload's id as sent, and what a `TICKETS_REQUEST` passed
+ * @param direct - the host's tickets past the install, as `ticketed` takes them
+ * @returns what `issueTickets` answers. An upload that is handed the install's route while the host hands tickets out is noted as the problem `direct_upload_refused`, once however many calls it goes on with
+ */
+export async function ticketsFor(install: Install, actor: Actor, asked: v.InferOutput<typeof TICKETS_REQUEST> & { readonly upload: string }, direct?: Direct): ReturnType<typeof issueTickets> {
+  const request = { upload: asked.upload, paths: asked.paths };
+  if (asked.through === undefined) return issueTickets(ticketed(install, direct), actor, request);
+
+  const issued = await issueTickets({ ...install, tickets: ROUTE_TICKETS }, actor, request);
+  const turned = TURNED.get(install.database) ?? new Set<string>();
+  if (!issued.ok || direct?.() === undefined || turned.has(asked.upload)) return issued;
+
+  // Marked before the note is written, so a call that comes meanwhile for the same upload notes nothing.
+  TURNED.set(install.database, turned.add(asked.upload));
+  await noteProblem(install, "direct_upload_refused");
+
+  return issued;
 }
 
 /**

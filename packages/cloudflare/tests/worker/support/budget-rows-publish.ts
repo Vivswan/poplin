@@ -21,6 +21,9 @@ const TWO_PAGES = 1001;
 /** The files a copy of up to a thousand takes in one call: a site of so many is copied and made in that one call. */
 const COPIED_AT_ONCE = 112;
 
+/** An upload key made long before any row's clock, in the text the Worker keeps it as: the install signs tickets with it. */
+const UPLOAD_KEY = JSON.stringify({ id: "0123456789abcdef0123456789abcdef", secret: "5".repeat(64), bucket: "poplin-sites", minted_at: 0 });
+
 /** One file's bytes, as every made-up file holds them. */
 const BODY = new TextEncoder().encode("x");
 
@@ -116,6 +119,38 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
     },
     status: 200,
     budget: { queries: 2, read: 2, written: 0, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "publish 5,000 files: the tickets of a hundred files, signed for the bucket",
+    route: "POST /api/uploads/:upload/tickets",
+    // Worst: the same hundred paths on an install that holds an upload key, each signed in the request. Signing asks neither the database nor the bucket.
+    arrange: async (stage) => {
+      const token = await adminToken(stage);
+      const upload = await uploadOf(stage, token, { declared: MOST_FILES, stored: 0 });
+      const paths = Array.from({ length: 100 }, (_path, at) => filePath(MOST_FILES - 1 - at));
+      stage.uploadKey = UPLOAD_KEY;
+
+      return (measured) => apiOf(measured, token).uploads[":upload"].tickets.$post({ param: { upload }, query: {}, json: { paths } });
+    },
+    status: 200,
+    budget: { queries: 2, read: 2, written: 0, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "publish 5,000 files: the tickets of a hundred files, after the bucket refused them",
+    route: "POST /api/uploads/:upload/tickets",
+    // Worst: the first sender of an hour that turns back to the install on one that holds an upload key. It is noted as a problem, in one more query that writes its one row.
+    arrange: async (stage) => {
+      const token = await adminToken(stage);
+      const upload = await uploadOf(stage, token, { declared: MOST_FILES, stored: 0 });
+      const paths = Array.from({ length: 100 }, (_path, at) => filePath(MOST_FILES - 1 - at));
+      stage.uploadKey = UPLOAD_KEY;
+
+      return (measured) => apiOf(measured, token).uploads[":upload"].tickets.$post({ param: { upload }, query: {}, json: { paths, through: "install" } });
+    },
+    status: 200,
+    budget: { queries: 3, read: 3, written: 1, reads: 0, writes: 0 },
   },
   {
     group,

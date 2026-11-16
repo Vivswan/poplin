@@ -136,8 +136,11 @@ export function openBench(parts: BenchParts): OpenBench {
   const prefix = `${SWEPT_PREFIX}${parts.run}`;
   let made = 0;
   let asked = 0;
+  const files = { install: 0, away: 0 };
   const counted: Fetch = (input, init) => {
     asked += 1;
+    // The one thing a command sends by PUT is a file of an upload.
+    if (init.method === "PUT") files[new URL(input).origin === admin ? "install" : "away"] += 1;
 
     return parts.fetch(input, init);
   };
@@ -299,6 +302,7 @@ export function openBench(parts: BenchParts): OpenBench {
       loginList: parts.loginList ?? (async () => Promise.reject(new Error("the run holds no key to read the provider's login list with"))),
       cli,
       asked: () => asked,
+      sentFiles: () => ({ ...files }),
       mcp,
       folder,
       manyFiles,

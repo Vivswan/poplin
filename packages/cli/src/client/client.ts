@@ -46,6 +46,9 @@ const CUT_CODES: ReadonlySet<unknown> = new Set(["ECONNRESET", "UND_ERR_SOCKET"]
 /** The line told when a request is sent once more. */
 const SENT_AGAIN = "the connection to the install was cut before any answer: sending the request again";
 
+/** The status another place than the install answers a file it stored nothing of, because its ticket writes once and something is there, or because the bytes are not the ones the ticket binds. */
+const NOT_WRITTEN = 412;
+
 /** The platform's `fetch`, or a stand-in for it. */
 export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -113,8 +116,8 @@ type Answering<Done> = Promise<Raw & { json(): Promise<Done | ApiError> }>;
  * `call` sends the one request `ask` makes of the routes, and answers the route's answer, checked against `form`, or the failure. A form the route's answer does not fit does not compile.
  *
  * `send` sends the bytes of one file of an upload to the address its ticket names, by the ticket's method and with its headers. A ticket that names a path is sent to that path of the install.
- * The token goes with them only to the install's own origin. Any answer in the 200s is the file taken; any other is read as `call` reads a refusal.
- *
+ * The token goes with them only to the install's own origin. Any answer in the 200s is the file taken; any other answer of the install is read as `call` reads a refusal.
+ * Another place's answer is never read: 412 is a file the place holds already or would not take, which the finish of the upload tells apart, and any other status is `unexpected` with that status, of which 403 is a ticket the place takes no more.
  * `download` asks for one stored file of one version of a site. Its bytes are not read here: the caller reads the stream to its end or cancels it, and a read that breaks off throws there.
  */
 export interface Client {
@@ -211,6 +214,20 @@ function codeOf(error: unknown): unknown {
   if (typeof error !== "object" || error === null) return undefined;
 
   return "code" in error ? error.code : codeOf("cause" in error ? error.cause : undefined);
+}
+
+/**
+ * Read the answer of another place than the install to a file sent by its ticket, by its status alone: what the place writes is its own, and is not passed on.
+ *
+ * A 412 is taken as the file sent: the place tells a file it holds already from bytes it would not take by no status, and the install says which as the upload is finished.
+ */
+async function readElsewhere(response: Raw): Promise<Called<undefined>> {
+  const { status } = response;
+  await response.body?.cancel().catch(() => undefined);
+
+  if ((status >= OK && status < REDIRECT) || status === NOT_WRITTEN) return { ok: true, value: undefined };
+
+  return failed({ kind: "unexpected", status, ...waitOf(response) });
 }
 
 /** The media type a header holds percent-encoded; `undefined` for a header that is absent or is no such text. */
@@ -312,12 +329,12 @@ export function createClient(options: ClientOptions): Client {
 
     const place = new URL(ticket.url, options.server);
     // The token is for the install alone: a ticket that names another place is sent with its own headers and nothing of the login.
-    const own = place.origin === new URL(options.server).origin && options.token !== undefined;
-    const sent = own ? { ...ticket.headers, Authorization: `Bearer ${options.token}` } : ticket.headers;
+    const own = place.origin === new URL(options.server).origin;
+    const sent = own && options.token !== undefined ? { ...ticket.headers, Authorization: `Bearer ${options.token}` } : ticket.headers;
     // A stream is sent as it is read, which the request must say.
     const put = (signal: AbortSignal): Promise<Raw> => options.fetch(place.href, { method: ticket.method, headers: sent, body, duplex: "half", redirect: "manual", signal } as RequestInit);
 
-    return ask(FILE_TIMEOUT_MS, (_api, signal) => put(signal), readSent);
+    return ask(FILE_TIMEOUT_MS, (_api, signal) => put(signal), own ? readSent : readElsewhere);
   };
 
   const download: Client["download"] = ({ site, version, path }) => {

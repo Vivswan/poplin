@@ -54,6 +54,9 @@ const NOT_ASKED = "a run started by hand with the many-files check switched on (
 /** Why the check of the users is skipped on a run that cannot read Cloudflare's list. */
 const NO_PROVIDER_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read the login list at Cloudflare";
 
+/** What a run that was told nothing of the install counts on no knowledge of: its upload key. */
+const NO_WORD_OF_KEY = "a run that says whether the install holds an upload key the bucket takes";
+
 /** Why the checks that need a token are skipped when the run has none. */
 const NO_TOKEN = "an admin token of the install in POPLIN_LIVE_TOKEN";
 
@@ -80,7 +83,8 @@ function installOf(): LiveInstall | undefined {
 
 /** What the run already knows the install to lack. */
 function knownMissing(): Missing {
-  const known: Missing = JSON.parse(setting("POPLIN_LIVE_MISSING") ?? "{}");
+  const told = setting("POPLIN_LIVE_MISSING");
+  const known: Missing = told === undefined ? { "settled-upload-key": NO_WORD_OF_KEY } : JSON.parse(told);
   if (setting("POPLIN_LIVE_TOKEN") === undefined) known.token = NO_TOKEN;
 
   if (setting("POPLIN_LIVE_MANY_FILES") !== "1") known["many-files"] = NOT_ASKED;

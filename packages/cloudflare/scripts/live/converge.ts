@@ -69,6 +69,12 @@ const NOT_PERMITTED = /status 40[13]/;
 /** What a login needs on an account whose Access is off: no API switches it on. */
 const ACCESS_OFF = "Access switched on for the account";
 
+/** The row of the key that sends files straight to the bucket. */
+const UPLOAD_KEY = "Upload key";
+
+/** What a run lacks whose repair made that key, or could not read it. */
+const FRESH_KEY = "an upload key older than two and a half minutes (this run made the key, or could not read it, and the bucket refuses a new one for about two minutes)";
+
 /** What the live suite calls the thing each optional object gives. */
 const CAPABILITIES: Readonly<Record<string, string>> = {
   "Redirect rule": "https-redirect",
@@ -309,6 +315,11 @@ function unsettledResult(row: DomainRow): string {
   return refusal === undefined ? row.state : `${row.state} (${refusal})`;
 }
 
+/** Whether a row is the upload key's, of a key that was not there before the run: made by it, or not read. */
+function isFreshKey(row: { readonly object: string; readonly state: string }): boolean {
+  return row.object === UPLOAD_KEY && row.state !== "present";
+}
+
 /** Run the zone plug's repair, the same code the Domain tab runs, and sort its rows into the summary and the lacking things. */
 async function repairZone(run: Run, found: Extract<Found, { readonly kind: "domain" }>, login: string, progress: Progress): Promise<Stop | undefined> {
   const logins = parseLogins([login]);
@@ -326,6 +337,9 @@ async function repairZone(run: Run, found: Extract<Found, { readonly kind: "doma
 function sortRows(run: Run, progress: Progress, rows: readonly DomainRow[]): Stop | undefined {
   let failed: Stop | undefined;
   let skipped: Stop | undefined;
+
+  // A key this run made is one the bucket refuses for its first minutes: the check of the way a file goes then counts on no direct ticket.
+  if (rows.some(isFreshKey)) progress.missing["settled-upload-key"] ??= FRESH_KEY;
 
   for (const row of rows) {
     if (SETTLED.has(row.state)) {

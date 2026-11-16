@@ -80,7 +80,8 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
-| the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
+| the Worker, to the bucket and the database | its bindings inside Cloudflare | no database key exists outside Cloudflare; the one bucket key is the upload key below |
+| the CLI, to the bucket, for the files of a publish | one ticket a file: a signed address that lives 10 minutes | the Worker signs it with the upload key, which never leaves the Worker; [The upload key](#the-upload-key) says what a ticket and the key can reach |
 | the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
 | the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
@@ -104,6 +105,35 @@ The page that allows a computer's login treats what the login says of itself as 
 | refuses a name with a line break, a control character, or a character that hides or turns text around | a name reads as it was written |
 
 A site belongs to the token that created it, or to the admin's email when it was duplicated on the dashboard. A publisher token updates and manages only the sites it created.
+
+## The upload key
+
+```text
+poplin ./report  ->  the Worker hands out one ticket a file  ->  each file goes straight to the bucket
+```
+
+A ticket is a signed address for one file. The bucket itself checks it:
+
+| A ticket allows | The bucket refuses |
+| --- | --- |
+| one write, to the one place the publish declared | another place, a read, a removal, a second write |
+| the declared length, type, and SHA-256 | other bytes, another length, another type |
+| 10 minutes, or to within a second of the publish's own end where that is sooner | a ticket that ran out |
+
+Repair makes the key beside the kept key, as an API token named "poplin upload key" that the account owns.
+
+| Question | Answer |
+| --- | --- |
+| Where it lives | on the Worker, as an encrypted secret, `UPLOAD_KEY`. Not in the database, a backup, or an export. Only a hash of the token is kept |
+| What it reaches | the objects of the install's one bucket: it can read, write, list, and delete them. Cloudflare has no narrower right that writes |
+| What it may not do | reach another bucket, the database, a Worker, the domain, or the account's settings; make another key |
+| What a publisher sees | the account's id and the bucket's name, in the address of each ticket |
+| How to end it | delete the token "poplin upload key" at Cloudflare, under Manage Account, Account API Tokens. Publishing goes on, through the Worker |
+| How to get a new one | press Repair on the Domain screen with an account token |
+
+Whoever holds the key itself, which only the Worker's code can read, could read and change every file of every site from outside the Worker, private sites included.
+
+Without the key, or for the first minutes of a new one, every file goes through the Worker, checked the same way. A file the bucket refuses twice goes through the Worker too, and the install notes [a problem](../fix/problems.md#what-is-noted).
 
 ## The kept key
 

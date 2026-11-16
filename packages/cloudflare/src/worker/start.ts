@@ -8,7 +8,7 @@
 //   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`
 //   visitor key        stored, only while none exists
 //   KEPT_KEY           read once; absent or no key, the install holds none   never a fault, and never quoted
-//   UPLOAD_KEY         read once, as the kept key is                         never a fault, and never quoted
+//   UPLOAD_KEY         read once, as the kept key is                         never a fault, and never quoted; with one that is old enough, an upload's files go straight to the bucket
 
 import { createApi } from "@poplin/app/src/api/api";
 import type { Counters } from "@poplin/app/src/limits/limits";
@@ -31,13 +31,14 @@ import type { PublicName } from "@poplin/core/src/names/names";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { defaultSettings, SETTING_VALUES, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
 import type { SiteId } from "@poplin/core/src/sites/ids";
+import type { Tickets } from "@poplin/core/src/storage/tickets";
 import * as v from "valibot";
 import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
 import { workflowJobs } from "../jobs/workflow-jobs";
 import { readKeptKey } from "../key/kept-key";
 import { createEndLogins } from "../key/logins-end";
-import { readUploadKey } from "../key/upload-key";
+import { isSettled, readUploadKey } from "../key/upload-key";
 import { createUsersFollow } from "../key/users-follow";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
@@ -45,6 +46,7 @@ import { createSelfUpdate } from "../update/self-update";
 import { accessIdentity } from "../login/access-token";
 import { accessKeys } from "../login/keys";
 import { R2Store } from "../storage/r2";
+import { createBucketTickets } from "../storage/r2-tickets";
 import { readAccessBinding } from "../zone/access-binding";
 import type { Connection } from "../zone/client";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
@@ -301,6 +303,28 @@ async function startUnset(given: {
   return { ok: false, failure: { kind: "unset", unset } };
 }
 
+/** What an instance reads of its two secrets: the kept key, the upload key, and the bucket's own tickets while that key signs them. */
+interface Keys {
+  readonly kept: ReturnType<typeof readKeptKey>;
+  readonly uploadKey: ReturnType<typeof readUploadKey>;
+  readonly direct: () => Tickets | undefined;
+}
+
+/**
+ * Read the two secrets of an install, once: the kept key and the upload key.
+ *
+ * @returns the kept key, `undefined` on an install that holds none; the upload key it holds; and `direct`, which answers the bucket's own tickets once that key is old enough for the bucket to take it
+ */
+function readKeys(env: Bindings, accountId: string, outside: Outside): Keys {
+  const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
+  const uploadKey = readUploadKey(env[INSTALL_OBJECTS.uploadKeyBinding]);
+  const signed = uploadKey === undefined ? undefined : createBucketTickets({ key: uploadKey, accountId, now: outside.now });
+  // A key the bucket does not take yet signs nothing: until then the install takes the files itself, as an install with no key does.
+  const direct = (): Tickets | undefined => (uploadKey !== undefined && isSettled(uploadKey, outside.now()) ? signed : undefined);
+
+  return { kept, uploadKey, direct };
+}
+
 /**
  * Make one Worker instance ready to answer.
  *
@@ -356,9 +380,9 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     reservedNames: addresses.reservedNames,
   };
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: driver });
-  const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
+  const { kept, uploadKey, direct } = readKeys(env, own.value.accountId, outside);
   const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
-  const { key, domain, rules } = hosts.sideOf({ ...own.value, kept, uploadKey: readUploadKey(env[INSTALL_OBJECTS.uploadKeyBinding]), fetch: outside.cloudflare, now: outside.now });
+  const { key, domain, rules } = hosts.sideOf({ ...own.value, kept, uploadKey, fetch: outside.cloudflare, now: outside.now });
   const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules };
   const api = createApi({
     ...install,
@@ -372,6 +396,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     update,
     ...carried,
     jobs: workflowJobs(env.JOBS),
+    direct,
   });
 
   const instance: Instance = {

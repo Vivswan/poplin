@@ -37,4 +37,25 @@ describe("the meter of bucket writes and lists", () => {
       stopped: "passed its ceiling of 2 bucket writes and lists",
     });
   });
+
+  // Drift: a file sent straight to the bucket is a write the install never sees. Uncounted, a run of many files would pass the ceiling unseen; counted when the bucket refused it, a run whose files then go through the install would count each twice.
+  test("a file sent to another place than the API counts as a write once it is taken, a refused one counts as none, and past the ceiling none is sent", async () => {
+    const sent: string[] = [];
+    const answers = [403, 200, 200];
+    const meter = meterBucket(async (input, init) => {
+      sent.push(`${init.method} ${new URL(input).host}`);
+
+      return new Response(null, { status: answers.shift() ?? 200 });
+    }, 2);
+    const direct = async (): Promise<number> => (await meter.fetch("https://files.example.net/bucket/site/v1/a.txt?signature=1", { method: "PUT" })).status;
+    const ended = [await direct(), await direct(), await direct(), await direct()];
+
+    expect({ ended, spent: meter.spent(), sent: sent.length, stopped: meter.stopped() }).toEqual({ ended: [403, 200, 200, 403], spent: 2, sent: 3, stopped: "passed its ceiling of 2 bucket writes and lists" });
+
+    // Four lanes send at once: the ceiling holds between them too.
+    const lanes = meterBucket(async () => new Response(null, { status: 200 }), 1);
+    const together = await Promise.all([1, 2, 3, 4].map(async () => (await lanes.fetch("https://files.example.net/bucket/site/v1/a.txt", { method: "PUT" })).status));
+
+    expect([together.filter((status) => status === 200).length, lanes.spent()]).toEqual([1, 1]);
+  });
 });

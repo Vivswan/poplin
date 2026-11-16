@@ -5,6 +5,7 @@
 //   bucket      the name of the install's bucket, with its jurisdiction where it was made in one
 //   minted_at   the moment the key was made, in milliseconds since the epoch
 //
+// The bucket's API refuses a new key for about two minutes after it is made, so a key is used only once it is two and a half minutes old.
 // Nothing here logs, and no answer of the Worker carries any part of it.
 
 import { sha256Hex } from "@poplin/core/src/auth/util";
@@ -21,6 +22,9 @@ const UPLOAD_KEY = v.strictObject({
 
 /** The secret's one text, read as JSON of that form. */
 const UPLOAD_KEY_TEXT = v.pipe(v.string(), v.parseJson(), UPLOAD_KEY);
+
+/** How long after it is made a key is left unused, in milliseconds: the bucket's API refuses a new key for about two minutes. */
+const SETTLING_MS = 150_000;
 
 /** The upload key, read. */
 export type UploadKey = Readonly<v.InferOutput<typeof UPLOAD_KEY>>;
@@ -54,4 +58,14 @@ export async function uploadKeyText(
   const key: UploadKey = { id: made.id, secret, bucket: bucket.name, ...(bucket.jurisdiction === undefined ? {} : { jurisdiction: bucket.jurisdiction }), minted_at: mintedAt };
 
   return { text: JSON.stringify(key), secret };
+}
+
+/**
+ * Decide whether a key is old enough for the bucket's API to take it.
+ *
+ * @param now - the moment asked about, in milliseconds since the epoch
+ * @returns whether the key was made two and a half minutes ago or longer; a key younger than that, or one a clock set back makes look so, is left unused
+ */
+export function isSettled(key: UploadKey, now: number): boolean {
+  return now - key.minted_at >= SETTLING_MS;
 }

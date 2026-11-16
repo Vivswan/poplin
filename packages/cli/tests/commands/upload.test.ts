@@ -477,6 +477,132 @@ describe("upload", () => {
     ]);
   });
 
+  /** What a place that is not the install answers a file whose ticket it takes no more, in its own words. */
+  const refusedElsewhere = (status: number): Response => new Response("<Error><Code>its own word for it</Code></Error>", { status, headers: { "Content-Type": "application/xml" } });
+
+  /**
+   * Give the install a store of its own: every ticket it hands out names that place, until the sender asks for tickets through the install.
+   *
+   * @param answer - what the store answers each file it is sent, by how many it was sent before; `undefined` passes the file on to the install's own route, as a store that took it would keep it.
+   *   `lost` does the same and answers a failure, as a store whose answer never arrived
+   * @returns the bodies of the calls that asked for tickets, in order
+   */
+  function elsewhere(bench: Bench, answer: (sentBefore: number) => Response | "lost" | undefined): { readonly asked: { paths: string[]; through?: string }[] } {
+    const asked: { paths: string[]; through?: string }[] = [];
+    let sent = 0;
+
+    bench.install.direct.tickets = {
+      issue: async (upload, files) =>
+        files.map(({ file }) => {
+          const url = `https://files.example.net/${upload.id}?${new URLSearchParams({ path: file.path })}`;
+
+          return { path: file.path, url, method: "PUT", headers: { "Content-Type": "application/octet-stream", "Content-Length": String(file.size) }, expires: upload.expires };
+        }),
+    };
+    bench.hook = async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/tickets")) asked.push((await request.clone().json()) as { paths: string[]; through?: string });
+
+      if (url.host !== "files.example.net") return undefined;
+
+      const refused = answer(sent);
+      sent += 1;
+      if (refused instanceof Response) return refused;
+
+      const headers = new Headers(request.headers);
+      headers.set("Authorization", `Bearer ${bench.install.tokens.admin}`);
+      const kept = await bench.install.api.fetch(new Request(`https://poplin.example.com/api/uploads${url.pathname}/file${url.search}`, { method: "PUT", headers, body: await request.arrayBuffer() }));
+
+      return refused === "lost" ? new Response("<Error><Code>its own word for it</Code></Error>", { status: 502 }) : kept;
+    };
+
+    return { asked };
+  }
+
+  /** The calls of a run, with the upload's id taken out. */
+  const callsOf = (bench: Bench): string[] => bench.sent.map((line) => line.replace(/[0-9a-z]{16}/, ":upload"));
+
+  /** The problems the install noted, each by its kind and how often. */
+  const notedBy = async (bench: Bench): Promise<(string | number)[][]> => (await bench.install.database.listProblems("2000-01-01")).map(({ kind, count }) => [kind, count]);
+
+  // Drift: a ticket lives minutes and an upload hours. A publish that gave up at the first ticket that ran out would fail every long publish near its end.
+  test("a file whose ticket the store refuses is sent again at once by a fresh ticket, with no pause and no line", async () => {
+    const bench = await openBench();
+    const { asked } = elsewhere(bench, (sentBefore) => (sentBefore === 0 ? refusedElsewhere(403) : undefined));
+
+    const made = await bench.run(folderOf("notes", ONE));
+
+    expect([made.code, made.err, made.waits, asked, await notedBy(bench)]).toEqual([0, [], [], [{ paths: ["index.html"] }], []]);
+    expect(callsOf(bench)).toEqual(["GET /api/whoami", "POST /api/uploads", "PUT /:upload?path=index.html", "POST /api/uploads/:upload/tickets", "PUT /:upload?path=index.html", "POST /api/uploads/:upload/finish"]);
+  });
+
+  // Drift: a store that refuses every ticket, for a key that was deleted or a request it reads otherwise than it was signed, would end every publish of the install. Sent through the install the publish is made.
+  test("a file the store refuses twice turns the upload to the install: it says so in one line, asks for tickets through the install, the publish is made, and the install notes one problem", async () => {
+    const bench = await openBench();
+    const { asked } = elsewhere(bench, () => refusedElsewhere(403));
+
+    const made = await bench.run(folderOf("notes", ONE));
+
+    expect([made.code, made.err, made.waits]).toEqual([0, ["the store did not take a file sent straight to it: sending the files through the install"], []]);
+    expect([asked, await notedBy(bench)]).toEqual([[{ paths: ["index.html"] }, { paths: ["index.html"], through: "install" }], [["direct_upload_refused", 1]]]);
+    expect(callsOf(bench)).toEqual([
+      "GET /api/whoami",
+      "POST /api/uploads",
+      "PUT /:upload?path=index.html",
+      "POST /api/uploads/:upload/tickets",
+      "PUT /:upload?path=index.html",
+      "POST /api/uploads/:upload/tickets",
+      "PUT /api/uploads/:upload/file?path=index.html",
+      "POST /api/uploads/:upload/finish",
+    ]);
+  });
+
+  // Drift: four lanes meet the refusal at once. Each telling it, or each asking the install to turn, would print the line four times and send files the store had already refused.
+  test("six files the store refuses turn the upload once: one line, one problem, and every file through the install", async () => {
+    const bench = await openBench();
+    const { asked } = elsewhere(bench, () => refusedElsewhere(403));
+
+    const made = await bench.run(folderOf("notes", SIX));
+    const turned = asked.findIndex((body) => body.through !== undefined);
+
+    expect([made.code, made.err, await notedBy(bench)]).toEqual([0, ["the store did not take a file sent straight to it: sending the files through the install"], [["direct_upload_refused", 1]]]);
+    expect([turned >= 0, asked.slice(turned).every((body) => body.through === "install"), new Set(asked.slice(turned).flatMap((body) => body.paths)).size]).toEqual([true, true, 6]);
+  });
+
+  // Drift: a ticket of the store writes once. A file the store took while its answer was lost is refused with a 412 when it is sent again; a sender that read that as a failure would give up a publish whose every file arrived.
+  test("a file the store took while its answer was lost is sent again, and the store's 412 for the file it holds already counts as the file sent: the publish is made", async () => {
+    const bench = await openBench();
+    const { asked } = elsewhere(bench, (sentBefore) => (sentBefore === 0 ? "lost" : refusedElsewhere(412)));
+
+    const made = await bench.run(folderOf("notes", ONE));
+
+    expect([made.code, made.err.filter((line) => line.includes("store")), asked, await notedBy(bench)]).toEqual([0, [], [], []]);
+    expect(callsOf(bench)).toEqual(["GET /api/whoami", "POST /api/uploads", "PUT /:upload?path=index.html", "PUT /:upload?path=index.html", "POST /api/uploads/:upload/finish"]);
+  });
+
+  // Drift: the store answers the same 412 to bytes that are not the ones a ticket binds, and stores nothing. The finish is what tells the two apart: a publish that took the 412 for the file would go live with a file missing.
+  test("a file the store answers 412 and stored nothing of is found missing at the finish, sent again, and ends the publish as a file that did not arrive, with nothing of the store's answer printed", async () => {
+    const bench = await openBench();
+    const before = await stateOf(bench);
+    elsewhere(bench, () => refusedElsewhere(412));
+
+    const made = await bench.run(folderOf("notes", ONE));
+
+    expect([made.code, made.out, made.err.some((line) => line.includes("a file of the publish did not arrive")), made.err.join().includes("its own word")]).toEqual([1, [], true, false]);
+    expect(callsOf(bench).filter((line) => line.endsWith("/finish"))).toHaveLength(3);
+    expect(await stateOf(bench)).toEqual(before);
+  });
+
+  // Drift: the store asks for a pause as the install does. A sender that took its "too many requests" for a refused ticket would ask for new tickets in a loop, and one that took it for a failure would give the publish up.
+  test("a store that asks for a pause is rested for as the install is, and the file then goes by the same ticket", async () => {
+    const bench = await openBench();
+    const { asked } = elsewhere(bench, (sentBefore) => (sentBefore === 0 ? new Response("slow down", { status: 429, headers: { "Retry-After": "3" } }) : undefined));
+
+    const made = await bench.run(folderOf("notes", ONE));
+
+    expect([made.code, made.waits, made.err, asked]).toEqual([0, [3000], ["the install asks for a pause: going on in 3 s"], []]);
+  });
+
   // Drift: one answer holds a hundred tickets. A publish of more files that asked for a ticket a file would spend a request a file, as it did before tickets; one that asked for none would send nothing.
   test("a publish of 130 files asks for its tickets in two calls, a hundred and thirty, each for the files that go next, and a file sent again goes by the ticket it had", async () => {
     const bench = await openBench();

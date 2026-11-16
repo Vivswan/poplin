@@ -390,7 +390,8 @@ describe("the forwarders and the keys of an install without a domain, against a 
         ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created", "Upload key: created", "Workflow: created"],
         ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present", "Upload key: present", "Workflow: present"],
       ],
-      missing: {},
+      // The first run made the upload key, which the bucket refuses for its first minutes: the suite is told to count on no file sent straight to it.
+      missing: { "settled-upload-key": "an upload key older than two and a half minutes (this run made the key, or could not read it, and the bucket refuses a new one for about two minutes)" },
     });
     expect([world.workers.map((worker) => worker.id), world.account.tokens.length]).toEqual([["poplin-sites", "poplin-private"], 2]);
   });
@@ -448,7 +449,7 @@ describe("the Workflow of an install without a domain, against a local fake acco
     const world: FreeWorld = { account: { ...emptyAccount(), workflows: [...workflows] }, workers: [], ...refusing };
     const told = await settleFree(world);
 
-    expect([told.stops, told.rows[0]?.at(-1), told.missing, world.account.workflows]).toEqual([[undefined], row, { jobs: "the Worker's Workflow, which Cloudflare did not make" }, workflows]);
+    expect([told.stops, told.rows[0]?.at(-1), told.missing.jobs, world.account.workflows]).toEqual([[undefined], row, "the Worker's Workflow, which Cloudflare did not make", workflows]);
     expect(JSON.stringify(told)).not.toContain(REFUSED.message);
   });
 });

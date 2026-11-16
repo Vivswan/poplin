@@ -33,6 +33,12 @@ const SERVER_FAILURE = 500;
 /** The status of an answer that says the install, or the zone in front of it, is asked too often. */
 const TOO_MANY_REQUESTS = 429;
 
+/** The status another place than the install refuses a ticket with: one that ran out, or that the place takes no more. */
+const TICKET_REFUSED = 403;
+
+/** What an upload says, once, when the place its tickets name refuses them and its files go through the install after all. */
+const THROUGH_INSTALL = "the store did not take a file sent straight to it: sending the files through the install";
+
 /** The code of an install whose database takes no more for the day. */
 const ALLOWANCE_SPENT = "allowance_spent";
 
@@ -99,6 +105,11 @@ function isWorthAnotherTry(failure: Failure): boolean {
   if (!("status" in failure)) return true;
 
   return failure.status >= SERVER_FAILURE && !(failure.kind === "refused" && failure.code === ALLOWANCE_SPENT);
+}
+
+/** Whether a file was refused for its ticket, by another place than the install: the install's own refusals are the API's, with a code. */
+function isRefusedTicket(failure: Failure): boolean {
+  return failure.kind === "unexpected" && failure.status === TICKET_REFUSED;
 }
 
 /** How long the pause before a file is sent again is, in milliseconds: a second, doubled with each sending before it, and stretched by a random share of up to its own length. */
@@ -236,18 +247,23 @@ export async function callUnhurried<Done>(io: Resting, call: () => Promise<Calle
   }
 }
 
-/** Send one file once, to the address and with the headers its ticket names. A file with no ticket yet has one asked for as it goes. */
+/**
+ * Send one file once, to the address and with the headers its ticket names. A file with no ticket yet has one asked for as it goes.
+ * A file whose ticket is refused where it points goes again at once by another ticket, as the ticket book hands them out: a fresh one first, then one of the install's own route.
+ */
 async function sendOnce(client: Client, tickets: TicketBook, file: UploadFile): Promise<Called<undefined>> {
-  const ticket = await tickets.of(file.path);
-  if (!ticket.ok) return ticket;
+  for (;;) {
+    const ticket = await tickets.of(file.path);
+    if (!ticket.ok) return ticket;
 
-  const body = await file.open();
-  const sent = await client.send(ticket.value, body);
+    const body = await file.open();
+    const sent = await client.send(ticket.value, body);
+    if (sent.ok) return sent;
 
-  // A request that broke off leaves the file open; a stream the request still holds refuses the cancel, and closes with the request.
-  if (!sent.ok) await body.cancel().catch(() => undefined);
-
-  return sent;
+    // A request that broke off leaves the file open; a stream the request still holds refuses the cancel, and closes with the request.
+    await body.cancel().catch(() => undefined);
+    if (!isRefusedTicket(sent.failure) || !tickets.refused(ticket.value)) return sent;
+  }
 }
 
 /** Send one file, and send it again after a pause while the install fails or gives no answer, up to three times more. The pause is the upload's own, on the command's clock: the library waits none. */
@@ -366,8 +382,8 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
  * Send the files of a begun upload and finish it.
  *
  * Each file goes to the address its ticket names, with the ticket's headers. A file the begun upload answered no ticket for has one asked for, a hundred files a call, as the files go.
+ * A ticket that another place than the install refuses is asked for anew once; refused again, the upload says so in one line and sends every file through the install.
  * Four files go at once; one the install fails on or does not answer is sent again after a pause it tells, up to three times more. While the install lacks files, it is asked which, sent those, and finished again, three times at most.
- *
  * An answer of "too many requests" to any call here counts as none of those: the upload rests as long as the answer asks, says so, and makes the call again, up to six rests a call.
  * The answer after the sixth rest is the failure. Once the person stops the command, during a rest or a call, the failure is `stopped` and no call is made after it.
  * @returns the install's answer to the finish, or the first failure; the upload is then still there to be given up
@@ -375,12 +391,13 @@ export async function giveUpUpload(session: Pick<Session, "client" | "afterStop"
 export async function sendUpload<File extends UploadFile>(client: Client, begun: Begun, files: readonly File[], on: Sending<File>): Promise<Called<Published>> {
   const upload = begun.upload.id;
   const pace = new Pace(on.io);
-  const askTickets = async (paths: readonly string[]): Promise<Called<readonly Ticket[]>> => {
-    const asked = await unhurried(pace, () => client.call(ISSUED_TICKETS, (api) => api.uploads[":upload"].tickets.$post({ param: { upload }, json: { paths: [...paths] } })));
+  const askTickets = async (paths: readonly string[], through: boolean): Promise<Called<readonly Ticket[]>> => {
+    const json = through ? { paths: [...paths], through: "install" as const } : { paths: [...paths] };
+    const asked = await unhurried(pace, () => client.call(ISSUED_TICKETS, (api) => api.uploads[":upload"].tickets.$post({ param: { upload }, json })));
 
     return asked.ok ? { ok: true, value: asked.value.tickets } : asked;
   };
-  const sending = { arrived: on.arrived, pace, stopped: on.io.stopped, tickets: new TicketBook(begun.tickets, askTickets) };
+  const sending = { arrived: on.arrived, pace, stopped: on.io.stopped, tickets: new TicketBook(begun.tickets, askTickets, () => on.io.err(THROUGH_INSTALL)) };
   const finish = (): Promise<Called<Published>> => unhurried(pace, () => finishUpload(client, upload));
 
   const unsent = await sendFiles(client, files, sending);
