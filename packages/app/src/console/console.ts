@@ -48,6 +48,9 @@ const REFUSALS = {
   "not-set-up": { data: 503, page: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first." },
 } as const;
 
+/** What the page of an email that is no user says before the address that ends this browser's login. */
+const OTHER_EMAIL = "To log in with another email, open";
+
 /** How long a client waits before it asks again after a login that could not be checked, in seconds. */
 const CHECK_AGAIN_SECONDS = "60";
 
@@ -111,6 +114,9 @@ interface ConsoleParts extends CodeTries {
   /** Ends every login of the dashboard at the provider. Without it nobody can be signed out here. */
   readonly endLogins?: EndLogins;
 
+  /** The address, on the console's own origin, where the provider ends this browser's login. Without it the frame shows no way out, and a refusal names none. */
+  readonly signOut?: string;
+
   /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair on the Domain screen. */
   readonly rules?: RulesFollow;
 
@@ -142,12 +148,16 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
     }
 
     const { data, page, code, sentence } = REFUSALS[who.refusal];
+    const asked = new URL(context.req.url);
     context.header("Cache-Control", "no-store");
     if (who.refusal === "unchecked") context.header("Retry-After", CHECK_AGAIN_SECONDS);
 
-    if (new URL(context.req.url).pathname.startsWith(`${parts.base}/data/`)) return context.json({ ok: false, code, about: null, sentence }, data);
+    if (asked.pathname.startsWith(`${parts.base}/data/`)) return context.json({ ok: false, code, about: null, sentence }, data);
 
-    return context.text(`${sentence}\n`, page);
+    // A person the login let through under an email that is no user stays that email until this browser's login ends: the page says where it ends.
+    const out = who.refusal === "not-a-user" && parts.signOut !== undefined ? `${OTHER_EMAIL} ${new URL(parts.signOut, asked.origin).href}\n` : "";
+
+    return context.text(`${sentence}\n${out}`, page);
   };
 }
 
@@ -221,7 +231,7 @@ export function createConsole(parts: ConsoleParts): Console {
     const asked = { version: parts.version, domain: parts.domain?.words.thing, selfCarried: parts.follow?.holdsKey() === true, keyed: parts.update.holdsKey(), back: wayBack(parts.update.last, parts.version) };
     const frame = await frameOf(install, actor, asked);
 
-    const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };
+    const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined, signOut: parts.signOut ?? null };
 
     return context.html(shellPage(boot, await parts.client.entry()));
   });

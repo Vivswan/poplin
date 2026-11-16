@@ -60,6 +60,9 @@ const SWEEP_FAILED = "the sweep failed";
 /** The setup page, for a redirect from the Worker's own address. */
 const SETUP = "/setup";
 
+/** The path, on every hostname Access guards, where Access ends the login of the browser that opens it. It never reaches the Worker. */
+const LOGOUT_PATH = "/cdn-cgi/access/logout";
+
 /** Where the variables of an install come from, for a person whose Worker lost or mistyped one. */
 const SET_THEM = "Setup writes them. In the Cloudflare dashboard they are under Workers & Pages, this Worker, Settings, Variables and Secrets.";
 
@@ -140,6 +143,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held,
     domain: instance.domain,
     follow: instance.follow,
     endLogins: instance.endLogins,
+    signOut: LOGOUT_PATH,
     rules: instance.rules,
     freeLimits: FREE_LIMITS,
     usage: instance.usage,

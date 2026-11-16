@@ -265,6 +265,8 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
     demo: { reset: `${base}${RESET_PATH}` },
     domain: changingPlug(world.kind.provider),
     endLogins: END_LOGINS,
+    // No login is here to end: the way out leads to the page a request with no login behind it gets.
+    signOut: `${base}/?as=visitor`,
     ...countsOf(world),
   });
   return { prefix, origin: world.kind.adminOrigin, base, holds: "pages", answer: dashboard.fetch };

@@ -12,7 +12,7 @@ import { expect, test } from "bun:test";
 import fc from "fast-check";
 
 import { CONSOLE_REFUSAL_STATUSES } from "../../packages/app/src/console/data";
-import { openConsole } from "../../packages/app/tests/console/support/console";
+import { openConsole, SIGN_OUT } from "../../packages/app/tests/console/support/console";
 import { readShell } from "../../packages/app/tests/console/support/shell";
 import { LOGIN_HEADER, ORIGIN } from "../../packages/app/tests/console/support/install";
 import { fuzzTarget } from "./config";
@@ -31,7 +31,7 @@ const NOT_A_USER = "This email is not a user of this install.";
 
 const REFUSED: Readonly<Record<number, readonly string[]>> = {
   401: [JSON.stringify({ ok: false, code: "no_login", about: null, sentence: NO_LOGIN }), ""],
-  403: [`${NO_LOGIN}\n`, `${NOT_A_USER}\n`, JSON.stringify({ ok: false, code: "not_a_user", about: null, sentence: NOT_A_USER }), ""],
+  403: [`${NO_LOGIN}\n`, `${NOT_A_USER}\nTo log in with another email, open ${ORIGIN}${SIGN_OUT}\n`, JSON.stringify({ ok: false, code: "not_a_user", about: null, sentence: NOT_A_USER }), ""],
 };
 
 const property = fuzzTarget(import.meta.file);

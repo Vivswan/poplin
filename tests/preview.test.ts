@@ -234,6 +234,8 @@ describe("the local preview", () => {
     // Drift: the preview has no provider's login, so its stand-in is the only place a person sees what the dashboard says to somebody who is not let in.
     expect(strangers.map((answer) => [answer.status, answer.headers.get("Location"), answer.headers.get("Content-Type")])).toEqual([403, 403, 503].map((status) => [status, null, "text/html; charset=utf-8"]));
     expect(await Promise.all(strangers.map(async (answer) => (await answer.text()).includes("<script")))).toEqual([false, false, false]);
+    // Drift: the page of an email that is no user names where the login ends. Named at the sample install's own address, it would lead a person out of the preview.
+    expect(await (await ask(first, `${base}/settings?as=removed`)).text()).toContain(`To log in with another email, open ${ORIGIN}${base}/?as=visitor`);
     expect(await Promise.all(strangersData.map(async (answer) => [answer.status, ((await answer.json()) as { code: string }).code]))).toEqual([
       [401, "no_login"],
       [403, "not_a_user"],

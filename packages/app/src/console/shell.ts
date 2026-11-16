@@ -66,6 +66,9 @@ export interface Boot {
   /** Whether the console has a Domain screen. */
   readonly domain: boolean;
 
+  /** The address that ends this browser's login, or `null` on a console that is told none. */
+  readonly signOut: string | null;
+
   /** What the domain needs, as the side shows it, or `null`. */
   readonly domainNote: { readonly label: string; readonly sentence: string; readonly quiet: boolean } | null;
 
