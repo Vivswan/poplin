@@ -1,10 +1,11 @@
 // The question before a site in the trash is deleted for good. It is drawn once on the Sites screen, outside the row or the panel that asks it, so a press in it is no press on that row.
+// The button that asks is the question's trigger, joined to it by the dialog library's handle: the library opens the question with what the button asks, and gives the focus back to the button.
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
+import { type UseMutationResult, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 
 import {
-  AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
@@ -21,35 +22,88 @@ import { sayDone } from "@/lib/notify";
 import { LONGEST_NAME, type Site, shownName } from "@/lib/sites";
 import { SITES_KEY, siteKey } from "@/sites/site-queries";
 
-/** The question that is open, and who is told when it changes: the one question drawn on the screen. */
-const QUESTION: { asked: Asked | undefined; readonly heard: Set<() => void> } = { asked: undefined, heard: new Set() };
+/** What joins the one question drawn on the screen to every button that asks it. */
+export const DELETE_FOR_GOOD = AlertDialogPrimitive.createHandle<Asked>();
 
 /** What is asked: the site to delete for good, and what follows. */
 interface Asked {
   /** The site, which is in the trash. */
   readonly site: Site;
 
-  /** The control that asked, which takes the focus back when the question is left. */
-  readonly opener: HTMLElement | null;
-
   /** Called once the site is gone, before the list is read again. */
   readonly onGone: () => void;
 }
 
-function hear(listener: () => void): () => void {
-  QUESTION.heard.add(listener);
-
-  return () => QUESTION.heard.delete(listener);
+/** A delete as it is sent: the site, and the asking it was answered in. What a button asks is made anew at every draw, so the asking is told by its number. */
+interface Sent {
+  readonly site: Site;
+  readonly asking: number;
 }
 
-function put(asked: Asked | undefined): void {
-  QUESTION.asked = asked;
-  for (const listener of QUESTION.heard) listener();
+/** What an open question is drawn from. */
+interface AnswerProps {
+  /** What is asked. */
+  readonly asked: Asked;
+
+  /** The number of this asking. */
+  readonly asking: number;
+
+  /** The delete of the screen: what it was sent for, and what became of it. */
+  readonly removal: UseMutationResult<unknown, Error, Sent>;
+
+  /** Sends the delete of this asking. */
+  readonly onRemove: () => void;
 }
 
-/** Ask whether a site in the trash is deleted for good. The question is drawn where `DeleteForGoodQuestion` stands. */
-export function askDeleteForGood(asked: Asked): void {
-  put(asked);
+/** What an open question shows: the field for the site's name, and the button that stays off until the name is typed. It is drawn anew with each asking, so each starts with an empty field. */
+function Answer({ asked, asking, removal, onRemove }: AnswerProps): ReactNode {
+  const { site } = asked;
+  const cancel = useRef<HTMLButtonElement>(null);
+  const [typed, setTyped] = useState("");
+  // What the last delete was refused with is said in the asking it was sent from alone, and a delete on its way holds that asking's button alone.
+  const own = removal.variables?.asking === asking;
+  const refusal = own ? removal.error?.message : undefined;
+  const remove = (event: FormEvent): void => {
+    event.preventDefault();
+    if (typed === site.name && !removal.isPending) onRemove();
+  };
+
+  return (
+    <AlertDialogContent initialFocus={cancel} finalFocus={thenHome()}>
+      <form onSubmit={remove} className="flex flex-col gap-4">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete {shownName(site)} for good?</AlertDialogTitle>
+          <AlertDialogDescription>This cannot be undone, and the site's files go too.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <Field invalid={refusal !== undefined}>
+          <FieldLabel>Site's name</FieldLabel>
+          <Input
+            value={typed}
+            onChange={(event) => {
+              setTyped(event.target.value);
+              // A refusal is about the delete that was sent: it leaves when the name is typed again. A delete on its way is left to end.
+              if (!removal.isPending) removal.reset();
+            }}
+            aria-required
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            maxLength={LONGEST_NAME}
+          />
+          <FieldDescription>
+            Type <span className="font-mono text-xs text-foreground">{site.name}</span> to delete it.
+          </FieldDescription>
+          {refusal === undefined ? null : <FieldError>{refusal}</FieldError>}
+        </Field>
+        <AlertDialogFooter>
+          <AlertDialogCancel ref={cancel}>Cancel</AlertDialogCancel>
+          <AlertDialogAction type="submit" variant="destructive" disabled={typed !== site.name || (own && removal.isPending)}>
+            Delete for good
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </form>
+    </AlertDialogContent>
+  );
 }
 
 /**
@@ -59,93 +113,40 @@ export function askDeleteForGood(asked: Asked): void {
  */
 export function DeleteForGoodQuestion(): ReactNode {
   const client = useQueryClient();
-  const asked = useSyncExternalStore(hear, () => QUESTION.asked);
-  const cancel = useRef<HTMLButtonElement>(null);
-  const opener = useRef<HTMLElement | null>(null);
-  const [typed, setTyped] = useState("");
-  // The words stay while the question closes, so it does not empty as it fades.
-  const last = useRef(asked);
-  if (asked !== undefined) [last.current, opener.current] = [asked, asked.opener];
-
-  const site = (asked ?? last.current)?.site;
-  // Whether this screen is still drawn: a delete that is done after it was left tells no screen that the site is gone.
-  const drawn = useRef(true);
-  // A done delete is said and the lists are read again, also where its question was left meanwhile. It closes the question it was asked in, and no other one that is open by then.
-  // The site that is gone is forgotten, not read again, which would only be refused.
+  // How often the question was asked, and the number of the asking that is open.
+  const [asking, setAsking] = useState(0);
+  const open = useRef<number | undefined>(undefined);
+  // A done delete is said and the lists are read again, also where its screen was left meanwhile. The site that is gone is forgotten, not read again, which would only be refused.
   const removal = useMutation({
-    mutationFn: (of: Asked) => answerOf(api.sites[":site"]["delete-for-good"].$post({ param: { site: of.site.label }, json: {} })),
-    onSuccess: (_done, of) => {
-      if (QUESTION.asked === of) put(undefined);
-
-      if (drawn.current) of.onGone();
-
-      client.removeQueries({ queryKey: siteKey(of.site.label) });
+    mutationFn: (sent: Sent) => answerOf(api.sites[":site"]["delete-for-good"].$post({ param: { site: sent.site.label }, json: {} })),
+    onSuccess: (_done, sent) => {
+      client.removeQueries({ queryKey: siteKey(sent.site.label) });
       void client.invalidateQueries({ queryKey: SITES_KEY, predicate: (query) => query.queryKey[1] !== "one" });
-      sayDone(`${shownName(of.site)} deleted for good.`);
+      sayDone(`${shownName(sent.site)} deleted for good.`);
     },
   });
-  // What the last delete was refused with is said in the question it was asked in alone, and a delete on its way holds that question's button alone.
-  const own = removal.variables === asked;
-  const refusal = own ? removal.error?.message : undefined;
-  const sending = own && removal.isPending;
-  // Each question starts with an empty field.
-  const [fresh, setFresh] = useState(asked);
-  if (asked !== fresh) {
-    setFresh(asked);
-    setTyped("");
-  }
+  // What only this screen does about a done delete, which the query library leaves out once the screen was left: it closes the asking the delete was sent from, and no other one that is open by then, and tells the screen that the site is gone.
+  const remove = (asked: Asked, sent: number): void =>
+    removal.mutate(
+      { site: asked.site, asking: sent },
+      {
+        onSuccess: () => {
+          if (open.current === sent) DELETE_FOR_GOOD.close();
 
-  // A question left open on a screen that is left is not asked on the next one. A development build sets an effect up twice, so the setup says the screen is drawn again.
-  useEffect(() => {
-    drawn.current = true;
-
-    return () => {
-      drawn.current = false;
-      put(undefined);
-    };
-  }, []);
-
-  const remove = (event: FormEvent): void => {
-    event.preventDefault();
-    if (asked !== undefined && typed === asked.site.name && !removal.isPending) removal.mutate(asked);
-  };
+          asked.onGone();
+        },
+      },
+    );
 
   return (
-    <AlertDialog open={asked !== undefined} onOpenChange={(open) => (open ? undefined : put(undefined))}>
-      <AlertDialogContent initialFocus={cancel} finalFocus={thenHome(opener)}>
-        <form onSubmit={remove} className="flex flex-col gap-4">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {site === undefined ? "" : shownName(site)} for good?</AlertDialogTitle>
-            <AlertDialogDescription>This cannot be undone, and the site's files go too.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <Field invalid={refusal !== undefined}>
-            <FieldLabel>Site's name</FieldLabel>
-            <Input
-              value={typed}
-              onChange={(event) => {
-                setTyped(event.target.value);
-                // A refusal is about the delete that was sent: it leaves when the name is typed again. A delete on its way is left to end.
-                if (!removal.isPending) removal.reset();
-              }}
-              aria-required
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              maxLength={LONGEST_NAME}
-            />
-            <FieldDescription>
-              Type <span className="font-mono text-xs text-foreground">{site?.name}</span> to delete it.
-            </FieldDescription>
-            {refusal === undefined ? null : <FieldError>{refusal}</FieldError>}
-          </Field>
-          <AlertDialogFooter>
-            <AlertDialogCancel ref={cancel}>Cancel</AlertDialogCancel>
-            <AlertDialogAction type="submit" variant="destructive" disabled={typed !== site?.name || sending}>
-              Delete for good
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </form>
-      </AlertDialogContent>
-    </AlertDialog>
+    <AlertDialogPrimitive.Root
+      handle={DELETE_FOR_GOOD}
+      onOpenChange={(opens) => {
+        open.current = opens ? asking + 1 : undefined;
+        if (opens) setAsking(asking + 1);
+      }}
+    >
+      {({ payload: asked }) => (asked === undefined ? null : <Answer key={asking} asked={asked} asking={asking} removal={removal} onRemove={() => remove(asked, asking)} />)}
+    </AlertDialogPrimitive.Root>
   );
 }

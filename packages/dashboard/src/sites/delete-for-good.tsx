@@ -1,10 +1,11 @@
 // The button that deletes a site in the trash for good, in the site's panel. It asks first.
 
-import { type ReactNode, useRef } from "react";
+import type { ReactNode } from "react";
 
+import { AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import type { Site } from "@/lib/sites";
-import { askDeleteForGood } from "@/sites/delete-for-good-question";
+import { DELETE_FOR_GOOD } from "@/sites/delete-for-good-question";
 
 /** What the button is drawn from. */
 interface DeleteForGoodProps {
@@ -17,11 +18,9 @@ interface DeleteForGoodProps {
 
 /** Draw the button. A press asks the question the Sites screen draws, which deletes the site once its name is typed. */
 export function DeleteForGood({ site, onGone }: DeleteForGoodProps): ReactNode {
-  const opener = useRef<HTMLButtonElement>(null);
-
   return (
-    <Button ref={opener} variant="destructive" onClick={() => askDeleteForGood({ site, opener: opener.current, onGone })}>
+    <AlertDialogTrigger handle={DELETE_FOR_GOOD} payload={{ site, onGone }} render={<Button variant="destructive" />}>
       Delete for good
-    </Button>
+    </AlertDialogTrigger>
   );
 }
