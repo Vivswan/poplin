@@ -20,6 +20,9 @@ const ROWS = "[data-opens]";
 /** The places beside a panel that close nothing when pressed: a row of the list opens, changes, or closes the panel itself, a result's button acts on the panel's thing, and a question or a menu the panel opened lies over the page. */
 const OWN_PLACES = `${ROWS}, [data-sonner-toaster], [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox']`;
 
+/** The library's own stops before and after a panel's content: Tab lands on one at an end of the panel, and the library moves the focus on to the other end a frame later. */
+const TURNS = "[data-base-ui-focus-guard]";
+
 /** What a panel is drawn from. */
 interface SidePanelProps {
   /** The name of the thing, as the panel's heading; `undefined` while it is being read. */
@@ -226,6 +229,24 @@ function useNoFocusUnder(place: HTMLElement | null, onClose: () => void): void {
 }
 
 /**
+ * Hold a Tab that comes while the library still turns the focus round at an end of the panel: the library does it a frame after the key, and a Tab pressed sooner would go on from its stop to the page under the panel.
+ *
+ * The library has no setting for it: its turn is always a frame late.
+ */
+function useTabWaitsForTurn(place: HTMLElement | null): void {
+  useEffect(() => {
+    if (place === null) return;
+
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === "Tab" && document.activeElement?.matches(TURNS) === true) event.preventDefault();
+    };
+    place.addEventListener("keydown", onKey);
+
+    return () => place.removeEventListener("keydown", onKey);
+  }, [place]);
+}
+
+/**
  * Draw a panel: the library's dialog that keeps Tab inside it, without its modal layer, drawn into its own place in the page, so nothing is dimmed and a pointer still reaches the rest of the page.
  *
  * It moves the focus to the heading, closes on Escape, and gives the focus back to its opener, though not after a close it was refused: the screen then finds the focus its place.
@@ -238,6 +259,7 @@ export function SidePanel({ title, closeLink, onClose, opener, back, beside, chi
   // A change of the thing can take away the control that was pressed for it: the heading takes the focus then.
   const kept = useFocusHome();
   useNoFocusUnder(place, onClose);
+  useTabWaitsForTurn(place);
 
   return (
     <aside

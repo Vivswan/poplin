@@ -16,9 +16,23 @@ const SITE = "Pricing";
 /** The first and the last control of the panel in the order of the keys. */
 const ENDS = { first: "Edit", last: "Delete" } as const;
 
+/** How often Tab is pressed with no wait between two presses: more than twice round the panel's controls. */
+const FAST_TABS = 40;
+
 /** A button of the open panel, by its name. */
 function inPanel(page: Page, name: string): Locator {
   return page.getByRole("dialog", { name: SITE, exact: true }).getByRole("button", { name, exact: true });
+}
+
+/** Note every place outside the open panel that takes the focus from now on, by its words, in a list of the page's own. The panel's own part of the page also holds the stops the library turns the focus round at. */
+async function noteFocusOutside(page: Page): Promise<void> {
+  await page.getByRole("complementary", { name: SITE, exact: true }).evaluate((panel) => {
+    const outside: string[] = [];
+    Object.assign(window, { outside });
+    document.addEventListener("focusin", ({ target }) => {
+      if (target instanceof HTMLElement && !panel.contains(target)) outside.push(target.textContent.trim() || target.tagName);
+    });
+  });
 }
 
 for (const size of SCREENS) {
@@ -42,6 +56,21 @@ for (const size of SCREENS) {
       await page.keyboard.press("Escape");
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(details).toBeFocused();
+    });
+
+    // Drift: Tab pressed faster than the library moves the focus would pass the panel's last control and go to the page under it, to its skip link and its sections, before it comes back.
+    test("Tab pressed many times with no wait never puts the focus outside the panel", async ({ page }) => {
+      await arrive(page);
+      await page.getByRole("button", { name: `Details of ${SITE}`, exact: true }).press("Enter");
+      await expect(page.getByRole("dialog", { name: SITE, exact: true }).getByRole("heading", { name: SITE, exact: true })).toBeFocused();
+      await noteFocusOutside(page);
+
+      for (let press = 0; press < FAST_TABS; press += 1) await page.keyboard.press("Tab");
+
+      expect(await page.evaluate(() => (window as unknown as { outside: string[] }).outside), "the places outside the panel that took the focus").toEqual([]);
+      await expect(page.getByRole("dialog", { name: SITE, exact: true })).toBeVisible();
+      // The last Tab may rest on one of the library's stops for a frame: the focus is waited for.
+      await expect(page.getByRole("dialog", { name: SITE, exact: true }).locator(":focus")).toHaveCount(1);
     });
   });
 }
