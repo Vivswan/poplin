@@ -1,6 +1,8 @@
 // Run one command line: read it, find who to talk to, run the command, print what it came to, and choose the exit code.
 
-import { createClient } from "../client/client";
+import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
+import type { AddressLayout } from "../../../core/src/sites/address-layout";
+import { type Client, createClient } from "../client/client";
 import { currentLogin } from "../local/current-login";
 import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
@@ -93,6 +95,22 @@ function asksJson(argv: readonly string[]): boolean {
   return argv.slice(0, end === -1 ? argv.length : end).includes("--json");
 }
 
+/** Ask an install for its address layout, and keep the answer: a session asks once, whichever of its steps needs it first. */
+function layoutAskedOnce(client: Client): Session["layout"] {
+  let kept: AddressLayout | undefined;
+
+  return async () => {
+    if (kept !== undefined) return { ok: true, value: kept };
+
+    const answered = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
+    if (!answered.ok) return answered;
+
+    kept = answered.value.layout;
+
+    return { ok: true, value: kept };
+  };
+}
+
 /**
  * Find the install a command talks to and the token it presents.
  *
@@ -114,7 +132,7 @@ async function connect(request: { readonly server?: string }, io: Io): Promise<S
   const client = createClient({ ...install, timeoutMs: io.timeoutMs, stopped: io.stopped, told: io.err });
   const afterStop = createClient({ ...install, timeoutMs: Math.min(io.timeoutMs ?? AFTER_STOP_TIMEOUT_MS, AFTER_STOP_TIMEOUT_MS) });
 
-  return { client, afterStop, io, server, source: current.source };
+  return { client, afterStop, io, server, layout: layoutAskedOnce(client), source: current.source };
 }
 
 /** The site a command names, when it names one: its own, or the one a publish updates. */

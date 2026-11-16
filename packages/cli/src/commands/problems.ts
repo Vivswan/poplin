@@ -75,6 +75,11 @@ const LOCAL_ROWS = {
   },
   unreadable: { sentence: "nothing can be published", exit: "failed" },
   no_name: { sentence: "the path gives the site no name", exit: "failed" },
+  root_links: {
+    sentence: 'this install has no domain, so a link that starts with "/" would not open',
+    hint: "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css, or give the install a domain",
+    exit: "failed",
+  },
   not_confirmed: { sentence: "what was typed is not the site's label, so nothing was deleted", exit: "failed" },
   no_terminal: {
     sentence: "delete --forever asks for the site's label to be typed, and there is no terminal to ask on",

@@ -1,7 +1,6 @@
 // What the parser read, put into the forms the API takes.
 
 import type { SiteChanges } from "../../../core/src/actions/changes";
-import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { siteLabel } from "../../../core/src/sites/labels";
 import { mayBeOfInstall, type SettledSite, settleSite, type TypedSite } from "../../../core/src/sites/references";
 import { type Problem, problem, problemOf } from "./problems";
@@ -25,17 +24,18 @@ export function siteWord(site: SettledSite): string {
  * @param site - the site a command names, as it was typed
  * @returns the site. `not_found` for an address under another domain or port than the install's sites, and for one that is no site's under the install's layout; else why the install did not answer
  */
-export async function readByInstall(site: TypedSite, session: Pick<Session, "client" | "server">): Promise<SettledSite | Problem> {
+export async function readByInstall(site: TypedSite, session: Pick<Session, "layout" | "server">): Promise<SettledSite | Problem> {
   if (!mayBeOfInstall(site, session.server)) return problem("not_found", `the address is under ${site.under}, which is not where ${session.server} keeps its sites`);
 
   if (site.kind !== "address") return site;
 
-  const answered = await session.client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
+  const answered = await session.layout();
   if (!answered.ok) return problemOf(answered.failure);
 
-  const address = `${site.label}.${site.under}${site.segment === undefined ? "" : `/${siteWord(site.segment)}`}`;
+  // Under hostnames a site is named by its hostname alone, so a path is no part of what the refusal names.
+  const named = answered.value.kind === "path" && site.segment !== undefined ? `/${siteWord(site.segment)}` : "";
 
-  return settleSite(site, { server: session.server, layout: answered.value.layout }) ?? problem("not_found", `${address} is not the address of a site of ${session.server}`);
+  return settleSite(site, { server: session.server, layout: answered.value }) ?? problem("not_found", `${site.label}.${site.under}${named} is not the address of a site of ${session.server}`);
 }
 
 /**

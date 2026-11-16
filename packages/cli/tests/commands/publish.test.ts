@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
+import type { LayoutInput } from "../../../app/tests/api/support/install";
 import { planPublish } from "../../src/commands/publish";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
@@ -142,7 +144,7 @@ describe("publish", () => {
     const made = await bench.run(folder);
 
     expect(made.code).toBe(0);
-    expect(bench.sent.map((line) => line.split(" ")[0]).join(" ")).toBe("POST PUT PUT POST GET PUT POST");
+    expect(bench.sent.map((line) => line.split(" ")[0]).join(" ")).toBe("GET POST PUT PUT POST GET PUT POST");
     expect((await bench.install.keys()).length).toBe(2);
   });
 
@@ -219,11 +221,51 @@ describe("publish", () => {
     expect(bench.sent).toEqual([]);
   });
 
+  // Drift: the install never reads a site's pages, and a site without a domain sits under a path, as https://sites.example.net/notes--k3f9x2ab71qz/. Nothing but this refusal tells a person that "/css/site.css" opens the host's root there.
+  test.each<[string, LayoutInput | undefined, number, string[], string[]]>([
+    [
+      "an install without a domain refuses it before anything is sent, and names the first file's first link",
+      { kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" },
+      1,
+      [
+        'this install has no domain, so a link that starts with "/" would not open: /css/site.css in about.html',
+        "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css, or give the install a domain",
+      ],
+      ["GET"],
+    ],
+    ["an install with a domain publishes it as it is", undefined, 0, [], ["GET", "POST", "PUT", "PUT", "PUT", "POST"]],
+  ])("a folder whose pages link from the root: %s", async (_name, layout, code, err, methods) => {
+    const bench = await openBench(layout);
+    const folder = folderOf("notes", { "index.html": '<a href="/about.html">about</a>', "about.html": '<link href="/css/site.css"><img src="/logo.png">', "css/site.css": "body{}" });
+    const before = await stateOf(bench);
+
+    const ran = await bench.run(`${folder} --json`);
+
+    expect([ran.code, ran.err, bench.sent.map((line) => line.split(" ")[0])]).toEqual([code, err, methods]);
+    expect(bench.sent[0]).toBe("GET /api/whoami");
+    expect((jsonOf(ran).error as { code: string } | undefined)?.code).toBe(code === 0 ? undefined : "root_links");
+    expect(isDeepStrictEqual(await stateOf(bench), before)).toBe(code !== 0);
+  });
+
+  // Drift: reading a typed address and checking the pages both need the install's layout; asked apart, every publish to an address costs the install one request more.
+  test("a publish onto a site named by its address asks the install for its layout once", async () => {
+    const bench = await openBench({ kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" });
+    const folder = folderOf("notes", PAGES);
+    const label = await publishedLabel(bench, folder);
+    bench.sent.length = 0;
+
+    const updated = await bench.run(`${folder} --site https://private.example.net/${label}/`);
+
+    expect([updated.code, bench.sent.filter((line) => line === "GET /api/whoami")]).toEqual([0, ["GET /api/whoami"]]);
+  });
+
   test("a publish whose first answer is lost says an upload may have begun, since there is no id to give it up by", async () => {
     const bench = await openBench();
     const folder = folderOf("notes", PAGES);
     const before = await stateOf(bench);
     bench.hook = async (request) => {
+      if (request.method !== "POST") return undefined;
+
       await bench.install.api.fetch(request);
 
       return new Response("<html>bad gateway</html>", { status: 502 });
@@ -234,7 +276,7 @@ describe("publish", () => {
     expect(lost.code).toBe(5);
     expect(lost.err[0]).toBe("the answer is not the install's: status 502");
     expect(lost.err[1]).toStartWith("no site changed; an upload the install began all the same runs out by itself within a day");
-    expect(bench.sent).toEqual(["POST /api/uploads"]);
+    expect(bench.sent).toEqual(["GET /api/whoami", "POST /api/uploads"]);
     expect(await stateOf(bench)).toEqual(before);
   });
 

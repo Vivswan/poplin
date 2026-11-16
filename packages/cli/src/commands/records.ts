@@ -1,6 +1,7 @@
 // What the modules that run a command share: the machine's ends a command talks through, and what a command comes to.
 
-import type { Client, Fetch } from "../client/client";
+import type { AddressLayout } from "../../../core/src/sites/address-layout";
+import type { Called, Client, Fetch } from "../client/client";
 import type { Machine } from "../local/login-file";
 import type { Problem } from "./problems";
 import type { Request } from "./requests";
@@ -63,6 +64,9 @@ export interface Session {
 
   /** The origin of the install, for a command that prints it. */
   readonly server: string;
+
+  /** Asks the install how it lays out the addresses of its sites. An answer is kept, so the install is asked once however often this is called; a failure is not kept. */
+  readonly layout: () => Promise<Called<AddressLayout>>;
 
   /** Where the login came from. */
   readonly source: "environment" | "file";

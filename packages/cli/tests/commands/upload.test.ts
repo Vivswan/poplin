@@ -169,7 +169,7 @@ describe("upload", () => {
       {
         command: "publish",
         moment: { matches: pathEnds("/api/uploads"), held: 1, stops: "a moment later" },
-        sent: () => ["POST /api/uploads"],
+        sent: () => ["GET /api/whoami", "POST /api/uploads"],
         err: ["the command was stopped: no site changed; an upload the install began all the same runs out by itself within a day"],
         left: [],
       },
@@ -179,7 +179,7 @@ describe("upload", () => {
       {
         command: "publish",
         moment: { matches: isPut, held: 1, stops: "at once" },
-        sent: () => ["POST /api/uploads", ...puts(1), "DELETE /api/uploads/:upload"],
+        sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(1), "DELETE /api/uploads/:upload"],
         err: ["the command was stopped: the upload was given up and no site changed"],
         left: ["create abandoned"],
       },
@@ -189,7 +189,7 @@ describe("upload", () => {
       {
         command: "publish",
         moment: { matches: isPut, held: 4, stops: "a moment later" },
-        sent: () => ["POST /api/uploads", ...puts(4), "DELETE /api/uploads/:upload"],
+        sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(4), "DELETE /api/uploads/:upload"],
         err: ["the command was stopped: the upload was given up and no site changed"],
         left: ["create abandoned"],
       },
@@ -199,7 +199,7 @@ describe("upload", () => {
       {
         command: "publish",
         moment: { matches: pathEnds("/finish"), held: 1, stops: "a moment later" },
-        sent: () => ["POST /api/uploads", ...puts(6), "POST /api/uploads/:upload/finish", "DELETE /api/uploads/:upload"],
+        sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(6), "POST /api/uploads/:upload/finish", "DELETE /api/uploads/:upload"],
         err: ["the command was stopped: the upload was given up and no site changed"],
         left: ["create abandoned"],
       },
@@ -469,6 +469,7 @@ describe("upload", () => {
 
     expect([made.code, elsewhere]).toEqual([0, [{ url: "https://files.example.net/drop/a.css?leave=1", headers: { "content-length": "3", "content-type": "application/octet-stream", "x-leave": "once" }, body: "a{}" }]]);
     expect(bench.sent.map((line) => line.replace(UPLOAD_ID, "/api/uploads/:upload"))).toEqual([
+      "GET /api/whoami",
       "POST /api/uploads",
       "PUT /drop/a.css?leave=1",
       "PUT /api/uploads/:upload/file?path=index.html",
@@ -496,7 +497,7 @@ describe("upload", () => {
     const calls = bench.sent.map((line) => line.split(" ")[1]?.replace(UPLOAD_ID, "").split("?")[0]);
 
     expect([made.code, asked.map((paths) => paths.length), new Set(asked.flat()).size, asked[0]?.[0]]).toEqual([0, [100, 30], 130, "index.html"]);
-    expect([calls.filter((call) => call === "/tickets").length, calls.filter((call) => call === "/file").length, bench.sent.length]).toEqual([2, 131, 135]);
+    expect([calls.filter((call) => call === "/tickets").length, calls.filter((call) => call === "/file").length, bench.sent.length]).toEqual([2, 131, 136]);
   });
 
   // Drift: a file is hashed when the folder is read and sent later. One that changed in between must stop the publish in words that say so, not go live as bytes nobody declared.
