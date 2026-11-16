@@ -79,7 +79,7 @@ export const PROBLEM_WORDS: Readonly<Record<ProblemKind, ProblemWords>> = {
   login_unchecked: { sentence: "The login could not be checked", todo: "Open Domain and press Check.", home: "domain", setting: null },
   update_failed: { sentence: "An update did not go as it should", todo: "The details say what went wrong. To try again, press Update now.", home: "settings", setting: null },
   update_went_back: { sentence: "An update could not change the database, so poplin went back", todo: "Nothing is lost: the install runs the version before. Report it, and update again once a later release is out.", home: "settings", setting: null },
-  users_not_carried: { sentence: "A change of the users did not reach the login of the domain", todo: "Open Domain and press Repair.", home: "domain", setting: null },
+  users_not_carried: { sentence: "A change of the users did not reach the login page", todo: "Open Domain and press Repair.", home: "domain", setting: null },
   rules_not_carried: { sentence: "A changed setting did not reach every rule of the domain", todo: "Open Domain and press Repair.", home: "domain", setting: null },
   copy_failed: { sentence: "A copy of a site was not made", todo: "Duplicate the site again.", home: "usage", setting: null },
   login_not_repaired: { sentence: "The install could not repair its own login", todo: "Open Domain and press Repair.", home: "domain", setting: null },
