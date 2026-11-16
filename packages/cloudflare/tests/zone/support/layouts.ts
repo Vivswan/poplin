@@ -1,6 +1,7 @@
 // The layouts and hostnames the planner tests share, each checked the way setup checks one.
 
 import { type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
+import { type AddressLayout, parseAddressLayout } from "../../../src/zone/address-layout";
 import { type DomainLayout, parseDomainLayout, type RawLayout } from "../../../src/zone/layout";
 
 const BASE: RawLayout = { domain: "example.com" };
@@ -26,3 +27,14 @@ export const LAYOUT = layoutOf({});
 
 /** A layout whose public word is `poplin`: every site hostname ends alike, in `-poplin.example.com`. */
 export const ONE_WORD = layoutOf({ public_word: "poplin" });
+
+/** Check the addresses of an install without a domain that a test wrote by hand; a refusal is a mistake in the test. */
+function addressesOf(account: string, worker: string): AddressLayout {
+  const layout = parseAddressLayout({ account_address: account }, worker);
+  if (!layout.ok) throw new Error(`the test's addresses were refused: ${layout.refusal}`);
+
+  return layout.value;
+}
+
+/** The addresses the tests of an install without a domain run under: the Worker `poplin` on the account `example`, so the dashboard is `poplin.example.workers.dev`. */
+export const ADDRESSES = addressesOf("example", "poplin");
