@@ -16,8 +16,8 @@ import { run } from "../../../cli/src/commands/run";
 import { openSession } from "../../../cli/tests/mcp/support/session";
 import type { JobRun } from "../scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
-import type { Bench, Draft, LiveSite, Missing, Ran, Shared } from "./records";
-import { failureOf } from "./util";
+import type { Bench, Draft, LiveSite, Met, Missing, Ran, Shared } from "./records";
+import { failureOf, thrownCode } from "./util";
 
 /** What every site name a live run makes starts with, whatever the run: the sweep removes each such site. */
 const SWEPT_PREFIX = "live-";
@@ -189,18 +189,23 @@ export function openBench(parts: BenchParts): OpenBench {
     stopped: new AbortController().signal,
   });
 
-  // One watch for each command and each tool call, so a status is never another call's.
-  const watched = (): { readonly fetch: Fetch; readonly refused: () => number | undefined } => {
+  // One watch for each command and each tool call, so what it met is never another call's.
+  const watched = (): { readonly fetch: Fetch; readonly met: () => Met } => {
     let refused: number | undefined;
+    const unanswered: string[] = [];
 
     return {
       fetch: async (input, init) => {
-        const answer = await counted(input, init);
+        const answer = await counted(input, init).catch((error: unknown) => {
+          unanswered.push(thrownCode(error));
+
+          throw error;
+        });
         if (answer.status >= REFUSED_FROM) refused = answer.status;
 
         return answer;
       },
-      refused: () => refused,
+      met: () => ({ refused, unanswered: [...unanswered] }),
     };
   };
 
@@ -212,7 +217,7 @@ export function openBench(parts: BenchParts): OpenBench {
       io((line) => lines.push(line), sent.fetch),
     );
 
-    return { code, value: printed(lines), refused: sent.refused() };
+    return { code, value: printed(lines), met: sent.met() };
   };
 
   const mcp = async (tool: string, input: Record<string, unknown>): Promise<Record<string, unknown>> => {
@@ -221,7 +226,7 @@ export function openBench(parts: BenchParts): OpenBench {
 
     try {
       const result = await session.client.callTool({ name: tool, arguments: input });
-      if (result.isError === true || !isRecord(result.structuredContent)) throw new Error(`the MCP tool ${tool} answered an error: ${failureOf(isRecord(result.structuredContent) ? result.structuredContent.error : undefined, sent.refused())}`);
+      if (result.isError === true || !isRecord(result.structuredContent)) throw new Error(`the MCP tool ${tool} answered an error: ${failureOf(isRecord(result.structuredContent) ? result.structuredContent.error : undefined, sent.met())}`);
 
       return result.structuredContent;
     } finally {
