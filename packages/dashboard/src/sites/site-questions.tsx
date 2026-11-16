@@ -1,4 +1,4 @@
-// The questions the Sites screen asks before a change of a site: its title and name, a new link, and who can open it. They are asked from a row's menu and from the panel alike, and drawn once, beside both.
+// The questions the Sites screen asks before a change of a site: its title and name, a new link, and who can open it. They are asked from the panel, and drawn once, outside it.
 
 import { type ReactNode, type RefObject, useRef } from "react";
 import { useDebounce } from "use-debounce";

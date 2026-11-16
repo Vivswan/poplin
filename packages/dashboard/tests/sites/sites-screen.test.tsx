@@ -1,4 +1,4 @@
-// The Sites screen's pages: where the list stands when another page of it is shown.
+// The Sites screen's list: where it stands when another page of it is shown, and what a row offers while the trash is read.
 
 import { clearPage } from "../lib/support/page";
 
@@ -100,5 +100,14 @@ describe("the pages of the sites", () => {
     await waitFor(() => expect(lists.map((list) => list?.scrollTop)).toEqual([0, 0]));
 
     expect(scrolled).toEqual([300, 300]);
+  });
+});
+
+describe("a row under the trash's filter", () => {
+  // Drift: while the trash is read the rows of the list before still show, and each would offer Restore for a site that is not in the trash, which the server refuses.
+  test("has no Restore while it shows a site that is not in the trash", async () => {
+    await draw("/?view=trash");
+
+    expect(within(document.body).queryAllByRole("button", { name: "Restore" }).length).toBe(0);
   });
 });

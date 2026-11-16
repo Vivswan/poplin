@@ -82,10 +82,10 @@ export async function arrive(page: Page): Promise<string[]> {
   return siteNames(page).allTextContents();
 }
 
-/** Move a site to the trash from its row's menu, on the Sites screen, and wait until the dashboard says so and the site has left the list. */
+/** Move a site to the trash from its panel, on the Sites screen, and wait until the dashboard says so and the site has left the list. */
 export async function trash(page: Page, name: string): Promise<void> {
-  await page.getByRole("button", { name: `More for ${name}`, exact: true }).click();
-  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await openPanel(page, name);
+  await page.getByRole("dialog", { name, exact: true }).getByRole("button", { name: "Delete", exact: true }).click();
 
   await expect(said(page, `${name} moved to the trash.`)).toBeVisible();
   await expect(siteName(page, name)).toHaveCount(0);

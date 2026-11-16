@@ -24,7 +24,7 @@ const SMALL_PHONES = [
   { width: 390, height: 667 },
 ] as const;
 
-/** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen with the switch at the top. */
+/** The schemes a browser asks for. The dashboard follows the browser while its System theme is chosen, which is where it starts. */
 const SCHEMES = ["light", "dark"] as const;
 
 /** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
@@ -175,21 +175,6 @@ const STOPS: readonly Stop[] = [
     close: pressEscape,
   },
   {
-    name: "the title and the name, from a row's menu",
-    open: (page) => fromRowMenu(page, SAMPLE.site, "Edit"),
-    shows: (page) => [
-      editDialog(page).getByRole("textbox", { name: "Title", exact: true }),
-      editDialog(page).getByRole("textbox", { name: "Name", exact: true }),
-    ],
-    close: cancelDialog,
-  },
-  {
-    name: "New link, from a row's menu",
-    open: (page) => fromRowMenu(page, SAMPLE.site, "New link"),
-    shows: (page) => [question(page, "Make a new link?")],
-    close: leaveBy("Cancel"),
-  },
-  {
     name: "a site's panel",
     open: (page) => openPanel(page, SAMPLE.site),
     shows: (page) => [
@@ -200,7 +185,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "the title and the name, from the panel",
     open: (page) => panel(page).getByRole("button", { name: "Edit", exact: true }).click(),
-    shows: (page) => [editDialog(page).getByRole("textbox", { name: "Name", exact: true })],
+    shows: (page) => [editDialog(page).getByRole("textbox", { name: "Title", exact: true }), editDialog(page).getByRole("textbox", { name: "Name", exact: true })],
     close: cancelDialog,
   },
   {
@@ -227,12 +212,6 @@ const STOPS: readonly Stop[] = [
         .getByRole("button", { name: /^Close/ })
         .click(),
     shows: (page) => [screenHeading(page, "Sites"), siteName(page, SAMPLE.site)],
-  },
-  {
-    name: "the account's menu",
-    open: (page) => page.getByRole("button", { name: /^Account/ }).click(),
-    shows: (page) => [page.getByRole("menuitem", { name: "Use system theme", exact: true })],
-    close: pressEscape,
   },
   {
     name: "the question before an update, from the side",
@@ -750,8 +729,9 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
   // Drift: the focus would go under the panel and out of sight again: the end of each row lies under the panel, and a row's controls keep the panel open.
   test("a focus that reaches a row's control under the panel closes the panel and stays there; one on a row's control beside the panel keeps it open", async ({ page }) => {
     await arrive(page);
-    const beside = page.getByRole("row").getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
-    const under = page.getByRole("row").getByRole("button", { name: `More for ${SAMPLE.graphed}`, exact: true });
+    const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true }) });
+    const beside = row.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
+    const under = row.getByRole("button", { name: "Open the site", exact: true });
 
     await openPanel(page, SAMPLE.site);
     await beside.focus();
@@ -760,6 +740,52 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await under.focus();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(under).toBeFocused();
+  });
+});
+
+test.describe("on a screen 1440 px wide, where a site's panel lies over more than rows", () => {
+  test.use({ viewport: VIEWPORTS[0] });
+
+  // Drift: the focus would go under the panel again on a control that is in no row: the panel lies over the last heading of the table and the end of its tools as well.
+  test("a focus that leaves the first row for a heading under the panel, or reaches a tool of the list under it, closes the panel and stays there", async ({ page }) => {
+    await arrive(page);
+    const first = page.getByRole("row").getByRole("button", { name: /^Details of / }).first();
+    const tool = page.getByRole("button", { name: "Columns", exact: true });
+
+    await openPanel(page, SAMPLE.site);
+    await first.focus();
+    await expect(panel(page)).toBeVisible();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("columnheader").last().locator(":focus")).toHaveCount(1);
+
+    await openPanel(page, SAMPLE.site);
+    await tool.focus();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(tool).toBeFocused();
+  });
+});
+
+test.describe("on a phone, at the button of the look", () => {
+  test.use({ viewport: PHONE, colorScheme: "light" });
+
+  // Drift: the look would have no way back to the device's again, the button would not say which look is chosen, or the system's look would be read once and stand still while the device changes.
+  test("each press moves on from System to Light, to Dark, and to System again, which follows the device as it changes", async ({ page }) => {
+    await arrive(page);
+    const root = page.locator("html");
+    const button = (look: string): Locator => page.getByRole("button", { name: `Theme: ${look}`, exact: true });
+
+    await button("System").click();
+    await button("Light").click();
+    await expect(button("Dark")).toBeVisible();
+    await expect(root).toHaveClass(/(^| )dark( |$)/);
+    await page.emulateMedia({ colorScheme: "dark" });
+
+    await button("Dark").click();
+    await expect(button("System")).toBeVisible();
+    await expect(root).toHaveClass(/(^| )dark( |$)/);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(root).toHaveClass(/(^| )light( |$)/);
   });
 });
 
@@ -827,6 +853,25 @@ test.describe("on a phone, after a site's panel", () => {
     await panel(page).getByRole("button", { name: "Close: back to sites", exact: true }).click();
     await expect(details).toBeFocused();
   });
+});
+
+// Drift: a move to another screen would leave the focus on the page itself again, where no key reaches anything and nothing is said; or every screen's tab would be named alike.
+test("a screen that follows another one gives its title the focus and names the tab, on a wide screen and from a phone's sections; the first Tab stop leads past the sections", async ({ page }) => {
+  await arrive(page);
+  for (const size of [VIEWPORTS[0], PHONE]) {
+    await page.setViewportSize(size);
+    for (const screen of ["Activity", "Settings", "Sites"]) {
+      await toSection(page, screen);
+      await expect(screenHeading(page, screen)).toBeFocused();
+      await expect(page).toHaveTitle(`${screen} - poplin`);
+    }
+  }
+
+  await page.reload();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Skip to the content", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(screenHeading(page, "Sites")).toBeFocused();
 });
 
 // Drift: a group of the settings would take its name from its heading by an id again: Firefox ends the page when such a name is read once by the walk's own scripts and once among the page's.
@@ -953,7 +998,8 @@ test.describe("on a phone, in a question", () => {
       return (first?.y ?? Number.NaN) < (second?.y ?? Number.NaN) ? buttons.first() : buttons.last();
     };
 
-    await fromRowMenu(page, SAMPLE.site, "New link");
+    await openPanel(page, SAMPLE.site);
+    await panel(page).getByRole("button", { name: "New link", exact: true }).click();
     await expect(await upper()).toHaveText("Make a new link");
     await expect(await upper()).toHaveClass(FILLED);
     await leaveBy("Cancel")(page);
@@ -1089,7 +1135,8 @@ test("no heading of a screen is larger than the screen's title", async ({ page }
 // Drift: the filter at a row's end would search for a name again: the entries from before a new link or a rename would be gone, and those of another site of that name shown.
 test("on Activity, Only this site keeps the entries of the row's site, the first one from before its new link among them, under a mark that names the site, and the mark's button shows every site again", async ({ page }) => {
   await arrive(page);
-  await fromRowMenu(page, SAMPLE.site, "New link");
+  await openPanel(page, SAMPLE.site);
+  await panel(page).getByRole("button", { name: "New link", exact: true }).click();
   await question(page, "Make a new link?").getByRole("button", { name: "Make a new link", exact: true }).click();
   await expect(said(page, "The site has a new link. The old link stopped working.")).toBeVisible();
 
@@ -1214,7 +1261,9 @@ test("a site in the trash is deleted for good only once its name is typed, with 
   const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
   await arrive(page);
   await page.goto(TRASH);
-  await fromRowMenu(page, TRASHED.title, "Delete for good");
+  // The way out for good is in the site's panel, which the row's own button opens.
+  await page.getByRole("row").getByRole("button", { name: `Details of ${TRASHED.title}`, exact: true }).press("Enter");
+  await page.getByRole("dialog", { name: TRASHED.title, exact: true }).getByRole("button", { name: "Delete for good", exact: true }).click();
   await expect(asks.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   await expect(remove).toBeDisabled();
 

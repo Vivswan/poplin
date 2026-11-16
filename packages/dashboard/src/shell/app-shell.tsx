@@ -12,17 +12,13 @@ import {
   KeyRoundIcon,
   LayoutListIcon,
   MenuIcon,
-  MonitorIcon,
-  MoonIcon,
   RotateCcwIcon,
   SettingsIcon,
-  SunIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { useTheme } from "@/components/theme-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,12 +34,12 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
+import { useScreenFocus } from "@/lib/focus";
 import { useFrame, useStarted } from "@/lib/frame";
-import { useMedia } from "@/lib/media";
 import { sayDone, sayRefused, send } from "@/lib/notify";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { Confirm, type Question } from "@/shared/confirm";
-import { IconButton } from "@/shared/icon-button";
+import { ThemeButton } from "@/shell/theme-button";
 import { siteKey } from "@/sites/site-queries";
 
 /** The sections, in the order shown, each with the path of its screen: first what a person looks at, then, set apart by a gap, what a person sets up. */
@@ -60,8 +56,8 @@ const SECTIONS = [
 /** The name at the top of the side, the same on every install. */
 const NAME = "poplin";
 
-/** What the browser matches while the system asks for the dark look. */
-const SYSTEM_DARK = "(prefers-color-scheme: dark)";
+/** The look of the way past the sections: over the page's corner, and in sight only while it holds the focus after a key. */
+const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focus-visible:pointer-events-auto focus-visible:opacity-100";
 
 /** What keeps the router from marking a link of the frame as the place the address is at for every address under it, and from adding a class of its own. */
 const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const;
@@ -104,21 +100,6 @@ function SectionLink({ section, current }: { readonly section: (typeof SECTIONS)
   );
 }
 
-/**
- * The switch between the light look and the dark one, kept in this browser. Until it is pressed the dashboard follows the system.
- */
-function ThemeToggle(): ReactNode {
-  const { theme, setTheme } = useTheme();
-  const systemDark = useMedia(SYSTEM_DARK);
-  const dark = theme === "dark" || (theme === "system" && systemDark);
-
-  return (
-    <IconButton label={dark ? "Switch to light" : "Switch to dark"} onClick={() => setTheme(dark ? "light" : "dark")} className="max-md:size-10">
-      {dark ? <SunIcon /> : <MoonIcon />}
-    </IconButton>
-  );
-}
-
 /** The email of who is logged in, whole: where one line is too short for it, it goes on at the "@" on a second line. What follows the "@" is quieter either way. */
 function Email({ className }: { readonly className?: string }): ReactNode {
   const at = Math.max(BOOT.email.lastIndexOf("@"), 0);
@@ -131,9 +112,8 @@ function Email({ className }: { readonly className?: string }): ReactNode {
   );
 }
 
-/** The account menu: who is logged in, and the way back to the system's look. */
+/** The account menu: who is logged in. */
 function AccountMenu({ compact, offer }: { readonly compact?: boolean; readonly offer: Offer | undefined }): ReactNode {
-  const { theme, setTheme } = useTheme();
   const initial = BOOT.email.slice(0, 1).toUpperCase();
   const avatar = (
     <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">{initial}</span>
@@ -161,13 +141,6 @@ function AccountMenu({ compact, offer }: { readonly compact?: boolean; readonly 
           <DropdownMenuLabel>
             <Email />
           </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem disabled={theme === "system"} onClick={() => setTheme("system")}>
-            <MonitorIcon />
-            Use system theme
-          </DropdownMenuItem>
         </DropdownMenuGroup>
         {compact && offer !== undefined ? (
           <>
@@ -351,7 +324,7 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
  * Draw the frame around one screen.
  *
  * @param current - the section the screen belongs to
- * @param heading - the screen's title
+ * @param heading - the screen's title, which the page's own title starts with
  * @param tools - what sits on the title's line, before the demo's tag
  */
 export function AppShell({
@@ -361,16 +334,24 @@ export function AppShell({
   children,
 }: {
   readonly current: Section;
-  readonly heading: ReactNode;
+  readonly heading: string;
   readonly tools?: ReactNode;
   readonly children: ReactNode;
 }): ReactNode {
   const { offer, started, question } = useOffer();
   // The frame is drawn before the screen inside it, so every time of the screen is written in the time zone a person chose.
   useChosenTimeZone();
+  const title = useScreenFocus(heading);
+  useEffect(() => {
+    document.title = `${heading} - ${NAME}`;
+  }, [heading]);
 
   return (
     <div className="grid h-svh grid-cols-[232px_minmax(0,1fr)] max-md:grid-cols-1">
+      {/* The first stop of the Tab key, in sight only while it holds the focus: it leads past the sections to the screen. */}
+      <Button variant="outline" size="sm" className={SKIP_LOOK} onClick={() => title.ref.current?.focus()}>
+        Skip to the content
+      </Button>
       <aside className="flex min-h-0 flex-col gap-4 border-r bg-sidebar px-3 pt-4 pb-3 max-md:hidden">
         <Link to="/" {...NO_OWN_MARK} className="flex h-8 items-center gap-2 rounded-md px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <BrandMark />
@@ -390,11 +371,13 @@ export function AppShell({
       <main className="flex min-h-0 min-w-0 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-3 px-6 max-md:gap-2 max-md:px-4">
           <PhoneSections current={current} offer={offer} started={started} />
-          <h1 className="min-w-0 truncate text-base font-bold">{heading}</h1>
+          <h1 {...title} className="min-w-0 truncate text-base font-bold outline-none">
+            {heading}
+          </h1>
           <div className="ml-auto flex items-center gap-2">
             {tools}
             <DemoTag />
-            <ThemeToggle />
+            <ThemeButton />
             <span className="md:hidden">
               <AccountMenu compact offer={offer} />
             </span>
