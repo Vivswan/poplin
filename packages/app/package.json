@@ -23,7 +23,9 @@
     "./src/limits/visitor-key": "./src/limits/visitor-key.ts",
     "./src/login/admit": "./src/login/admit.ts",
     "./src/login/entries": "./src/login/entries.ts",
+    "./src/sites/addresses": "./src/sites/addresses.ts",
     "./src/sites/hostname-addresses": "./src/sites/hostname-addresses.ts",
+    "./src/sites/path-addresses": "./src/sites/path-addresses.ts",
     "./src/sites/paused": "./src/sites/paused.ts",
     "./src/sites/serve": "./src/sites/serve.ts",
     "./src/transport/to-https": "./src/transport/to-https.ts"

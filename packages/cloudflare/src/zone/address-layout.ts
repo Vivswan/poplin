@@ -20,12 +20,12 @@ const PRIVATE_ENDING = "-private";
 declare const addressBrand: unique symbol;
 
 /** The layout as the Worker's `ZONE` binding holds it, unchecked: the account's name in its free address, the `<account>` of `<worker>.<account>.workers.dev`. */
-export interface RawAddressLayout {
+export interface RawAccountAddresses {
   readonly account_address: string;
 }
 
-/** A layout made by `parseAddressLayout` alone. Each forwarder's name is the first label of the host it answers at. */
-export interface AddressLayout {
+/** A layout made by `parseAccountAddresses` alone. Each forwarder's name is the first label of the host it answers at. */
+export interface AccountAddresses {
   /** The account's name in its free address. */
   readonly account: string;
 
@@ -55,7 +55,7 @@ export interface AddressLayout {
 type AddressRefusal = "bad-account" | "bad-worker" | "account-too-long";
 
 /** A layout, or the first rule it breaks. */
-export type CheckedAddressLayout = { readonly ok: true; readonly value: AddressLayout } | { readonly ok: false; readonly refusal: AddressRefusal };
+export type CheckedAccountAddresses = { readonly ok: true; readonly value: AccountAddresses } | { readonly ok: false; readonly refusal: AddressRefusal };
 
 /**
  * Check the addresses of an install without a domain before any of them reaches Cloudflare.
@@ -63,7 +63,7 @@ export type CheckedAddressLayout = { readonly ok: true; readonly value: AddressL
  * @param worker - the one Worker's name, which the two forwarders' names are made from
  * @returns the layout, or the first rule it breaks; under a Worker named `poplin` the account's name may be 36 characters at most
  */
-export function parseAddressLayout(raw: RawAddressLayout, worker: string): CheckedAddressLayout {
+export function parseAccountAddresses(raw: RawAccountAddresses, worker: string): CheckedAccountAddresses {
   // An account's name is one label: it holds no dot, and under the free address alone it is a hostname.
   if (raw.account_address.includes(".") || !parseHostname(`${raw.account_address}.${FREE_ADDRESS}`).ok) return { ok: false, refusal: "bad-account" };
 
@@ -78,5 +78,5 @@ export function parseAddressLayout(raw: RawAddressLayout, worker: string): Check
 
   const layout = { account: raw.account_address, worker, adminHost: adminHost.value, sitesWorker, sitesHost: sitesHost.value, privateWorker, privateHost: privateHost.value };
 
-  return { ok: true, value: layout as AddressLayout };
+  return { ok: true, value: layout as AccountAddresses };
 }

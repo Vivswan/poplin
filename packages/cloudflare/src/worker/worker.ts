@@ -1,10 +1,12 @@
 // The Worker: every request and every scheduled run enters here.
 //
-//   <admin hostname>/api and below   the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
-//   <admin hostname>/setup and below the setup page, which answers only until somebody has logged in
-//   <admin hostname>/...             the dashboard: the Access token and the users, on every request
-//   the Worker's workers.dev address the setup page and nothing else of the install: it is the one address that resolves before setup made the records
+//   <admin host>/api and below       the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
+//   <admin host>/setup and below     the setup page, which answers only until somebody has logged in
+//   <admin host>/...                 the dashboard: the Access token and the users, on every request
 //   any other hostname               the Access token under `p`, the limits, then serving; one that is no site's gets serving's own 404
+//
+// Which hostname is which is said by the instance's `hosts`, the one value built from the install's kind.
+// On an install with a domain alone, every workers.dev hostname answers the setup page and nothing else of the install.
 //
 // Access stands in front of the whole admin hostname at the edge, but for the paths of `INSTALL_OBJECTS.openPaths`. Each of those has its answer in `OPEN`, and every other path is the dashboard's.
 // The dashboard keeps no session of its own: the token Access puts on a request is checked on each one, and its email against the users.
@@ -43,9 +45,6 @@ const FRESH = 0;
 /** The answer to a request that met a failure of the database or the bucket. */
 const TRY_AGAIN = "Something went wrong. Try again.";
 
-/** What the hostname of a Worker's own address ends in. Cloudflare gives every Worker one, whatever its routes. */
-const OWN_ADDRESS = ".workers.dev";
-
 /** The answer of an install whose database another build of poplin made: by a schema step that was not this code's, or with settings this code does not read. */
 const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
 
@@ -61,7 +60,7 @@ const SET_THEM = "Setup writes them, and so does the OpenTofu module. In the Clo
 /** What answers each path Access lets past its login, and everything below it. A path the list gains has no answer here until one is written, and the Worker does not build without it. */
 const OPEN: Readonly<Record<(typeof INSTALL_OBJECTS.openPaths)[number], (request: Request, instance: Instance, ways: Ways) => Promise<Response>>> = {
   "/api": async (request, instance) => instance.api.fetch(request),
-  "/setup": async (request, instance, ways) => answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen),
+  "/setup": async (request, instance, ways) => answerSetup(request, instance, () => ways.held(FRESH), ways.setupOpen),
 };
 
 /** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, the same for a site request, and whether the setup page is open. */
@@ -117,7 +116,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
     entered: instance.entered,
     base: "",
     client: CLIENT_FILES,
-    domain: instance.domain,
+    ...(instance.domain === undefined ? {} : { domain: instance.domain }),
     follow: instance.follow,
     freeLimits: FREE_LIMITS,
     usage: instance.usage,
@@ -133,9 +132,9 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
   }
 }
 
-/** The Worker's own address answers setup alone: the page itself, the way to it from any other path while it is open, and nothing after. */
+/** The Worker's own address, on an install with a domain, answers setup alone: the page itself, the way to it from any other path while it is open, and nothing after. */
 async function answerOwnAddress(request: Request, instance: Instance, ways: Ways): Promise<Response> {
-  if (isSetupPath(new URL(request.url).pathname)) return answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen);
+  if (isSetupPath(new URL(request.url).pathname)) return answerSetup(request, instance, () => ways.held(FRESH), ways.setupOpen);
 
   if (await ways.setupOpen()) return new Response(null, { status: 302, headers: { "Cache-Control": "no-store", Location: SETUP } });
 
@@ -265,11 +264,10 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     const { hostname } = new URL(request.url);
     const { database } = instance.install;
     const ways: Ways = { held: (lifetime) => held(database, lifetime), siteHeld: ofSite(database), setupOpen: () => setupOpen(database) };
-    if (hostname.endsWith(OWN_ADDRESS)) return answerOwnAddress(request, instance, ways);
+    const part = instance.hosts.partOf(hostname);
+    if (part === "site") return answerSite(request, instance, ways.siteHeld);
 
-    if (hostname !== instance.layout.adminHostname) return answerSite(request, instance, ways.siteHeld);
-
-    return answerAdmin(request, instance, ways);
+    return part === "setup" ? answerOwnAddress(request, instance, ways) : answerAdmin(request, instance, ways);
   }
 
   return {

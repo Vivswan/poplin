@@ -185,12 +185,13 @@ export async function tokenOf(from: World, scope: "admin" | "publisher"): Promis
  * The API as one caller asks it: with the token, or with no `Authorization` header for `null`.
  *
  * @param send - what sends each request; left out, the Worker is asked on the simulated bindings
+ * @param admin - the origin the API answers at; left out, the example domain's admin hostname
  */
-export function api(worker: Worker, token: string | null, send: (input: string, init: RequestInit) => Promise<Response> = (input, init) => ask(worker, input, init)): ApiCalls {
+export function api(worker: Worker, token: string | null, send: (input: string, init: RequestInit) => Promise<Response> = (input, init) => ask(worker, input, init), admin: string = ADMIN): ApiCalls {
   const headers: Record<string, string> = token === null ? {} : { Authorization: `Bearer ${token}` };
 
   // The client names every address as text.
-  return hc<Api>(ADMIN, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => send(String(input), init ?? {}) }).api;
+  return hc<Api>(admin, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => send(String(input), init ?? {}) }).api;
 }
 
 /** Send the bytes of one file of an upload. */
@@ -205,9 +206,12 @@ export async function done<Body>(response: Answer): Promise<Body> {
   return (await response.json()) as Body;
 }
 
-/** Publish files through the API's three steps: begin, one put per file, finish. */
-export async function publish(worker: Worker, token: string, asked: Omit<v.InferInput<typeof PUBLISH_REQUEST>, "files">, files: readonly TestFile[]): Promise<Published> {
-  const calls = api(worker, token);
+/**
+ * Publish files through the API's three steps: begin, one put per file, finish.
+ *
+ * @param calls - the API as the publisher asks it; left out, at the example domain's admin hostname on the simulated bindings
+ */
+export async function publish(worker: Worker, token: string, asked: Omit<v.InferInput<typeof PUBLISH_REQUEST>, "files">, files: readonly TestFile[], calls: ApiCalls = api(worker, token)): Promise<Published> {
   const manifest = await Promise.all(files.map(async (file) => ({ path: file.path, size: file.body.byteLength, content_type: file.type, sha256: await sha256Of(file.body) })));
   const begun = await done<{ upload: { id: string } }>(await calls.uploads.$post({ query: {}, json: { ...asked, files: manifest } }));
 
