@@ -1,7 +1,7 @@
 // The Activity log in its room: what the table's columns show whole and where the room they leave over goes, and what a phone's row shows whole.
-// And the screen at rest: which entries it shows stands in sight over the list, with the row of tools whole beside it.
+// And the screen at rest and narrowed to one site: which entries it shows stands in sight on a line of its own over the list, with the tools whole over it.
 
-import { expect } from "@playwright/test";
+import { expect, type Locator } from "@playwright/test";
 
 import { arrive, screenHeading, test, toSection } from "./visit";
 
@@ -14,8 +14,24 @@ const SCREENS = [
 /** How long a press that is only tried waits for a tool to be in reach, in milliseconds: a tool under another one never is. */
 const REACH_MS = 3000;
 
-/** The screens the words over the list are looked for on: those of the table, and a phone. */
-const AT_REST = [...SCREENS, { width: 390, height: 844 }] as const;
+/** The screens the words over the list are looked for on: those of the table, the narrowest whose row of tools holds the mark of one site, and a phone. */
+const AT_REST = [...SCREENS, { width: 1280, height: 800 }, { width: 390, height: 844 }] as const;
+
+/** The sample site with the longest title, which the mark of one site is widest for. */
+const LONGEST = "Notes from the offsite";
+
+/** The tools of the log that a line too full pushes under one another: the search, the far button of the time zone, and Download. */
+function toolsOf(log: Locator): readonly Locator[] {
+  return [log.getByRole("searchbox", { name: /^Find activity / }), log.getByRole("button", { name: "UTC", exact: true }), log.getByRole("button", { name: "Download", exact: true })];
+}
+
+/** Hold that each tool is whole, all of it inside the window, and in reach: a press on it would land on it, which a press that is only tried says without pressing. */
+async function expectInReach(tools: readonly Locator[]): Promise<void> {
+  for (const tool of tools) {
+    await expect(tool).toBeInViewport({ ratio: 1 });
+    await tool.click({ trial: true, timeout: REACH_MS });
+  }
+}
 
 for (const size of SCREENS) {
   test.describe(`on a screen ${size.width} px wide, in the Activity table`, () => {
@@ -77,12 +93,26 @@ for (const size of AT_REST) {
       const shown = log.getByText(/^1 to 50 of [0-9,]+$/).filter({ visible: true }).first();
       await expect(shown).toBeInViewport({ ratio: 1 });
 
-      const tools = [log.getByRole("searchbox", { name: /^Find activity / }), log.getByRole("button", { name: "UTC", exact: true }), log.getByRole("button", { name: "Download", exact: true })];
-      // Whole: all of it inside the window. In reach: a press on it would land on it, which a press that is only tried says without pressing.
-      for (const tool of tools) {
-        await expect(tool).toBeInViewport({ ratio: 1 });
-        await tool.click({ trial: true, timeout: REACH_MS });
-      }
+      await expectInReach(toolsOf(log));
+    });
+
+    // Drift: the words would stand in the row of tools again, where the mark of one site stands too: with a long title in the mark, the row has no room for both, and the time zone's buttons go under Download.
+    test("narrowed to the site with the longest title, the words stand on a line of their own under every tool, and the tools stay whole and in reach", async ({ page }) => {
+      await arrive(page);
+      await toSection(page, "Activity");
+      const log = page.getByRole("region", { name: "Activity", exact: true });
+      await log.getByRole("button", { name: `Only ${LONGEST}`, exact: true }).filter({ visible: true }).first().click();
+      const mark = log.getByRole("button", { name: "Show every site", exact: true });
+      await expect(mark).toBeVisible();
+      // The mark's button takes the focus and shows its hint, which on a phone lies over the search: Escape puts the hint away.
+      await page.keyboard.press("Escape");
+      const shown = log.getByText(/^1 to [0-9]+ of [0-9,]+$/).filter({ visible: true }).first();
+      await expect(shown).toBeInViewport({ ratio: 1 });
+
+      await expectInReach(toolsOf(log));
+      const [words, ...boxes] = await Promise.all([shown, ...toolsOf(log), mark].map((part) => part.boundingBox()));
+      const lowest = Math.max(...boxes.map((box) => (box?.y ?? Number.NaN) + (box?.height ?? Number.NaN)));
+      expect(words?.y ?? Number.NaN, "the top of the words, under the bottom of the lowest tool").toBeGreaterThanOrEqual(lowest);
     });
   });
 }
