@@ -50,6 +50,9 @@ const RUN_MS = 30_000;
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
 const CHECKS_ROWS = 849;
 
+/** What a run says when it sends a stranger's request a second time. */
+const SENT_AGAIN = "a stranger's request was cut off before any answer, and was sent once more";
+
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
 
@@ -136,13 +139,13 @@ const BURST_CASES: readonly BurstCase[] = [
     ["320 requests in 0 ms were answered: 302 x120, 429 of the install x180, 429 of the rate rule x20", "through AAA x320 (most in ten seconds x320)", ONE_SEEN],
   ],
   ["requests spread over two data centers are blocked once one of them has seen more than the limit", { spread: 2 }, "passed",
-    ["603 requests in 3156 ms were answered: 302 x120, 429 of the install x480, 429 of the rate rule x3", "through AAA x302 (most in ten seconds x302), BBB x301 (most in ten seconds x301)", ONE_SEEN],
+    ["604 requests in 3168 ms were answered: 302 x120, 429 of the install x480, 429 of the rate rule x4", "through AAA x302 (most in ten seconds x302), BBB x302 (most in ten seconds x302)", ONE_SEEN],
   ],
   ["one data center past the limit for five seconds, with no rule to block, fails", { noRateRule: true }, "failed",
     ["757 requests in 5004 ms were answered: 302 x120, 429 of the install x637", "through AAA x757 (most in ten seconds x757)", ONE_SEEN],
   ],
   ["two data centers past the limit for five seconds, with no rule to block, fail before the requests end", { noRateRule: true, spread: 2 }, "failed",
-    ["1020 requests in 8160 ms were answered: 302 x120, 429 of the install x900", "through AAA x510 (most in ten seconds x510), BBB x510 (most in ten seconds x510)", ONE_SEEN],
+    ["1021 requests in 8172 ms were answered: 302 x120, 429 of the install x901", "through AAA x511 (most in ten seconds x511), BBB x510 (most in ten seconds x510)", ONE_SEEN],
   ],
   ["requests spread over four data centers, none past the limit, prove nothing and are skipped", { spread: 4 }, "skipped",
     [
@@ -291,6 +294,31 @@ describe("the live checks, against a local fake", () => {
     ["a drill whose removal at the end is refused fails, and says no line", { method: "DELETE", path: /^\/api\/sites\/[^/]+$/, nth: 4 }, /could not remove 1 of its 3 sites/, 1],
   ])("%s", async (_what, refusal, failure, left) => {
     expect(await drillOn(refusal)).toMatchObject({ said: [], result: "failed", failure: expect.stringMatching(failure), left });
+  }, RUN_MS);
+
+  // Drift: the edge's rule blocks with an answer, a 403, and a connection that closes before any answer says nothing of the rule.
+  // A check that took such a failure for the block would pass with the rule gone; one that failed on it fails a run for the network's sake.
+  test.each<[string, string, number, Outcome["result"], string[]]>([
+    ["a changing method to a site's address, cut off once, is sent once more, said so, and passes on the answer it then gets", "L8-method", 1, "passed", [SENT_AGAIN]],
+    ["a changing method to a site's address, cut off twice, fails", "L8-method", 2, "failed", [SENT_AGAIN]],
+    ["a computer's login asked of the API, cut off once, is not sent again, and fails", "L11", 1, "failed", []],
+  ])("%s", async (_what, id, cuts, result, lines) => {
+    const fake = await openFake();
+    const said: string[] = [];
+    let cut = 0;
+    const cutting: Fetch = async (input, init) => {
+      if (init.method !== "POST" || cut >= cuts) return fake.fetch(input, init);
+
+      cut += 1;
+      throw Object.assign(new TypeError("The socket connection was closed unexpectedly"), { code: "ECONNRESET" });
+    };
+    const { bench, close } = openBench({ domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing: {}, fetch: cutting, pause: fake.pause, now: fake.now, say: (text) => said.push(text), manyFiles: MANY_FILES });
+    OPENED.push(close);
+
+    const check = CHECKS.find((one) => one.id === id);
+    if (check === undefined) throw new Error(`the checks hold no ${id}`);
+
+    expect({ result: (await runCheck(bench, check)).result, said }).toEqual({ result, said: lines });
   }, RUN_MS);
 
   // A failure that said only the answers left it open whether the rule was gone or the requests never met in one count; a line that held the address the edge saw would put it in a public log.
