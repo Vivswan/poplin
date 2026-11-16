@@ -342,10 +342,27 @@ describe("the live checks, against a local fake", () => {
   // A drill that fails half way has made sites on an install that keeps them; one whose own removal fails has left one there and must not pass.
   test.each<[string, Refusal, RegExp, number]>([
     ["a drill that fails at its second export still removes every site it made", { method: "GET", path: /^\/api\/export\/sites\/[^/]+$/, nth: 4 }, /Expected: 0\s+Received: 1/, 0],
-    ["a drill whose first import is refused reports that, not the removals of sites that are gone", { method: "POST", path: /^\/api\/import\/sites$/, nth: 1 }, /"imported": 1/, 0],
+    ["a drill whose first import is refused reports its problem's code and the status, not the removals of sites that are gone", { method: "POST", path: /^\/api\/import\/sites$/, nth: 1 }, /"problem forbidden, last status of 400 or more: 403"/, 0],
     ["a drill whose removal at the end is refused fails, and says no line", { method: "DELETE", path: /^\/api\/sites\/[^/]+$/, nth: 4 }, /could not remove 1 of its 3 sites/, 1],
   ])("%s", async (_what, refusal, failure, left) => {
     expect(await drillOn(refusal)).toMatchObject({ said: [], result: "failed", failure: expect.stringMatching(failure), left });
+  }, RUN_MS);
+
+  // Drift: a tool call that failed said nothing of why, so a run that met one stray answer could not be read; and the answer's own words may quote an address, which a log must not hold.
+  test("a tool call the install refuses says the problem's code and the status, and nothing else of the answer", async () => {
+    const fake = await openFake();
+    const refusing: Fetch = async (input, init) => {
+      if (init.method !== "POST" || new URL(input).pathname !== "/api/uploads") return fake.fetch(input, init);
+
+      return Response.json({ error: { code: "forbidden", message: `Refused at ${input}.` } }, { status: 403 });
+    };
+    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: refusing, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY };
+    const { bench, close } = openBench({ ...parts, say: () => undefined });
+    OPENED.push(close);
+
+    const failure = await bench.mcp("publish_site", { path: bench.folder("<p>refused</p>"), name: "refused" }).then(() => "no failure", String);
+
+    expect(failure).toBe("Error: the MCP tool publish_site answered an error: problem forbidden, last status of 400 or more: 403");
   }, RUN_MS);
 
   // Drift: the line is how a person reading a run learns whether files went straight to the bucket. One that said "used" for a file that went through the install would hide a key the bucket refuses.

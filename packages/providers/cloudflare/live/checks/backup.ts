@@ -9,7 +9,7 @@ import { expect } from "bun:test";
 
 import { type Compared, compareBackups, differenceLines, IGNORED } from "../compare-backups";
 import type { Bench, Check, LiveSite } from "../records";
-import { siteOf } from "../util";
+import { failureOf, siteOf } from "../util";
 
 /** What one drill asks of the install when no request is sent again: every request it sends, and how many of them make the install write to its bucket or list it. */
 export const DRILL_COST = { requests: 72, bucket: 34 } as const;
@@ -67,9 +67,11 @@ async function restoreAndCompare(bench: Bench, made: readonly LiveSite[]): Promi
   for (const site of made) expect((await bench.cli("show", site.id)).code).not.toBe(0);
 
   for (const zip of first) {
-    // The counts alone: the answer's other keys hold the zip's path and the site's label, which a failure would print.
-    const { imported, skipped, failed } = (await bench.cli("import", zip)).value;
-    expect({ imported, skipped, failed }).toEqual({ imported: 1, skipped: 0, failed: 0 });
+    // The counts, and of each site that failed its problem's code and the last status: the answer's other keys hold the zip's path and the site's label, which a failure would print.
+    const ran = await bench.cli("import", zip);
+    const { imported, skipped, failed, sites } = ran.value;
+    const met = (Array.isArray(sites) ? sites : []).filter((site) => site?.result === "failed").map((site) => failureOf(site, ran.refused));
+    expect({ imported, skipped, failed, met }).toEqual({ imported: 1, skipped: 0, failed: 0, met: [] });
   }
 
   const second = await exportEach(bench, made, "second");

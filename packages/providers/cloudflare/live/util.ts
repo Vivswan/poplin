@@ -8,6 +8,9 @@ import type { LiveSite, Ran } from "./records";
 /** An id no site has: a check asks for it to see what the install answers for a site that is not there. */
 export const GHOST_ID = "0live0check0";
 
+/** A problem's code as the product writes one: lowercase words joined by underscores, which hold no name and no address. */
+const PROBLEM_CODE = /^[a-z][a-z0-9_]*$/;
+
 /** The statuses the install itself refuses a stranger with; each such answer is never cached. */
 const OWN_REFUSALS: ReadonlySet<number> = new Set([302, 303, 401, 403, 404, 405, 429]);
 
@@ -19,6 +22,19 @@ const OWN_REFUSALS: ReadonlySet<number> = new Set([302, 303, 401, 403, 404, 405,
  */
 export function under(address: string, inside: string): string {
   return address.endsWith("/") ? `${address}${inside}` : `${address}/${inside}`;
+}
+
+/**
+ * Say what a command or a tool call that failed met, in a code and a number alone: a problem's other words may quote an address.
+ *
+ * @param problem - what was answered as the problem, of any shape
+ * @param refused - the status of the last answer to the call that was 400 or more
+ */
+export function failureOf(problem: unknown, refused: number | undefined): string {
+  const code: unknown = typeof problem === "object" && problem !== null && "code" in problem ? problem.code : undefined;
+  const named = typeof code === "string" && PROBLEM_CODE.test(code) ? `problem ${code}` : "a problem with no code";
+
+  return refused === undefined ? `${named}, and no answer of status 400 or more` : `${named}, last status of 400 or more: ${refused}`;
 }
 
 /** The site a command answered, after a command that must exit 0. */

@@ -21,10 +21,11 @@ export interface LiveSite {
   readonly state: string;
 }
 
-/** What one command printed with `--json`: its exit code and the one value on stdout. */
+/** What one command printed with `--json`: its exit code and the one value on stdout. `refused` is the status of the last answer to it that was 400 or more; `undefined` where every answer was under that. */
 export interface Ran {
   readonly code: number;
   readonly value: Record<string, unknown>;
+  readonly refused: number | undefined;
 }
 
 /** What a site is published with. `text` is the page's whole body, which a check looks for in an answer. */
