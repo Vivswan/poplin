@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { publishedPins } from "../packages/core/src/records/release";
 import { publishedRelease } from "../packages/core/src/records/update";
 import { newestRelease } from "../website/src/lib/changelog";
 
@@ -11,7 +12,7 @@ const WEBSITE = join(ROOT, "website");
 
 const SITE = { PAGES_ORIGIN: "https://site.example.com", PAGES_BASE_PATH: "/poplin/" };
 
-const BUILD_SETTINGS = ["DEMO_URL", "POPLIN_CHANGELOG", "PAGES_ORIGIN", "PAGES_BASE_PATH"];
+const BUILD_SETTINGS = ["DEMO_URL", "POPLIN_CHANGELOG", "POPLIN_RELEASE_PINS", "PAGES_ORIGIN", "PAGES_BASE_PATH"];
 
 const DEMO = "https://demo-page.example.com/";
 
@@ -41,22 +42,39 @@ const LATER_RELEASE = `## [0.2.0](https://github.com/example/poplin/compare/v0.1
 
 `;
 
-const CHANGELOGS: readonly (readonly [what: string, changelog: string, foot: string, latest: unknown, read: ReturnType<typeof publishedRelease>])[] = [
-  ["no version released", "# Changelog\n", "poplin", { version: null }, null],
-  [
-    "one version",
-    `# Changelog\n\n${FIRST_RELEASE}`,
-    "poplin 0.1.0",
-    { version: "0.1.0", released: "2026-11-20", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.1.0" },
-    { version: "0.1.0", released: "2026-11-20", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.1.0", database: false },
-  ],
-  [
-    "two versions",
-    `# Changelog\n\n${LATER_RELEASE}${FIRST_RELEASE}`,
-    "poplin 0.2.0",
-    { version: "0.2.0", released: "2026-12-04", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0" },
-    { version: "0.2.0", released: "2026-12-04", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", database: false },
-  ],
+const DIGEST = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
+const FIRST_NEWS = { version: "0.1.0", released: "2026-11-20", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.1.0" };
+
+const LATER_NEWS = { version: "0.2.0", released: "2026-12-04", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0" };
+
+const CHANGELOGS: readonly {
+  readonly what: string;
+  readonly changelog: string;
+  readonly pins: Readonly<Record<string, { source: string }>> | undefined;
+  readonly foot: string;
+  readonly latest: unknown;
+  readonly read: ReturnType<typeof publishedRelease>;
+}[] = [
+  { what: "no version released", changelog: "# Changelog\n", pins: {}, foot: "poplin", latest: { version: null }, read: null },
+  { what: "one version, its digest published", changelog: `# Changelog\n\n${FIRST_RELEASE}`, pins: { "0.1.0": { source: DIGEST } }, foot: "poplin 0.1.0", latest: FIRST_NEWS, read: { ...FIRST_NEWS, database: false } },
+  {
+    what: "two versions, both digests published",
+    changelog: `# Changelog\n\n${LATER_RELEASE}${FIRST_RELEASE}`,
+    pins: { "0.2.0": { source: DIGEST }, "0.1.0": { source: DIGEST } },
+    foot: "poplin 0.2.0",
+    latest: LATER_NEWS,
+    read: { ...LATER_NEWS, database: false },
+  },
+  {
+    what: "two versions, the newer with no digest published",
+    changelog: `# Changelog\n\n${LATER_RELEASE}${FIRST_RELEASE}`,
+    pins: { "0.1.0": { source: DIGEST } },
+    foot: "poplin 0.1.0",
+    latest: FIRST_NEWS,
+    read: { ...FIRST_NEWS, database: false },
+  },
+  { what: "one version, in a build with no step that looks for digests", changelog: `# Changelog\n\n${FIRST_RELEASE}`, pins: undefined, foot: "poplin", latest: { version: null }, read: null },
 ];
 
 /** Builds the website into a folder, with the build settings it is given and no other. */
@@ -109,18 +127,21 @@ describe("the built website", () => {
   );
 
   test.each(CHANGELOGS)(
-    "names the newest released version in latest.json and in the footer, and none while none is released, in a file an install can read (%s): without this an install is told of a version that was never released, or of none",
-    (what, changelog, foot, latest, read) => {
+    "names in releases.json every release whose digest was found, and in latest.json and the footer the newest of those alone ($what): without this an install is told of a release its build refuses, or of one that was never released",
+    ({ what, changelog, pins, foot, latest, read }) => {
       using site = mkdtempDisposableSync(join(tmpdir(), "poplin-website-"));
       using source = mkdtempDisposableSync(join(tmpdir(), "poplin-changelog-"));
       const file = join(source.path, "CHANGELOG.md");
+      const pinsFile = join(source.path, "release-pins.json");
       writeFileSync(file, changelog);
-      build(site.path, { ...SITE, POPLIN_CHANGELOG: file });
+      writeFileSync(pinsFile, JSON.stringify(pins ?? {}));
+      build(site.path, { ...SITE, POPLIN_CHANGELOG: file, POPLIN_RELEASE_PINS: pins === undefined ? undefined : pinsFile });
 
       const published = readFileSync(join(site.path, "latest.json"), "utf8");
 
       expect(JSON.parse(published), what).toEqual(latest);
       expect(publishedRelease(published), "what an install reads from the file").toEqual(read);
+      expect(publishedPins(readFileSync(join(site.path, "releases.json"), "utf8")), "what a build reads as the releases it may take").toEqual(pins ?? {});
       expect(footLine(readFileSync(join(site.path, "index.html"), "utf8")), what).toBe(foot);
       expect(existsSync(join(site.path, "changelog")), "the release notes are on the repository, not the site").toBe(false);
     },

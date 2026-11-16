@@ -3,7 +3,9 @@
 // THE FROZEN PART. An install's copy on GitHub never changes, so every release must go on answering what any earlier copy does in a hosted build:
 //
 //   reads     POPLIN_VERSION, the one build variable a person sets
-//   fetches   the release's files into a new folder, then installs there with `bun install --frozen-lockfile`
+//   fetches   the published digests from the project's website, and the release's files from GitHub
+//   checks    the files against the digest published for that version, and runs none that differ
+//   unpacks   the files into a new folder, then installs there with `bun install --frozen-lockfile`
 //   runs      `bun run deploy` in that folder, with POPLIN_COPY_CONFIG set to the path of the copy's wrangler.jsonc
 //
 // The release's own deploy, handed POPLIN_COPY_CONFIG, fetches nothing: it lays the copy's fields over its configuration and deploys.
@@ -11,9 +13,12 @@
 import { mkdtempDisposableSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { checkedRelease, newestPinned, type ReleasePins, type ReleaseRefusal } from "@poplin/core/src/records/release";
+import * as v from "valibot";
+
 import { parseAskedVersion } from "./asked-version";
 import { type DeployConfig, keepCopyConfig } from "./kept-config";
-import type { ReleaseSource, RunCommand } from "./release-source";
+import type { ReleaseSource } from "./release-source";
 
 /** What Cloudflare's hosted build sets `WORKERS_CI` to. */
 const HOSTED = "1";
@@ -27,13 +32,28 @@ const MERGED_FILE = "wrangler.deploy.json";
 /** The folder wrangler runs in, from the root of a tree. */
 const PACKAGE = join("packages", "cloudflare");
 
+/** The folder a release's archive holds its files in. */
+const ARCHIVE_FOLDER = "poplin";
+
+/** The file of a release that says its version, from the root of its archive. */
+const VERSION_FILE = `${ARCHIVE_FOLDER}/packages/cli/package.json`;
+
+/** What that file must hold to say a version. */
+const VERSION_MANIFEST = v.object({ version: v.string() });
+
 /** What ends every line of a deploy that stopped before wrangler ran. */
 const NOTHING_DEPLOYED = "Nothing was deployed.";
+
+/** Runs one command to its end, its output going where the build's goes. Answers its exit code. */
+export type RunCommand = (command: readonly string[], options: { readonly cwd: string; readonly env: Readonly<Record<string, string | undefined>> }) => Promise<number>;
 
 /** One deploy: the tree it starts in, its environment, and its ways out to the world. */
 export interface Deploy {
   /** The root of the tree this deploy's code sits in. */
   readonly root: string;
+
+  /** The version of poplin that tree holds. */
+  readonly version: string;
 
   /** The folder a fetched release gets a new folder of its own in, removed after the deploy. */
   readonly scratch: string;
@@ -88,15 +108,49 @@ async function deployForCopy(deploy: Deploy, copyFile: string): Promise<number> 
   }
 }
 
-/** Fetch a release, install it, and hand the deploy over to the release's own code. `asked` is the word the build asked with. */
-async function deployRelease(deploy: Deploy, version: string, asked: string): Promise<number> {
-  using scratch = mkdtempDisposableSync(join(deploy.scratch, "poplin-release-"));
-  const tree = join(scratch.path, "poplin");
+/** Read the version an archive's files say they are; `undefined` for an archive that says none. */
+async function versionOf(bytes: Uint8Array<ArrayBuffer>): Promise<string | undefined> {
+  try {
+    const manifest = v.safeParse(VERSION_MANIFEST, await (await new Bun.Archive(bytes).files()).get(VERSION_FILE)?.json());
 
-  if (!(await deploy.source.fetchInto(version, tree))) {
-    deploy.say(`poplin: release ${version} could not be fetched from github.com. ${NOTHING_DEPLOYED} Check that ${version} is a release of poplin, then build again.`);
-    return 1;
+    return manifest.success ? manifest.output.version : undefined;
+  } catch {
+    return undefined;
   }
+}
+
+/** The line of a release that was not taken. `says` is the version its files gave. */
+function refusalLine(refusal: Exclude<ReleaseRefusal, "older">, version: string, says: string | undefined): string {
+  const lines: Readonly<Record<typeof refusal, string>> = {
+    no_digest: `no digest is published for release ${version}, so its files cannot be checked. ${NOTHING_DEPLOYED} Check that ${version} is a release of poplin, then build again; the website names poplin's own releases, each up to a day after it is out.`,
+    unreachable: `release ${version} could not be fetched from github.com. ${NOTHING_DEPLOYED} Build again in a few minutes.`,
+    digest_differs: `the files fetched for release ${version} are not the files poplin published: their SHA-256 digest differs. ${NOTHING_DEPLOYED} Build again; if it says this again, tell the project.`,
+    other_version: `the files published as release ${version} say they are ${says === undefined ? "no version" : `version ${JSON.stringify(says)}`}. ${NOTHING_DEPLOYED} Tell the project.`,
+  };
+
+  return `poplin: ${lines[refusal]}`;
+}
+
+/** Answer a release that was not taken: the copy's own files for a newest release older than the copy, and for every other refusal one line and no deploy. */
+function deployNotTaken(deploy: Deploy, version: string, refused: { readonly refusal: ReleaseRefusal; readonly says?: string }): Promise<number> {
+  if (refused.refusal === "older") {
+    deploy.say(`poplin: the newest published release, ${version}, is older than your copy (${deploy.version}); deploying your copy's own files`);
+    return wrangler(deploy, join(deploy.root, CONFIG_FILE));
+  }
+
+  deploy.say(refusalLine(refused.refusal, version, refused.says));
+  return Promise.resolve(1);
+}
+
+/** Fetch a release, take it only with the published digest, install it, and hand the deploy over to the release's own code. `asked` is the word the build asked with, and `running` the version a build of the newest release never goes below. */
+async function deployRelease(deploy: Deploy, pins: ReleasePins, wanted: { readonly version: string; readonly running?: string }, asked: string): Promise<number> {
+  const { version } = wanted;
+  const release = await checkedRelease(wanted, pins, { fetch: deploy.source.fetch, versionOf });
+  if (!release.ok) return deployNotTaken(deploy, version, release);
+
+  using scratch = mkdtempDisposableSync(join(deploy.scratch, "poplin-release-"));
+  const tree = join(scratch.path, ARCHIVE_FOLDER);
+  await new Bun.Archive(release.bytes).extract(scratch.path);
 
   if ((await deploy.run(["bun", "install", "--frozen-lockfile"], { cwd: tree, env: deploy.env })) !== 0) {
     deploy.say(`poplin: what release ${version} needs could not be installed. ${NOTHING_DEPLOYED} Build again in a few minutes.`);
@@ -108,21 +162,16 @@ async function deployRelease(deploy: Deploy, version: string, asked: string): Pr
   return await deploy.run(["bun", "run", "deploy", ...deploy.args], { cwd: tree, env: { ...deploy.env, POPLIN_COPY_CONFIG: join(deploy.root, CONFIG_FILE) } });
 }
 
-/** Deploy the newest release. While none is published nothing newer than the copy exists, so the copy's own files are deployed. */
-async function deployNewest(deploy: Deploy): Promise<number> {
-  const latest = await deploy.source.latest();
+/** Deploy the newest release the website names, or the copy's own files while it names none or the newest is older than the copy. */
+function deployNewest(deploy: Deploy, pins: ReleasePins): Promise<number> {
+  const newest = newestPinned(pins);
 
-  if (latest.kind === "none") {
-    deploy.say("poplin: no release is published yet; deploying your copy's own files");
+  if (newest === undefined) {
+    deploy.say("poplin: poplin's website names no release yet; deploying your copy's own files");
     return wrangler(deploy, join(deploy.root, CONFIG_FILE));
   }
 
-  if (latest.kind === "unknown") {
-    deploy.say(`poplin: github.com did not say which release of poplin is the newest. ${NOTHING_DEPLOYED} Build again in a few minutes, or set the build variable POPLIN_VERSION to a version like 0.2.0.`);
-    return 1;
-  }
-
-  return deployRelease(deploy, latest.version, "latest");
+  return deployRelease(deploy, pins, { version: newest, running: deploy.version }, "latest");
 }
 
 /**
@@ -148,7 +197,14 @@ export async function deployWorker(deploy: Deploy): Promise<number> {
     return wrangler(deploy, join(deploy.root, CONFIG_FILE));
   }
 
-  if (asked.kind === "exact") return deployRelease(deploy, asked.version, asked.version);
+  const pins = await deploy.source.pins();
 
-  return deployNewest(deploy);
+  if (pins === undefined) {
+    deploy.say(`poplin: poplin's website did not say which releases are published. ${NOTHING_DEPLOYED} Build again in a few minutes.`);
+    return 1;
+  }
+
+  if (asked.kind === "exact") return deployRelease(deploy, pins, { version: asked.version }, asked.version);
+
+  return deployNewest(deploy, pins);
 }

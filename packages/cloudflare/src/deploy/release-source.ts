@@ -1,79 +1,86 @@
-// Where a hosted build takes a release of poplin from: GitHub, with no token.
+// Where a hosted build takes a release of poplin from, with no token: which releases there are and the digest of each from the project's website, the files from GitHub.
 //
-// The newest release is read from the address GitHub sends `releases/latest` to. That page counts published releases alone; a tag exists before its release is published.
+// The website is built from the main branch alone, so only what that branch released is named there. The files are an asset of the release's page, and are trusted for nothing: the deploy takes them only when their digest is the published one.
+
+import { homepage } from "../../../cli/package.json";
+import { textUpTo } from "@poplin/core/src/api/text-up-to";
+import { publishedPins, type ReleasePins } from "@poplin/core/src/records/release";
 
 /** The repository the releases are made in. */
 const REPOSITORY = "https://github.com/Vivswan/poplin";
 
-/** The address GitHub sends on from to the newest published release. */
-const LATEST_PAGE = `${REPOSITORY}/releases/latest`;
+/** The file of the project's website that names every release an install may take, with the digest of its files. */
+const PINS_ADDRESS = new URL("releases.json", homepage).href;
 
-/** Where that address leads while the repository has no published release. */
-const NO_RELEASE_PAGE = `${REPOSITORY}/releases`;
+/** The most bytes of that file that are read. */
+const MOST_PINS_BYTES = 1_048_576;
 
-/** The page of one release, with its version as the first group. */
-const RELEASE_PAGE = /^https:\/\/github\.com\/Vivswan\/poplin\/releases\/tag\/v(\d+\.\d+\.\d+)$/;
-
-/** The status GitHub sends that address on with. Any other answer says nothing about the releases. */
-const SENT_ON = 302;
-
-/** How long GitHub may take to answer, in milliseconds. */
-const ANSWER_WITHIN = 30_000;
-
-/** Runs one command to its end, its output going where the build's goes. Answers its exit code. */
-export type RunCommand = (command: readonly string[], options: { readonly cwd: string; readonly env: Readonly<Record<string, string | undefined>> }) => Promise<number>;
-
-/** The newest published release: its version, `none` only when the source said outright that no release is published, `unknown` for every other answer. */
-export type Latest = { readonly kind: "release"; readonly version: string } | { readonly kind: "none" } | { readonly kind: "unknown" };
+/** How long the website and GitHub may each take to answer, in milliseconds. */
+const ANSWER_WITHIN = 60_000;
 
 /** A place releases are taken from. */
 export interface ReleaseSource {
-  /** Finds the newest published release. */
-  readonly latest: () => Promise<Latest>;
+  /** Reads which releases are published, each with the digest of its files; `undefined` for no answer that can be read. */
+  readonly pins: () => Promise<ReleasePins | undefined>;
 
-  /** Puts the files of one release into a folder that does not exist yet. Answers whether it did. */
-  readonly fetchInto: (version: string, folder: string) => Promise<boolean>;
+  /** Fetches the files of one release as the bytes of its archive; `undefined` when they cannot be fetched. */
+  readonly fetch: (version: string) => Promise<Uint8Array<ArrayBuffer> | undefined>;
 }
 
-/** What the GitHub source reaches the world through. */
+/** What the source reaches the world through: the platform's own `fetch`, or a stand-in. */
 interface Reach {
   readonly fetch: (url: string, init: RequestInit) => Promise<Response>;
-  readonly run: RunCommand;
-  readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-async function latestRelease(reach: Reach): Promise<Latest> {
-  let answer: Response;
+async function readPins(reach: Reach): Promise<ReleasePins | undefined> {
   try {
-    answer = await reach.fetch(LATEST_PAGE, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(ANSWER_WITHIN) });
+    const answer = await reach.fetch(PINS_ADDRESS, { signal: AbortSignal.timeout(ANSWER_WITHIN) });
+    if (answer.status !== 200 || answer.body === null) {
+      await answer.body?.cancel();
+
+      return undefined;
+    }
+
+    const text = await textUpTo(answer.body, MOST_PINS_BYTES);
+
+    return text === undefined ? undefined : publishedPins(text);
   } catch {
-    return { kind: "unknown" };
+    return undefined;
   }
+}
 
-  if (answer.status !== SENT_ON) return { kind: "unknown" };
+async function fetchSource(reach: Reach, version: string): Promise<Uint8Array<ArrayBuffer> | undefined> {
+  try {
+    const answer = await reach.fetch(sourceAddress(version), { signal: AbortSignal.timeout(ANSWER_WITHIN) });
+    if (answer.status !== 200) {
+      await answer.body?.cancel();
 
-  const target = answer.headers.get("location");
-  if (target === NO_RELEASE_PAGE) return { kind: "none" };
+      return undefined;
+    }
 
-  const version = RELEASE_PAGE.exec(target ?? "")?.[1];
-  if (version === undefined) return { kind: "unknown" };
-
-  return { kind: "release", version };
+    return new Uint8Array(await answer.arrayBuffer());
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * The releases of poplin on GitHub, read with no token and outside the REST API's hourly allowance.
+ * The address of a release's source files: the archive the release workflow packs from the release's commit and adds to its page.
  *
- * @returns a source whose `fetchInto` clones the release's tag with git, one commit deep
+ * @param version - a version as it is written, such as `0.2.0`
  */
-export function githubReleases(reach: Reach): ReleaseSource {
+export function sourceAddress(version: string): string {
+  return `${REPOSITORY}/releases/download/v${version}/poplin-${version}.tar.gz`;
+}
+
+/**
+ * The releases of poplin, read with no token: the published digests from the project's website, the files from GitHub.
+ *
+ * @returns a source that checks nothing itself: what it fetched is for `checkedRelease` to take or refuse
+ */
+export function projectReleases(reach: Reach): ReleaseSource {
   return {
-    latest: () => latestRelease(reach),
-
-    fetchInto: async (version, folder) => {
-      const clone = ["git", "-c", "advice.detachedHead=false", "clone", "--depth", "1", "--branch", `v${version}`, REPOSITORY, folder];
-
-      return (await reach.run(clone, { cwd: process.cwd(), env: reach.env })) === 0;
-    },
+    pins: () => readPins(reach),
+    fetch: (version) => fetchSource(reach, version),
   };
 }

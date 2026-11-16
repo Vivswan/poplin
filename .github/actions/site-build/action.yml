@@ -7,6 +7,9 @@ description: |
   It runs as the site-build hook of ci.yml's `site` leg, on the judged commit, before the fleet
   renders docs/ and deploys.
 
+  Before the build it asks GitHub which releases carry the release workflow's attestation, and the build
+  publishes those, each with the digest of its files, as `releases.json`.
+
   The build reads `DEMO_URL` from the deploy job's environment: `site.vars` in .repo-platform.yml
   names the repository variable the fleet exports there.
 
@@ -29,11 +32,18 @@ runs:
   using: composite
   steps:
     - uses: ./.github/actions/setup
+    # Which releases an install may take, each with the digest of its files: only an archive the release workflow attested in a run of main.
+    - name: Name the releases whose files are attested
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: bun run --cwd packages/cloudflare pin-releases "$RUNNER_TEMP/release-pins.json"
     - id: build
       shell: bash
       env:
         PAGES_BASE_PATH: ${{ inputs.base-path }}
         PAGES_ORIGIN: ${{ inputs.origin }}
+        POPLIN_RELEASE_PINS: ${{ runner.temp }}/release-pins.json
       run: |
         bun run --cwd website build
         echo "dist=website/dist" >> "$GITHUB_OUTPUT"

@@ -7,6 +7,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check the checks themselves, against a local fake | `bun test ./tests/live`                                                   | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the test install                            | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `with-domain-ci-tests` environment                                    |
+| check that a build takes a release by its digest  | a release's own run of main, then the next one: `poplin-<version>.tar.gz` on the release's page, its digest under that version in the website's `releases.json`, and `poplin: deploying <version> (was asked for latest)` in an install's build | a published release |
 
 ```text
 Live Checks workflow

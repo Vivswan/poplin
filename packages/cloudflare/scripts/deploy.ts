@@ -1,10 +1,11 @@
-// Runs the deploy for `bun run deploy`: the real git, bun, wrangler, and GitHub behind the deploy's ways out.
+// Runs the deploy for `bun run deploy`: the real bun, wrangler, and network behind the deploy's ways out.
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { deployWorker } from "../src/deploy/deploy";
-import { githubReleases, type RunCommand } from "../src/deploy/release-source";
+import { version } from "../../cli/package.json";
+import { deployWorker, type RunCommand } from "../src/deploy/deploy";
+import { projectReleases } from "../src/deploy/release-source";
 
 /** The root of the tree this script sits in. */
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -24,10 +25,11 @@ const run: RunCommand = async (command, options) => {
 
 process.exitCode = await deployWorker({
   root: ROOT,
+  version,
   scratch: tmpdir(),
   env: process.env,
   args: process.argv.slice(2),
-  source: githubReleases({ fetch, run, env: process.env }),
+  source: projectReleases({ fetch }),
   run,
   say: (line) => console.log(line),
 });
