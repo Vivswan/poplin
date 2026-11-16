@@ -135,6 +135,29 @@ describe("publishSite", () => {
     expect(await world.audit()).toEqual(["create", "access", "details", "publish"]);
   });
 
+  // Drift: a page's title comes from the file, at any length a request can carry, and every list of sites carries it whole. A publish refused for it would fail on a page nobody typed; one kept whole would slow every list.
+  test.each([
+    ["200 characters", "p".repeat(200), "p".repeat(200)],
+    ["one character more", "p".repeat(201), "p".repeat(200)],
+    ["a megabyte", "p".repeat(1_000_000), "p".repeat(200)],
+    ["a character of two places across the cut", `${"p".repeat(199)}\u{1F600}tail`, "p".repeat(199)],
+    ["a line break past the cut", `${"p".repeat(200)}\nmore`, "p".repeat(200)],
+  ])("a page title of %s is kept as its first 200 characters at most, never half a character, on a new site and on an update", async (_length, sent, kept) => {
+    const world = await makeWorld();
+    const created = await publishSite(world.install, OWNER, { files: pages("first"), name: "report", page_title: sent });
+    const id = created.ok ? created.site.id : "";
+    const updated = await publishSite(world.install, OWNER, { files: pages("next"), site: id, page_title: `${sent}!` });
+
+    expect([created.ok && created.site.title, updated.ok && updated.site.title]).toEqual([kept, kept]);
+  });
+
+  // Drift: what a site keeps of its page's title is one line. A cut that let a line break through inside the kept part would put it into every list.
+  test("a page title with a line break inside the part that is kept is still refused", async () => {
+    const world = await makeWorld();
+
+    expect(await publishSite(world.install, OWNER, { files: pages("first"), name: "report", page_title: `two\nlines${"p".repeat(300)}` })).toMatchObject({ ok: false, code: "bad_argument", about: "page_title" });
+  });
+
   // Drift: the page's own title rides with every publish; one that replaced a typed title would undo `set --title` on the next update.
   test("an update changes the title only when one is typed, and a site with no typed title follows its page", async () => {
     const world = await makeWorld();

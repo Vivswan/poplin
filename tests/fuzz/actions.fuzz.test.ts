@@ -3,6 +3,7 @@
 import { expect, spyOn } from "bun:test";
 import fc from "fast-check";
 
+import { MAX_PAGE_TITLE_LENGTH, MAX_TITLE_LENGTH } from "../../packages/core/src/actions/changes";
 import { deleteSite } from "../../packages/core/src/actions/delete";
 import { publishSite } from "../../packages/core/src/actions/publish";
 import { updateSite } from "../../packages/core/src/actions/set";
@@ -100,6 +101,38 @@ property(
 
       expect(await titleAfter(world, id, step)).toEqual([typed ?? page, typed !== null]);
     }
+  }),
+);
+
+property(
+  "a typed title is taken whole or refused, never cut, and taken exactly when it is at most the longest title and one line, whatever text it is",
+  fc.asyncProperty(fc.oneof(fc.string({ unit: "binary", maxLength: 2 * MAX_TITLE_LENGTH }), fc.string({ unit: "grapheme", minLength: MAX_TITLE_LENGTH - 2, maxLength: MAX_TITLE_LENGTH + 2 })), async (typed) => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report");
+    const fits = typed.length <= MAX_TITLE_LENGTH && !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(typed);
+
+    const set = await updateSite(world.install, OWNER, { site: id, title: typed });
+
+    expect(set.ok ? set.site.title : set).toEqual(fits ? typed || null : { ok: false, code: "bad_argument", about: "title" });
+  }),
+);
+
+property(
+  "the title of a page is kept as a start of what was sent, at most the longest page title and never half a character, or the publish is refused for a line break in that start, whatever text the page holds",
+  fc.asyncProperty(fc.oneof(fc.string({ unit: "binary", maxLength: 3 * MAX_PAGE_TITLE_LENGTH }), fc.string({ unit: "grapheme", minLength: MAX_PAGE_TITLE_LENGTH - 2, maxLength: MAX_PAGE_TITLE_LENGTH + 2 })), async (sent) => {
+    const world = await makeWorld();
+    const published = await publishSite(world.install, OWNER, { files: pages("first"), name: "report", page_title: sent });
+    if (!published.ok) {
+      expect([published.code, /[\p{Cc}\p{Zl}\p{Zp}]/u.test(sent.slice(0, MAX_PAGE_TITLE_LENGTH))]).toEqual(["bad_argument", true]);
+
+      return;
+    }
+
+    const kept = published.site.title ?? "";
+
+    const whole = sent.length - kept.length <= 1 || kept.length >= MAX_PAGE_TITLE_LENGTH - 1;
+
+    expect([sent.startsWith(kept), kept.length <= MAX_PAGE_TITLE_LENGTH, whole, /[\uD800-\uDBFF]$/.test(kept) && sent.length > kept.length, /[\p{Cc}\p{Zl}\p{Zp}]/u.test(kept)]).toEqual([true, true, true, false, false]);
   }),
 );
 

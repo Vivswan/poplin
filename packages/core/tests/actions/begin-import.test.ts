@@ -129,6 +129,7 @@ describe("beginImport", () => {
     ["a site that does not say whether it is in the trash", (entry: Entry) => sited(entry, { state: undefined }), { ok: false, code: "bad_argument", about: "site" }, ADMIN],
     ["a public name on a site that is not public", (entry: Entry) => sited(entry, { public_name: "handbook" }), { ok: false, code: "bad_argument", about: "site" }, ADMIN],
     ["a field no site has", (entry: Entry) => sited(entry, { colour: "red" }), { ok: false, code: "bad_argument", about: "site" }, ADMIN],
+    ["a typed title longer than one may be typed", (entry: Entry) => sited(entry, { title: "t".repeat(201) }), { ok: false, code: "bad_argument", about: "site" }, ADMIN],
     ["a live version the site does not keep", (entry: Entry) => sited(entry, { live_version: 9 }), { ok: false, code: "bad_argument", about: "site" }, ADMIN],
     ["a public name this install keeps for itself", (entry: Entry) => sited(entry, { access: "public", public_name: "docs-p" }), { ok: false, code: "reserved_name", about: "public_name" }, ADMIN],
     ["a file under a version the site does not keep", (entry: Entry) => filed(entry, { path: "v4/index.html", size: 1, content_type: "text/html", sha256: PAGE_SHA256 }), { ok: false, code: "bad_path", about: "v4/index.html" }, ADMIN],
