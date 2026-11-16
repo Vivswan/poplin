@@ -1,8 +1,12 @@
 # Prepare the draft release here: packaging, asset uploads, and note edits.
-#
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
-#
 # Publishing waits for every job, and every asset uploaded here is attested at publish time.
+#
+# The one asset is the release's source files, which an install's hosted build fetches and runs. The website publishes
+# its SHA-256 digest only when the attestation made HERE holds: by this workflow, in a run of main. So the archive is
+# attested in the job that packed it, never after a round trip through the draft, where a write token could swap it.
+#
+#   the tag's commit is not on main, or its files say another version than the tag -> the job fails, nothing is uploaded
 
 name: Update Release
 
@@ -20,15 +24,35 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write # also what makes the draft visible to gh
+      id-token: write # the attestation is signed as this workflow
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
-      - name: Update the draft release
+          # The full name: a branch named like the tag would be taken before it.
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+          # The whole history, so the tag's commit can be looked for on main.
+          fetch-depth: 0
+      # No dependency is installed and no script of the tree runs in this job: it holds the token that signs.
+      - name: Refuse a tag whose commit is not on main
+        run: git merge-base --is-ancestor HEAD refs/remotes/origin/main
+      - name: Refuse files that say another version than the tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: test "v$(jq -r .version packages/cli/package.json)" = "$RELEASE_TAG"
+      - name: Pack the source files of the release
+        id: pack
+        run: |
+          version="$(jq -r .version packages/cli/package.json)"
+          git archive --format=tar.gz --prefix=poplin/ --output="poplin-$version.tar.gz" HEAD
+          echo "file=poplin-$version.tar.gz" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.pack.outputs.file }}
+      - name: Add the archive to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-        # Repository-specific release preparation goes here, e.g.:
-        #   ./build.sh
-        #   gh release upload "$RELEASE_TAG" ./artifact --clobber
-        run: echo "nothing to add to $RELEASE_TAG yet"
+          ARCHIVE: ${{ steps.pack.outputs.file }}
+        run: gh release upload "$RELEASE_TAG" "$ARCHIVE" --clobber
