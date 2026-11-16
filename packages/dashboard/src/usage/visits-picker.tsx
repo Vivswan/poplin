@@ -1,18 +1,23 @@
 // The control that picks the sites drawn beside all sites: a button that opens a list to search and tick, with the ways to tick every listed site and to clear the ticks.
 
+import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
 import { type ReactNode, useRef, useState } from "react";
 import { useDebounce } from "use-debounce";
 
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList, ComboboxTrigger } from "@/components/ui/combobox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { LOOK_COUNT, MOST_PICKED, type Option, type Picked, useOptions } from "@/usage/visits-queries";
 
 /** How long the typing rests before the list is read again, in milliseconds. */
 const REST = 200;
 
-/** How high the list of sites may be: the library's own height, cut down to whole lines over the 8 px of the list's edges. A line is 28 px, and 40 px under the width at which `index.css` makes it a finger high. */
+/** How high the room of the list of sites may be: the library's own height, cut down to whole lines over the 8 px of the list's edges. A line is 28 px, and 40 px under the width at which `index.css` makes it a finger high. */
 const WHOLE_LINES =
-  "[--line:1.75rem] max-[767.98px]:[--line:2.5rem] max-h-[calc(round(down,min(15.75rem,var(--available-height)_-_2.25rem)_-_0.5rem,var(--line))_+_0.5rem)]";
+  "[--line:1.75rem] max-[767.98px]:[--line:2.5rem] *:data-[slot=scroll-area-viewport]:max-h-[calc(round(down,min(15.75rem,var(--available-height)_-_2.25rem)_-_0.5rem,var(--line))_+_0.5rem)]";
+
+/** The list inside that room: the room scrolls it and draws the bar, so the list itself is as high as its sites. */
+const UNCUT = "max-h-none overflow-visible";
 
 /** What the picker is drawn from. */
 interface VisitsPickerProps {
@@ -88,14 +93,19 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
           </Button>
         </div>
         <ComboboxEmpty>No site found.</ComboboxEmpty>
-        <ComboboxList aria-label="Sites" className={WHOLE_LINES}>
-          {(option: Option) => (
-            <ComboboxItem key={option.id} value={option} disabled={full && !picked.some((site) => site.id === option.id)}>
-              <span className="min-w-0 truncate">{option.title}</span>
-              {option.title === option.name ? null : <span className="min-w-0 shrink-0 truncate text-xs text-muted-foreground">{option.name}</span>}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
+        <ScrollArea className={WHOLE_LINES}>
+          {/* The bar follows the size of this part: without it a list that another text made shorter keeps the bar of the longer one. */}
+          <ScrollAreaParts.Content>
+            <ComboboxList aria-label="Sites" className={UNCUT}>
+              {(option: Option) => (
+                <ComboboxItem key={option.id} value={option} disabled={full && !picked.some((site) => site.id === option.id)}>
+                  <span className="min-w-0 truncate">{option.title}</span>
+                  {option.title === option.name ? null : <span className="min-w-0 shrink-0 truncate text-xs text-muted-foreground">{option.name}</span>}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ScrollAreaParts.Content>
+        </ScrollArea>
         {full ? <p className="border-t px-3 py-2 text-xs text-muted-foreground">{MOST_PICKED} sites at most.</p> : null}
       </ComboboxContent>
     </Combobox>
