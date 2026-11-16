@@ -168,7 +168,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const runsOut = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
       const [kept, removed] = [(await mintToken({ scope: "publisher", note: "ci", now: NOW + 1 })).record, (await mintToken({ scope: "publisher", note: "agent", now: NOW + 2 })).record];
       for (const token of [runsOut, kept, removed]) await database.addToken(token, BY_ADA);
-      await database.revokeToken(removed.id, { by: ADMIN, at: NOW + 5 });
+      await database.revokeToken(removed.id, { as: "person", by: ADMIN, at: NOW + 5 });
       const ranOutAt = runsOut.scope === "admin" ? runsOut.expiresAt : 0;
       const gone = { id: removed.id, scope: "publisher", note: "agent", createdAt: NOW + 2, endedAt: NOW + 5, how: "removed", by: ADMIN };
       const ranOut = { id: runsOut.id, scope: "admin", note: "laptop", createdAt: NOW, endedAt: ranOutAt, how: "ran_out" };
@@ -198,7 +198,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const admin = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
       const ranOutAt = admin.scope === "admin" ? admin.expiresAt : 0;
       await database.addToken(admin, BY_ADA);
-      await database.revokeToken(admin.id, { by: ADA, at: ranOutAt + 7 });
+      await database.revokeToken(admin.id, { as: "token", by: ADA, at: ranOutAt + 7 });
       const removed = { id: admin.id, scope: "admin", note: "laptop", createdAt: NOW, endedAt: ranOutAt + 7, how: "removed", by: ADA };
 
       expect<unknown>(await database.listTokenStates(ranOutAt + 9, 50)).toEqual({ live: [], ended: [removed], more: false });
@@ -212,10 +212,10 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const [works, removedLong, ranOutLong] = [await minted("publisher", "works"), await minted("publisher", "removed long ago"), await minted("admin", "ran out long ago")];
       const [removedLately, removedOnTheDay] = [await minted("publisher", "removed lately"), await minted("publisher", "removed 90 days ago")];
       const all = [works, removedLong, ranOutLong, removedLately, removedOnTheDay];
-      for (const token of all) await database.addToken(token, { by: ADMIN, at: longAgo });
-      await database.revokeToken(removedLong.id, { by: ADMIN, at: NOW - 90 * DAY_MS - 1 });
-      await database.revokeToken(removedLately.id, { by: ADMIN, at: NOW - DAY_MS });
-      await database.revokeToken(removedOnTheDay.id, { by: ADMIN, at: NOW - 90 * DAY_MS });
+      for (const token of all) await database.addToken(token, { ...BY_ADA, at: longAgo });
+      await database.revokeToken(removedLong.id, { as: "person", by: ADMIN, at: NOW - 90 * DAY_MS - 1 });
+      await database.revokeToken(removedLately.id, { as: "person", by: ADMIN, at: NOW - DAY_MS });
+      await database.revokeToken(removedOnTheDay.id, { as: "person", by: ADMIN, at: NOW - 90 * DAY_MS });
       const told = async (): Promise<unknown> => {
         const { live, ended } = await database.listTokenStates(NOW, 50);
 
@@ -241,8 +241,8 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const longAgo = NOW - 200 * DAY_MS;
       const ended = await Promise.all(Array.from({ length: 27 }, async (_token, at) => (await mintToken({ scope: "publisher", note: `ci ${at}`, now: longAgo })).record));
       for (const [at, token] of ended.entries()) {
-        await database.addToken(token, { by: ADMIN, at: longAgo });
-        await database.revokeToken(token.id, { by: ADMIN, at: longAgo + 1 + at });
+        await database.addToken(token, { ...BY_ADA, at: longAgo });
+        await database.revokeToken(token.id, { as: "person", by: ADMIN, at: longAgo + 1 + at });
       }
       const left = async (): Promise<string[]> => [...(await database.getTokenNames(ended.map((token) => token.id))).values()].sort();
 
@@ -298,7 +298,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
     test("one login is added or removed in one step: changes made at the same moment all land, and a login that works always stays", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy, di] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login];
-      const byAdmin: Signed = { by: ADMIN, at: NOW + 1 };
+      const byAdmin: Signed = { as: "person", by: ADMIN, at: NOW + 1 };
       const kinds = (answers: readonly { readonly kind: string }[]): string[] => answers.map((answer) => answer.kind);
       const stored = async (): Promise<unknown> => [...((await database.readSettings())?.logins ?? [])].sort();
 
@@ -339,10 +339,10 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo] }, BY_ADA);
       const token = async (scope: "admin" | "publisher", note: string, now = NOW): Promise<TokenRecord> => (await mintToken({ scope, note, now })).record;
       const [stays, laptop, ci, old] = [await token("publisher", "stays"), await token("admin", "laptop", NOW + 1), await token("publisher", "ci", NOW + 2), await token("admin", "old", NOW - 31 * 86_400_000)];
-      await database.addToken(stays, { by: ADMIN, at: NOW });
-      for (const made of [laptop, old]) await database.addToken(made, { by: bo, at: NOW });
+      await database.addToken(stays, { as: "person", by: ADMIN, at: NOW });
+      for (const made of [laptop, old]) await database.addToken(made, { as: "person", by: bo, at: NOW });
       // One made by a token is its maker's user's, and so is one that user allowed from a terminal.
-      await database.addToken(ci, { by: laptop.id, at: NOW });
+      await database.addToken(ci, { as: "token", by: laptop.id, at: NOW });
       const login = await pendingLogin();
       const agent = await token("publisher", "agent", NOW + 3);
       await database.addComputerLogin(login, ROOM);
@@ -355,17 +355,17 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const held = [...(await database.countUserTokens(NOW + 4))].sort();
       const working = async (): Promise<string[]> => (await database.listTokenStates(NOW + 9, 50)).live.map(({ note }) => note).sort();
 
-      const refused = await database.removeLogin(ADMIN, { by: ADMIN, at: NOW + 4 });
+      const refused = await database.removeLogin(ADMIN, { as: "person", by: ADMIN, at: NOW + 4 });
       const untouched = await working();
-      const removed = await database.removeLogin(bo, { by: ADMIN, at: NOW + 5 });
-      const again = await database.removeLogin(bo, { by: ADMIN, at: NOW + 6 });
+      const removed = await database.removeLogin(bo, { as: "person", by: ADMIN, at: NOW + 5 });
+      const again = await database.removeLogin(bo, { as: "person", by: ADMIN, at: NOW + 6 });
       // A request that was let in before the removal and stores its token after it stores none: the user behind the token that signs is gone, though one such token only ran out, and so is the user who allowed the waiting login.
       const late = [
-        await database.addToken(await token("publisher", "late"), { by: laptop.id, at: NOW + 6 }),
-        await database.addToken(await token("publisher", "late"), { by: old.id, at: NOW + 6 }),
+        await database.addToken(await token("publisher", "late"), { as: "token", by: laptop.id, at: NOW + 6 }),
+        await database.addToken(await token("publisher", "late"), { as: "token", by: old.id, at: NOW + 6 }),
         await database.redeemComputerLogin(waiting.id, await token("publisher", "late", NOW + 6)),
       ];
-      await database.addLogin(bo, { by: ADMIN, at: NOW + 7 });
+      await database.addLogin(bo, { as: "person", by: ADMIN, at: NOW + 7 });
       const states = await database.listTokenStates(NOW + 9, 50);
       const went = (made: TokenRecord): unknown => ({ id: made.id, scope: made.scope, note: made.note, createdAt: made.createdAt, endedAt: NOW + 5, how: "user_removed", by: ADMIN });
 
@@ -402,19 +402,19 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const token = async (note: string, now = NOW): Promise<TokenRecord> => (await mintToken({ scope: "admin", note, now })).record;
       // The token of cy runs out five milliseconds on: a removal after that leaves it as it ended.
       const [laptop, brief, pad, ci] = [await token("laptop"), await token("brief", NOW - 30 * DAY_MS + 5), await token("pad"), await token("ci")];
-      for (const [made, by] of [[laptop, bo], [brief, cy], [pad, di], [ci, ed]] as const) await database.addToken(made, { by, at: NOW });
+      for (const [made, by] of [[laptop, bo], [brief, cy], [pad, di], [ci, ed]] as const) await database.addToken(made, { as: "person", by, at: NOW });
       const state = async (): Promise<unknown> => {
         const [stored, tokens, check] = [await database.readSettings(), await database.listTokenStates(NOW + 9, 50), await database.readDomainCheck()];
         const ended = Object.fromEntries(tokens.ended.map(({ note, how }) => [note, how]));
 
         return { logins: stored?.logins, outside: stored?.outside_pages, live: tokens.live.map(({ note }) => note).sort(), ended, changes: (await auditDetails(database, "settings_changed")).length, rulesWait: (check?.rules_changed_at ?? 0) > 0 };
       };
-      await database.removeLogin(bo, { by: ADMIN, at: NOW + 1 });
-      await database.removeLogin(cy, { by: ADMIN, at: NOW + 6 });
+      await database.removeLogin(bo, { as: "person", by: ADMIN, at: NOW + 1 });
+      await database.removeLogin(cy, { as: "person", by: ADMIN, at: NOW + 6 });
       const before = await state();
-      const late: Signed = { by: laptop.id, at: NOW + 2 };
+      const late: Signed = { as: "token", by: laptop.id, at: NOW + 2 };
       // The token that ran out signs from before its end, as a request let in then would: its user is gone, so it is too.
-      const ranOut: Signed = { by: brief.id, at: NOW + 2 };
+      const ranOut: Signed = { as: "token", by: brief.id, at: NOW + 2 };
       const refused = [
         await database.changeSettings({ logins: [ADMIN, bo], outside_pages: "allowed" }, late),
         await database.addLogin(bo, late),
@@ -424,8 +424,8 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
         await database.removeLogin(cy, ranOut),
       ];
       const after = await state();
-      const own = [await database.removeLogin(ed, { by: ci.id, at: NOW + 7 }), await database.changeSettings({ logins: [ADMIN], outside_pages: "allowed" }, { by: pad.id, at: NOW + 8 })];
-      const again = await database.changeSettings({ logins: [ADMIN, di], outside_pages: "blocked" }, { by: pad.id, at: NOW + 8 });
+      const own = [await database.removeLogin(ed, { as: "token", by: ci.id, at: NOW + 7 }), await database.changeSettings({ logins: [ADMIN], outside_pages: "allowed" }, { as: "token", by: pad.id, at: NOW + 8 })];
+      const again = await database.changeSettings({ logins: [ADMIN, di], outside_pages: "blocked" }, { as: "token", by: pad.id, at: NOW + 8 });
 
       expect<unknown>([refused, after]).toEqual([Array.from({ length: 6 }, () => ({ kind: "signer_gone" })), before]);
       expect(before).toEqual({ logins: [ADMIN, di, ed], outside: "blocked", live: ["ci", "pad"], ended: { laptop: "user_removed", brief: "ran_out" }, changes: 2, rulesWait: false });
@@ -433,6 +433,43 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
         ["done", "done"],
         { kind: "signer_gone" },
         { logins: [ADMIN], outside: "allowed", live: [], ended: { laptop: "user_removed", brief: "ran_out", pad: "user_removed", ci: "user_removed" }, changes: 4, rulesWait: true },
+      ]);
+    });
+
+    // Drift: a person is let in by their email before they are removed and may write after. A write that still landed would let a removed user add their own email back, or leave a token behind that outlives them.
+    test("a write signed by a person who was removed since changes nothing, a person who is a login still writes, and the first login and the sweeper always sign", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy, di, ed] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login, "ed@example.com" as Login];
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy] }, BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [] }, null);
+      const token = async (note: string): Promise<TokenRecord> => (await mintToken({ scope: "publisher", note, now: NOW })).record;
+      const state = async (): Promise<unknown> => {
+        const [stored, tokens, check] = [await database.readSettings(), await database.listTokenStates(NOW + 9, 50), await database.readDomainCheck()];
+        const entries = [(await auditDetails(database, "settings_changed")).length, (await auditDetails(database, "token_added")).length];
+
+        return { logins: stored?.logins, outside: stored?.outside_pages, live: tokens.live.map(({ note }) => note).sort(), ended: tokens.ended.length, entries, check };
+      };
+      await database.removeLogin(bo, { as: "person", by: ADMIN, at: NOW + 1 });
+      const before = await state();
+      const late: Signed = { as: "person", by: bo, at: NOW + 2 };
+      const refused = [
+        await database.addLogin(bo, late),
+        await database.changeSettings({ logins: [ADMIN, bo], outside_pages: "allowed" }, late),
+        await database.changeSettings({ outside_pages: "allowed" }, late),
+        await database.removeLogin(cy, late),
+        await database.addToken(await token("late"), late),
+      ];
+      const after = await state();
+      const standing: Signed = { as: "person", by: cy, at: NOW + 3 };
+      const written = [await database.addLogin(di, standing), await database.removeLogin(di, standing), await database.changeSettings({ outside_pages: "allowed" }, standing), await database.addToken(await token("of cy"), standing)];
+      const always = [await database.changeSettings({ logins: [ed] }, { as: "first_login", by: ed, at: NOW + 4 }), await database.addToken(await token("swept"), { as: "sweeper", by: "sweep@poplin.invalid" as Login, at: NOW + 5 })];
+
+      expect<unknown>([refused, after]).toEqual([Array.from({ length: 5 }, () => ({ kind: "signer_gone" })), before]);
+      expect(before).toMatchObject({ logins: [ADMIN, cy], outside: "blocked", live: [], ended: 0, entries: [1, 0] });
+      expect<unknown>([written.map(({ kind }) => kind), always.map(({ kind }) => kind), await state()]).toMatchObject([
+        ["done", "done", "done", "done"],
+        ["done", "done"],
+        { logins: [ed], outside: "allowed", live: ["swept"], ended: 1, entries: [5, 2] },
       ]);
     });
 
@@ -445,14 +482,14 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const [ofAda, ofBo, ofCy] = minted.map((mint) => mint.record);
       if (ofAda === undefined || ofBo === undefined || ofCy === undefined) throw new Error("the tokens were not minted");
 
-      await database.addToken(ofAda, { by: ADMIN, at: NOW });
-      await database.addToken(ofBo, { by: bo, at: NOW });
-      await database.addToken(ofCy, { by: cy, at: NOW });
+      await database.addToken(ofAda, { as: "person", by: ADMIN, at: NOW });
+      await database.addToken(ofBo, { as: "person", by: bo, at: NOW });
+      await database.addToken(ofCy, { as: "person", by: cy, at: NOW });
       const live = async (): Promise<string[]> => (await database.listTokens()).map(({ note }) => note).sort();
 
-      await database.changeSettings({ logins: [cy, bo, ADMIN], trash_days: 9 }, { by: ADMIN, at: NOW + 1 });
+      await database.changeSettings({ logins: [cy, bo, ADMIN], trash_days: 9 }, { as: "person", by: ADMIN, at: NOW + 1 });
       const kept = await live();
-      await database.changeSettings({ logins: [ADMIN, "di@example.com" as Login] }, { by: ADMIN, at: NOW + 2 });
+      await database.changeSettings({ logins: [ADMIN, "di@example.com" as Login] }, { as: "person", by: ADMIN, at: NOW + 2 });
 
       expect([kept, await live()]).toEqual([["ada", "bo", "cy"], ["ada"]]);
       expect((await database.listTokenStates(NOW + 3, 50)).ended.map(({ note, how, endedAt }) => [note, how, endedAt]).sort()).toEqual([
@@ -563,7 +600,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       const asks = async (): Promise<PendingLogin> => ({ ...(await pendingLogin()), scope: "admin" });
       const [lowered, kept, denied] = [await asks(), await asks(), await asks()];
       for (const login of [lowered, kept, denied]) await database.addComputerLogin(login, ROOM);
-      const by = { by: ADMIN, at: NOW + 1 } as const;
+      const by = { as: "person", by: ADMIN, at: NOW + 1 } as const;
 
       const decided = [
         await database.decideComputerLogin(lowered.code, { state: "allowed", asPublisher: true, ...by }),

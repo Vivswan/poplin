@@ -6,6 +6,7 @@ import { duplicateSite } from "../../src/actions/duplicate";
 import { finishPublish } from "../../src/actions/finish-publish";
 import { listSites } from "../../src/actions/list";
 import { publishSite } from "../../src/actions/publish";
+import { signedBy } from "../../src/actions/reach";
 import { getSite } from "../../src/actions/show";
 import { sweepExpired } from "../../src/actions/sweep";
 import { uploadFile } from "../../src/actions/upload-file";
@@ -179,7 +180,7 @@ describe("finishPublish", () => {
     const contents = [await holds()];
     await publishSite(world.install, OWNER, { site: first.site.id, files: [file("index.html", "home again")] });
     contents.push(await holds());
-    await world.install.database.setLiveVersion(first.site.id, 1, { by: ADMIN.holder, at: world.clock.now });
+    await world.install.database.setLiveVersion(first.site.id, 1, signedBy(ADMIN, world.clock.now));
     contents.push(await holds());
 
     const held = { missing_page: true, bare_files: "\nLICENSE\ndocs/README\n" };
@@ -251,7 +252,7 @@ describe("finishPublish", () => {
     const world = await makeWorld({ versions_kept: 13 });
     const site = await made(world, OWNER, "report");
     for (let version = 2; version <= 12; version += 1) await publishSite(world.install, OWNER, { files: [file("index.html", "page")], site });
-    await world.install.database.changeSettings({ versions_kept: 1 }, { by: ADMIN.holder, at: world.clock.now });
+    await world.install.database.changeSettings({ versions_kept: 1 }, signedBy(ADMIN, world.clock.now));
     const upload = await staged(world, { site });
 
     const first = await finishPublish(world.install, OWNER, upload);
@@ -266,7 +267,7 @@ describe("finishPublish", () => {
     const site = await made(world, OWNER, "report");
     await publishSite(world.install, OWNER, { files: [file("index.html", "two")], site });
     await publishSite(world.install, OWNER, { files: [file("index.html", "three")], site });
-    await world.install.database.changeSettings({ versions_kept: 1 }, { by: ADMIN.holder, at: world.clock.now });
+    await world.install.database.changeSettings({ versions_kept: 1 }, signedBy(ADMIN, world.clock.now));
     const upload = await staged(world, { site });
     world.faults.failRemoval = true;
 

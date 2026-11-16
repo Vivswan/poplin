@@ -108,7 +108,7 @@ async function buildWorld(addresses?: SiteAddresses): Promise<World> {
   const sealed = await install.publish({ name: "sealed", access: "unlisted", embeddable: false, files: { "index.html": ["sealed home", HTML] } });
   const trashed = await install.publish({ name: "trashed", access: "unlisted", files: { "index.html": ["trashed home", HTML] } });
   const expired = await install.publish({ name: "expired", access: "unlisted", expires: NOW - 1, files: { "index.html": ["expired home", HTML] } });
-  await install.database.trashSite(trashed.id, { by: install.owner, at: NOW });
+  await install.database.trashSite(trashed.id, { as: "person", by: install.owner, at: NOW });
 
   return { install, report, secret, shop, sealed, trashed, expired };
 }
@@ -252,7 +252,7 @@ describe("access", () => {
   test("after a new id the old address is gone and the new one serves", async () => {
     const install = await openInstall();
     const before = await install.publish({ name: "moved", access: "unlisted", files: { "index.html": ["moved home", HTML] } });
-    const changed = await install.database.giveNewId(before.id, { by: install.owner, at: NOW });
+    const changed = await install.database.giveNewId(before.id, { as: "person", by: install.owner, at: NOW });
     if (changed.kind !== "done") throw new Error(`the id did not change: ${changed.kind}`);
 
     const old = await serveSite(ask(typedHost(before, "p"), "/", install.ownerProof), install.serving);
@@ -265,7 +265,7 @@ describe("access", () => {
   test("after a rename the address with the old name still serves, and so does the one with the new name", async () => {
     const install = await openInstall();
     const before = await install.publish({ name: "drafts", access: "unlisted", files: { "index.html": ["renamed home", HTML] } });
-    const changed = await install.database.changeDetails(before.id, { name: "notes" as Site["name"] }, { by: install.owner, at: NOW });
+    const changed = await install.database.changeDetails(before.id, { name: "notes" as Site["name"] }, { as: "person", by: install.owner, at: NOW });
     if (changed.kind !== "done") throw new Error(`the name did not change: ${changed.kind}`);
 
     const old = await serveSite(ask(labelHost(before), "/"), install.serving);
@@ -411,7 +411,7 @@ describe("a site's own 404 page", () => {
     const bare = await install.publish({ name: "bare", access: "unlisted", files: { "index.html": ["home", HTML] } });
     const gone = await install.publish({ name: "gone", access: "unlisted", files });
     const lapsed = await install.publish({ name: "lapsed", access: "unlisted", expires: NOW - 1, files });
-    await install.database.trashSite(gone.id, { by: install.owner, at: NOW });
+    await install.database.trashSite(gone.id, { as: "person", by: install.owner, at: NOW });
 
     lost = { install, guide, store, vault, bare, gone, lapsed };
   });
@@ -592,7 +592,7 @@ describe("the icon of a site that holds none", () => {
     const vault = await install.publish({ name: "vault", access: "private", files: { ...files, ...lostPage } });
     const gone = await install.publish({ name: "gone", access: "unlisted", files });
     const lapsed = await install.publish({ name: "lapsed", access: "unlisted", expires: NOW - 1, files });
-    await install.database.trashSite(gone.id, { by: install.owner, at: NOW });
+    await install.database.trashSite(gone.id, { as: "person", by: install.owner, at: NOW });
 
     icons = { install, bare, lost, own, blank, open, vault, gone, lapsed };
   });

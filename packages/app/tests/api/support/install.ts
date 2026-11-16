@@ -165,11 +165,10 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   if (opened.kind !== "open") throw new Error(`the test's database did not open: ${opened.kind}`);
 
   const { database } = opened;
-  const signed = { by: INSTALLER, at: NOW };
-  await database.initSettings({ ...defaultSettings({ installer: INSTALLER }), ...overrides }, signed);
+  await database.initSettings({ ...defaultSettings({ installer: INSTALLER }), ...overrides }, { as: "first_login", by: INSTALLER, at: NOW });
 
   const minted = await Promise.all((["admin", "publisher", "publisher"] as const).map((scope) => mintToken({ scope, note: "a test", now: NOW })));
-  for (const { record } of minted) await database.addToken(record, signed);
+  for (const { record } of minted) await database.addToken(record, { as: "person", by: INSTALLER, at: NOW });
 
   const [admin, owner, stranger] = minted.map(({ token }) => token);
   if (admin === undefined || owner === undefined || stranger === undefined) throw new Error("the test's tokens were not minted");

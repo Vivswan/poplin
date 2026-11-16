@@ -72,7 +72,7 @@ export async function openWorld(driver: SqlDriver, kind: Kind, kept: Kept = {}):
 
   const { database } = opened;
   const { addressOf, publicAddressOf, reservedNames } = kind.addresses;
-  await database.initSettings(defaultSettings({ installer: holder }), { by: holder, at: kept.since ?? now() });
+  await database.initSettings(defaultSettings({ installer: holder }), { as: "first_login", by: holder, at: kept.since ?? now() });
   await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now());
 
   return {

@@ -258,7 +258,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     test("a site keeps its name, folder, owner, and creation time through every change another person makes", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
-      const later: Signed = { by: BO, at: NOW + 5 };
+      const later: Signed = { as: "token", by: BO, at: NOW + 5 };
       const steps = [
         await database.changeAccess(site.id, { access: "public", public_name: DOCS }, later),
         await database.changeDetails(site.id, { title: "T" }, later),
@@ -396,7 +396,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     test("access moves between the three, a public name is claimed, changed, and freed, and asking for what already is writes nothing", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
-      const later: Signed = { by: BO, at: NOW + 5 };
+      const later: Signed = { as: "token", by: BO, at: NOW + 5 };
       const steps = [
         await database.changeAccess(site.id, { access: "unlisted" }, later),
         await database.changeAccess(site.id, { access: "unlisted" }, later),
@@ -432,7 +432,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     test("after a new id the old id names no site, the public name leads to the new id, and the folder and versions are the same", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT, "public", DOCS));
-      const moved = await database.giveNewId(site.id, { by: ADA, at: NOW + 9 });
+      const moved = await database.giveNewId(site.id, { as: "token", by: ADA, at: NOW + 9 });
       if (moved.kind !== "done") throw new Error(`the new id was refused: ${moved.kind}`);
 
       expect(moved.site).toEqual({ ...site, id: moved.site.id });
@@ -450,14 +450,14 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     test("a trashed site keeps its public name, is served at neither address, and comes back whole when restored", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT, "public", DOCS));
-      const trashed = await database.trashSite(site.id, { by: ADA, at: NOW + 1 });
+      const trashed = await database.trashSite(site.id, { as: "token", by: ADA, at: NOW + 1 });
       const inTrash = { ...site, state: "trash", trashed_at: NOW + 1 };
 
       expect(trashed).toEqual({ kind: "done", site: inTrash } as typeof trashed);
       expect([await database.findServed({ id: site.id }, NOW), await database.findServed({ public_name: DOCS }, NOW)]).toEqual([undefined, undefined]);
       expect<unknown>([await database.getSite(site.id), await database.getSiteByPublicName(DOCS)]).toEqual([inTrash, inTrash]);
       expect(await publishedSite(database, draft(DOCS, "public"), BY_ADA)).toEqual({ kind: "name_taken" });
-      expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 2 })).toEqual({ kind: "done", site });
+      expect(await database.restoreSite(site.id, { as: "token", by: ADA, at: NOW + 2 })).toEqual({ kind: "done", site });
       expect((await database.findServed({ public_name: DOCS }, NOW))?.site).toEqual(site);
     });
 
@@ -469,9 +469,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       for (const name of ["early", "late", "never", "later", "sat", "fresh"]) sites.push(await made(database, draft(name as SiteName)));
       const [early, late, never, later, sat, fresh] = sites as [Site, Site, Site, Site, Site, Site];
       for (const [site, expires] of [[early, NOW + 5], [late, NOW + 10], [later, NOW + 20]] as const) await database.changeDetails(site.id, { expires }, BY_ADA);
-      await database.trashSite(sat.id, { by: ADA, at: NOW + 1 });
-      await database.trashSite(fresh.id, { by: ADA, at: NOW + 50 });
-      const sweeper = { by: BO, at: NOW + 10 };
+      await database.trashSite(sat.id, { as: "token", by: ADA, at: NOW + 1 });
+      await database.trashSite(fresh.id, { as: "token", by: ADA, at: NOW + 50 });
+      const sweeper: Signed = { as: "token", by: BO, at: NOW + 10 };
 
       const expired = [await database.listDueSites({ expiredBy: NOW + 10 }, 10), await database.listDueSites({ expiredBy: NOW + 10 }, 1), await database.listDueSites({ expiredBy: NOW + 4 }, 10)];
       await database.changeDetails(early.id, { expires: NOW + 30 }, BY_ADA);
@@ -479,7 +479,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       for (const site of [early, late, late, never, later, sat]) moved.push((await database.trashExpiredSite(site.id, sweeper)).kind);
       moved.push((await database.trashExpiredSite(NO_SITE, sweeper)).kind);
       const satOut = [await database.listDueSites({ trashedBy: NOW + 10 }, 10), await database.listDueSites({ trashedBy: NOW }, 10)];
-      await database.restoreSite(late.id, { by: ADA, at: NOW + 11 });
+      await database.restoreSite(late.id, { as: "token", by: ADA, at: NOW + 11 });
       const removed = [];
       for (const site of [late, fresh, never, sat, sat]) removed.push((await database.deleteSatOutSite(site.id, sweeper, NOW + 10)).kind);
 
@@ -503,7 +503,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       await database.trashSite(site.id, BY_ADA);
       const restored = { ...site, expires: kept };
 
-      expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 5 })).toEqual({ kind: "done", site: restored });
+      expect(await database.restoreSite(site.id, { as: "token", by: ADA, at: NOW + 5 })).toEqual({ kind: "done", site: restored });
       expect([await database.getSite(site.id), (await database.findServed({ id: site.id }, NOW + 5))?.site]).toEqual([restored, restored]);
     });
 
@@ -560,15 +560,15 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     test("details change only where a given value differs, and a trashed or missing site is refused", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
-      const later: Signed = { by: ADA, at: NOW + 3 };
+      const later: Signed = { as: "token", by: ADA, at: NOW + 3 };
       const changed = { ...site, name: DOCS, title: "Q3 report", search_engines: true, expires: NOW + 100 };
 
       expect(await database.changeDetails(site.id, { name: DOCS, title: "Q3 report", search_engines: true, expires: NOW + 100 }, later)).toEqual({
         kind: "done",
         site: changed,
       });
-      expect(await database.changeDetails(site.id, { title: "Q3 report" }, { by: ADA, at: NOW + 4 })).toEqual({ kind: "unchanged", site: changed });
-      expect(await database.changeDetails(site.id, {}, { by: ADA, at: NOW + 4 })).toEqual({ kind: "unchanged", site: changed });
+      expect(await database.changeDetails(site.id, { title: "Q3 report" }, { as: "token", by: ADA, at: NOW + 4 })).toEqual({ kind: "unchanged", site: changed });
+      expect(await database.changeDetails(site.id, {}, { as: "token", by: ADA, at: NOW + 4 })).toEqual({ kind: "unchanged", site: changed });
       expect(await database.changeDetails(site.id, { title: null, expires: "never" }, later)).toEqual({
         kind: "done",
         site: { ...changed, title: null, expires: "never" },
@@ -610,8 +610,8 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
         [BO, NOW + 2],
         [ADA, NOW + 3],
       ] as const)
-        ids.push((await made(database, draft(REPORT), { by, at })).id);
-      await database.trashSite("dddddddddddd" as SiteId, { by: ADA, at: NOW + 9 });
+        ids.push((await made(database, draft(REPORT), { as: "token", by, at })).id);
+      await database.trashSite("dddddddddddd" as SiteId, { as: "token", by: ADA, at: NOW + 9 });
 
       const first = await database.listSites({ trash: false, limit: 3 });
       const second = await database.listSites({ trash: false, limit: 3, ...(first.next === undefined ? {} : { after: first.next }) });
@@ -642,7 +642,7 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect([await found(REPORT.slice(1, 4)), await found(REPORT.toUpperCase()), await found("%"), await found("_"), await found("\u0000"), await found(`${REPORT}\u0000`)]).toEqual([live, live, [], [], [], []]);
 
       // The trash shows what was deleted last first, whenever its content changed: the oldest site, deleted last, leads.
-      await database.trashSite("aaaaaaaaaaaa" as SiteId, { by: ADA, at: NOW + 10 });
+      await database.trashSite("aaaaaaaaaaaa" as SiteId, { as: "token", by: ADA, at: NOW + 10 });
       const trash = await database.listSites({ trash: true, limit: 1 });
 
       expect<unknown>([page(trash), trash.next]).toEqual([["aaaaaaaaaaaa"], { updated_at: NOW + 10, id: "aaaaaaaaaaaa" }]);
@@ -672,9 +672,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
           // One site is public, under a public name that is not its name: the link a listing shows for it holds that name.
           const open = name === "misc" ? draft(name as SiteName, "public", "open-shelf" as PublicName) : draft(name as SiteName);
           const site = { ...open, title, ...(pageTitle === undefined ? {} : { page_title: pageTitle }) };
-          await made(database, site, { by: ADA, at: NOW + index });
+          await made(database, site, { as: "token", by: ADA, at: NOW + index });
         }
-        await database.trashSite("ffffffffffff" as SiteId, { by: ADA, at: NOW + 9 });
+        await database.trashSite("ffffffffffff" as SiteId, { as: "token", by: ADA, at: NOW + 9 });
 
         return database;
       };
@@ -722,9 +722,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
         ];
         for (const [index, [name, title, pageTitle]] of drafts.entries()) {
           const site = { ...draft(name as SiteName, index === 1 ? "unlisted" : "private"), title, ...(pageTitle === undefined ? {} : { page_title: pageTitle }) };
-          await made(database, site, { by: ADA, at: NOW + index });
+          await made(database, site, { as: "token", by: ADA, at: NOW + index });
         }
-        await database.trashSite("iiiiiiiiiiii" as SiteId, { by: ADA, at: NOW + 9 });
+        await database.trashSite("iiiiiiiiiiii" as SiteId, { as: "token", by: ADA, at: NOW + 9 });
 
         return database;
       };
@@ -793,7 +793,7 @@ export function versions(label: string, makeDatabase: DatabaseFactory): void {
     // Drift: a site without a version has nothing to serve; the database itself makes version 1 with the site, of the size and by the maker the call states.
     test("a new site holds version 1 alone, live, as its maker published it, and the next number set aside is 2", async () => {
       const database = await opened(makeDatabase);
-      const site = await made(database, { ...draft(REPORT), bytes: 100, files: 2 }, { by: BO, at: NOW + 1 });
+      const site = await made(database, { ...draft(REPORT), bytes: 100, files: 2 }, { as: "token", by: BO, at: NOW + 1 });
       const first = { number: 1, published_at: NOW + 1, published_by: BO, bytes: 100, files: 2 };
 
       expect([site.live_version, site.versions, (await database.getSite(site.id))?.versions]).toEqual([1, [first], [first]]);
@@ -811,8 +811,8 @@ export function versions(label: string, makeDatabase: DatabaseFactory): void {
       const site = await made(database, draft(REPORT));
       const reserved = await Promise.all([1, 2, 3].map(() => database.reserveVersion(site.id)));
       const numbers = reserved.map((answer) => (answer.kind === "reserved" ? answer.number : 0)).sort();
-      const second = await publishedVersion(database, site.id, publish(2, 3), { by: BO, at: NOW + 2 });
-      const fourth = await publishedVersion(database, site.id, publish(4, 2), { by: BO, at: NOW + 4 });
+      const second = await publishedVersion(database, site.id, publish(2, 3), { as: "token", by: BO, at: NOW + 2 });
+      const fourth = await publishedVersion(database, site.id, publish(4, 2), { as: "token", by: BO, at: NOW + 4 });
 
       expect(numbers).toEqual([2, 3, 4]);
       expect(second).toMatchObject({
@@ -928,14 +928,14 @@ export function backups(label: string, makeDatabase: DatabaseFactory): void {
     test("every site is exported a page at a time in id order, the trash included, and reads back the same once deleted and imported", async () => {
       const database = await opened(makeDatabase, mintFrom("cccccccccccc", "aaaaaaaaaaaa", "eeeeeeeeeeee", "bbbbbbbbbbbb", "dddddddddddd"));
       const [rolledBack, trashed] = [await made(database, draft(REPORT, "public", DOCS)), await made(database, { ...draft(REPORT), title: "Old" })];
-      for (const name of [REPORT, DOCS, REPORT]) await made(database, draft(name, "unlisted"), { by: BO, at: NOW + 1 });
+      for (const name of [REPORT, DOCS, REPORT]) await made(database, draft(name, "unlisted"), { as: "token", by: BO, at: NOW + 1 });
       for (const number of [2, 3]) {
         await database.reserveVersion(rolledBack.id);
-        await publishedVersion(database, rolledBack.id, { number, keep: 3, bytes: number * 11, files: number }, { by: BO, at: NOW + number });
+        await publishedVersion(database, rolledBack.id, { number, keep: 3, bytes: number * 11, files: number }, { as: "token", by: BO, at: NOW + number });
       }
       await database.reserveVersion(rolledBack.id);
       await database.setLiveVersion(rolledBack.id, 2, BY_ADA);
-      await database.trashSite(trashed.id, { by: BO, at: NOW + 7 });
+      await database.trashSite(trashed.id, { as: "token", by: BO, at: NOW + 7 });
 
       const pages = [await database.exportSites({ limit: 2 })];
       while (pages.at(-1)?.next !== undefined) pages.push(await database.exportSites({ limit: 2, after: pages.at(-1)?.next as SiteId }));
@@ -944,7 +944,7 @@ export function backups(label: string, makeDatabase: DatabaseFactory): void {
       for (const site of exported) await database.deleteSite(site.id, BY_ADA);
       const emptied = await database.readTotals();
       const imported = [];
-      for (const site of exported) imported.push(await storedBack(database, site, { by: BO, at: NOW + 99 }));
+      for (const site of exported) imported.push(await storedBack(database, site, { as: "token", by: BO, at: NOW + 99 }));
       const readBack = await Promise.all(exported.map((site) => database.getSite(site.id)));
 
       expect<unknown>(pages.map((page) => [page.sites.map((site) => site.id), page.next])).toEqual([
@@ -1057,7 +1057,7 @@ export function versionContents(label: string, makeDatabase: DatabaseFactory): v
     test("a served site is the site as its own read gives it, with the live version alone of the ones it keeps: the newest, and the older one after a rollback", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT, "public", DOCS));
-      for (const later of [1, 2]) await database.publishUploadAsVersion(await begunVersion(database, site), { keep: 3, details: {} }, { by: BO, at: NOW + later });
+      for (const later of [1, 2]) await database.publishUploadAsVersion(await begunVersion(database, site), { keep: 3, details: {} }, { as: "token", by: BO, at: NOW + later });
       const newest = [await database.findServed({ id: site.id }, NOW), await database.findServed({ public_name: DOCS }, NOW)].map((found) => found?.site);
       const kept = await database.getSite(site.id);
       await database.setLiveVersion(site.id, 2, BY_ADA);

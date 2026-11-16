@@ -15,11 +15,11 @@
 
 import gt from "semver/functions/gt";
 
+import { SWEEPER } from "../auth/scopes";
 import type { Learned } from "./check-update";
 import type { Install } from "./records";
 import { DAY_MS } from "./site-object";
 import { type SelfUpdate, startUpdate, type Updating } from "./start-update";
-import { SWEEPER } from "./sweep";
 import { changesDatabase, newerRelease } from "./update";
 
 /** How long a release waits, from the moment the install first knew of its version, before the install starts it by itself, in milliseconds: three days. */

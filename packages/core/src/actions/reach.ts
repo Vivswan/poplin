@@ -1,8 +1,11 @@
 // The way into every action: the install's settings, the site a reference names, and whether the actor may touch it.
 
-import { type Actor, mayReachSite } from "../auth/scopes";
+import * as v from "valibot";
+
+import { type Actor, mayReachSite, SWEEPER } from "../auth/scopes";
 import type { SettingsAndSite, ShownSite, Signed, SitesShown } from "../database/database";
 import { parsePublicName } from "../names/names";
+import { TOKEN_ID } from "../records/fields";
 import type { SettingValues } from "../records/settings";
 import type { Site } from "../records/site";
 import { dayOf } from "../records/views";
@@ -73,6 +76,17 @@ function isOpenToAll(site: Site, now: number): boolean {
 }
 
 /**
+ * The signature of an actor on a change: a token by its id, the sweeper as itself, and anyone else as the person whose email it is.
+ *
+ * @param at - the moment of the change, in milliseconds since the epoch
+ */
+export function signedBy(actor: Pick<Actor, "holder">, at: number): Signed {
+  if (v.is(TOKEN_ID, actor.holder)) return { as: "token", by: actor.holder, at };
+
+  return { as: actor === SWEEPER ? "sweeper" : "person", by: actor.holder, at };
+}
+
+/**
  * Enter the install for an action on no one site.
  *
  * @returns the settings and the signature of the actor at the clock's time, or `not_set_up` before setup stored the settings
@@ -81,7 +95,7 @@ export async function enterInstall(install: Install, actor: Actor): Promise<Ente
   const settings = await settingsOf(install);
   if (settings === undefined) return refuse("not_set_up");
 
-  return { ok: true, settings, signed: { by: actor.holder, at: install.now() } };
+  return { ok: true, settings, signed: signedBy(actor, install.now()) };
 }
 
 /**
@@ -98,7 +112,7 @@ export async function reachSite(
   reference: string,
   beside?: Pick<SitesShown, "publishers">,
 ): Promise<Reached | Refused<"not_set_up" | "bad_argument" | "not_found" | "not_allowed">> {
-  const signed = { by: actor.holder, at: install.now() };
+  const signed = signedBy(actor, install.now());
   const found = await findSite(install, reference, beside === undefined ? undefined : { day: dayOf(signed.at), publishers: beside.publishers });
   if (found === "malformed") {
     const entered = await enterInstall(install, actor);

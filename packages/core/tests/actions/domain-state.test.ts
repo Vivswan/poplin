@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { domainState } from "../../src/actions/domain-state";
+import { signedBy } from "../../src/actions/reach";
 import type { Login } from "../../src/auth/logins";
 import type { CheckedPiece, DomainCheck } from "../../src/records/domain-check";
 import { ADMIN, DAY, makeWorld, NOW } from "./support/actions-fixture";
@@ -90,7 +91,7 @@ describe("domainState", () => {
     const world = await makeWorld();
     const check: DomainCheck = { ran_at: NOW - ago, by: ADMIN.holder, run: "repair", pieces: pieces(found) };
     await world.install.database.keepDomainCheck(check, {});
-    await world.install.database.addLogin("bo@example.com" as Login, { by: ADMIN.holder, at: NOW });
+    await world.install.database.addLogin("bo@example.com" as Login, signedBy(ADMIN, NOW));
     const waiting = await domainState(world.install, ADMIN);
     await world.install.database.keepDomainCheck(check, {}, { logins: (await world.install.database.readSettings())?.logins ?? [], since: NOW });
 

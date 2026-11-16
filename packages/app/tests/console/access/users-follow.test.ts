@@ -60,7 +60,7 @@ async function added(opened: Owned, login: Login): Promise<readonly Login[]> {
   }
 
   opened.clock.now += 1;
-  const change = await opened.install.database.addLogin(login, { by: opened.owner, at: opened.install.now() });
+  const change = await opened.install.database.addLogin(login, { as: "person", by: opened.owner, at: opened.install.now() });
   if (change.kind !== "done") throw new Error("the user was not added");
 
   return change.values.logins;
@@ -216,7 +216,7 @@ describe("followUsers", () => {
   // Drift: an install that never kept a run of its domain has no row to remember a waiting change by, so no scheduled run would carry it. Told "it is tried again by itself", the admin would wait for a login that never comes.
   test("on an install that keeps no run of its domain, a try the provider did not answer is noted as a problem and sends the admin to Repair", async () => {
     const opened = await openOwned();
-    await opened.install.database.addLogin(BO, { by: opened.owner, at: opened.install.now() });
+    await opened.install.database.addLogin(BO, { as: "person", by: opened.owner, at: opened.install.now() });
     const followed = await followUsers(opened.install, fakeFollow(() => "unreachable"));
 
     expect(followed).toEqual({ carried: false, why: "forgotten", sentence: "The login list at Example Cloud is not up to date. Open Domain and press Repair." });
@@ -236,13 +236,13 @@ describe("followUsers", () => {
   // A try that set no mark because it began under none would leave the kept run saying nothing waits, over a provider that holds the list without cy.
   test("a try that began before the install's first run was kept, and is refused after that run, leaves the change waiting under it", async () => {
     const opened = await openOwned();
-    await opened.install.database.addLogin(BO, { by: opened.owner, at: opened.install.now() });
+    await opened.install.database.addLogin(BO, { as: "person", by: opened.owner, at: opened.install.now() });
     const provider: { held: readonly Login[] } = { held: [] };
     const follow: UsersFollow = {
       where: "Example Cloud",
       holdsKey: () => true,
       push: async (logins) => {
-        await opened.install.database.addLogin(CY, { by: opened.owner, at: opened.install.now() });
+        await opened.install.database.addLogin(CY, { as: "person", by: opened.owner, at: opened.install.now() });
         const repaired = [opened.owner, BO, CY];
         await opened.install.database.keepDomainCheck({ ran_at: opened.install.now(), by: opened.owner, run: "repair", pieces: [] }, {}, { logins: repaired, since: opened.install.now() });
         expect(await waits(opened)).toBe(false);

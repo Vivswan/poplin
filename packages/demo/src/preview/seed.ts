@@ -12,6 +12,7 @@ import { listSites } from "../../../core/src/actions/list";
 import { issueToken, revokeToken } from "../../../core/src/actions/manage-tokens";
 import { newLink } from "../../../core/src/actions/new-link";
 import { publishSite } from "../../../core/src/actions/publish";
+import { signedBy } from "../../../core/src/actions/reach";
 import { runDomain } from "../../../app/src/console/domain/domain-run";
 import { restoreSite } from "../../../core/src/actions/restore";
 import { updateSite } from "../../../core/src/actions/set";
@@ -287,7 +288,7 @@ async function decideComputer(world: World, cast: Cast, moment: Extract<Moment, 
 async function play(world: World, cast: Cast, moment: Moment): Promise<void> {
   const { install } = world;
   const actor = made(cast.actors, moment.by);
-  const signed = { by: actor.holder, at: install.now() };
+  const signed = signedBy(actor, install.now());
 
   switch (moment.does) {
     case "token": {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { type Asking, checkForUpdate } from "../../src/actions/check-update";
+import { signedBy } from "../../src/actions/reach";
 import { updateOf } from "../../src/actions/update";
 import { OWN_SCHEMA } from "../../src/database/open";
 import { ADMIN, DAY, makeWorld, NOW, type World } from "./support/actions-fixture";
@@ -140,7 +141,7 @@ describe("checkForUpdate and updateOf", () => {
 
     const world = await makeWorld();
     await checkForUpdate(world.install, website(RELEASE));
-    await world.install.database.changeSettings({ update_check: false }, { by: ADMIN.holder, at: NOW });
+    await world.install.database.changeSettings({ update_check: false }, signedBy(ADMIN, NOW));
 
     expect([never, asking.asked.length, await updateOf(world.install, "0.1.0")]).toEqual([{ update: undefined, kept: undefined }, 0, undefined]);
   });

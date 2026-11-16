@@ -74,7 +74,7 @@ export async function openSqlInstall(kind: "domain" | "account address" = "domai
   if (opened.kind !== "open") throw new Error(`the fake's database did not open: ${opened.kind}`);
 
   const { database } = opened;
-  await database.initSettings(defaultSettings({ installer: INSTALLER }), { by: INSTALLER, at: FAKE_NOW });
+  await database.initSettings(defaultSettings({ installer: INSTALLER }), { as: "first_login", by: INSTALLER, at: FAKE_NOW });
 
   const counters = new MemoryCounters();
   const free = kind === "account address";

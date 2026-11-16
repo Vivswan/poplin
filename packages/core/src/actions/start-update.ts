@@ -23,6 +23,7 @@ import { type LastUpdate, UPDATE_NEWS } from "../records/update";
 import { wayBack } from "./go-back";
 import { NEWEST, type WantedRelease } from "./pick-release";
 import { noteProblem } from "./problems";
+import { signedBy } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 
 /** The most starts the whole install takes a minute, whoever asks. */
@@ -138,7 +139,7 @@ export async function startUpdate(install: Pick<Install, "database" | "now">, ac
   if (!ready.ok) return notTaken(install, ready);
 
   const detail = asked.automatic === true ? { from: asked.version, to: ready.version, automatic: true } : { from: asked.version, to: ready.version };
-  await install.database.appendAudit({ action: "update_started", detail }, { by: actor.holder, at: install.now() });
+  await install.database.appendAudit({ action: "update_started", detail }, signedBy(actor, install.now()));
 
   const put = await ready.put();
   if (!put.ok) return notTaken(install, put);

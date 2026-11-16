@@ -5,6 +5,7 @@ import * as v from "valibot";
 import { type Login, parseLogin } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import type { SettingValues } from "../records/settings";
+import { signedBy } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 
 /** What a change of one login is asked with: the email, as it was typed. */
@@ -32,7 +33,7 @@ function loginIn(request: unknown): Login | Refused<"bad_argument"> {
  *
  * @param request - `{ login }`, the email as typed; anything is taken and checked
  * @returns the login in its normal form and every setting after the change. `bad_argument` about `login` for text that is no email, and `already_a_login` for one that is a login already.
- *   `not_allowed` for a token whose user was removed while it asked. A refusal changes nothing
+ *   `not_allowed` for a token whose user was removed while it asked, and for a person removed while they asked. A refusal changes nothing
  */
 export async function addLogin(install: Install, actor: Actor, request: unknown): Promise<Changed | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "already_a_login">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
@@ -40,7 +41,7 @@ export async function addLogin(install: Install, actor: Actor, request: unknown)
   const login = loginIn(request);
   if (typeof login !== "string") return login;
 
-  const added = await install.database.addLogin(login, { by: actor.holder, at: install.now() });
+  const added = await install.database.addLogin(login, signedBy(actor, install.now()));
   if (added.kind === "done") return { ok: true, login, values: added.values };
 
   if (added.kind === "unchanged") return refuse("already_a_login", "login");
@@ -55,7 +56,7 @@ export async function addLogin(install: Install, actor: Actor, request: unknown)
  *
  * @param request - `{ login }`, the email as typed; anything is taken and checked
  * @returns the login in its normal form and every setting after the change. `bad_argument` about `login` for text that is no email, `not_a_login` for an email that is no login, and `no_working_login` when no login that works would stay.
- *   `not_allowed` for a token whose user was removed while it asked
+ *   `not_allowed` for a token whose user was removed while it asked, and for a person removed while they asked
  */
 export async function removeLogin(install: Install, actor: Actor, request: unknown): Promise<Changed | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "not_a_login" | "no_working_login">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
@@ -63,7 +64,7 @@ export async function removeLogin(install: Install, actor: Actor, request: unkno
   const login = loginIn(request);
   if (typeof login !== "string") return login;
 
-  const removed = await install.database.removeLogin(login, { by: actor.holder, at: install.now() });
+  const removed = await install.database.removeLogin(login, signedBy(actor, install.now()));
   if (removed.kind === "done") return { ok: true, login, values: removed.values };
 
   if (removed.kind === "not_set_up") return refuse("not_set_up");

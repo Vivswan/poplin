@@ -1,6 +1,10 @@
 // Who may act on a site: the two scopes a credential can carry and the one decision made from them.
 
 import type { Holder } from "../records/fields";
+import type { Login } from "./logins";
+
+/** Who signs the audit entry of every site a scheduled sweep moves or removes. No person logs in under a `.invalid` address. */
+export const SWEEPER = { scope: "admin", holder: "sweep@poplin.invalid" as Login } as const;
 
 /** What a credential is allowed to reach; there is no third value. */
 export type Scope = "publisher" | "admin";

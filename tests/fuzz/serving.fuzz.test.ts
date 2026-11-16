@@ -78,7 +78,7 @@ async function registerUnder(bench: Bench): Promise<void> {
   const expired = await install.publish({ name: "expired", access: "unlisted", expires: NOW - 1, files: FILES });
   const sealed = await install.publish({ name: "sealed", access: "unlisted", embeddable: false, files: { ...FILES, "404.html": ["lost", HTML] } });
   const locked = await install.publish({ name: "locked", access: "private", embeddable: false, files: FILES });
-  await install.database.trashSite(trashed.id, { by: install.owner, at: NOW });
+  await install.database.trashSite(trashed.id, { as: "person", by: install.owner, at: NOW });
 
   const SITES = [unlisted, hidden, shown, trashed, expired, loose, guided, sealed, locked];
   const BY_ID = new Map(SITES.map((site) => [site.id as string, site] as const));

@@ -96,7 +96,7 @@ export function usersReplaced(logins: readonly string[], signed: Signed): Statem
   const moved = fragment`json_extract(${settings.value}, '$.logins[0]') IS NOT ${logins[0] ?? null}`;
   const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added} OR ${moved}))`;
 
-  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(signed.at) }).where(and(eq(domainCheck.id, 1), differs, signerStands(signed.by))));
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(signed.at) }).where(and(eq(domainCheck.id, 1), differs, signerStands(signed))));
 }
 
 /**
@@ -137,7 +137,7 @@ export function usersCarried(carried: CarriedUsers, at: number): Statement {
 export function rulesReplaced(changes: Partial<RuleSettings>, signed: Signed): Statement | undefined {
   if (RULE_SETTINGS.every((key) => changes[key] === undefined)) return undefined;
 
-  return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(signed.at) }).where(and(eq(domainCheck.id, 1), fragment`NOT ${storedRules(changes)}`, signerStands(signed.by))));
+  return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(signed.at) }).where(and(eq(domainCheck.id, 1), fragment`NOT ${storedRules(changes)}`, signerStands(signed))));
 }
 
 /**

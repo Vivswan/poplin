@@ -162,7 +162,7 @@ export function endsLogins(stage: Stage): void {
 export async function sessionOf(stage: Stage): Promise<Record<string, string>> {
   const { now } = stage.w.clock;
   const began = Math.floor((now - LOGIN_AGE_MS) / 1000);
-  await stage.install.database.appendAudit({ action: "login", detail: {} }, { by: OWNER, at: now - LOGIN_AGE_MS });
+  await stage.install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: OWNER, at: now - LOGIN_AGE_MS });
 
   return accessHeaders(stage.w, { iat: began, nbf: began });
 }

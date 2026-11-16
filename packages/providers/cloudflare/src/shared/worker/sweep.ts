@@ -27,9 +27,11 @@
 import { startDueUpdate } from "@poplin/core/src/actions/auto-update";
 import { type Asking, checkForUpdate } from "@poplin/core/src/actions/check-update";
 import { meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
+import { signedBy } from "@poplin/core/src/actions/reach";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Updating } from "@poplin/core/src/actions/start-update";
-import { SWEEP_SPARE_WRITES, SWEEPER, sweepExpired } from "@poplin/core/src/actions/sweep";
+import { SWEEP_SPARE_WRITES, sweepExpired } from "@poplin/core/src/actions/sweep";
+import { SWEEPER } from "@poplin/core/src/auth/scopes";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import { followUsers, type UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import { followRules, type RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
@@ -137,7 +139,7 @@ async function repairLogin(install: Install, running: Pick<Running, "login" | "f
     await followUsers(install, running.follow);
   }
 
-  if (wrote.length > 0) await install.database.appendAudit({ action: "domain_synced", detail: { run: "repair", from: "sweep", changed: [...wrote] } }, { by: SWEEPER.holder, at: install.now() });
+  if (wrote.length > 0) await install.database.appendAudit({ action: "domain_synced", detail: { run: "repair", from: "sweep", changed: [...wrote] } }, signedBy(SWEEPER, install.now()));
 
   if (refusal !== undefined && refusal !== "unreachable") await noteProblem(install, "login_not_repaired", new Error(refusal));
 }

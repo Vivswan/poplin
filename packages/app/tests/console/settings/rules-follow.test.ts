@@ -53,7 +53,7 @@ async function changed(opened: Owned, changes: Partial<SettingValues>): Promise<
   }
 
   opened.clock.now += 1;
-  await opened.install.database.changeSettings(changes, { by: opened.owner, at: opened.install.now() });
+  await opened.install.database.changeSettings(changes, { as: "person", by: opened.owner, at: opened.install.now() });
 }
 
 /** Whether a change of the settings of the rules waits. */
@@ -147,7 +147,7 @@ describe("followRules", () => {
   test("on an install that keeps no run of its domain the rules are written all the same, and a try with no answer is noted", async () => {
     const [taken, unanswered] = [await openOwned(), await openOwned()];
     const rules = fakeRules();
-    await taken.install.database.changeSettings({ outside_pages: "allowed" }, { by: taken.owner, at: taken.install.now() });
+    await taken.install.database.changeSettings({ outside_pages: "allowed" }, { as: "person", by: taken.owner, at: taken.install.now() });
 
     expect([await followRules(taken.install, rules), rules.held?.outside_pages, await problems(taken)]).toEqual([{ carried: true }, "allowed", []]);
     expect([await followRules(unanswered.install, fakeRules(() => "unreachable")), await problems(unanswered)]).toEqual([{ carried: false, why: "forgotten" }, ["rules_not_carried"]]);
@@ -163,7 +163,7 @@ describe("followRules, on an install that keeps its first run of the domain whil
 
       return "unreachable" as const;
     });
-    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { by: opened.owner, at: opened.install.now() });
+    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { as: "person", by: opened.owner, at: opened.install.now() });
 
     expect([await followRules(opened.install, rules), await waits(opened), await problems(opened)]).toEqual([{ carried: false, why: "unreachable" }, true, []]);
   });
@@ -179,7 +179,7 @@ describe("followRules, on an install that keeps its first run of the domain whil
 
       return undefined;
     });
-    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { by: opened.owner, at: opened.install.now() });
+    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { as: "person", by: opened.owner, at: opened.install.now() });
 
     expect([await followRules(opened.install, rules), rules.held?.outside_pages, await waits(opened)]).toEqual([{ carried: true }, "blocked", false]);
   });
@@ -206,12 +206,12 @@ describe("followRules, when an older try ends after a newer one", () => {
     const rules = fakeRules(async (earlier) => {
       if (earlier > 0) return undefined;
 
-      await opened.install.database.changeSettings({ outside_pages: "blocked" }, { by: opened.owner, at: opened.install.now() });
+      await opened.install.database.changeSettings({ outside_pages: "blocked" }, { as: "person", by: opened.owner, at: opened.install.now() });
       await followRules(opened.install, fakeRules());
 
       return undefined;
     });
-    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { by: opened.owner, at: opened.install.now() });
+    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { as: "person", by: opened.owner, at: opened.install.now() });
 
     expect([await followRules(opened.install, rules), rules.held?.outside_pages, rules.pushed.length, await problems(opened)]).toEqual([{ carried: true }, "blocked", 2, []]);
   });
@@ -220,11 +220,11 @@ describe("followRules, when an older try ends after a newer one", () => {
   test("with no run kept, values that are stale on every try are noted as a problem", async () => {
     const opened = await openOwned();
     const rules = fakeRules(async (earlier) => {
-      await opened.install.database.changeSettings({ search_engines_allowed: earlier === 0 }, { by: opened.owner, at: opened.install.now() });
+      await opened.install.database.changeSettings({ search_engines_allowed: earlier === 0 }, { as: "person", by: opened.owner, at: opened.install.now() });
 
       return undefined;
     });
-    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { by: opened.owner, at: opened.install.now() });
+    await opened.install.database.changeSettings({ outside_pages: "allowed" }, { as: "person", by: opened.owner, at: opened.install.now() });
 
     expect([await followRules(opened.install, rules), rules.pushed.length, await problems(opened)]).toEqual([{ carried: false, why: "forgotten" }, 2, ["rules_not_carried"]]);
   });

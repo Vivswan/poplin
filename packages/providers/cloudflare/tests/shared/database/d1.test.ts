@@ -6,6 +6,7 @@ import { beginPublish } from "@poplin/core/src/actions/begin-publish";
 import { beginLogin, redeemLogin } from "@poplin/core/src/actions/computer-logins";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
 import { publishSite } from "@poplin/core/src/actions/publish";
+import { signedBy } from "@poplin/core/src/actions/reach";
 import type { Install } from "@poplin/core/src/actions/records";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import type { Login } from "@poplin/core/src/auth/logins";
@@ -326,7 +327,7 @@ async function asRoute<Answer>(install: Install, step: (counted: Install) => Pro
 /** Publish a new site of `files` pages of four bytes each through the three steps, each as its route runs it; answers the rows the whole of it read and wrote. */
 async function publishCost(files: number): Promise<RowCounts> {
   const { install, rows } = await meteredInstall();
-  await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
+  await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), signedBy(PUBLISHER, NOW));
   const paths = ["index.html", ...Array.from(Array(files - 1).keys(), (index) => `pages/${index}.html`)];
   rows.read = 0;
   rows.written = 0;
@@ -633,7 +634,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
     const login = { holdsKey: () => false, repair: () => Promise.reject(new Error("the test asked for a repair of the login")) };
     const running = { version: "0.1.0", updating, login, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
-    await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
+    await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), signedBy(PUBLISHER, NOW));
     rows.read = 0;
     rows.written = 0;
     await runSweep(install, latest, running);
@@ -666,7 +667,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await straight(`INSERT INTO audit (at, actor, action, detail) WITH RECURSIVE entry(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM entry WHERE n < 100) SELECT ${longAgo}, 'ada@example.com', 'login', '{}' FROM entry`);
     const ended = `SELECT printf('%016x', n), 'h', 'publisher', '', ${longAgo}, 'ada@example.com', ${longAgo} + n, 'ada@example.com' FROM token`;
     await straight(`INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by, removed_at, removed_by) WITH RECURSIVE token(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM token WHERE n < 25) ${ended}`);
-    await install.database.appendAudit({ action: "login", detail: {} }, { by: "ada@example.com" as Login, at: NOW });
+    await install.database.appendAudit({ action: "login", detail: {} }, { as: "person", by: "ada@example.com" as Login, at: NOW });
     rows.read = 0;
     rows.written = 0;
     await install.database.sweepRunOut(NOW);
@@ -908,7 +909,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("claimUsers", () => database.claimUsers(NOW + 2));
     await cost("settleUsers, the stored logins carried", () => database.settleUsers({ logins: carried, since: NOW + 2 }, NOW + 2));
     await cost("settleUsers, a try whose outcome is unknown", () => database.settleUsers({ logins: null, since: NOW + 2 }, NOW + 2));
-    await database.changeSettings({ outside_pages: "allowed" }, { by: BY_ADA.by, at: NOW + 3 });
+    await database.changeSettings({ outside_pages: "allowed" }, { ...BY_ADA, at: NOW + 3 });
     await cost("claimRules", () => database.claimRules(NOW + 4));
     await cost("settleRules, the stored settings carried", () => database.settleRules({ rules: { outside_pages: "allowed", search_engines_allowed: false }, since: NOW + 4 }, NOW + 4));
     await cost("claimRules, nothing waits", () => database.claimRules(NOW + 5));
@@ -942,10 +943,10 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("changeSettings, another first login", () => database.changeSettings({ logins: [person, ADMIN] }, BY_ADA));
     // A user's tokens end with the user: each costs its entry of the log and its own row, with the indexes that hold it.
     const allowed = await Promise.all(["one", "two", "three", "four"].map((note) => mintToken({ scope: "publisher", note, now: NOW })));
-    for (const { record } of allowed.slice(0, 2)) await database.addToken(record, { by: person, at: NOW });
+    for (const { record } of allowed.slice(0, 2)) await database.addToken(record, { as: "person", by: person, at: NOW });
     await cost("removeLogin, a user behind 2 tokens", () => database.removeLogin(person, BY_ADA));
     await database.addLogin(person, BY_ADA);
-    for (const { record } of allowed.slice(2)) await database.addToken(record, { by: person, at: NOW });
+    for (const { record } of allowed.slice(2)) await database.addToken(record, { as: "person", by: person, at: NOW });
     await cost("changeSettings, a login less behind 2 tokens", () => database.changeSettings({ logins: [ADMIN] }, BY_ADA));
 
     await cost("readStorageWrites", () => database.readStorageWrites(DAY));

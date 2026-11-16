@@ -6,6 +6,7 @@ import { listSites } from "../../src/actions/list";
 import { beginPublish } from "../../src/actions/begin-publish";
 import { publishSite } from "../../src/actions/publish";
 import { deleteSite } from "../../src/actions/delete";
+import { signedBy } from "../../src/actions/reach";
 import { ADMIN, DAY, file, hashOf, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
 
 /** A second, in milliseconds. */
@@ -264,7 +265,7 @@ describe("publishSite", () => {
     const world = await makeWorld();
     await made(world, ADMIN, "taken", { access: "public" });
     const id = await made(world, OWNER, "first");
-    await world.install.database.changeSettings(settings, { by: ADMIN.holder, at: NOW });
+    await world.install.database.changeSettings(settings, signedBy(ADMIN, NOW));
     const [keys, audit] = [await world.keys(), await world.audit()];
     world.faults.failWrite = 5;
 
@@ -328,7 +329,7 @@ describe("publishSite", () => {
 
       await publishSite(world.install, OWNER, { files: sized(20), site: first.site.id });
       await deleteSite(world.install, OWNER, { site: trashed.site.id });
-      await world.install.database.changeSettings(limit, { by: ADMIN.holder, at: NOW });
+      await world.install.database.changeSettings(limit, signedBy(ADMIN, NOW));
       const keys = await world.keys();
       if (outcome !== true) world.faults.failWrite = 4;
 

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { countAudit, listAudit, listAuditForFile, listAuditForScreen, nextAuditFile } from "../../src/actions/audit-log";
 import { changeConfig } from "../../src/actions/config";
+import { signedBy } from "../../src/actions/reach";
 import { updateSite } from "../../src/actions/set";
 import { AUDIT_WINDOW } from "../../src/database/database";
 import { ADMIN, made, makeWorld, NOW, OWNER } from "./support/actions-fixture";
@@ -93,7 +94,7 @@ describe("a narrowed reading of a log longer than its window", () => {
   test("answers what its window holds and where it stopped, the count and the file's end stop with it, and the screen's reading takes a page of 201", async () => {
     const world = await makeWorld();
     await made(world, ADMIN, "report");
-    for (let count = 0; count < AUDIT_WINDOW + 5; count += 1) await world.install.database.appendAudit({ action: "login", detail: {} }, { by: ADMIN.holder, at: NOW });
+    for (let count = 0; count < AUDIT_WINDOW + 5; count += 1) await world.install.database.appendAudit({ action: "login", detail: {} }, signedBy(ADMIN, NOW));
     await made(world, ADMIN, "docs");
     const told = (read: Awaited<ReturnType<typeof listAudit>>): unknown => (read.ok ? [read.entries.map((entry) => entry.site?.name ?? entry.action), Object.keys(read)] : read);
     const toldOfFile = (read: Awaited<ReturnType<typeof listAuditForFile>>): unknown => told(read.ok ? { ...read, entries: read.entries.map(({ entry }) => entry) } : read);

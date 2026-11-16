@@ -36,7 +36,7 @@ const DAY_MS = 86_400_000;
 
 export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the audit log`, () => {
-    const signed: Signed = { by: BO, at: NOW + 1 };
+    const signed: Signed = { as: "token", by: BO, at: NOW + 1 };
 
     // Drift: the Activity tab is only as true as this; a change with no entry, or an entry for a change that was refused, makes it lie.
     test.each([
@@ -149,9 +149,9 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
     test("entries read back newest first, a page at a time, each with who, when, and the site as it was named then", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
-      await database.trashSite(site.id, { by: BO, at: NOW + 1 });
-      await database.deleteSite(site.id, { by: BO, at: NOW + 2 });
-      await database.appendAudit({ action: "login", detail: { from: "dashboard" } }, { by: "ada@example.com" as Login, at: NOW + 3 });
+      await database.trashSite(site.id, { as: "token", by: BO, at: NOW + 1 });
+      await database.deleteSite(site.id, { as: "token", by: BO, at: NOW + 2 });
+      await database.appendAudit({ action: "login", detail: { from: "dashboard" } }, { as: "person", by: "ada@example.com" as Login, at: NOW + 3 });
       const named = { id: site.id, name: REPORT };
       const newest = await database.listAudit({ limit: 2 });
 
@@ -173,9 +173,9 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       if (laptop === undefined || agent === undefined || unnamed === undefined) throw new Error("no token was minted");
 
       for (const token of [laptop, agent, unnamed]) await database.addToken(token, BY_ADA);
-      const first = await made(database, { ...draft(REPORT), title: "Typed" }, { by: laptop.id, at: NOW });
-      await database.giveNewId(first.id, { by: agent.id, at: NOW });
-      const holder = await made(database, draft(DOCS), { by: unnamed.id, at: NOW });
+      const first = await made(database, { ...draft(REPORT), title: "Typed" }, { as: "token", by: laptop.id, at: NOW });
+      await database.giveNewId(first.id, { as: "token", by: agent.id, at: NOW });
+      const holder = await made(database, draft(DOCS), { as: "token", by: unnamed.id, at: NOW });
       await database.changeDetails(holder.id, { name: "figures" as SiteName }, BY_ADA);
       const binned = await made(database, draft("binned" as SiteName));
       await database.trashSite(binned.id, BY_ADA);
@@ -214,7 +214,7 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
     // Drift: a file of the log is read 1,000 entries a reading; a reading cut at a listing's 100 would end the file early, and one with no bound would hold a whole long log in memory.
     test("one reading holds up to 1,000 entries, and no more is asked of it", async () => {
       const database = await opened(makeDatabase);
-      for (let count = 0; count < 120; count += 1) await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW + count });
+      for (let count = 0; count < 120; count += 1) await database.appendAudit({ action: "login", detail: {} }, { as: "token", by: BO, at: NOW + count });
       const read = await database.listAudit({ limit: 1000 });
 
       expect([read.length, read.at(0)?.seq, read.at(-1)?.seq]).toEqual([120, 120, 1]);
@@ -226,11 +226,11 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       await made(database, draft("abc" as SiteName));
       const report = await made(database, draft(REPORT));
-      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      await database.appendAudit({ action: "login", detail: {} }, { as: "token", by: BO, at: NOW });
       const docs = await made(database, draft(DOCS));
-      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
-      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW + 2 });
-      await database.trashSite(docs.id, { by: BO, at: NOW + 3 });
+      await database.trashSite(report.id, { as: "token", by: BO, at: NOW + 1 });
+      await database.appendAudit({ action: "login", detail: {} }, { as: "token", by: BO, at: NOW + 2 });
+      await database.trashSite(docs.id, { as: "token", by: BO, at: NOW + 3 });
       const told = (entries: readonly AuditEntry[]): unknown[] => entries.map((entry) => [entry.action, entry.site?.name ?? null]);
       const narrowed = { actions: ["trash", "create"], site: "o" } as const;
       const found = async (query: Parameters<Database["searchAudit"]>[0]): Promise<unknown[]> => told((await database.searchAudit(query)).entries);
@@ -322,9 +322,9 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
     test("a count keeps the narrowing of a page and reads no further back than it is told, saying that the log goes on only when it does", async () => {
       const database = await opened(makeDatabase);
       const report = await made(database, draft(REPORT));
-      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      await database.appendAudit({ action: "login", detail: {} }, { as: "token", by: BO, at: NOW });
       await made(database, draft(DOCS));
-      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
+      await database.trashSite(report.id, { as: "token", by: BO, at: NOW + 1 });
 
       const whole = [{ most: 5 }, { most: 4 }, { most: 100, actions: ["create"] }, { most: 100, site: "o" }, { most: 4, site: "o" }, { most: 100, actions: ["login"], site: "o" }, { most: 100, actions: [] }] as const;
       const cut = [{ most: 3 }, { most: 3, site: "o" }, { most: 2, actions: ["create"] }, { most: 1, actions: ["create"] }] as const;
@@ -338,9 +338,9 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
     test("a part of the log ends on its last entry when an entry lies behind it, and nowhere when the log ends with it", async () => {
       const database = await opened(makeDatabase);
       const report = await made(database, draft(REPORT));
-      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      await database.appendAudit({ action: "login", detail: {} }, { as: "token", by: BO, at: NOW });
       await made(database, draft(DOCS));
-      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
+      await database.trashSite(report.id, { as: "token", by: BO, at: NOW + 1 });
 
       const parts = [{ entries: 1 }, { entries: 3 }, { entries: 4 }, { entries: 2, after: 3 }, { entries: 1, after: 3 }] as const;
 
@@ -362,11 +362,11 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       await made(database, draft("abc" as SiteName));
       const report = await made(database, draft(REPORT));
-      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW });
+      await database.appendAudit({ action: "login", detail: {} }, { as: "token", by: BO, at: NOW });
       const docs = await made(database, draft(DOCS));
-      await database.trashSite(report.id, { by: BO, at: NOW + 1 });
-      await database.appendAudit({ action: "login", detail: {} }, { by: BO, at: NOW + 2 });
-      await database.trashSite(docs.id, { by: BO, at: NOW + 3 });
+      await database.trashSite(report.id, { as: "token", by: BO, at: NOW + 1 });
+      await database.appendAudit({ action: "login", detail: {} }, { as: "token", by: BO, at: NOW + 2 });
+      await database.trashSite(docs.id, { as: "token", by: BO, at: NOW + 3 });
       const read: string[][] = [];
       let after: number | undefined;
 
@@ -385,7 +385,7 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
 
 export function auditTrim(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the sweep's trim of the audit log`, () => {
-    const at = (daysAgo: number): Signed => ({ by: ADMIN, at: NOW - daysAgo * DAY_MS });
+    const at = (daysAgo: number): Signed => ({ as: "person", by: ADMIN, at: NOW - daysAgo * DAY_MS });
     const held = async (database: Database): Promise<unknown> => [(await auditTrail(database)).map((entry) => entry.seq), await database.countAudit({ most: 1000 })];
 
     // Drift: the Activity screen counts the log from its two ends. A trim that took an old entry from behind a kept one would leave a gap and a count one too many, and one that took the newest entry would let the next entry take its number.
@@ -445,7 +445,7 @@ export function everLoggedIn(label: string, makeDatabase: DatabaseFactory): void
     // Drift: the setup page is open to anyone until the first login and shut for good after it; an answer that counted another entry as a login would shut it on the person setting up, and one that missed a login under later entries would open it again.
     test("it is no before any login, whatever else the log holds, and yes from the first login on, however much is written after it", async () => {
       const database = await opened(makeDatabase);
-      const by = { by: ADA, at: NOW };
+      const by: Signed = { as: "token", by: ADA, at: NOW };
       const before = await database.hasLoggedIn();
       await database.initSettings(SETTINGS, by);
       for (const action of ["domain_synced", "login_allowed", "login_denied", "signed_everyone_out"] as const) await database.appendAudit({ action, detail: { from: "login" } }, by);
@@ -461,7 +461,7 @@ export function everLoggedIn(label: string, makeDatabase: DatabaseFactory): void
     // Drift: one login at the provider would leave a line for every instance that met it, or a later login of the same person, or a login of another, would leave none.
     test("a login is noted once: again only when it began after the last entry of its email, and each email by its own entries", async () => {
       const database = await opened(makeDatabase);
-      await database.initSettings(SETTINGS, { by: ADMIN, at: NOW });
+      await database.initSettings(SETTINGS, { as: "first_login", by: ADMIN, at: NOW });
       const eve = "eve@example.com" as Login;
       const noted: string[] = [];
       for (const [login, since, at] of [

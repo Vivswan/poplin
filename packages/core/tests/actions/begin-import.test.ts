@@ -5,6 +5,7 @@ import { beginImport, type ImportRequest } from "../../src/actions/begin-import"
 import { exportFile, exportFiles, exportSite } from "../../src/actions/export";
 import { finishPublish } from "../../src/actions/finish-publish";
 import { publishSite } from "../../src/actions/publish";
+import { signedBy } from "../../src/actions/reach";
 import { getSite } from "../../src/actions/show";
 import { uploadFile } from "../../src/actions/upload-file";
 import type { SettingValues } from "../../src/records/settings";
@@ -215,7 +216,7 @@ describe("an import that is finished", () => {
     await finishPublish(world.install, ADMIN, await staged(world, await backupOf(source, first.site.id)));
     const holds = async (): Promise<unknown> => (await world.install.database.findServed({ id: first.site.id }, world.clock.now))?.contents;
     const contents = [await holds()];
-    await world.install.database.setLiveVersion(first.site.id, 1, { by: ADMIN.holder, at: world.clock.now });
+    await world.install.database.setLiveVersion(first.site.id, 1, signedBy(ADMIN, world.clock.now));
     contents.push(await holds());
 
     expect(contents).toEqual([{ missing_page: false, bare_files: "" }, { missing_page: true, bare_files: "\nLICENSE\n" }]);
