@@ -34,6 +34,6 @@ who      Cloudflare emails your first user
 made by  Repair, with an account token that also holds Notifications: Edit
 ```
 
-An install gets the alert once you add the permission to the account token and press Repair: [Domain](../../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar).
+An install of either kind, under a domain or without one, gets the alert once you add the permission to the account token and press Repair: [Domain](../../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar).
 
 Without the permission, Repair makes no alert and fails nothing. You can also make one by hand: Manage Account, then Billing, then Billable Usage, then Create budget alert.

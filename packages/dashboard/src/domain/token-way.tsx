@@ -30,7 +30,7 @@ function FormHelp({ form }: { readonly form: Domain["form"] }): ReactNode {
           <>
             <PopoverHeader>
               <PopoverTitle>Optional rights</PopoverTitle>
-              <PopoverDescription>They block junk traffic and crawlers.</PopoverDescription>
+              <PopoverDescription>The install works without them.</PopoverDescription>
             </PopoverHeader>
             <ul className="flex flex-col gap-2">
               {form.tokenOptional.map((entry) => (
