@@ -83,7 +83,7 @@ On Cloudflare's Workers Paid plan, lines past the plan's own allowance are charg
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------- |
 | `poplin: a request failed`                                            | a request met an error and was answered a 503                             | the error's kind, places in code   |
 | `poplin: an API request failed`                                       | a call of the API met an error and was answered a 500                     | the error's kind, places in code   |
-| `poplin: a login was refused:`                                        | a login came with no valid proof from Access, or for an email not allowed | the kind of refusal                |
+| `poplin: a request for the dashboard was refused:`                    | a request came with no valid proof from Access, or for an email not allowed | the kind of refusal              |
 | `poplin: a request for a private site was refused:`                   | the same, at a private site                                               | the kind of refusal                |
 | `poplin: a login was not written to the audit log`                    | the database took no write, and the person was let in                     | the error's kind, places in code   |
 | `poplin: the day's count of writes to the bucket was not written`     | the database took no write after a request                                | the error's kind, places in code   |
@@ -94,6 +94,27 @@ On Cloudflare's Workers Paid plan, lines past the plan's own allowance are charg
 
 - **An error the Worker caught is written by its kind, never by its message.** `RangeError`, then the places in the code it passed through; for a scheduled run that failed, Cloudflare names them by the source's file and line. a message could repeat a site's id or a file's path.
 - **poplin writes into no line** a token, a login's token, a login code, an email, a visitor's address, a site's id, or a value of a setting or a variable.
-- **Cloudflare's own record of each request is off.** It would hold the request's address, and the address of an unlisted or a private site is its link.
-- **Cloudflare adds fields of its own to every line.** The log is in your Cloudflare account, and whoever can open the account can read it.
 - **A request that goes well writes no line.**
+
+### What Cloudflare stores with a line
+
+Cloudflare stores each line together with the request it was written in. poplin writes no address into a line, and Cloudflare adds it:
+
+| Cloudflare stores with the line                   | It does not store               |
+| ------------------------------------------------- | ------------------------------- |
+| the request's whole address: hostname and path    | the visitor's address           |
+| the request's method                              | a header of the request         |
+| Cloudflare's own id of the request                |                                 |
+
+**So the address of a site can be in the log.** The address of a private or an unlisted site holds the site's id, and for an unlisted site the address is the link. It is stored for a request in which the Worker wrote one of the lines of the table above, and for no other request.
+
+| The request                                                              | Its address is stored |
+| ------------------------------------------------------------------------ | --------------------- |
+| wrote no line, as a request that goes well does                          | no                    |
+| wrote `poplin: a request failed`, or any other line of the table above   | yes, with that line   |
+| was refused by the login check of a private site or of the dashboard     | yes, with the line of that refusal |
+
+- **Who can read it:** whoever can read the logs of your Cloudflare account, for the days the first table names.
+- **Cloudflare's own record of each request is off.** With it on, the address of every request would be stored, also of one that went well.
+- **To keep addresses out,** switch the Worker's logs off at Cloudflare, in the Worker's settings. No line is kept then: the reason of a 503, of a refused login, and of a step of the database that failed is in no log.
+- **An update switches the logs on again.** An update that poplin makes states the log settings of its release, and poplin's release states them on. So: off at Cloudflare, and again after each update. poplin has no setting for it.

@@ -11,7 +11,7 @@ The three kinds of access, the address each gives a site, and what a visitor see
 
 | Access                | Who can open it            | Address                                                               | Set it with                                  |
 | --------------------- | -------------------------- | --------------------------------------------------------------------- | -------------------------------------------- |
-| private (the default) | only you, after a login    | `report--k3f9x2ab71qz-p-poplin.example.com`                           | `npx poplin set report--k3f9x2ab71qz --private` |
+| private (the default) | only the users of your install, after a login | `report--k3f9x2ab71qz-p-poplin.example.com`                           | `npx poplin set report--k3f9x2ab71qz --private` |
 | unlisted              | anyone who has the address | `report--k3f9x2ab71qz-u-poplin.example.com`                           | `poplin set report--k3f9x2ab71qz --unlisted` |
 | public                | everyone                   | the unlisted one, and a name the site claims: `docs-page.example.com` | `poplin set report--k3f9x2ab71qz --public`   |
 

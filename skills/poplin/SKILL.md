@@ -50,13 +50,13 @@ You publish with the MCP tools, or with the `poplin` command when the tools are 
 
 **A publish with no `site` always makes a new site.** Poplin never guesses that two publishes belong together, even from the same folder. So pass the label as `site` whenever you revise. Without it every revision lands at a new address, the link the user already shared keeps showing the old page, and stale copies pile up.
 
-**A new site is private.** Only the install's admins can open it, after they log in in the browser. That is the right default for a draft or a report with real numbers in it, so leave it unless the user asks for more.
+**A new site is private.** Only the users of the install can open it, after they log in in the browser. That is the right default for a draft or a report with real numbers in it, so leave it unless the user asks for more.
 
 **Ask before you widen who can open a site.** The user may not know what each state lets out:
 
 | `access`   | Who can open it                                            | Address ends in                 | Command flag |
 | ---------- | ---------------------------------------------------------- | ------------------------------- | ------------ |
-| `private`  | the install's admins, after login                          | `-p-poplin.example.com`         | `--private`  |
+| `private`  | the install's users, after login                           | `-p-poplin.example.com`         | `--private`  |
 | `unlisted` | anyone who has the address, with no login                  | `-u-poplin.example.com`         | `--unlisted` |
 | `public`   | everyone, also at a public name: `report-page.example.com` | `-u-poplin.example.com`         | `--public`   |
 
@@ -116,7 +116,7 @@ An install is one of two kinds: under the user's own domain, or without a domain
 Give three things: the address on a line of its own, who can open it, and how to change that.
 
 ```text
-Published. It is private: only the admins of your install can open it, after login.
+Published. It is private: only the users of your install can open it, after they log in.
 
 https://report--k3f9x2ab71qz-p-poplin.example.com
 
@@ -137,6 +137,6 @@ Two rules hold for every refusal. A refusal about the login (`no_login`, `not_lo
 
 | Open                                                               | When                                                                    |
 | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| [`references/setup.md`](references/setup.md)                       | the user asks to set poplin up, cannot log in, or asks to remove the install; or there are no tools and no login |
+| [`references/setup.md`](references/setup.md)                       | the user asks to set poplin up, cannot log in, or asks to remove or move the install; or there are no tools and no login |
 | [`references/mcp-server.md`](references/mcp-server.md)             | you add the MCP server to your own configuration, during the setup      |
 | [`references/refusals.md`](references/refusals.md)                 | a tool or a command answers with a refusal `code`                       |
