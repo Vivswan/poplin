@@ -139,9 +139,10 @@ export function ProblemsBlock(): ReactNode {
   const problems = data?.problems;
 
   return (
-    <section aria-labelledby="problems-heading" className="flex shrink-0 flex-col pt-6">
+    // Named in its own words, as the Visits block is: Firefox ends a page whose block is named by its heading's id once two scripts of different worlds read that name.
+    <section aria-label="Problems" className="flex shrink-0 flex-col pt-6">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-6 pb-3 max-md:px-4">
-        <h2 id="problems-heading" className="text-sm font-medium">
+        <h2 className="text-sm font-medium">
           Problems
         </h2>
         <div className="ml-auto">
