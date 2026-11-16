@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import type { DomainReading, DomainSettings } from "@poplin/app/src/console/domain/records";
+import { runDone } from "../../../app/src/console/domain-answers";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { createPathPlug, givePathKey } from "../../src/zone/path-plug";
 import { withFake } from "./support/fake-cloudflare";
@@ -100,6 +101,27 @@ test("a repair makes every object in 24 calls, the forwarders bound to the one W
     expect(shown(await plug.check(TOKEN, SETTINGS))).toEqual(table({}));
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({}));
     expect(writes(asked.slice(sent))).toEqual([]);
+  });
+});
+
+// Drift: with somebody's own Worker at a forwarder's name and every other piece in place, a run would say that nothing is left to repair while the open sites still reach that other Worker.
+test.each(["check", "repair"] as const)("a %s of an install whose open sites' name is held by a Worker that is not poplin's fails at that forwarder, says why, and never touches the Worker", async (run) => {
+  const account = deployed();
+
+  await withAccount(account, async (plug, asked) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const theirs = { id: "poplin-sites", tags: [], bindings: [], enabled: true, previews_enabled: true };
+    account.workers.splice(0, 1, { ...theirs });
+    const sent = asked.length;
+    const reading = await plug[run](TOKEN, SETTINGS);
+
+    expect(shown(reading)).toEqual([
+      "Forwarder | present | poplin-private: https://poplin-private.example.workers.dev (private sites)",
+      "Forwarder | failed | poplin-sites: a Worker of this name is not poplin's: rename or delete it",
+      ...table({}).slice(2),
+    ]);
+    expect(reading.ok ? runDone(run, reading, false).summary : undefined).toEqual({ line: "1 not done", tone: "bad" });
+    expect([writes(asked.slice(sent)), account.workers[0]]).toEqual([[], theirs]);
   });
 });
 
