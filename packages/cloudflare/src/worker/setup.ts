@@ -4,7 +4,8 @@
 //   somebody has, ever      ->  shut, for good
 //
 // A login is an entry of the audit log, which only ever grows, so the page never opens again.
-// The page answers on the admin hostname and on the Worker's own workers.dev address, which is the only one that resolves before setup made the records.
+// The page answers on the admin hostname and, on an install with a domain, on the Worker's own workers.dev address, which is the only one that resolves before setup made the records.
+// An install whose kind has no side at Cloudflare has nothing for the page to run: there it is shut from the start.
 // A Worker with nothing set answers the page on every hostname: it has no domain yet to tell one from another.
 
 import { createSetupConsole } from "@poplin/app/src/console/setup-console";
@@ -13,6 +14,7 @@ import { clientAddress } from "../limits/client-address";
 import { CLIENT_FILES } from "./client-files";
 import type { Held } from "./held";
 import type { Instance, Unset } from "./start";
+import { plain } from "./util";
 
 /** Where the setup page answers; its two runs are one level below. */
 const SETUP_PATH = "/setup";
@@ -50,17 +52,21 @@ export function answerFirstSetup(request: Request, unset: Unset, now: () => numb
 /**
  * Answer a request to the setup page.
  *
+ * @param held - reads the settings the instance holds; never asked on an install with no setup page
  * @param open - whether the page answers at all, asked on every request
- * @returns the page's own answer: a 404 that says nothing once the page is shut
+ * @returns the page's own answer: a 404 that says nothing once the page is shut, and on an install with no side at Cloudflare
  */
-export function answerSetup(request: Request, instance: Instance, held: Held, open: () => Promise<boolean>): Promise<Response> {
+export async function answerSetup(request: Request, instance: Instance, held: () => Promise<Held>, open: () => Promise<boolean>): Promise<Response> {
+  if (instance.domain === undefined) return plain(request, 404, "Not found.");
+
+  const { visitorSecret } = await held();
   const setup = createSetupConsole({
     client: CLIENT_FILES,
     install: instance.install,
     domain: instance.domain,
     open,
     counters: instance.counters,
-    visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, instance.install.now()),
+    visitorOf: (asked) => visitorKey(clientAddress(asked.headers), visitorSecret, instance.install.now()),
   });
 
   return setup.fetch(request);
