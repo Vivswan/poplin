@@ -5,6 +5,7 @@ import { decideLogin } from "@poplin/core/src/actions/computer-logins";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
+import { mintToken } from "@poplin/core/src/auth/tokens";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
@@ -575,6 +576,49 @@ describe("createApi", () => {
 
     expect([admin.status, part(admin, "error").code, unknown.status, part(unknown, "error")]).toEqual([403, "not_allowed", 400, expect.objectContaining({ code: "bad_argument", about: "expires" })]);
     expect<number[]>([others.status, own.status, (await asOwner.whoami.$get({ query: {} })).status]).toEqual([403, 200, 401]);
+  });
+
+  // Drift: a token is its user's. A removed user whose tokens lived on would read every private site with them, and with an admin one put their own email back among the users.
+  test.each([
+    ["a shorter list of users", (install: ApiInstall, stays: Login[]) => answered(install.routes.config.$patch({ json: { logins: stays }, query: {} }))],
+    [
+      "an import that brings a shorter list",
+      async (install: ApiInstall, stays: Login[]) => {
+        const settings = (await answered(install.routes.export.settings.$get({ query: {} }))).body.settings as Record<string, string>;
+
+        return answered(install.routes.import.settings.$post({ json: { format: 1, settings: { ...settings, logins: stays.join(",") }, logins: true }, query: {} }));
+      },
+    ],
+  ])("%s ends the admin and the publisher token the removed user allowed, at once and for good, and no token of a user who stays", async (_how, shorten) => {
+    const install = await openApi();
+    const [ada, bo] = ["ada@example.com" as Login, "bo@example.com" as Login];
+    await answered(install.routes.config.$patch({ json: { logins: [ada, bo] }, query: {} }));
+    const [laptop, agent] = await Promise.all([mintToken({ scope: "admin", note: "laptop", now: NOW }), mintToken({ scope: "publisher", note: "agent", now: NOW })]);
+    await install.database.addToken(laptop.record, { by: bo, at: NOW });
+    // A token made by a token is its maker's user's: the publisher token here is made by bo's admin token.
+    await install.database.addToken(agent.record, { by: laptop.record.id, at: NOW });
+    const all = [laptop.token, agent.token, install.tokens.admin, install.tokens.owner, install.tokens.stranger];
+    const answers = (): Promise<number[]> => Promise.all(all.map(async (token) => (await install.as(token).whoami.$get({ query: {} })).status));
+    const before = await answers();
+
+    const removed = await shorten(install, [ada]);
+    const after = await answers();
+    const back = await answered(install.as(laptop.token).config.$patch({ json: { logins: [ada, bo] }, query: {} }));
+    await answered(install.routes.config.$patch({ json: { logins: [ada, bo] }, query: {} }));
+    const ended = (await install.database.listTokenStates(NOW, 50)).ended.map(({ id, how }) => [id, how]);
+
+    expect([before, removed.status, after, back.status, await answers()]).toEqual([[200, 200, 200, 200, 200], 200, [401, 401, 200, 200, 200], 401, [401, 401, 200, 200, 200]]);
+    expect<unknown>(ended.sort()).toEqual([[laptop.record.id, "user_removed"], [agent.record.id, "user_removed"]].sort());
+  });
+
+  // Drift: the provider is called with the install's kept key when a change of the users is stored. A publisher's change is refused, and a call made all the same would let any publisher token spend that key.
+  test("a publisher's change of the users is refused and carries nothing to the provider", async () => {
+    const install = await openApi();
+    install.users.takes = true;
+
+    const refused = await answered(install.as(install.tokens.owner).config.$patch({ json: { logins: ["ada@example.com" as Login, "bo@example.com" as Login] }, query: {} }));
+
+    expect([refused.status, part(refused, "error").code, install.users.pushed]).toEqual([403, "not_allowed", []]);
   });
 
   // Drift: a host ends a request past 50 calls to the database, and the route reads the token first, in a request that may also start the host. A copy told nothing of that passes 50 on a host that just started.

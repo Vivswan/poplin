@@ -318,14 +318,14 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     name: "Access screen: the people",
     guide: "Open the Access screen",
     route: "GET /data/people",
-    // The logins are one setting, read with the rest.
+    // The logins are one setting, read with the rest; the tokens each user allowed are counted in a statement of their own.
     arrange: async (stage) => {
       const session = await sessionOf(stage);
 
       return (measured) => data(measured, session, "/people");
     },
     status: 200,
-    budget: { queries: 1, reads: 0, writes: 0 },
+    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,

@@ -20,10 +20,10 @@ const TOKEN_ROW = v.variant("scope", [
 /** What a row of an ended token holds however it ended: no hash. */
 const ENDED_ALWAYS = { id: TOKEN_ID, note: v.string(), created_at: MOMENT };
 
-/** A row of a token that ended: one that was removed names when and by whom, and one that only ran out is an admin's. */
+/** A row of a token that ended: one that was removed names when and by whom, and whether it went with its user; one that only ran out is an admin's. */
 const ENDED_ROW = v.union([
-  v.strictObject({ ...ENDED_ALWAYS, scope: v.picklist(["admin", "publisher"]), expires_at: v.nullable(MOMENT), removed_at: MOMENT, removed_by: HOLDER }),
-  v.strictObject({ ...ENDED_ALWAYS, scope: v.literal("admin"), expires_at: MOMENT, removed_at: v.null(), removed_by: v.null() }),
+  v.strictObject({ ...ENDED_ALWAYS, scope: v.picklist(["admin", "publisher"]), expires_at: v.nullable(MOMENT), removed_at: MOMENT, removed_by: HOLDER, user_removed: v.picklist([0, 1]) }),
+  v.strictObject({ ...ENDED_ALWAYS, scope: v.literal("admin"), expires_at: MOMENT, removed_at: v.null(), removed_by: v.null(), user_removed: v.literal(0) }),
 ]);
 
 /**
@@ -39,7 +39,9 @@ export function endedTokenFromRow(row: unknown): EndedToken {
   const { id, note, created_at: createdAt } = parsed.output;
   if (parsed.output.removed_at === null) return { id, note, createdAt, endedAt: parsed.output.expires_at, how: "ran_out", scope: parsed.output.scope };
 
-  return { id, note, createdAt, endedAt: parsed.output.removed_at, how: "removed", scope: parsed.output.scope, by: parsed.output.removed_by };
+  const how = parsed.output.user_removed === 1 ? "user_removed" : "removed";
+
+  return { id, note, createdAt, endedAt: parsed.output.removed_at, how, scope: parsed.output.scope, by: parsed.output.removed_by };
 }
 
 /**

@@ -1,4 +1,5 @@
 // The People tab: who has no Remove, what is asked before a person is taken out or every browser is signed out, and where a refused email is said.
+// The question before a person is taken out counts the tokens that end with that person.
 
 import { clearPage, type Within } from "../lib/support/page";
 
@@ -10,8 +11,13 @@ import type { AccessActions } from "@/access/access-actions";
 import type { People } from "@/access/access-queries";
 import { PeopleTab } from "@/access/people-tab";
 
-/** The people of the test install: the one logged in here, and one more. */
-const PEOPLE = { ok: true, logins: ["mira@example.com", "jonas@example.com"], you: "mira@example.com" } as People;
+/** The people of the test install: the one logged in here, one more who allowed two tokens, one who allowed one, and one who allowed none. */
+const PEOPLE = {
+  ok: true,
+  logins: ["mira@example.com", "jonas@example.com", "lena@example.com", "omar@example.com"],
+  you: "mira@example.com",
+  tokens: { "mira@example.com": 4, "jonas@example.com": 2, "lena@example.com": 1 },
+} as unknown as People;
 
 /** What the server says of an email that is none. */
 const NOT_AN_EMAIL = "Type an email address, such as name@example.com.";
@@ -70,6 +76,25 @@ describe("the rows of the people", () => {
     expect(row("mira@example.com").queryByRole("button")).toBeNull();
     expect(row("jonas@example.com").queryByText("you")).toBeNull();
     expect(row("jonas@example.com").getByRole("button", { name: "More for jonas@example.com" })).toBeDefined();
+  });
+});
+
+describe("taking a person out", () => {
+  // Drift: a person's tokens end with the person. A question that did not say so would have an admin break a build server by removing a colleague, and one that named tokens where there are none would worry for nothing.
+  test.each([
+    ["jonas@example.com", "This user can no longer log in. Their 2 tokens stop working."],
+    ["lena@example.com", "This user can no longer log in. Their 1 token stops working."],
+    ["omar@example.com", "This user can no longer log in."],
+  ])("the question before %s is removed says %j, and Remove sends the email", async (email, says) => {
+    render(<Tab />);
+    fireEvent.click(row(email).getByRole("button", { name: `More for ${email}` }));
+    fireEvent.click(await waitFor(() => page().getByRole("menuitem", { name: "Remove" })));
+    const question = within(await waitFor(() => page().getByRole("alertdialog")));
+
+    expect([question.getByText(`Remove ${email}?`).textContent, question.getByText(says).textContent]).toEqual([`Remove ${email}?`, says]);
+
+    fireEvent.click(question.getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(done.removed).toEqual([email]));
   });
 });
 

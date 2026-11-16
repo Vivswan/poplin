@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { listAudit } from "@poplin/core/src/actions/audit-log";
 import { beginLogin } from "@poplin/core/src/actions/computer-logins";
 import { mintComputerLogin, parseLoginSecret, showUserCode, type UserCode } from "@poplin/core/src/auth/computer-logins";
+import type { Login } from "@poplin/core/src/auth/logins";
 import { issueToken } from "@poplin/core/src/actions/manage-tokens";
 
 import { openConsole } from "./support/console";
@@ -223,6 +224,28 @@ describe("the people", () => {
       { ok: true, login: "jonas@example.com", note: null },
     ]);
     expect([afterAdding - before, (await entries()) - afterAdding]).toEqual([1, 1]);
+  });
+
+  // Drift: the question before a user is removed counts that user's tokens from this answer, and the removal ends them. A count of another user's tokens would promise the wrong end, and a token left alive would keep a removed person in.
+  test("the people are answered with how many working tokens each allowed; removing a person ends those and no other, and the list of ended tokens says how", async () => {
+    const opened = await openConsole();
+    const jonas = "jonas@example.com" as Login;
+    await opened.change("/data/people/add", { login: jonas });
+    const issue = async (holder: Login, note: string, scope: "admin" | "publisher"): Promise<string> => {
+      const issued = await issueToken(opened.base.install, { scope: "admin", holder }, { note, scope });
+
+      return issued.ok ? issued.record.id : "";
+    };
+    const [mine, laptop, agent] = [await issue(opened.base.owner, "mine", "publisher"), await issue(jonas, "jonas laptop", "admin"), await issue(jonas, "jonas agent", "publisher")];
+    const before = (await read(await opened.get("/data/people"))).tokens;
+
+    await opened.change("/data/people/remove", { login: jonas });
+    await opened.change("/data/people/add", { login: jonas });
+    const listed = await read(await opened.get("/data/tokens"));
+    const ended = (listed.ended as readonly Answer[]).map((token) => [token.id, token.how, token.by]);
+
+    expect([before, (await read(await opened.get("/data/people"))).tokens]).toEqual([{ [opened.base.owner]: 1, [jonas]: 2 }, { [opened.base.owner]: 1 }]);
+    expect([(listed.tokens as readonly Answer[]).map((token) => token.id), ended.sort()]).toEqual([[mine], [[laptop, "user_removed", opened.base.owner], [agent, "user_removed", opened.base.owner]].sort()]);
   });
 });
 

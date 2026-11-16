@@ -16,13 +16,15 @@ function ended(id: string, note: string, how: { readonly by?: string; readonly s
   return { id, note, scope: "publisher", created: THEN, ended: THEN + 1000, how: "removed", by: "mira@example.com", ...how } as EndedToken;
 }
 
-/** One token that ended each way: by a person, by another token, by itself, and by its time. */
+/** One token that ended each way: by a person, by another token, by itself, by its time, and with its user, whoever removed that user. */
 const TOKENS = [
   ended("00000000000000a1", "old laptop", {}),
   ended("00000000000000a2", "intern laptop", { by: "00000000000000cc" }),
   ended("00000000000000a3", "nightly build", { by: "00000000000000a3" }),
   ended("00000000000000a4", "old server", { by: "00000000000000dd" }),
   ended("00000000000000a5", "first setup", { scope: "admin", how: "ran_out", by: undefined }),
+  ended("00000000000000a6", "jonas laptop", { how: "user_removed" }),
+  ended("00000000000000a7", "jonas agent", { how: "user_removed", by: "00000000000000a7" }),
 ];
 
 /** The name of the one token the list can name. */
@@ -53,7 +55,7 @@ afterAll(clearPage);
 
 describe("the removed tokens", () => {
   // Drift: the words of an end are joined here from the answer's `how` and `by` and the shared writer of who did a thing. A token that gave itself back would read as removed by its own name, or a remover with no name left would be written as an id.
-  test("open into the shared table, each saying how it ended: by whom it was removed, that it logged out, or that it ran out", () => {
+  test("open into the shared table, each saying how it ended: by whom it was removed, that it logged out, that it ran out, or that its user was removed", () => {
     drawn({ tokens: TOKENS, more: false });
     fireEvent.click(opener());
 
@@ -63,6 +65,8 @@ describe("the removed tokens", () => {
       ["nightly build", "Logged out"],
       ["old server", "Removed by a token"],
       ["first setup", "Ran out"],
+      ["jonas laptop", "Its user was removed"],
+      ["jonas agent", "Its user was removed"],
     ]);
   });
 

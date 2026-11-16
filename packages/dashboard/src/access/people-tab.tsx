@@ -38,6 +38,9 @@ interface Person {
 
   /** Whether this is the person logged in here. */
   readonly you: boolean;
+
+  /** How many tokens that work this person allowed: they end with the person. */
+  readonly tokens: number;
 }
 
 /** What the tab is drawn from. */
@@ -59,7 +62,9 @@ interface PeopleTabProps {
 function leavingQuestion(person: Person | undefined): Question | undefined {
   if (person === undefined) return undefined;
 
-  return { title: `Remove ${person.email}?`, says: "This user can no longer log in.", yes: "Remove", removes: true };
+  const tokens = person.tokens === 1 ? " Their 1 token stops working." : ` Their ${person.tokens} tokens stop working.`;
+
+  return { title: `Remove ${person.email}?`, says: `This user can no longer log in.${person.tokens > 0 ? tokens : ""}`, yes: "Remove", removes: true };
 }
 
 /** Draw the Users tab. */
@@ -69,7 +74,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
   const adder = useRef<HTMLButtonElement>(null);
   const [leaving, setLeaving] = useState<Person>();
   const [signingOut, setSigningOut] = useState(false);
-  const rows = useMemo<readonly Person[]>(() => (people?.logins ?? []).map((email) => ({ email, you: email === people?.you })), [people]);
+  const rows = useMemo<readonly Person[]>(() => (people?.logins ?? []).map((email) => ({ email, you: email === people?.you, tokens: people?.tokens[email] ?? 0 })), [people]);
 
   const removeOf = (person: Person): ReactNode => {
     if (person.you) return <span className="inline-flex h-7 min-w-7 items-center justify-center text-[13px] text-muted-foreground">you</span>;

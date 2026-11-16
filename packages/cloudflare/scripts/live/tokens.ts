@@ -62,7 +62,7 @@ export function removeTokens(run: Run, databaseId: string, now: number): Promise
 }
 
 /**
- * Make an admin token for this run and store its hash in the install's database.
+ * Make an admin token for this run and store its hash in the install's database. No user allowed it, so the row names the run in that place, and no user's removal ends it.
  *
  * @returns the token, hidden before it is handed back, or why it could not be stored
  */
@@ -70,8 +70,8 @@ export async function seedToken(run: Run, databaseId: string, now: number): Prom
   const { token, record } = await mintToken({ scope: "admin", note: `${NOTE_PREFIX}${run.id}`, now });
   run.hide(token);
 
-  const sql = `INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) VALUES (?, ?, 'admin', ?, ${now}, ${now + LIFETIME_MS})`;
-  const stopped = await runSql(run, databaseId, sql, [record.id, record.hash, record.note]);
+  const sql = `INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ${now}, ${now + LIFETIME_MS}, ?)`;
+  const stopped = await runSql(run, databaseId, sql, [record.id, record.hash, record.note, record.note]);
 
   return stopped ?? token;
 }

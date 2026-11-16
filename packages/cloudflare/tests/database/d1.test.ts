@@ -92,11 +92,13 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "initSettings, already set": [3, 0],
   "addLogin": [5, 3],
   "addLogin, already one": [5, 0],
-  "removeLogin": [8, 3],
-  "removeLogin, not one": [5, 0],
-  "removeLogin, the last": [5, 0],
-  "changeSettings, a login more": [13, 3],
-  "changeSettings, another first login": [4, 3],
+  "removeLogin": [12, 3],
+  "removeLogin, not one": [9, 0],
+  "removeLogin, the last": [10, 0],
+  "changeSettings, a login more": [27, 3],
+  "changeSettings, another first login": [22, 3],
+  "removeLogin, a user behind 2 tokens": [18, 9],
+  "changeSettings, a login less behind 2 tokens": [30, 9],
   "ensureVisitorKey, the first": [2, 1],
   "ensureVisitorKey, kept": [3, 0],
   "readVisitorKey": [1, 0],
@@ -173,19 +175,20 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "publishUploadAsVersion, plain": [43, 8],
   "addUpload, 500 files": [8, 5],
   "abandonUpload": [2, 2],
-  "addToken": [1, 4],
+  "addToken": [1, 5],
   "getToken": [1, 0],
   "listTokens": [2, 0],
   "getTokenNames, 1 of 2": [1, 0],
   "getTokenNames, 1 of 2 among 250 ids": [251, 0],
   "revokeToken": [3, 3],
   "listTokenStates": [3, 0],
+  "countUserTokens, 1 token": [1, 0],
   "addComputerLogin": [6, 3],
   "getComputerLogin": [1, 0],
   "findComputerLogin": [1, 0],
   "listWaitingComputerLogins": [4, 0],
   "decideComputerLogin": [4, 3],
-  "redeemComputerLogin": [4, 5],
+  "redeemComputerLogin": [5, 6],
   "sweepRunOut": [11, 1],
   "appendAudit, a login": [0, 2],
   "hasLoggedIn, nobody yet": [1, 0],
@@ -664,8 +667,8 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     const { install, rows } = await meteredInstall();
     const longAgo = NOW - 200 * 86_400_000;
     await straight(`INSERT INTO audit (at, actor, action, detail) WITH RECURSIVE entry(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM entry WHERE n < 100) SELECT ${longAgo}, 'ada@example.com', 'login', '{}' FROM entry`);
-    const ended = `SELECT printf('%016x', n), 'h', 'publisher', '', ${longAgo}, ${longAgo} + n, 'ada@example.com' FROM token`;
-    await straight(`INSERT INTO tokens (id, hash, scope, note, created_at, removed_at, removed_by) WITH RECURSIVE token(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM token WHERE n < 25) ${ended}`);
+    const ended = `SELECT printf('%016x', n), 'h', 'publisher', '', ${longAgo}, 'ada@example.com', ${longAgo} + n, 'ada@example.com' FROM token`;
+    await straight(`INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by, removed_at, removed_by) WITH RECURSIVE token(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM token WHERE n < 25) ${ended}`);
     await install.database.appendAudit({ action: "login", detail: {} }, { by: "ada@example.com" as Login, at: NOW });
     rows.read = 0;
     rows.written = 0;
@@ -815,6 +818,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getTokenNames, 1 of 2 among 250 ids", () => database.getTokenNames([...Array.from({ length: 249 }, (_none, index) => index.toString(16).padStart(16, "0") as TokenId), publisher.id]));
     await cost("revokeToken", () => database.revokeToken(admin.id, BY_ADA));
     await cost("listTokenStates", () => database.listTokenStates(NOW + 1, 50));
+    await cost("countUserTokens, 1 token", () => database.countUserTokens(NOW + 1));
     const login = await pendingLogin(NOW, "one-visitor");
     await cost("addComputerLogin", () => database.addComputerLogin(login, ROOM));
     await database.addComputerLogin(await pendingLogin(NOW + 1, "another-visitor"), ROOM);
@@ -939,6 +943,13 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("removeLogin, the last", () => database.removeLogin(ADMIN, BY_ADA));
     await cost("changeSettings, a login more", () => database.changeSettings({ logins: [ADMIN, person] }, BY_ADA));
     await cost("changeSettings, another first login", () => database.changeSettings({ logins: [person, ADMIN] }, BY_ADA));
+    // A user's tokens end with the user: each costs its entry of the log and its own row, with the indexes that hold it.
+    const allowed = await Promise.all(["one", "two", "three", "four"].map((note) => mintToken({ scope: "publisher", note, now: NOW })));
+    for (const { record } of allowed.slice(0, 2)) await database.addToken(record, { by: person, at: NOW });
+    await cost("removeLogin, a user behind 2 tokens", () => database.removeLogin(person, BY_ADA));
+    await database.addLogin(person, BY_ADA);
+    for (const { record } of allowed.slice(2)) await database.addToken(record, { by: person, at: NOW });
+    await cost("changeSettings, a login less behind 2 tokens", () => database.changeSettings({ logins: [ADMIN] }, BY_ADA));
 
     await cost("readStorageWrites", () => database.readStorageWrites(DAY));
     await cost("takeStorageWrite", () => database.takeStorageWrite(DAY, 0));

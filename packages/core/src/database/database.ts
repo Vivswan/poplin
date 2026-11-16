@@ -783,8 +783,12 @@ export interface Database {
    */
   listUploads(query: { readonly before: number; readonly limit: number; readonly after?: UploadsCursor }): Promise<UploadsPage>;
 
-  /** Store the record of a new token. */
-  addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken">>;
+  /**
+   * Store the record of a new token. The user behind it is `signed.by`, or for a token that signs, the user behind that token.
+   *
+   * @returns `signer_gone` for a token that signs and was removed, or whose user is no user any more, as when that user was removed while it asked
+   */
+  addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken" | "signer_gone">>;
 
   /** The record of the token with this id. A removed token has none, so it proves nothing. */
   getToken(id: TokenId): Promise<TokenRecord | undefined>;
@@ -807,6 +811,13 @@ export interface Database {
    * @throws {RangeError} `mostEnded` is not a whole number from 1 to 100
    */
   listTokenStates(now: number, mostEnded: number): Promise<TokenStates>;
+
+  /**
+   * How many tokens that work at a moment each user is behind: the tokens that end when that user is removed. A user behind none is left out.
+   *
+   * @param now - a token that runs out at this moment works no more
+   */
+  countUserTokens(now: number): Promise<ReadonlyMap<string, number>>;
 
   /** Mark a token as removed at `signed.at` by `signed.by`, so it proves nothing from then on. Its row is kept. `not_found` for one that was removed already. */
   revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">>;
@@ -844,7 +855,7 @@ export interface Database {
    * Of calls made at the same moment one is done, so a login gives one token.
    *
    * @param token - a new token's record, of the login's scope, made at the clock's time
-   * @returns `not_allowed` for a login that is pending, denied, gone, run out at the token's `createdAt`, or of another scope than the token
+   * @returns `not_allowed` for a login that is pending, denied, gone, run out at the token's `createdAt`, of another scope than the token, or allowed by somebody who is no user any more
    */
   redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">>;
 
