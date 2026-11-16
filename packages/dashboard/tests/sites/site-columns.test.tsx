@@ -15,12 +15,13 @@ afterEach(cleanup);
 afterAll(clearPage);
 
 // Drift: a place to break would go missing after a dash, so a long link would have to break inside a word; or one would be offered between the two dashes before the id; or the text a selection copies would change.
-test("a shown link that wraps offers a break after each run of dashes, and reads whole", () => {
+// Or one would be offered after the lone letter near the end, which leaves "-p-" at a line's end and the last word alone under it.
+test("a shown link that wraps offers a break after each run of dashes but not after a lone letter between dashes, and reads whole", () => {
   const { container } = render(<SiteLink site={SITE} whole wraps />);
   const link = container.firstElementChild;
   const lines = (link?.innerHTML ?? "").replaceAll(/<\/?span[^>]*>/g, "").split("<wbr>");
 
-  expect([lines, link?.textContent]).toEqual([["sales-", "report--", "abc123def456-", "p-", "poplin.example.com"], "sales-report--abc123def456-p-poplin.example.com"]);
+  expect([lines, link?.textContent]).toEqual([["sales-", "report--", "abc123def456-", "p-poplin.example.com"], "sales-report--abc123def456-p-poplin.example.com"]);
 });
 
 // Drift: where a link's id is left out a screen reader would read the name and the end run together again, with nothing said of the part between them.

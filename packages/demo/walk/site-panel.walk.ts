@@ -1,5 +1,5 @@
 // A site's panel on the screens between a phone and the widest: it lies over the end of the list, which stays in sight and in reach beside it. And its Edit, which starts from what the site holds every time it is opened.
-// And the fields that take a site's name or a user's email, which keep one that is too long and say so.
+// And the fields that take a site's name or a user's email, which keep one that is too long and say so. And where a phone's panel breaks a long link.
 
 import { expect } from "@playwright/test";
 
@@ -11,8 +11,11 @@ const SCREENS = [
   { width: 1280, height: 800 },
 ] as const;
 
-/** The sample sites the walk opens and looks for, by their titles. */
-const SAMPLE = { opened: "Pricing", beside: "Team handbook" } as const;
+/** The sample sites the walk opens and looks for, by their titles; `long` has a link too long for one line of a phone's panel. */
+const SAMPLE = { opened: "Pricing", beside: "Team handbook", long: "Q3 sales report" } as const;
+
+/** The lines a phone's panel draws the letters of that site's link on: the name and the dash after the hidden part, then the letter of who can open the site with what follows it. */
+const LINES = ["sales-report---", "p-poplin"];
 
 /** What is typed into the Edit of a site and then left. */
 const DRAFT = { title: "Draft X", name: "ab" } as const;
@@ -98,6 +101,46 @@ for (const { opens, dialog, field, sends } of NAMED) {
     await expect(name).toHaveValue(TOO_LONG);
   });
 }
+
+test.describe("on a phone, in a site's panel", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  // Drift: a browser goes on in the next line after any dash between letters, so the link would break after "-p-" again and leave the last word of the address alone under it.
+  test("a link too long for one line goes on in the next after a dash, with the letter of who can open the site and what follows it whole", async ({ page, browserName }) => {
+    await arrive(page);
+    await openPanel(page, SAMPLE.long);
+    const link = page.getByRole("dialog", { name: SAMPLE.long, exact: true }).getByTitle(/^Part of the link is hidden here/);
+    await expect(link).toBeVisible();
+
+    // The link's letters by the line each is drawn on; the dots of the hidden part are no letters.
+    const lines = (): Promise<string[]> =>
+      link.evaluate((drawn) => {
+        const byTop = new Map<number, string>();
+        const texts = document.createTreeWalker(drawn, NodeFilter.SHOW_TEXT);
+        for (let text = texts.nextNode(); text !== null; text = texts.nextNode()) {
+          for (const [at, letter] of [...(text.textContent ?? "")].entries()) {
+            const one = document.createRange();
+            one.setStart(text, at);
+            one.setEnd(text, at + 1);
+            const top = Math.round(one.getBoundingClientRect().top);
+            byTop.set(top, `${byTop.get(top) ?? ""}${letter}`);
+          }
+        }
+
+        return [...byTop].sort(([one], [other]) => one - other).map(([, line]) => line);
+      });
+
+    // Firefox at times draws the link in the page's own narrower face, in which the whole of it fits one line: there is then no break to look at, and only there.
+    const broken = async (): Promise<string[]> => {
+      const read = await lines();
+
+      return browserName === "firefox" && read.length === 1 && read[0] === LINES.join("") ? LINES : read;
+    };
+
+    // The panel slides in and its font arrives: the lines are read until they hold.
+    await expect.poll(broken).toEqual(LINES);
+  });
+});
 
 // Drift: the field of Add a user took 254 characters, so a longer email lost its end with no word and what was left was added as a user.
 test(`an email of ${LONG_EMAIL.length} characters typed in Add a user is kept whole and refused there`, async ({ page }) => {

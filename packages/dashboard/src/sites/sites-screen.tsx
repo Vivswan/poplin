@@ -22,7 +22,7 @@ import { openerOf, useKeptFocus, useLiesOver } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
-import { AccessMark, LinkButtons, type Reveal, RevealButton, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
+import { AccessMark, LinkButtons, Moment, type Reveal, RevealButton, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
 import { SitePanel } from "@/sites/site-panel";
 import { SITES_KEY, useSitesPage } from "@/sites/site-queries";
 import { type Ask, type Asked, SiteQuestions } from "@/sites/site-questions";
@@ -135,7 +135,7 @@ function RestoreButton({ site, onRestore }: { readonly site: Site; readonly onRe
   );
 }
 
-/** The sites on a phone: one row each, the site's title and who can open it over its link, written as the table writes it, with the ways to show, copy and open it, in the trash the way back, and after the last row what follows the list. */
+/** The sites on a phone, one row each: the site's title, who can open it and when it was updated, over its link and the ways to show, copy and open it. A row of the trash has the way back. What follows the list comes after the last row. */
 function PhoneList({
   sites,
   opened,
@@ -181,11 +181,18 @@ function PhoneList({
                 {/* A title that is a link lies over the row's button; plain words let a press through to it. */}
                 <span className={cn("min-w-0 truncate", site.state !== "trash" && "relative")}>{nameCell(site)}</span>
                 <AccessMark access={site.access} className="shrink-0" />
+                {site.state === "trash" ? null : <Moment moment={site.updated} className="ml-auto shrink-0 text-xs" />}
               </span>
-              <span className="flex min-w-0 items-center">
-                <SiteLink site={site} whole={reveal.shows(site)} wraps={reveal.shows(site)} gives={!reveal.shows(site)} className="mr-1 text-muted-foreground" />
-                {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} inList className="relative -my-2 shrink-0" />}
-                <LinkButtons site={site} onCopy={onCopy} className="relative -my-2 shrink-0" />
+              {/* The buttons end at the row's right edge in every row, however long the row's link is and whether or not it has an eye. */}
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex min-w-0 flex-1">
+                  <SiteLink site={site} whole={reveal.shows(site)} wraps={reveal.shows(site)} gives={!reveal.shows(site)} className="text-muted-foreground" />
+                </span>
+                {/* A button's mark ends where the time over it ends: the button itself reaches into the row's side room, which a row of the trash keeps clear for its Restore. */}
+                <span className={cn("flex shrink-0 items-center", restore === undefined && "-mr-3")}>
+                  {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} inList className="relative -my-2 shrink-0" />}
+                  <LinkButtons site={site} onCopy={onCopy} className="relative -my-2 shrink-0" />
+                </span>
               </span>
             </div>
             {restore === undefined ? null : <span className="relative">{restore(site)}</span>}
