@@ -116,7 +116,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     digest_differs: "The files fetched for the release are not the files poplin published. Nothing was changed. Try again; if it says this again, tell the project.",
     other_version: "The files published for the release say they are of another version. Nothing was changed. Tell the project.",
     database: "That release changes the database, and the version asked for cannot read it. Nothing was changed.",
-    needs_hand: "The release adds a part to the install that poplin cannot make by itself. Nothing was changed. Update by hand.",
+    needs_hand: "The install cannot put this release in place by itself. Nothing was changed: the install goes on with the version it runs.",
     host: "The host did not answer before anything was sent. Nothing was changed. Try again in a few minutes.",
   },
   version_refused: {

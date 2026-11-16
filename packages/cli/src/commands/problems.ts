@@ -117,7 +117,7 @@ const HINTS_ABOUT: Readonly<Record<string, Readonly<Record<string, string>>>> = 
     digest_differs: "the files fetched for the release are not the files the project published; try again, and if it comes back, report it",
     other_version: "the files published for the release name another version or schema than the project's website; trying again gives the same answer, so report it",
     database: "that release changes the database, and the version asked for cannot read it; trying again gives the same answer",
-    needs_hand: "the install cannot put this release in place by itself; build the install again to take it",
+    needs_hand: "the install cannot put this release in place by itself; the install goes on with the version it runs",
     host: "the install's host did not answer before anything was sent; try again in a few minutes",
   },
 };
