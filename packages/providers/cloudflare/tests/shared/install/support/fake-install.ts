@@ -100,6 +100,9 @@ export interface Account {
   /** The bindings of the install's Worker. */
   bindings: Row[];
 
+  /** What the next reads of the Worker's settings answer in place of its own, each once and in order, as settings that trail a change do: at once, or from the Worker's next upload on. */
+  trailing?: { from: "now" | "upload"; readonly answers: Row[] };
+
   /** Whether the account has no Worker named `poplin`: every read of it is then answered 404, until an upload makes it. */
   noWorker?: boolean;
 
@@ -176,6 +179,7 @@ export function emptyAccount(): Account {
     alerts: [],
     workflows: [],
     bindings: [
+      { name: "WORKER_NAME", type: "plain_text", text: "poplin" },
       { name: "SITES", type: "r2_bucket", bucket_name: "poplin-sites" },
       { name: "DB", type: "d1", id: "database-1" },
       { name: "ZONE", type: "json", json: { domain: "example.com" } },
@@ -304,6 +308,8 @@ function uploaded(account: Account, asked: Asked): Response {
   if (account.noWorker === true) account.bindings = [];
 
   account.noWorker = false;
+  if (account.trailing !== undefined) account.trailing.from = "now";
+
   account.bindings = boundAfter(account, metadata.bindings);
   account.uploads.push({ metadata, files: Object.keys(files) });
   account.versions.unshift({ id: `version-${account.versions.length + 1}`, number: account.versions.length + 1, annotations: metadata.annotations });
@@ -320,6 +326,13 @@ function written(account: Account, asked: Asked): Response {
   Object.assign(account, { noWorker: true, bindings: [], versions: [], crons: [] });
 
   return reply(null);
+}
+
+/** The settings a read of the install's Worker is answered: the next of the answers that trail a change, or else its bindings. */
+function settingsOf(account: Account): Row {
+  const trailing = account.trailing?.from === "now" ? account.trailing.answers.shift() : undefined;
+
+  return trailing ?? { bindings: account.bindings };
 }
 
 /** The account's Workers: the list, the Worker named `poplin` with its settings, its versions, its cron list, and its address switches, and every other Worker. */
@@ -348,7 +361,7 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
 
   if (parts[5] !== "settings") return refusal(404, 10007, "This Worker does not exist on your account.");
 
-  if (asked.method === "GET") return reply({ bindings: account.bindings });
+  if (asked.method === "GET") return reply(settingsOf(account));
 
   const { settings } = asked.body as { settings: { bindings: Row[] } };
   account.bindings = boundAfter(account, settings.bindings);

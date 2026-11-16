@@ -133,6 +133,9 @@ function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<s
 export function processEnds(io: Io): InstallEnds {
   const { env } = io.machine;
   const plain = (env.NO_COLOR ?? "") !== "" || env.TERM === PLAIN_TERMINAL;
+  const sleep = async (milliseconds: number): Promise<void> => {
+    if ((await io.pause(milliseconds)) === "interrupted") throw new Error("the command was stopped");
+  };
 
   return {
     providers: () => loadProviders(PROVIDERS),
@@ -141,10 +144,9 @@ export function processEnds(io: Io): InstallEnds {
     reach: {
       fetch: (input, init) => fetch(input, { ...init, signal: init?.signal == null ? io.stopped : AbortSignal.any([init.signal, io.stopped]) }),
       now: () => Date.now(),
+      sleep,
     },
-    sleep: async (milliseconds) => {
-      if ((await io.pause(milliseconds)) === "interrupted") throw new Error("the command was stopped");
-    },
+    sleep,
   };
 }
 

@@ -36,6 +36,30 @@ test.each(cases)("$name is a $kind", ({ bindings, kind }) => {
   expect(planVariables(DESIRED, bindings).map((step) => `${step.kind} ${step.subject}`)).toEqual([`${kind} ACCESS`]);
 });
 
+// Drift: a change names as kept only the bindings its own read listed. Sent after a read in part, it would drop the bucket, the database, and the key of a Worker that holds them.
+test.each([
+  ["no binding", { bindings: [] }],
+  ["no list of bindings", {}],
+  ["every binding but the Worker's own name", { bindings: emptyAccount().bindings.filter((binding) => binding.name !== "WORKER_NAME") }],
+])("a change after a read of the Worker that answers %s is not sent: it fails as a read that got no answer, names the variable, and leaves every binding", async (_, answered) => {
+  const worker = { accountId: ACCOUNT, script: "poplin" };
+  const account = { ...emptyAccount(), trailing: { from: "now" as const, answers: [answered] } };
+  const before = JSON.stringify(account.bindings);
+
+  await withFake(
+    (asked) => answer(account, asked),
+    async (connection, asked) => {
+      const token = { ...connection, key: TOKEN };
+      const wanted = [{ name: "ACCOUNT_ID", value: ACCOUNT }];
+
+      expect(await syncVariables(token, worker, wanted, "apply")).toMatchObject({ ok: false, failure: "network", failed: "ACCOUNT_ID", unrun: [], report: { created: [], changed: [] } });
+      expect([asked.filter((entry) => entry.method !== "GET"), JSON.stringify(account.bindings)]).toEqual([[], before]);
+      expect(await syncVariables(token, worker, wanted, "apply")).toMatchObject({ ok: true, report: { created: ["ACCOUNT_ID"] } });
+      expect(account.bindings.map((binding) => binding.name)).toEqual([...emptyAccount().bindings.map((binding) => binding.name), "ACCOUNT_ID"]);
+    },
+  );
+});
+
 // Drift: a dry run of an install reads the Worker before it exists. Read as a failure, every row after it would say "not run" where a run makes each one.
 test("a Worker that does not exist is told apart from one with no binding, reads as one with none in a plan of its variables, and any other refusal stays a failure", async () => {
   const worker = { accountId: ACCOUNT, script: "poplin" };

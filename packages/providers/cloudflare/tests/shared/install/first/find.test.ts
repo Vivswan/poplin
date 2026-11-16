@@ -46,13 +46,24 @@ function fresh(changes: Partial<Account> = {}): Account {
   return { ...emptyAccount(), bindings: [], noWorker: true, ...changes };
 }
 
-/** Find with a token: what was found, the same with no place in it, and which calls were sent. */
-async function found(account: Account, where: Where, token = TOKEN): Promise<{ readonly found: Found<Where, Place>; readonly shown: Readonly<Record<string, unknown>>; readonly calls: string[] }> {
+/** The read of the Worker's settings, as a call is listed. */
+const READ_WORKER = `GET /accounts/${ACCOUNT}/workers/scripts/poplin/settings`;
+
+/** What a find came to: what was found, the same with no place in it, which calls were sent, and each wait asked for, in milliseconds. */
+interface Sought {
+  readonly found: Found<Where, Place>;
+  readonly shown: Readonly<Record<string, unknown>>;
+  readonly calls: string[];
+  readonly slept: readonly number[];
+}
+
+/** Find with a token. */
+async function found(account: Account, where: Where, token = TOKEN): Promise<Sought> {
   const world = await worldOf(account);
   const state = await findInstall(token as Token, where, world.reach, { lacks: lacksRight, nameOf: rightFor });
   const { place: _, ...shown } = { place: undefined, ...state };
 
-  return { found: state, shown, calls: world.asked.map((entry) => `${entry.method} ${entry.path.split("?")[0]}`) };
+  return { found: state, shown, calls: world.asked.map((entry) => `${entry.method} ${entry.path.split("?")[0]}`), slept: world.slept };
 }
 
 describe("the states of an account", () => {
@@ -132,6 +143,40 @@ describe("the states of an account", () => {
     expect(whole.calls).toEqual(["GET /accounts", "GET /accounts", `GET /accounts/${ACCOUNT}/workers/scripts/poplin/settings`, `GET /accounts/${ACCOUNT}/workers/scripts/poplin/versions`]);
     expect((await found({ ...account, versions: [{ id: "version-1", number: 1 }] }, NONE)).found).toMatchObject({ state: "whole", version: undefined });
     expect((await found({ ...account, bindings: [...MARKS, { name: "ZONE", type: "json", json: { domain: "example.com" } }, IN_ACCOUNT] }, DOMAIN)).found).toMatchObject({ state: "whole", address: "https://poplin.example.com" });
+  });
+
+  // Drift: Cloudflare's settings list a Worker without its new version's bindings for about a second after an upload. Told as held on that one read, a person's own install is called somebody else's right after its update.
+  test.each([
+    ["no binding", [{ bindings: [] }], [1500]],
+    ["no list of bindings", [{}], [1500]],
+    ["no binding, then the name alone", [{ bindings: [] }, { bindings: MARKS.slice(3) }], [1500, 1500]],
+    ["no binding three times over", [{ bindings: [] }, { bindings: [] }, { bindings: [] }], [1500, 1500, 1500]],
+  ] as const)("a set install whose settings answer %s at first is read again after a wait each time, and found whole", async (_, answers, slept) => {
+    for (const where of [DOMAIN, NONE]) {
+      const set = where.kind === "domain" ? [{ name: "ZONE", type: "json", json: { domain: "example.com" } }, IN_ACCOUNT] : SET;
+      const sought = await found(fresh({ noWorker: false, bindings: [...MARKS, ...set], trailing: { from: "now", answers: answers.map((answer) => ({ ...answer })) } }), where);
+
+      expect([sought.shown.state, sought.slept, sought.calls.filter((call) => call === READ_WORKER).length]).toEqual(["whole", [...slept], slept.length + 1]);
+    }
+  });
+
+  // Drift: the reads again are for a Worker that reads as not poplin's alone, and they end. More of them make every refusal of a stranger's Worker slower, and none on a whole install keeps each command as fast as it was.
+  test("a Worker that is not poplin's is held after three more reads over 4.5 seconds, one that is gone by then is no Worker, a wait that is stopped stops the find, and a whole install is read once with no wait", async () => {
+    const rights = { lacks: lacksRight, nameOf: rightFor };
+    const theirs = await found(fresh({ noWorker: false, bindings: [] }), NONE);
+    const gone = fresh({ noWorker: false, bindings: [] });
+    const world = await worldOf(gone);
+    const leaves = async (): Promise<void> => {
+      gone.noWorker = true;
+    };
+    const left = await findInstall(TOKEN as Token, NONE, { ...world.reach, sleep: leaves }, rights);
+    const other = await worldOf(fresh({ noWorker: false, bindings: [] }));
+    const whole = await found(fresh({ noWorker: false, bindings: [...MARKS, ...SET] }), NONE);
+
+    expect([theirs.shown.state, theirs.slept, theirs.calls]).toEqual(["held", [1500, 1500, 1500], ["GET /accounts", "GET /accounts", READ_WORKER, READ_WORKER, READ_WORKER, READ_WORKER]]);
+    expect(left.state).toBe("none");
+    await expect(findInstall(TOKEN as Token, NONE, { ...other.reach, sleep: () => Promise.reject(new Error("stopped")) }, rights)).rejects.toThrow("stopped");
+    expect([whole.slept, whole.calls.filter((call) => call === READ_WORKER).length]).toEqual([[], 1]);
   });
 
   // Drift: what was found is what a command prints for a program. Its place holds the token, so it must not be a part of what is printed.

@@ -11,6 +11,7 @@
 // Every update states one variable of its own, `LAST_UPDATE`: the version the install ran, the version it takes, the schema its database is at, and when.
 // It comes in with the code or not at all, so the new code reads which version it can go back to.
 // A release never states the key's own binding, nor that variable: one that does is refused, as one that names a binding the Worker lacks.
+// A read of the bindings that lacks the Worker's own name is a read in part, and an upload after it would drop every binding it did not list: nothing is sent, and the update can be asked for again.
 // The upload is whole or not at all. Code that throws as it loads is refused by Cloudflare, and the Worker goes on running what it ran.
 //
 // An install is the first update: the same files and the same metadata, sent with a person's token to a Worker that does not exist yet.
@@ -71,7 +72,7 @@ type KeyRefused = Extract<Keyed<never>, { readonly ok: false }>;
 /** What Cloudflare said of the code it was sent. */
 type Sent = { readonly taken: true } | { readonly taken: false; readonly status: number; readonly load: boolean };
 
-/** How an upload ended: in place, with `unset` naming a schedule that was not taken; or nothing changed. `unread` is bindings Cloudflare did not answer with, `needs_hand` a release no upload can place, and `load` code that throws as it loads. */
+/** How an upload ended: in place, with `unset` naming a schedule not taken; or nothing changed. `unread` is bindings Cloudflare answered in part or not at all, `needs_hand` a release no upload can place, and `load` code that throws as it loads. */
 type Put =
   | { readonly ok: true; readonly unset?: "schedule" }
   | KeyRefused
@@ -166,6 +167,8 @@ async function put(key: KeptKey | undefined, worker: OwnWorker, sending: Sending
   if (!settings.ok) return settings.refusal === "unreachable" ? { ok: false, refusal: "unread" } : settings;
 
   const bindings = (settings.value.bindings ?? []).map((binding) => binding.name);
+  if (!bindings.includes(INSTALL_OBJECTS.workerBinding)) return { ok: false, refusal: "unread" };
+
   const metadata = updateMetadata(sending, { bindings, observability: settings.value.observability });
   if (metadata === undefined) return { ok: false, refusal: "needs_hand" };
 

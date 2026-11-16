@@ -62,10 +62,11 @@ export type Read<Where> =
   | { readonly ok: false; readonly why: "open"; readonly open: readonly Question<Where>[] }
   | { readonly ok: false; readonly why: "refused"; readonly refused: string };
 
-/** What a run reaches the world through: the platform's own, or stand-ins. `now` is the clock, in milliseconds since the epoch. */
+/** What a run reaches the world through: the platform's own, or stand-ins. `now` is the clock, in milliseconds since the epoch, and `sleep` waits for so many milliseconds. */
 export interface Reach {
   readonly fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
   readonly now: () => number;
+  readonly sleep: (milliseconds: number) => Promise<void>;
 }
 
 /** Something that stops a piece until a person acts at the provider's own pages: what it is, the line that says so, and the address to open. `right_lacking` names the right the token lacks. */

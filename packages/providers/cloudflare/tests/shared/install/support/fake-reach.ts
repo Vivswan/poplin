@@ -32,11 +32,12 @@ interface Meets {
   readonly website?: (address: string) => Response | undefined;
 }
 
-/** A stand-in world: the reach to hand a run, every call it sent to Cloudflare, and every other address it asked. */
+/** A stand-in world: the reach to hand a run, every call it sent to Cloudflare, every other address it asked, and each wait it asked for, in milliseconds, none of which takes time. */
 interface World {
   readonly reach: Reach;
   readonly asked: Asked[];
   readonly fetched: string[];
+  readonly slept: number[];
 }
 
 /** The files of the release, by the last part of the address each is fetched at. */
@@ -62,6 +63,7 @@ export async function worldOf(account: Account, meets: Meets = {}): Promise<Worl
   const files = await published();
   const asked: Asked[] = [];
   const fetched: string[] = [];
+  const slept: number[] = [];
 
   const fetch: Reach["fetch"] = async (input, init) => {
     const address = input instanceof Request ? input.url : String(input);
@@ -83,5 +85,5 @@ export async function worldOf(account: Account, meets: Meets = {}): Promise<Worl
     return meets.website?.(address) ?? (file === undefined ? new Response("no such file", { status: 404 }) : new Response(file));
   };
 
-  return { asked, fetched, reach: { fetch, now: () => 0 } };
+  return { asked, fetched, slept, reach: { fetch, now: () => 0, sleep: async (milliseconds) => void slept.push(milliseconds) } };
 }

@@ -131,7 +131,7 @@ test("a repair writes the application's audience tag and the team's domain onto 
 
   await withAccount(account, async (plug) => {
     expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: ready });
-    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "ACCESS", "KEPT_KEY", "UPLOAD_KEY"]);
+    expect(account.bindings.map((binding) => binding.name)).toEqual(["WORKER_NAME", "SITES", "DB", "ZONE", "ACCESS", "KEPT_KEY", "UPLOAD_KEY"]);
     expect(account.bindings.at(-3)).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } });
     expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: [] });
 
@@ -1136,7 +1136,7 @@ describe("the keys an install keeps", () => {
     await withAccount(account, async (plug) => {
       const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-      expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "ACCESS"]);
+      expect(account.bindings.map((binding) => binding.name)).toEqual(["WORKER_NAME", "SITES", "DB", "ZONE", "ACCESS"]);
       expect(keyless(rows)).toEqual(keyless(table({ all: "created", bots: "changed" })));
     });
   });
@@ -1153,7 +1153,7 @@ describe("the keys an install keeps", () => {
       const changes = asked.slice(sent).filter((entry) => entry.method === "PATCH").map((entry) => (entry.body as { settings: { bindings: { name: string; type: string }[] } }).settings.bindings);
 
       expect(rows.filter((row) => row.includes("ey | ") || row.startsWith("Worker variable"))).toEqual(["Worker variable | created | ACCESS", "Key | present | poplin kept key", UPLOAD_PRESENT]);
-      expect(changes.map((bindings) => bindings.map((binding) => `${binding.name} ${binding.type}`))).toEqual([["SITES inherit", "DB inherit", "ZONE inherit", "KEPT_KEY inherit", "UPLOAD_KEY inherit", "ACCESS json"]]);
+      expect(changes.map((bindings) => bindings.map((binding) => `${binding.name} ${binding.type}`))).toEqual([["WORKER_NAME inherit", "SITES inherit", "DB inherit", "ZONE inherit", "KEPT_KEY inherit", "UPLOAD_KEY inherit", "ACCESS json"]]);
       expect([account.tokens.length, writes(asked.slice(sent))]).toEqual([2, [SETTINGS_WRITE]]);
     });
   });

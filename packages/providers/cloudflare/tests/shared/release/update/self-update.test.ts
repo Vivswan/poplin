@@ -390,6 +390,26 @@ describe("an update the install takes by itself", () => {
       assets: 0,
     },
     {
+      name: "bindings read in part, with none listed: an upload after it would drop each one, so nothing is sent and the update can be asked for again",
+      meets: (meets) => {
+        meets.script.bindings = [];
+      },
+      ready: TAKEN,
+      put: release_refused("host"),
+      calls: [READ_CRONS, READ_BINDINGS],
+      assets: 3,
+    },
+    {
+      name: "bindings read in part, with every one a release names and not the Worker's own name",
+      meets: (meets) => {
+        meets.script.bindings = BINDINGS.filter((binding) => binding.name !== "WORKER_NAME");
+      },
+      ready: TAKEN,
+      put: release_refused("host"),
+      calls: [READ_CRONS, READ_BINDINGS],
+      assets: 3,
+    },
+    {
       name: "bindings the API does not answer with: nothing was sent, so nothing can be in",
       meets: (meets) => {
         meets.api[READ_BINDINGS] = "down";

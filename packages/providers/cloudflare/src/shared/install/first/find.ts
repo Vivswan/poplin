@@ -10,6 +10,7 @@
 //
 // The Worker is poplin's when `WORKER_NAME` is its own name and its bucket, database, and Workflow are bound. It is set once `ZONE` reads as an install and `ACCOUNT_ID` is there.
 // Until then it also carries `INSTALL_PLACE`, which its first upload states: without it nothing says which kind of install the run that made it was.
+// For about a second after an upload, Cloudflare's settings can list a Worker without the bindings its new version holds. So a Worker that reads as not poplin's is read again, three times over 4.5 seconds, before it is told as held.
 // Nothing here changes anything. Of the texts the account holds, an answer tells three, each read first: the place as a domain, the version as a released one, and an account's name on one line.
 
 import type { Blocked, Found, Question, Reach, Read, Token } from "@poplin/core/src/install/installer";
@@ -18,6 +19,7 @@ import { isPlainVersion } from "@poplin/core/src/records/update";
 import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseVersions } from "cloudflare/resources/workers/scripts/versions";
+import pRetry from "p-retry";
 import * as v from "valibot";
 import { projectReleases } from "../../release/publish/release-source";
 import { isAccessOff, readLoginFacts } from "../pieces/access/access";
@@ -42,6 +44,9 @@ const DASHBOARD = "https://dash.cloudflare.com";
 
 /** The annotation of a version that holds the release it was uploaded from. */
 const VERSION_TAG = "workers/tag";
+
+/** How often a Worker that reads as not poplin's is read again, and the wait before each read, in milliseconds: the settings trail an upload by about a second. */
+const AGAIN = { times: 3, everyMs: 1_500 } as const;
 
 /** A version as Cloudflare lists it, read no further than its annotations. */
 const LISTED_VERSION = v.object({ annotations: v.optional(v.record(v.string(), v.unknown())) });
@@ -93,6 +98,16 @@ interface Rights {
 
   /** The permission a token needs first for one object, as the token form names it. */
   readonly nameOf: (object: "D1 database" | "R2 bucket" | "Access application" | "Worker variable") => string;
+}
+
+/** What a read of the Worker answers: its bindings, `undefined` for no Worker, or why Cloudflare gave none. */
+type Bindings = Awaited<ReturnType<typeof readWorker>>;
+
+/** A read of a Worker that is there and reads as not poplin's: what the reads again go on from. */
+class NotOwn extends Error {
+  constructor(readonly read: Bindings) {
+    super("the Worker reads as not poplin's");
+  }
 }
 
 /** What `find` answers. */
@@ -338,6 +353,37 @@ async function standing(place: Place, started: boolean, rights: Rights): Promise
 }
 
 /**
+ * Read the Worker, and one that reads as not poplin's again after a wait each time, until it reads as poplin's, as gone, or not at all.
+ *
+ * The waits are on the caller's clock, through `reach.sleep`: the library waits none. A sleep that throws, as one the person stopped does, ends the reads with that error.
+ *
+ * @returns the last read where every one read as not poplin's
+ */
+async function readSettled(place: Place, reach: Reach): Promise<Bindings> {
+  const attempt = async (): Promise<Bindings> => {
+    const read = await readWorker(place.connection, { accountId: place.accountId, script: SCRIPT });
+    if (read.ok && read.value !== undefined && !isOwn(read.value)) throw new NotOwn(read);
+
+    return read;
+  };
+  const again = async ({ error }: { readonly error: Error }): Promise<boolean> => {
+    if (!(error instanceof NotOwn)) return false;
+
+    await reach.sleep(AGAIN.everyMs);
+
+    return true;
+  };
+
+  try {
+    return await pRetry(attempt, { retries: AGAIN.times, minTimeout: 0, maxTimeout: 0, shouldRetry: again });
+  } catch (error) {
+    if (error instanceof NotOwn) return error.read;
+
+    throw error;
+  }
+}
+
+/**
  * Look for an install with a token. It only reads.
  *
  * @param where - the place a person chose: its domain says which account, and its `account` picks one where the token shows several
@@ -350,7 +396,7 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
   if (typeof accountId !== "string") return accountId;
 
   const place: Place = { connection, accountId, toJSON: () => undefined };
-  const bindings = await readWorker(connection, { accountId, script: SCRIPT });
+  const bindings = await readSettled(place, reach);
   if (!bindings.ok) return rights.lacks(bindings) ? { state: "blocked", blocked: [rightLacking(rights, "Worker variable", accountId)] } : refusedBy(bindings);
 
   if (bindings.value === undefined) return standing(place, false, rights);

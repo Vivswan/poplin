@@ -323,6 +323,10 @@ export async function runLine(line: string, account: Account, options: Options =
   const typed = [...(options.typed ?? [])];
   const statuses = [...(options.statuses ?? [401])];
   let clock = 0;
+  const sleep = async (milliseconds: number): Promise<void> => {
+    ran.slept.push(milliseconds);
+    clock += milliseconds;
+  };
   const ends: InstallEnds = {
     providers: async () => options.providers ?? [standIn(account) as Installer<unknown, unknown>],
     screen: screenOf(ran, typed),
@@ -335,11 +339,9 @@ export async function runLine(line: string, account: Account, options: Options =
         return new Response(null, { status: statuses.length > 1 ? statuses.shift() : statuses[0] });
       },
       now: () => clock,
+      sleep,
     },
-    sleep: async (milliseconds) => {
-      ran.slept.push(milliseconds);
-      clock += milliseconds;
-    },
+    sleep,
   };
   const io: Io = {
     out: (text) => {
