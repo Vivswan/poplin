@@ -229,7 +229,7 @@ describe("publish", () => {
       1,
       [
         'this install has no domain, so a link that starts with "/" would not open: /css/site.css in about.html',
-        "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css, or give the install a domain",
+        "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css",
       ],
       ["GET"],
     ],
