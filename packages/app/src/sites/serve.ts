@@ -123,7 +123,7 @@ interface Serving {
 type SiteAddress = Exclude<Addressed, { readonly kind: "none" }>;
 
 /** What a request for a site comes to, before any file is read. */
-type Verdict = { readonly kind: "serve"; readonly site: Site; readonly contents: VersionContents } | { readonly kind: "move"; readonly origin: string } | { readonly kind: "none" };
+type Verdict = { readonly kind: "serve"; readonly site: Site; readonly contents: VersionContents } | { readonly kind: "move"; readonly to: string } | { readonly kind: "none" };
 
 /** What reading a file for a request gave: the store's answer, or `gone` for a file that went between two calls for it. */
 type Read = ReadResult | typeof GONE;
@@ -193,11 +193,11 @@ function verdictOf(address: SiteAddress, found: Awaited<ReturnType<typeof findSi
   if (address.kind === "public-name") return found?.site.access === "public" ? { kind: "serve", ...found } : NOT_FOUND;
 
   const isPrivate = found?.site.access === "private";
-  if (address.letter !== "p") return found === undefined || isPrivate ? { kind: "move", origin: addresses.letterFormOf(address, "p") } : { kind: "serve", ...found };
+  if (address.letter !== "p") return found === undefined || isPrivate ? { kind: "move", to: addresses.letterFormOf(address, "p") } : { kind: "serve", ...found };
 
   if (found === undefined) return NOT_FOUND;
 
-  return isPrivate ? { kind: "serve", ...found } : { kind: "move", origin: addresses.letterFormOf(address, "u") };
+  return isPrivate ? { kind: "serve", ...found } : { kind: "move", to: addresses.letterFormOf(address, "u") };
 }
 
 function requestedRange(headers: Headers): ByteRange | undefined {
@@ -425,6 +425,8 @@ async function answerHead(request: Request, keys: readonly ObjectKey[], served: 
  * Answer a visitor's request for a site of an install, at three calls to the store at most. A served site that holds no `favicon.ico` is answered poplin's own icon there.
  * Any other 404 for a file a served site does not hold carries the site's own `404.html` when its live version has one.
  *
+ * An address with nothing after what names the site is answered 302 to itself and a slash, so a page's relative links stay inside the site.
+ *
  * @returns the file with its headers, its body the store's own stream; else 304 for what the request holds, 206 or 416 for a range, 403 for a subrequest of a page that is no site of the install, 302 to the same label under the other letter, 405, or 404
  * @throws whatever the database, the store, or the identity check rejects with; nothing else throws
  */
@@ -440,10 +442,13 @@ export async function serveSite(request: Request, serving: Serving): Promise<Res
 
   if (serving.settings.outside_pages === "blocked" && isOutsideSubrequest(request.headers, serving.addresses)) return plain(request, 403);
 
+  // Asked before any lookup, so the move tells nothing of a site.
+  if (address.path === "") return redirect(`${url.origin}${url.pathname}/${url.search}`);
+
   const verdict = verdictOf(address, await findSite(address, serving), serving.addresses);
   if (verdict.kind === "none") return plain(request, 404);
 
-  if (verdict.kind === "move") return redirect(`${verdict.origin}${url.pathname}${url.search}`);
+  if (verdict.kind === "move") return redirect(`${verdict.to}${address.path}${url.search}`);
 
   const tag = versionTag(verdict.site);
   const held = heldVersion(request.headers.get("If-None-Match"), tag);

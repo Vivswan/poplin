@@ -7,7 +7,7 @@ import type { SiteId } from "@poplin/core/src/sites/ids";
 import type { SiteLabel } from "@poplin/core/src/sites/labels";
 
 /**
- * What a request's URL addresses. `path` is the file's path inside the site, still percent-encoded; `none` is every URL that names nothing of this install.
+ * What a request's URL addresses. `path` is the file's path inside the site, still percent-encoded, and empty for a URL that ends right after what names the site; `none` is every URL that names nothing of this install.
  *
  * A `site` is named by its id alone: `name` and `letter` are what the URL carried, and either may be absent.
  */
@@ -30,7 +30,7 @@ export interface SiteAddresses {
   /** Writes the address a public site answers at under its public name: one `resolve` reads back as that name. */
   readonly publicAddressOf: (name: PublicName) => string;
 
-  /** Writes the address that names a site exactly as a request did, with or without a name, under the letter given. */
+  /** Writes the address that names a site exactly as a request did, with or without a name, under the letter given. Nothing follows what names the site, so a request's `path` is written straight after it. */
   readonly letterFormOf: (typed: { readonly id: SiteId; readonly name?: SiteName }, letter: AccessLetter) => string;
 
   /** The public names the layout keeps for itself: no site may hold one. */
