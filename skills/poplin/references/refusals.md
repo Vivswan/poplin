@@ -36,9 +36,9 @@ Three commands work with the user's account token: `npx poplin install cloudflar
 | ------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------- |
 | `missing_answer`         | a run that asks nothing lacks an answer, named in its list | give the option the line on stderr names                          |
 | `usage`                  | the line is written wrong, and the value says how          | correct the line: `npx poplin install --help`                     |
-| `already_installed`      | the account holds an install; nothing was changed          | log in to the address under `found`; after a run that left something undone, `npx poplin doctor --repair` |
+| `already_installed`      | the account holds an install; nothing was changed          | run what `next` names: the login at the address under `found`, or `npx poplin doctor --repair` where the install needs mending |
 | `leftover`               | a bucket or a database of poplin's name, and no install    | ask the user; `--adopt` uses it with what it holds                |
-| `name_held`              | a Worker named poplin that is not poplin's                 | the user renames or deletes it at `address`                       |
+| `name_held`              | a Worker named poplin that is not poplin's                 | the user does what its sentence says, at `address`                |
 | `blocked`                | the user must act first, as its list says                  | the table of blocks in [`setup.md`](setup.md)                     |
 | `token_refused`          | Cloudflare refused the token, or it shows no such account  | the user makes the token again, for the right account             |
 | `no_domain`              | the token shows no active domain of that name              | check the domain with the user, and the token's Zone Resources    |

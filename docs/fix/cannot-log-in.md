@@ -124,7 +124,7 @@ Every piece of the install has a row. Three matter here:
 
 The login is mended to the users the install has stored. No site and no setting of yours is changed.
 
-**To look first**, add `--dry-run`: it lists the same rows as `would make` and `would leave`, and changes nothing.
+**To look first**, add `--dry-run`: it lists the same rows as `would make` and `would leave`, and changes nothing. Its last line starts `ready:` and counts what a run would make or change, or says `the install is as it should be`. It starts `not ready:` where a run would be stopped.
 
 ## The row of the new user
 
@@ -161,8 +161,6 @@ The link the command prints chooses every permission but one. Workers R2 Storage
 
 ## When it stops
 
-A row calls a permission a right.
-
 | It says                                                             | Means                                                   | Do                                                              |
 | ------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------- |
 | `No install is in this account.`                                    | the token is of an account with no install              | make the token in the account the install is in                 |
@@ -171,7 +169,7 @@ A row calls a permission a right.
 | `An install was started in this account and not finished.`          | the install was never set, so there is no login to mend | finish it: `npx poplin install cloudflare`                      |
 | `Cloudflare refused the token at the install`                       | the token does not reach the install's account, or its domain | on the token's form, choose that account, and that domain |
 | a row `stopped`, saying `Access is off for the account`             | Zero Trust, the part of Cloudflare that holds the login page, is not switched on | pick the Free plan at the address under the rows, then run again |
-| a row `stopped`, ending `Add this one:` or `Add this right to the account token:` and a name | the token lacks the permission of that name | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token), then run again |
+| a row `stopped`, ending `Add this one:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token), then run again |
 | `The install's records are not at the schema of this poplin.`       | the install is of another version of poplin than the command you ran | run the newest: `npx poplin@latest doctor --repair`. The line names a second way: the command of the install's own version |
 | `The install changed while it was read.`                            | something changed at Cloudflare during the run          | run it again                                                    |
 
@@ -195,7 +193,7 @@ Do not type an `export` line with the token into a terminal: the shell keeps the
 
 | Exit code | Means                                                                         |
 | --------- | ----------------------------------------------------------------------------- |
-| 0         | nothing is left undone; or a dry run that would change nothing                |
-| 1         | something is left undone; or a dry run that would change something            |
+| 0         | nothing is left undone; or a dry run that says a run would leave nothing undone |
+| 1         | something is left undone; or a dry run that says a run would be stopped       |
 | 2         | the line is written wrong, or an answer is missing in a run that asks nothing |
 | 5         | Cloudflare gave no answer                                                     |

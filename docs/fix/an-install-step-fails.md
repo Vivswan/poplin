@@ -27,10 +27,10 @@ stopped part way             rows say stopped, failed, or not run: what is made 
 | `Access is not switched on for this account.`                          | Zero Trust is off: nobody could log in                          | answer no at `Go on all the same?`, pick the Free plan at the address it prints, then run again |
 | `This account has no free address yet, or one whose name is too long for the login.` | without a domain: the account has no `workers.dev` subdomain, or one of more than 36 characters | open Workers & Pages at the address it prints, and set a subdomain of 36 characters at most |
 | a line that ends `The token lacks a permission. Add this one:` and a name | the token lacks the permission of that name                  | add it to the token: [the table below](#add-a-permission-to-the-token) |
-| `There is a database named poplin in this account, and no poplin runs.` | an earlier install left its database, its bucket, or both      | answer yes at `Use it, with what it holds?` to keep its sites; or rename or delete it at the address it prints |
+| `There is a database named poplin in this account, and no poplin runs.` | an earlier install left its database, its bucket, or both      | answer yes at `Use it, with what it holds?` to keep its sites; or delete it at the address it prints |
 | `A Worker named poplin is in this account and does not carry poplin's name`  | the name the install needs is taken                       | rename that Worker at the address it prints                           |
 | `A Worker named poplin is in this account. It carries poplin's name and lacks`, and a list | an install whose Worker lost a binding, as one deployed again by hand does | keep it. Put the bindings back on the Worker's Bindings page, then run the command the line names |
-| `This account already holds poplin 0.1.0, at https://poplin.example.com.` | an install is there, and nothing was changed                 | an install that works: log in, `npx poplin login`, with `--server` and the address the line names. One whose run left rows undone: [the second run](#the-second-run) |
+| `This account already holds poplin 0.1.0, at https://poplin.example.com` | an install is there, and nothing was changed                 | the line under it has the way on: the login where the install `is as it should be`, and the repair where it `is not`: [the second run](#the-second-run) |
 | `No release of poplin is published yet.`                               | poplin's website names no version to install                    | nothing can be installed until it does                                |
 | `This release needs a newer poplin`                                    | the newest version needs a newer command                        | `npx poplin@latest install cloudflare`                                |
 | `The release's files are not the ones the project published.`          | the release's files are not the ones poplin's website names for that version | run it again; if it comes back, report it                |
@@ -39,18 +39,18 @@ stopped part way             rows say stopped, failed, or not run: what is made 
 
 ## Part way
 
-A row says what happened to one piece, and calls a permission a right. [Step 4 of Install](../start/install.md#4-read-what-it-made) has every word a row starts with.
+A row says what happened to one piece. [Step 4 of Install](../start/install.md#4-read-what-it-made) has every word a row starts with.
 
 | A row                                                              | Means                                                   | Do                                                                |
 | ------------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------- |
-| `left out`, ending `add this right to the account token and press Repair:` and a name | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
-| `stopped`, ending `Add this one:` or `Add this right to the account token:` and a name | the token lacks the permission of that name | add it to the token: [the table below](#add-a-permission-to-the-token) |
+| `left out`, ending `add this permission to the account token and press Repair:` and a name | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
+| `stopped`, ending `Add this one:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `stopped`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows, then [finish with the repair](#the-second-run) |
 | `failed`, ending `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
 | `failed`, with other words                                         | the row says why, such as a Worker of the name that is not poplin's | do what the row asks                                  |
 | `failed`, ending `Cloudflare asked to wait` or `no answer from Cloudflare` | Cloudflare was busy, or gave no answer          | run the command again in a minute                                 |
 | `not run`                                                          | an earlier row stopped the run before this piece        | fix that row first                                                |
-| `no answer yet at` and the address                                 | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-computer-in-and-check) |
+| `no answer yet at` and the address, then `is made, and its address does not answer yet` | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-computer-in-and-check). If it still does not answer: `npx poplin doctor --repair` |
 
 ## The second run
 
