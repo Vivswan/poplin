@@ -13,8 +13,9 @@ import { MiddleColumn } from "@/shared/middle-column";
 import { SaveBar } from "@/shared/save-bar";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
 import { controlId, SettingRow } from "@/settings/setting-row";
+import { isOn } from "@/settings/setting-values";
 import { useDraft } from "@/settings/settings-draft";
-import { type Settings, useSettings } from "@/settings/settings-queries";
+import { type Row, type Settings, useSettings } from "@/settings/settings-queries";
 import { type Block, blocksOf, UPDATES, wordsOf } from "@/settings/settings-words";
 import { AppShell } from "@/shell/app-shell";
 
@@ -76,7 +77,7 @@ function Groups({
           {block.rows.map((row) => (
             <SettingRow
               key={row.key}
-              row={row}
+              row={waitingOn(row, settings.rows, draft)}
               text={draft.shown(row)}
               refusal={draft.refusals[row.key]}
               onChange={(text) => draft.change(row, text)}
@@ -88,6 +89,19 @@ function Groups({
       ))}
     </>
   );
+}
+
+/**
+ * A switch as it is drawn while the switch it needs is off, saved or not: it says what to switch on first, and takes no change.
+ *
+ * @returns the row itself for every other setting, and while the switch it needs is on
+ */
+function waitingOn(row: Row, rows: readonly Row[], draft: Draft): Row {
+  const { needs, needsLine } = wordsOf(row.key);
+  const needed = rows.find((other) => other.key === needs);
+  if (needed === undefined || needsLine === undefined || isOn(needed, draft.shown(needed))) return row;
+
+  return { ...row, needs: row.needs ?? needsLine };
 }
 
 /** What stands in the blocks' place before they are read. */
