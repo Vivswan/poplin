@@ -287,6 +287,23 @@ function requestsOf(day: string, site: string): Statement {
   return built(BUILD.select({ requests: requestCounts.requests }).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, site))));
 }
 
+/** The two statements that move the live site with an id to the trash while a further condition holds for it: the move, and its audit entry. */
+function trashing(holds: SQL | undefined, id: SiteId, signed: Signed): [move: Statement, entry: Statement] {
+  return [built(BUILD.update(sites).set({ trashed_at: signed.at }).where(and(eq(sites.id, id), eq(sites.trashed, 0), holds))), auditOfSite(signed, "trash", id, {})];
+}
+
+/** The three statements that remove the site with an id for good while a condition holds for it: the read of it as it is, its audit entry, written while the site is still there to name, and the delete, only when the entry was. */
+function deletion(holds: SQL | undefined, id: SiteId, signed: Signed): [before: Statement, entry: Statement, remove: Statement] {
+  const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'delete', ${sites.id}, ${sites.name}, '{}' FROM ${sites} WHERE ${holds}`;
+
+  return [siteById(id), insertFrom(audit, AUDIT_COLUMNS, entry), built(BUILD.delete(sites).where(and(eq(sites.id, id), CHANGED)))];
+}
+
+/** One call names at most a page of sites or folders: each is a bound value of its statement, or a statement of its batch. */
+function requireFew(named: readonly unknown[]): void {
+  if (named.length > MAX_PAGE) throw new RangeError(`one call names at most ${MAX_PAGE} sites or folders, not ${named.length}`);
+}
+
 function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
 }
@@ -612,10 +629,13 @@ export class SqlDatabase implements Database {
     return (found?.rows ?? []).map((row) => v.parse(SITE_ID, row.id));
   }
 
-  async trashExpiredSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_due">> {
-    const { moved, after } = await this.#trashWhere(lte(sites.expires_at, signed.at), id, signed);
+  async trashExpiredSites(ids: readonly SiteId[], signed: Signed): Promise<number> {
+    requireFew(ids);
+    if (ids.length === 0) return 0;
 
-    return moved ? done(after) : { kind: "not_due" };
+    const moved = await this.#driver.batch(ids.flatMap((id) => trashing(lte(sites.expires_at, signed.at), id, signed)));
+
+    return ids.filter((_id, at) => changed(moved[at * 2])).length;
   }
 
   async restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">> {
@@ -632,8 +652,13 @@ export class SqlDatabase implements Database {
     return (await this.#deleteWhere(eq(sites.id, id), id, signed)) ?? { kind: "not_found" };
   }
 
-  async deleteSatOutSite(id: SiteId, signed: Signed, trashedBy: number): Promise<Done | Refused<"not_due">> {
-    return (await this.#deleteWhere(and(eq(sites.id, id), lte(sites.trashed_at, trashedBy)), id, signed)) ?? { kind: "not_due" };
+  async deleteSatOutSites(ids: readonly SiteId[], signed: Signed, trashedBy: number): Promise<readonly Site[]> {
+    requireFew(ids);
+    if (ids.length === 0) return [];
+
+    const removed = await this.#driver.batch(ids.flatMap((id) => deletion(and(eq(sites.id, id), lte(sites.trashed_at, trashedBy)), id, signed)));
+
+    return ids.flatMap((_id, at) => (changed(removed[at * 3 + 2]) ? [done(removed[at * 3]).site] : []));
   }
 
   async listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage> {
@@ -649,8 +674,12 @@ export class SqlDatabase implements Database {
     return { folders, next: last };
   }
 
-  async forgetLeftover(folder: SiteFolder): Promise<void> {
-    await this.#driver.batch([built(BUILD.delete(leftovers).where(eq(leftovers.folder, folder)))]);
+  async forgetLeftovers(folders: readonly SiteFolder[]): Promise<void> {
+    requireFew(folders);
+    if (folders.length === 0) return;
+
+    // A statement a folder: a list of them in one statement is read a row a folder more.
+    await this.#driver.batch(folders.map((folder) => built(BUILD.delete(leftovers).where(eq(leftovers.folder, folder)))));
   }
 
   async reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">> {
@@ -1508,18 +1537,14 @@ export class SqlDatabase implements Database {
 
   /** Move the live site with an id to the trash while a further condition holds for it, with its audit entry: whether it moved, and the read of the site after. */
   async #trashWhere(holds: SQL | undefined, id: SiteId, signed: Signed): Promise<{ readonly moved: boolean; readonly after: StatementResult | undefined }> {
-    const trash = BUILD.update(sites).set({ trashed_at: signed.at }).where(and(eq(sites.id, id), eq(sites.trashed, 0), holds));
-    const [updated, , after] = await this.#driver.batch([built(trash), auditOfSite(signed, "trash", id, {}), siteById(id)]);
+    const [updated, , after] = await this.#driver.batch([...trashing(holds, id, signed), siteById(id)]);
 
     return { moved: changed(updated), after };
   }
 
   /** Remove the site with an id for good while a condition holds for it, with its audit entry; `undefined` when it does not hold. */
   async #deleteWhere(holds: SQL | undefined, id: SiteId, signed: Signed): Promise<Done | undefined> {
-    // The audit entry is written while the site is still there to name, and the delete only when it was.
-    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'delete', ${sites.id}, ${sites.name}, '{}' FROM ${sites} WHERE ${holds}`;
-    const remove = BUILD.delete(sites).where(and(eq(sites.id, id), CHANGED));
-    const [before, , deleted] = await this.#driver.batch([siteById(id), insertFrom(audit, AUDIT_COLUMNS, entry), built(remove)]);
+    const [before, , deleted] = await this.#driver.batch(deletion(holds, id, signed));
 
     return changed(deleted) ? done(before) : undefined;
   }

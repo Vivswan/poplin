@@ -521,10 +521,10 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.getLaterSites([site.id, NO_SITE]);
       await database.trashSite(id, BY_ADA);
       await database.listDueSites({ trashedBy: NOW }, 10);
-      await database.deleteSatOutSite(id, BY_ADA, NOW - 1);
+      await database.deleteSatOutSites([id], BY_ADA, NOW - 1);
       await database.restoreSite(id, BY_ADA);
       await database.listDueSites({ expiredBy: NOW }, 10);
-      await database.trashExpiredSite(id, { as: "token", by: ADA, at: NOW - 1 });
+      await database.trashExpiredSites([id], { as: "token", by: ADA, at: NOW - 1 });
       const deleted = await database.deleteSite(id, BY_ADA);
       const imported = deleted.kind === "done" ? await storedBack(database, deleted.site) : deleted;
       await database.addToken(token, BY_ADA);
@@ -582,7 +582,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.noteProblem({ kind: "files_limit_reached", at: NOW, count: 1, more: false, name: null, message: null });
       await database.listProblems("2023-11-01");
       await database.listLeftovers({ limit: 10, after: gone.folder });
-      await database.forgetLeftover(gone.folder);
+      await database.forgetLeftovers([gone.folder]);
       await readStanding(driver, STEPS);
 
       const scans: string[] = [];

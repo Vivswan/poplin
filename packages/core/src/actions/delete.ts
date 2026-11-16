@@ -24,17 +24,25 @@ interface Removed {
 }
 
 /**
- * Remove what the bucket still holds under the folder of a removed site, as far as one bounded removal goes, and forget the folder once it is empty.
+ * Remove what the bucket still holds under the folders of removed sites, as far as one bounded removal goes for each, and forget the folders that are empty, all in one query.
  *
- * @param folder - a leftover: the folder of a site that is removed
- * @returns the folder's prefix while files may still sit under it, and nothing once all went
- * @throws {Error} the database failed; the folder stays a leftover
+ * @param folders - leftovers: the folders of sites that are removed, at most 100
+ * @returns how many folders were emptied, and the prefix of each one files may still sit under
+ * @throws {Error} the database failed; the folders stay leftovers
  */
-export async function emptyLeftover(install: Install, folder: SiteFolder): Promise<readonly string[]> {
-  const left = await removeFiles(install.store, [sitePrefix(folder)]);
-  if (left.length === 0) await install.database.forgetLeftover(folder);
+export async function emptyLeftovers(install: Install, folders: readonly SiteFolder[]): Promise<{ readonly emptied: number; readonly left: readonly string[] }> {
+  const left: string[] = [];
+  const emptied: SiteFolder[] = [];
 
-  return left;
+  for (const folder of folders) {
+    const remaining = await removeFiles(install.store, [sitePrefix(folder)]);
+    left.push(...remaining);
+    if (remaining.length === 0) emptied.push(folder);
+  }
+
+  await install.database.forgetLeftovers(emptied);
+
+  return { emptied: emptied.length, left };
 }
 
 /**
@@ -43,14 +51,13 @@ export async function emptyLeftover(install: Install, folder: SiteFolder): Promi
  * In that order a crash between the two leaves files no row points to, which nothing can serve. The other order would leave a site that is served with files missing.
  * The database keeps the folder as a leftover from the moment the row goes, so the sweep removes whatever this call left.
  *
- * @param trashedBy - remove the site only while it sits in the trash since that moment or before, checked in the step that removes it; left out, the site goes wherever it is
- * @returns the site as it was, or `undefined` when there is no such site, or none that sat in the trash that long
+ * @returns the site as it was, or `undefined` when there is no such site
  */
-export async function removeSite(install: Install, id: SiteId, signed: Signed, trashedBy?: number): Promise<Removed | undefined> {
-  const deleted = trashedBy === undefined ? await install.database.deleteSite(id, signed) : await install.database.deleteSatOutSite(id, signed, trashedBy);
+async function removeSite(install: Install, id: SiteId, signed: Signed): Promise<Removed | undefined> {
+  const deleted = await install.database.deleteSite(id, signed);
   if (deleted.kind !== "done") return undefined;
 
-  return { site: deleted.site, left: await emptyLeftover(install, deleted.site.folder) };
+  return { site: deleted.site, left: (await emptyLeftovers(install, [deleted.site.folder])).left };
 }
 
 /**

@@ -113,7 +113,7 @@ export const SLICE_CEILINGS: Readonly<Record<string, { readonly queries: number;
   "delete a site for good: its files": { queries: 5, read: 33, written: 12, bucket: 2 },
   "scheduled run: nothing due": { queries: 6, read: 25, written: 0, bucket: 0 },
   "scheduled run: nothing due, a long log": { queries: 6, read: 25, written: 0, bucket: 0 },
-  "scheduled run: the trash sweep, every spare site past its days": { queries: 38, read: 382, written: 168, bucket: 15 },
+  "scheduled run: the trash sweep, every spare site past its days": { queries: 14, read: 382, written: 168, bucket: 15 },
   "list the sites: the largest page": { queries: 2, read: 1213, written: 0, bucket: 0 },
   "export: a page of sites, every version": { queries: 2, read: 506, written: 0, bucket: 0 },
   "export: a page of a version's files": { queries: 3, read: 9, written: 1, bucket: 1 },
