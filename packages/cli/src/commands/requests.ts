@@ -49,7 +49,6 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   login,
   logout: (words) => withInstall(words, (install) => ({ kind: "logout", ...install })),
   whoami: (words) => withInstall(words, (install) => ({ kind: "whoami", ...install })),
-  setup,
   config,
   doctor,
   update,
@@ -96,7 +95,6 @@ type Asked<Site> =
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
   | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)
-  | ({ readonly kind: "setup"; readonly check: boolean; readonly domain?: string; readonly login?: string } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "update"; readonly action: UpdateAction } & Install)
   | ({ readonly kind: "export"; readonly site?: Site; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
@@ -254,14 +252,6 @@ function doctor(words: Words): TypedRequest | UsageError {
   if (stray !== undefined) return usageError(`${stray} goes with --repair`);
 
   return withInstall(words, (install) => ({ kind: "doctor", ...install }));
-}
-
-function setup(words: Words): TypedRequest | UsageError {
-  const domain = flagValue(words.flags, "--domain");
-  const first = flagValue(words.flags, "--login");
-  const typed = { ...(domain === undefined ? {} : { domain }), ...(first === undefined ? {} : { login: first }) };
-
-  return withInstall(words, (install) => ({ kind: "setup", check: words.flags.has("--dry-run"), ...typed, ...install }));
 }
 
 function readConfigAction(words: Words): ConfigAction | UsageError {

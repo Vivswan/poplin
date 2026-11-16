@@ -22,7 +22,6 @@ import { logIn } from "./login";
 import { type ProviderCommand, parseCommand } from "./parse-command";
 import { type Problem, problem, problemLines } from "./problems";
 import { planPublish, previewPublish, sendPublish } from "./publish";
-import { runSetup } from "./setup";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request, TypedRequest } from "./requests";
 import { runSiteCommand } from "./site-commands";
@@ -61,7 +60,7 @@ function guarded(io: Io, tokens: ReadonlySet<string>): Io {
 }
 
 /**
- * The tokens this machine holds: the ones the environment may hold, the login's and the two account tokens `poplin setup` and `poplin install` take, and the one of the saved login, whichever the command uses.
+ * The tokens this machine holds: the ones the environment may hold, the login's and the account token `poplin install` takes, and the one of the saved login, whichever the command uses.
  *
  * A login that cannot be read gives no token here, and is refused where the command looks for it.
  */
@@ -209,8 +208,6 @@ async function dispatch(request: Command, io: Io, reached?: Session): Promise<Ou
   if (asks(request, ["publish"])) return publish(request, io, reached);
 
   if (asks(request, ["login"])) return logIn(request, io);
-
-  if (asks(request, ["setup"])) return runSetup(request, io);
 
   if (asks(request, INSTALL_COMMANDS)) return online(request, io, (session) => runInstallCommand(request, session));
 

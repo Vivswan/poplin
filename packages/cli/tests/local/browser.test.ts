@@ -7,7 +7,7 @@ import { type Machine, thisMachine } from "../../src/local/login-file";
 const ADDRESS = "https://poplin.example.com/tokens/review/0123456789abcdef";
 
 /** Every variable a command reads a token from. */
-const TOKENS = ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN", "POPLIN_INSTALL_TOKEN"];
+const TOKENS = ["POPLIN_TOKEN", "POPLIN_INSTALL_TOKEN"];
 
 /** What was handed to the browser. */
 function recorder(): { readonly started: string[][]; readonly start: NonNullable<Parameters<typeof openBrowser>[2]> } {
@@ -76,7 +76,7 @@ describe("openBrowser", () => {
       });
       const after = TOKENS.map((name) => process.env[name]);
 
-      expect([started, seen, after]).toEqual([opened, [[undefined, undefined, undefined], "https://poplin.example.com", held], held]);
+      expect([started, seen, after]).toEqual([opened, [[undefined, undefined], "https://poplin.example.com", held], held]);
     } finally {
       for (const [name, value] of kept) {
         if (value === undefined) delete process.env[name];
