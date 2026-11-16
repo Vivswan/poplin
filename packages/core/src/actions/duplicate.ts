@@ -16,10 +16,11 @@ import { mintSiteFolder } from "../records/site";
 import { type ManifestFile, mintUploadId, parseUploadId, UPLOAD_ID, type Upload } from "../records/upload";
 import { dayOf } from "../records/views";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
-import { checkManifest, FULL, roomUnder, type UploadLimits } from "./begin-publish";
+import { checkManifest, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
 import { defaultExpiry } from "./changes";
 import { fileKey, versionPrefix } from "./files";
 import { finishPublish, PUBLISHED_SITE } from "./finish-publish";
+import { noteProblem } from "./problems";
 import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { CLEANUP_CALLS, discardUpload, isWithinReach, missingFiles, uploadKey } from "./uploads";
@@ -178,7 +179,7 @@ async function beginCopy(
   };
   const upload = { id: mintUploadId(), folder, number: 1, owner: actor.holder, plan, manifest, created_at: asked.now };
   const added = await install.database.addUpload(upload, roomUnder(settings, { makesSite: true, writes: manifest.length * COPY_CALLS }, asked.now));
-  if (added.kind !== "done") return FULL[added.kind];
+  if (added.kind !== "done") return refuseFull(install, added.kind);
 
   return { ok: true, upload: { ...upload, state: "pending", bytes: listed.bytes, files: manifest.length, dropped: [] }, missing: manifest.map((file) => file.path) };
 }
@@ -204,7 +205,7 @@ async function resumeCopy(install: Install, actor: Actor, asked: { readonly site
  * Copy files of the source's version to the copy's folder, each with the media type the source holds.
  *
  * @returns `false` when the source no longer holds one of them, which leaves the rest uncopied
- * @throws {Error} the store failed. A write it did not keep is counted against the day first: a host bills it, and the call that goes on with the copy writes the file again
+ * @throws {Error} the store failed. A write it did not keep is counted against the day first, and noted where it takes the day past its limit: a host bills it, and the call that goes on with the copy writes the file again
  */
 async function copyFiles(install: Install, upload: CopyUpload, paths: readonly string[]): Promise<boolean> {
   const { store } = install;
@@ -221,7 +222,10 @@ async function copyFiles(install: Install, upload: CopyUpload, paths: readonly s
     try {
       await store.write(to.key, { stream: read.body, size: read.info.size }, { contentType: read.info.contentType });
     } catch (error) {
-      await install.database.addStorageWrites(dayOf(install.now()), 1);
+      const day = dayOf(install.now());
+      await install.database.addStorageWrites(day, 1);
+      const counted = await install.database.readStorageWrites(day);
+      if (counted !== undefined && counted.writes > counted.most) await noteProblem(install, "writes_limit_reached");
 
       throw error;
     }

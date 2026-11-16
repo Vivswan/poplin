@@ -4,6 +4,7 @@ import type { Update } from "@poplin/core/src/actions/update";
 import { html, raw } from "hono/html";
 
 import { DEFAULT_ICON, DEFAULT_ICON_TYPE } from "../sites/default-icon";
+import type { Marked } from "./problems-routes";
 
 /** The characters that would end the data block, each as JSON's own escape. */
 const UNSAFE: Readonly<Record<string, string>> = { "<": "\\u003c", ">": "\\u003e", "&": "\\u0026" };
@@ -63,6 +64,12 @@ export interface Boot {
 
   /** What the domain needs, as the side shows it, or `null`. */
   readonly domainNote: { readonly label: string; readonly sentence: string; readonly quiet: boolean } | null;
+
+  /** The problems last seen within a day, the newest first. */
+  readonly recent: Marked["recent"];
+
+  /** What the side marks at each screen that holds a problem. */
+  readonly marks: Marked["marks"];
 
   /** What the setup screen starts from, on the page shown before anyone has logged in; left out on every other. */
   readonly setup?: unknown;

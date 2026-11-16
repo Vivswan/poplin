@@ -179,6 +179,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    ok  settings  20 settings read
    ok  sites     0 sites
    ok  trash     0 sites
+   ok  problems  none in 7 days
    nothing was changed
    ```
 

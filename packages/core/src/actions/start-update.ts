@@ -8,6 +8,7 @@
 //   any answer but a 2xx, a redirect included    update_refused, about its status
 //   a 2xx                                        started, and one `update_started` audit entry, which says `automatic` for a start nobody asked for
 //
+// A request that fails or is refused is noted as the problem `update_failed`.
 // The request is a POST with no body and no header of the install's. No redirect is followed, so nothing is ever sent to a host the provider did not accept.
 
 import * as v from "valibot";
@@ -15,6 +16,7 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import { AllowanceSpent } from "../database/driver";
 import { rebuildAddress } from "../records/update";
+import { noteProblem } from "./problems";
 import { type Install, type Refused, refuse } from "./records";
 import { updateOf } from "./update";
 
@@ -26,6 +28,9 @@ const STARTS_PER_MINUTE = 1;
 
 /** What the count of starts is kept under. */
 const COUNT_KEY = "start_update";
+
+/** What is noted of a request that got no answer. The failure itself may quote the address, so nothing of it is kept. */
+const NO_ANSWER = "the request for a rebuild got no answer";
 
 /** What a request to start an update may ask for. */
 export const START_OPTIONS = v.strictObject({ anyway: v.optional(v.boolean()) });
@@ -114,9 +119,11 @@ export async function startUpdate(
   if (!taken.ok) return refuse("too_many_requests", "update");
 
   const status = await askProvider(address, rebuilding);
-  if (status === undefined) return refuse("update_unreachable");
+  if (status === undefined || status < 200 || status > 299) {
+    await noteProblem(install, "update_failed", status === undefined ? NO_ANSWER : `the request for a rebuild was answered ${status}`);
 
-  if (status < 200 || status > 299) return refuse("update_refused", String(status));
+    return status === undefined ? refuse("update_unreachable") : refuse("update_refused", String(status));
+  }
 
   const to = update?.newest ?? null;
   const detail = asked.automatic === true ? { from: asked.version, to, automatic: true } : { from: asked.version, to };

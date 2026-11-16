@@ -16,6 +16,7 @@
 // sweep_place  one row while a walk of the scheduled sweep is under way: where its last run stopped
 // update_check one row once the install has asked for the newest release: when it asked, the newest it knows, since when, and its last try to start an update by itself
 // domain_check one row once the domain was checked or repaired: when, by whom, how each piece stood, and whether the users changed since
+// problems     one row per UTC day and kind of what went wrong: how often, when, and the latest failure's name and cleaned message; 30 days are kept
 
 import type { Step } from "./migrate";
 
@@ -212,6 +213,21 @@ CREATE TABLE domain_check (
   users_changed_at INTEGER
 ) STRICT`;
 
+/** What went wrong, per UTC day and kind. `count` is a floor, since a kind is written once an hour, and `more` says it came more often than it was written; `name` and `message` are of the latest failure. */
+const PROBLEMS = `
+CREATE TABLE problems (
+  day TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  kind TEXT NOT NULL CHECK (kind IN ('request_failed', 'api_failed', 'sweep_failed', 'count_unwritten', 'login_unwritten', 'login_unchecked', 'update_failed', 'files_limit_reached', 'writes_limit_reached', 'requests_limit_reached')),
+  count INTEGER NOT NULL CHECK (count >= 1),
+  more INTEGER NOT NULL DEFAULT 0 CHECK (more IN (0, 1)),
+  first_at INTEGER NOT NULL,
+  last_at INTEGER NOT NULL,
+  name TEXT,
+  message TEXT,
+  PRIMARY KEY (day, kind),
+  CHECK (last_at >= first_at)
+) STRICT, WITHOUT ROWID`;
+
 /** A site that is removed leaves its folder to be emptied, whatever removed it. */
 const REMOVED_SITE_LEAVES_ITS_FOLDER = `
 CREATE TRIGGER sites_delete_leaves_the_folder AFTER DELETE ON sites
@@ -304,7 +320,7 @@ BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, update_check, and domain_check tables",
+  description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, update_check, domain_check, and problems tables",
   statements: [
     SITES,
     VERSIONS,
@@ -323,6 +339,7 @@ export const CREATE_SCHEMA: Step = {
     SWEEP_PLACE,
     UPDATE_CHECK,
     DOMAIN_CHECK,
+    PROBLEMS,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_name ON sites (trashed, name, id)",

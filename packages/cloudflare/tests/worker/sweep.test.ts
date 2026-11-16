@@ -6,7 +6,7 @@ import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { dayOf } from "@poplin/core/src/records/views";
 import { beforeEach, describe, expect, test } from "vitest";
-import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, publish, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
+import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf, publish, refusingDatabase, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
@@ -95,6 +95,17 @@ describe("the scheduled run", () => {
       [{ live: 0, trash: 0 }, 1, 1, most + SWEEP_SPARE_WRITES],
       [{ live: 0, trash: 0 }, 0, 0, most + 1],
     ]);
+  });
+
+  // Drift: a run that failed was thrown into the provider's log of the schedule, which nobody opens, so sites stayed past their expiry with no word to the owner.
+  test("a run the database fails is thrown on, and noted as a clean-up that did not finish", async () => {
+    const locked = { ...BINDINGS, DB: refusingDatabase(/sweep_place/i) };
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+
+    const run = await sweep(instance(w), w, locked).then(() => "ran", String);
+
+    expect(run).toBe("Error: the table is locked");
+    expect(await problemsOf(w)).toEqual([["sweep_failed", 1, "the table is locked"]]);
   });
 
   // Drift: nothing but the scheduled run ever asks which version is the newest. An entry that did not hand it the fetch, or a run that asked every time, would leave the install silent or have it ask the website 96 times a day.

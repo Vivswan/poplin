@@ -13,12 +13,14 @@ import type { Actor } from "@poplin/core/src/auth/scopes";
 import { mintToken, type TokenId } from "@poplin/core/src/auth/tokens";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { SqlDatabase } from "@poplin/core/src/database/sql-database";
+import { PROBLEM_KINDS } from "@poplin/core/src/records/problem";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import { meterStore } from "@poplin/core/src/storage/metered";
 import type { PublicName, SiteName } from "@poplin/core/src/names/names";
 import type { Site, SiteFolder } from "@poplin/core/src/records/site";
 import type { UploadId } from "@poplin/core/src/records/upload";
+import { dayOf } from "@poplin/core/src/records/views";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import { describeDatabase } from "@poplin/core/tests/database/support/database-contract";
 import { BY_ADA, begunFiles, begunSite, begunVersion, draft, numberedFiles, pendingLogin, publish, storedBack } from "@poplin/core/tests/database/support/database-fixtures";
@@ -34,6 +36,9 @@ const BINDINGS: Bindings = env;
 
 /** The moment every fixture is made at. */
 const NOW = 1_700_000_000_000;
+
+/** A midnight UTC after it, where an hour of the clock and a day both begin. */
+const MIDNIGHT = 1_700_006_400_000;
 
 /** How many sites the log that is searched by a site is about. */
 const SEARCHED_SITES = 60;
@@ -104,7 +109,14 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepDomainCheck": [2, 3],
   "keepDomainCheck, 200 pieces over the run before": [2, 3],
   "readDomainCheck": [1, 0],
-  "readFrame": [3, 0],
+  "readFrame": [4, 0],
+  "noteProblem, the day's first": [1, 1],
+  "noteProblem, the same hour": [1, 0],
+  "noteProblem, a later hour": [1, 1],
+  "noteProblem, once a day": [1, 1],
+  "noteProblem, once a day and noted": [1, 0],
+  "listProblems, 7 days of 10 kinds": [70, 0],
+  "sweepRunOut, 12 problems past the days kept": [14, 12],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -169,7 +181,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "listWaitingComputerLogins": [4, 0],
   "decideComputerLogin": [5, 4],
   "redeemComputerLogin": [5, 7],
-  "sweepComputerLogins": [1, 1],
+  "sweepRunOut": [2, 1],
   "appendAudit, a login": [1, 3],
   "hasLoggedIn, nobody yet": [0, 0],
   "hasLoggedIn": [1, 0],
@@ -590,9 +602,9 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await runSweep(install, latest, running);
 
     expect([first, idle, rows, website.asked]).toEqual([
-      { read: 13, written: 1 },
-      { read: 10, written: 0 },
-      { read: 12, written: 0 },
+      { read: 14, written: 1 },
+      { read: 11, written: 0 },
+      { read: 13, written: 0 },
       1,
     ]);
   });
@@ -730,7 +742,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("decideComputerLogin", () => database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 2 }));
     const redeemed = (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 3 })).record;
     await cost("redeemComputerLogin", () => database.redeemComputerLogin(login.id, redeemed));
-    await cost("sweepComputerLogins", () => database.sweepComputerLogins(NOW + 86_400_000));
+    await cost("sweepRunOut", () => database.sweepRunOut(NOW + 86_400_000));
 
     await cost("hasLoggedIn, nobody yet", () => database.hasLoggedIn());
     await cost("appendAudit, a login", () => database.appendAudit({ action: "login", detail: {} }, BY_ADA));
@@ -809,7 +821,20 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     const pieces = Array.from({ length: 200 }, (_piece, at) => ({ piece: "Record", detail: `record ${at}`, part: "reach", state: "needs_repair" }) as const);
     await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
     await cost("readDomainCheck", () => database.readDomainCheck());
-    await cost("readFrame", () => database.readFrame());
+    await cost("readFrame", () => database.readFrame(NOW));
+
+    const note = { kind: "request_failed", count: 1, more: false, name: "TypeError", message: "m".repeat(200) } as const;
+    const limit = { kind: "files_limit_reached", count: 1, more: false, name: null, message: null } as const;
+    await cost("noteProblem, the day's first", () => database.noteProblem({ ...note, at: MIDNIGHT }));
+    await cost("noteProblem, the same hour", () => database.noteProblem({ ...note, at: MIDNIGHT + 1 }));
+    await cost("noteProblem, a later hour", () => database.noteProblem({ ...note, at: MIDNIGHT + 3_600_000 }));
+    await cost("noteProblem, once a day", () => database.noteProblem({ ...limit, at: MIDNIGHT }));
+    await cost("noteProblem, once a day and noted", () => database.noteProblem({ ...limit, at: MIDNIGHT + 3_600_000 }));
+    for (const kind of PROBLEM_KINDS) {
+      for (let day = 1; day <= 7; day += 1) await database.noteProblem({ ...note, kind, at: MIDNIGHT + day * 86_400_000 });
+    }
+    await cost("listProblems, 7 days of 10 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
+    await cost("sweepRunOut, 12 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
 
     // The logins change after every read of the log, so that the entries they write are read by no page of it above.
     const person = "bo@example.com" as Login;

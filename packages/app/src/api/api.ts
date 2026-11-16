@@ -18,6 +18,7 @@ import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import
 import { LIST_QUERY, listSites } from "@poplin/core/src/actions/list";
 import { issueToken, listTokens, revokeToken, TOKEN_REQUEST } from "@poplin/core/src/actions/manage-tokens";
 import { newLink } from "@poplin/core/src/actions/new-link";
+import { listProblems, noteProblem } from "@poplin/core/src/actions/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
@@ -53,6 +54,9 @@ const NO_QUERY = v.strictObject({});
 
 /** The calls to the database a request with a token makes before its route runs: the one that reads the token's record. */
 const TOKEN_CALLS = 1;
+
+/** How many days of problems the API lists: the week `poplin doctor` reports on. */
+const PROBLEM_DAYS = 7;
 
 /** What one request can carry: a file's bytes, a publish's file count, and the JSON that declares a publish's files. */
 export interface ApiLimits extends UploadLimits {
@@ -159,6 +163,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     .delete("/sessions", token, install, noQuery, async (context) => respond(await signEveryoneOut(context.var.install, context.var.actor)))
     .get("/audit", token, install, queried(AUDIT_QUERY), async (context) => respond(await listAudit(context.var.install, context.var.actor, context.req.valid("query"))))
     .get("/domain", token, install, noQuery, async (context) => respond(await domainState(context.var.install, context.var.actor)))
+    .get("/problems", token, install, noQuery, async (context) => respond(await listProblems(context.var.install, context.var.actor, PROBLEM_DAYS)))
 
     .post("/update", token, install, queried(START_OPTIONS), async (context) => {
       return respond(await startUpdate(context.var.install, context.var.actor, { ...context.req.valid("query"), version: deps.version }, rebuilding));
@@ -188,7 +193,7 @@ export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) =
   app.use(methodNotAllowed({ app, onMethodNotAllowed: (_context, allowed) => refusal("method_not_allowed", undefined, { Allow: allowed.join(", ") }) }));
   app.route("/", routesOf(deps, metered(deps, deps.report)));
   app.notFound(() => refusal("not_found", "route"));
-  app.onError((error) => {
+  app.onError(async (error) => {
     // The one such error is the refusal of a request with no live token: an answer, and no failure to report.
     if (error instanceof HTTPException) return error.getResponse();
 
@@ -197,6 +202,8 @@ export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) =
 
     deps.report?.(error);
     if (error instanceof AllowanceSpent) return spentRefusal(error, deps.now());
+
+    await noteProblem(deps, "api_failed", error);
 
     return refusal("internal");
   });

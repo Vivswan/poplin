@@ -9,9 +9,11 @@ import { MOST_FILES_PER_PUBLISH, type SettingValues, sizeBytes } from "../record
 import { mintSiteFolder, type SiteAccess, type SiteFolder } from "../records/site";
 import { MANIFEST_FILE, type ManifestFile, mintUploadId, type UploadPlan } from "../records/upload";
 import { dayOf } from "../records/views";
+import type { ProblemKind } from "../records/problem";
 import type { SiteId } from "../sites/ids";
 import { type CheckedChanges, defaultExpiry, readChanges, SITE_CHANGES, type SiteChanges, TITLE_TEXT } from "./changes";
 import { checkFilePath } from "./files";
+import { noteProblem } from "./problems";
 import { enterInstall, reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { type BegunUpload, uploadObject } from "./uploads";
@@ -26,7 +28,7 @@ const MAX_MANIFEST_BYTES = 1_500_000;
 const MAX_PENDING_UPLOADS = 20;
 
 /** The refusal of each bound of the room an upload did not fit. */
-export const FULL = {
+const FULL = {
   own_full: refuse("too_large", "max_pending_uploads"),
   folder_full: refuse("too_large", "max_site_size"),
   total_full: refuse("too_large", "max_total_size"),
@@ -34,6 +36,9 @@ export const FULL = {
   day_full: refuse("too_large", "max_files_per_day"),
   writes_full: refuse("allowance_spent", "max_storage_writes_per_day"),
 } as const;
+
+/** The problem noted for each bound that is a limit of the day. */
+const DAY_LIMITS: Partial<Record<keyof typeof FULL, ProblemKind>> = { day_full: "files_limit_reached", writes_full: "writes_limit_reached" };
 
 /** Measures a manifest as the database stores it. */
 const UTF8 = new TextEncoder();
@@ -133,6 +138,18 @@ export function checkManifest(
   if (UTF8.encode(JSON.stringify(files)).length > MAX_MANIFEST_BYTES) return refuse("too_large", "max_manifest_size");
 
   return { ok: true, bytes };
+}
+
+/**
+ * Refuse an upload that did not fit its room. A bound that is a limit of the day is noted as a problem, once on the day it is reached.
+ *
+ * @param bound - the bound the database said the upload did not fit
+ */
+export async function refuseFull<Bound extends keyof typeof FULL>(install: Pick<Install, "database" | "now">, bound: Bound): Promise<(typeof FULL)[Bound]> {
+  const reached = DAY_LIMITS[bound];
+  if (reached !== undefined) await noteProblem(install, reached);
+
+  return FULL[bound];
 }
 
 /**
@@ -282,7 +299,7 @@ export async function beginPublish(
 
   const upload = { id: mintUploadId(), folder: planned.folder, number: planned.number, owner: actor.holder, plan: planned.plan, manifest: files, created_at: install.now() };
   const added = await install.database.addUpload(upload, planned.room);
-  if (added.kind !== "done") return FULL[added.kind];
+  if (added.kind !== "done") return refuseFull(install, added.kind);
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);
 

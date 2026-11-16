@@ -5,6 +5,8 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, primaryKey, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
+import { PROBLEM_KINDS } from "../records/problem";
+
 /** The form a day is stored in. */
 const DAY_FORM = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]";
 
@@ -308,5 +310,28 @@ export const domainCheck = sqliteTable(
     check("domain_check_one_row", sql`${table.id} = 1`),
     check("domain_check_run", sql`${table.run} IN ('check', 'repair')`),
     check("domain_check_pieces", sql`json_valid(${table.pieces}) AND json_type(${table.pieces}) = 'array'`),
+  ],
+);
+
+/** What went wrong, one row per UTC day and kind: how often at the least, whether it came more often than it was written, the first and the last time, and the name and cleaned message of the latest failure. */
+export const problems = sqliteTable(
+  "problems",
+  {
+    day: text().notNull(),
+    kind: text({ enum: PROBLEM_KINDS }).notNull(),
+    count: integer().notNull(),
+    more: integer().notNull().default(0),
+    first_at: integer().notNull(),
+    last_at: integer().notNull(),
+    name: text(),
+    message: text(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.day, table.kind] }),
+    check("problems_day", sql`${table.day} GLOB ${sql.raw(`'${DAY_FORM}'`)}`),
+    check("problems_kind", sql`${table.kind} IN (${sql.raw(PROBLEM_KINDS.map((kind) => `'${kind}'`).join(", "))})`),
+    check("problems_count", sql`${table.count} >= 1`),
+    check("problems_more", sql`${table.more} IN (0, 1)`),
+    check("problems_last_is_after_first", sql`${table.last_at} >= ${table.first_at}`),
   ],
 );

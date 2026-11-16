@@ -3,7 +3,7 @@
 import { decideLogin } from "@poplin/core/src/actions/computer-logins";
 import { ADMIN, done, OWNER } from "./install";
 import { adminToken, apiOf, type BudgetRow, get, sql, type Stage, unmeasured } from "./budget-stage";
-import { manyEntries, manySites, manyTokens, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
+import { manyEntries, manyProblems, manySites, manyTokens, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
 
 /** The group of every row here. */
 const group = "CLI / agent actions";
@@ -389,6 +389,20 @@ export const API_ROWS: readonly BudgetRow[] = [
     },
     status: 200,
     budget: { queries: 2, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "read what went wrong in the last week",
+    route: "GET /api/problems",
+    // Worst: every kind was noted on each of the 7 days read.
+    arrange: async (stage) => {
+      await manyProblems(stage, 7);
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).problems.$get({ query: {} });
+    },
+    status: 200,
+    budget: { queries: 2, read: 71, reads: 0, writes: 0 },
   },
   {
     group,

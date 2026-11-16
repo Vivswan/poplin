@@ -8,6 +8,7 @@ import { issueToken } from "@poplin/core/src/actions/manage-tokens";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { openDatabase } from "@poplin/core/src/database/open";
+import { dayOf } from "@poplin/core/src/records/views";
 import { hc } from "hono/client";
 import type * as v from "valibot";
 import { D1Driver } from "../../../src/database/d1";
@@ -45,6 +46,9 @@ const FREE_QUERIES = 50;
 
 /** A statement that changes a row. */
 const CHANGES = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
+
+/** Any statement at all. */
+const EVERY_STATEMENT = /^/;
 
 /** What D1 rejects a query with once a day's free allowance is used up, as its error reference prints the first sentence of each. */
 const SPENT = {
@@ -297,18 +301,19 @@ export function freePlanBindings(tally: Tally): Bindings {
 }
 
 /**
- * The database binding as D1 is once a day's free allowance is used up.
+ * The database binding with the batches that hold a matching statement failing, and every other batch answered.
  *
- * @param spent - `read` refuses every batch; `write` refuses the batches that hold a statement that changes a row, and answers the rest
+ * @param fails - what the text of a statement whose batch fails matches
+ * @param failure - what such a batch is rejected with
  */
-export function spentDatabase(spent: keyof typeof SPENT): D1Database {
-  const changing = new WeakSet<D1PreparedStatement>();
+function failingBatches(fails: RegExp, failure: string): D1Database {
+  const failing = new WeakSet<D1PreparedStatement>();
   const binding: Pick<D1Database, "prepare" | "batch"> = {
     prepare: (query) => {
       const prepared: Pick<D1PreparedStatement, "bind"> = {
         bind: (...values) => {
           const bound = BINDINGS.DB.prepare(query).bind(...values);
-          if (CHANGES.test(query)) changing.add(bound);
+          if (fails.test(query)) failing.add(bound);
 
           return bound;
         },
@@ -317,13 +322,40 @@ export function spentDatabase(spent: keyof typeof SPENT): D1Database {
       return prepared as D1PreparedStatement;
     },
     batch: async <Row>(statements: D1PreparedStatement[]) => {
-      if (spent === "read" || statements.some((statement) => changing.has(statement))) throw new Error(SPENT[spent]);
+      if (statements.some((statement) => failing.has(statement))) throw new Error(failure);
 
       return BINDINGS.DB.batch<Row>(statements);
     },
   };
 
   return binding as D1Database;
+}
+
+/**
+ * The database binding as D1 is once a day's free allowance is used up.
+ *
+ * @param spent - `read` refuses every batch; `write` refuses the batches that hold a statement that changes a row, and answers the rest
+ */
+export function spentDatabase(spent: keyof typeof SPENT): D1Database {
+  return failingBatches(spent === "read" ? EVERY_STATEMENT : CHANGES, SPENT[spent]);
+}
+
+/**
+ * The database binding with some statements failing, and every other one answered: a database that works but for one table.
+ *
+ * @param refused - what the text of a statement that fails matches
+ */
+export function refusingDatabase(refused: RegExp): D1Database {
+  return failingBatches(refused, "the table is locked");
+}
+
+/**
+ * What the install has noted on the day of the world's clock: the kind, the count, and the message of each problem, the newest first.
+ */
+export async function problemsOf(from: World): Promise<unknown[]> {
+  const { database } = await installOf(from);
+
+  return (await database.listProblems(dayOf(from.clock.now))).map(({ kind, count, message }) => [kind, count, message]);
 }
 
 /**

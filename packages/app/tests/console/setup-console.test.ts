@@ -122,6 +122,8 @@ describe("the page", () => {
       demo: null,
       domain: false,
       domainNote: null,
+      recent: [],
+      marks: { usage: null, domain: null, settings: null },
       setup: {
         boxes,
         form: {

@@ -22,6 +22,7 @@ import { sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { MiddleColumn } from "@/shared/middle-column";
+import { HomeProblems } from "@/problems/home-problems";
 import { AppShell } from "@/shell/app-shell";
 
 /** What an install that remembers no run says in place of a count, and small beside it. */
@@ -151,6 +152,7 @@ export function DomainScreen(): ReactNode {
               <PersonSteps steps={ran.steps} />
             </div>
           )}
+          <HomeProblems home="domain" className="flex shrink-0 flex-col gap-2 px-6 pb-3 max-md:px-4" />
           {rows === undefined ? null : <Pieces rows={rows} />}
         </section>
       </MiddleColumn>

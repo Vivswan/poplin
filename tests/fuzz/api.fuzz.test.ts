@@ -93,6 +93,7 @@ function pathsOf({ site, upload, trash, limit, forever }: Named): Readonly<Recor
     "/api/sessions": [ROUTES.sessions.$path()],
     "/api/audit": [ROUTES.audit.$path({ query: { limit, site } })],
     "/api/domain": [ROUTES.domain.$path()],
+    "/api/problems": [ROUTES.problems.$path()],
     "/api/update": [ROUTES.update.$path()],
     "/api/update/address": [ROUTES.update.address.$path()],
   };
@@ -281,7 +282,10 @@ property(
       const response = await install.api.fetch(request as Request);
       const text = await response.text();
 
-      expect([[...ANSWERS, 500].includes(response.status), text.includes(install.tokens[who]), text.includes("the store is down")]).toEqual([true, false, false]);
+      // The list of problems is where an admin reads the cleaned message of a failure the install noted: no other answer holds a word of it.
+      const quoted = text.includes("the store is down") && new URL(request?.url ?? ORIGIN).pathname !== ROUTES.problems.$path();
+
+      expect([[...ANSWERS, 500].includes(response.status), text.includes(install.tokens[who]), quoted]).toEqual([true, false, false]);
     } finally {
       Object.assign(install.store, { write, list, deleteMany });
       install.reported.length = 0;

@@ -116,6 +116,18 @@ const EARLIER: readonly Moment[] = Array.from({ length: EARLIER_DAYS }, (_day, i
   return index % CHECK_EVERY === 0 ? { ago, does: "domain", by: "mira", run: "check" } : { ago, does: "login", by: "mira" };
 });
 
+/** What went wrong in the sample install, by how many hours ago: failed requests that came in a storm, a clean-up that failed in two hours of the clock, a login that could not be checked, and a day's limit reached earlier in the week. */
+const PROBLEMS = [
+  { kind: "requests_limit_reached", hoursAgo: 50, count: 1, more: false, name: null, message: null },
+  { kind: "login_unchecked", hoursAgo: 6, count: 1, more: false, name: null, message: null },
+  { kind: "sweep_failed", hoursAgo: 5, count: 2, more: false, name: "Error", message: "the store did not answer" },
+  { kind: "sweep_failed", hoursAgo: 3, count: 1, more: false, name: "Error", message: "the store did not answer" },
+  { kind: "request_failed", hoursAgo: 0.7, count: 12, more: true, name: "TypeError", message: "the store did not answer in time" },
+] as const;
+
+/** The milliseconds of one hour. */
+const HOUR_MS = 3_600_000;
+
 /** How many days before now a seeded install was set up: a day before the oldest moment of its history, so its first entry is the log's oldest. */
 export const SEEDED_DAYS = Math.ceil(Math.max(...[...SITES, ...SITE_HISTORY, ...HISTORY, ...EARLIER].map((moment) => moment.ago))) + 1;
 
@@ -380,6 +392,11 @@ export function keepLoginsWaiting(world: World, held: readonly string[]): Sample
   return { keep, secrets: () => secrets };
 }
 
+/** Note what went wrong in the sample install, each note as the install would have written it then. */
+async function noteProblems(world: World, start: number): Promise<void> {
+  for (const { hoursAgo, ...noted } of PROBLEMS) await world.install.database.noteProblem({ ...noted, at: start - Math.round(hoursAgo * HOUR_MS) });
+}
+
 /** Check the domain once as the admin, over a plug that finds every piece in place. */
 async function checkDomain(world: World): Promise<void> {
   const settings = await world.install.database.readSettings();
@@ -412,6 +429,7 @@ export async function seedWorld(world: World, samples: Samples): Promise<Seeded>
   world.clock.held = undefined;
   await countRequests(world, start);
   await checkDomain(world);
+  await noteProblems(world, start);
   const issued = done(await issueToken(world.install, world.admin, { note: ADMIN_TOKEN, scope: "admin" }), "the admin token");
 
   return { token: issued.token };

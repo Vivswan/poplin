@@ -5,7 +5,9 @@ import { describe, expect, test } from "bun:test";
 import type { SiteName } from "../../../src/names/names";
 import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenRecord } from "../../../src/auth/tokens";
+import type { ProblemNote } from "../../../src/database/problems";
 import type { DomainCheck } from "../../../src/records/domain-check";
+import { dayOf } from "../../../src/records/views";
 import type { SiteId } from "../../../src/sites/ids";
 import { auditLog, everLoggedIn } from "./audit-contract";
 import {
@@ -32,6 +34,12 @@ import {
 import { computerLogins, loginRoom, signingKey, tokensAndSettings } from "./login-contract";
 import { backups, sites, sizes, versionContents, versions } from "./site-contract";
 import { declaredFiles, storageWrites, uploadFiles, uploads } from "./upload-contract";
+
+/** The milliseconds of one hour and of one day. */
+const [HOUR_MS, DAY_MS] = [3_600_000, 86_400_000];
+
+/** A midnight UTC, where an hour of the clock and a day both begin. */
+const DAY_START = 1_699_920_000_000;
 
 function emptyInstall(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: an empty install`, () => {
@@ -161,17 +169,73 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
       expect([before, written, await database.readUpdateCheck()]).toEqual([undefined, { checked_at: NOW + 1, news: null, seen_at: null, auto: { ...start, taken: "0.2.0" } }, written]);
     });
 
-    // Drift: the frame of every screen is drawn from one read of four records. One that gave a record differently from its own read would show a release, a start, or an alarm that the screen behind it denies.
-    test("the frame's one read gives the settings, the saved address, the kept run, and the last asking, each as its own read gives it: nothing on an empty install, then each once it is kept", async () => {
+    // Drift: the frame of every screen is drawn from one read of five records. One that gave a record differently from its own read would show a release, a start, or an alarm that the screen behind it denies.
+    test("the frame's one read gives the settings, the saved address, the kept run, the last asking, and the problems of today and the day before, each as its own read gives it: nothing on an empty install, then each once it is kept", async () => {
       const database = await opened(makeDatabase);
-      const empty = await database.readFrame();
+      const empty = await database.readFrame(NOW);
       await database.initSettings(SETTINGS, BY_ADA);
       await database.keepUpdateAddress("https://builds.provider.example/hooks/first-3f9c", BY_ADA);
       await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [{ piece: "Record", detail: "every site", part: "reach", state: "ok" }] }, { run: "check" });
       await database.keepUpdateCheck({ checked_at: NOW, news: null });
-      const each = { settings: await database.readSettings(), updateAddress: await database.readUpdateAddress(), domainCheck: await database.readDomainCheck(), updateCheck: await database.readUpdateCheck() };
+      for (const ago of [0, 1, 2]) await database.noteProblem({ kind: "api_failed", at: NOW - ago * DAY_MS, count: 1, more: false, name: null, message: null });
+      const each = {
+        settings: await database.readSettings(),
+        updateAddress: await database.readUpdateAddress(),
+        domainCheck: await database.readDomainCheck(),
+        updateCheck: await database.readUpdateCheck(),
+        problems: await database.listProblems(dayOf(NOW - DAY_MS)),
+      };
 
-      expect([empty, Object.values(each).includes(undefined), await database.readFrame()]).toEqual([{ settings: undefined, updateAddress: undefined, domainCheck: undefined, updateCheck: undefined }, false, each]);
+      expect([empty, Object.values(each).includes(undefined), each.problems.length, await database.readFrame(NOW)]).toEqual([{ settings: undefined, updateAddress: undefined, domainCheck: undefined, updateCheck: undefined, problems: [] }, false, 2, each]);
+    });
+  });
+}
+
+function problems(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: what went wrong`, () => {
+    // Drift: the once-an-hour rule is the statement's own. A store that added to the row on every note would let a storm of failures spend the day's written rows, and one that never added would show a kind that fails all day as one failure.
+    test("a kind is written once per hour of the clock and UTC day: a note in the same hour changes nothing, a later hour adds to the row, and the next day starts a row", async () => {
+      const database = await opened(makeDatabase);
+      const note = (at: number, more: Partial<ProblemNote> = {}): ProblemNote => ({ kind: "request_failed", at, count: 1, more: false, name: "TypeError", message: "the first", ...more });
+      const written = [
+        await database.noteProblem(note(DAY_START)),
+        await database.noteProblem(note(DAY_START + HOUR_MS - 1, { message: "never kept" })),
+        await database.noteProblem(note(DAY_START + HOUR_MS, { count: 4, more: true, name: null, message: "the latest" })),
+        await database.noteProblem(note(DAY_START + HOUR_MS + 1, { kind: "sweep_failed", name: null, message: null })),
+        await database.noteProblem(note(DAY_START + DAY_MS)),
+      ];
+
+      expect(written).toEqual([true, false, true, true, true]);
+      expect(await database.listProblems(dayOf(DAY_START))).toEqual([
+        { day: dayOf(DAY_START + DAY_MS), kind: "request_failed", count: 1, more: false, first_at: DAY_START + DAY_MS, last_at: DAY_START + DAY_MS, name: "TypeError", message: "the first" },
+        { day: dayOf(DAY_START), kind: "sweep_failed", count: 1, more: false, first_at: DAY_START + HOUR_MS + 1, last_at: DAY_START + HOUR_MS + 1, name: null, message: null },
+        { day: dayOf(DAY_START), kind: "request_failed", count: 5, more: true, first_at: DAY_START, last_at: DAY_START + HOUR_MS, name: null, message: "the latest" },
+      ]);
+      expect((await database.listProblems(dayOf(DAY_START + DAY_MS))).map((problem) => problem.day)).toEqual([dayOf(DAY_START + DAY_MS)]);
+    });
+
+    // Drift: a limit of a day stays reached until midnight, and every refusal after the first would otherwise write a row an hour to say so again.
+    test("a kind noted once has one row a day whose count stays 1, however many hours it is noted in", async () => {
+      const database = await opened(makeDatabase);
+      const note = (at: number): ProblemNote => ({ kind: "files_limit_reached", at, count: 1, more: false, name: null, message: null });
+      const written = [await database.noteProblem(note(DAY_START)), await database.noteProblem(note(DAY_START + 5 * HOUR_MS)), await database.noteProblem(note(DAY_START + DAY_MS))];
+
+      expect(written).toEqual([true, false, true]);
+      expect((await database.listProblems(dayOf(DAY_START))).map(({ day, count, last_at }) => [day, count, last_at])).toEqual([
+        [dayOf(DAY_START + DAY_MS), 1, DAY_START + DAY_MS],
+        [dayOf(DAY_START), 1, DAY_START],
+      ]);
+    });
+
+    // Drift: nothing else removes a problem. A sweep that kept every day would grow the table for ever, and one that took a day too many would empty the list a person reads.
+    test("the sweep forgets the problems of the days before the 30 kept, and keeps the thirtieth", async () => {
+      const database = await opened(makeDatabase);
+      const note = (at: number): ProblemNote => ({ kind: "api_failed", at, count: 1, more: false, name: null, message: null });
+      for (const at of [DAY_START, DAY_START + DAY_MS, DAY_START + 30 * DAY_MS]) await database.noteProblem(note(at));
+
+      await database.sweepRunOut(DAY_START + 30 * DAY_MS + HOUR_MS);
+
+      expect((await database.listProblems(dayOf(DAY_START))).map((problem) => problem.day)).toEqual([dayOf(DAY_START + 30 * DAY_MS), dayOf(DAY_START + DAY_MS)]);
     });
   });
 }
@@ -200,7 +264,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       await database.keepDomainCheck(second, { run: "repair", from: "setup" });
 
       expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, { ...first, users_changed_at: null }, { ...second, users_changed_at: null }]);
-      expect(await database.readFrame()).toEqual({ settings: undefined, updateAddress: undefined, domainCheck: { ...second, users_changed_at: null }, updateCheck: undefined });
+      expect(await database.readFrame(NOW)).toEqual({ settings: undefined, updateAddress: undefined, domainCheck: { ...second, users_changed_at: null }, updateCheck: undefined, problems: [] });
       expect((await auditTrail(database)).map(({ action, by, at, detail }) => ({ action, by, at, detail }))).toEqual([
         { action: "domain_synced", by: ADA, at: NOW, detail: { run: "check", from: "dashboard" } },
         { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "setup" } },
@@ -506,6 +570,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   sweepPlace(label, makeDatabase);
   updateCheck(label, makeDatabase);
   domainCheck(label, makeDatabase);
+  problems(label, makeDatabase);
   requestCounts(label, makeDatabase);
   uploads(label, makeDatabase);
   uploadFiles(label, makeDatabase);

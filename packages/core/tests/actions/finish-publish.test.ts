@@ -136,6 +136,8 @@ describe("finishPublish", () => {
       { ok: false, code: "too_large", about: "max_files_per_day" },
     ]);
     expect([copied.ok, last.ok, tomorrow.ok]).toEqual([true, true, true]);
+    // The day's limit is noted once, on the day it was reached, however many uploads it refused.
+    expect((await world.install.database.listProblems(dayOf(world.clock.now - DAY))).map(({ day, kind, count }) => [day, kind, count])).toEqual([[dayOf(world.clock.now - DAY), "files_limit_reached", 1]]);
   });
 
   // Drift: a host bills every write to its store past a month's free amount. A file counted when it is sent would cost the database a row a file; one never counted, or a copy counted once, would let a day pass the bound.
@@ -158,6 +160,7 @@ describe("finishPublish", () => {
     const spent = { ok: false, code: "allowance_spent", about: "max_storage_writes_per_day" };
     expect<unknown>([copied.ok, four, copy, three.ok, one, tomorrow.ok]).toEqual([true, spent, spent, true, spent, true]);
     expect(counted).toEqual({ writes: 9, most: 9 });
+    expect((await world.install.database.listProblems(day)).map(({ day: noted, kind, count }) => [noted, kind, count])).toEqual([[day, "writes_limit_reached", 1]]);
   });
 
   // Drift: serving reads the store for a `404.html`, and for a file without an extension, only when the live version's record says it holds one. A record made from another list than the files published would hide a file or cost every miss a read.

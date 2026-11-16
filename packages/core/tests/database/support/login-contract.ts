@@ -451,7 +451,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       for (const login of [old, decided, live]) await database.addComputerLogin(login, ROOM);
       await database.decideComputerLogin(decided.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
 
-      expect([await database.sweepComputerLogins(old.expiresAt - 1), await database.sweepComputerLogins(old.expiresAt), await database.sweepComputerLogins(old.expiresAt)]).toEqual([0, 2, 0]);
+      expect([await database.sweepRunOut(old.expiresAt - 1), await database.sweepRunOut(old.expiresAt), await database.sweepRunOut(old.expiresAt)]).toEqual([0, 2, 0]);
       expect([await database.getComputerLogin(old.id), await database.getComputerLogin(decided.id), await database.getComputerLogin(live.id)]).toEqual([undefined, undefined, live]);
     });
   });

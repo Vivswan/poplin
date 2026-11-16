@@ -6,6 +6,7 @@ import type { Api } from "@poplin/app/src/api/api";
 import type { ExportedSite } from "@poplin/core/src/actions/export";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { settingsFromText } from "@poplin/core/src/records/settings";
+import { dayOf } from "@poplin/core/src/records/views";
 import { parse } from "es-module-lexer/js";
 import type { ExtractSchema } from "hono/types";
 import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
@@ -108,6 +109,7 @@ const EVERY_ROUTE: { readonly [Path in keyof Routes]: { readonly [Method in keyo
   "/api/sessions": { $delete: (calls) => calls.sessions.$delete({ query: {} }) },
   "/api/audit": { $get: (calls) => calls.audit.$get({ query: SITE.param }) },
   "/api/domain": { $get: (calls) => calls.domain.$get({ query: {} }) },
+  "/api/problems": { $get: (calls) => calls.problems.$get({ query: {} }) },
   "/api/update": { $post: (calls) => calls.update.$post({ query: {} }) },
   "/api/update/address": {
     $get: (calls) => calls.update.address.$get({ query: {} }),
@@ -959,6 +961,23 @@ describe("a copy of a site", () => {
     },
     COPY_MS,
   );
+});
+
+describe("a request that fails", () => {
+  // Drift: a failure of the bucket or the database was a line in the provider's log, which the install cannot read, so the owner never learned of it. A note on every failure would be a row a request in a storm.
+  test("a page whose file the bucket refuses is answered try again, and noted once with the failure's name and its message without the address in it", async () => {
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const site = await publish(instance(w), await tokenOf(w, "admin"), { name: "report", access: "public" }, [page("<h1>report</h1>")]);
+    const away = () => Promise.reject(new Error("the bucket at https://bucket.example.com/report/v1/index.html is away"));
+    const broken = withBindings({ SITES: new Proxy(BINDINGS.SITES, { get: (inner, name) => (name === "get" || name === "head" ? away : Reflect.get(inner, name, inner)) }) });
+    const worker = instance(w);
+
+    const answers = [await ask(worker, `${site.addresses.public}/`, {}, broken), await ask(worker, `${site.addresses.public}/`, {}, broken)];
+    const { database } = await installOf(w);
+
+    expect([answers.map((answer) => answer.status), await answers[0]?.text(), failed.mock.calls.length]).toEqual([[503, 503], "Something went wrong. Try again.\n", 2]);
+    expect((await database.listProblems(dayOf(w.clock.now))).map(({ kind, count, name, message }) => ({ kind, count, name, message }))).toEqual([{ kind: "request_failed", count: 1, name: "Error", message: "the bucket at ... is away" }]);
+  });
 });
 
 describe("the rows the live checks count", () => {

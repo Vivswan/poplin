@@ -14,6 +14,7 @@ import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
 import type { DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
+import type { Problem } from "../records/problem";
 import { LOGIN } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
@@ -76,6 +77,7 @@ import type {
 } from "./database";
 import { domainCheckAsked, domainCheckIn, domainCheckKept, usersChanged, usersReplaced } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
+import { type ProblemNote, problemNoted, problemsAsked, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
 import { fileUnderKey, manifestFromText, manifestKey, manifestToText } from "./manifest";
 import {
@@ -1028,10 +1030,22 @@ export class SqlDatabase implements Database {
     return { kind: changed(inserted) ? "done" : "not_allowed" };
   }
 
-  async sweepComputerLogins(now: number): Promise<number> {
-    const [removed] = await this.#driver.batch([built(BUILD.delete(logins).where(lte(logins.expires_at, now)))]);
+  async sweepRunOut(now: number): Promise<number> {
+    const [removed] = await this.#driver.batch([built(BUILD.delete(logins).where(lte(logins.expires_at, now))), problemsForgotten(now)]);
 
     return removed?.changes ?? 0;
+  }
+
+  async noteProblem(note: ProblemNote): Promise<boolean> {
+    const [noted] = await this.#driver.batch([problemNoted(note)]);
+
+    return changed(noted);
+  }
+
+  async listProblems(since: string): Promise<readonly Problem[]> {
+    const [read] = await this.#driver.batch([problemsAsked(since)]);
+
+    return problemsIn(read);
   }
 
   async readSweepPlace(): Promise<SweepPlace | undefined> {
@@ -1124,10 +1138,11 @@ export class SqlDatabase implements Database {
     return settingsIn(read);
   }
 
-  async readFrame(): Promise<FrameRecords> {
-    const [stored, address, domain, update] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_ADDRESS, domainCheckAsked(), READ_UPDATE_CHECK]);
+  async readFrame(now: number): Promise<FrameRecords> {
+    const [yesterday] = daysUpTo(dayOf(now), 2);
+    const [stored, address, domain, update, noted] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_ADDRESS, domainCheckAsked(), READ_UPDATE_CHECK, problemsAsked(yesterday ?? dayOf(now))]);
 
-    return { settings: settingsIn(stored), updateAddress: updateAddressIn(address), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update) };
+    return { settings: settingsIn(stored), updateAddress: updateAddressIn(address), domainCheck: domainCheckIn(domain), updateCheck: updateCheckIn(update), problems: problemsIn(noted) };
   }
 
   async initSettings(values: SettingValues, signed: Signed): Promise<{ readonly kind: "done" | "already_set"; readonly values: SettingValues }> {

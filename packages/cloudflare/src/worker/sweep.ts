@@ -3,8 +3,8 @@
 //                        database calls                                                        other calls           in all
 //   the newer version     1: the last asking read                                                0                      1
 //   the day's first run   3: that, the settings, the answer written                              1: the website asked   4
-//   an update started     6: the address twice, the try, the settings, the answer, and the       1: the build started   7
-//                            audit entry or the try taken back
+//   an update started     7: the address twice, the try, the settings, the answer, and the       1: the build started   8
+//                            audit entry, or the try taken back and the problem noted
 //   one step, at most    18: the settings, a listing, 5 x (a read, a change, a leftover gone),   150: 5 x 30 to the bucket   168
 //                            and the day's count of writes to the bucket, read before a run's first listing of it
 //   sites, none due       2: the settings, a listing                                              0                      2
@@ -18,10 +18,10 @@
 
 import { startDueUpdate } from "@poplin/core/src/actions/auto-update";
 import { type Asking, checkForUpdate } from "@poplin/core/src/actions/check-update";
+import { meterNoted } from "@poplin/core/src/actions/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Rebuilding } from "@poplin/core/src/actions/start-update";
 import { SWEEP_SPARE_WRITES, SWEEPER, sweepExpired } from "@poplin/core/src/actions/sweep";
-import { meterStore } from "@poplin/core/src/storage/metered";
 
 /** How many sites or uploads one step looks at. */
 const STEP_ITEMS = 5;
@@ -91,7 +91,7 @@ function fitsAnotherStep(tally: Tally): boolean {
 export async function runSweep(install: Install, asking: Asking, running: Running): Promise<void> {
   const tally: Tally = { database: 0, bucket: 0, web: 0 };
   const database = counted(install.database, tally, "database");
-  const meter = meterStore(install.store, { database, now: install.now, spare: SWEEP_SPARE_WRITES });
+  const meter = meterNoted({ ...install, database }, SWEEP_SPARE_WRITES);
   const watched: Install = { ...install, database, store: counted(meter.store, tally, "bucket") };
   const learned = await checkForUpdate(watched, counted(asking, tally, "web"));
   const rebuilding = { ...running.rebuilding, fetch: counted({ fetch: running.rebuilding.fetch }, tally, "web").fetch };

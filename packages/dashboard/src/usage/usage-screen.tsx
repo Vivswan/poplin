@@ -1,4 +1,4 @@
-// The Usage screen: what the install holds and has answered today, each number beside its limit, with words only once a number nears it, and the way to the setting that holds the limit.
+// The Usage screen: what the install holds and has answered today, each number beside its limit, with words only once a number nears it, and the way to the setting that holds the limit. Under them, what went wrong in the last days.
 
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";
@@ -7,6 +7,8 @@ import { ArrowUpRightIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { Progress } from "@/components/ui/progress";
+import { ProblemsBlock } from "@/problems/problems-block";
+import { ProblemsPlace } from "@/problems/problems-place";
 import { showCount } from "@/lib/sites";
 import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
@@ -109,27 +111,30 @@ export function UsageScreen(): ReactNode {
 
   return (
     <AppShell current="usage" heading="Usage">
-      <section aria-label="Usage" className="line-room flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-        <VisitsBlock />
-        {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
-        {usage === undefined && error === null ? <WaitingRows /> : null}
-        {usage === undefined ? null : (
-          <>
-            <div className="shrink-0 max-md:hidden">
-              <DataTable
-                label="Usage"
-                columns={columns}
-                rows={usage.lines}
-                rowId={(line) => line.what}
-                layout={layout}
-                sort={AS_GIVEN}
-                actions={(line) => <LimitLink line={line} />}
-              />
-            </div>
-            <PhoneList lines={usage.lines} />
-          </>
-        )}
-      </section>
+      <ProblemsPlace>
+        <section aria-label="Usage" className="line-room flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+          <VisitsBlock />
+          {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
+          {usage === undefined && error === null ? <WaitingRows /> : null}
+          {usage === undefined ? null : (
+            <>
+              <div className="shrink-0 max-md:hidden">
+                <DataTable
+                  label="Usage"
+                  columns={columns}
+                  rows={usage.lines}
+                  rowId={(line) => line.what}
+                  layout={layout}
+                  sort={AS_GIVEN}
+                  actions={(line) => <LimitLink line={line} />}
+                />
+              </div>
+              <PhoneList lines={usage.lines} />
+            </>
+          )}
+          <ProblemsBlock />
+        </section>
+      </ProblemsPlace>
     </AppShell>
   );
 }
