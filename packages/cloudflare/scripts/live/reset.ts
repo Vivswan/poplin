@@ -2,7 +2,7 @@
 //
 //   a token for the reset -> the sample sites that still are what the demo's own table ends in, found -> every other site but the demo removed for good, the trash too
 //     -> the missing sample sites published -> the demo built, given the address of each sample site, and published at the public name `demo` unless it holds those files already
-//     -> waiting logins and every token removed
+//     -> waiting logins and every token removed -> the files of the bucket that no record of the database names removed, as far as one run's ceiling goes
 //
 // The install then lists the sites the demo lists, each open to the same people, and the demo's links lead to them.
 // A site that is kept costs the database no row and the bucket no write: a reset after checks that left the samples alone writes nothing but its own token.
@@ -27,6 +27,7 @@ import { buildDemo } from "../../../demo/scripts/build";
 import { REAL_SITES_FILE, type RealSites } from "../../../demo/src/preview/real-sites";
 import { standingSites, THE_DEMO } from "../../../demo/src/preview/sample-sites";
 import { CEILINGS, meterBucket } from "./budget";
+import { type Orphans, removeOrphans } from "./orphans";
 import { meterRows, ROW_CEILINGS } from "./rows";
 import { isSameSite, type Wanted } from "./same-site";
 import { type Cli, publishSamples, type Sample, sampleSites, wantedOf } from "./samples";
@@ -120,6 +121,9 @@ interface Tally {
   /** The rows it made the database write, at most, by the price of each request. */
   readonly rows: number;
 }
+
+/** What a reset of the test install did, and what came of removing the files no record names after it. */
+type Ended = Tally & { readonly orphans: Orphans | Stop };
 
 /** One page of a listing. */
 type Sites = v.InferOutput<typeof LISTED_SITES>["sites"];
@@ -332,8 +336,8 @@ export async function resetInstall(ends: ResetEnds): Promise<Tally | Stop> {
   return stopped === undefined ? ended : { kind: "failed", what: `the reset ${stopped}` };
 }
 
-/** Reset the owner's test install with a token made for the reset; answers `undefined` for an account that holds no install. */
-async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
+/** Reset the owner's test install with a token made for the reset, then remove the files no record names; answers `undefined` for an account that holds no install. */
+async function resetTestInstall(run: Run): Promise<Ended | Stop | undefined> {
   const found = await findInstall(run);
   if (isStop(found)) return found;
 
@@ -343,7 +347,7 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
   const token = await seedToken(run, database, Date.now());
   if (typeof token !== "string") return token;
 
-  return resetInstall({
+  const ended = await resetInstall({
     server: `https://${found.adminHost}`,
     token,
     fetch: sendLive,
@@ -357,10 +361,25 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
     ceiling: CEILINGS.reset,
     rowCeiling: ROW_CEILINGS.reset,
   });
+  if (isStop(ended)) return ended;
+
+  return { ...ended, orphans: await removeOrphans(run, found.zone, { database, ceiling: CEILINGS.orphans }) };
 }
 
-/** Tell the log and the step summary what came of a reset, and answer the exit code: 0 for a reset that ran to its end, and for an account with no install. */
-function tell(run: Run, ended: Tally | Stop | undefined): number {
+/** The rows that say what became of the files no record names: what went and what is left, and the lists and deletes it took. None for a removal that stopped before it removed anything. */
+function orphanRows(orphans: Orphans | Stop): readonly (readonly [string, string])[] {
+  if (isStop(orphans)) return [];
+
+  const { folders, objects, left, calls } = orphans;
+
+  return [
+    ["Files no site owns", `removed ${folders} folders and ${objects} objects, ${left.folders} folders and ${left.objects} objects remain`],
+    ["Bucket lists and deletes for them", `${calls} of at most ${CEILINGS.orphans}`],
+  ];
+}
+
+/** Tell the log and the step summary what came of a reset, and answer the exit code: 0 for a reset that ran to its end and a removal no refusal stopped, and for an account with no install. */
+function tell(run: Run, ended: Ended | Stop | undefined): number {
   if (ended === undefined) {
     run.annotate("notice", NO_INSTALL);
     run.summarize(`### The reset\n\n${NO_INSTALL}\n`);
@@ -382,13 +401,16 @@ function tell(run: Run, ended: Tally | Stop | undefined): number {
     ["Bucket writes and lists", `${ended.operations} of at most ${CEILINGS.reset}`],
     ["Rows written this run", `${ended.rows} of at most ${ROW_CEILINGS.reset}`],
     ["Waiting logins and tokens", "removed"],
+    ...orphanRows(ended.orphans),
   ];
   for (const [what, result] of rows) run.say(`${what}: ${result}`);
 
   run.say("The test install holds the sample sites and the demo alone.");
   run.summarize(["### The reset", "", "| Step | Result |", "| --- | --- |", ...rows.map(([what, result]) => `| ${what} | ${result} |`), ""].join("\n"));
 
-  return 0;
+  const stopped = isStop(ended.orphans) ? ended.orphans : ended.orphans.stopped;
+
+  return stopped === undefined ? 0 : reportStop(run, stopped, "The files no site of the test install owns were not all removed");
 }
 
 /**

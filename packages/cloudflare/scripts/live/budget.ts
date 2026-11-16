@@ -28,8 +28,8 @@ const SPENDING = [
 /** The method and the path of each spending route, as a request is matched against them. */
 const MATCHERS = SPENDING.map(({ method, path }) => ({ method, path: new URLPattern({ pathname: path }) }));
 
-/** The most bucket writes and lists each step of a run may ask for: the checks, the checks with the publish of two thousand files, and the reset. */
-export const CEILINGS = { checks: 150, manyFiles: 2300, reset: 150 } as const;
+/** The most bucket writes and lists each step of a run may ask for: the checks, the checks with the publish of two thousand files, and the reset. `orphans` is the most lists and deletes a run asks Cloudflare for to remove the files no record names. */
+export const CEILINGS = { checks: 150, manyFiles: 2300, reset: 150, orphans: 300 } as const;
 
 /** The status a held-back request is answered with. */
 const HELD_BACK = 403;

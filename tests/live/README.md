@@ -22,6 +22,7 @@ Live Checks workflow
                                                  `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
+  packages/cloudflare/scripts/live/orphans.ts    after the reset: the files of the bucket no record of the database names, removed
   step summary                                   one table of the install's pieces, one of the checks, one of the reset
 ```
 
@@ -83,6 +84,7 @@ One install on the Cloudflare test account, called staging. It stays up between 
 | a sample that differs from its row, for good  | the Worker, the bucket, the database, and the zone's objects                          |
 | every token, its own among them               | the sample sites below: one that still matches is kept, any other is published anew   |
 | every login of a computer that waits          | the demo: a public site with the public name `demo`, updated where it stands          |
+| the files of the bucket no record names       | the files of every site, of every upload, and of a removed site the install still empties |
 
 | A sample is kept when                                      | It is published anew after                                    |
 | ---------------------------------------------------------- | ------------------------------------------------------------- |
@@ -163,6 +165,27 @@ Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and code
 
 Every other check runs on both installs, at the addresses of each one's layout. No run logs in: the checks of a person stay skipped on both.
 
+## The files no record names
+
+The install finds a site's files by a record of its database. A run that makes the database anew drops every record, and the files of the database before it stay in the bucket. The reset removes them when it has put the install back.
+
+| A folder of the bucket                                    | The reset                      |
+| --------------------------------------------------------- | ------------------------------ |
+| of a site, in the trash or not                            | leaves it                      |
+| of an upload, on its way, given up, or finished           | leaves it                      |
+| of a removed site whose files the install still removes   | leaves it                      |
+| that no such record names                                 | removes its files, one a call  |
+| a key that starts with no folder of a site                | leaves it                      |
+
+One run lists the bucket, a thousand files a call, and removes at most what its 300 lists and deletes reach. R2 counts a list with the writes and bills no delete. What is left waits for the next run, the midnight reset among them.
+
+It acts on a test account alone, as the start-over does, and on the bucket of the run's own install: each of the two installs has its own bucket, guard, and ceiling.
+
+```text
+Files no site owns: removed 4 folders and 298 objects, 21 folders and 1457 objects remain
+Bucket lists and deletes for them: 300 of at most 300
+```
+
 ## What keeps the test account at no cost
 
 Each account has its own allowances, and every ceiling below holds for each install by itself.
@@ -174,6 +197,7 @@ Each account has its own allowances, and every ceiling below holds for each inst
 | a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
 | bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
+| bucket lists and deletes: 300 together by the removal of the files no record names | `orphans.ts`, around every call to Cloudflare for the bucket | the removal stops, and the next run goes on |
 | rows written to the database: 1,100 by the checks, 600 by a reset | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
@@ -188,12 +212,15 @@ Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)
 ```
 
 ```text
-one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 150 (reset) = 302 bucket writes and lists
-a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
-31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
-a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
-a usual run                      about 77 (checks) + 0 (a reset that keeps every sample and the demo)
+one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 150 (reset) + 301 (the files no record names, were every call a list) = 603 bucket writes and lists
+a day of 40 such runs            40 x 603 + 451 (the midnight reset) = 24,571
+31 such days                     24,571 x 31 = 761,701 of the 1,000,000 R2 takes for free in a month
+with a bucket of 2,000 files     3 in place of the 301: 305 a run, 12,353 a day, 382,943 a month
+a run with the many-files check  2 + 2,300 + 150 + 301 = 2,753, started by hand alone
+a usual run                      about 77 (checks) + 0 (a reset that keeps every sample and the demo) + 2 (the bucket found, and listed once)
 a reset that keeps nothing       about 131
+either install                   the same sums, each against the 1,000,000 of its own account
+the files no record names        the bucket found, and 1 list for every thousand files it holds; a delete is free, and counted against the 300 all the same
 ```
 
 A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
