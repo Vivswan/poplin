@@ -32,8 +32,19 @@ export const FREE_LIMITS = {
 /** A host of the tests' own that reads no figures: each limit and each page differs, so a number or a link on the wrong line is seen. */
 export const USAGE_HOST = {
   name: "Provider",
-  limits: { requestsPerDay: 100_000, rowsReadPerDay: 5_000_000, rowsWrittenPerDay: 90_000, storedBytes: 10_000_000_000, storageWritesPerMonth: 1_000_000, storageReadsPerMonth: 10_000_000 },
-  links: { requests: "https://provider.example/requests", database: "https://provider.example/database", storage: "https://provider.example/storage" },
+  limits: {
+    requestsPerDay: 100_000,
+    rowsReadPerDay: 5_000_000,
+    rowsWrittenPerDay: 90_000,
+    storedBytes: 10_000_000_000,
+    storageWritesPerMonth: 1_000_000,
+    storageReadsPerMonth: 10_000_000,
+    databaseBytes: 400_000_000,
+    accountDatabaseBytes: 5_000_000_000,
+    processingMs: 10,
+    jobsAtOnce: 100,
+  },
+  links: { requests: "https://provider.example/requests", database: "https://provider.example/database", storage: "https://provider.example/storage", jobs: "https://provider.example/jobs" },
 } as const;
 
 /** The version of poplin the test console says it runs. */

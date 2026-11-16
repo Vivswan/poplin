@@ -173,6 +173,20 @@ describe("the Visits block", () => {
     ]);
   });
 
+  // Drift: Clear turns itself off once nothing is picked, and a button that is turned off while it holds the focus drops it to the page, so the typing after it goes nowhere.
+  test("keeps the focus in the picker's field after Clear", async () => {
+    keep(4);
+    await draw();
+    await doing(() => fireEvent.click(within(document.body).getByRole("combobox", { name: "Compare sites" })));
+    await within(document.body).findByRole("option", { name: /^Report/ });
+    const clear = within(document.body).getByRole("button", { name: "Clear" });
+    clear.focus();
+    await doing(() => fireEvent.click(clear));
+    await settle();
+
+    expect([document.activeElement?.getAttribute("aria-label"), kept().sites]).toEqual(["Find a site", []]);
+  });
+
   // Drift: a pick would not reach the server, a small cap would come back and stop a sixth site, two picked sites would share a look, or every listed site could not be ticked or unticked at once.
   test("asks for a site once it is ticked, lets a sixth be ticked, ticks every listed site at once with a look of its own each, and clears them all", async () => {
     keep(4);

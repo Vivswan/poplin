@@ -1,6 +1,6 @@
 // The control that picks the sites drawn beside all sites: a button that opens a list to search and tick, with the ways to tick every listed site and to clear the ticks.
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { useDebounce } from "use-debounce";
 
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,12 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
   const stale = typed.trim() !== asked || isPlaceholderData;
   const ticked: readonly Option[] = picked.map((site) => ({ id: site.id, title: site.title, name: "" }));
   const full = picked.length >= MOST_PICKED;
+  const field = useRef<HTMLInputElement>(null);
+  // Clear is turned off once nothing is picked, and a button turned off while it holds the focus drops it to the page: the field takes it first, so the typing after a Clear still finds a site.
+  const clear = (): void => {
+    field.current?.focus();
+    onPick([]);
+  };
 
   return (
     <Combobox
@@ -68,12 +74,12 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
         {picked.length === 0 ? null : <span className="text-muted-foreground tabular-nums">{picked.length}</span>}
       </ComboboxTrigger>
       <ComboboxContent align="end" aria-label="Compare sites" className="w-72">
-        <ComboboxInput placeholder="Find a site" aria-label="Find a site" showTrigger={false} />
+        <ComboboxInput ref={field} placeholder="Find a site" aria-label="Find a site" showTrigger={false} />
         <div className="flex items-center gap-1 border-b px-1.5 py-1">
           <Button type="button" variant="ghost" size="xs" disabled={options.length === 0} onClick={() => onPick(pickedAfter(picked, [...ticked, ...options]))}>
             Select all
           </Button>
-          <Button type="button" variant="ghost" size="xs" disabled={picked.length === 0} onClick={() => onPick([])}>
+          <Button type="button" variant="ghost" size="xs" disabled={picked.length === 0} onClick={clear}>
             Clear
           </Button>
         </div>

@@ -2,6 +2,7 @@
 //
 // D1 says with every answer how many rows the statement read and wrote: the numbers its daily allowance is counted in.
 // The driver adds them up for its instance, UTC day by UTC day, until the day's count takes them. A statement D1 rejected names none, so it adds nothing.
+// D1 also says with every answer how large the database is after the statement, in bytes: the driver keeps the last size it was told.
 // Only the day that is running is held: what is left of a day when the next one begins is dropped, and so are the rows of a batch that was sent on one day and answered on the next. No day is given the rows of another.
 
 import type { RowsUsed } from "@poplin/core/src/database/database";
@@ -22,6 +23,8 @@ export class D1Driver implements SqlDriver {
 
   #rows: RowsUsed = NO_ROWS;
 
+  #bytes: number | undefined;
+
   /**
    * @param now - the clock, in milliseconds since the epoch, which says the UTC day a statement's rows are of; the runtime's own when absent
    */
@@ -37,6 +40,7 @@ export class D1Driver implements SqlDriver {
       throw allowanceSpent(error) ?? error;
     });
 
+    this.#bytes = results.at(-1)?.meta.size_after ?? this.#bytes;
     if (dayOf(this.#now()) === day) {
       this.returnRows(day, {
         read: results.reduce((sum, result) => sum + result.meta.rows_read, 0),
@@ -45,6 +49,11 @@ export class D1Driver implements SqlDriver {
     }
 
     return results.map((result) => ({ rows: result.results, changes: result.meta.changes }));
+  }
+
+  /** The bytes the database held after the last statement D1 answered this instance; `undefined` before the first. */
+  heldBytes(): number | undefined {
+    return this.#bytes;
   }
 
   /**

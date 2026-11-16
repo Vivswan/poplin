@@ -51,12 +51,52 @@ const FREE_LIMITS = {
   logins: { most: 50, warning: "Past 50 users, the host bills each login." },
 } as const;
 
-/** The invented host's side of the Usage screen: sample limits, and pages nothing answers at. It reads no figures of its own. */
-const USAGE_HOST = {
-  name: "the host",
-  limits: { requestsPerDay: 100_000, rowsReadPerDay: 5_000_000, rowsWrittenPerDay: 100_000, storedBytes: 10_000_000_000, storageWritesPerMonth: 1_000_000, storageReadsPerMonth: 10_000_000 },
-  links: { requests: "https://provider.example/usage/requests", database: "https://provider.example/usage/database", storage: "https://provider.example/usage/storage" },
+/** The figures the invented host answers as its own: made up, the same at every reading, with a processing time above its limit so the sign of one shows. */
+const SAMPLE_FIGURES = {
+  requests: 1318,
+  errors: 4,
+  stopped: 0,
+  slowestMs: 12.4,
+  rowsRead: 13_902,
+  rowsWritten: 342,
+  databaseBytes: 2_300_000,
+  storedBytes: 5_000_000,
+  files: 212,
+  unfinishedUploads: 3,
+  storageWrites: 41_200,
+  storageReads: 310_000,
+  jobsStarted: 6,
+  jobsDone: 5,
+  jobsFailed: 0,
+  jobsRunning: 1,
 } as const;
+
+/** The invented host's side of the Usage screen as an install that keeps no key has it: sample limits, pages nothing answers at, a made-up size of the database, and no figures of the host's own. */
+const OWN_USAGE_HOST = {
+  name: "the host",
+  limits: {
+    requestsPerDay: 100_000,
+    rowsReadPerDay: 5_000_000,
+    rowsWrittenPerDay: 100_000,
+    storedBytes: 10_000_000_000,
+    storageWritesPerMonth: 1_000_000,
+    storageReadsPerMonth: 10_000_000,
+    databaseBytes: 500_000_000,
+    accountDatabaseBytes: 5_000_000_000,
+    processingMs: 10,
+    jobsAtOnce: 100,
+  },
+  links: {
+    requests: "https://provider.example/usage/requests",
+    database: "https://provider.example/usage/database",
+    storage: "https://provider.example/usage/storage",
+    jobs: "https://provider.example/usage/jobs",
+  },
+  databaseBytes: () => 1_400_000,
+} as const;
+
+/** The same side as an install that keeps a key has it: with sample figures in place of ones read anywhere, said to run ten minutes behind. */
+const USAGE_HOST = { ...OWN_USAGE_HOST, behindMs: 600_000, official: async (now: number) => ({ ok: true, value: { at: now, ...SAMPLE_FIGURES } }) as const } as const;
 
 /** When the sample release the seeded install knows of came out, where its notes are (the page of the project's releases), and its schema, which is the install's own. No such release exists. */
 const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", schema: OWN_SCHEMA } as const;
@@ -219,7 +259,8 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
     base,
     client: host.client,
     freeLimits: FREE_LIMITS,
-    usage: USAGE_HOST,
+    // The install that holds nothing stands for one that keeps no key, so both kinds of the Usage screen can be seen.
+    usage: prefix === EMPTY_PREFIX ? OWN_USAGE_HOST : USAGE_HOST,
     update: sampleUpdate(world),
     demo: { reset: `${base}${RESET_PATH}` },
     domain: changingPlug(world.kind.provider),
