@@ -511,6 +511,27 @@ function panel(page: Page): Locator {
   return page.getByRole("dialog", { name: SAMPLE.site, exact: true });
 }
 
+/** Press a place of the page beside an open panel that holds no control: the blank under the table's last row, a heading of the table beside its words, the band over the screen, or the blank under the sections. */
+async function pressBeside(page: Page, beside: "under the last row" | "on a heading of the table" | "on the band over the screen" | "on the blank of the sections"): Promise<void> {
+  const list = page.getByRole("region", { name: "Sites", exact: true });
+  if (beside === "under the last row") {
+    const room = await list.boundingBox();
+    const last = await list.getByRole("row").last().boundingBox();
+    if (room === null || last === null) throw new Error("the list is out of sight");
+    // The control: there is blank under the last row.
+    expect(room.y + room.height - (last.y + last.height)).toBeGreaterThan(40);
+
+    return page.mouse.click(room.x + 120, room.y + room.height - 20);
+  }
+  if (beside === "on a heading of the table") return list.getByRole("columnheader").first().click({ position: { x: 8, y: 6 } });
+  if (beside === "on the band over the screen") return page.locator("header").first().click({ position: { x: 12, y: 4 } });
+
+  const sections = await page.getByRole("navigation", { name: "Sections", exact: true }).boundingBox();
+  if (sections === null) throw new Error("the sections are out of sight");
+
+  return page.mouse.click(sections.x + sections.width / 2, sections.y + sections.height + 80);
+}
+
 /** A question that asks before a change. */
 function question(page: Page, title: string | RegExp): Locator {
   return page.getByRole("alertdialog", { name: title, exact: true });
@@ -717,6 +738,23 @@ test.describe("on a screen 1920 px wide", () => {
     expect(await column.first().evaluate((at) => (at.parentElement?.offsetWidth ?? 0) - (at.parentElement?.clientWidth ?? 0))).toBeGreaterThan(0);
     expect(await room(bar.locator(column))).toEqual(await room(column.first()));
   });
+});
+
+test.describe("on a screen 1440 px wide, beside a site's panel", () => {
+  test.use({ viewport: VIEWPORTS[0] });
+
+  // Drift: the panel would stay open again after a press on the blank under the rows, where the list takes the focus before the press ends, or on a heading of the table.
+  for (const beside of ["under the last row", "on a heading of the table", "on the band over the screen", "on the blank of the sections"] as const) {
+    test(`a press ${beside} closes the panel and leaves the focus on the row's button`, async ({ page }) => {
+      await arrive(page);
+      await openPanel(page, SAMPLE.site);
+      await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
+
+      await pressBeside(page, beside);
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true })).toBeFocused();
+    });
+  }
 });
 
 test.describe("on a screen 1440 px wide, under a site's panel", () => {
@@ -930,6 +968,17 @@ test.describe("on a phone, after a site's panel", () => {
 for (const size of [PHONE, FITS_FROM]) {
   test.describe(`on a screen ${size.width} px wide, where a site's panel takes the list's place`, () => {
     test.use({ viewport: size });
+
+    // Drift: a press beside the panel would leave it open again where the list is out of sight: Close and Escape alone closed it.
+    test("a press on the band over the screen closes the panel and leaves the focus on the row's button", async ({ page }) => {
+      await arrive(page);
+      await openPanel(page, SAMPLE.site);
+      await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
+
+      await pressBeside(page, "on the band over the screen");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true })).toBeFocused();
+    });
 
     // Drift: Tab after the panel's last control would stop on a place with no name again, with the panel still open; or Escape would leave the focus on the page itself where the list is a table.
     test("Tab after the panel's last control closes the panel and goes to the row's button, and so does Escape", async ({ page }) => {
