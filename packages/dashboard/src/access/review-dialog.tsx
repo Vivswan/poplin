@@ -3,7 +3,7 @@
 // Anyone can begin a login, so nothing the login says of itself is the page's own words: its name is a quoted fact, and what it may change starts at the least, whatever it asked for.
 
 import { useMutation } from "@tanstack/react-query";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, type RefObject, useRef, useState } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
 import type { Review } from "@/access/access-queries";
@@ -186,8 +186,14 @@ function ReviewForm({
     setRefusal(undefined);
   };
 
+  // Enter in the field does what Allow does, and nothing while Allow is off.
+  const allow = (event: FormEvent): void => {
+    event.preventDefault();
+    decide(true);
+  };
+
   return (
-    <>
+    <form onSubmit={allow} className="contents">
       <DialogHeader>
         <DialogTitle className="pr-8">Allow this login?</DialogTitle>
         <DialogDescription className={byLink ? "text-foreground" : undefined}>{SAYS_FIRST[byLink ? "linked" : "listed"]}</DialogDescription>
@@ -214,11 +220,11 @@ function ReviewForm({
         <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>
           Deny
         </Button>
-        <Button type="button" disabled={busy || lettersIn(typed) < TYPED_LETTERS} onClick={() => decide(true)}>
+        <Button type="submit" disabled={busy || lettersIn(typed) < TYPED_LETTERS}>
           Allow
         </Button>
       </DialogFooter>
-    </>
+    </form>
   );
 }
 

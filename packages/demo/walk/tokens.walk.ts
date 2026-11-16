@@ -1,4 +1,4 @@
-// The Tokens tab of Access: the list of tokens keeps its columns when the removed tokens under it are opened.
+// The Tokens tab of Access: the list of tokens keeps its columns when the removed tokens under it are opened, and Enter in a review's field does what Allow does.
 
 import { expect, type Page } from "@playwright/test";
 
@@ -9,6 +9,9 @@ const SCREENS = [
   { width: 1440, height: 900 },
   { width: 1024, height: 768 },
 ] as const;
+
+/** Four letters that end no code, which has no vowel in it, and what the server says of them. */
+const WRONG = { letters: "OOOO", refusal: "Those are not the last letters of this login's code." } as const;
 
 /** Where each heading of the list of tokens starts, in whole pixels from the window's left edge. */
 async function headingStarts(page: Page): Promise<readonly number[]> {
@@ -51,3 +54,17 @@ for (const size of SCREENS) {
     });
   });
 }
+
+// Drift: Enter in the field of the letters would do nothing, where it sends every other form of the dashboard, and a person who types the letters and presses Enter would wait for an answer that never comes.
+test("Enter in the field of a review's letters does what Allow does", async ({ page }) => {
+  await page.goto("tokens/list");
+  const review = page.getByRole("dialog", { name: "Allow this login?", exact: true });
+  const field = review.getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true });
+  await page.getByRole("button", { name: "Review", exact: true }).filter({ visible: true }).first().click({ timeout: FIRST_LOAD_MS });
+  await field.fill(WRONG.letters);
+  await field.press("Enter");
+
+  // The server answered the letters, which only Allow sends: its refusal stands at the field, and the review stays for the next try.
+  await expect(review.getByRole("alert")).toHaveText(WRONG.refusal);
+  await expect(field).toBeFocused();
+});
