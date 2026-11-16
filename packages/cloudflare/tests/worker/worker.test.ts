@@ -347,6 +347,28 @@ describe("an instance's first request", () => {
   });
 });
 
+describe("an instance whose settings can be read no longer", () => {
+  // Drift: a site request reads the settings beside its site once the instance's minute ran out. Were a failure of that read not the instance's to start again from, the instance would go on answering the API from a start that no longer holds.
+  test("is started again by the request that meets it, a site's lookup included, and the next request is told why", async () => {
+    using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const worker = instance(w);
+    await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
+    const before = await ask(worker, "https://docs-page.example.com/");
+    await BINDINGS.DB.exec("UPDATE settings SET value = json_remove(value, '$.max_storage_writes_per_day')");
+    wait(w, 2 / 60);
+
+    const met = await ask(worker, "https://docs-page.example.com/");
+    const next = await ask(worker, `${ADMIN}/api/whoami`);
+
+    expect([before.status, { status: met.status, text: await met.text() }, { status: next.status, text: await next.text() }, failed.mock.calls.length]).toEqual([
+      200,
+      { status: 503, text: "Something went wrong. Try again.\n" },
+      { status: 503, text: `${MADE_BY_ANOTHER_BUILD}\n` },
+      2,
+    ]);
+  });
+});
+
 describe("the product, from a token to an opened site", () => {
   // Drift: any one join could break alone: the API's install, the token check in front of serving, the login's cookie, or the address the API prints against the one serving reads.
   test("a site published through the API is private behind the letter p, public under its public name, and gone from an address a new link replaced", async () => {
@@ -493,6 +515,45 @@ describe("the product, from a token to an opened site", () => {
     const view = await ask(worker, "https://docs-page.example.com/");
 
     expect({ status: view.status, text: await view.text(), calls: tally.calls }).toEqual({ status: 200, text: "<p>docs</p>", calls: 3 });
+  });
+
+  // Drift: an instance reads the settings once a minute and a site's count of the day once in half a minute. Each as a query of its own, the first view of a site would cost four queries where the lookup's one batch holds all three reads.
+  test("a view costs the file's read and two queries, the lookup and the count: also the first of an instance, and the first after its minute ran out; one more for a public name not seen yet, and under p", async () => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+    const token = await tokenOf(w, "publisher");
+    const open = await publish(worker, token, { name: "notes", access: "unlisted" }, [page("<p>notes</p>")]);
+    const hidden = await publish(worker, token, { name: "report" }, [page("<p>report</p>")]);
+    await publish(worker, token, { name: "docs", access: "public" }, [page("<p>docs</p>")]);
+    const owner = await accessHeaders(w);
+    const view = async (address: string, headers: Record<string, string> = {}): Promise<readonly [status: number, calls: number]> => {
+      tally.calls = 0;
+      const answer = await ask(worker, `${address}/`, { headers });
+
+      return [answer.status, tally.calls];
+    };
+    const costs: Record<string, readonly [number, number]> = {};
+    costs["the first view the instance answers, by a site's id"] = await view(under(open, "u"));
+    costs["the next view of that site"] = await view(under(open, "u"));
+    costs["the first view of a site by its public name, whose id the instance has yet to learn"] = await view("https://docs-page.example.com");
+    costs["the next view of it"] = await view("https://docs-page.example.com");
+    wait(w, 2 / 60);
+    costs["a view by the id after the minute ran out"] = await view(under(open, "u"));
+    wait(w, 2 / 60);
+    costs["a view by the public name after the minute ran out"] = await view("https://docs-page.example.com");
+    wait(w, 2 / 60);
+    costs["a view under p after the minute ran out"] = await view(under(hidden, "p"), owner);
+
+    expect(costs).toEqual({
+      "the first view the instance answers, by a site's id": [200, 3],
+      "the next view of that site": [200, 3],
+      "the first view of a site by its public name, whose id the instance has yet to learn": [200, 4],
+      "the next view of it": [200, 3],
+      "a view by the id after the minute ran out": [200, 3],
+      "a view by the public name after the minute ran out": [200, 3],
+      "a view under p after the minute ran out": [200, 4],
+    });
   });
 
   const lostPage = { path: "404.html", body: new TextEncoder().encode("<h1>lost</h1>"), type: "text/html" };
@@ -753,9 +814,9 @@ describe("the admin hostname", () => {
       "the frame alone": [200, 2],
       "the sites, each with its views and who published it": [200, 2],
       "the sites through the API: the token, then the settings with the sites and their views": [200, 2],
-      "one site: the site, its views, and who published it": [200, 4],
+      "one site: the site, its views, and who published it": [200, 2],
       "a change to one site: the session, the settings with the site, the change": [200, 3],
-      "one site through the API: the token, the settings with the site, its views": [200, 3],
+      "one site through the API: the token, the settings with the site, its views": [200, 2],
     });
   });
 

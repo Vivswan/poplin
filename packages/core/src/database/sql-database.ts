@@ -54,8 +54,11 @@ import type {
   RequestCounts,
   Reserved,
   ServedSite,
+  ServedAlso,
+  ServedLookup,
   SettingsAndKey,
   SettingsAndSite,
+  ShownSite,
   ShownSitesPage,
   Signed,
   SigningKey,
@@ -123,7 +126,6 @@ import {
   insertSite,
   isFirstPending,
   isFree,
-  isServed,
   keepEarlierId,
   moveLive,
   narrowing,
@@ -131,11 +133,11 @@ import {
   publicNameIsFree,
   publicNameOf,
   requireCursor,
+  servedSite,
   setAccess,
   siteById,
   sitesWhere,
   storedDetails,
-  versionsOfSite,
 } from "./site-statements";
 import { BUILD, CHANGED, ONE, bare, built, insertFrom, qualified, written } from "./statements";
 import {
@@ -430,6 +432,17 @@ export class SqlDatabase implements Database {
     return { settings: settingsIn(stored), site: siteIn(found) };
   }
 
+  async getShownSite(id: SiteId, shown: SitesShown): Promise<ShownSite> {
+    requireDay(shown.day);
+    const one = BUILD.select({ ...SITE_FIELDS, listed_by: fragment`${sites.id}`.as("listed_by") }).from(sites).where(eq(sites.id, id));
+    const [stored, found] = await this.#driver.batch([READ_SETTINGS, pageWithBeside(fragment`${one}`, shown, false)]);
+    const row = found?.rows[0];
+    const beside = row === undefined ? undefined : v.parse(SHOWN_BESIDE, row);
+    const publishers = new Map(Object.entries(beside?.publishers ?? {}) as [TokenId, string][]);
+
+    return { settings: settingsIn(stored), site: siteIn(found), views: beside?.views ?? { today: 0, week: 0 }, publishers };
+  }
+
   async getSiteNames(ids: readonly SiteId[]): Promise<ReadonlyMap<SiteId, SiteNamed>> {
     const asked = [...new Set(ids)];
     if (asked.length > MOST_SITES_ASKED) throw new RangeError(`the names of at most ${MOST_SITES_ASKED} sites are read at once, not of ${asked.length}`);
@@ -471,11 +484,24 @@ export class SqlDatabase implements Database {
   }
 
   async findServed(address: Address, now: number): Promise<ServedSite | undefined> {
-    const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
-    const fields = { ...SITE_FIELDS, versions: versionsOfSite(true).as("versions") };
-    const [found] = await this.#driver.batch([built(BUILD.select(fields).from(sites).where(and(addressed, isServed(now))))]);
+    return (await this.findServedWith(address, now, {})).served;
+  }
 
-    return servedIn(found);
+  async findServedWith(address: Address, now: number, also: ServedAlso): Promise<ServedLookup> {
+    if (also.counts !== undefined) requireDay(also.counts.day);
+
+    const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
+    const counts = also.counts === undefined ? [] : [requestsOf(also.counts.day, ALL_SITES), requestsOf(also.counts.day, also.counts.site)];
+    const held = also.settingsAndKey === true ? [READ_SETTINGS, READ_SIGNING_KEY] : [];
+    const [found, ...beside] = await this.#driver.batch([servedSite(addressed, now), ...counts, ...held]);
+    const [all, ofSite] = counts.length === 0 ? [] : beside;
+    const [stored, key] = held.length === 0 ? [] : beside.slice(counts.length);
+
+    return {
+      served: servedIn(found),
+      ...(counts.length === 0 ? {} : { counts: { site: requestsIn(ofSite), all: requestsIn(all) } }),
+      ...(held.length === 0 ? {} : { settingsAndKey: { settings: settingsIn(stored), key: signingKeyIn(key) } }),
+    };
   }
 
   async listSites(query: SitesQuery): Promise<SitesPage> {

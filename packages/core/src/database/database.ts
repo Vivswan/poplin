@@ -76,10 +76,31 @@ export interface SiteDetails {
   readonly expires?: "never" | number;
 }
 
-/** A site an address serves, with what its live version is known to hold. */
+/** A site an address serves, its `versions` holding the live one alone, with what that version is known to hold. */
 export interface ServedSite {
   readonly site: Site;
   readonly contents: VersionContents;
+}
+
+/** What a lookup for serving reads beside the site, in its own step. */
+export interface ServedAlso {
+  /** The site and the UTC day whose request counts are read. */
+  readonly counts?: { readonly day: string; readonly site: SiteId };
+
+  /** Whether the settings and the signing key are read. */
+  readonly settingsAndKey?: boolean;
+}
+
+/** What a lookup for serving found, and what it read beside the site. */
+export interface ServedLookup {
+  /** The site the address serves, as `findServed` gives it. */
+  readonly served: ServedSite | undefined;
+
+  /** The day's counts as `readRequests` gives them, when they were asked for. */
+  readonly counts?: RequestCounts;
+
+  /** The settings and the signing key as `readSettingsAndKey` gives them, when they were asked for. */
+  readonly settingsAndKey?: SettingsAndKey;
 }
 
 /** Where a visitor's hostname points: a site's id, or a public name. */
@@ -153,6 +174,15 @@ export interface ShownSitesPage extends SitesPage {
   readonly views: ReadonlyMap<SiteId, SiteViews>;
 
   /** The note of each token that published a kept version of a site of the page and has a note, removed or not; empty when none were asked for. */
+  readonly publishers: ReadonlyMap<TokenId, string>;
+}
+
+/** One site with what a screen shows beside it. */
+export interface ShownSite extends SettingsAndSite {
+  /** The site's page views, zeros where nothing was counted or no site has the id. */
+  readonly views: SiteViews;
+
+  /** The note of each token that published a kept version of the site and has a note, removed or not; empty when none were asked for. */
   readonly publishers: ReadonlyMap<TokenId, string>;
 }
 
@@ -480,6 +510,14 @@ export interface Database {
   getSiteWithSettings(id: SiteId): Promise<SettingsAndSite>;
 
   /**
+   * The settings and the site with this id, in the trash or not, with its views and who published its versions, all read in one step.
+   *
+   * @returns what `getSiteWithSettings` gives and, beside it, what `readViews` and `getTokenNames` give for the site
+   * @throws {RangeError} `day` is not a date
+   */
+  getShownSite(id: SiteId, shown: SitesShown): Promise<ShownSite>;
+
+  /**
    * The name each of these ids' sites has now and the title it is listed under, in the trash or not, read in one step. An id that is no site's is left out.
    *
    * @param ids - the sites to name, at most 100 different ones
@@ -501,9 +539,16 @@ export interface Database {
   /**
    * The site an address serves at `now`.
    *
-   * @returns the site and what its live version holds; `undefined` for an address of no site, of a site in the trash, or of a site past its expiry
+   * @returns the site with its live version alone, and what that version holds; `undefined` for an address of no site, of a site in the trash, or of a site past its expiry
    */
   findServed(address: Address, now: number): Promise<ServedSite | undefined>;
+
+  /**
+   * Find the site an address serves and, in the same one step, read what a request for it needs beside it: a day's request counts, the settings and the signing key, or neither.
+   *
+   * @throws {RangeError} the day of the counts is not a date such as `2026-11-13`
+   */
+  findServedWith(address: Address, now: number, also: ServedAlso): Promise<ServedLookup>;
 
   /**
    * One page of the sites, or of the trash.

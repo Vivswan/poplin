@@ -2,6 +2,9 @@
 //
 //   the address  ->  under `p`: the Access token and the logins  ->  one database query  ->  the limits  ->  serving, handed the site already found  ->  the day's count
 //
+// The one query finds the site and reads beside it what the instance holds no longer: the settings once their minute ran out, and the site's count of the day once its half minute did.
+// Under `p`, and at an address that names no site, the settings are read first and on their own: the login is checked before any site is looked up.
+//
 // Access stands in front of every `p` address at the edge. The token it puts on a request is checked here all the same, and the email against the logins of the last minute.
 // A request under `p` without that proof came around Access: it is looked up nowhere.
 // Only a request the site's files are read for counts against the site. Every other counts against its visitor's minute alone, so the limits tell nobody whether a private id exists.
@@ -13,10 +16,12 @@ import { refusalResponse } from "@poplin/app/src/limits/refusal";
 import { type VisitorKey, visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { serveSite } from "@poplin/app/src/sites/serve";
 import { isLogin } from "@poplin/core/src/auth/logins";
-import type { Address } from "@poplin/core/src/database/database";
+import type { Address, ServedLookup, ServedSite } from "@poplin/core/src/database/database";
 import type { Site } from "@poplin/core/src/records/site";
+import { dayOf } from "@poplin/core/src/records/views";
+import type { SiteId } from "@poplin/core/src/sites/ids";
 import { clientAddress } from "../limits/client-address";
-import type { Held } from "./held";
+import type { Held, SiteHeld } from "./held";
 import type { Instance } from "./start";
 import { plain } from "./util";
 
@@ -25,6 +30,17 @@ const ALLOWED = { ok: true, requests: 0 } as const;
 
 /** A request no login was asked of: its address is not under `p`. */
 const NOT_ASKED = { kind: "not-asked" } as const;
+
+/** How many public names an instance remembers the site of. A full memory is emptied, and each name is learned again at its next view. */
+const MOST_NAMES_REMEMBERED = 1000;
+
+/** What a request is answered from before its limits: the settings its instance holds, what the login said, and the site its address serves, with the address it was found by. */
+interface Entered {
+  readonly held: Held;
+  readonly proof: Proof;
+  readonly address: Address | undefined;
+  readonly found: ServedSite | undefined;
+}
 
 /** What a request's URL addresses, as the install's layout reads it. */
 type Addressed = ReturnType<Instance["addresses"]["resolve"]>;
@@ -46,6 +62,51 @@ function opensAt(addressed: Addressed, site: Site): boolean {
   if (addressed.kind !== "site") return true;
 
   return (addressed.letter === "p") === (site.access === "private");
+}
+
+/** The id of the site an address names: its own, or the one its public name last served on this instance. */
+function idOf(addressed: Addressed, instance: Instance): SiteId | undefined {
+  if (addressed.kind === "site") return addressed.id;
+
+  return addressed.kind === "public-name" ? instance.servedByName.get(addressed.name) : undefined;
+}
+
+/**
+ * Find the site an address serves, and in the same query read what the instance holds no longer: the settings and the key when `settingsAndKey` asks, and the day's count of the site.
+ * The count goes to the counters only for the site the lookup found.
+ */
+async function lookUp(address: Address, addressed: Addressed, context: { readonly instance: Instance; readonly settingsAndKey: boolean; readonly now: number }): Promise<ServedLookup> {
+  const { instance, settingsAndKey, now } = context;
+  const id = idOf(addressed, instance);
+  const window = id === undefined ? undefined : { day: dayOf(now), site: id };
+  const counts = window !== undefined && !instance.counters.isDayFresh(window, now) ? { counts: window } : {};
+  const looked = await instance.install.database.findServedWith(address, now, { ...counts, settingsAndKey });
+  const found = looked.served?.site.id;
+  if (window !== undefined && looked.counts !== undefined && found === window.site) instance.counters.learnDay(window, looked.counts, now);
+
+  if (addressed.kind !== "public-name" || found === undefined) return looked;
+
+  if (instance.servedByName.size >= MOST_NAMES_REMEMBERED) instance.servedByName.clear();
+  instance.servedByName.set(addressed.name, found);
+
+  return looked;
+}
+
+/**
+ * Read what a request is answered from: the settings, the login's word on a request under `p`, and the site.
+ * A request the login refused is looked up nowhere. Any other finds its site in one query, which also brings the settings when the instance's minute ran out.
+ */
+async function enter(request: Request, addressed: Addressed, context: { readonly instance: Instance; readonly holding: SiteHeld; readonly now: number }): Promise<Entered> {
+  const { instance, holding, now } = context;
+  const asked = queryOf(addressed);
+  const underP = addressed.kind === "site" && addressed.letter === "p";
+  const early = await (holding.current() ?? (underP || asked === undefined ? holding.read() : undefined));
+  const proof = early === undefined ? NOT_ASKED : await proofOf(request, addressed, { instance, held: early, now });
+  const address = proof.kind === "refused" || proof.kind === "unchecked" ? undefined : asked;
+  const lookup = address === undefined ? undefined : lookUp(address, addressed, { instance, settingsAndKey: early === undefined, now });
+  const held = early ?? (await (lookup === undefined ? holding.read() : holding.fromLookup(lookup.then((looked) => looked.settingsAndKey), now)));
+
+  return { held, proof, address, found: (await lookup)?.served };
 }
 
 function sameAddress(one: Address, other: Address | undefined): boolean {
@@ -83,14 +144,11 @@ async function takeVisitorMinute(counters: Counters, window: { readonly key: Vis
  * @returns 429 with `Retry-After` from the first limit that refuses, 503 for a request under `p` while the team's keys cannot be had, and otherwise serving's own response, untouched
  * @throws whatever the database or the bucket rejects with
  */
-export async function answerSite(request: Request, instance: Instance, held: Held): Promise<Response> {
+export async function answerSite(request: Request, instance: Instance, holding: SiteHeld): Promise<Response> {
   const { database, store } = instance.install;
   const now = instance.install.now();
   const addressed = instance.addresses.resolve(new URL(request.url));
-  const proof = await proofOf(request, addressed, { instance, held, now });
-  const cameAround = proof.kind === "refused" || proof.kind === "unchecked";
-  const address = cameAround ? undefined : queryOf(addressed);
-  const found = address === undefined ? undefined : await database.findServed(address, now);
+  const { held, proof, address, found } = await enter(request, addressed, { instance, holding, now });
   const site = found?.site;
 
   const visitor = await visitorKey(clientAddress(request.headers), held.visitorSecret, now);

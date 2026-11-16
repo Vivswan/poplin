@@ -390,6 +390,33 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
+    // Drift: a page view's one query reads beside the site what its instance holds no longer. A count or a setting that came out of it other than its own read gives would let a day's limit pass, or check a visitor against settings nobody stored.
+    test("a lookup for serving gives the site as the plain lookup does and, only when asked, the day's counts and the settings with the key, each as its own read gives it", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.ensureSigningKey(new Uint8Array(32).fill(7), NOW);
+      const site = await made(database, draft("report" as SiteName, "public", DOCS));
+      const day = new Date(NOW).toISOString().slice(0, 10);
+      await database.addRequests({ day, site: site.id, requests: 5, views: 2 });
+      await database.addRequests({ day, site: OTHER_SITE, requests: 3 });
+      const served = await database.findServed({ id: site.id }, NOW);
+      const all = { counts: { day, site: site.id }, settingsAndKey: true } as const;
+
+      expect<unknown>([
+        await database.findServedWith({ id: site.id }, NOW, {}),
+        await database.findServedWith({ public_name: DOCS }, NOW, all),
+        await database.findServedWith({ id: NO_SITE }, NOW, all),
+        await database.findServedWith({ id: site.id }, NOW, { counts: { day: TOMORROW, site: site.id }, settingsAndKey: false }),
+      ]).toEqual([
+        { served },
+        { served, counts: await database.readRequests(day, site.id), settingsAndKey: await database.readSettingsAndKey() },
+        { served: undefined, counts: { site: 5, all: 8 }, settingsAndKey: await database.readSettingsAndKey() },
+        { served, counts: { site: 0, all: 0 } },
+      ]);
+      expect(served?.site.id).toBe(site.id);
+      await expect(database.findServedWith({ id: site.id }, NOW, { counts: { day: "today", site: site.id } })).rejects.toThrow(RangeError);
+    });
+
     // Drift: a screen's page is one read that stands for four. One that gave a site other views than its own read, or lost the note of whoever published it, would show a table that its own panels deny.
     test("the page a screen lists is the plain page and, beside it, the settings, each site's views, and the note of each token that published one: what the four reads give apart", async () => {
       const database = await opened(makeDatabase);
@@ -421,6 +448,12 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
         { today: 7, week: 11 },
         { today: 0, week: 0 },
         { today: 0, week: 0 },
+      ]);
+      const [listedFirst] = plain.sites;
+      const one = listedFirst === undefined ? undefined : await database.getShownSite(listedFirst.id, { day, publishers: true });
+      expect<unknown>([one, await database.getShownSite(NO_SITE, { day, publishers: true })]).toEqual([
+        { settings: SETTINGS, site: listedFirst, views: { today: 7, week: 11 }, publishers: new Map([[named.id, "ci"]]) },
+        { settings: SETTINGS, site: undefined, views: { today: 0, week: 0 }, publishers: new Map() },
       ]);
       expect<unknown>([bare.sites.map((site) => site.name), [...bare.views.values()], [...bare.publishers]]).toEqual([["site-3"], [{ today: 0, week: 0 }], []]);
       await expect(database.listShownSites(query, { day: "tomorrow", publishers: true })).rejects.toThrow(RangeError);

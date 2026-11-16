@@ -26,7 +26,7 @@ import { FREE_LIMITS } from "../limits/free-limits";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { Bindings } from "./bindings";
 import { CLIENT_FILES } from "./client-files";
-import { type Held, readHeld } from "./held";
+import { createHolding, type Held, SETTINGS_LIFETIME_MS, type SiteHeld } from "./held";
 import { answerLogin } from "./login";
 import { answerSite } from "./site";
 import { answerFirstSetup, answerSetup, isSetupPath } from "./setup";
@@ -34,9 +34,6 @@ import { answerSpent } from "./spent";
 import { type Failure, type Instance, type Outside, type Started, startInstance } from "./start";
 import { runSweep } from "./sweep";
 import { plain } from "./util";
-
-/** How long a site request trusts the settings and the logins an instance read. */
-const SETTINGS_LIFETIME_MS = 60_000;
 
 /** The login and the dashboard trust no earlier read. */
 const FRESH = 0;
@@ -59,9 +56,10 @@ const SETUP = "/setup";
 /** Where the variables of an install come from, for a person whose Worker lost or mistyped one. */
 const SET_THEM = "Setup writes them, and so does the OpenTofu module. In the Cloudflare dashboard they are under Workers & Pages, this Worker, Settings, Variables and Secrets.";
 
-/** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, and whether the setup page is open. */
+/** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, the same for a site request, and whether the setup page is open. */
 interface Ways {
   readonly held: (lifetime: number) => Promise<Held>;
+  readonly siteHeld: SiteHeld;
   readonly setupOpen: () => Promise<boolean>;
 }
 
@@ -164,8 +162,11 @@ function outsideOf(given: Partial<Outside>): Outside {
 export function createWorker(given: Partial<Outside> = {}): Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> {
   const outside = outsideOf(given);
   let starting: Promise<Started> | undefined;
-  let holding: { readonly at: number; readonly value: Promise<Held> } | undefined;
   let loggedInOnce = false;
+  // A read that fails means the install may have lost its settings or its key, so the instance starts again from its bindings.
+  const { held, ofSite } = createHolding(outside.now, () => {
+    starting = undefined;
+  });
 
   async function attempt(env: Bindings): Promise<Started> {
     try {
@@ -184,25 +185,6 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     starting ??= attempt(env);
 
     return starting;
-  }
-
-  // A read that fails means the install may have lost its settings or its key, so the instance starts again from its bindings.
-  async function read(database: Database): Promise<Held> {
-    try {
-      return await readHeld(database);
-    } catch (error) {
-      starting = undefined;
-      holding = undefined;
-
-      throw error;
-    }
-  }
-
-  function held(database: Database, lifetime: number): Promise<Held> {
-    const at = outside.now();
-    if (holding === undefined || at - holding.at >= lifetime) holding = { at, value: read(database) };
-
-    return holding.value;
   }
 
   // The API counts a computer that logs in by the same key a site counts its visitors by, under the secret a site request trusts.
@@ -230,10 +212,10 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     const { instance } = started;
     const { hostname } = new URL(request.url);
     const { database } = instance.install;
-    const ways: Ways = { held: (lifetime) => held(database, lifetime), setupOpen: () => setupOpen(database) };
+    const ways: Ways = { held: (lifetime) => held(database, lifetime), siteHeld: ofSite(database), setupOpen: () => setupOpen(database) };
     if (hostname.endsWith(OWN_ADDRESS)) return answerOwnAddress(request, instance, ways);
 
-    if (hostname !== instance.layout.adminHostname) return answerSite(request, instance, await ways.held(SETTINGS_LIFETIME_MS));
+    if (hostname !== instance.layout.adminHostname) return answerSite(request, instance, ways.siteHeld);
 
     return answerAdmin(request, instance, ways);
   }

@@ -15,12 +15,12 @@ import { newLink } from "@poplin/core/src/actions/new-link";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
 import { updateSite } from "@poplin/core/src/actions/set";
-import { getSite } from "@poplin/core/src/actions/show";
+import { getSite, getSiteWithNames } from "@poplin/core/src/actions/show";
 import { parsePublicName } from "@poplin/core/src/names/names";
 import { Hono } from "hono";
 import * as v from "valibot";
 
-import { loginNames, NOTHING, refused, refuseInvalid, type Shared } from "./data";
+import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 
 /** How many sites one page of the table holds. */
 const PAGE_SIZE = 25;
@@ -82,11 +82,6 @@ function cursorOf(next: NonNullable<Listing["after"]>): string {
   return by === undefined ? `${next.updated_at}-${next.id}` : `${next.updated_at}-${next.id}~${by}`;
 }
 
-/** Whoever published a version the site keeps: every holder a row of it can show. */
-function publishersOf(site: Row): readonly string[] {
-  return site.versions.map((version) => version.published_by);
-}
-
 /** One page of the table as its address asks for it: the sites in the listing's own order, the cursor of the following page or `null`, and the names of the logins that published their versions. */
 async function sitesPage(
   { install, actor }: Shared["Variables"]["asker"],
@@ -112,7 +107,7 @@ export const siteRoutes = new Hono<Shared>()
   })
   .get("/sites/:site", vValidator("param", ONE_SITE, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
-    const shown = await getSite(install, actor, context.req.valid("param").site);
+    const shown = await getSiteWithNames(install, actor, context.req.valid("param").site);
     // An address that names no site in a form a site's label can have is told as a site that is not there: both are an old or mistyped link.
     if (!shown.ok) return refused(context, shown.code === "bad_argument" && shown.about === "site" ? { code: "not_found" } : shown);
 
@@ -120,7 +115,7 @@ export const siteRoutes = new Hono<Shared>()
     const config = await readConfig(install, actor);
     if (!config.ok) return refused(context, config);
 
-    return context.json({ ok: true as const, site: shown.site, logins: await loginNames(context.get("asker"), publishersOf(shown.site)), search_engines_allowed: config.values.search_engines_allowed });
+    return context.json({ ok: true as const, site: shown.site, logins: shown.names, search_engines_allowed: config.values.search_engines_allowed });
   })
   .get("/public-address", vValidator("query", NAMED, refuseInvalid), (context) => {
     const { install } = context.get("asker");

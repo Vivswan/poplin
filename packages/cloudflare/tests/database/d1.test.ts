@@ -115,11 +115,15 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "getSite, none": [0, 0],
   "getSiteWithSettings": [4, 0],
   "getSiteWithSettings, none": [1, 0],
+  "getShownSite, with the views and the publishers": [15, 0],
   "getSiteNames": [10, 0],
   "getSiteByPublicName": [2, 0],
   "getSiteByFolder": [3, 0],
-  "findServed, by id": [3, 0],
+  "findServed, by id": [2, 0],
   "findServed, by public name": [2, 0],
+  "findServed, a site that keeps two versions": [2, 0],
+  "findServedWith, the day's counts": [2, 0],
+  "findServedWith, the day's counts, the settings and the key": [4, 0],
   "readTotals": [1, 0],
   "exportSites": [18, 0],
   "exportSites, after": [18, 0],
@@ -657,6 +661,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getSite, none", () => database.getSite(NOBODY));
     await cost("getSiteWithSettings", () => database.getSiteWithSettings(first.id));
     await cost("getSiteWithSettings, none", () => database.getSiteWithSettings(NOBODY));
+    await cost("getShownSite, with the views and the publishers", () => database.getShownSite(first.id, { day: DAY, publishers: true }));
     await cost("getSiteNames", () => database.getSiteNames(sites.slice(0, 5).map((made) => made.id)));
     await cost("getSiteByPublicName", () => database.getSiteByPublicName("open" as PublicName));
     await cost("getSiteByFolder", () => database.getSiteByFolder(first.folder));
@@ -674,6 +679,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("setLiveVersion, the same", () => database.setLiveVersion(first.id, 2, BY_ADA));
     await database.setLiveVersion(first.id, 3, BY_ADA);
     await cost("setLiveVersion, previous", () => database.setLiveVersion(first.id, "previous", BY_ADA));
+    await cost("findServed, a site that keeps two versions", () => database.findServed({ id: first.id }, NOW));
+    await cost("findServedWith, the day's counts", () => database.findServedWith({ id: first.id }, NOW, { counts: { day: DAY, site: first.id } }));
+    await cost("findServedWith, the day's counts, the settings and the key", () => database.findServedWith({ id: first.id }, NOW, { counts: { day: DAY, site: first.id }, settingsAndKey: true }));
     await cost("trashSite", () => database.trashSite(third.id, BY_ADA));
     await cost("trashSite, in the trash", () => database.trashSite(third.id, BY_ADA));
     await cost("restoreSite", () => database.restoreSite(third.id, BY_ADA));
