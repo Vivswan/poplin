@@ -179,6 +179,7 @@ The database's free plan takes 100,000 rows written a day, every database of the
 | a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 6 out of it         |
 | a change of who may open a site           | 3             | any other setting 2, both at once 5, and 1 where it is told an expiry      |
 | a new link                                | 9             | a rollback 2, a setting of the install 3, a computer's login 3             |
+| a copy of a site                          | 21            | counted at the request that begins it; 16 for each request that goes on    |
 | a listing of the bucket                   | 1             | the files of a version, and what an upload lacks                           |
 | a page or a file a site answered          | 2             | the day's count of the site, and of all sites                              |
 
@@ -192,18 +193,18 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   773 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the checks, as the harness counts them   849 on the local fake, a few more with the demo's check: every site they publish, change, and remove
 a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 390
 the harness's own statements             18: three tokens in and out, and the caps
-a usual run                              about 830 counted; the sweep later drops each upload's row, 5 a publish, about 125 more
-a day of 40 such runs                    about 37,000 of the 100,000
+a usual run                              about 905 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
+a day of 40 such runs                    about 42,000 of the 100,000
 ```
 
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 773 of at most 1100
+Rows written this run: 849 of at most 1100
 ```
 
 ## The backup drill

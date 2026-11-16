@@ -31,6 +31,7 @@ const WITH_TOKEN = [
   "new-link",
   "set-private",
   "delete-restore",
+  "duplicate",
   "mcp",
   "export-import",
   "backup-drill",
@@ -47,7 +48,7 @@ const MANY_FILES = 7;
 const RUN_MS = 30_000;
 
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
-const CHECKS_ROWS = 773;
+const CHECKS_ROWS = 849;
 
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
@@ -96,7 +97,7 @@ const CASES: readonly Case[] = [
     "an install that opens a letter p address with no login behind the request fails the checks of a private site",
     { leaksPrivate: true },
     {},
-    { ...NO_LOGIN, private: "failed", L5: "failed" },
+    { ...NO_LOGIN, private: "failed", duplicate: "failed", L5: "failed" },
   ],
   ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, NO_LOGIN],
   ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, NO_LOGIN],

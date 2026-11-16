@@ -578,7 +578,7 @@ describe("createApi", () => {
     [48, 1],
     [300, 3],
     [1_001, 10],
-  ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 40 calls to the database, the 44 a copy is held to less the 4 of a host's start, or more than 250 to the store", async (count, requests) => {
+  ])("a copy of %i files through the route is whole after %i requests, none of which makes more than 42 calls to the database, the 44 a copy is held to less the 2 of a host's start, or more than 250 to the store", async (count, requests) => {
     const install = await openApi({}, { fileBytes: 64, files: 10_000, manifestBytes: 2_000_000 });
     const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
     const source = await publishSite(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { name: "report", files });
@@ -597,7 +597,7 @@ describe("createApi", () => {
       site = step.body.site;
     }
 
-    expect([spent.length, spent.filter((calls) => calls.database > 40 || calls.store > 250)]).toEqual([requests, []]);
+    expect([spent.length, spent.filter((calls) => calls.database > 42 || calls.store > 250)]).toEqual([requests, []]);
   }, COPY_MS);
 });
 

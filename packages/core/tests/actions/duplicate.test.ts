@@ -20,8 +20,8 @@ const COPY_MS = 30_000;
 /** The calls a caller made before the action: one, as a caller that read a token did. */
 const ASKING = 1;
 
-/** The most calls to the database the action itself may make after a caller's one: the 44 a request of a copy is held to, less the 4 a host may make to start, the caller's own, and the 2 that count the day's listings, which a host makes. */
-const OWN_DATABASE_CALLS = 37;
+/** The most calls to the database the action itself may make after a caller's one: the 44 a request of a copy is held to, less the 2 a host may make to start, the caller's own, and the 2 that count the day's listings, which a host makes. */
+const OWN_DATABASE_CALLS = 39;
 
 /** The most calls to the store one call of the action may make. */
 const STORE_CALLS = 250;
@@ -125,7 +125,7 @@ describe("duplicateSite", () => {
     [1, 1],
     [300, 3],
     [1_001, 10],
-  ])("a copy of %i files is whole after %i calls, none of which makes more than 37 calls to the database or more than 250 to the store", async (count, calls) => {
+  ])("a copy of %i files is whole after %i calls, none of which makes more than 39 calls to the database or more than 250 to the store", async (count, calls) => {
     const world = await makeWorld();
     const pages = Array.from({ length: count - 1 }, (_page, at) => file(`pages/${at}.html`, "x"));
     const source = await publishSite(world.install, OWNER, { name: "report", files: [file("index.html", "<p>home</p>"), ...pages] });
@@ -180,9 +180,9 @@ describe("duplicateSite", () => {
     using batches = spyOn(BunSqliteDriver.prototype, "batch");
     using reads = spyOn(world.install.store, "list");
 
-    await expect(duplicateSite(world.install, OWNER, { site: source }, 25)).rejects.toThrow(RangeError);
+    await expect(duplicateSite(world.install, OWNER, { site: source }, 27)).rejects.toThrow(RangeError);
     expect([batches.mock.calls.length, reads.mock.calls.length]).toEqual([0, 0]);
-    expect(await duplicateSite(world.install, OWNER, { site: source }, 24)).toMatchObject({ ok: true, site: { live_version: 1 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source }, 26)).toMatchObject({ ok: true, site: { live_version: 1 } });
   });
 
   // Drift: a duplicate is a new site made from another's files, so it must pass every door a publish and a read pass: ownership, the trash, and the install's limits.
@@ -224,10 +224,11 @@ describe("duplicateSite", () => {
   });
 
   // Drift: a host bills a write it did not keep, and a copy counts its writes once, when it begins. A later call whose write failed uncounted could be sent again without end, each time one more billed write the day's bound never saw.
-  test("a later call of a copy whose write fails counts that write against the day, and the copy stays to be gone on with", async () => {
+  test("a later call of a copy whose write fails counts that write against the day, and the copy stays to be gone on with, from the files that were on their way with it", async () => {
     const world = await makeWorld();
     const source = await made(world, OWNER, "report");
     await publishSite(world.install, OWNER, { site: source, files: MANY });
+    const sources = (await world.keys()).length;
     const begun = await duplicateSite(world.install, OWNER, { site: source }, ASKING);
     if (!begun.ok) throw new Error("the copy was refused");
 
@@ -237,9 +238,74 @@ describe("duplicateSite", () => {
 
     await expect(duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING)).rejects.toThrow("the store is down");
     const counted = (await world.install.database.readStorageWrites(day))?.writes;
+    const held = (await world.keys()).length - sources;
     const next = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING);
 
-    expect([counted, next]).toMatchObject([before + 1, { ok: true, copy: { copied: 224, files: 300 } }]);
+    // The files that were on their way beside the one that failed are kept, five at most, and no further one was begun.
+    expect([counted, held >= 112 && held <= 117, next]).toMatchObject([before + 1, true, { ok: true, copy: { copied: held + 112, files: 300 } }]);
+  });
+
+  // Drift: a write that fails is counted in the database before it is told, and the files begun during that wait would each be a billed write of a copy that is given up.
+  test("a call whose write fails begins no further file while the failure is counted", async () => {
+    const world = await makeWorld();
+    const source = await made(world, OWNER, "report");
+    await publishSite(world.install, OWNER, { site: source, files: MANY });
+    const count = world.install.database.addStorageWrites.bind(world.install.database);
+    spyOn(world.install.database, "addStorageWrites").mockImplementation(async (...asked) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      return count(...asked);
+    });
+    spyOn(world.install.store, "write").mockRejectedValueOnce(new Error("the store is down"));
+    using reads = spyOn(world.install.store, "read");
+
+    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING)).rejects.toThrow("the store is down");
+
+    expect(reads.mock.calls.length).toBeLessThanOrEqual(6);
+  });
+
+  // Drift: a billed write that the database did not count would be told as the store's failure alone, and whoever reads the failure would not learn that the day's count is short.
+  test("a call whose failed write cannot be counted throws the failure of the count", async () => {
+    const world = await makeWorld();
+    const source = await made(world, OWNER, "report");
+    spyOn(world.install.store, "write").mockRejectedValueOnce(new Error("the store is down"));
+    spyOn(world.install.database, "addStorageWrites").mockRejectedValueOnce(new Error("the database is down"));
+
+    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING)).rejects.toThrow("the database is down");
+  });
+
+  // Drift: copied one after another, the files of one call are 224 waits in a row; copied all at once, they pass the connections a host lets one request hold open.
+  test("a call copies six files at once, and never more", async () => {
+    const world = await makeWorld();
+    const source = await made(world, OWNER, "report");
+    await publishSite(world.install, OWNER, { site: source, files: MANY });
+    const onTheirWay = { now: 0, most: 0 };
+    // A file is on its way from the call that reads it to the end of the call that writes it.
+    const store = new Proxy(world.install.store, {
+      get(target, name) {
+        const method: unknown = Reflect.get(target, name);
+        if (typeof method !== "function") return method;
+
+        return async (...asked: unknown[]): Promise<unknown> => {
+          if (name === "read") {
+            onTheirWay.now += 1;
+            onTheirWay.most = Math.max(onTheirWay.most, onTheirWay.now);
+            // A store answers later, so the files begun beside this one are on their way by then.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+
+          try {
+            return await method.apply(target, asked);
+          } finally {
+            if (name === "write") onTheirWay.now -= 1;
+          }
+        };
+      },
+    });
+
+    const begun = await duplicateSite({ ...world.install, store }, OWNER, { site: source }, ASKING);
+
+    expect([begun.ok && begun.copy.copied, onTheirWay]).toEqual([112, { now: 0, most: 6 }]);
   });
 
   // Drift: a listing is no snapshot; a version a newer publish is removing lists short, and a copy of what is left would be a site with pages missing.

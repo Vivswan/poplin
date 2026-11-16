@@ -1,6 +1,8 @@
 // The checks a token holder starts: a site published, changed, and removed through the CLI and the MCP server, and what a stranger then gets at each of its addresses.
 
 import { expect } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { type Bench, type Check, type LiveSite, Skip } from "../records";
 import { expectRefused, GHOST_ID, labelAddress, siteOf } from "../util";
@@ -22,6 +24,12 @@ const DEMO = "demo";
 
 /** Why the demo's check is skipped on an install that holds no such site. */
 const NO_DEMO = "a public site named demo, which the reset of the test install publishes";
+
+/** How many files the copied site holds: more than a copy took in one request when a request copied fifteen, and few enough to cost a run little. */
+const COPIED_FILES = 16;
+
+/** The form of a problem's code, as the CLI names its own: a code of any other form is shown as `other`, so a failure prints no text an install chose. */
+const CODE = /^[a-z_]{1,40}$/;
 
 /** The content type of a script as the install stores it. */
 const SCRIPT = /^text\/javascript\b/;
@@ -210,6 +218,47 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
 
       expect(siteOf(await bench.cli("restore", site.label)).state).toBe("live");
       await expectOpens(bench, site.url, text);
+    },
+  },
+  {
+    id: "duplicate",
+    name: "a copy of a site is a private site of its own that holds the source's pages, and the run says how long the copy took",
+    needs: ["token"],
+    run: async (bench) => {
+      const text = "<p>duplicate</p>";
+      const path = bench.folder(text);
+      const pages = Array.from({ length: COPIED_FILES - 1 }, (_page, at) => `<p>page ${at}</p>`);
+      for (const [at, page] of pages.entries()) writeFileSync(join(path, `page-${at}.html`), page);
+
+      const source = siteOf(await bench.cli("publish", path, "--name", `${bench.prefix}-copied`, "--unlisted", "--expires", "1d"));
+      const [asked, began] = [bench.asked(), bench.now()];
+      const copied = await bench.cli("duplicate", source.label);
+      const [rounds, took] = [bench.asked() - asked, bench.now() - began];
+
+      // A request the host ends, as one that ran past its processing time, answers no site: the command then fails, and the code of its problem is what the failure shows.
+      const problem = (copied.value.error as { readonly code?: string } | undefined)?.code;
+      expect({ code: copied.code, problem: problem === undefined || CODE.test(problem) ? problem : "other" }).toEqual({ code: 0, problem: undefined });
+      const copy = copied.value.site as LiveSite;
+      const { copied: stored, files } = copied.value.copy as { readonly copied: number; readonly files: number };
+      // Only what the check chose is compared, so a failure shows no address.
+      expect({ name: copy.name === source.name, access: copy.access, version: copy.live_version, own: copy.id !== source.id, stored, files }).toEqual({
+        name: true,
+        access: "private",
+        version: 1,
+        own: true,
+        stored: COPIED_FILES,
+        files: COPIED_FILES,
+      });
+      await expectRefused(bench.domain, await bench.visit(copy.url), text);
+
+      // The copy's files are read as a stranger reads them, once the copy is unlisted: its first page, and the first and the last of the others.
+      const opened = siteOf(await bench.cli("set", copy.label, "--unlisted"));
+      expect(opened.id === copy.id).toBe(true);
+      await expectOpens(bench, opened.url, text);
+      for (const at of [0, pages.length - 1]) await expectOpens(bench, `${opened.url}/page-${at}.html`, pages[at] ?? "");
+
+      const bytes = [text, ...pages].reduce((sum, page) => sum + page.length, 0);
+      bench.say(`duplicate: ${COPIED_FILES} files, ${bytes} bytes, ${rounds} rounds, ${took} ms`);
     },
   },
   {

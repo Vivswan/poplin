@@ -1016,14 +1016,16 @@ describe("the audit log as a file", () => {
 describe("a copy of a site", () => {
   // Drift: the Free plan ends a request past 50 queries of the database, 2 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
   test.each([
-    [130, 2, { database: [8, 10], bucket: [225, 225] }],
-    [1_001, 10, { database: [8, 10], bucket: [228, 228] }],
-  ])(
-    "of %i files takes %i requests through the API, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
-    async (count, requests, most) => {
-      // The first request of an install stores its settings, which a publish reads.
-      await ask(instance(w), `${ADMIN}/api/whoami`);
-      const token = await tokenOf(w, "admin");
+    ["api", 130, 2, { database: [8, 10], bucket: [225, 225] }],
+    ["api", 1_001, 10, { database: [8, 10], bucket: [228, 228] }],
+    ["data", 130, 2, { database: [8, 10], bucket: [225, 225] }],
+    ["data", 1_001, 10, { database: [8, 10], bucket: [228, 228] }],
+  ] as const)(
+    "through /%s, of %i files, takes %i requests, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
+    async (by, count, requests, most) => {
+      // The first request of an install stores its settings, which a publish reads: a login does.
+      const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+      const asker = by === "api" ? { Authorization: `Bearer ${await tokenOf(w, "admin")}` } : session;
       const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
       const source = await publishSite(await installOf(w), { scope: "admin", holder: OWNER }, { name: "report", files });
       if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
@@ -1041,7 +1043,7 @@ describe("a copy of a site", () => {
           if (fresh) [worker, bindings] = [instance(w), counted()];
 
           const before = [database.calls, bucket.calls] as const;
-          round = await done(await send(worker, `${ADMIN}/api/sites/${source.site.id}/duplicate`, round.copy === undefined ? {} : { upload: round.copy.upload }, { Authorization: `Bearer ${token}` }, bindings));
+          round = await done(await send(worker, `${ADMIN}/${by}/sites/${source.site.id}/duplicate`, round.copy === undefined ? {} : { upload: round.copy.upload }, asker, bindings));
           Object.assign(most, { database: Math.max(most.database, database.calls - before[0]), bucket: Math.max(most.bucket, bucket.calls - before[1]) });
         }
 
@@ -1119,6 +1121,15 @@ describe("the rows the live checks count", () => {
 
     const made = await step("a new site", async () => finish(await calls.uploads.$post({ query: {}, json: { name: "docs", access: "unlisted", files: [declared] } })));
     const site = { site: made.id };
+    await step("a copy of a site, whole in one request", async () => done(await calls.sites[":site"].duplicate.$post({ param: site, query: {}, json: { name: "docs-copy" } })));
+    // A site of more files than one request copies, published beside the harness: its copy takes two requests.
+    const pages = Array.from({ length: 113 }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
+    const large = await publishSite(await installOf(w), { scope: "admin", holder: OWNER }, { name: "large", files: pages });
+    if (!large.ok) throw new Error(`the large site was refused: ${large.code}`);
+
+    const copied = { site: large.site.id };
+    const begun = await step("a copy of 113 files begun", async () => done<{ copy: { upload: string } }>(await calls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: {} })));
+    await step("that copy gone on with, and finished", async () => done(await calls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: { upload: begun.copy.upload } })));
     const again = async (): Promise<Published> => finish(await calls.uploads.$post({ query: {}, json: { ...site, files: [declared] } }));
     await step("a second version", again);
     await again();
@@ -1176,6 +1187,10 @@ describe("the rows the live checks count", () => {
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
         "a new site": [19, 19],
+        "a copy of a site, whole in one request": [21, 21],
+        // A copy that takes more requests is counted as whole at its first, which writes the upload alone.
+        "a copy of 113 files begun": [6, 21],
+        "that copy gone on with, and finished": [16, 16],
         "a second version": [13, 13],
         "a fourth version, which drops the first": [17, 17],
         "a page opened": [2, 2],

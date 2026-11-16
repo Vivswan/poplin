@@ -48,7 +48,7 @@ describe("the meter of rows written", () => {
   test("a request that changes something on a route with no price is held back, and names why", async () => {
     const install = fake();
     const meter = meterRows(install.fetch, 100);
-    const answered = await meter.fetch(`${SERVER}/api/sites/docs/duplicate`, json("POST", {}));
+    const answered = await meter.fetch(`${SERVER}/api/update`, json("POST", {}));
 
     expect({ status: answered.status, sent: install.sent, stopped: meter.stopped() }).toEqual({ status: 403, sent: [], stopped: "sent POST to a route of the API that has no price in rows" });
   });
