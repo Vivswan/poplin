@@ -124,7 +124,7 @@ Repair makes the key beside the kept key, as an API token named "poplin upload k
 
 | Question | Answer |
 | --- | --- |
-| Where it lives | on the Worker, as an encrypted secret, `UPLOAD_KEY`. Not in the database, a backup, or an export. Only a hash of the token is kept |
+| Where it lives | on the Worker, as an encrypted secret, `UPLOAD_KEY`. Not in the database, a backup, or an export. What is kept is the token's id and the SHA-256 of its value: the two the bucket's API takes as its key, so whoever holds them holds the key |
 | What it reaches | the objects of the install's one bucket: it can read, write, list, and delete them. Cloudflare has no narrower right that writes |
 | What it may not do | reach another bucket, the database, a Worker, the domain, or the account's settings; make another key |
 | What a publisher sees | the account's id and the bucket's name, in the address of each ticket |
@@ -167,7 +167,7 @@ What guards each address:
 | the API, `/api`, which the CLI and `poplin mcp` call | the token the Worker issued; Access lets everyone through to it, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
-| the setup page, `/setup` | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it only repairs: it takes the token and no other value, and corrects no login |
+| the setup page, `/setup` | the pasted Cloudflare API token alone: it must show the install's own zone, or without a domain the address of the install's own account, which a token that only reads can do. On a Worker with nothing set yet, a token changes only what its own account holds, and the run writes nothing to the install's own database. Anyone may open the page and gets the form; with no token that passes, nothing of the install. A run with a token that passes answers every user's email. Five tries a minute from one address. After the first login it only repairs: it takes the token and no other value, and corrects no login |
 | the Worker's own `workers.dev` address, on an install under a domain | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
 Two Access applications do this, made once at install, never per site:
