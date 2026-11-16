@@ -23,7 +23,7 @@ import { dayOf } from "../records/views";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
 import { abandonPublish } from "./abandon-publish";
 import { checkManifest, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
-import { defaultExpiry } from "./changes";
+import { cutTitle, defaultExpiry, MAX_TITLE_LENGTH } from "./changes";
 import { fileKey, versionPrefix } from "./files";
 import { finishPublish, PUBLISHED_SITE } from "./finish-publish";
 import { noteProblem } from "./problems";
@@ -69,6 +69,9 @@ const UNREAD_HASH = "";
 
 /** A copy bounded by nothing but what a publish may declare. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Number.MAX_SAFE_INTEGER };
+
+/** What the title of a copy ends with. */
+const COPY_MARK = " (copy)";
 
 /** What a duplicate may ask for besides its site: the `name` of the copy on the first call, or the `upload` an earlier call answered, to go on with it. */
 export const DUPLICATE_REQUEST = v.strictObject({ name: v.optional(v.string()), upload: v.optional(v.string()) });
@@ -157,6 +160,18 @@ async function listVersion(store: ObjectStore, prefix: string, files: number): P
   }
 }
 
+/**
+ * The title a copy is given: the one its source shows, which is the typed one or else its page's own, with ` (copy)` after it. The title is cut to make room, and the mark never is.
+ *
+ * @returns the source's typed title as it is, for a source that shows no title and so shows its name, or one whose title ends in the mark already
+ */
+function copyTitle(site: Site): string | null {
+  const shown = site.title ?? site.page_title;
+  if (shown === null || shown.endsWith(COPY_MARK)) return site.title;
+
+  return `${cutTitle(shown, MAX_TITLE_LENGTH - COPY_MARK.length).trimEnd()}${COPY_MARK}`;
+}
+
 /** Record the upload of a new copy: the source's live version as it is now, under a new folder, for a private site. */
 async function beginCopy(
   install: Install,
@@ -181,7 +196,7 @@ async function beginCopy(
     site: {
       name: asked.name,
       folder,
-      title: site.title,
+      title: copyTitle(site),
       ...(site.page_title === null ? {} : { page_title: site.page_title }),
       search_engines: site.search_engines,
       embeddable: site.embeddable,
@@ -424,7 +439,7 @@ export async function cancelCopy(install: Install, actor: Actor, reference: stri
 /**
  * Make a new site that holds a copy of a site's live version, or ask after a copy an earlier call began: while `site` is `null` the caller calls again with `copy.upload`.
  * The copy is private whatever the source is, under a new id and a new folder, with no public name, at version 1, and its owner is the caller. Its name is the source's unless `name` is given.
- * It takes the source's typed title, its page's own title, and its search-engine and frame settings; its expiry is a new site's, from `default_expires`. The install's limits bound it as they bound a publish.
+ * It takes the source's search-engine and frame settings, and its title as `copyTitle` writes it; its expiry is a new site's, from `default_expires`. The install's limits bound it as they bound a publish.
  * @param request - `site` is a reference to the source; `name` goes with the first call alone, and `upload` with every later one
  * @param asking - the calls to the database the caller's request made before this action, to learn who asks: they count against the calls to the database one request may make
  * @param jobs - what a copy the first call left unfinished is started on. Where it runs by itself, a later call copies nothing and answers `copy.copied` as `null`; anywhere else each later call copies the next files

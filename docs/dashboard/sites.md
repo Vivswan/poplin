@@ -46,7 +46,7 @@ For a site that deletes itself, the panel then shows the day and time, and `Then
 
 The field Public name starts with the site's name. Under it, `Its link will be` shows the address the site gets for the name typed, such as `docs-page.example.com`.
 
-Duplicate, in the panel, makes a private copy of the site, with a new link.
+Duplicate, in the panel, makes a private copy of the site, with a new link. The copy's title is the site's, with `(copy)` after it; [Manage sites](../sites/manage.md) has the whole rule.
 
 | After Duplicate               | You see                                                                           |
 | ----------------------------- | --------------------------------------------------------------------------------- |

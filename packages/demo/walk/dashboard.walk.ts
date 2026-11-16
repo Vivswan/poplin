@@ -1569,9 +1569,10 @@ test("only the table of the sites has headings to move and edges to resize: ever
   expect({ ...found, Sites: found.Sites?.map((count) => count > 0) }).toEqual({ Sites: [true, true], Activity: [0, 0], Usage: [0, 0], Users: [0, 0], Pieces: [0, 0] });
 });
 
-// Drift: a copy could only be made from a terminal; or the dashboard's copy would keep the source's access, drop a refused name, or leave no way to the new site.
-test("a site is duplicated from its panel: a refused name stays in its field, the copy is said as done with the way to its own panel, and it is a private site of its own in the list", async ({ page }) => {
+// Drift: a copy could only be made from a terminal; or the dashboard's copy would keep the source's access, drop a refused name, or leave no way to the new site, or be a second row of the same title.
+test("a site is duplicated from its panel: a refused name stays in its field, the copy is said as done with the way to its own panel, and it is a private site of its own in the list, titled as a copy", async ({ page }) => {
   const asks = page.getByRole("dialog", { name: `Duplicate ${SAMPLE.site}?`, exact: true });
+  const copy = `${SAMPLE.site} (copy)`;
   const name = asks.getByRole("textbox", { name: "Name", exact: true });
   await arrive(page);
   await openPanel(page, SAMPLE.site);
@@ -1587,9 +1588,10 @@ test("a site is duplicated from its panel: a refused name stays in its field, th
   await name.fill("pricing-copy");
   await asks.getByRole("button", { name: "Duplicate", exact: true }).click();
   await expect(said(page, "Duplicated.")).toBeVisible();
-  await expect(siteName(page, SAMPLE.site)).toHaveCount(2);
+  await expect(siteName(page, SAMPLE.site)).toHaveCount(1);
+  await expect(siteName(page, copy)).toHaveCount(1);
 
   await lines(page).getByRole("button", { name: "Open", exact: true }).click();
   await expect(page).toHaveURL(/\/sites\/pricing-copy--[0-9a-z]{12}$/);
-  await expect(panel(page).getByRole("button", { name: "Private", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("dialog", { name: copy, exact: true }).getByRole("button", { name: "Private", exact: true })).toHaveAttribute("aria-pressed", "true");
 });

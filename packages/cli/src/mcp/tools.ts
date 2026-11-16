@@ -299,7 +299,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     },
   },
   duplicate_site: {
-    description: "Make a private copy of a site, with a new label and address. The original is untouched.",
+    description: "Make a private copy of a site, with a new label and address, titled as the site with (copy) after it. The original is untouched.",
     parameters: { site: SITE, name: "The copy's name, e.g. q3-draft. Left out: the site's own name." },
     hints: { destructiveHint: false },
     run: (input, host) => {

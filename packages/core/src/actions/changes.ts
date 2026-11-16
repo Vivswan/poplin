@@ -67,11 +67,6 @@ export type SiteChanges = v.InferInput<typeof SITE_CHANGES>;
 /** A time span as the settings count one. */
 type Span = Exclude<SettingValues["default_expires"], "never">;
 
-/** Cut the title of a page to the length a site keeps, and never through a surrogate pair. */
-function cutPageTitle(title: string): string {
-  return title.slice(0, MAX_PAGE_TITLE_LENGTH).replace(HIGH_SURROGATE_AT_END, "");
-}
-
 /** What the changes are checked against. */
 interface Ground {
   /** The name of the site, which a site going public takes as its public name unless another is asked for. */
@@ -92,6 +87,16 @@ export interface CheckedChanges {
   readonly ok: true;
   readonly access?: SiteAccess;
   readonly details: SiteDetails;
+}
+
+/** Cut a title to a length, and never through a surrogate pair. */
+export function cutTitle(title: string, length: number): string {
+  return title.slice(0, length).replace(HIGH_SURROGATE_AT_END, "");
+}
+
+/** Cut the title of a page to the length a site keeps. */
+function cutPageTitle(title: string): string {
+  return cutTitle(title, MAX_PAGE_TITLE_LENGTH);
 }
 
 /**

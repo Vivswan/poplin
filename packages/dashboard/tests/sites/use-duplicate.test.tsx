@@ -45,7 +45,7 @@ const SOURCE = {
 } as unknown as Site;
 
 /** The copy once it is a site. */
-const COPY = { ...SOURCE, id: "zyx987wvu654", label: "trip-notes--zyx987wvu654", access: "private" };
+const COPY = { ...SOURCE, id: "zyx987wvu654", label: "trip-notes--zyx987wvu654", title: "Trip notes (copy)", access: "private" };
 
 /** The upload the copy's answers name. */
 const UPLOAD = "00000000000000aa";
