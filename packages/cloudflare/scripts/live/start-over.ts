@@ -19,7 +19,6 @@ import { BasePolicies as BaseAlerts } from "cloudflare/resources/alerting/polici
 import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
 import { BaseRecords } from "cloudflare/resources/dns/records";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
-import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 import { BaseObjects } from "cloudflare/resources/r2/buckets/objects";
 import { BaseRoutes } from "cloudflare/resources/workers/routes";
 import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
@@ -35,7 +34,7 @@ import { removeForwarders } from "../../src/zone/forwarders/forwarders";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { removeOwnRule, syncPhase } from "../../src/zone/rules/rules";
 import { applySteps } from "../../src/zone/sync";
-import { readFreePlans } from "./plan";
+import { refuseOtherAccount } from "./test-account";
 import { BUCKET, type Found, findInstall, isStop, openRun, type Run, reportStop, SCRIPT, type Stop, stopOf } from "./util";
 
 /** What the variable that asks for a start-over must hold: the workflow's ticked box. */
@@ -250,15 +249,7 @@ async function findTestInstall(run: Run, env: Environment): Promise<Found | Stop
   const found = await findInstall(run, env);
   if (isStop(found)) return found;
 
-  const plans = await readFreePlans(run, found.zone);
-  if (isStop(plans) && plans.kind === "failed") return plans;
-
-  const buckets = await callCloudflare(run.connection, (api) => new BaseBuckets(api).list({ account_id: run.accountId, name_contains: BUCKET }));
-  if (!buckets.ok) return stopOf(buckets, "Workers R2 Storage: Edit");
-
-  const held = buckets.value.buckets?.some((bucket) => bucket.name === BUCKET) === true;
-
-  return held ? found : { kind: "failed", what: "the account holds no bucket of the test install, so nothing in it is removed" };
+  return (await refuseOtherAccount(run, found.zone)) ?? found;
 }
 
 /** Remove each kind in order, telling how many went; answers what stopped the run, or `undefined` once every kind is gone or told as left. */

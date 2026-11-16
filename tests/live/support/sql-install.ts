@@ -1,4 +1,4 @@
-// A local install whose database a test also reaches with SQL: the real API on bun's SQLite and a store in memory, for the self-test of what the live harness does to a database directly.
+// A local install whose database a test also reaches with SQL, and its bucket: the real API on bun's SQLite and a store in memory, for the self-test of what the live harness does to a database and a bucket directly.
 
 import { createApi } from "../../../packages/app/src/api/api";
 import { MemoryCounters } from "../../../packages/app/src/limits/memory-counters";
@@ -43,6 +43,9 @@ interface SqlInstall {
   /** Sends one request to the API. */
   readonly fetch: Fetch;
 
+  /** The bucket the install stores its files in. */
+  readonly store: MemoryStore;
+
   /** Runs one statement and answers its rows. */
   readonly sql: (statement: string, params?: readonly (string | number | null)[]) => Promise<readonly Record<string, unknown>[]>;
 
@@ -78,9 +81,10 @@ export async function openSqlInstall(kind: "domain" | "account address" = "domai
   const counters = new MemoryCounters();
   const free = kind === "account address";
   const addresses = free ? pathAddresses({ sitesHost: hostOf(FREE_HOSTS.sites), privateHost: hostOf(FREE_HOSTS.private) }) : ADDRESSES;
+  const store = new MemoryStore();
   const api = createApi({
     database,
-    store: new MemoryStore(),
+    store,
     now: () => FAKE_NOW,
     addressOf: addresses.addressOf,
     publicAddressOf: addresses.publicAddressOf,
@@ -99,6 +103,7 @@ export async function openSqlInstall(kind: "domain" | "account address" = "domai
   return {
     server: `https://${free ? FREE_HOSTS.admin : ADMIN_HOST}`,
     fetch: (input, init) => api.fetch(new Request(input, init)),
+    store,
     sql,
     addToken: async (note) => {
       const { token, record } = await mintToken({ scope: "admin", note, now: FAKE_NOW });
