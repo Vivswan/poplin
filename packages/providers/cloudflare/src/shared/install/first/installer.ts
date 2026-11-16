@@ -81,6 +81,12 @@ const MADE_FIRST = ["R2 bucket"] as const;
 /** The row of the repair that this file settles itself, before the upload. */
 const OWN_ROWS: ReadonlySet<string> = new Set(["D1 database"]);
 
+/** How many users of a database a row names before it counts the rest. */
+const NAMED_USERS = 5;
+
+/** How the users a row names are joined: `a and b`, `a, b, and 2 more`. */
+const USERS = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
 /** Where the install answers, with its checked addresses. */
 type Target = { readonly kind: "domain"; readonly layout: DomainLayout } | { readonly kind: "no-domain"; readonly layout: AccountAddresses };
 
@@ -410,13 +416,26 @@ async function stoodDatabase(work: Work, adopted: boolean): Promise<Stood | unde
   return { found, detail: said.length === 0 ? name : `${name} (${said.join("; ")})`, kept: stored?.state === "stored" ? stored.settings : undefined };
 }
 
-/** The row that says the first login a person gave was not used, where the database holds users and it is none of them; `undefined` where it is used, or is one of them. */
-function unusedLogin(login: Login, kept: SettingValues | undefined): Row | undefined {
-  if (kept === undefined || kept.logins.includes(login)) return undefined;
+/** The users a database holds, named for a row: the first five, and how many more there are. */
+function namedUsers(logins: readonly Login[]): string {
+  const more = logins.length - NAMED_USERS;
+
+  return USERS.format(more > 0 ? [...logins.slice(0, NAMED_USERS), `${more} more`] : logins);
+}
+
+/**
+ * The row of the first login a person gave, where the database holds users already; `undefined` where it holds none, and the login is used.
+ *
+ * It names the users the login is mended to, whether the person is one of them or not: the database may be one somebody else left under poplin's name, and they are who logs in from then on.
+ */
+function keptUsersRow(login: Login, kept: SettingValues | undefined): Row | undefined {
+  if (kept === undefined) return undefined;
 
   const users = kept.logins.length === 1 ? "its user" : `its ${kept.logins.length} users`;
+  const held = `The database holds ${users} already, and they are who logs in: ${namedUsers(kept.logins)}.`;
+  if (kept.logins.includes(login)) return { object: "First login", state: "leave", detail: `${login}: a user already. ${held}` };
 
-  return { object: "First login", state: "leave-out", detail: `${login}: not used. The database holds ${users} already, and they are who logs in. To let this person in too: npx poplin doctor --repair --add-user ${login}` };
+  return { object: "First login", state: "leave-out", detail: `${login}: not used. ${held} To let this person in too: npx poplin doctor --repair --add-user ${login}` };
 }
 
 /**
@@ -439,8 +458,8 @@ async function madeFirst(work: Work, target: Target, release: Release, login: Lo
   const database = left?.found ?? (await syncDatabase(connection, accountId, work.mode));
   if (!synced(work, "D1 database", left?.detail ?? INSTALL_OBJECTS.database, database)) return false;
 
-  const unused = unusedLogin(login, left?.kept);
-  if (unused !== undefined) note(work, unused);
+  const users = keptUsersRow(login, left?.kept);
+  if (users !== undefined) note(work, users);
 
   return (await workerPieces(work, target, release, { standing, databaseId: database.ok ? database.id : undefined })) && { kept: left?.kept };
 }

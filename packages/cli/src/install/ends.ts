@@ -2,6 +2,7 @@
 // A command of the family runs in one frame: its words read, its help and its list answered, its stops worded, every token hidden, and its lines shown for a person or as one JSON value.
 
 import { text } from "node:stream/consumers";
+import { stripVTControlCharacters } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import type { Run } from "../../../core/src/install/installer";
@@ -20,6 +21,12 @@ const PROVIDERS = fileURLToPath(new URL("./providers/", import.meta.url));
 
 /** The value of `TERM` on a terminal that takes no control sequence. */
 const PLAIN_TERMINAL = "dumb";
+
+/** A run of control characters, the line break among them. */
+const CONTROL_RUN = /\p{Cc}+/gu;
+
+/** One control character that is no line break. */
+const CONTROL_BUT_BREAK = /[^\P{Cc}\n]/gu;
 
 /** The exits of a stop, as the endings the command table knows. */
 const ENDINGS = { 1: "failed", 2: "usage-error", 5: "unreachable" } as const;
@@ -80,26 +87,31 @@ interface StoppedAt {
 /**
  * The same screen and the same machine's ends, with every token taken out of each line, each question, and each choice before it is shown.
  *
+ * A provider's text may quote what somebody else wrote in the account, so no escape sequence and no other control character of it reaches the terminal:
+ * a line stays one line, and a question keeps the line breaks its list is made of. The one JSON value holds each text as it came, since JSON escapes it.
  * Stdout is left to its writers: the screen, the one JSON value written without tokens, and the help, which holds nothing a person or a variable gave.
  */
 function guarded(io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): { readonly io: Io; readonly ends: InstallEnds } {
-  const safe = (text: string): string => hide(text, secrets);
+  // A token is hidden before anything is taken out, since an escape sequence right before it ends at the token's first letter; and once more after, for a token a control character stood in.
+  const shown = (text: string, controls: RegExp, as: string): string => hide(stripVTControlCharacters(hide(text, secrets)).replace(controls, as), secrets);
+  const line = (text: string): string => shown(text, CONTROL_RUN, " ");
+  const lines = (text: string): string => shown(text, CONTROL_BUT_BREAK, "");
   const { screen } = ends;
   const hiding: Screen = {
-    line: (tone, text) => screen.line(tone, safe(text)),
-    aside: (tone, text) => screen.aside(tone, safe(text)),
-    ask: (question, secret) => screen.ask(safe(question), secret),
-    confirm: (question, initial) => screen.confirm(safe(question), initial),
+    line: (tone, text) => screen.line(tone, line(text)),
+    aside: (tone, text) => screen.aside(tone, line(text)),
+    ask: (question, secret) => screen.ask(lines(question), secret),
+    confirm: (question, initial) => screen.confirm(lines(question), initial),
     choose: (question, picks) =>
       screen.choose(
-        safe(question),
-        picks.map((pick) => ({ value: pick.value, label: safe(pick.label), hint: safe(pick.hint) })),
+        lines(question),
+        picks.map((pick) => ({ value: pick.value, label: line(pick.label), hint: line(pick.hint) })),
       ),
-    working: (text) => screen.working(safe(text)),
+    working: (text) => screen.working(line(text)),
     rest: screen.rest,
   };
 
-  return { io: { ...io, err: (line) => io.err(safe(line)) }, ends: { ...ends, screen: hiding } };
+  return { io: { ...io, err: (text) => io.err(line(text)) }, ends: { ...ends, screen: hiding } };
 }
 
 /** The ways to show for one command. With `--json` no line reaches stdout but the one value, and what is no result goes to stderr as it is. */

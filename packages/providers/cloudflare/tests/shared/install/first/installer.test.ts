@@ -302,7 +302,7 @@ function usersAt(account: Account): { readonly login: string[]; readonly alerts:
 
 describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the data an uninstall kept, %s", (kind) => {
   const [first, second] = KEPT_USERS;
-  const unused = `First login | leave-out | ${LOGIN}: not used. The database holds its 2 users already, and they are who logs in. To let this person in too: npx poplin doctor --repair --add-user ${LOGIN}`;
+  const unused = `First login | leave-out | ${LOGIN}: not used. The database holds its 2 users already, and they are who logs in: ${first} and ${second}. To let this person in too: npx poplin doctor --repair --add-user ${LOGIN}`;
   const alerts = kind === "domain" ? [first, first] : [first];
 
   // Drift: the Worker stores its first settings only in a database that holds none. Mended to the first login a person typed, Cloudflare would let in an email the install turns away, and send no code to the users it knows.
@@ -329,14 +329,29 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     expect(mended?.ok === true ? mended.rows.filter((row) => row.state !== "leave" && row.state !== "leave-out") : mended).toEqual([]);
   });
 
-  // Drift: a person who types their own email again is a user already, so no row is owed; the other users the database holds must still get in.
-  test("a first login that is one of the stored users raises no row, and every stored user is let in", async () => {
+  // Drift: a database somebody else left under poplin's name holds their users, and the run mends the login to them. A row that counts them and names nobody lets a stranger in unseen; one that named a hundred would hide the rest of the run.
+  test("a database that holds more than five users has its first five named in the row, and the rest counted", async () => {
+    const account = await keptData();
+    const more = ["third", "fourth", "fifth", "sixth", "seventh"].map((name) => loginOf(`${name}@example.com`));
+    for (const login of more) await account.store.database.addLogin(login, { as: "person", by: first, at: 2 });
+
+    const rows = shown((await installed(account, kind, DRY)).done).filter((row) => row.startsWith("First login"));
+
+    const named = `${first}, ${second}, third@example.com, fourth@example.com, fifth@example.com, and 2 more`;
+
+    expect(rows).toEqual([`First login | leave-out | ${LOGIN}: not used. The database holds its 7 users already, and they are who logs in: ${named}. To let this person in too: npx poplin doctor --repair --add-user ${LOGIN}`]);
+  });
+
+  // Drift: a person who types their own email again is a user already, and the database may hold others somebody else put there. With no row, the run lets them in and names nobody.
+  test("a first login that is one of the stored users is told beside every user the database lets in, and every stored user is let in", async () => {
     const account = await keptData();
     const world = await worldOf(account);
     const found = await installer.find(KEY, KINDS[kind].where, world.reach);
     const done = await installer.install(startable(found), KINDS[kind].where, second, APPLY, world.reach, () => undefined);
 
-    expect([shown(done).filter((row) => row.startsWith("First login")), usersAt(account)]).toEqual([[], { login: [first, second], alerts }]);
+    const told = `First login | leave | ${second}: a user already. The database holds its 2 users already, and they are who logs in: ${first} and ${second}.`;
+
+    expect([shown(done).filter((row) => row.startsWith("First login")), usersAt(account)]).toEqual([[told], { login: [first, second], alerts }]);
   });
 
   // Drift: a run that stopped after its upload is found as one that was started, with no word that its database was kept. Finished to the typed login, it would be the same wrong install by two runs.

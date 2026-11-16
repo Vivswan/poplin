@@ -10,10 +10,11 @@
 //
 // The Worker is poplin's when `WORKER_NAME` is its own name and its bucket, database, and Workflow are bound. It is set once `ZONE` reads as an install and `ACCOUNT_ID` is there.
 // Until then it also carries `INSTALL_PLACE`, which its first upload states: without it nothing says which kind of install the run that made it was.
-// Nothing here changes anything, and no answer holds a text Cloudflare sent.
+// Nothing here changes anything. Of the texts the account holds, an answer tells three, each read first: the place as a domain, the version as a released one, and an account's name on one line.
 
 import type { Blocked, Found, Question, Reach, Read, Token } from "@poplin/core/src/install/installer";
 import { newestPinned } from "@poplin/core/src/records/release";
+import { isPlainVersion } from "@poplin/core/src/records/update";
 import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseVersions } from "cloudflare/resources/workers/scripts/versions";
@@ -60,6 +61,9 @@ const HELD_COMMANDS = { install: "npx poplin install cloudflare", repair: "npx p
 
 /** A list as a sentence says it. */
 const LISTED = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+/** A run of control characters, which no line told to a person holds. */
+const CONTROL_RUN = /\p{Cc}+/gu;
 
 /** What each state is told in. */
 const WORDS = {
@@ -133,9 +137,14 @@ function chosen(text: string, shown: readonly Shown[]): string | undefined {
   return numbered ?? shown.find((account) => account.id === typed)?.id;
 }
 
+/** An account's name as one line of a list: each run of control characters is one space, so a name adds no line and no escape sequence to what a person is asked. */
+function oneLine(name: string): string {
+  return name.replace(CONTROL_RUN, " ").trim();
+}
+
 /** The question of which account, where a token shows several: the answer is the place with that account named. */
 function whichAccount(where: Where, shown: readonly Shown[]): Question<Where> {
-  const list = shown.map((account, index) => `  ${index + 1}) ${account.name} (${account.id})`).join("\n");
+  const list = shown.map((account, index) => `  ${index + 1}) ${oneLine(account.name)} (${account.id})`).join("\n");
 
   return {
     key: "account",
@@ -254,13 +263,13 @@ function dashboardOf(bindings: readonly ListedBinding[]): string | undefined {
   return `https://${install.kind === "domain" ? install.layout.adminHostname : install.layout.adminHost}`;
 }
 
-/** The release a Worker runs, from the tag of its latest version; `undefined` where none can be read. */
+/** The release a Worker runs, from the tag of its latest version; `undefined` where none can be read, and for a tag that is no released version: the tag is a text anybody who may write the Worker sets. */
 async function versionOf(place: Place): Promise<string | undefined> {
   const versions = await callCloudflare(place.connection, (api) => new BaseVersions(api).list(SCRIPT, { account_id: place.accountId }));
   const latest = versions.ok ? v.safeParse(LISTED_VERSION, versions.value.result.items?.[0]) : undefined;
   const tag = latest?.success === true ? latest.output.annotations?.[VERSION_TAG] : undefined;
 
-  return typeof tag === "string" ? tag : undefined;
+  return typeof tag === "string" && isPlainVersion(tag) ? tag : undefined;
 }
 
 /** Say that an install that was started and not finished was started for another place than the one a person named; `undefined` where the two are one. */
