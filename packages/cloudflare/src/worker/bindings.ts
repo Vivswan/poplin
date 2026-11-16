@@ -11,7 +11,7 @@ export interface Bindings {
   /** The one-minute request counts of every visitor and every site. */
   readonly MINUTE_LIMITS: RateLimit;
 
-  /** The install's zone values, unchecked: the domain, and the public word when the install chose one. Setup or the OpenTofu module writes it; a Worker without it answers setup alone. */
+  /** Where the install answers, unchecked: its domain and the public word it chose, or the account's name in its free address on an install without a domain. Setup or the OpenTofu module writes it; a Worker without it answers setup alone. */
   readonly ZONE: unknown;
 
   /** The first settings in their text form, unchecked: the logins, and any other setting that does not start at its default. The Worker stores them while it has no settings, and never reads them once it has. */

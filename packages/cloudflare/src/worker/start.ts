@@ -1,6 +1,7 @@
 // One Worker instance made ready: its bindings read, its database opened and brought up to date, the first settings and the visitor key stored, and every piece built over them.
 //
 //   ZONE, ACCOUNT_ID, WORKER_NAME   read and checked                     else `binding`, naming every one that is refused
+//   ZONE                            a domain, or an account's address    the kind of the install, with its hosts: every piece below that differs by kind comes from that one value
 //   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`: its setup page alone, until somebody has logged in
 //   ACCESS             read and checked; absent, nobody is admitted      else `binding`
 //   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`
@@ -17,7 +18,7 @@ import type { RulesFollow } from "@poplin/app/src/console/settings/rules-follow"
 import type { UsageHost } from "@poplin/app/src/console/usage/records";
 import type { Identify } from "@poplin/app/src/login/admit";
 import { createEntries } from "@poplin/app/src/login/entries";
-import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
+import type { SiteAddresses } from "@poplin/app/src/sites/addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
@@ -31,10 +32,8 @@ import type { SiteId } from "@poplin/core/src/sites/ids";
 import * as v from "valibot";
 import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
-import { createInstallKey } from "../key/install-key";
 import { readKeptKey } from "../key/kept-key";
 import { createEndLogins } from "../key/logins-end";
-import { createRulesFollow } from "../key/rules-follow";
 import { createUsersFollow } from "../key/users-follow";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
@@ -46,13 +45,11 @@ import { readAccessBinding } from "../zone/access-binding";
 import type { Connection } from "../zone/client";
 import { isDeployHook } from "../zone/deploy-hook";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
-import type { DomainLayout } from "../zone/layout";
-import { readZoneBinding } from "../zone/zone-binding";
 import { createFirstRun } from "../zone/first-run";
-import { createDomainPlug, giveKey } from "../zone/zone-plug";
 import type { Bindings } from "./bindings";
 import { logFault } from "./fault";
 import { derivedSecret, type Held } from "./held";
+import { type InstallHosts, readHosts } from "./hosts";
 import { readOwnWorker } from "./own-worker";
 
 /** What one request to the API may carry. Cloudflare's Free plan ends a request body at 100 MB, and core ends a manifest at 1.5 MB itself. */
@@ -79,9 +76,6 @@ const KEYS_UNAVAILABLE = "keys-unavailable";
 /** The version of poplin this Worker was built from: the one the released package states, read when the Worker is bundled. */
 const VERSION: string = version;
 
-/** The address layout of an install, as serving and the login ask it. */
-type Addresses = ReturnType<typeof hostnameAddresses>;
-
 /** What the instance is given besides its bindings. */
 export interface Outside {
   /** The clock, in milliseconds since the epoch. */
@@ -105,14 +99,14 @@ export type VisitorOf = (request: Request, database: Database) => Promise<string
 
 /** Everything a request is answered from. One is built per Worker instance: the counters and the Access keys remember what they saw. */
 export interface Instance {
-  /** The install's domain, its admin hostname, and its public word. */
-  readonly layout: DomainLayout;
+  /** Where the install answers: its kind, its admin host, and what each hostname is answered as. */
+  readonly hosts: InstallHosts;
 
   /** The install as the actions take it: the database, the bucket, the clock, and how an address is written. */
   readonly install: Install;
 
-  /** The install's address layout. */
-  readonly addresses: Addresses;
+  /** The install's address layout: hostnames under a domain, or paths on two hosts. */
+  readonly addresses: SiteAddresses;
 
   /** The request counts of the limits. */
   readonly counters: CloudflareCounters;
@@ -129,8 +123,8 @@ export interface Instance {
   /** Writes the Activity line of a login, once for each login at Access; it is told every dashboard page a user opens. */
   readonly entered: ReturnType<typeof createEntries>;
 
-  /** The install's side at Cloudflare, for setup and the Domain tab. */
-  readonly domain: DomainPlug;
+  /** The install's side at Cloudflare, for setup and the Domain tab. Absent on an install of a kind that has none: it has no Domain tab, and its setup page is shut. */
+  readonly domain: DomainPlug | undefined;
 
   /** The key poplin keeps for Cloudflare: whether the install holds one, whether Cloudflare still takes it, and the way to a new one. Nothing answers the key itself. */
   readonly key: InstallKey;
@@ -258,22 +252,22 @@ async function readStored(database: Database): Promise<SettingsAndKey | Extract<
 
 /** Read the Worker's variables, and list every one that cannot be used. An absent `ACCESS` is no fault: nobody is admitted until setup writes it. */
 function readVariables(env: Bindings): {
-  readonly zone: ReturnType<typeof readZoneBinding>;
+  readonly hosts: ReturnType<typeof readHosts>;
   readonly own: ReturnType<typeof readOwnWorker>;
   readonly access: ReturnType<typeof readAccessBinding>;
   readonly refused: readonly RefusedBinding[];
 } {
-  const zone = readZoneBinding(env.ZONE);
   const own = readOwnWorker({ accountId: env[INSTALL_OBJECTS.accountBinding], script: env[INSTALL_OBJECTS.workerBinding] });
+  const hosts = readHosts(env.ZONE, own.ok ? own.value.script : own.script);
   const access = readAccessBinding(env[INSTALL_OBJECTS.accessBinding]);
   const noAccess = !access.ok && access.refusal === "absent";
   const refused: RefusedBinding[] = [
-    ...(zone.ok ? [] : [{ binding: "ZONE" as const, refusal: zone.refusal }]),
+    ...(hosts.ok ? [] : [{ binding: "ZONE" as const, refusal: hosts.refusal }]),
     ...(own.ok ? [] : own.refused),
     ...(access.ok || noAccess ? [] : [{ binding: "ACCESS" as const, refusal: access.refusal }]),
   ];
 
-  return { zone, own, access, refused };
+  return { hosts, own, access, refused };
 }
 
 /**
@@ -312,7 +306,7 @@ async function startUnset(given: {
  * @throws whatever the database rejects with while the settings or the key are stored
  */
 export async function startInstance(env: Bindings, outside: Outside, visitorOf: VisitorOf): Promise<Started> {
-  const { zone, own, access, refused } = readVariables(env);
+  const { hosts: read, own, access, refused } = readVariables(env);
   // Setup writes the domain and the account together, so either one absent is a Worker with nothing set. Any other fault is a value somebody typed wrong.
   const nothingSet = refused.every(({ binding, refusal }) => refusal === "absent" && (binding === "ZONE" || binding === INSTALL_OBJECTS.accountBinding));
   if (!nothingSet) return { ok: false, failure: { kind: "binding", refused } };
@@ -340,7 +334,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   if ("ok" in stored) return stored;
 
   const settled = stored.settings !== undefined;
-  if (!zone.ok || !own.ok) return startUnset({ database, driver, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
+  if (!read.ok || !own.ok) return startUnset({ database, driver, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
 
   const unset = settled ? undefined : await ensureSettings(database, env.FIRST_SETTINGS, now);
   if (unset !== undefined) return unset;
@@ -348,8 +342,8 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   // An install that holds its key is asked for it no more: only the first start of an install makes one.
   if (stored.key === undefined) await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);
 
-  const layout = zone.value;
-  const addresses = hostnameAddresses(layout);
+  const hosts = read.value;
+  const { addresses } = hosts;
   const install: Install = {
     database,
     store: new R2Store(env.SITES),
@@ -363,15 +357,14 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   // An install that holds its key takes a release by itself; one that holds none starts a build at the saved address.
   const self = kept === undefined ? undefined : createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
   const rebuild = { accepts: isDeployHook, fetch: outside.rebuild, self };
-  const placed = { ...own.value, layout, fetch: outside.cloudflare };
-  const key: InstallKey = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
-  const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules: createRulesFollow(kept, { accountId: own.value.accountId, layout }) };
+  const { key, domain, rules } = hosts.sideOf({ ...own.value, kept, fetch: outside.cloudflare });
+  const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules };
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),
     limits: API_LIMITS,
     version: VERSION,
-    layout: { kind: "hostname", public_word: layout.publicWord },
+    layout: hosts.layout,
     report: (error) => logFault("an API request failed", error),
     counters,
     visitorOf: (request) => visitorOf(request, database),
@@ -380,7 +373,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   });
 
   const instance: Instance = {
-    layout,
+    hosts,
     install,
     addresses,
     counters,
@@ -388,7 +381,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     api,
     entered: createEntries(install, (error) => logFault("a login was not written to the audit log", error)),
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
-    domain: createDomainPlug({ ...placed, key }),
+    domain,
     key,
     ...carried,
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), key: kept }),

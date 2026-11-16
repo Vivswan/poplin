@@ -9,7 +9,7 @@
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
-import type { AddressLayout } from "../address-layout";
+import type { AccountAddresses } from "../address-layout";
 import { type CloudflareResult, type Connection, callCloudflare } from "../client";
 import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
@@ -85,12 +85,12 @@ function planForwarder(name: string, service: string, workers: readonly AccountW
 }
 
 /** One step per forwarder, the open sites' first; no step names another Worker. */
-function planForwarders(layout: AddressLayout, workers: readonly AccountWorker[]): ForwarderStep[] {
+function planForwarders(layout: AccountAddresses, workers: readonly AccountWorker[]): ForwarderStep[] {
   return [layout.sitesWorker, layout.privateWorker].map((name) => planForwarder(name, layout.worker, workers));
 }
 
 /** A step per Worker of a forwarder's name: a `remove` for one of poplin's and a `skip` for one that is not; none for a name the account has no Worker of. */
-function planRemoval(layout: AddressLayout, workers: readonly AccountWorker[]): RemovalStep[] {
+function planRemoval(layout: AccountAddresses, workers: readonly AccountWorker[]): RemovalStep[] {
   return [layout.sitesWorker, layout.privateWorker].flatMap((name): RemovalStep[] => {
     const current = workers.find((worker) => worker.id === name);
     if (current === undefined) return [];
@@ -100,7 +100,7 @@ function planRemoval(layout: AddressLayout, workers: readonly AccountWorker[]): 
 }
 
 /** The account's Workers of the two forwarders' names; with `compared`, each of poplin's carries its bindings and its two switches. */
-async function readForwarders(connection: Connection, accountId: string, layout: AddressLayout, compared: boolean): Promise<CloudflareResult<AccountWorker[]>> {
+async function readForwarders(connection: Connection, accountId: string, layout: AccountAddresses, compared: boolean): Promise<CloudflareResult<AccountWorker[]>> {
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BaseScripts(api).list({ account_id: accountId })));
   if (!listed.ok) return listed;
 
@@ -143,7 +143,7 @@ function upload(connection: Connection, accountId: string, name: string, service
  * @returns what was created, changed, and left; a Worker of a forwarder's name that is not poplin's is skipped with the reason.
  *   A forwarder is uploaded and then given its free address, so one whose second call failed is finished by the next run
  */
-export async function syncForwarders(connection: Connection, accountId: string, layout: AddressLayout, mode: Mode): Promise<Synced> {
+export async function syncForwarders(connection: Connection, accountId: string, layout: AccountAddresses, mode: Mode): Promise<Synced> {
   const workers = await readForwarders(connection, accountId, layout, true);
   if (!workers.ok) return { ...workers, report: reportOf([]) };
 
@@ -163,7 +163,7 @@ export async function syncForwarders(connection: Connection, accountId: string, 
  * @param mode - `plan` reads the account's Workers and sends no change
  * @returns what was removed; a Worker of a forwarder's name that is not poplin's is skipped with the reason, and an account with neither changes nothing
  */
-export async function removeForwarders(connection: Connection, accountId: string, layout: AddressLayout, mode: Mode): Promise<Synced> {
+export async function removeForwarders(connection: Connection, accountId: string, layout: AccountAddresses, mode: Mode): Promise<Synced> {
   const workers = await readForwarders(connection, accountId, layout, false);
   if (!workers.ok) return { ...workers, report: reportOf([]) };
 
