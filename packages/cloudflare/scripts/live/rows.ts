@@ -1,15 +1,17 @@
 // A ceiling on the rows one step of a live run makes the install write to its database. D1's Free plan takes 100,000 rows written a day, every database of the account together, and refuses each write past them until midnight UTC.
 //
-//   POST   /api/uploads                    a new site 19, a new version 13: the begin and its finish together
+//   POST   /api/uploads                    a new site 19, and 1 where it is told an expiry; a new version 13: the begin and its finish together
 //   POST   /api/uploads/:upload/finish     2 where the publish dropped older versions and 2 for each of them, once its answer says how many
-//   POST   /api/import/sites               a site with one version 19, and 2 for each version more
+//   POST   /api/import/sites               a site with one version 19, 2 for each version more, and 1 where it runs out and is in no trash
 //   DELETE /api/sites/:site                to the trash 6, for good 13
-//   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 5    PATCH /api/sites/:site 3    POST /api/sites/:site/rollback 2
+//   PATCH  /api/sites/:site                who may open it 3, any other setting 2, both 5, and 1 where it is told an expiry
+//   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 6    POST /api/sites/:site/rollback 2
 //   PATCH  /api/config 3                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
 //
 // D1 counts an index entry and a row a trigger writes as rows, so one new site is 8 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
+// A site that runs out has one entry more, in the index of expiries, written when it is told an expiry and when it leaves the trash: a restore is counted as if its site ran out, as every site of the checks does.
 // A visit is counted once it is answered, since only the answer says that a site was served, and so is a dropped version. Once a step is stopped, no further request for a site's address is sent.
 // A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
 // A request that would pass the ceiling is not sent, and every one after it: each is answered here as refused, with a 403, which the CLI does not send again.
@@ -34,8 +36,17 @@ const IMPORTED_SITE = 19;
 /** The rows each further version of a site put back from a backup adds. */
 const IMPORTED_VERSION = 2;
 
+/** The row a site's entry in the index of expiries is: written when a site is told an expiry, and again when one that runs out leaves the trash. */
+const EXPIRY = 1;
+
 /** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
 const REMOVED = { trash: 6, forever: 13 } as const;
+
+/** The rows of a change to a site: of who may open it, and of any other setting. Both are written where a request asks for both. */
+const CHANGED = { access: 3, details: 2 } as const;
+
+/** The keys of a change that say who may open a site. */
+const ACCESS_KEYS: ReadonlySet<string> = new Set(["access", "public_name"]);
 
 /** The rows a visit writes that a site answered with a page or a file: the day's count of the site, and of all sites. */
 const VISIT = 2;
@@ -57,15 +68,15 @@ const HELD_BACK = 403;
 
 /** The routes whose requests make the install write rows, each with the most rows one request writes. One the app does not declare does not compile. */
 const PRICES = [
-  { method: "POST", path: "/api/uploads", rows: (asked) => (asked.body.site === undefined ? NEW_SITE : NEW_VERSION) },
-  { method: "POST", path: "/api/import/sites", rows: (asked) => IMPORTED_SITE + IMPORTED_VERSION * (versionsIn(asked.body) - 1) },
+  { method: "POST", path: "/api/uploads", rows: (asked) => (asked.body.site === undefined ? NEW_SITE + expiryRows(asked.body) : NEW_VERSION) },
+  { method: "POST", path: "/api/import/sites", rows: (asked) => IMPORTED_SITE + IMPORTED_VERSION * (versionsIn(asked.body) - 1) + importedExpiryRows(asked.body.site) },
   { method: "PUT", path: "/api/uploads/:upload/file", rows: () => 0 },
   { method: "POST", path: "/api/uploads/:upload/finish", rows: () => 0 },
   { method: "GET", path: "/api/uploads/:upload", rows: () => 1 },
   { method: "DELETE", path: "/api/uploads/:upload", rows: () => 3 },
   { method: "DELETE", path: "/api/sites/:site", rows: (asked) => (asked.query.get("forever") === "true" ? REMOVED.forever : REMOVED.trash) },
-  { method: "PATCH", path: "/api/sites/:site", rows: () => 3 },
-  { method: "POST", path: "/api/sites/:site/restore", rows: () => 5 },
+  { method: "PATCH", path: "/api/sites/:site", rows: (asked) => changeRows(asked.body) },
+  { method: "POST", path: "/api/sites/:site/restore", rows: () => 5 + EXPIRY },
   { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },
   { method: "POST", path: "/api/sites/:site/rollback", rows: () => 2 },
   { method: "PATCH", path: "/api/config", rows: () => 3 },
@@ -110,6 +121,27 @@ function versionsOf(site: unknown): number {
 /** How many versions the site of an import carries; one for a body that names none. */
 function versionsIn(body: Asked["body"]): number {
   return Math.max(1, versionsOf(body.site));
+}
+
+/** The row a request writes that tells a site when it runs out; none for a request that names no expiry, or says never. */
+function expiryRows(body: Asked["body"]): number {
+  return typeof body.expires === "string" && body.expires !== "never" ? EXPIRY : 0;
+}
+
+/** The row a site put back from a backup writes for its expiry: a backup holds the moment, and a site in the trash has no entry. */
+function importedExpiryRows(site: unknown): number {
+  if (typeof site !== "object" || site === null || !("expires" in site) || !("state" in site)) return 0;
+
+  return typeof site.expires === "number" && site.state !== "trash" ? EXPIRY : 0;
+}
+
+/** The rows of a change to a site, by what it asks for: who may open it, any other setting, or both, and the expiry's entry where it names one. */
+function changeRows(body: Asked["body"]): number {
+  const keys = Object.keys(body);
+  const access = keys.some((key) => ACCESS_KEYS.has(key)) ? CHANGED.access : 0;
+  const details = keys.some((key) => !ACCESS_KEYS.has(key)) ? CHANGED.details : 0;
+
+  return access + details + expiryRows(body);
 }
 
 /** The JSON object a request carries; empty for a body that is none, such as a file's bytes. */

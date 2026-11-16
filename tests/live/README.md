@@ -171,11 +171,13 @@ The database's free plan takes 100,000 rows written a day, every database of the
 
 | One request of a run                      | Rows, at most | Which are                                                                  |
 | ----------------------------------------- | ------------- | -------------------------------------------------------------------------- |
-| a new site, from its begin to its finish  | 25            | the site 12, the upload 7, the day's counts 2, the version 2, the log 2    |
-| a new version that drops no older one     | 15            | 19 where it drops one, and 2 for each further one it drops                 |
-| a site put back from a backup             | 25            | and 2 for each version more                                                |
-| a site removed for good                   | 14            | with three versions and a day's count; 9 to the trash, 9 out of it         |
-| a new link 12, a setting of a site 5      |               | a rollback 3, a setting of the install 4, a computer's login 3             |
+| a new site, from its begin to its finish  | 19            | the site 8, the upload 6, the day's counts 2, the version 2, the log 1     |
+| a new site that is told an expiry         | 20            | its entry in the index of expiries; every site of the checks has one       |
+| a new version that drops no older one     | 13            | 17 where it drops one, and 2 for each further one it drops                 |
+| a site put back from a backup             | 19            | 2 for each version more, and 1 where it runs out                           |
+| a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 6 out of it         |
+| a change of who may open a site           | 3             | any other setting 2, both at once 5, and 1 where it is told an expiry      |
+| a new link                                | 9             | a rollback 2, a setting of the install 3, a computer's login 3             |
 | a listing of the bucket                   | 1             | the files of a version, and what an upload lacks                           |
 | a page or a file a site answered          | 2             | the day's count of the site, and of all sites                              |
 
@@ -189,18 +191,18 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   755 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the checks, as the harness counts them   773 on the local fake, a few more with the demo's check: every site they publish, change, and remove
 a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
-a reset that keeps none                  about 385
+a reset that keeps none                  about 390
 the harness's own statements             18: three tokens in and out, and the caps
-a usual run                              about 810 counted; the sweep later drops each upload's row, 5 a publish, about 125 more
+a usual run                              about 830 counted; the sweep later drops each upload's row, 5 a publish, about 125 more
 a day of 40 such runs                    about 37,000 of the 100,000
 ```
 
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 755 of at most 1100
+Rows written this run: 773 of at most 1100
 ```
 
 ## The backup drill
