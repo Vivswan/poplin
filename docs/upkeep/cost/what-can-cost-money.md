@@ -35,7 +35,7 @@ made by  the install, with the key it keeps: when the users change, and once a d
 sooner   Repair, with an account token that also holds Notifications: Edit
 ```
 
-An install of either kind, under a domain or without one, holds [its key](../../about/security.md#the-kept-key) from its first Repair, and makes the alert with it. No permission is added for that.
+An install of either kind, under a domain or without one, holds [its key](../../about/security.md#the-kept-key) from the run that made it, and makes the alert with it. No permission is added for that.
 
 | The token of a Repair | The alert |
 | --- | --- |

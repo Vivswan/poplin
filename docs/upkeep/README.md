@@ -9,6 +9,6 @@ Updates, backups, the removal of an install, and the limits.
 | Page                               | What it covers                                                    |
 | ---------------------------------- | ----------------------------------------------------------------- |
 | [Update](update.md)                | how each kind of install updates; the notice of a newer version   |
-| [Back up](back-up.md)              | export and import                                                 |
+| [Back up](back-up.md)              | export and import; how to move an install                         |
 | [Remove](remove.md)                | `poplin uninstall`, what it removes, and the same removal by hand |
 | [Limits and cost](cost/README.md)  | what can cost money; the limits; what one action costs            |
