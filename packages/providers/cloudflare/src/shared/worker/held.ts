@@ -62,7 +62,7 @@ function derivation(label: string): HkdfParams {
  * @param key - the bytes of the install's visitor key
  * @returns the key that hashes a visitor's address for the limits
  */
-export async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<Held, "visitorSecret">> {
+async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<Held, "visitorSecret">> {
   const derivable = await crypto.subtle.importKey("raw", key, "HKDF", false, ["deriveKey"]);
 
   return { visitorSecret: await crypto.subtle.deriveKey(derivation(VISITOR_LABEL), derivable, VISITOR_KEY, false, ["sign"]) };

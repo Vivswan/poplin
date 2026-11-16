@@ -50,8 +50,8 @@ interface FailedStart {
   /** The kept key, or `undefined` on an install that holds none. */
   readonly key: KeptKey | undefined;
 
-  /** The Worker's own place, or `undefined` where its variables do not say it. */
-  readonly worker: OwnWorker | undefined;
+  /** The Worker's own place. */
+  readonly worker: OwnWorker;
 
   /** The database as it stands, and the clock: the going back is noted there. */
   readonly noting: { readonly database: Database; readonly now: () => number };
@@ -108,7 +108,7 @@ async function versionBefore(key: KeptKey, worker: OwnWorker, tags: { readonly r
 export async function goBack(start: FailedStart): Promise<{ readonly from: string; readonly to: string } | undefined> {
   const { key, worker, failed } = start;
   const to = backAfterFailedStep(readLastUpdate(start.last), failed);
-  if (to === undefined || key === undefined || worker === undefined) return undefined;
+  if (to === undefined || key === undefined) return undefined;
 
   const before = await versionBefore(key, worker, { running: failed.version, before: to });
   if (before === undefined) return undefined;

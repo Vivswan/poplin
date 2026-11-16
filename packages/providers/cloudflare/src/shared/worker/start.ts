@@ -2,7 +2,7 @@
 //
 //   ZONE, ACCOUNT_ID, WORKER_NAME   read and checked                     else `binding`, naming every one that is refused
 //   ZONE                            a domain, or an account's address    the kind of the install, with its hosts: every piece below that differs by kind comes from that one value
-//   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`: its setup page alone
+//   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`, before the database is opened: an install command has not finished it
 //   ACCESS             read and checked; absent, nobody is admitted      else `binding`
 //   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`, which carries the way back to the code before an update
 //   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`
@@ -12,8 +12,7 @@
 //   LAST_UPDATE        the update the running code came in with; absent, the code was put in place another way
 
 import { createApi } from "@poplin/app/src/api/api";
-import type { Counters } from "@poplin/app/src/limits/limits";
-import type { DomainPlug, FirstRun } from "@poplin/app/src/console/domain/records";
+import type { DomainPlug } from "@poplin/app/src/console/domain/records";
 import type { InstallKey, Keyed } from "@poplin/app/src/console/key/records";
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import type { RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
@@ -54,11 +53,9 @@ import { createBucketTickets } from "../storage/r2-tickets";
 import { readAccessBinding } from "../login/access-binding";
 import type { Connection } from "../install/client";
 import { INSTALL_OBJECTS } from "../install/install-objects";
-import { createFirstRun } from "../install/kind/first-run";
 import { readFirstSettings } from "../install/kind/first-settings";
 import type { Bindings } from "./bindings";
 import { logFault } from "./fault";
-import { derivedSecret, type Held } from "./held";
 import { type InstallHosts, readHosts } from "./hosts";
 import { readOwnWorker } from "./own-worker";
 
@@ -167,34 +164,19 @@ interface RefusedBinding {
   readonly refusal: string;
 }
 
-/** What a Worker with nothing set answers its setup page from: no domain is known, so there is no install to serve. */
-export interface Unset {
-  /** The database, which holds no settings yet. */
-  readonly database: Database;
-
-  /** The request counts of the setup page's tries. */
-  readonly counters: Counters;
-
-  /** The Cloudflare side of an install that has no domain and no account yet. */
-  readonly first: FirstRun;
-
-  /** The secret the setup page counts its visitors with. */
-  readonly secrets: Pick<Held, "visitorSecret">;
-}
-
 /**
  * Why an instance could not start. `binding` names every variable that is refused, at least one. `differs` is a database another build of poplin made.
  *
  * `failed` is a schema step that could not run: `back` puts the code before an update back in place, where the install may go back by itself.
  *
- * `unset` is no fault: the Worker was deployed and setup has not given it its domain and its account.
+ * `unset` is no fault: the Worker's code is in place, and the install command has not yet written where it answers and its account.
  */
 export type Failure =
   | { readonly kind: "binding"; readonly refused: readonly RefusedBinding[] }
   | { readonly kind: "newer" }
   | { readonly kind: "differs" }
   | { readonly kind: "failed"; readonly back: () => ReturnType<typeof goBack> }
-  | { readonly kind: "unset"; readonly unset: Unset };
+  | { readonly kind: "unset" };
 
 /** An instance, or why there is none. */
 export type Started = { readonly ok: true; readonly instance: Instance } | { readonly ok: false; readonly failure: Failure };
@@ -276,34 +258,6 @@ function readVariables(env: Bindings): {
   return { hosts, own, access, refused };
 }
 
-/**
- * Answer the start of a Worker with nothing set: the parts its setup page needs, and no install.
- *
- * A Worker without its values whose database holds settings is one that lost them: it names them and offers no setup, which would give it another first login than the stored one.
- */
-async function startUnset(given: {
-  readonly database: Database;
-  readonly driver: D1Driver;
-  readonly env: Bindings;
-  readonly outside: Outside;
-  readonly refused: readonly RefusedBinding[];
-  readonly script: string | undefined;
-  readonly settled: boolean;
-}): Promise<Started> {
-  const { database, env, outside, refused, script, settled } = given;
-  if (script === undefined || settled) return { ok: false, failure: { kind: "binding", refused } };
-
-  const key = await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), outside.now());
-  const unset: Unset = {
-    database,
-    counters: new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: given.driver }),
-    first: createFirstRun({ script, fetch: outside.cloudflare }),
-    secrets: await derivedSecret(key.key),
-  };
-
-  return { ok: false, failure: { kind: "unset", unset } };
-}
-
 /** What an instance reads of its two secrets: the kept key, the upload key, and the bucket's own tickets while that key signs them. */
 interface Keys {
   readonly kept: ReturnType<typeof readKeptKey>;
@@ -349,16 +303,19 @@ function failedStep(
  */
 export async function startInstance(env: Bindings, outside: Outside, visitorOf: VisitorOf): Promise<Started> {
   const { hosts: read, own, access, refused } = readVariables(env);
-  // Setup writes the domain and the account together, so either one absent is a Worker with nothing set. Any other fault is a value somebody typed wrong.
+  // An install writes the domain and the account together, so either one absent is a Worker with nothing set. Any other fault is a value somebody typed wrong.
   const nothingSet = refused.every(({ binding, refusal }) => refusal === "absent" && (binding === "ZONE" || binding === INSTALL_OBJECTS.accountBinding));
   if (!nothingSet) return { ok: false, failure: { kind: "binding", refused } };
+
+  // Nothing of the account is opened for a Worker that names no place to answer at.
+  if (!read.ok || !own.ok) return { ok: false, failure: { kind: "unset" } };
 
   const now = outside.now();
   const driver = new D1Driver(env.DB, outside.now);
   const opened = await openDatabase(driver, now);
   if (opened.kind === "newer") return { ok: false, failure: { kind: "newer" } };
 
-  if (opened.kind === "failed") return failedStep(opened, { env, outside, worker: own.ok ? own.value : undefined });
+  if (opened.kind === "failed") return failedStep(opened, { env, outside, worker: own.value });
 
   if (opened.kind !== "open") {
     console.error(`poplin: ${opened.message}`);
@@ -370,11 +327,8 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const stored = await readStored(database);
   if ("ok" in stored) return stored;
 
-  const settled = stored.settings !== undefined;
-  if (!read.ok || !own.ok) return startUnset({ database, driver, env, outside, refused, script: own.ok ? own.value.script : own.script, settled });
-
-  const unset = settled ? undefined : await ensureSettings(database, env.FIRST_SETTINGS, now);
-  if (unset !== undefined) return unset;
+  const refusedFirst = stored.settings === undefined ? await ensureSettings(database, env.FIRST_SETTINGS, now) : undefined;
+  if (refusedFirst !== undefined) return refusedFirst;
 
   // An install that holds its key is asked for it no more: only the first start of an install makes one.
   if (stored.key === undefined) await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now);
