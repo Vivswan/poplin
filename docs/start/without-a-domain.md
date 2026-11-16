@@ -144,13 +144,20 @@ npx poplin doctor
 
 ## A domain, afterwards
 
-No command puts this install under a domain. The way is to [move it](../upkeep/back-up.md#move-an-install): back up with `npx poplin export --out backup.zip`, install anew under the domain, and bring the data back with `npx poplin import backup.zip`.
+No command puts this install under a domain. The way is to [move it](../upkeep/back-up.md#move-an-install): back up, install anew under the domain, and bring the data back. Both lines need their options:
+
+| Line                                                | Without its option                                                    |
+| --------------------------------------------------- | --------------------------------------------------------------------- |
+| `npx poplin export --all-versions --out backup.zip` | the zip holds each site's live version alone: the kept versions before it are lost with this install |
+| `npx poplin import backup.zip --settings`           | the sites come back, and the new install keeps its own settings       |
 
 | Thing                 | After the move                                                     |
 | --------------------- | ------------------------------------------------------------------ |
 | a site's address      | new: a hostname of its own under your domain                       |
 | a link you shared     | stops with this install. Send the new one                          |
-| each computer's login | made anew, with `npx poplin login`                                 |
+| each computer's login | made anew, with `npx poplin login`: the zip holds no token         |
+| the users             | the first login of the new install. `--settings --logins` brings the old list |
+| the activity log      | starts anew: the zip does not hold it                              |
 
 ## Afterwards
 

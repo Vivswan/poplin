@@ -383,7 +383,15 @@ No command moves an install: not to a domain, not off one, and not to another ac
 | 4    | `npx poplin import backup.zip --settings`           | you, once this computer is logged in to the new install |
 | 5    | to another account: the removal of the old install  | the user, once step 4 put every site back               |
 
-Tell the user what changes before step 1, and wait for their yes. Under another domain, or of the other kind, every site gets a new address and each link they shared stops. Each computer logs in again. In one account the old install goes before the new one is made, so the zip is then the only copy.
+Tell the user what changes before step 1, and wait for their yes. Under another domain, or of the other kind, every site gets a new address and each link they shared stops. In one account the old install goes before the new one is made, so the zip is then the only copy.
+
+| The line                   | Carries                                                            | Without it                                        |
+| -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
+| `--all-versions`, step 1   | every kept version of each site                                    | the live version alone: the others are lost       |
+| `--settings`, step 4       | every setting but the logins                                       | the new install keeps its own settings            |
+| `--settings --logins`      | the list of users too                                              | the users are the new install's first login       |
+
+No line carries a token, a key of the install, or the activity log: each computer logs in again, and the log starts anew.
 
 Off a domain, a site with a root link, or with a public name in the form of an id, is not put back. Mend those on the old install before step 1. [Move an install](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/back-up.md#move-an-install) has every row.
 

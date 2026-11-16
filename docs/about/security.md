@@ -38,13 +38,13 @@ The id alone finds the site. The letter never opens anything: the stored site de
 - **Lists and commands show it.** The id shown in lists and commands is the link of an unlisted site. Someone who saw it while the site was private can open the site once it is unlisted, since the address differs by one known letter; running `poplin new-link` first avoids that.
 - **A pasted address travels.** Paste it in a chat and the chat's preview bot fetches it; forward it and the next reader has it.
 - **A plain DNS lookup shows the name.** A network between the visitor and Cloudflare can learn that the address exists, though it cannot read the page.
-- **A leak is fixed by `poplin new-link`.** The site gets a new id, and the old address stops at once. Making the site private closes it to everyone but the owner.
+- **A leak is fixed by `poplin new-link`.** The site gets a new id, and the old address stops at once. Making the site private closes it to everyone but the users of the install.
 
 ## The three access states
 
 | State | Address | Who opens it | What the visitor needs |
 | --- | --- | --- | --- |
-| private, the default | `report--k3f9x2ab71qz-p-poplin.example.com` | the owner | the login |
+| private, the default | `report--k3f9x2ab71qz-p-poplin.example.com` | the users of the install | the login |
 | unlisted | `report--k3f9x2ab71qz-u-poplin.example.com` | anyone who has the address | the address alone |
 | public | the unlisted address, and a name the site claims: `report-page.example.com` | everyone | nothing |
 

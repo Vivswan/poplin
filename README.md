@@ -1,11 +1,11 @@
 # Poplin
 
-Your AI agent publishes a web page for you and hands back a link. The page sits in your own Cloudflare account, and only you can open it until you say otherwise.
+Your AI agent publishes a web page for you and hands back a link. The page sits in your own Cloudflare account, and only the users of your install can open it until you say otherwise.
 
 ```text
 You:    Put this report online.
 
-Agent:  Published. It is private: only you can open it, after you log in.
+Agent:  Published. It is private: only the users of your install can open it, after they log in.
 
         https://report--k3f9x2ab71qz-p-poplin.example.com
 
@@ -72,11 +72,11 @@ Have ready a Cloudflare account with a payment method on it, and Node.js 24. An 
 
 | Access                | Who can open it          | Address                                                           |
 | --------------------- | ------------------------ | ----------------------------------------------------------------- |
-| private (the default) | only you, after a login  | `report--k3f9x2ab71qz-p-poplin.example.com`                       |
+| private (the default) | only the users of your install, after a login | `report--k3f9x2ab71qz-p-poplin.example.com`                       |
 | unlisted              | anyone who has the link  | `report--k3f9x2ab71qz-u-poplin.example.com`                       |
 | public                | everyone                 | a name you choose, `docs-page.example.com`, and its unlisted link |
 
-`example.com` stands for your own domain; [Without a domain](docs/start/without-a-domain.md) shows the addresses of an install that has none. "You" is every user of your install: yourself, and anyone you add. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
+`example.com` stands for your own domain; [Without a domain](docs/start/without-a-domain.md) shows the addresses of an install that has none. The users of your install are yourself, and anyone you add. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
 
 ## Use it from the command line
 
