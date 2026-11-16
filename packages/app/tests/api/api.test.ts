@@ -113,7 +113,7 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "GET /api/export/sites/:site": 4,
   "GET /api/export/sites/:site/files": 6,
   "GET /api/export/sites/:site/file": 5,
-  "POST /api/import/settings": 5,
+  "POST /api/import/settings": 6,
   "POST /api/import/sites": 7,
   "GET /api/config": 2,
   "PATCH /api/config": 5,
@@ -380,6 +380,10 @@ describe("createApi", () => {
     await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, logins: users.join(",") }, logins: true }, query: {} }));
     await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, trash_days: "8" } }, query: {} }));
     expect([install.users.pushed, settled, (await install.database.readDomainCheck())?.users_changed_at]).toEqual([[three, users], null, null]);
+    // Drift: `poplin config outside_pages` goes through this route too. A change that reached no rule of the domain would wait for a repair the command never mentions, and one carried on any setting would call the provider for nothing.
+    await done((api) => api.config.$patch({ json: { outside_pages: "allowed", trash_days: 9 }, query: {} }));
+    await done((api) => api.config.$patch({ json: { block_bots: "off" }, query: {} }));
+    expect([install.rules.pushed, (await install.database.readDomainCheck())?.rules_changed_at]).toEqual([[{ outside_pages: "allowed", search_engines_allowed: false }], null]);
     expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { forever: "true" } })), "before").id).toBe(moved);
     expect(part(await done((api) => api.import.settings.$post({ json: { format: 1, settings }, query: {} })), "values").trash_days).toBe(7);
     const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));

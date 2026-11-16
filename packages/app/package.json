@@ -18,6 +18,7 @@
     "./src/console/domain/setup": "./src/console/domain/setup.ts",
     "./src/console/key/records": "./src/console/key/records.ts",
     "./src/console/access/users-follow": "./src/console/access/users-follow.ts",
+    "./src/console/settings/rules-follow": "./src/console/settings/rules-follow.ts",
     "./src/limits/limits": "./src/limits/limits.ts",
     "./src/limits/refusal": "./src/limits/refusal.ts",
     "./src/limits/visitor-key": "./src/limits/visitor-key.ts",

@@ -34,12 +34,14 @@ import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import type { PublicWord } from "@poplin/core/src/names/marker";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import { WritesSpent } from "@poplin/core/src/storage/metered";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import * as v from "valibot";
 
 import { followUsers, type UsersFollow } from "../console/access/users-follow";
+import { holding, type Later } from "../console/later";
+import { carryRules, namesRule, type RulesFollow } from "../console/settings/rules-follow";
 import { carries, counted, type Gate, metered, namesSite, sent } from "./asked";
 import { authenticate, type ReadToken } from "./authenticate";
 import { answerWhoami, beginWithAddress, checked, FILE_QUERY, saveAddress, storeBody, ticketed } from "./handlers";
@@ -89,6 +91,25 @@ export interface ApiDeps extends Install, Gate {
 
   /** The provider's side of the users: a change of the logins is carried there by itself. Without it a change waits for a repair. */
   readonly follow?: UsersFollow;
+
+  /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair. */
+  readonly rules?: RulesFollow;
+}
+
+/**
+ * Carry a stored change of the settings to the provider: the users before the answer, and the settings of the domain's rules with no answer held for them where the host holds the request open.
+ *
+ * @param named - whether the change named the logins, and whether it named a setting the domain's rules are written from
+ * @returns the action's own answer, whatever the provider said: a change that did not reach it waits, and the dashboard says so
+ */
+async function carried<Answer extends { readonly ok: boolean }>(deps: Omit<ApiDeps, "store">, context: Context, answer: Answer, named: { readonly logins: boolean; readonly rules: boolean }): Promise<Answer> {
+  if (!answer.ok) return answer;
+
+  if (deps.follow !== undefined && named.logins) await followUsers(deps, deps.follow);
+
+  if (named.rules) await carryRules(context, deps, deps.rules);
+
+  return answer;
 }
 
 /** Declare every route of one install. The type of what it returns is what a client is typed from, so it is inferred, never written. */
@@ -98,13 +119,6 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
   const noQuery = queried(NO_QUERY);
   const site = namesSite();
   const rebuilding = { ...deps.rebuild, counters: deps.counters };
-
-  // The answer is the action's own, whatever the provider said: a change that did not reach it waits, and the dashboard says so.
-  const carried = async <Answer extends { readonly ok: boolean }>(answer: Answer, logins: boolean): Promise<Answer> => {
-    if (deps.follow !== undefined && logins && answer.ok) await followUsers(deps, deps.follow);
-
-    return answer;
-  };
 
   return new Hono()
     .basePath("/api")
@@ -170,7 +184,8 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
       return respondFile(await exportFile(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
     })
     .post("/import/settings", token, install, json, noQuery, sent<v.InferInput<typeof SETTINGS_IMPORT>>(SETTINGS_BYTES), async (context) => {
-      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(await importSettings(context.var.install, context.var.actor, request), request.logins === true)));
+      // A backup holds every setting, the ones the domain's rules are written from among them.
+      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(deps, context, await importSettings(context.var.install, context.var.actor, request), { logins: request.logins === true, rules: true })));
     })
     .post("/import/sites", token, install, json, noQuery, sent<ImportRequest>(deps.limits.manifestBytes), async (context) => {
       return respond(await beginImport(ticketed(context.var.install), context.var.actor, context.req.valid("json"), deps.limits), deps.now());
@@ -179,8 +194,9 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     .get("/config", token, install, noQuery, async (context) => respond(await readConfig(context.var.install, context.var.actor)))
     .patch("/config", token, install, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => {
       const changes = context.req.valid("json");
+      const named = { logins: typeof changes === "object" && changes !== null && "logins" in changes, rules: namesRule(changes) };
 
-      return respond(await carried(await changeConfig(context.var.install, context.var.actor, changes), typeof changes === "object" && changes !== null && "logins" in changes));
+      return respond(await carried(deps, context, await changeConfig(context.var.install, context.var.actor, changes), named));
     })
     .delete("/sessions", token, install, noQuery, async (context) => respond(await signEveryoneOut(context.var.install, context.var.actor)))
     .get("/audit", token, install, queried(AUDIT_QUERY), async (context) => respond(await listAudit(context.var.install, context.var.actor, context.req.valid("query"))))
@@ -207,9 +223,10 @@ export type Api = ReturnType<typeof routesOf>;
  *
  * The two routes a computer logs in through take no token: they are counted by visitor, the logins begun by all visitors together too, and what they hand out is decided by an admin on the dashboard.
  *
- * @returns the handler of every request under `/api`, which never throws. It answers a path that is no route 404, a route under another method 405 with `Allow`, a database or a store spent for the day 503 with `Retry-After`, and any other failure 500
+ * @returns the handler of every request under `/api`, which never throws. Given what the host holds a request open with, work an answer is not held for runs on past it.
+ *   It answers a path that is no route 404, a route under another method 405 with `Allow`, a database or a store spent for the day 503 with `Retry-After`, and any other failure 500
  */
-export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) => Promise<Response> } {
+export function createApi(deps: ApiDeps): { readonly fetch: (request: Request, later?: Later) => Promise<Response> } {
   const app = new Hono();
 
   app.use(methodNotAllowed({ app, onMethodNotAllowed: (_context, allowed) => refusal("method_not_allowed", undefined, { Allow: allowed.join(", ") }) }));
@@ -230,5 +247,5 @@ export function createApi(deps: ApiDeps): { readonly fetch: (request: Request) =
     return refusal("internal");
   });
 
-  return { fetch: async (request) => app.fetch(request) };
+  return { fetch: async (request, later) => app.fetch(request, holding(later)) };
 }
