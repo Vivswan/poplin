@@ -12,7 +12,7 @@ import { RemovedTokens } from "@/access/removed-tokens";
 const THEN = 1_794_000_000_000;
 
 /** A token that ended, with one name for all its times. */
-function ended(id: string, note: string, how: Partial<EndedToken>): EndedToken {
+function ended(id: string, note: string, how: { readonly by?: string; readonly scope?: EndedToken["scope"]; readonly how?: EndedToken["how"] }): EndedToken {
   return { id, note, scope: "publisher", created: THEN, ended: THEN + 1000, how: "removed", by: "mira@example.com", ...how } as EndedToken;
 }
 

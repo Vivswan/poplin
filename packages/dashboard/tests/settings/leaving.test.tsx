@@ -1,6 +1,6 @@
 // Leaving a screen that holds unsaved typing: which moves wait for the question, what each answer does, and what is asked of the browser itself.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { type AnyRouter, useLocation } from "@tanstack/react-router";
@@ -69,7 +69,7 @@ async function settled(start: () => void): Promise<void> {
 }
 
 /** Come to the guarded screen from another one, make one move, and hand back the page's queries. */
-async function moved(unsaved: boolean, move: Move): Promise<ReturnType<typeof within>> {
+async function moved(unsaved: boolean, move: Move): Promise<Within> {
   const router = await drawAt(AWAY, <Guarded unsaved={unsaved} />);
   await settled(() => void router.navigate({ to: HOME }));
   await settled(() => move(router));
@@ -78,7 +78,7 @@ async function moved(unsaved: boolean, move: Move): Promise<ReturnType<typeof wi
 }
 
 /** What the page shows: the place drawn, the browser's address, and whether the question is open. */
-function shown(page: ReturnType<typeof within>): readonly [string | null, string, boolean] {
+function shown(page: Within): readonly [string | null, string, boolean] {
   // The open question hides the rest of the page from a query by role, so the place is read from its element.
   return [
     document.querySelector("output")?.textContent ?? null,

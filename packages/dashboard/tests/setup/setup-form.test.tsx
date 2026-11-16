@@ -1,6 +1,6 @@
 // The form of the setup screen: what an empty box does, and where a refusal is said.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
@@ -24,7 +24,7 @@ const TOKEN = "planted-token-0123456789";
 const repairs: Sent[] = [];
 
 /** Draw the form of one install over a repair that answers `refusal`, and hand back the page's queries. */
-function drawn(boxes: "first" | "login", refusal?: Refused): ReturnType<typeof within> {
+function drawn(boxes: "first" | "login", refusal?: Refused): Within {
   const onRepair = async (sent: Sent): Promise<Refused | undefined> => {
     repairs.push(sent);
 
@@ -35,12 +35,12 @@ function drawn(boxes: "first" | "login", refusal?: Refused): ReturnType<typeof w
   return within(document.body);
 }
 
-function box(page: ReturnType<typeof within>, label: string): HTMLInputElement {
+function box(page: Within, label: string): HTMLInputElement {
   return page.getByLabelText(label) as HTMLInputElement;
 }
 
 /** Fill every box of a new install and press Repair. */
-async function repairFilled(page: ReturnType<typeof within>): Promise<void> {
+async function repairFilled(page: Within): Promise<void> {
   fireEvent.change(box(page, "Domain"), { target: { value: "example.com" } });
   fireEvent.change(box(page, "Your email"), { target: { value: "mira@example.com" } });
   fireEvent.change(box(page, "Account token"), { target: { value: TOKEN } });

@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, within } from "@testing-library/react"
 import { type ReactNode, useState } from "react";
 import { type ColumnSpec, DataTable, type Sort } from "@/table/data-table";
 import { type TableLayout, useTableLayout } from "@/table/layout";
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 /** A row of the test table. */
 interface Fruit {
@@ -102,7 +102,7 @@ function roomOf(width: number): void {
 }
 
 /** The page's queries, bound when asked: the document exists only once the support module has run. */
-function page(): ReturnType<typeof within> {
+function page(): Within {
   return within(document.body);
 }
 

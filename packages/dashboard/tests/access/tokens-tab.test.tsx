@@ -1,6 +1,6 @@
 // The Tokens tab: what a waiting row and an allowed row each let a person do, and where a waiting login is still listed with no token beside it.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
@@ -17,7 +17,7 @@ const WAITING_LOGIN = { id: "0cbb997f737c56ae", scope: "admin", computer: "build
 const TOKEN = { id: "cd45ee5db1827382", scope: "publisher", note: "report agent", created: 1_794_000_000_000, expires: "never" } as Token;
 
 /** A token a person removed. */
-const ENDED = { tokens: [{ id: "00000000000000a1", scope: "publisher", note: "old laptop", created: 1_793_000_000_000, ended: 1_794_000_000_000, how: "removed", by: "mira@example.com" }], more: false } as Ended;
+const ENDED = { tokens: [{ id: "00000000000000a1", scope: "publisher", note: "old laptop", created: 1_793_000_000_000, ended: 1_794_000_000_000, how: "removed", by: "mira@example.com" }], more: false } as unknown as Ended;
 
 /** The order of a list nobody sorted. */
 const UNSORTED = { key: "allowed", descending: true };
@@ -52,7 +52,7 @@ function Tab({ tokens = [TOKEN], failure, ended, waits = [WAITING_LOGIN] }: { re
 }
 
 /** The row of the table that holds a name. */
-function row(name: string): ReturnType<typeof within> {
+function row(name: string): Within {
   const table = within(document.body).getByRole("table", { name: "Tokens" });
   const found = within(table)
     .getAllByRole("row")

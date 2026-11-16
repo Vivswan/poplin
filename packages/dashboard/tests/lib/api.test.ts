@@ -20,7 +20,7 @@ function serverOf(answer: () => Response): Mock<typeof fetch> {
 }
 
 /** Ask one data route and say what the call was refused as. */
-async function refusalOf(asked: Promise<Parameters<typeof answerOf>[0]>): Promise<readonly [code: string, sentence: string] | "answered"> {
+async function refusalOf(asked: Parameters<typeof answerOf>[0]): Promise<readonly [code: string, sentence: string] | "answered"> {
   try {
     await answerOf(asked);
 

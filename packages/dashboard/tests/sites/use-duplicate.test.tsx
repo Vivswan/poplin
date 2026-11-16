@@ -1,6 +1,6 @@
 // A copy of a site from the dashboard: what the dialog sends, what the background work asks after it, and the line each ending is said in.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
@@ -142,7 +142,7 @@ function lines(): readonly string[] {
 }
 
 /** Draw the screen, open the dialog, and press Duplicate with `name` typed, or with the name the dialog opened with. */
-async function duplicate(name?: string): Promise<{ readonly page: ReturnType<typeof within>; readonly router: AnyRouter }> {
+async function duplicate(name?: string): Promise<{ readonly page: Within; readonly router: AnyRouter }> {
   const router = await drawAt(
     "/",
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -162,7 +162,7 @@ async function duplicate(name?: string): Promise<{ readonly page: ReturnType<typ
 }
 
 /** Whether the dialog is shown. */
-function asks(page: ReturnType<typeof within>): boolean {
+function asks(page: Within): boolean {
   return page.queryByRole("dialog") !== null;
 }
 
