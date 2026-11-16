@@ -51,8 +51,8 @@ const INDENT = "  ";
 /** How some parts are joined into one phrase: `a and b`, `a, b, and c`. */
 const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
-/** A word a POSIX shell reads as it is written, with no quote around it. */
-const PLAIN_WORD = /^[A-Za-z0-9@%+=:,./_-]+$/;
+/** A word a shell reads as it is written, with no quote around it. It holds no equals sign: zsh takes a word that starts with one as a command to look up. */
+const PLAIN_WORD = /^[A-Za-z0-9@%+:,./_-]+$/;
 
 /** The line every stop before the first change ends in. */
 export const UNCHANGED = "nothing was changed";
@@ -60,7 +60,7 @@ export const UNCHANGED = "nothing was changed";
 /** What every dry run of the three commands exits with, as each help says it. */
 export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
 
-/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` a stop's own sentence names as the way on, then each careful choice. A repair may be the newest poplin's. */
+/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (a place or a user the stop's sentence names, never a consent), then each careful choice. */
 export const NEXT = {
   install: (provider: Provider | undefined, careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id, ...named], careful) }),
   repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({

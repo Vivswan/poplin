@@ -465,6 +465,8 @@ describe("a first login the run did not use", () => {
     ["o'brien@example.com", "'o'\\''brien@example.com'"],
     ["pay$roll&co@example.com", "'pay$roll&co@example.com'"],
     ["first.last+tag@example.com", "first.last+tag@example.com"],
+    // zsh reads a bare word that starts with an equals sign as a command to look up, and the paste does nothing.
+    ["=ls@example.com", "'=ls@example.com'"],
   ])("the line that lets %s in too writes the email as one word of a POSIX shell: %s", async (email, word) => {
     const account: Account = { ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: email as Login } };
     const json = await runLine(`${line} --yes --no-wait --json`, account, { env: HELD });
