@@ -31,6 +31,8 @@ Every token that user allowed stops working in the same step: the logins of thei
 
 A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way, and a user it leaves out loses their tokens the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
+Log out, beside your email at the foot of the side menu, ends the login of this browser alone: Cloudflare shows its own page, and the next visit asks for a code again.
+
 Sign everyone out, on the same tab, ends every login of the dashboard and of private sites: everyone logs in again at the next click, you too. It can take a few seconds. Tokens keep working. [Security](../about/security.md#hardening) says what it ends and what it leaves.
 
 | After the press | Means | What to do |

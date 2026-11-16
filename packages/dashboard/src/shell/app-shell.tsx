@@ -53,6 +53,12 @@ const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focu
 /** The look of the email where it rests: blurred, and sharp under a pointer, with the focus the keys give it, and with the focus a tap gives it where a finger is the pointer. */
 const EMAIL_AT_REST = "blur-xs transition-[filter] hover:blur-none focus-visible:blur-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:focus:blur-none";
 
+/** What the way out of this browser's login is called. */
+const LOG_OUT = "Log out";
+
+/** The console's path that sends a browser on to where the provider ends its login. */
+const OUT_PATH = "/out";
+
 /** What keeps the router from marking a link of the frame as the place the address is at for every address under it, and from adding a class of its own. */
 const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const;
 
@@ -114,6 +120,21 @@ function Email({ className }: { readonly className?: string }): ReactNode {
       <span className="max-w-full break-all text-foreground">{BOOT.email.slice(0, at)}</span>
       <span className="max-w-full break-all text-muted-foreground">{BOOT.email.slice(at)}</span>
     </span>
+  );
+}
+
+/**
+ * Who is logged in, and beside the email the way out of this browser's login: a link to the console's own path that sends the browser on to where the provider ends the login.
+ * It asks the server for the page, as no screen of the dashboard answers there.
+ */
+function Account(): ReactNode {
+  return (
+    <div className="flex items-start gap-1">
+      <Email className="px-2.5 py-1" />
+      <Button variant="link" size="xs" nativeButton={false} className="mt-1 mr-2.5 ml-auto h-4 px-0 text-muted-foreground" render={<Link to={OUT_PATH} reloadDocument {...NO_OWN_MARK} />}>
+        {LOG_OUT}
+      </Button>
+    </div>
   );
 }
 
@@ -308,7 +329,7 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
           <div className="mt-auto flex flex-col gap-2">
             <DomainNote onGo={() => setOpen(false)} />
             <VersionLine offer={closingOffer} started={started} />
-            <Email className="px-2.5 py-1" />
+            <Account />
           </div>
         </div>
       </SheetContent>
@@ -361,7 +382,7 @@ export function AppShell({
         <div className="mt-auto flex flex-col gap-2">
           <DomainNote />
           <VersionLine offer={offer} started={started} />
-          <Email className="px-2.5 py-1" />
+          <Account />
         </div>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">

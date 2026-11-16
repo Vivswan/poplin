@@ -947,6 +947,17 @@ describe("the admin hostname", () => {
     expect(beside.filter(([, sent]) => !sent)).toEqual([]);
   });
 
+  // Drift: Access ends a browser's login at one path of the guarded hostname and nowhere else. A way out that led to another address would leave the person logged in, and a removed user could not change the email they are stuck under.
+  test("the dashboard's way out sends a browser on to Access's own logout path, a removed user's too, and the page of an email that is no user names the way out on the dashboard's hostname", async () => {
+    const worker = instance(w);
+    const guest = { headers: await accessHeaders(w, { email: "guest@example.com" }) };
+    const outs = await Promise.all([{ headers: await accessHeaders(w) }, guest].map((who) => ask(worker, `${ADMIN}/out`, who)));
+    const stranger = await ask(worker, `${ADMIN}/`, guest);
+
+    expect(outs.map((out) => [out.status, out.headers.get("Location"), out.headers.get("Cache-Control")])).toEqual(outs.map(() => [302, "/cdn-cgi/access/logout", "no-store"]));
+    expect([stranger.status, await stranger.text()]).toEqual([403, `This email is not a user of this install.\nTo log in with another email, open ${ADMIN}/out\n`]);
+  });
+
   // Drift: with the login in front of every path, the edge lets a person through to the page they asked for. A Worker that sent them on anywhere would turn the provider's way back into a detour, or a loop.
   test("a person the edge let through to a page sees that page at once: no redirect, and no cookie", async () => {
     const answered = await ask(instance(w), `${ADMIN}/settings?tab=access`, { headers: await accessHeaders(w) });

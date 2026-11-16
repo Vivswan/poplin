@@ -31,7 +31,7 @@ const NOT_A_USER = "This email is not a user of this install.";
 
 const REFUSED: Readonly<Record<number, readonly string[]>> = {
   401: [JSON.stringify({ ok: false, code: "no_login", about: null, sentence: NO_LOGIN }), ""],
-  403: [`${NO_LOGIN}\n`, `${NOT_A_USER}\n`, JSON.stringify({ ok: false, code: "not_a_user", about: null, sentence: NOT_A_USER }), ""],
+  403: [`${NO_LOGIN}\n`, `${NOT_A_USER}\nTo log in with another email, open ${ORIGIN}/out\n`, JSON.stringify({ ok: false, code: "not_a_user", about: null, sentence: NOT_A_USER }), ""],
 };
 
 const property = fuzzTarget(import.meta.file);
