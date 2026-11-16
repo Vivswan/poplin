@@ -18,8 +18,9 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { answerOf, api } from "@/lib/api";
 import { thenHome } from "@/lib/focus";
-import { sayDone } from "@/lib/notify";
+import { sayDone, unsay } from "@/lib/notify";
 import { LONGEST_NAME, type Site, shownName } from "@/lib/sites";
+import { trashLine } from "@/sites/site-actions";
 import { SITES_KEY, siteKey } from "@/sites/site-queries";
 
 /** What joins the one question drawn on the screen to every button that asks it. */
@@ -122,6 +123,8 @@ export function DeleteForGoodQuestion(): ReactNode {
     onSuccess: (_done, sent) => {
       client.removeQueries({ queryKey: siteKey(sent.site.label) });
       void client.invalidateQueries({ queryKey: SITES_KEY, predicate: (query) => query.queryKey[1] !== "one" });
+      // The line that said the site went to the trash offers an Undo no site is left for: it leaves.
+      unsay(trashLine(sent.site));
       sayDone(`${shownName(sent.site)} deleted for good.`);
     },
   });
