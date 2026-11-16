@@ -3,7 +3,7 @@
 //   1  the account     the one the domain's zone is in, or the one the token shows
 //   2  the Worker      `poplin`: none, poplin's own by its bindings, an install's that lost a binding, or somebody else's
 //                      one that is not set yet says where it was started for, and a place of another kind, or under another domain, is refused
-//   3  the version     of a whole install, from the tag of its latest version
+//   3  the version     of a whole install, from the binding every upload states: no call of its own
 //   4  the database    `poplin`, by its name
 //   5  the bucket      `poplin-sites`, by its name; a refusal here says the token lacks the storage right, or that storage is switched off
 //                      a repair's look reads none: a repair makes no bucket, so its token is asked for no storage permission
@@ -17,13 +17,11 @@
 
 import type { Blocked, Found, Question, Reach, Read, Token } from "@poplin/core/src/install/installer";
 import { newestPinned } from "@poplin/core/src/records/release";
-import { isPlainVersion } from "@poplin/core/src/records/update";
 import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
-import { BaseVersions } from "cloudflare/resources/workers/scripts/versions";
 import pRetry from "p-retry";
-import * as v from "valibot";
 import { projectReleases } from "../../release/publish/release-source";
+import { readRelease } from "../../release/update/release-mark";
 import { isAccessOff, readLoginFacts } from "../pieces/access/access";
 import { listBuckets, planBucket } from "../pieces/bucket/bucket";
 import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare, findZones } from "../client";
@@ -44,17 +42,11 @@ const SERVER_FAILURE = 500;
 /** Cloudflare's dashboard, where a person does what no API does. */
 const DASHBOARD = "https://dash.cloudflare.com";
 
-/** The annotation of a version that holds the release it was uploaded from. */
-const VERSION_TAG = "workers/tag";
-
 /** How often a Worker that reads as not poplin's is read again, and the wait before each read, in milliseconds: the settings trail an upload by about a second. */
 const AGAIN = { times: 3, everyMs: 1_500 } as const;
 
 /** The buckets of an account as a look that reads none has them: no bucket of poplin's name is told. */
 const NO_BUCKETS: Awaited<ReturnType<typeof listBuckets>> = { ok: true, value: [] };
-
-/** A version as Cloudflare lists it, read no further than its annotations. */
-const LISTED_VERSION = v.object({ annotations: v.optional(v.record(v.string(), v.unknown())) });
 
 /** What the Worker of an install is bound to beside its name, each as a person is told it. */
 const BOUND = [
@@ -286,15 +278,6 @@ function dashboardOf(bindings: readonly ListedBinding[]): string | undefined {
   return `https://${install.kind === "domain" ? install.layout.adminHostname : install.layout.adminHost}`;
 }
 
-/** The release a Worker runs, from the tag of its latest version; `undefined` where none can be read, and for a tag that is no released version: the tag is a text anybody who may write the Worker sets. */
-async function versionOf(place: Place): Promise<string | undefined> {
-  const versions = await callCloudflare(place.connection, (api) => new BaseVersions(api).list(SCRIPT, { account_id: place.accountId }));
-  const latest = versions.ok ? v.safeParse(LISTED_VERSION, versions.value.result.items?.[0]) : undefined;
-  const tag = latest?.success === true ? latest.output.annotations?.[VERSION_TAG] : undefined;
-
-  return typeof tag === "string" && isPlainVersion(tag) ? tag : undefined;
-}
-
 /** Say that an install that was started and not finished was started for another place than the one a person named, with the option that names its own; `undefined` where the two are one. */
 function startedElsewhere(bindings: readonly ListedBinding[], where: Where): Pick<Extract<FoundHere, { readonly why: "other_place" }>, "words" | "give"> | undefined {
   const started = readStartedPlace(bindings);
@@ -312,11 +295,11 @@ function startedElsewhere(bindings: readonly ListedBinding[], where: Where): Pic
   return named ? undefined : { words: `An install was started in this account under the domain ${started.domain}, and not finished: give ${give}.`, give };
 }
 
-/** A whole install: its version, and the newest release the project's website names. */
-async function wholeAt(place: Place, address: string, reach: Reach): Promise<FoundHere> {
+/** A whole install: the release its bindings state, and the newest release the project's website names. */
+async function wholeAt(place: Place, set: { readonly address: string; readonly version: string | undefined }, reach: Reach): Promise<FoundHere> {
   const pins = await projectReleases({ fetch: reach.fetch }).pins();
 
-  return { state: "whole", place, version: await versionOf(place), address, newest: pins === undefined ? undefined : newestPinned(pins) };
+  return { state: "whole", place, ...set, newest: pins === undefined ? undefined : newestPinned(pins) };
 }
 
 /** What stops a run before it changes anything, from the three reads Cloudflare refused or answered. Access that is switched off is no block: a run goes on without it. */
@@ -417,7 +400,7 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
   if (!isOwn(bindings.value)) return { state: "held", ...heldBy(bindings.value), address: pagesOf(accountId).worker };
 
   const address = dashboardOf(bindings.value);
-  if (address !== undefined) return wholeAt(place, address, reach);
+  if (address !== undefined) return wholeAt(place, { address, version: readRelease(bindings.value) }, reach);
 
   const other = startedElsewhere(bindings.value, where);
 
