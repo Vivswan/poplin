@@ -100,7 +100,7 @@ function ChoiceControl(props: ControlProps): ReactNode {
   return <Choice id={id} labelledBy={`${id}-label`} items={items} value={text} onChoose={onChange} className={WIDE} />;
 }
 
-/** The field of a number, with its unit fixed at its right. It takes a count from 0 up: a minus or a letter is not let in. Whether the count is one the setting takes is the server's to say, a fraction too. */
+/** The field of a number, with its unit fixed at its right. No letter is let in, and its arrow keys stop at 0. Whether the count is one the setting takes is the server's to say: a fraction, a count below 0, and a count too large to keep too. */
 function CountField({ row, id, text, onChange, className }: ControlProps & { readonly className: string }): ReactNode {
   const parts = partsOf(row, text);
   const unit = unitWord(row.key, parts.unit);
@@ -111,6 +111,8 @@ function CountField({ row, id, text, onChange, className }: ControlProps & { rea
       value={parts.count}
       onValueChange={(count) => onChange(textOf(row, { count, unit: parts.unit }))}
       min={0}
+      // A count the library would not take is handed on as it was typed, for the server to refuse: the library would turn one past the largest a number holds exactly into that largest, and one below 0 into 0, with nothing said.
+      allowOutOfRange
       format={AS_TYPED}
       locale="en-US"
       className={className}

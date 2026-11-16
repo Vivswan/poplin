@@ -9,8 +9,8 @@ const COUNT_FORMAT = new Intl.NumberFormat("en-US");
 /** How a count is written in a setting's text: in digits alone, a small fraction too, which a number written by itself would give an exponent. */
 const COUNT_TEXT = new Intl.NumberFormat("en-US", { useGrouping: false, maximumFractionDigits: 20 });
 
-/** The two parts of a number's text: its count, which may be none, and the unit after it. The field lets in counts from 0 up alone, and a fraction stays in the count as it was typed. */
-const PARTS = /^([0-9]*(?:\.[0-9]+)?)(.*)$/;
+/** The two parts of a number's text: its count, which may be none, and the unit after it. A fraction stays in the count as it was typed, and so does a minus, which the server refuses. */
+const PARTS = /^(-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)|)(.*)$/;
 
 /** A number's text taken apart. */
 interface Parts {

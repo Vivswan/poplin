@@ -98,6 +98,18 @@ describe("the control of a setting", () => {
     expect([field.value, sent.at(-1)]).toEqual(["1.5", "1.5MB"]);
   });
 
+  // Drift: a count the field's library does not take would be sent as the nearest one it does, the largest a number holds exactly or 0, and saved with nothing said, where the server refuses the count as it is.
+  test.each([
+    ["twenty nines", "99999999999999999999", "100000000000000000000"],
+    ["two above the largest exact count", "9007199254740993", "9007199254740992"],
+    ["a count below 0", "-5", "-5"],
+  ])("of a count the server refuses sends it as large or as small as it was typed: %s", (_what, typed, text) => {
+    const { page, sent } = drawn(rowOf("versions_kept", { kind: "number", word: null }, "5"));
+    fireEvent.change(page.getByRole("textbox"), { target: { value: typed } });
+
+    expect(sent).toEqual([text]);
+  });
+
   // Drift: an emptied field of a setting that takes no number would send an empty text, which the server refuses, where empty has a meaning.
   test("of a count that may be none says what empty means and sends the word for an emptied field", () => {
     const { page, sent } = drawn(rowOf("max_sites", { kind: "number", word: "none" }, "40"));
