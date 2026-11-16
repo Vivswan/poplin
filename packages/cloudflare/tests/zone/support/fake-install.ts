@@ -21,6 +21,18 @@ export const TEAM = "team.cloudflareaccess.com";
 /** What Cloudflare answers on an account whose Access was never switched on. */
 const ACCESS_OFF = { status: 403, code: 9999, message: "access.api.error.not_enabled" } as const;
 
+/** How the value of every key the fake makes starts. A test looks for it in whatever a run says: the value is no text of a row, a step, a log, or an error. */
+export const KEY_VALUE_START = "value-of-made-key-";
+
+/** The permission groups the fake lists, by scope: every right of a key, and the ones a key is kept from. One name is of both scopes, as at Cloudflare, the zone's first: found by its name alone, it is the wrong one. */
+const GROUP_NAMES = {
+  "com.cloudflare.api.account.zone": [
+    ...["Access: Apps and Policies Write", "Zone Read", "Zone Settings Read", "DNS Read", "DNS Write", "Workers Routes Read", "Workers Routes Write"],
+    ...["Zone WAF Write", "Dynamic URL Redirects Read", "Dynamic URL Redirects Write", "Bot Management Read", "Bot Management Write"],
+  ],
+  "com.cloudflare.api.account": ["Account Analytics Read", "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write", "Workers Scripts Write", "Account API Tokens Write"],
+} as const;
+
 /** Which account each token acts on. */
 const ACCOUNT_OF: Readonly<Record<string, string>> = { [`Bearer ${TOKEN}`]: ACCOUNT, [`Bearer ${OTHER_TOKEN}`]: "account-b" };
 
@@ -32,6 +44,9 @@ const ZONES = [
 
 /** A stored object: its id and whatever was sent for it. */
 type Row = Record<string, unknown>;
+
+/** How many keys the fake has made, over every account of a test run. */
+let madeKeys = 0;
 
 /** The account's state. A test changes it between runs to make an object missing or different. */
 export interface Account {
@@ -62,17 +77,26 @@ export interface Account {
   /** The bindings of the install's Worker. */
   bindings: Row[];
 
+  /** The API tokens the account owns: every key made for an install, as Cloudflare lists it, with no value. */
+  tokens: Row[];
+
+  /** The permission groups Cloudflare lists for the account. */
+  groups: Row[];
+
   /** Whether the zone's own Always Use HTTPS is on. */
   zoneRedirects: boolean;
 
   /** Whether Access was never switched on: both Access lists are then refused. */
   accessOff: boolean;
 
-  /** A call to refuse, as `METHOD /path`, or several; the refusal's message repeats the token it was sent with. */
+  /** A call to refuse, as `METHOD /path`, or several; one that ends in `*` refuses every call that starts so. The refusal's message repeats the token it was sent with. */
   refuse?: string | readonly string[];
 
   /** The message of that refusal, for a test that needs Cloudflare's own words. */
   refuseMessage?: string;
+
+  /** Whether that refusal's message also repeats everything the call sent, as an API that quotes a bad request does. */
+  refuseQuotes?: boolean;
 
   /** The status and the error code of that refusal; left out, the ones of a token that lacks a permission. */
   refuseAs?: { readonly status: number; readonly code: number };
@@ -96,6 +120,8 @@ export function emptyAccount(): Account {
       { name: "ZONE", type: "json", json: { domain: "example.com" } },
     ],
     accessOff: false,
+    tokens: [],
+    groups: Object.entries(GROUP_NAMES).flatMap(([scope, names]) => names.map((name) => ({ id: `${name} of ${scope}`, name, scopes: [scope] }))),
   };
 }
 
@@ -155,9 +181,24 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
   if (asked.method === "GET") return reply({ bindings: account.bindings });
 
   const { settings } = asked.body as { settings: { bindings: Row[] } };
-  account.bindings = settings.bindings.flatMap((sent) => (sent.type === "inherit" ? account.bindings.filter((kept) => kept.name === sent.name) : [sent]));
+  // A secret is kept and never read back: its binding lists with no text.
+  const taken = (sent: Row): Row => (sent.type === "secret_text" ? { name: sent.name, type: sent.type } : sent);
+  account.bindings = settings.bindings.flatMap((sent) => (sent.type === "inherit" ? account.bindings.filter((kept) => kept.name === sent.name) : [taken(sent)]));
 
   return reply({ bindings: account.bindings });
+}
+
+/** The API tokens the account owns. A new one is active, and its value is answered this once and kept nowhere. No two tokens of a test run share an id. */
+function tokens(account: Account, asked: Asked, id: string | undefined): Response {
+  if (id === "permission_groups") return reply(account.groups);
+
+  if (asked.method !== "POST") return stored(account.tokens, asked, id);
+
+  madeKeys += 1;
+  const made = { id: `key-${madeKeys}`, status: "active", ...(asked.body as Row) };
+  account.tokens.push(made);
+
+  return reply({ ...made, value: `${KEY_VALUE_START}${madeKeys}` });
 }
 
 /** The zone's own switches: Always Use HTTPS, which is only read, and the bot switches. */
@@ -192,6 +233,8 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
 
   if (parts[2] === "rulesets") return rules(account, asked, parts);
 
+  if (parts[2] === "tokens") return tokens(account, asked, parts[3]);
+
   return switches(account, asked, parts);
 }
 
@@ -214,7 +257,10 @@ export function answer(account: Account, asked: Asked): Response {
   // A token of another account reaches nothing of this one.
   if (owner !== ACCOUNT) return refusal(403, 10000, "Authentication error");
 
-  if ([account.refuse ?? []].flat().includes(`${asked.method} ${path}`)) return refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}`);
+  const call = `${asked.method} ${path}`;
+  const refused = [account.refuse ?? []].flat().some((entry) => (entry.endsWith("*") ? call.startsWith(entry.slice(0, -1)) : entry === call));
+  const quoted = account.refuseQuotes === true ? ` in ${JSON.stringify(asked.body)}` : "";
+  if (refused) return refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}${quoted}`);
 
   return inAccount(account, asked, path.split("/").slice(1));
 }

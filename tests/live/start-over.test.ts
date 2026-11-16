@@ -21,6 +21,7 @@ const THEIRS = {
   application: { id: "their-application", name: "wiki", type: "self_hosted", domain: "wiki.example.com" },
   policy: { id: "their-policy", name: "wiki readers", decision: "allow" },
   alert: { id: "their-alert", name: "my budget", alert_type: "billing_budget_alert", enabled: true },
+  token: { id: "their-token", name: "deploys", status: "active" },
 };
 
 /** The phase the owner's rule sits in, beside two of poplin's. */
@@ -36,6 +37,7 @@ const REMOVED = [
   "Database: removed 1",
   "Bucket objects: removed 2",
   "Budget alert: removed 1",
+  "Key: removed 1",
 ];
 
 /** What a run on an account that holds nothing of poplin's tells. */
@@ -100,6 +102,7 @@ async function installed(): Promise<World> {
   world.account.applications.push({ ...THEIRS.application });
   world.account.policies.push({ ...THEIRS.policy });
   world.account.alerts.push({ ...THEIRS.alert });
+  world.account.tokens.push({ ...THEIRS.token });
 
   return world;
 }
@@ -123,10 +126,10 @@ async function run(world: World, asking = "true"): Promise<Told> {
 
 /** What the account still holds: everything of the kinds a start-over removes. */
 function heldBy(world: World): unknown {
-  const { records, routes, rulesets, applications, policies, databases, alerts } = world.account;
+  const { records, routes, rulesets, applications, policies, databases, alerts, tokens } = world.account;
   const rules = Object.values(rulesets).flatMap((ruleset) => ruleset?.rules ?? []);
 
-  return { records, routes, rules, applications: applications.map(({ aud: _aud, ...application }) => application), policies, databases, alerts, objects: world.objects, worker: world.worker };
+  return { records, routes, rules, applications: applications.map(({ aud: _aud, ...application }) => application), policies, databases, alerts, tokens, objects: world.objects, worker: world.worker };
 }
 
 /** What stays after a start-over: the owner's own things, and nothing of poplin's. */
@@ -138,6 +141,7 @@ const ONLY_THEIRS = {
   policies: [THEIRS.policy],
   databases: [],
   alerts: [THEIRS.alert],
+  tokens: [THEIRS.token],
   objects: [],
   worker: false,
 };

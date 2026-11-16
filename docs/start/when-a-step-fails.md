@@ -29,6 +29,7 @@ Then build again: [Build again](../run/update.md#build-again) has the three clic
 | Account   | D1                                                    | Edit      | the database                                |
 | Account   | Access: Apps and Policies                             | Edit      | the login                                   |
 | Account   | Access: Organizations, Identity Providers, and Groups | Read      | your team's name                            |
+| Account   | Account API Tokens                                    | Edit      | making the key poplin keeps                 |
 | Zone      | Zone                                                  | Read      | finding your domain                         |
 | Zone      | DNS                                                   | Edit      | the addresses                               |
 | Zone      | Workers Routes                                        | Edit      | sending the addresses to the Worker         |

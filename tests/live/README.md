@@ -17,6 +17,7 @@ Live Checks workflow
   packages/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
   packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
                                                  `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
+                                                 `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   step summary                                   one table of the install's pieces, one of the checks, one of the reset
@@ -55,7 +56,7 @@ One job touches the install at a time. The checks and the midnight reset wait in
 
 On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
 
-The run removes the Worker and its routes, poplin's DNS records, rules, Access application and policy, the database, and every file in the bucket. The bucket stays, and so does everything on the account that poplin did not make. A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
+The run removes the Worker and its routes, poplin's DNS records, rules, Access application and policy, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make. A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
 
 ## The test install
 
@@ -249,7 +250,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 
 | Skipped: needs                                                      | Checks                                                                   |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| a token permission for a rule, the bot settings, or the login       | the piece of the install that permission makes, and the checks behind it |
+| a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | Access switched on for the account                                  | `L1`                                                                     |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
@@ -280,6 +281,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Access: Organizations, Identity Providers, and Groups: Read | the account | the team domain the Worker checks a login against |
 | Billing: Read                                               | the account | reading that every subscription is at a price of 0 |
 | Notifications: Edit                                         | the account | the budget alert                                  |
+| Account API Tokens: Edit                                    | the account | the key the install keeps                         |
 
 ## What one request costs
 
@@ -300,8 +302,8 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | login   | Open the dashboard, logged out. Enter your email and the code Cloudflare sends.                                                                                  | Cloudflare's login page first, then the dashboard. An email that is no login gets no code that works.   |
 | `setup` | On a Cloudflare account with no poplin, follow `docs/start/by-hand.md` from step 1 to step 5. Then open `/setup` on the dashboard and on the Worker's own address.     | Each step works as written: in step 2 the last button of the form deploys, and the page that opens has the `workers.dev` address at its top. The setup page lists the objects it made. After the first login, `/setup` answers 404 on both addresses.|
-| `token` | Open the link "Make the token" on the setup page, or the one in step 3 of `docs/start/by-hand.md`, logged in to Cloudflare.                                            | The token form opens with the eight linked rights ticked.                                                                           |
-| `eight-rights` | Install with the link's eight rights only: on a Cloudflare account with no poplin, make the token from that link, add nothing to it, and press Repair on the setup page. Log in, then publish a site and open it. | The notice counts what was repaired and names no failure. No row says failed. The redirect, guard, and rate rows say `optional`, each with the right that switches it on. So does the bot row, or `left out` on a domain with other hostnames. The login works and the site opens. |
+| `token` | Open the link "Make the token" on the setup page, or the one in step 3 of `docs/start/by-hand.md`, logged in to Cloudflare.                                            | The token form opens with the nine linked rights ticked.                                                                           |
+| `link-rights` | Install with the link's nine rights only: on a Cloudflare account with no poplin, make the token from that link, add nothing to it, and press Repair on the setup page. Log in, then publish a site and open it. | The notice counts what was repaired and names no failure. No row says failed. The redirect, guard, and rate rows say `optional`, each with the right that switches it on. So does the bot row, or `left out` on a domain with other hostnames. The login works and the site opens. |
 | `http`  | Switch the redirect rule off in the zone's Redirect Rules, then run `curl -i http://<a site's address>` and the same on the admin hostname and the Worker's own address.                 | Status 308 and a `Location` that is the same address over `https`, from the Worker: its address reaches the Worker as `http`. Switch the rule on again. |
 | `L3`    | Publish two private sites. Open the first, then the second.                                                                                                      | Both open. The second asks for nothing.                                                                 |
 | `L2`    | Publish private site B. Publish private site A whose page shows B in an `iframe`. Open A in Chromium, Firefox, and Safari. Then open B directly and reload A.    | In each engine: whether B shows inside A before B was opened directly, and after. Write both down.      |

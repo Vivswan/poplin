@@ -1,27 +1,31 @@
 // The dashboard's zone plug for Cloudflare: every object of an install read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables, https redirect, guard rules, rate rule, bot switches, database, budget alert
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its key, https redirect, guard rules, rate rule, bot switches, database, budget alert
 //
+// The key is the one thing an install keeps of Cloudflare's: a repair makes it with the token where the install has none that works, and writes it onto the Worker in the same change as the variables.
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 // The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
+import type { InstallKey } from "@poplin/app/src/console/key/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncBudgetAlert } from "./alerts/budget-alert";
 import { syncZoneBots } from "./bots/bots";
-import { type Connection, findZones, listZones, type Zone } from "./client";
+import { type CloudflareFailure, type Connection, findZones, listZones, type Zone } from "./client";
 import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
 import type { INSTALL_PIECES } from "./install-pieces";
 import { HTTPS_SWITCH, syncHttps } from "./https/https";
+import { readKeyState } from "./key/key-state";
+import { mintKey } from "./key/mint";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
 import { defaultRateRule, syncWaf } from "./rules/waf";
-import { type Mode, type Report, reportOf } from "./sync";
+import { type Mode, type Report, reportOf, type Synced } from "./sync";
 import { syncVariables } from "./variables/variables";
 
 /** What a token is made of. Anything else is refused unsent, so no pasted text reaches a request header. */
@@ -72,6 +76,18 @@ const SWITCH_ON = "To switch this on, add this right to the account token and pr
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 
+/** What the key's row names: the name every key of an install has at Cloudflare. */
+const KEY = INSTALL_OBJECTS.keyName;
+
+/** What the key's row says of a key the install holds and Cloudflare takes no more. */
+const KEY_REFUSED = "Cloudflare no longer takes the key the install holds";
+
+/** What the key's row says of a new key whose write onto the Worker failed, by whether it could be deleted again. */
+const KEY_UNWRITTEN = { deleted: "made, and deleted again when its write onto the Worker failed", left: "made, and left at Cloudflare for you to delete when its write onto the Worker failed" } as const;
+
+/** What a repair that could not list or delete the older keys tells the person to do. */
+const OLD_KEY = `An older key named ${KEY} may still be at Cloudflare. Delete it there:`;
+
 /** Every permission the plug's calls use, in Cloudflare's own name: one an install needs, with its key as Cloudflare's page on token template links names it, or an optional one, which that page names no key for. */
 const RIGHT = {
   zone: { name: "Zone: Read", key: "zone", type: "read" },
@@ -86,6 +102,7 @@ const RIGHT = {
   bots: { name: "Bot Management: Edit", adds: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says." },
   database: { name: "D1: Edit", key: "d1", type: "edit" },
   notifications: { name: "Notifications: Edit", adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar." },
+  tokens: { name: "Account API Tokens: Edit", key: "account_api_tokens", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
 /** The permissions the calls of each object use, the one its changes use first. A piece with no row here, or with none in the list the OpenTofu module is held to, does not compile. */
@@ -102,6 +119,7 @@ const RIGHTS = {
   "Bot settings": [RIGHT.bots],
   "D1 database": [RIGHT.database],
   "Budget alert": [RIGHT.notifications],
+  Key: [RIGHT.tokens, RIGHT.scripts],
 } as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone, readonly Right[]>>;
 
 /** What each object is for: the login guards private sites, a record or a route makes a site answer at its address. A piece with no row here does not compile. */
@@ -118,6 +136,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Bot settings": "rest",
   "D1 database": "rest",
   "Budget alert": "rest",
+  Key: "rest",
   "Public word": "rest",
 };
 
@@ -141,8 +160,12 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
  *
  * One that is set has `accountId`, the account the Worker runs in, never one a token's holder names.
  * One with nothing set has `first`, its first login: its account is the one the token shows the domain in, and a repair also writes the domain, this login, and that account onto the Worker.
+ * `key` is the install's key as its own Worker holds it. Without one, how the key stands is read at Cloudflare with the token.
  */
-type Known = { readonly accountId: string; readonly first?: undefined } | { readonly accountId?: undefined; readonly first: { readonly login: Login } };
+type Known = { readonly accountId: string; readonly first?: undefined; readonly key?: Held } | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined };
+
+/** The install's key as the Worker that holds it sees it. */
+type Held = Pick<InstallKey, "has" | "verify">;
 
 /** What the plug is built from. */
 type PlugParts = Known & {
@@ -162,8 +185,11 @@ type PlugParts = Known & {
 /** One permission of a token: one an install needs, with its key and level in a link to the form, or an optional one, with what it adds. */
 type Right = { readonly name: string; readonly key: string; readonly type: "read" | "edit" } | { readonly name: string; readonly adds: string };
 
-/** The parts once the account is known. */
-type Placed = Pick<PlugParts, "script" | "layout" | "first"> & { readonly accountId: string };
+/** The parts once the token has shown the zone, and with it the account. */
+type Placed = Pick<PlugParts, "script" | "layout" | "first" | "key"> & { readonly accountId: string; readonly zoneId: string };
+
+/** The variables a run wants on the Worker. */
+type Wanted = Parameters<typeof syncVariables>[2];
 
 /** An object the table names. */
 type Piece = keyof typeof RIGHTS;
@@ -345,32 +371,101 @@ function firstValues(placed: Placed): Parameters<typeof syncVariables>[2] {
   ];
 }
 
-// The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists, in one change with the values of an install that has none.
-async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<void> {
+/** The row of a key that failed: `what` came of it, why, and for a missing permission the one to add, unless another row of the run names it. */
+function keyFailed(what: string, failure: CloudflareFailure | { readonly ok: false; readonly failure: string; readonly message: string }, right: Right | undefined): Found {
+  const stopped: Stopped = { ...failure, report: reportOf([]) };
+  const why = `${KEY}${what}: ${failureText(stopped)}`;
+  if (right === undefined || !lacksRight(stopped)) return { object: "Key", state: "failed", detail: why };
+
+  return { object: "Key", state: "failed", detail: `${why}. ${ADD_RIGHT}: ${right.name}`, right: right.name };
+}
+
+/**
+ * The row of a key that was read and left as it is: how it stands, or why that could not be read.
+ *
+ * @param variables - whether the run also reads the Worker's bindings for its variables, whose row then names the permission that reading lacks
+ */
+function keyRead(state: Awaited<ReturnType<typeof readKeyState>>, variables: boolean): Found {
+  if (!state.ok && state.read === "bindings") return keyFailed("", state, variables ? undefined : RIGHT.scripts);
+
+  if (!state.ok) return keyFailed("", state, RIGHT.tokens);
+
+  if (state.value === "refused") return { object: "Key", state: "differs", detail: `${KEY}: ${KEY_REFUSED}` };
+
+  return { object: "Key", state: state.value, detail: KEY };
+}
+
+/**
+ * Make a new key with the token and write it onto the Worker, in one change with the variables a run wants there.
+ *
+ * @param replaces - whether the install held a key before, which the new one stands in for
+ * @returns the key's row, a step for an older key that is still at Cloudflare, and what the one change came to; no change is `undefined`, of a key that was never made
+ */
+async function mintInto(connection: Connection, placed: Placed, wanted: Wanted, replaces: boolean): Promise<{ readonly row: Found; readonly steps: DomainStep[]; readonly written: Synced | undefined }> {
+  const place = { accountId: placed.accountId, zoneId: placed.zoneId, name: KEY };
+  const minted = await mintKey(connection, place, (value) => syncVariables(connection, placed, wanted, "apply", { name: INSTALL_OBJECTS.keyBinding, text: value }));
+  if (minted.ok) {
+    const steps = minted.stale ? [{ text: OLD_KEY, address: `https://dash.cloudflare.com/${placed.accountId}/api-tokens` }] : [];
+
+    return { row: { object: "Key", state: replaces ? "changed" : "created", detail: KEY }, steps, written: minted.kept };
+  }
+
+  if (!minted.made) return { row: keyFailed("", minted.why, RIGHT.tokens), steps: [], written: undefined };
+
+  return { row: keyFailed(`, ${minted.left ? KEY_UNWRITTEN.left : KEY_UNWRITTEN.deleted}`, minted.kept, RIGHT.scripts), steps: [], written: minted.kept };
+}
+
+// The key and the variables are one piece of work on the Worker: a key is made only where a repair finds none that works, and then both go in one change.
+async function workerPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, wanted: Wanted): Promise<Synced | undefined> {
+  const object = (): Piece => "Worker variable";
+  const state = await readKeyState(placed.key, connection, placed);
+  const made = mode === "apply" && state.ok && state.value !== "present" ? await mintInto(connection, placed, wanted, state.value === "refused") : undefined;
+  const written = made?.written;
+  const run = written === undefined ? (): Promise<Synced> => syncVariables(connection, placed, wanted, mode) : async (): Promise<Synced> => written;
+  // With no variable to write, the key's own row says everything the change came to.
+  const synced = wanted.length === 0 ? written : await piece(progress, mode, object, run);
+  progress.rows.push(made?.row ?? keyRead(state, wanted.length > 0));
+  progress.steps.push(...(made?.steps ?? []));
+
+  return synced;
+}
+
+/** The variables a run wants on the Worker, with the rows of what it cannot want yet; `login` says whether the login's own variable is among them. A run that may not write the Worker at all wants nothing, and answers `undefined`. */
+async function wantedVariables(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<{ readonly variables: Wanted; readonly login: boolean } | undefined> {
   const name = INSTALL_OBJECTS.accessBinding;
   const object = (): Piece => "Worker variable";
   // An install whose login was refused gets no values: a Worker with a domain and no login behind it is half an install.
   if (progress.stopped || accessReady === undefined) {
     progress.rows.push({ object: object(), state: "not-run", detail: "" });
 
-    return;
+    return undefined;
   }
 
   const facts = accessReady ? await readLoginFacts(connection, placed.accountId) : ({ ok: true, value: undefined } as const);
   if (!facts.ok) {
     await piece(progress, mode, object, async (): Promise<Outcome> => ({ ...facts, report: reportOf([]), failed: TEAM_DOMAIN }));
 
-    return;
+    return undefined;
   }
 
   if (facts.value === undefined) progress.rows.push({ object: object(), state: "missing", detail: `${name}: ${NO_APPLICATION}` });
 
   const login = facts.value === undefined ? [] : [{ name, value: { team_domain: facts.value.teamDomain, audience: facts.value.audience } }];
-  const wanted = [...firstValues(placed), ...login];
-  if (wanted.length === 0) return;
 
-  const synced = await piece(progress, mode, object, () => syncVariables(connection, placed, wanted, mode));
-  const ready = mode === "apply" && synced?.ok === true && !synced.report.changedNothing && login.length > 0;
+  return { variables: [...firstValues(placed), ...login], login: login.length > 0 };
+}
+
+// The Worker checks a login against the application setup made, so its audience tag is written onto the Worker once the application exists, in one change with the values of an install that has none.
+async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<void> {
+  const wanted = await wantedVariables(progress, mode, placed, connection, accessReady);
+  if (wanted === undefined) {
+    progress.rows.push({ object: "Key", state: "not-run", detail: "" });
+
+    return;
+  }
+
+  const synced = await workerPiece(progress, mode, placed, connection, wanted.variables);
+  const ready = mode === "apply" && synced?.ok === true && !synced.report.changedNothing && wanted.login;
   if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.layout.adminHostname}` });
 }
 
@@ -398,14 +493,22 @@ async function findZone(parts: PlugParts, connection: Connection): Promise<Zone 
   return parts.accountId === undefined ? NO_DOMAIN : REFUSED;
 }
 
-async function read(parts: PlugParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
+/** Prove a token: one that is malformed, refused, or shows no zone of the install's domain where the install is gets its refusal, and nothing of the install is read with it. */
+async function prove(parts: PlugParts, token: string): Promise<{ readonly connection: Connection; readonly zone: Zone; readonly placed: Placed } | DomainReading> {
   if (!TOKEN.test(token)) return REFUSED;
 
   const connection: Connection = { key: token, baseUrl: parts.baseUrl, fetch: parts.fetch };
   const zone = await findZone(parts, connection);
   if ("ok" in zone) return zone;
 
-  const placed: Placed = { script: parts.script, layout: parts.layout, first: parts.first, accountId: zone.accountId };
+  return { connection, zone, placed: { script: parts.script, layout: parts.layout, first: parts.first, key: parts.key, accountId: zone.accountId, zoneId: zone.id } };
+}
+
+async function read(parts: PlugParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
+  const proven = await prove(parts, token);
+  if ("ok" in proven) return proven;
+
+  const { connection, zone, placed } = proven;
 
   // The token is proven: only now is anything of the install read.
   const settings = await readSettings();
@@ -495,6 +598,21 @@ export function tokenFacts(): TokenFacts {
     tokenOptional: optional,
     tokenNote: TOKEN_SCOPE,
   };
+}
+
+/**
+ * Give an install a new key, made with a token a person pasted, and nothing else: no other object is read or changed.
+ *
+ * @param parts - the install; with `key`, a key the install holds is said to be replaced
+ * @returns the key's one row, and a step for an older key that is still at Cloudflare; a token that does not prove itself is refused as a check refuses it. The older keys of the name are deleted once the new one is on the Worker
+ */
+export async function giveKey(parts: Extract<PlugParts, { readonly accountId: string }>, token: string): Promise<DomainReading> {
+  const proven = await prove(parts, token);
+  if ("ok" in proven) return proven;
+
+  const { row, steps } = await mintInto(proven.connection, proven.placed, [], parts.key?.has() === true);
+
+  return { ok: true, rows: [{ ...row, part: PART[row.object] }], steps };
 }
 
 /**

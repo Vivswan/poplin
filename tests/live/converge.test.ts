@@ -6,7 +6,7 @@ import { mkdtempDisposableSync, readFileSync, realpathSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import type { DomainRow } from "../../packages/app/src/console/domain/records";
+import type { DomainRow, DomainSettings } from "../../packages/app/src/console/domain/records";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { answerOf, convergeInstall, needOf, workerConfig } from "../../packages/cloudflare/scripts/live/converge";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
@@ -293,8 +293,8 @@ describe("what a failed wait for the install repeats of its answer", () => {
   });
 });
 
-/** The calls Cloudflare refuses a token made from the link on the setup page, which carries eight rights and none of the four optional ones. */
-const REFUSED_WITH_EIGHT_RIGHTS = [
+/** The calls Cloudflare refuses a token made from the link on the setup page, which carries nine rights and none of the four optional ones. */
+const REFUSED_WITH_THE_LINK_RIGHTS = [
   "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint",
   "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",
   "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint",
@@ -302,10 +302,10 @@ const REFUSED_WITH_EIGHT_RIGHTS = [
   `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies`,
 ];
 
-describe("the zone's repair with the eight rights of the token link alone, against a local fake account", () => {
+describe("the zone's repair with the nine rights of the token link alone, against a local fake account", () => {
   // Drift: the install page says the link's token is enough, so a run that called its rows a failure would turn the test install red for the very token a reader is told to make.
   test("every row the repair did not settle is a lack the suite skips for, never a failure, and every object an install answers with is made", async () => {
-    const account = { ...emptyAccount(), refuse: REFUSED_WITH_EIGHT_RIGHTS };
+    const account = { ...emptyAccount(), refuse: REFUSED_WITH_THE_LINK_RIGHTS };
     let rows: readonly DomainRow[] = [];
 
     await withFake(
@@ -332,7 +332,32 @@ describe("the zone's repair with the eight rights of the token link alone, again
       "Access application",
       "Access policy",
       "Worker variable",
+      "Key",
       "D1 database",
     ]);
+  });
+
+  // Drift: the run holds no key of the install, so it reads the key's state at Cloudflare. A run that made a key on every push would leave the test install a new Worker version and a new token each time.
+  test("the key: the first run makes it, a later run finds it present and makes none, and a token that may not make one is a lack the suite skips for", async () => {
+    const [account, lacking] = [emptyAccount(), { ...emptyAccount(), refuse: `GET /accounts/${INSTALL_ACCOUNT}/tokens/permission_groups` }];
+    const settings = async (): Promise<DomainSettings> => ({ logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" });
+    const keyOf = async (baseUrl: string | undefined): Promise<(string | undefined)[]> => {
+      const reading = await createDomainPlug({ accountId: INSTALL_ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl }).repair(TOKEN, settings);
+
+      return (reading.ok ? reading.rows : []).filter((row) => row.object === "Key").flatMap((row) => [row.state, needOf(row)]);
+    };
+
+    await withFake(
+      (asked) => answerInstall(account, asked),
+      async (connection) => {
+        expect([await keyOf(connection.baseUrl), await keyOf(connection.baseUrl), account.tokens.length]).toEqual([["created", undefined], ["present", undefined], 1]);
+      },
+    );
+    await withFake(
+      (asked) => answerInstall(lacking, asked),
+      async (connection) => {
+        expect(await keyOf(connection.baseUrl)).toEqual(["failed", "the token permission for the Key"]);
+      },
+    );
   });
 });
