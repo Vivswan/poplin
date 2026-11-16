@@ -321,8 +321,8 @@ export function ActivityScreen(): ReactNode {
               maxLength={MAX_SEARCH}
             />
           </div>
-          {/* Which entries are shown, in sight before the foot is: beside the search, and on a line of its own over the list where the row of tools has no room for it. Nothing where no row is drawn. */}
-          <ShownEntries query={query} page={drawnPage(page, instead)} total={total} size={size} busy={isPlaceholderData} className="whitespace-nowrap max-xl:order-5 max-xl:basis-full" />
+          {/* Which entries are shown, in sight before the foot is: on a line of its own right over the list, after every tool, so it reads as the list's and takes no room from a tool. Nothing where no row is drawn. */}
+          <ShownEntries query={query} page={drawnPage(page, instead)} total={total} size={size} busy={isPlaceholderData} className="order-6 basis-full whitespace-nowrap" />
           <LogSaid read={{ page, there, failure: error, query }} narrowed={{ kind, site }} />
           {site.of === "" ? null : <OnlySite of={site.of} page={page} current={!isPlaceholderData} onShowEvery={() => move({ of: "" })} />}
           <div className="flex min-w-0 flex-1 items-center gap-2 max-md:order-4 max-md:basis-full">
