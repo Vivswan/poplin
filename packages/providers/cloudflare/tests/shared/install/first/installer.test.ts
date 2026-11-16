@@ -406,9 +406,9 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
 
 // Drift: a run that stopped after its upload has made records and routes under a domain, or forwarders without one. Gone on with as the other kind, or removed as it, those stay in the account, and no command has a row for them.
 test.each([
-  ["domain", "no-domain", "POST /zones/zone-1/workers/routes", "An install was started in this account under the domain example.com, and not finished: give --domain example.com."],
-  ["no-domain", "domain", `PUT /accounts/${ACCOUNT}/workers/scripts/poplin-private`, "An install was started in this account without a domain, and not finished: give --no-domain."],
-] as const)("a run that stopped after its upload, %s, is gone on with and removed as that kind alone: a look for the other kind (%s) is refused and changes nothing, and its own kind removes what it made", async (kind, other, refuse, words) => {
+  ["domain", "no-domain", "POST /zones/zone-1/workers/routes", "An install was started in this account under the domain example.com, and not finished: give --domain example.com.", "--domain example.com"],
+  ["no-domain", "domain", `PUT /accounts/${ACCOUNT}/workers/scripts/poplin-private`, "An install was started in this account without a domain, and not finished: give --no-domain.", "--no-domain"],
+] as const)("a run that stopped after its upload, %s, is gone on with and removed as that kind alone: a look for the other kind (%s) is refused and changes nothing, and its own kind removes what it made", async (kind, other, refuse, words, give) => {
   const account = fresh({ refuse, refuseAs: { status: 400, code: 10001 } });
   const stopped = await installed(account, kind, APPLY);
   delete account.refuse;
@@ -416,7 +416,7 @@ test.each([
   const world = await worldOf(account);
   const looked = await installer.find(KEY, KINDS[other].where, world.reach, "install");
 
-  expect([stopped.done.ok && stopped.done.ready, looked, world.asked.filter((entry) => entry.method !== "GET")]).toEqual([false, { state: "refused", why: "other_place", words }, []]);
+  expect([stopped.done.ok && stopped.done.ready, looked, world.asked.filter((entry) => entry.method !== "GET")]).toEqual([false, { state: "refused", why: "other_place", words, give }, []]);
   expect(made).toEqual(kind === "domain" ? { records: 2, forwarders: 0 } : { records: 0, forwarders: 1 });
 
   const own = await installer.find(KEY, KINDS[kind].where, world.reach, "install");

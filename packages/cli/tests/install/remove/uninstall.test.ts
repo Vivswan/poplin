@@ -286,7 +286,7 @@ describe("what stops a removal before it starts", () => {
 
   // Drift: a program reads the problem, not the sentence. Told as a token that shows no such domain, it would send a person to the token's form in place of the option to give.
   test("an install that was started for another place than the one named stops the removal as other_place, with the provider's sentence, and nothing is removed", async () => {
-    const account: Account = { ...emptyAccount(), scenes: [{ state: "refused", why: "other_place", words: "An install was started here for another place." }], removed: () => removedOf(WHOLE) };
+    const account: Account = { ...emptyAccount(), scenes: [{ state: "refused", why: "other_place", words: "An install was started here for another place.", give: "--place example.com" }], removed: () => removedOf(WHOLE) };
     const ran = await runLine("uninstall stand-in --no-place --dry-run --json", account, { env: HELD });
 
     expect([ran.code, jsonOf(ran), account.changes]).toMatchObject([1, { ok: false, problem: "other_place", words: "An install was started here for another place. Nothing was removed." }, 0]);
