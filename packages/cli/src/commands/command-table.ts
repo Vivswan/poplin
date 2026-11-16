@@ -41,6 +41,14 @@ export const SESSION = [
   "poplin delete report",
 ];
 
+/** The command that makes an install, as its row of the help: its providers and their options are known only when it runs, so its own parser reads its words. */
+export const INSTALL_COMMAND = {
+  name: "install",
+  group: "the install",
+  about: "make your own install at a provider",
+  arguments: [{ name: "provider", about: "where to install; without it, the providers are listed", required: false }],
+} as const;
+
 /** Every command, in the order the help lists them. */
 export const COMMANDS = [
   {
