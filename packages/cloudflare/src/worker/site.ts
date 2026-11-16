@@ -1,6 +1,9 @@
 // A request to any hostname but the admin one: its login checked, looked up, counted against the limits, then served.
 //
-//   the address  ->  under `p`: the Access token and the logins  ->  one database query  ->  the limits  ->  serving, handed the site already found  ->  the day's count
+//   the address  ->  the visitor's minute  ->  under `p`: the Access token and the logins  ->  one database query  ->  the site's limits  ->  serving, handed the site already found  ->  the day's count
+//
+// The visitor's minute is taken first, by the settings the instance read within the minute, so a visitor past it is refused with nothing read: neither a site nor a setting.
+// Once that minute ran out, one request takes it after its query, which brings the settings anew: a limit that was raised is in force within the minute, however many requests are refused.
 //
 // The one query finds the site and reads beside it what the instance holds no longer: the settings once their minute ran out, and the site's count of the day once its half minute did.
 // Under `p`, and at an address that names no site, the settings are read first and on their own: the login is checked before any site is looked up.
@@ -11,9 +14,9 @@
 // The limits count the request against its day before it is served, and its one write comes after the answer, since only the answer says whether a page was opened.
 // Serving's answer goes out as it is. Nothing here reads, holds, or changes a file's bytes.
 
-import { checkLimits, type Counters, countRequest, isPageView, type Refusal } from "@poplin/app/src/limits/limits";
+import { checkSiteLimits, countRequest, isPageView, takeVisitorMinute } from "@poplin/app/src/limits/limits";
 import { refusalResponse } from "@poplin/app/src/limits/refusal";
-import { type VisitorKey, visitorKey } from "@poplin/app/src/limits/visitor-key";
+import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { serveSite } from "@poplin/app/src/sites/serve";
 import { noteProblem } from "@poplin/core/src/actions/problems";
 import { isLogin } from "@poplin/core/src/auth/logins";
@@ -127,16 +130,11 @@ async function proofOf(request: Request, addressed: Addressed, context: { readon
   return refusal === "keys-unavailable" ? { kind: "unchecked" } : { kind: "refused" };
 }
 
-/** Count a request for no served site against its visitor's minute. A counter that cannot answer lets it through, as the limits do. */
-async function takeVisitorMinute(counters: Counters, window: { readonly key: VisitorKey; readonly limit: number }, now: number): Promise<typeof ALLOWED | Refusal> {
-  try {
-    const taken = await counters.takeMinute({ scope: "visitor", ...window }, now);
-    if (taken.ok) return ALLOWED;
+/** Count a request against its visitor's minute, by the visitor limit and the secret of what the instance holds. */
+async function visitorMinute(request: Request, instance: Instance, held: Held, now: number): ReturnType<typeof takeVisitorMinute> {
+  const visitor = await visitorKey(clientAddress(request.headers), held.visitorSecret, now);
 
-    return { ok: false, which: "visitor", retryAfterSeconds: taken.retryAfterSeconds };
-  } catch {
-    return ALLOWED;
-  }
+  return takeVisitorMinute({ settings: held.settings, visitor, now }, instance.counters);
 }
 
 /**
@@ -149,17 +147,19 @@ export async function answerSite(request: Request, instance: Instance, holding: 
   const { database, store } = instance.install;
   const now = instance.install.now();
   const addressed = instance.addresses.resolve(new URL(request.url));
+  const before = await holding.current();
+  const early = before === undefined ? undefined : await visitorMinute(request, instance, before, now);
+  if (early?.ok === false) return refusalResponse(early);
+
   const { held, proof, address, found } = await enter(request, addressed, { instance, holding, now });
   // Noted before the limits: a full minute answers first, and the keys were still not to be had.
   if (proof.kind === "unchecked") await noteProblem(instance.install, "login_unchecked");
   const site = found?.site;
+  const visitor = early ?? (await visitorMinute(request, instance, held, now));
+  if (!visitor.ok) return refusalResponse(visitor);
 
-  const visitor = await visitorKey(clientAddress(request.headers), held.visitorSecret, now);
   const served = site !== undefined && opensAt(addressed, site) ? site : undefined;
-  const verdict =
-    served === undefined
-      ? await takeVisitorMinute(instance.counters, { key: visitor, limit: held.settings.visitor_requests_per_minute }, now)
-      : await checkLimits({ settings: held.settings, site: served.id, visitor, now }, instance.counters);
+  const verdict = served === undefined ? ALLOWED : await checkSiteLimits({ settings: held.settings, site: served.id, now }, instance.counters);
   if (!verdict.ok) {
     // The day's limit of requests is noted once on the day it is reached. A full minute is the limit at work, and is no problem.
     if (verdict.which === "day") await noteProblem(instance.install, "requests_limit_reached");

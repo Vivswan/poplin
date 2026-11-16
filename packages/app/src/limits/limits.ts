@@ -120,7 +120,7 @@ function siteShare(settings: Asked["settings"]): number {
   return Math.max(1, Math.floor((settings.requests_per_day * settings.site_share_of_day) / PERCENT));
 }
 
-async function takenOrOpen(counters: Counters, window: MinuteWindow, now: number): Promise<Taken> {
+async function takenOrOpen(counters: Pick<Counters, "takeMinute">, window: MinuteWindow, now: number): Promise<Taken> {
   try {
     return await counters.takeMinute(window, now);
   } catch {
@@ -143,15 +143,35 @@ function takeDay(counters: Counters, window: DayWindow, room: DayRoom, now: numb
 }
 
 /**
+ * Count a request against its visitor's minute, which every request spends, whatever it asks for and whether a site answers it. It needs nothing of a site, so it is taken before one is looked up.
+ *
+ * @returns `ok` with no request counted toward a day, or the visitor's refusal
+ */
+export async function takeVisitorMinute(asked: Pick<Asked, "visitor" | "now"> & { readonly settings: Pick<Asked["settings"], "visitor_requests_per_minute"> }, counters: Pick<Counters, "takeMinute">): Promise<Verdict> {
+  const visitor = await takenOrOpen(counters, { scope: "visitor", key: asked.visitor, limit: asked.settings.visitor_requests_per_minute }, asked.now);
+  if (!visitor.ok) return { ok: false, which: "visitor", retryAfterSeconds: visitor.retryAfterSeconds };
+
+  return { ok: true, requests: 0 };
+}
+
+/**
  * Decide whether a request for a site may proceed, and count it against its minutes and its day when it may. `countRequest` writes the day's count once the request is answered.
  *
  * @returns `ok` with `requests`, what `countRequest` is handed, or the first limit that refused in the order visitor, site, day, site-share; a day limit is lifted at the next midnight UTC
  */
 export async function checkLimits(asked: Asked, counters: Counters): Promise<Verdict> {
-  const { settings, site, now } = asked;
+  const visitor = await takeVisitorMinute(asked, counters);
 
-  const visitor = await takenOrOpen(counters, { scope: "visitor", key: asked.visitor, limit: settings.visitor_requests_per_minute }, now);
-  if (!visitor.ok) return { ok: false, which: "visitor", retryAfterSeconds: visitor.retryAfterSeconds };
+  return visitor.ok ? checkSiteLimits(asked, counters) : visitor;
+}
+
+/**
+ * Decide the limits of a served site for a request whose visitor's minute is taken already: the site's minute, then the day and the site's share of it.
+ *
+ * @returns `ok` with `requests`, what `countRequest` is handed, or the first limit that refused in the order site, day, site-share
+ */
+export async function checkSiteLimits(asked: Omit<Asked, "visitor">, counters: Counters): Promise<Verdict> {
+  const { settings, site, now } = asked;
 
   const ofSite = await takenOrOpen(counters, { scope: "site", key: site, limit: settings.site_requests_per_minute }, now);
   if (!ofSite.ok) return { ok: false, which: "site", retryAfterSeconds: ofSite.retryAfterSeconds };

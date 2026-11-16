@@ -698,21 +698,32 @@ describe("the product, from a token to an opened site", () => {
   });
 
   // Drift: the limits would sit behind serving, or count nothing for an address that names no site, and a probe of made-up names would run free.
+  // A visitor's minute taken after the site was looked up would let a flood of one visitor's requests cost a query each, refused or not.
   test.each([
     { name: "a public site", address: "https://docs-page.example.com/", served: 200 },
     { name: "a name no site holds", address: "https://nothing-page.example.com/", served: 404 },
-  ])("$name answers a visitor past the per-visitor limit 429 with Retry-After, and another visitor as before", async ({ address, served }) => {
-    const tight = withBindings({ FIRST_SETTINGS: { ...FIRST, visitor_requests_per_minute: "2" } });
+  ])("$name answers a visitor past the per-visitor limit 429 with Retry-After and asks the database nothing for it within the instance's minute, and another visitor as before", async ({ address, served }) => {
+    const tally = { calls: 0 };
+    const tight = { ...countedBindings(tally), FIRST_SETTINGS: { ...FIRST, visitor_requests_per_minute: "2" } } as Bindings;
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, tight);
     await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
 
     const from = (visitor: string): Promise<Response> => ask(worker, address, { headers: { "CF-Connecting-IP": visitor } });
     await awayFromMinuteEnd();
-    const answers = [await from("203.0.113.7"), await from("203.0.113.7"), await from("203.0.113.7"), await from("198.51.100.9")];
+    const answers = [await from("203.0.113.7"), await from("203.0.113.7")];
+    tally.calls = 0;
+    answers.push(await from("203.0.113.7"));
+    const refused = tally.calls;
+    answers.push(await from("198.51.100.9"));
+    // Once the instance's minute ran out, a refused request reads the settings anew with its lookup: a limit raised meanwhile is not held off by the refusals.
+    wait(w, 2 / 60);
+    tally.calls = 0;
+    const later = await from("203.0.113.7");
 
     expect(answers.map((answer) => answer.status)).toEqual([served, served, 429, served]);
     expect(answers.map((answer) => answer.headers.get("Retry-After"))).toEqual([null, null, "60", null]);
+    expect([refused, later.status, tally.calls]).toEqual([0, 429, 1]);
   });
 
   // Drift: the id alone names a site, under any name; counted apart from the site, every other name before the id would be a fresh allowance.
