@@ -38,8 +38,8 @@ export interface SiteActions {
   readonly restore: (site: Site) => Promise<Site | undefined>;
 }
 
-/** The name of the line that says a site went to the trash. */
-function trashLine(site: Site): string {
+/** The name of the line that says a site went to the trash: the line is taken away under it once its Undo can do nothing, after a restore and after a delete for good. */
+export function trashLine(site: Site): string {
   return `trash ${site.id}`;
 }
 

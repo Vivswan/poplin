@@ -2,7 +2,7 @@
 
 import type { Review, Token } from "@/access/access-queries";
 import { answerOf, api, Refused } from "@/lib/api";
-import { copy, sayDone, sayRefused, send } from "@/lib/notify";
+import { copy, sayDone, sayRefused, send, unsay } from "@/lib/notify";
 
 /** What each decision says once it is done. */
 const DECIDED = {
@@ -23,6 +23,11 @@ const PEOPLE_SAID = {
   removed: "Removed.",
   gone: "That user was removed already.",
 } as const;
+
+/** The name of the line that says a person was added: the line is taken away under it once the person is out again, since its Undo then has nobody to take out. */
+function addedLine(email: string): string {
+  return `added ${email}`;
+}
 
 /** What a decision about a login asks for. */
 interface Decision {
@@ -91,12 +96,14 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
       if (error.code !== "not_a_login") return sayRefused(error.message);
 
       onChanged();
+      unsay(addedLine(email));
 
       return sayDone(PEOPLE_SAID.gone);
     }
 
     onChanged();
     onUsersChanged();
+    unsay(addedLine(email));
     sayDone(peopleWords(PEOPLE_SAID.removed, note));
   };
 
@@ -134,7 +141,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
         const added = await answerOf(api.people.add.$post({ json: { login: email } }));
         onChanged();
         onUsersChanged();
-        sayDone(peopleWords(PEOPLE_SAID.added, added.note), { run: () => void removePerson(added.login) });
+        sayDone(peopleWords(PEOPLE_SAID.added, added.note), { run: () => void removePerson(added.login), id: addedLine(added.login) });
 
         return undefined;
       } catch (error) {
