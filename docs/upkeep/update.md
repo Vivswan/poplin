@@ -71,6 +71,8 @@ the install now runs 0.3.1; it ran 0.3.0
 
 `release_refused` comes with a word for which row it is. For `key_refused`, `no_key`, and `lacks_right`, press Repair on the Domain screen with an account token: it makes a key with every permission the install uses. [When poplin refuses](../fix/poplin-refuses.md) has each code.
 
+The token you installed with may be deleted by now. Repair's dialog has the button that opens Cloudflare's form for a new one, and [Domain](../dashboard/domain.md#repair-asks-for-an-account-token) has the steps. `npx poplin doctor --repair` is the same repair from a terminal, and prints the link.
+
 A release that changes the database is taken when you start it, never by itself. Once it ran, an older poplin cannot read the database, so the install cannot [go back](#go-back) from it.
 
 [The kept key](../about/security.md#the-kept-key) says what the key can reach, and [Hardening](../about/security.md#hardening) what an update still trusts.
