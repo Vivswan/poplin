@@ -5,8 +5,8 @@
 
 import type { RemovalRow, RemovalState, Removed, Run } from "../../../../core/src/install/installer";
 import { countText } from "../../commands/text";
-import type { Provider } from "../records";
-import { blockedLines, type Line, type StateWords, wordedRow } from "../report";
+import type { Next, Provider } from "../records";
+import { blockedLines, type Line, NEXT, type StateWords, wordedRow } from "../report";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
 const STATES: Readonly<Record<RemovalState, StateWords>> = {
@@ -90,11 +90,13 @@ export function removedLines(removed: Listed, provider: Provider): Line[] {
  * The JSON value of a dry run or a run that worked through its rows.
  *
  * @param found - what the look for an install found, which the run went on from
- * @returns the same value for both, but for `run` and the key of each row's state: `will` in a dry run, `did` in a run. `ok` is whether the command exits with 0
+ * @param provider - the provider, which the command line of the next step names
+ * @returns the same value for both, but for `run` and the key of each row's state: `will` in a dry run, `did` in a run. `ok` is whether the command exits with 0, and `next` names this command until a run removed all it was to
  */
-export function removalValue(removed: Listed, run: Run, found: string): Readonly<Record<string, unknown>> {
+export function removalValue(removed: Listed, run: Run, found: string, provider: Provider): Readonly<Record<string, unknown>> {
   const key = run === "dry-run" ? "will" : "did";
   const rows = removed.rows.map(({ object, state, detail, ...held }) => ({ object, [key]: state, detail, ...held }));
+  const next: Next = run === "apply" && removed.ready ? NEXT.none() : NEXT.uninstall(provider);
 
-  return { ok: removed.ready, run, ready: removed.ready, found: { state: found }, confirm: removed.confirm, rows, blocked: removed.blocked };
+  return { ok: removed.ready, run, ready: removed.ready, found: { state: found }, confirm: removed.confirm, rows, blocked: removed.blocked, next };
 }

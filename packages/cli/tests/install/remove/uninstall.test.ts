@@ -17,6 +17,9 @@ const NAME = "poplin.example.com";
 /** A whole install, as a look finds it. */
 const INSTALL: Found<Where, Place> = { state: "whole", place: PLACE, version: "0.1.0", address: ADDRESS, newest: "0.1.0" };
 
+/** What runs the command again, as the one JSON value names it. */
+const AGAIN = { step: "uninstall", command: "npx poplin uninstall stand-in" };
+
 /** The line of a look that found the install. */
 const FOUND = `looking for an install ... found: poplin 0.1.0, at ${ADDRESS}`;
 
@@ -85,6 +88,7 @@ describe("a dry run", () => {
         { object: "Account token", will: "stay", detail: "delete it at Stand-In Host" },
       ],
       blocked: [],
+      next: AGAIN,
     });
   });
 
@@ -148,7 +152,7 @@ describe("a run", () => {
     const flagged = await runLine("uninstall stand-in --no-place --confirm poplin.example.org --json", given, { env: HELD });
 
     expect([asked.code, asked.err.at(-1), typed.changes]).toEqual([1, words, 0]);
-    expect([flagged.code, jsonOf(flagged), given.changes]).toEqual([1, { ok: false, problem: "not_confirmed", words, run: "apply", ready: false }, 0]);
+    expect([flagged.code, jsonOf(flagged), given.changes]).toEqual([1, { ok: false, problem: "not_confirmed", next: AGAIN, words, run: "apply", ready: false }, 0]);
   });
 
   test.each([

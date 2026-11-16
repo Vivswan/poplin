@@ -22,6 +22,9 @@ const WHOLE: Found<Where, Place> = { state: "whole", place: PLACE, version: "0.1
 /** Records an earlier install left behind. */
 const LEFTOVER: Found<Where, Place> = { state: "leftover", place: PLACE, notes: [], words: "Records named poplin are in this account.", address: "https://host.example.com/records" };
 
+/** What runs the command again, as the one JSON value names it. */
+const AGAIN = { step: "repair", command: "npx poplin doctor --repair" };
+
 /** The line that says which install was found. */
 const FOUND = `looking for an install ... found: poplin 0.1.0, at ${ADDRESS}`;
 
@@ -98,13 +101,13 @@ describe("a repair with the account token", () => {
     expect(account.changes).toBe(1);
   });
 
-  test("a dry run names what a run would change, changes nothing, and exits with 1 while something would change: without this a check by a program reads a broken install as a healthy one", async () => {
+  test("a dry run names what a run would change, changes nothing, and exits with 0 as the run after it would, with the repair as the next step: without this its words say ready while its exit and its value say failed", async () => {
     const account = installed(repairedOf(ONE_GONE));
     const dry = await runLine(`${RUN} --dry-run`, account, { env: HELD });
     const json = await runLine(`${RUN} --dry-run --json`, account, { env: HELD });
     const same = await runLine(`${RUN} --dry-run --json`, installed(), { env: HELD });
 
-    expect([dry.code, account.changes, account.repairs.map((asked) => asked.mend.run)]).toEqual([1, 0, ["dry-run", "dry-run"]]);
+    expect([dry.code, json.code, account.changes, account.repairs.map((asked) => asked.mend.run)]).toEqual([0, 0, 0, ["dry-run", "dry-run"]]);
     expect(dry.out.slice(1)).toEqual([
       "would leave      Store                 poplin-sites",
       "would make       Guard rule            bots",
@@ -112,7 +115,7 @@ describe("a repair with the account token", () => {
       "ready: a run would make 1. nothing was changed",
     ]);
     expect(jsonOf(json)).toEqual({
-      ok: false,
+      ok: true,
       run: "dry-run",
       ready: true,
       changes: 1,
@@ -123,8 +126,9 @@ describe("a repair with the account token", () => {
       ],
       blocked: [],
       steps: [],
+      next: AGAIN,
     });
-    expect([same.code, jsonOf(same)]).toMatchObject([0, { ok: true, ready: true, changes: 0 }]);
+    expect([same.code, jsonOf(same)]).toMatchObject([0, { ok: true, ready: true, changes: 0, next: { step: "login" } }]);
   });
 
   test("a run that leaves a piece undone names the permission and its page, says to run it again, and exits with 1: without this a token that lacks a permission looks like a repair that worked", async () => {
@@ -171,33 +175,34 @@ describe("a repair with the account token", () => {
 
 describe("what a repair does not go on from", () => {
   const install = "npx poplin install stand-in";
+  const MAKE = { step: "install", command: install };
 
   // Drift: every state a look can find has one command that takes it. A state this command neither mends nor sends on would leave a person with no way on.
   test.each([
-    ["nothing", { state: "none", place: PLACE, notes: [] }, 1, "no_install", `No install is in this account. To make one: ${install}`],
-    ["data left behind", LEFTOVER, 1, "no_install", `Records named poplin are in this account. To make an install that uses it: ${install} --adopt`],
-    ["an install that was started", { state: "started", place: PLACE, notes: [] }, 1, "unfinished", `An install was started in this account and not finished. To finish it: ${install}`],
-    ["a token the provider refuses", { state: "refused", why: "token", words: "The host refused the token." }, 1, "token_refused", "The host refused the token. nothing was changed"],
-    ["a provider that gives no answer", { state: "refused", why: "unreachable", words: "The host gave no answer." }, 5, "unreachable", "The host gave no answer. nothing was changed"],
-  ] as const)("%s is said in one line, and nothing is repaired", async (_, scene, code, problem, line) => {
+    ["nothing", { state: "none", place: PLACE, notes: [] }, 1, "no_install", `No install is in this account. To make one: ${install}`, MAKE],
+    ["data left behind", LEFTOVER, 1, "no_install", `Records named poplin are in this account. To make an install that uses it: ${install} --adopt`, MAKE],
+    ["an install that was started", { state: "started", place: PLACE, notes: [] }, 1, "unfinished", `An install was started in this account and not finished. To finish it: ${install}`, MAKE],
+    ["a token the provider refuses", { state: "refused", why: "token", words: "The host refused the token." }, 1, "token_refused", "The host refused the token. nothing was changed", AGAIN],
+    ["a provider that gives no answer", { state: "refused", why: "unreachable", words: "The host gave no answer." }, 5, "unreachable", "The host gave no answer. nothing was changed", AGAIN],
+  ] as const)("%s is said in one line with what to run next, and nothing is repaired", async (_, scene, code, problem, line, next) => {
     const account = installed(undefined, scene);
     const ran = await runLine(RUN, account, { env: HELD });
     const json = await runLine(`${RUN} --json`, account, { env: HELD });
 
     expect([ran.code, ran.out, ran.err, account.repairs]).toEqual([code, [], [line], []]);
-    expect(jsonOf(json)).toEqual({ ok: false, problem, words: line, run: "apply", ready: false });
+    expect(jsonOf(json)).toEqual({ ok: false, problem, next, words: line, run: "apply", ready: false });
   });
 
   // Drift: each of these is the provider's own refusal of a repair it began. Worded as a failure with no code, a program could not tell a wrong option from a lost connection.
   test.each([
-    ["the install answers elsewhere than the place named", "elsewhere", 1, "other_place"],
-    ["the install's records are of another version", "another", 1, "another_version"],
-    ["the provider refuses the token at the install", "token", 1, "token_refused"],
-    ["the provider gives no answer", "unreachable", 5, "unreachable"],
-  ] as const)("a repair that stops because %s exits with its code and says that nothing was changed", async (_, why, code, problem) => {
+    ["the install answers elsewhere than the place named", "elsewhere", 1, "other_place", AGAIN],
+    ["the install's records are of another version", "another", 1, "another_version", { step: "repair", command: "npx poplin@latest doctor --repair" }],
+    ["the provider refuses the token at the install", "token", 1, "token_refused", AGAIN],
+    ["the provider gives no answer", "unreachable", 5, "unreachable", AGAIN],
+  ] as const)("a repair that stops because %s exits with its code, says that nothing was changed, and names what goes on from it", async (_, why, code, problem, next) => {
     const ran = await runLine(`${RUN} --json`, installed({ ok: false, why, words: "The host says why." }), { env: HELD });
 
-    expect([ran.code, jsonOf(ran)]).toEqual([code, { ok: false, problem, words: "The host says why. nothing was changed", run: "apply", ready: false }]);
+    expect([ran.code, jsonOf(ran)]).toEqual([code, { ok: false, problem, next, words: "The host says why. nothing was changed", run: "apply", ready: false }]);
   });
 });
 
@@ -233,7 +238,7 @@ describe("the words of a repair", () => {
       "poplin doctor --repair: an answer is missing: where it answers. Give --place <name> or --no-place (or POPLIN_PLACE).",
       "poplin doctor --repair: an answer is missing: the account token. Set POPLIN_INSTALL_TOKEN, or pipe it with --token-stdin.",
     ]);
-    expect([ran.code, jsonOf(ran)]).toEqual([2, { ok: false, problem: "missing_answer", missing: ["where", "token"] }]);
+    expect([ran.code, jsonOf(ran)]).toEqual([2, { ok: false, problem: "missing_answer", next: AGAIN, missing: ["where", "token"] }]);
   });
 
   test("the help of a repair lists its own options, the provider's, and how the token is given: without this --repair has options no help shows", async () => {
