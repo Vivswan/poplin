@@ -68,9 +68,9 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # One lane for every job that touches a test install, of either kind. `queue: max` keeps each waiting job: none takes another's place.
+    # One lane for every job that touches the test install of one kind: the two kinds are two accounts, and run side by side. `queue: max` keeps each waiting job: none takes another's place.
     concurrency:
-      group: live-checks
+      group: live-checks-${{ inputs.kind }}
       cancel-in-progress: false
       queue: max
     steps:
@@ -129,7 +129,7 @@ jobs:
     env:
       POPLIN_LIVE_INSTALL: ${{ inputs.kind }}
     concurrency:
-      group: live-checks
+      group: live-checks-${{ inputs.kind }}
       cancel-in-progress: false
       queue: max
     steps:
