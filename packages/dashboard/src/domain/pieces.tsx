@@ -6,7 +6,6 @@ import { type ReactNode, useMemo } from "react";
 import type { Ran } from "@/domain/domain-queries";
 import { ToneMark } from "@/domain/tone-mark";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
-import { useTableLayout } from "@/table/layout";
 
 /** The look of a state's words, by how the state is read. */
 const WORDS = { good: "text-muted-foreground", bad: "font-medium text-destructive", idle: "text-muted-foreground" } as const;
@@ -56,12 +55,11 @@ function pieceColumns(): ColumnSpec<Piece & { readonly place: number }>[] {
 export function Pieces({ rows }: { readonly rows: Ran["rows"] }): ReactNode {
   const placed = useMemo(() => rows.map((row, place) => ({ ...row, place })), [rows]);
   const columns = useMemo(pieceColumns, []);
-  const layout = useTableLayout("pieces", columns);
 
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col max-md:hidden">
-        <DataTable label="Pieces" columns={columns} rows={placed} rowId={(piece) => String(piece.place)} layout={layout} sort={AS_RUN} />
+        <DataTable label="Pieces" columns={columns} rows={placed} rowId={(piece) => String(piece.place)} sort={AS_RUN} />
       </div>
       <ul aria-label="Pieces" className="line-room min-h-0 flex-1 overflow-y-auto border-t md:hidden">
         {placed.map((piece) => (

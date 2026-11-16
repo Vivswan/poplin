@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
-import { useTableLayout } from "@/table/layout";
 
 /** The longest email the field takes, in characters. */
 const LONGEST_EMAIL = 254;
@@ -71,7 +70,6 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
   const [leaving, setLeaving] = useState<Person>();
   const [signingOut, setSigningOut] = useState(false);
   const rows = useMemo<readonly Person[]>(() => (people?.logins ?? []).map((email) => ({ email, you: email === people?.you })), [people]);
-  const layout = useTableLayout("people", COLUMNS);
 
   const removeOf = (person: Person): ReactNode => {
     if (person.you) return <span className="inline-flex h-7 min-w-7 items-center justify-center text-[13px] text-muted-foreground">you</span>;
@@ -116,7 +114,6 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
               columns={COLUMNS}
               rows={rows}
               rowId={(person) => person.email}
-              layout={layout}
               sort={AS_LISTED}
               actions={removeOf}
               loading={people === undefined}

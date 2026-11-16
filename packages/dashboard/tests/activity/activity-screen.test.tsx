@@ -33,8 +33,14 @@ const SITE_PAGE = { ...PAGE, entries: [{ ...PAGE.entries[0], action: "create", s
 /** A narrowed page that found no entry among those it looked at, and stopped with the log going on behind place 9. */
 const STOPPED_PAGE = { ...PAGE, entries: [], next: "9", stopped: true };
 
+/** A narrowed page of a log that holds no such entry. */
+const EMPTY_PAGE = { ...PAGE, entries: [], next: null };
+
+/** The server's refusal to read the log. */
+const REFUSED = { ok: false, code: "no_more_reading", about: null, sentence: "The log could not be read." } as const;
+
 /** What the log answers a read with; a test swaps the page, and it is put back after each. */
-const answered = { page: PAGE as typeof PAGE | typeof STOPPED_PAGE | typeof SITE_PAGE };
+const answered = { page: PAGE as typeof PAGE | typeof STOPPED_PAGE | typeof SITE_PAGE | typeof EMPTY_PAGE | typeof REFUSED };
 
 /** How many entries the log holds, as the server answers it. */
 const TOTAL = { ok: true, total: 1240, whole: true };
@@ -64,7 +70,7 @@ async function draw(address: string, cache = cacheOf(), shown = "mira@example.co
 
     asked.push(search);
 
-    return Response.json(answered.page);
+    return Response.json(answered.page, { status: answered.page.ok ? 200 : 503 });
   }) as typeof fetch;
 
   await drawAt(
@@ -192,6 +198,46 @@ describe("the log of one site", () => {
     await readAfter(before);
 
     expect([both, window.location.search, asked.at(-1)]).toEqual(["?site=notes", "?site=trip", "?site=trip"]);
+  });
+});
+
+describe("the line the log says to a screen reader", () => {
+  /** What the line says now. */
+  const line = (): string | undefined => document.querySelector('section[aria-label="Activity"] output')?.textContent;
+
+  // Drift: two empty logs, or two searches that stopped with none found, would be said in the same words, which is not said at all; or a search that stopped would keep the count of the page before it.
+  test.each([
+    ["a page with an entry", PAGE, "/activity", "mira@example.com", "1 entry on this page"],
+    ["an empty log of one kind", EMPTY_PAGE, "/activity?kind=sites", "No activity of this kind", "No activity of this kind, Sites"],
+    ["an empty log of another kind", EMPTY_PAGE, "/activity?kind=access", "No activity of this kind", "No activity of this kind, Access"],
+    ["an empty log for a text, which its own words name", EMPTY_PAGE, "/activity?kind=access&site=o", 'No activity for "o"', 'No activity for "o", Access'],
+    [
+      "a search that stopped with none found",
+      STOPPED_PAGE,
+      "/activity?kind=access&site=o",
+      "Nothing in the newest 5,000 entries.",
+      'Nothing in the newest 5,000 entries, Access, "o". Older entries are not searched yet.',
+    ],
+  ])("names what the log is narrowed to, for %s", async (_what, page, address, shown, said) => {
+    answered.page = page;
+    await draw(address, cacheOf(), shown);
+
+    await waitFor(() => expect(line()).toBe(said));
+  });
+
+  // Drift: a read that was refused would leave the count of the page before it in the line, while the rows show the refusal; or the refusal would stay in the line once the rows of that page are shown again, while the next read is on its way.
+  test("says the refusal of a read in place of the count of the page before it, and that page again while the read after the refusal is on its way", async () => {
+    await draw("/activity");
+    await waitFor(() => expect(line()).toBe("1 entry on this page"));
+    answered.page = REFUSED;
+    fireEvent.change(within(document.body).getByRole("searchbox"), { target: { value: "trip" } });
+    await waitFor(() => expect(line()).toBe(REFUSED.sentence));
+
+    // The next read is never answered: the rows of the last page read stand in for it.
+    globalThis.fetch = (() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;
+    fireEvent.change(within(document.body).getByRole("searchbox"), { target: { value: "notes" } });
+
+    await waitFor(() => expect(line()).toBe("1 entry on this page"));
   });
 });
 

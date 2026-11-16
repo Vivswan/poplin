@@ -20,7 +20,6 @@ import { Confirm, type Question } from "@/shared/confirm";
 import { IconButton } from "@/shared/icon-button";
 import type { Fitted } from "@/table/column-widths";
 import { type ColumnSpec, DataTable, type Sort } from "@/table/data-table";
-import { useTableLayout } from "@/table/layout";
 
 /** The width of the last column, wide enough for the worded button a waiting row ends with. */
 const ACTION_WIDTH = 104;
@@ -228,16 +227,15 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
   // The list and the removed tokens under it stand in the same columns: each is told what the other measured.
   const [fitted, setFitted] = useState<Fitted>();
   const [removedFitted, setRemovedFitted] = useState<Fitted>();
-  const layout = useTableLayout("tokens", COLUMNS);
   const rows = useMemo(() => tokenRows(waiting?.logins ?? [], tokens ?? []), [waiting, tokens]);
   // A read of the tokens that was refused does not hide the logins that wait: they are listed, and the refusal is said under them.
   const unreadTokens = tokens === undefined ? failure : undefined;
   const after = afterRows(waiting?.more ?? 0, unreadTokens ?? waitingFailure);
   const names = useMemo(() => namesOf(tokens ?? [], ended), [tokens, ended]);
   const none = ended === undefined || ended.tokens.length === 0;
-  const removed = none ? undefined : <RemovedTokens ended={ended} names={names} layout={layout} />;
+  const removed = none ? undefined : <RemovedTokens ended={ended} names={names} />;
   // Under the table the removed tokens are a second table in the same columns; under a phone's list, and where no list is, they stand alone.
-  const paired = none ? undefined : <RemovedTokens ended={ended} names={names} layout={layout} alongside={fitted} endWidth={ACTION_WIDTH} onFitted={setRemovedFitted} />;
+  const paired = none ? undefined : <RemovedTokens ended={ended} names={names} alongside={fitted} endWidth={ACTION_WIDTH} onFitted={setRemovedFitted} />;
   const afterAll = (under: ReactNode): ReactNode =>
     after === undefined && under === undefined ? undefined : (
       <>
@@ -292,7 +290,6 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
             columns={COLUMNS}
             rows={rows}
             rowId={(row) => row.key}
-            layout={layout}
             sort={sort}
             onSort={onSort}
             actions={actionOf}

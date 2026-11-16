@@ -14,7 +14,6 @@ import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
 import { WaitingRows } from "@/shared/waiting-rows";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
-import { useTableLayout } from "@/table/layout";
 
 /** The order of the rows: the server's, the newest first, which no heading changes. */
 const AS_GIVEN = { key: "", descending: false } as const;
@@ -54,7 +53,7 @@ function LimitLink({ problem }: { readonly problem: Problem }): ReactNode {
   if (problem.setting === null) return null;
 
   return (
-    <IconButton label="Change this limit" link={<Link {...settingAddress(problem.setting)} />}>
+    <IconButton label="Change this limit" name={`Change this limit: ${problem.sentence}`} link={<Link {...settingAddress(problem.setting)} />}>
       <ArrowUpRightIcon />
     </IconButton>
   );
@@ -123,7 +122,6 @@ export function ProblemsBlock(): ReactNode {
   const navigate = useNavigate();
   const { data, error } = useProblems(range);
   const columns = useMemo(problemColumns, []);
-  const layout = useTableLayout("problems", columns);
   const opened = query.get(PROBLEM_KEY) ?? undefined;
   const address = (changes: Readonly<Record<string, string | undefined>>): UsageAddress => {
     const next = new URLSearchParams(query);
@@ -163,7 +161,6 @@ export function ProblemsBlock(): ReactNode {
               columns={columns}
               rows={problems}
               rowId={problemId}
-              layout={layout}
               sort={AS_GIVEN}
               selected={opened}
               opens={{ name: (problem) => `Details of ${problem.sentence}`, open: (problem) => void navigate(toProblem(problem)) }}

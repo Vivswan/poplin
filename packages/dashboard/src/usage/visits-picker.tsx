@@ -67,7 +67,7 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
         Compare sites
         {picked.length === 0 ? null : <span className="text-muted-foreground tabular-nums">{picked.length}</span>}
       </ComboboxTrigger>
-      <ComboboxContent align="end" className="w-72">
+      <ComboboxContent align="end" aria-label="Compare sites" className="w-72">
         <ComboboxInput placeholder="Find a site" aria-label="Find a site" showTrigger={false} />
         <div className="flex items-center gap-1 border-b px-1.5 py-1">
           <Button type="button" variant="ghost" size="xs" disabled={options.length === 0} onClick={() => onPick(pickedAfter(picked, [...ticked, ...options]))}>
@@ -78,7 +78,7 @@ export function VisitsPicker({ picked, onPick }: VisitsPickerProps): ReactNode {
           </Button>
         </div>
         <ComboboxEmpty>No site found.</ComboboxEmpty>
-        <ComboboxList>
+        <ComboboxList aria-label="Sites">
           {(option: Option) => (
             <ComboboxItem key={option.id} value={option} disabled={full && !picked.some((site) => site.id === option.id)}>
               <span className="min-w-0 truncate">{option.title}</span>

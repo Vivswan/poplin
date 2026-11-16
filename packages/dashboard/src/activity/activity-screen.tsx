@@ -7,7 +7,7 @@ import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { activityColumns, SiteThen, When } from "@/activity/activity-columns";
-import { ActivityFoot } from "@/activity/activity-foot";
+import { ActivityFoot, nothingSoFarWords } from "@/activity/activity-foot";
 import { type Entry, type Page, useActivityPage, useActivityTotal } from "@/activity/activity-queries";
 import { emptyWords, KINDS, type Kind, kindOf, logQuery, siteIn, sortedQuery, sortOf } from "@/activity/activity-words";
 import { DownloadMenu } from "@/activity/download-menu";
@@ -29,7 +29,6 @@ import { SearchBox } from "@/shared/search-box";
 import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { DataTable } from "@/table/data-table";
-import { useTableLayout } from "@/table/layout";
 
 /** The screen's path. */
 const PATH = "/activity";
@@ -159,21 +158,53 @@ interface Narrowed {
   readonly site: ReturnType<typeof siteIn>;
 }
 
+/** The read of a page of the log, as far as the line said of it needs it. */
+interface Read {
+  /** The page shown; `undefined` while the first is read. */
+  readonly page: Page | undefined;
+
+  /** Whether the page is the one the address asks for, and not one still shown from the address before. */
+  readonly there: boolean;
+
+  /** Why the read was refused; `null` when it was not. */
+  readonly failure: Error | null;
+
+  /** The address the page is asked at. */
+  readonly query: URLSearchParams;
+}
+
 /**
- * What the log says of itself to a screen reader: how many entries the page shows and what the log is narrowed to, or the words of an empty log.
+ * What a page of the log says of itself to a screen reader: how many entries it shows, or that it shows none, with what the log is narrowed to.
  *
- * @param there - whether the page is the one the address asks for, and not one still shown from the address before
- * @returns `undefined` while there is nothing new to say: a page not there yet, a read that was refused, or a page that stopped looking with none found, which its foot speaks for
+ * Two logs that hold as many entries, or none, are then said in different words, so the second is said too.
+ *
+ * @returns `undefined` while the page the address asks for is not there: on its way, or refused
  */
-function saidOf({ page, there, failure }: { readonly page: Page | undefined; readonly there: boolean; readonly failure: Error | null }, { kind, site }: Narrowed): string | undefined {
+function pageSaid({ page, there, failure, query }: Read, { kind, site }: Narrowed): string | undefined {
   if (page === undefined || !there || failure !== null) return undefined;
 
-  if (page.entries.length === 0) return page.stopped ? undefined : emptyWords(kind, site).title;
+  const chosen = [...KINDS.filter((entry) => entry.value === kind && kind !== "all").map((entry) => entry.label), ...(page.of === null ? [] : [page.of.title ?? page.of.name ?? "one site"])];
+  const typed = site.text === "" ? [] : [`"${site.text}"`];
+  if (page.entries.length > 0) return rowsSaid(page.entries.length, { one: "entry", many: "entries", paged: page.next !== null || page.previous !== null, narrowed: [...chosen, ...typed] });
 
-  const one = page.of === null ? [] : [page.of.title ?? page.of.name ?? "one site"];
-  const narrowed = [...KINDS.filter((entry) => entry.value === kind && kind !== "all").map((entry) => entry.label), ...(site.text === "" ? [] : [`"${site.text}"`]), ...one];
+  // The words of a log that ended with none found name the text themselves; those of one that stopped looking do not.
+  if (!page.stopped) return [emptyWords(kind, site).title, ...chosen].join(", ");
 
-  return rowsSaid(page.entries.length, { one: "entry", many: "entries", paged: page.next !== null || page.previous !== null, narrowed });
+  const { nothing, left } = nothingSoFarWords(query);
+
+  return `${[nothing, ...chosen, ...typed].join(", ")}. ${left}`;
+}
+
+/**
+ * Draw the line the log says to a screen reader.
+ *
+ * A read that was refused takes the rows away: its refusal is said while it stands. Otherwise the line says the page last read, whose rows are also the ones shown while the next page is on its way.
+ */
+function LogSaid({ read, narrowed }: { readonly read: Read; readonly narrowed: Narrowed }): ReactNode {
+  const said = pageSaid(read, narrowed);
+  const lastPage = useShownPlace(said ?? "", said !== undefined);
+
+  return <ResultLine words={read.failure === null ? lastPage : read.failure.message} />;
 }
 
 /** What stands where the rows would: the refusal of the read, the rows being read, or the words of an empty page with the way back to every entry. `undefined` when there are rows to draw. */
@@ -233,7 +264,6 @@ export function ActivityScreen(): ReactNode {
   // The screen reads the choice of time zone itself, so its rows are drawn again, in the new time zone, when the choice changes.
   const [timeZone, chooseTimeZone] = useTimeZoneChoice();
   const columns = useMemo(() => activityColumns(logins ?? {}, timeZone), [logins, timeZone]);
-  const layout = useTableLayout("activity", columns);
   const showAll = (): void => void navigate({ to: PATH });
   const instead = insteadOfRows(error?.message, page, kind, site, showAll);
   const move = (changes: Readonly<Record<string, string>>, replace = false): void =>
@@ -287,7 +317,7 @@ export function ActivityScreen(): ReactNode {
               maxLength={MAX_SEARCH}
             />
           </div>
-          <ResultLine words={saidOf({ page, there, failure: error }, { kind, site })} />
+          <LogSaid read={{ page, there, failure: error, query }} narrowed={{ kind, site }} />
           {site.of === "" ? null : <OnlySite of={site.of} page={page} current={!isPlaceholderData} onShowEvery={() => move({ of: "" })} />}
           <div className="flex min-w-0 flex-1 items-center gap-2 max-md:order-4 max-md:basis-full">
             <KindSelect kind={kind} onChoose={(chosen) => move({ kind: chosen === "all" ? "" : chosen })} />
@@ -312,7 +342,6 @@ export function ActivityScreen(): ReactNode {
                 columns={columns}
                 rows={page?.entries ?? []}
                 rowId={(entry) => String(entry.seq)}
-                layout={layout}
                 sort={sortOf(query)}
                 onSort={(order) => void navigate({ to: PATH, search: searchOf(sortedQuery(query, order)) })}
                 actions={rowActions}
