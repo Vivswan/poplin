@@ -290,6 +290,28 @@ describe("import", () => {
     expect(Object.values(linesOf(jsonOf(runs.backup_too_new)))).toEqual(Array(5).fill("backup_too_new"));
   });
 
+  // Drift: an install never reads a site's pages. A backup of an install under a domain, put into one without, would make sites whose "/css/site.css" opens the host's root, and no line would say so.
+  test("an install without a domain refuses a site whose live pages link from the root as a publish there is refused, sends nothing of it, and imports the next; an install with a domain takes both", async () => {
+    const from = await openBench();
+    const rooted = folderOf("rooted", { "index.html": '<link href="/css/site.css">', "css/site.css": "body{}" });
+    const mended = (jsonOf(await from.run(`${rooted} --json`)).site as { label: string }).label;
+    await published(from, "linked", { "index.html": '<a href="/about.html">about</a>', "about.html": "<title>About</title>" });
+    writeFileSync(join(rooted, "index.html"), '<link href="css/site.css">');
+    await from.run(`${rooted} --site ${mended}`);
+    const zip = await exportedZip(from);
+    const under = await openBench({ kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" });
+    const beside = await openBench();
+
+    const refused = await under.run(`import ${zip} --json`);
+    const taken = await beside.run(`import ${zip} --json`);
+    const failed = (jsonOf(refused).sites as (Line & { readonly message?: string })[]).find((site) => site.result === "failed");
+
+    expect([refused.code, linesOf(jsonOf(refused)), taken.code, linesOf(jsonOf(taken))]).toEqual([1, { linked: "root_links", rooted: "imported" }, 0, { linked: "imported", rooted: "imported" }]);
+    expect(failed?.message).toBe('this install has no domain, so a link that starts with "/" would not open (/about.html in index.html)');
+    expect([under.sent.filter((line) => line === "GET /api/whoami").length, under.sent.filter((line) => line.startsWith("POST /api/import/sites")).length]).toEqual([1, 1]);
+    expect((await held(under.install)).sites.map((site) => site.name)).toEqual(["rooted"]);
+  });
+
   test("a site too large with every version is imported with its live version alone, and one too large even so fails: without this a full history would keep a site from coming back at all", async () => {
     const from = await openBench();
     const { notes } = await filled(from);
@@ -325,7 +347,7 @@ describe("import", () => {
     expect([one, byWideName].map((ran) => (ran.sites as Line[]).map((site) => site.label))).toEqual([[docs], [wide]]);
     expect([byId.imported, (byId.sites as Line[])[0]?.label]).toEqual([1, notes]);
     expect([absent.code, absent.err[0]]).toEqual([1, "the backup holds no such site: zzzzzzzzzzzz"]);
-    expect(into.sent.filter((sent) => !sent.includes("/uploads/"))).toEqual(["POST /api/import/sites"]);
+    expect(into.sent.filter((sent) => !sent.includes("/uploads/"))).toEqual(["GET /api/whoami", "POST /api/import/sites"]);
   });
 
   test("the settings come back only with --settings and the logins only with --logins, and a one-site backup has none to give: without this an import could lock the admin of the new install out", async () => {

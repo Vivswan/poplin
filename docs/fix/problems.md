@@ -48,7 +48,7 @@ failed  problems  2 kinds today: request_failed, sweep_failed
 | `login_unchecked`        | The login could not be checked                  | open Domain and press Check                         |
 | `update_failed`          | An update did not go as it should               | the sentence of what went wrong; for a key, open Domain and press Repair |
 | `update_went_back`       | An update could not change the database, so poplin went back | nothing is lost; report it, and update again once a later release is out |
-| `users_not_carried`      | A change of the users did not reach the login of the domain | open Domain and press Repair            |
+| `users_not_carried`      | A change of the users did not reach the login page | open Domain and press Repair            |
 | `rules_not_carried`      | A changed setting did not reach every rule of the domain | open Domain and press Repair               |
 | `copy_failed`            | A copy of a site was not made                   | duplicate the site again                            |
 | `direct_upload_refused`  | The store refused files sent straight to it, so they went through the install | open Domain and press Repair |

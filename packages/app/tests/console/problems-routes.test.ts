@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { PROBLEM_KINDS, PROBLEM_WORDS } from "@poplin/core/src/records/problem";
 import { dayOf } from "@poplin/core/src/records/views";
 
 import { TOKEN, usualPlug } from "./support/fake-plug";
@@ -9,6 +10,9 @@ import { openConsole } from "./support/console";
 
 /** The milliseconds of one hour and of one day. */
 const [HOUR_MS, DAY_MS] = [3_600_000, 86_400_000];
+
+/** The kinds only an install under a domain can note: an install without one has no rule a setting is carried to. */
+const UNDER_A_DOMAIN: readonly string[] = ["rules_not_carried"];
 
 type Opened = Awaited<ReturnType<typeof openConsole>>;
 
@@ -66,6 +70,13 @@ describe("the list of problems", () => {
   });
 
   // Drift: the list names what broke inside the install, which only a logged-in admin reads.
+  // Drift: an install without a domain notes every other kind too. Words that name "the domain" there point at something the install does not have.
+  test("the words of a kind that an install without a domain can note name no domain, only the Domain screen", () => {
+    const named = PROBLEM_KINDS.filter((kind) => !UNDER_A_DOMAIN.includes(kind) && /\bdomain\b/.test(`${PROBLEM_WORDS[kind].sentence} ${PROBLEM_WORDS[kind].todo}`));
+
+    expect(named).toEqual([]);
+  });
+
   test("is answered to nobody without a login", async () => {
     const opened = await openConsole();
     const answer = await opened.getLoggedOut("/data/problems?days=7");

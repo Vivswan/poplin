@@ -12,7 +12,7 @@ import type { Bench, Check, LiveSite } from "../records";
 import { siteOf } from "../util";
 
 /** What one drill asks of the install when no request is sent again: every request it sends, and how many of them make the install write to its bucket or list it. */
-export const DRILL_COST = { requests: 69, bucket: 34 } as const;
+export const DRILL_COST = { requests: 72, bucket: 34 } as const;
 
 /** Make the drill's sites: a private one with three versions that serves its second, an unlisted one under a new name, and a public one. */
 async function makeSites(bench: Bench, made: LiveSite[]): Promise<void> {

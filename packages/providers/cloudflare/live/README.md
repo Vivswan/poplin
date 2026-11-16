@@ -255,8 +255,8 @@ The copy the install's job finishes is a site of 113 files: one more than the fi
 burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few seconds after one data center passed 300
 burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
 own-limit                about 700
-backup-drill             69, of which 34 make the install write to its bucket or list it
-a run, at its worst      1,140 + 700 + 64 = 1,904
+backup-drill             72, of which 34 make the install write to its bucket or list it
+a run, at its worst      1,140 + 700 + 72 = 1,912
 the plan's day           100,000 requests to the Worker, reached at about 52 such runs
 ```
 
@@ -264,9 +264,9 @@ The runs of one day must stay under the plan's 100,000 requests to the Worker. T
 
 ```text
 the install without a domain
-a run, at its worst      700 (own-limit) + 69 (backup-drill) = 769: no rate rule stands in front of it, so no burst is sent
-a usual run              about 125 (own-limit, which ends at the first 429) + 69 + about 130 (the reset) and a few dozen more
-a day of 45 runs         45 x 769 = 34,605 of its own account's 100,000
+a run, at its worst      700 (own-limit) + 72 (backup-drill) = 772: no rate rule stands in front of it, so no burst is sent
+a usual run              about 125 (own-limit, which ends at the first 429) + 72 + about 130 (the reset) and a few dozen more
+a day of 45 runs         45 x 772 = 34,740 of its own account's 100,000
 a request for a site     one request of a forwarder, which hands it to the Worker at no further request, by Cloudflare's documentation
 ```
 
@@ -342,7 +342,7 @@ Anything else that is not the same fails the check, with its place in the backup
 backup-drill: 3 sites, 5 files, 119 bytes put back and exported the same; passed over made_at of manifest.json; <milliseconds> ms
 ```
 
-The line holds no name and no address. One drill is 69 requests when none is sent again.
+The line holds no name and no address. One drill is 72 requests when none is sent again.
 
 ## The check of the way a file goes
 

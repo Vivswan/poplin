@@ -23,6 +23,7 @@ Every other example runs the same way, with `npx` before `poplin`.
 
 - **The zip holds plain files.** It holds no token and no key of the install.
 - **Nothing is overwritten.** A site the install already has is skipped.
+- **An install without a domain checks each site as it checks a publish.** A site whose live version has a link that starts with `/` is not put back: its line says `failed` with `root_links` and the first such link, nothing of it is sent, and the next site is tried. [Publish](../sites/publish.md) has the rule. `--dry-run` does not check it.
 
 ## What a restore brings back
 
