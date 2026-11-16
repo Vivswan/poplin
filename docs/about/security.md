@@ -126,14 +126,23 @@ What guards each address:
 
 | Address | Guarded by |
 | --- | --- |
-| the login and the dashboard | Cloudflare Access authenticates the user in front of the whole dashboard; the Worker checks Access's token and the email on every request |
-| the API, which the CLI and `poplin mcp` call | the token the Worker issued; no Access in front, so a machine needs no browser after its login |
+| the dashboard: every address of its hostname but `/api` and `/setup` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email on every request |
+| the API, `/api`, which the CLI and `poplin mcp` call | the token the Worker issued; Access lets everyone through to it, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 | the setup page, `/setup`, until the first login | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it answers 404 for good |
 | the Worker's own `workers.dev` address | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
-One Access application covers the dashboard and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
+Two Access applications do this, made once at install, never per site:
+
+| Application | Covers | Lets in |
+| --- | --- | --- |
+| the login | the dashboard's whole hostname, and every address that ends in `-p-poplin.<domain>` | your users, after Cloudflare's login |
+| the open paths | `/api` and `/setup` of the dashboard's hostname | everyone: the Worker asks its own token at `/api`, and the pasted token at `/setup` |
+
+One weakness is known. A page of a site of the same install can set a cookie for the whole domain, named like Cloudflare's login cookie. A browser that holds one before it logs in is sent back to the login each time, at the dashboard and at private sites, until its cookies for the domain are cleared.
+
+Nothing leaks. On an install whose dashboard matters, publish only pages you trust.
 
 Every site hostname answers GET and HEAD only. The Worker refuses every other method, and the optional bots rule at Cloudflare's edge blocks it before the Worker.
 
