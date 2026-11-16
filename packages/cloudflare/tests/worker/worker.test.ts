@@ -808,8 +808,8 @@ describe("the admin hostname", () => {
   });
 
   // Drift: the dashboard would be mounted without the check of Access's token, or with one that trusts users the install no longer has.
-  // A change taken as a form would let a page of another origin send one with the owner's login.
-  test("the dashboard answers its page, its files, and its data to a user's token of Access and refuses anyone else; a change is JSON alone; no answer sets a cookie", async () => {
+  // A change taken as a form would let a page of another origin send one with the owner's login, and data read for such a page would be answered to it.
+  test("the dashboard answers its page, its files, and its data to a user's token of Access and refuses anyone else; a change is JSON alone, and a page of another origin reads no data; no answer sets a cookie", async () => {
     const worker = instance(w);
     const token = await tokenOf(w, "admin");
     const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
@@ -822,6 +822,7 @@ describe("the admin hostname", () => {
     const icon = await ask(worker, `${ADMIN}/favicon.ico`, { headers: session });
     const sites = await ask(worker, `${ADMIN}/data/sites`, { headers: session });
     const forms = [await send(worker, remove, {}, { ...form, Origin: "https://elsewhere.example.net", "Sec-Fetch-Site": "cross-site" }), await send(worker, remove, {}, form)];
+    const elsewhere = await ask(worker, `${ADMIN}/data/sites`, { headers: { ...session, Origin: "https://elsewhere.example.net", "Sec-Fetch-Site": "cross-site" } });
     const after = await done<{ site: Published }>(await api(worker, token).sites[":site"].$get({ param: { site: site.label }, query: {} }));
     const unknown = await ask(worker, `${ADMIN}/data/no-such-data`, { headers: session });
     const cookies = [...strangers, shell, icon, sites, ...forms, unknown].map((answer) => answer.headers.get("Set-Cookie"));
@@ -831,6 +832,7 @@ describe("the admin hostname", () => {
     expect([shell.status, shell.headers.get("Content-Security-Policy"), shell.headers.get("Cache-Control"), ((await readShell(await shell.text())).boot as { email: string }).email]).toEqual([200, POLICY, "no-store", OWNER]);
     expect([icon.status, sites.status, (await sites.json<{ sites: Published[] }>()).sites.map((listed) => listed.label)]).toEqual([200, 200, [site.label]]);
     expect([forms.map((answer) => answer.status), after.site.state, unknown.status]).toEqual([[403, 415], "live", 404]);
+    expect([elsewhere.status, (await elsewhere.text()).includes(site.label)]).toEqual([403, false]);
     expect(cookies).toEqual(cookies.map(() => null));
   });
 

@@ -146,7 +146,7 @@ describe("a decision", () => {
     const { id } = await plant(opened, "studio-laptop");
     const attempt = (): Promise<Response> => opened.change("/data/logins/decide", { login: id, allow: true, scope: "publisher", letters: PLANTED.wrong });
     for (let nth = 0; nth < 30; nth += 1) await opened.change("/data/logins/decide", { login: id, allow: true });
-    // A page of a site of the same install rides on the person's login: what it can send is no decision, and spends nothing.
+    // A page of a site of the same install rides on the person's login: what it can send is refused before it is a decision or a search, and spends nothing.
     const forged: number[] = [];
     for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.change("/data/logins/decide", `login=${id}&allow=true&scope=admin&letters=BBBB`, SIBLING_PAGE)).status);
     for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.fetch(new Request(`${ORIGIN}/data/logins/find?code=BBBB-BBBB`, { headers: { ...opened.base.proof, ...SIBLING_PAGE } }))).status);
@@ -154,7 +154,7 @@ describe("a decision", () => {
     for (let nth = 0; nth < 21; nth += 1) statuses.push((await attempt()).status);
     const last = await attempt();
 
-    expect([...new Set(forged.slice(0, 30)), ...new Set(forged.slice(30))]).toEqual([403, 400]);
+    expect([...new Set(forged.slice(0, 30)), ...new Set(forged.slice(30))]).toEqual([403, 403]);
     expect([...new Set(statuses.slice(0, 20)), statuses[20]]).toEqual([400, 429]);
     expect((await read(last)).sentence).toBe("Too many tries. Wait a minute.");
     expect((await opened.get("/data/logins")).status).toBe(200);

@@ -53,6 +53,12 @@ const OWN_REFUSAL = "no_login";
 /** A token header in the shape the edge writes, which no team signed. */
 const FORGED = { "Cf-Access-Jwt-Assertion": ["eyJhbGciOiJSUzI1NiJ9", "eyJlbWFpbCI6Im93bmVyQGV4YW1wbGUuY29tIn0", "c2lnbmVk"].join(".") };
 
+/** A field's name that only an answer holding something of the install has. */
+const DASHBOARD_DATA = /"(?:sites|email|logins|recent)"/;
+
+/** What an answer's two headers hold when it lets no other origin read it. */
+const NO_GRANT = [null, null] as const;
+
 /** What a browser sends with an image a page of another domain loads. */
 const OUTSIDE_PAGE = { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Dest": "image" };
 
@@ -290,6 +296,11 @@ function sentToTeamLogin(bench: Bench, response: Response): boolean {
   return hostname.endsWith(TEAM_LOGIN.host) && pathname.startsWith(TEAM_LOGIN.path);
 }
 
+/** The two headers by which an answer lets another origin read it: the origin it names, and whether the visitor's cookies may come along. */
+function grantOf(response: Response): readonly [string | null, string | null] {
+  return [response.headers.get("Access-Control-Allow-Origin"), response.headers.get("Access-Control-Allow-Credentials")];
+}
+
 /** Every check a stranger makes alone. The two checks of the limits come last: they use up the visitor's minute. */
 export const EDGE_CHECKS: readonly Check[] = [
   {
@@ -348,7 +359,7 @@ export const EDGE_CHECKS: readonly Check[] = [
         // The edge's redirect or its 401, or the install's own refusal: 403 for a page, 401 for a call.
         expect(response.status, path).toBeOneOf([302, 401, 403]);
         expect(response.headers.get("Set-Cookie") ?? "", path).not.toContain("poplin");
-        expect(/"(?:sites|email|logins|recent)"/.test(text), path).toBe(false);
+        expect(DASHBOARD_DATA.test(text), path).toBe(false);
       }
     },
   },
@@ -407,21 +418,27 @@ export const EDGE_CHECKS: readonly Check[] = [
   },
   {
     id: "data-cross-origin",
-    name: "the dashboard's data asked for by a page of a site is refused, a form's change too, and no answer lets another origin read it",
+    name: "the dashboard's data asked for by a page of a site is refused, a form's change too, and no answer of the install lets another origin read it",
     needs: [],
     run: async (bench) => {
       const origin = { Origin: new URL(bench.addresses.openRoot).origin };
 
-      // The question a browser asks before a change is answered by whatever stands in front, with any status: what counts is that no answer grants the origin.
+      // The question a browser asks before a change is answered by whatever stands in front, with any status: what counts is that no answer holds the data, and none of the install grants the origin.
       for (const [what, refused, init] of [
         ["a read", true, { headers: origin }],
         ["a form's change", true, { method: "POST", headers: { ...origin, "Content-Type": "application/x-www-form-urlencoded" }, body: "name=x" }],
         ["a question before a change", false, { method: "OPTIONS", headers: { ...origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" } }],
       ] as const) {
         const response = await bench.visit(`${bench.admin}/data/sites`, init);
-        const granted = [response.headers.get("Access-Control-Allow-Origin"), response.headers.get("Access-Control-Allow-Credentials")];
-        expect([what, refused && response.ok, granted, /"(?:sites|email|logins|recent)"/.test(await response.text())]).toEqual([what, false, [null, null], false]);
+        const text = await response.text();
+        // The login's redirect lets the origin read it: an answer of the login's own, which holds nothing of the install.
+        const granted = sentToTeamLogin(bench, response) ? NO_GRANT : grantOf(response);
+        expect([what, refused && response.ok, granted, DASHBOARD_DATA.test(text)]).toEqual([what, false, NO_GRANT, false]);
       }
+
+      // The login lets this path through on every install, so the answer is the install's own, on the hostname of the dashboard.
+      const open = await bench.visit(`${bench.admin}/api/sites`, { headers: origin });
+      expect([open.status, grantOf(open), DASHBOARD_DATA.test(await open.text())]).toEqual([401, NO_GRANT, false]);
     },
   },
   {

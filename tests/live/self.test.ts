@@ -99,6 +99,7 @@ const CASES: readonly Case[] = [
   ["an install whose login stands in front of the login path alone fails the check of the whole dashboard", { access: true, loginPathOnly: true }, {}, { "dashboard-login": "failed" }],
   ["an install whose login stands in front of its setup page too fails the check of that open path", { access: true, setupBehindLogin: true }, {}, { "setup-open": "failed" }],
   ["an install whose dashboard lets a site's origin read its answers fails the check of the dashboard's data asked for by a site", { grantsOrigin: true }, {}, { ...NO_LOGIN, "data-cross-origin": "failed" }],
+  ["the same install behind a login, whose own answers alone the check judges, fails it on the path the login lets through", { access: true, grantsOrigin: true }, {}, { "data-cross-origin": "failed" }],
   ["an install whose site hostnames answer the API fails the check that keeps the hosts apart, with a domain and without", { apiOnSiteHosts: true }, {}, { ...NO_LOGIN, "hosts-apart": "failed" }],
   ["an install without a domain whose site hosts answer the API fails the same check", { noDomain: true, apiOnSiteHosts: true }, {}, { ...NO_LOGIN, ...ZONE_CHECKS, "hosts-apart": "failed" }],
   ["an install that holds the demo's site passes the demo's check", { demoSite: "whole" }, {}, NO_LOGIN],
