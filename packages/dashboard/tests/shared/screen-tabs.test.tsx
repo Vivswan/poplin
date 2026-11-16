@@ -1,6 +1,6 @@
 // The strip of a screen's tabs: which tab it marks, and what it tells the screen of a press.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
@@ -17,7 +17,7 @@ const TABS: readonly ScreenTab<"first" | "shown" | "last">[] = [
 /** Every tab the strip told the screen of. */
 const chosen: string[] = [];
 
-function strip(): ReturnType<typeof within> {
+function strip(): Within {
   render(<ScreenTabs label="Kinds of things" tabs={TABS} active="shown" onChoose={(id) => chosen.push(id)} />);
 
   return within(within(document.body).getByRole("tablist", { name: "Kinds of things" }));

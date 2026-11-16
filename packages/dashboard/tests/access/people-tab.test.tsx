@@ -1,16 +1,17 @@
 // The People tab: who has no Remove, what is asked before a person is taken out or every browser is signed out, and where a refused email is said.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
+import type { People } from "@/access/access-queries";
 import { PeopleTab } from "@/access/people-tab";
 
 /** The people of the test install: the one logged in here, and one more. */
-const PEOPLE = { ok: true as const, logins: ["mira@example.com", "jonas@example.com"], you: "mira@example.com" };
+const PEOPLE = { ok: true, logins: ["mira@example.com", "jonas@example.com"], you: "mira@example.com" } as People;
 
 /** What the server says of an email that is none. */
 const NOT_AN_EMAIL = "Type an email address, such as name@example.com.";
@@ -39,10 +40,10 @@ function Tab(): ReactNode {
   return <PeopleTab people={PEOPLE} failure={undefined} actions={ACTIONS} onRetry={() => undefined} />;
 }
 
-const page = (): ReturnType<typeof within> => within(document.body);
+const page = (): Within => within(document.body);
 
 /** The row of the table that holds an email. */
-function row(email: string): ReturnType<typeof within> {
+function row(email: string): Within {
   const found = within(page().getByRole("table", { name: "Users" }))
     .getAllByRole("row")
     .find((entry) => within(entry).queryByText(email) !== null);

@@ -23,7 +23,7 @@ const DOMAIN = "example.com";
 /** The invented person a new install is set up by. */
 const ADMIN_EMAIL = "mira@example.com";
 
-/** The bytes of a signing key. */
+/** The bytes of a visitor key. */
 const KEY_BYTES = 32;
 
 /** What one request to the API may carry. */
@@ -111,7 +111,7 @@ export async function newInstall(): Promise<Running & { readonly token: string }
   const { install } = opened.running;
   const holder = admin();
   await install.database.initSettings(defaultSettings({ installer: holder }), { by: holder, at: install.now() });
-  await install.database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), install.now());
+  await install.database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), install.now());
   const issued = await issueToken(install, { scope: "admin", holder }, { note: "upgrade check", scope: "admin" });
   if (!issued.ok) throw new Error(`the new install issued no token: ${issued.code}`);
 

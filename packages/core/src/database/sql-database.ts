@@ -17,7 +17,7 @@ import { computerLoginFromRow } from "../records/computer-login";
 import type { Problem } from "../records/problem";
 import { LOGIN, SITE_ID } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
-import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
+import { visitorKeyFromRow, visitorKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import { AUTO_START, type AutoStart, UPDATE_CHECK, type UpdateCheck } from "../records/update";
@@ -66,7 +66,7 @@ import type {
   ShownSite,
   ShownSitesPage,
   Signed,
-  SigningKey,
+  VisitorKey,
   SiteDetails,
   SiteNow,
   SiteNamed,
@@ -80,7 +80,7 @@ import type {
   UploadRoom,
   UploadsPage,
 } from "./database";
-import { domainCheckAsked, domainCheckIn, domainCheckKept, usersCarried, usersChanged, usersClaimed, usersReplaced } from "./domain-check";
+import { domainCheckAsked, domainCheckIn, domainCheckKept, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { type ProblemNote, problemNoted, problemsAsked, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
@@ -188,8 +188,8 @@ const A_COUNT = alias(requestCounts, "c");
 /** The settings, as JSON text. */
 const READ_SETTINGS = built(BUILD.select({ value: settings.value }).from(settings).where(eq(settings.id, 1)));
 
-/** The signing key, as hex text. */
-const READ_SIGNING_KEY = built(BUILD.select({ value: secrets.value }).from(secrets).where(eq(secrets.name, "session_key")));
+/** The visitor key, as hex text. */
+const READ_VISITOR_KEY = built(BUILD.select({ value: secrets.value }).from(secrets).where(eq(secrets.name, "visitor_key")));
 
 /** The address that starts a rebuild, and when it was saved. */
 const READ_UPDATE_ADDRESS = built(BUILD.select({ value: secrets.value, created_at: secrets.created_at }).from(secrets).where(eq(secrets.name, "update_address")));
@@ -249,7 +249,7 @@ function auditOfLogins(signed: Signed): Statement {
 }
 
 /** A secret in place of the stored one of its name, or as the first. */
-function keepSecret(name: "session_key" | "update_address", value: string, at: number): Statement {
+function keepSecret(name: "visitor_key" | "update_address", value: string, at: number): Statement {
   const kept = { value: fragment`excluded.${bare(secrets.value)}`, created_at: fragment`excluded.${bare(secrets.created_at)}` };
 
   return built(BUILD.insert(secrets).values({ name, value, created_at: at }).onConflictDoUpdate({ target: secrets.name, set: kept }));
@@ -353,10 +353,10 @@ function loginIn(result: StatementResult | undefined): ComputerLogin | undefined
   return row === undefined ? undefined : computerLoginFromRow(row);
 }
 
-function signingKeyIn(result: StatementResult | undefined): Uint8Array<ArrayBuffer> | undefined {
+function visitorKeyIn(result: StatementResult | undefined): Uint8Array<ArrayBuffer> | undefined {
   const row = result?.rows[0];
 
-  return row === undefined ? undefined : signingKeyFromRow(row);
+  return row === undefined ? undefined : visitorKeyFromRow(row);
 }
 
 function placeIn(result: StatementResult | undefined): SweepPlace | undefined {
@@ -496,7 +496,7 @@ export class SqlDatabase implements Database {
 
     const addressed = "id" in address ? eq(sites.id, address.id) : eq(sites.public_name, address.public_name);
     const counts = also.counts === undefined ? [] : [requestsOf(also.counts.day, ALL_SITES), requestsOf(also.counts.day, also.counts.site)];
-    const held = also.settingsAndKey === true ? [READ_SETTINGS, READ_SIGNING_KEY] : [];
+    const held = also.settingsAndKey === true ? [READ_SETTINGS, READ_VISITOR_KEY] : [];
     const [found, ...beside] = await this.#driver.batch([servedSite(addressed, now), ...counts, ...held]);
     const [all, ofSite] = counts.length === 0 ? [] : beside;
     const [stored, key] = held.length === 0 ? [] : beside.slice(counts.length);
@@ -504,7 +504,7 @@ export class SqlDatabase implements Database {
     return {
       served: servedIn(found),
       ...(counts.length === 0 ? {} : { counts: { site: requestsIn(ofSite), all: requestsIn(all) } }),
-      ...(held.length === 0 ? {} : { settingsAndKey: { settings: settingsIn(stored), key: signingKeyIn(key) } }),
+      ...(held.length === 0 ? {} : { settingsAndKey: { settings: settingsIn(stored), key: visitorKeyIn(key) } }),
     };
   }
 
@@ -1147,15 +1147,13 @@ export class SqlDatabase implements Database {
 
   async claimUsers(at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly mark: number | undefined }> {
     const [, read, kept] = await this.#driver.batch([usersClaimed(at), READ_SETTINGS, domainCheckAsked()]);
-    const mark = kept?.rows[0]?.users_changed_at;
-
-    return { logins: settingsIn(read)?.logins, mark: typeof mark === "number" ? mark : undefined };
+    return { logins: settingsIn(read)?.logins, mark: waitingMark(kept?.rows[0]?.users_changed_at) };
   }
 
   async settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly waits: boolean }> {
     const [, read, kept] = await this.#driver.batch([usersCarried(carried, at), READ_SETTINGS, domainCheckAsked()]);
 
-    return { logins: settingsIn(read)?.logins, waits: typeof kept?.rows[0]?.users_changed_at === "number" };
+    return { logins: settingsIn(read)?.logins, waits: waitingMark(kept?.rows[0]?.users_changed_at) !== undefined };
   }
 
   async readStorageWrites(day: string): Promise<{ readonly writes: number; readonly most: number } | undefined> {
@@ -1254,32 +1252,32 @@ export class SqlDatabase implements Database {
     return values.logins.includes(login) ? { kind: "no_working_login" } : { kind: "unchanged", values };
   }
 
-  async readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined> {
-    const [read] = await this.#driver.batch([READ_SIGNING_KEY]);
+  async readVisitorKey(): Promise<Uint8Array<ArrayBuffer> | undefined> {
+    const [read] = await this.#driver.batch([READ_VISITOR_KEY]);
 
-    return signingKeyIn(read);
+    return visitorKeyIn(read);
   }
 
   async readSettingsAndKey(): Promise<SettingsAndKey> {
-    const [stored, key] = await this.#driver.batch([READ_SETTINGS, READ_SIGNING_KEY]);
+    const [stored, key] = await this.#driver.batch([READ_SETTINGS, READ_VISITOR_KEY]);
 
-    return { settings: settingsIn(stored), key: signingKeyIn(key) };
+    return { settings: settingsIn(stored), key: visitorKeyIn(key) };
   }
 
-  async ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey> {
-    const text = signingKeyToText(fresh);
+  async ensureVisitorKey(fresh: Uint8Array, at: number): Promise<VisitorKey> {
+    const text = visitorKeyToText(fresh);
     // One step whether a key is stored or not: the insert does nothing where one is, and the read after it gives the stored one.
-    const noneStored = fragment`NOT EXISTS (SELECT 1 FROM ${secrets} WHERE ${secrets.name} = 'session_key')`;
-    const first = insertFrom(secrets, [secrets.name, secrets.value, secrets.created_at], fragment`SELECT 'session_key', ${text}, ${at} WHERE ${noneStored}`);
-    const [inserted, read] = await this.#driver.batch([first, READ_SIGNING_KEY]);
-    const key = signingKeyIn(read);
-    if (key === undefined) throw new Error("the signing key was stored and is not there to read");
+    const noneStored = fragment`NOT EXISTS (SELECT 1 FROM ${secrets} WHERE ${secrets.name} = 'visitor_key')`;
+    const first = insertFrom(secrets, [secrets.name, secrets.value, secrets.created_at], fragment`SELECT 'visitor_key', ${text}, ${at} WHERE ${noneStored}`);
+    const [inserted, read] = await this.#driver.batch([first, READ_VISITOR_KEY]);
+    const key = visitorKeyIn(read);
+    if (key === undefined) throw new Error("the visitor key was stored and is not there to read");
 
     return { kind: changed(inserted) ? "created" : "kept", key };
   }
 
-  async rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void> {
-    await this.#driver.batch([keepSecret("session_key", signingKeyToText(fresh), signed.at), auditPlain(signed, "signed_everyone_out", {})]);
+  async rotateVisitorKey(fresh: Uint8Array, signed: Signed): Promise<void> {
+    await this.#driver.batch([keepSecret("visitor_key", visitorKeyToText(fresh), signed.at), auditPlain(signed, "signed_everyone_out", {})]);
   }
 
   async readUpdateAddress(): Promise<UpdateAddress | undefined> {
@@ -1301,6 +1299,14 @@ export class SqlDatabase implements Database {
   async appendAudit(note: AuditNote, signed: Signed): Promise<void> {
     const entry = fragment`VALUES (${signed.at}, ${signed.by}, ${note.action}, ${note.site?.id ?? null}, ${note.site?.name ?? null}, ${JSON.stringify(note.detail)})`;
     await this.#driver.batch([insertFrom(audit, AUDIT_COLUMNS, entry)]);
+  }
+
+  async noteLogin(login: Login, entered: { readonly since: number; readonly at: number }): Promise<{ readonly kind: "written" | "known" }> {
+    // The kind stands in the statement itself, as below: the question reads the one entry of this email the index of the logins leads to.
+    const known = fragment`EXISTS (SELECT 1 FROM ${audit} WHERE ${audit.action} = 'login' AND ${audit.actor} = ${login} AND ${audit.at} >= ${entered.since})`;
+    const [added] = await this.#driver.batch([insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${entered.at}, ${login}, 'login', '{}' WHERE NOT ${known}`)]);
+
+    return { kind: changed(added) ? "written" : "known" };
   }
 
   async hasLoggedIn(): Promise<boolean> {

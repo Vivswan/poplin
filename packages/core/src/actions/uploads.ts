@@ -134,14 +134,14 @@ export async function missingFiles(store: ObjectStore, upload: Upload, manifest:
 
     if (!page.more) break;
 
-    if (pages <= 1) throw new Error(`the listing of ${prefix} did not end in the pages ${manifest.length} files need`);
+    if (pages <= 1) throw new Error("the listing of an upload did not end in the pages its files need");
 
     page = await store.list({ prefix, cursor: page.cursor });
   }
 
   // Every path of the manifest passed the key rules when the upload began, so its key is the prefix and the path as written.
   const missing = manifest.filter((file) => stored.get(`${prefix}${file.path}`) !== file.size);
-  if (stored.size > manifest.length) throw new Error(`${prefix} holds a file its manifest does not name`);
+  if (stored.size > manifest.length) throw new Error("an upload holds a file its manifest does not name");
 
   return missing.map((file) => file.path);
 }

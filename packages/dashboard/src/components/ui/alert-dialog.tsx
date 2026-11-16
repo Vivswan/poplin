@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { useUnsavedTyping } from "@/lib/unsaved"
 
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
@@ -38,6 +39,21 @@ function AlertDialogOverlay({
   )
 }
 
+// Drawn only while the dialog is: what is typed into it counts as unsaved until it closes.
+function AlertDialogPopup({ onInput, ...props }: AlertDialogPrimitive.Popup.Props) {
+  const typed = useUnsavedTyping()
+
+  return (
+    <AlertDialogPrimitive.Popup
+      onInput={(event) => {
+        typed()
+        onInput?.(event)
+      }}
+      {...props}
+    />
+  )
+}
+
 function AlertDialogContent({
   className,
   size = "default",
@@ -48,7 +64,7 @@ function AlertDialogContent({
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
-      <AlertDialogPrimitive.Popup
+      <AlertDialogPopup
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(

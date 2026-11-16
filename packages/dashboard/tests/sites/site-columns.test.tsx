@@ -5,10 +5,11 @@ import { clearPage } from "../lib/support/page";
 import { afterAll, afterEach, expect, test } from "bun:test";
 import { cleanup, render, within } from "@testing-library/react";
 
+import type { Site } from "@/lib/sites";
 import { SiteLink } from "@/sites/site-columns";
 
 /** A site whose link holds its name, its id, and a word after it. */
-const SITE = { id: "abc123def456", url: "https://sales-report--abc123def456-p-poplin.example.com/" };
+const SITE = { id: "abc123def456", url: "https://sales-report--abc123def456-p-poplin.example.com/" } as Pick<Site, "id" | "url">;
 
 afterEach(cleanup);
 afterAll(clearPage);

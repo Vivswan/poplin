@@ -29,6 +29,9 @@ const COLUMNS: readonly ColumnSpec<Row>[] = [
   { id: "expires", header: "Ended", cell: ({ token }) => <Moment at={token.ended} /> },
 ];
 
+/** The least room the name of who removed a token is cut down to: the first letters of it. */
+const LEAST_REMOVER = "6ch";
+
 /** What a removed token ends its row with under the list above: nothing, in the room the list's own rows end with their actions in. */
 const NO_ACTION = (): ReactNode => null;
 
@@ -56,16 +59,19 @@ interface RemovedTokensProps {
   readonly onFitted?: (fitted: Fitted | undefined) => void;
 }
 
-/** Say how a token ended: that it ran out, that it gave itself back, or who removed it, written as on every screen. */
+/** Say how a token ended: that it ran out, that it gave itself back, or who removed it, written as on every screen. The remover's name gives where the row is narrow. */
 function How({ token, names }: Row): ReactNode {
   if (token.how === "ran_out") return "Ran out";
 
   if (token.by === token.id) return "Logged out";
 
   return (
-    <>
-      Removed by <Who by={token.by} logins={names} unnamed="a token" />
-    </>
+    <span className="flex min-w-0 items-baseline">
+      <span className="shrink-0 whitespace-pre">Removed by </span>
+      <span data-gives className="truncate" style={{ minWidth: LEAST_REMOVER }}>
+        <Who by={token.by} logins={names} unnamed="a token" />
+      </span>
+    </span>
   );
 }
 

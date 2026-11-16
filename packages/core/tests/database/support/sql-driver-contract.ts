@@ -366,7 +366,7 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       ],
       ["a second row of totals", [{ sql: "INSERT INTO totals (id, sites, trashed_sites, bytes, files) VALUES (2, 0, 0, 0, 0)", params: [] }]],
       ["the totals row removed", [{ sql: "DELETE FROM totals", params: [] }]],
-      ["a secret that is not the signing key", [{ sql: "INSERT INTO secrets (name, value, created_at) VALUES ('other', 'x', 0)", params: [] }]],
+      ["a secret that is not the visitor key", [{ sql: "INSERT INTO secrets (name, value, created_at) VALUES ('other', 'x', 0)", params: [] }]],
       ["a site moved to another folder", [{ sql: "UPDATE sites SET folder = 'folder-c' WHERE id = 'aaaaaaaaaaaa'", params: [] }]],
       ["an admin token that never expires", [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at) VALUES ('t', 'h', 'admin', '', 0)", params: [] }]],
       [
@@ -414,12 +414,12 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
     });
 
     // Drift: whoever reads the tables themselves, such as a migration step, relies on these forms, which no read of the interface shows.
-    test("an audit detail is JSON text, the signing key is one row no audit row quotes, and a deleted site leaves no version row", async () => {
+    test("an audit detail is JSON text, the visitor key is one row no audit row quotes, and a deleted site leaves no version row", async () => {
       const driver = await migrated(makeDriver);
       const database = new SqlDatabase(driver);
       const site = await made(database, draft(REPORT, "public", DOCS));
-      await database.ensureSigningKey(FIRST_KEY, NOW);
-      await database.rotateSigningKey(SECOND_KEY, { by: ADA, at: NOW + 2 });
+      await database.ensureVisitorKey(FIRST_KEY, NOW);
+      await database.rotateVisitorKey(SECOND_KEY, { by: ADA, at: NOW + 2 });
       await database.deleteSite(site.id, BY_ADA);
       const audit = await rows(driver, "SELECT * FROM audit ORDER BY seq");
       const logged = JSON.stringify(audit);
@@ -430,7 +430,7 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
         ["delete", ADA, site.id, REPORT, "{}"],
       ]);
       expect(["a1".repeat(32), "b2".repeat(32), "161,161", "178,178"].filter((needle) => logged.includes(needle))).toEqual([]);
-      expect(await rows(driver, "SELECT name, created_at FROM secrets")).toEqual([{ name: "session_key", created_at: NOW + 2 }]);
+      expect(await rows(driver, "SELECT name, created_at FROM secrets")).toEqual([{ name: "visitor_key", created_at: NOW + 2 }]);
       await expect(rows(driver, "INSERT INTO secrets (name, value, created_at) VALUES ('another_secret', 'x', 1)")).rejects.toThrow();
       expect(await rows(driver, "SELECT * FROM versions")).toEqual([]);
     });
@@ -494,11 +494,11 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.readTotals();
       const exported = await database.exportSites({ limit: 10, after: NO_SITE });
       await database.exportSites({ limit: 10 });
-      await database.readSigningKey();
+      await database.readVisitorKey();
       await database.readSettingsAndKey();
       await database.readFrame(NOW);
-      await database.ensureSigningKey(FIRST_KEY, NOW);
-      await database.rotateSigningKey(SECOND_KEY, BY_ADA);
+      await database.ensureVisitorKey(FIRST_KEY, NOW);
+      await database.rotateVisitorKey(SECOND_KEY, BY_ADA);
       const moved = await database.giveNewId(site.id, BY_ADA);
       const id = moved.kind === "done" ? moved.site.id : site.id;
       await database.getLaterSites([site.id, NO_SITE]);

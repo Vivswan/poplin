@@ -130,7 +130,7 @@ describe("the table of the Usage screen", () => {
   test("names each way to the host's page by its line, as an icon in the table and in words on a phone, and opens the page of that line in a new tab", async () => {
     await draw(OWN);
 
-    const named = [
+    const named: readonly (readonly [string, string])[] = [
       ["Storage, all sites: see it at Provider", PAGES.storage],
       ["Requests today: see it at Provider", PAGES.requests],
       ["Database rows read today: see it at Provider", PAGES.database],
@@ -166,9 +166,9 @@ describe("the table of the Usage screen", () => {
   // Drift: a kept key that stopped working must say so in one plain line and leave the install's own numbers on the screen, never an empty or a broken one.
   test.each([
     [null, null],
-    [{ refusal: "key_refused", right: null }, "The kept key no longer works. The numbers here are poplin's own count."],
-    [{ refusal: "lacks_right", right: "Figures: Read" }, "The kept key has no right to read usage: Figures: Read. The numbers here are poplin's own count."],
-    [{ refusal: "lacks_right", right: null }, "The kept key has no right to read usage. The numbers here are poplin's own count."],
+    [{ refusal: "key_refused", right: null }, "The kept key no longer works. Open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
+    [{ refusal: "lacks_right", right: "Figures: Read" }, "The kept key has no right to read usage: Figures: Read. Delete the key at Provider, then open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
+    [{ refusal: "lacks_right", right: null }, "The kept key has no right to read usage. Delete the key at Provider, then open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
     [{ refusal: "unreachable", right: null }, "Provider did not answer. The numbers here are poplin's own count."],
   ] as const)("over the install's own numbers, %j reads %p", async (official, says) => {
     await draw({ ...OWN, official });

@@ -1,4 +1,4 @@
-// The preview's own markup: the gallery of every state, the page around a refusal in plain text, and the page that stands where the provider's login would be. None of it is a page of the product.
+// The preview's own markup: the gallery of every state, and the page around a refusal in plain text. None of it is a page of the product.
 
 import { html, raw } from "hono/html";
 
@@ -139,21 +139,4 @@ export function terminalPage(printed: readonly Printed[]): Promise<string> {
  */
 export function missingPage(): Promise<string> {
   return shell("Not found", html`<h1>Not found</h1><p>The preview has no such page.</p>`);
-}
-
-/**
- * Build the page that stands where the provider's login would be.
- *
- * @param address - the path and query of the login address that was asked, at the admin origin
- * @returns a page with the two outcomes of a login as links: in as the sample admin, or refused
- */
-export function loginPage(address: string): Promise<string> {
-  const choice = (login: string): string => `${address}${address.includes("?") ? "&" : "?"}preview-login=${login}`;
-
-  return shell(
-    "Login",
-    html`<h1>The login would be here</h1>
-<p class="banner">Demo. On a real install the provider's login page asks who you are at this point. The demo has none, so choose the outcome.</p>
-<ul><li><a href="${choice("admin")}">Log in as the sample admin</a></li><li><a href="${choice("refused")}">Be refused</a><span class="status">403</span></li></ul>`,
-  );
 }

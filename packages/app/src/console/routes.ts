@@ -14,7 +14,7 @@ import { siteRoutes } from "./site-routes";
 import { usageRoutes } from "./usage-routes";
 import { visitsRoutes } from "./visits-routes";
 
-/** The data routes, each screen's own chained on. They are mounted under `/data`, after the session check and the guard on changes. */
+/** The data routes, each screen's own chained on. They are mounted under `/data`, after every request was asked who it is from, and after the guard on changes. */
 export const dataRoutes = new Hono<Shared>()
   .route("/", frameRoutes)
   .route("/", siteRoutes)

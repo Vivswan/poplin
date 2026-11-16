@@ -89,7 +89,7 @@ export interface ServedAlso {
   /** The site and the UTC day whose request counts are read. */
   readonly counts?: { readonly day: string; readonly site: SiteId };
 
-  /** Whether the settings and the signing key are read. */
+  /** Whether the settings and the visitor key are read. */
   readonly settingsAndKey?: boolean;
 }
 
@@ -101,7 +101,7 @@ export interface ServedLookup {
   /** The day's counts as `readRequests` gives them, when they were asked for. */
   readonly counts?: RequestCounts;
 
-  /** The settings and the signing key as `readSettingsAndKey` gives them, when they were asked for. */
+  /** The settings and the visitor key as `readSettingsAndKey` gives them, when they were asked for. */
   readonly settingsAndKey?: SettingsAndKey;
 }
 
@@ -228,13 +228,13 @@ export interface NewVersion {
   readonly contents?: VersionContents;
 }
 
-/** The signing key and whether this call stored it. `kept` is a key that was already there, which is the one to use. */
-export interface SigningKey {
+/** The visitor key and whether this call stored it. `kept` is a key that was already there, which is the one to use. */
+export interface VisitorKey {
   readonly kind: "created" | "kept";
   readonly key: Uint8Array<ArrayBuffer>;
 }
 
-/** The settings and the bytes of the signing key as one read gave them; each is `undefined` before it was stored. */
+/** The settings and the bytes of the visitor key as one read gave them; each is `undefined` before it was stored. */
 export interface SettingsAndKey {
   readonly settings: SettingValues | undefined;
   readonly key: Uint8Array<ArrayBuffer> | undefined;
@@ -526,7 +526,7 @@ export interface TokenStates {
   readonly more: boolean;
 }
 
-/** The one doorway to stored sites, tokens, pending logins, settings, the signing key, the audit log, and the request counts of the last year. */
+/** The one doorway to stored sites, tokens, pending logins, settings, the visitor key, the audit log, and the request counts of the last year. */
 export interface Database {
   /**
    * Make a site under a fresh id, with version 1 as its only version and its live one: published at `signed.at` by `signed.by`, of the draft's `bytes` and `files`.
@@ -578,7 +578,7 @@ export interface Database {
   findServed(address: Address, now: number): Promise<ServedSite | undefined>;
 
   /**
-   * Find the site an address serves and, in the same one step, read what a request for it needs beside it: a day's request counts, the settings and the signing key, or neither.
+   * Find the site an address serves and, in the same one step, read what a request for it needs beside it: a day's request counts, the settings and the visitor key, or neither.
    *
    * @throws {RangeError} the day of the counts is not a date such as `2026-11-13`
    */
@@ -688,7 +688,7 @@ export interface Database {
   readTotals(): Promise<Totals>;
 
   /**
-   * One page of every site as it is stored, for a backup. Tokens, the signing key, and the audit log are in no page.
+   * One page of every site as it is stored, for a backup. Tokens, the visitor key, and the audit log are in no page.
    *
    * @param query - how many sites, from 1 to 100, and the `next` of the page before
    * @throws {RangeError} `limit` is not a whole number from 1 to 100
@@ -977,32 +977,32 @@ export interface Database {
    */
   removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login">>;
 
-  /** The bytes of the key that signs sessions, `undefined` before one was stored. Only this and `readSettingsAndKey` return them. */
-  readSigningKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;
+  /** The bytes of the key the visitor limits are made from, `undefined` before one was stored. Only this and `readSettingsAndKey` return them. */
+  readVisitorKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;
 
   /**
-   * Read the settings and the signing key together, in one step: what a session is checked against.
+   * Read the settings and the visitor key together, in one step: what a request is checked against.
    *
    * @returns each as its own read gives it, `undefined` before it was stored
    */
   readSettingsAndKey(): Promise<SettingsAndKey>;
 
   /**
-   * Store the signing key when the install has none. Of callers starting at the same moment one stores its key and every other gets that key back.
+   * Store the visitor key when the install has none. Of callers starting at the same moment one stores its key and every other gets that key back.
    *
    * @param fresh - at least 32 newly drawn random bytes, used only when no key is stored
    * @param at - the clock, in milliseconds since the epoch
    * @throws {RangeError} `fresh` is under 32 bytes
    */
-  ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey>;
+  ensureVisitorKey(fresh: Uint8Array, at: number): Promise<VisitorKey>;
 
   /**
-   * Replace the signing key, which ends every session. It writes one `signed_everyone_out` audit entry, which holds nothing of either key.
+   * Replace the visitor key, which starts every visitor's minute anew. It writes one `signed_everyone_out` audit entry, which holds nothing of either key.
    *
    * @param fresh - at least 32 newly drawn random bytes
    * @throws {RangeError} `fresh` is under 32 bytes
    */
-  rotateSigningKey(fresh: Uint8Array, signed: Signed): Promise<void>;
+  rotateVisitorKey(fresh: Uint8Array, signed: Signed): Promise<void>;
 
   /** The address that starts a rebuild of the install and when it was saved, `undefined` while none is. No other operation returns the address. */
   readUpdateAddress(): Promise<UpdateAddress | undefined>;
@@ -1019,6 +1019,14 @@ export interface Database {
 
   /** Add an entry that goes with no change of a site, a token, or the settings. */
   appendAudit(note: AuditNote, signed: Signed): Promise<void>;
+
+  /**
+   * Write the `login` entry of one login at the provider, once: nothing is written while an entry of the same email stands at or after the moment the login began.
+   *
+   * @param entered - `since`, when the provider's login began, and `at`, the entry's own time, never before `since`; both in milliseconds since the epoch
+   * @returns `known` for a login whose entry is there already
+   */
+  noteLogin(login: Login, entered: { readonly since: number; readonly at: number }): Promise<{ readonly kind: "written" | "known" }>;
 
   /** Whether the audit log holds a `login` entry, which is whether anybody has ever logged in. It is one query, whatever the log's length. */
   hasLoggedIn(): Promise<boolean>;

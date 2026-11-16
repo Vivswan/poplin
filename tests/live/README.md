@@ -173,8 +173,9 @@ The database's free plan takes 100,000 rows written a day, every database of the
 | One request of a run                      | Rows, at most | Which are                                                                  |
 | ----------------------------------------- | ------------- | -------------------------------------------------------------------------- |
 | a new site, from its begin to its finish  | 19            | the site 8, the upload 6, the day's counts 2, the version 2, the log 1     |
-| a new site that is told an expiry         | 20            | its entry in the index of expiries; every site of the checks has one       |
+| a new site not told never to run out      | 20            | its entry in the index of expiries; one that names no expiry may take the install's |
 | a new version that drops no older one     | 13            | 17 where it drops one, and 2 for each further one it drops                 |
+| a new version that asks settings of its site |            | and what those settings cost as a change of the site, below                |
 | a site put back from a backup             | 19            | 2 for each version more, and 1 where it runs out                           |
 | a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 6 out of it         |
 | a change of who may open a site           | 3             | any other setting 2, both at once 5, and 1 where it is told an expiry      |
@@ -193,18 +194,18 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   861 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the checks, as the harness counts them   864 on the local fake, a few more with the demo's check: every site they publish, change, and remove
 a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 390
 the harness's own statements             18: three tokens in and out, and the caps
-a usual run                              about 917 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
+a usual run                              about 920 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
 a day of 40 such runs                    about 42,000 of the 100,000
 ```
 
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 861 of at most 1100
+Rows written this run: 864 of at most 1100
 ```
 
 ## The backup drill
@@ -261,6 +262,8 @@ Each result comes with one line: the requests, the time, each answer's count, ea
 
 ## A request that is cut off
 
+The edge closes a connection it kept open, and a request sent on it then gets no answer. A client sends a read again by itself, and no other request. So every request of a run that is no read opens a connection of its own, in `send.ts`; reads keep the open ones.
+
 The edge's rules block with an answer: a 403. A stranger's request whose connection closes before any answer says nothing of a rule or of the install. The run sends it once more and reads the second answer, and the log holds one line for it. A request that is cut off twice reaches its check as cut off, and so does a change asked of the API, which is never sent twice.
 
 ```text
@@ -278,7 +281,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`                                                           |
-| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard |
+| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `users-follow`: no login list exists |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |
@@ -340,7 +343,7 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | `L9`    | Open an unlisted site in Chromium, Firefox, and Safari. Publish new content to it. Reload within five minutes, then after.                                       | Which reload first shows the new version in each engine, and that no page mixes files of both versions. |
 | `download` | On an install whose Activity holds more than 2,000 entries, press Download, then CSV. Open the Worker's metrics in the Cloudflare dashboard. | The file is named `poplin-activity-<date>-1.csv`, holds the heading and 2,000 entries, and ends with the line that says the log holds more. CPU time of that request under 10 ms, the Free plan's limit. |
 | `copy`  | After `setup`, open the copy on GitHub, and the Worker's build settings in Cloudflare. Read the log of the first build. | The deploy command runs the `deploy` script of `package.json`. The log holds one line that starts with `poplin:`. Note what the copy's `wrangler.jsonc` holds that the repository's does not. |
-| `update` | With a release of poplin published, follow "Update the install" in `docs/run/update.md` on the install of `setup`. Read the new build's log. | The log holds `poplin: deploying`, the release's version, and `(was asked for latest)`. The dashboard, its sites, and its settings are as before, and the account holds no second bucket or database. |
+| `update` | With a release of poplin published, follow "Update the install" in `docs/upkeep/update.md` on the install of `setup`. Read the new build's log. | The log holds `poplin: deploying`, the release's version, and `(was asked for latest)`. The dashboard, its sites, and its settings are as before, and the account holds no second bucket or database. |
 | `pin`   | Set the build variable `POPLIN_VERSION` to an older release's version and build again. Then set it to `v1` and build again. | The first log names the older version. The second build fails with one line that starts with `poplin:` and holds `Nothing was deployed`, and the install still answers. |
 | `alerts` | With a token that also holds Notifications: Edit, apply the OpenTofu module once on the test account with `usage_alert_percents = [50, 90]`. Then open Notifications in the Cloudflare dashboard. | The apply makes six notification policies, and Cloudflare refuses none for its product name. After a run of the workflow, the list also holds `poplin: usage charges reached 1 dollar`, sent to the login. |
 

@@ -5,7 +5,7 @@
 // earlier_ids  the ids a site had before each new link, each with the folder of its site
 // tokens       the hashed record of every token
 // settings     one row for the whole install
-// secrets      what the install must keep and never show, such as the key that signs sessions
+// secrets      what the install must keep and never show, such as the key the visitor limits are made from
 // totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are only ever added
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together; a year is kept
@@ -92,10 +92,10 @@ CREATE TABLE settings (
   updated_at INTEGER NOT NULL
 ) STRICT`;
 
-/** What the install keeps and no listing, export, or audit entry shows: the key that signs sessions as lowercase hex, and the address that starts a rebuild of the install. */
+/** What the install keeps and no listing, export, or audit entry shows: the key the visitor limits are made from as lowercase hex, and the address that starts a rebuild of the install. */
 const SECRETS = `
 CREATE TABLE secrets (
-  name TEXT NOT NULL PRIMARY KEY CHECK (name IN ('session_key', 'update_address')),
+  name TEXT NOT NULL PRIMARY KEY CHECK (name IN ('visitor_key', 'update_address')),
   value TEXT NOT NULL,
   created_at INTEGER NOT NULL
 ) STRICT, WITHOUT ROWID`;
@@ -204,7 +204,7 @@ CREATE TABLE update_check (
   CHECK ((news IS NULL) = (seen_at IS NULL))
 ) STRICT`;
 
-/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: when a user was last added or removed and the change has not reached the domain. */
+/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: above zero, a change of the users waits; below zero, none does. */
 const DOMAIN_CHECK = `
 CREATE TABLE domain_check (
   id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
@@ -347,7 +347,7 @@ export const CREATE_SCHEMA: Step = {
     "CREATE INDEX sites_by_expiry ON sites (expires_at, id) WHERE expires_at IS NOT NULL AND trashed_at IS NULL",
     "CREATE INDEX sites_by_trashing ON sites (trashed_at, id) WHERE trashed_at IS NOT NULL",
     "CREATE INDEX earlier_ids_by_folder ON earlier_ids (folder)",
-    "CREATE INDEX audit_logins ON audit (action) WHERE action = 'login'",
+    "CREATE INDEX audit_logins ON audit (action, actor, at) WHERE action = 'login'",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",
     "CREATE INDEX tokens_by_end ON tokens (end_at DESC, id DESC)",
     "CREATE INDEX uploads_by_age ON uploads (created_at, id)",

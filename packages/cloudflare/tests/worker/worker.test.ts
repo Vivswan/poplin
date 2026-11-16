@@ -23,7 +23,7 @@ import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { signer } from "../login/support/access";
 import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
 import {
-  ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
+  ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
   PATHS, type Published, page, publish, send, sendFile, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
 
@@ -48,8 +48,8 @@ const POLICY = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-
 /** How long a browser may keep a file of the dashboard's client: for good, as its name holds a hash of its content. */
 const KEPT_FOR_GOOD = "public, max-age=31536000, immutable";
 
-/** What the dashboard's data answers a request with no session. */
-const NO_SESSION = { ok: false, code: "no_session", about: null, sentence: "Log in again." };
+/** What the dashboard's data answers a request no login of Access stands behind. */
+const NO_LOGIN = { ok: false, code: "no_login", about: null, sentence: "No login was checked for this request. Open the dashboard's address again." };
 
 /** What the dashboard says while the database's free reading is used up for the day. */
 const NO_READING = "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.";
@@ -243,8 +243,8 @@ beforeEach(async () => {
 });
 
 describe("an instance's first request", () => {
-  // Drift: two instances that start together would each store settings and a key of their own, and a dashboard session made by one would be no session at the other.
-  test("two instances starting together on an empty database end with the schema, one settings record from FIRST_SETTINGS, and one signing key", async () => {
+  // Drift: two instances that start together would each store settings and a key of their own, and a user one of them admits would be nobody at the other.
+  test("two instances starting together on an empty database end with the schema, one settings record from FIRST_SETTINGS, and one visitor key", async () => {
     const [one, other] = [instance(w), instance(w)];
     const started = await Promise.all([ask(one, `${ADMIN}/api/whoami`), ask(other, `${ADMIN}/api/whoami`)]);
     const { database } = await installOf(w);
@@ -253,8 +253,7 @@ describe("an instance's first request", () => {
 
     const stored = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "settings_set");
 
-    const session = cookieOf(await logIn(one, w));
-    const opened = await ask(other, `${ADMIN}/`, { headers: { Cookie: session } });
+    const opened = await ask(other, `${ADMIN}/`, { headers: await logIn(one, w) });
 
     expect(started.map((answer) => answer.status)).toEqual([401, 401]);
     expect(await database.readSettings()).toEqual(first.values);
@@ -402,7 +401,7 @@ describe("the product, from a token to an opened site", () => {
     const around = await ask(worker, `${under(site, "p")}/`);
     const opened = await ask(worker, `${under(site, "p")}/`, { headers: owner });
     const file = await ask(worker, `${under(site, "p")}/data/table.csv`, { headers: owner });
-    const login = await logIn(worker, w, `${ADMIN}/login?return=${encodeURIComponent(`${under(site, "p")}/`)}`);
+    const login = await ask(worker, `${ADMIN}/`, { headers: owner });
 
     const shown = await done<{ site: Published }>(await api(worker, token).sites[":site"].$patch({ param: { site: site.label }, query: {}, json: { access: "public", public_name: "yearly" } }));
     const named = await ask(worker, "https://yearly-page.example.com/");
@@ -415,8 +414,7 @@ describe("the product, from a token to an opened site", () => {
     expect({ status: around.status, to: around.headers.get("Location"), text: await around.text() }).toEqual({ status: 404, to: null, text: "Not found\n" });
     expect({ status: opened.status, cache: opened.headers.get("Cache-Control"), text: await opened.text() }).toEqual({ status: 200, cache: "private, no-cache", text: "<h1>report</h1>" });
     expect({ status: file.status, type: file.headers.get("Content-Type"), text: await file.text() }).toEqual({ status: 200, type: "text/csv", text: "a,b\n1,2\n" });
-    expect({ status: login.status, to: login.headers.get("Location"), cache: login.headers.get("Cache-Control") }).toEqual({ status: 302, to: "/", cache: "no-store" });
-    expect(login.headers.get("Set-Cookie")).toMatch(/^__Host-poplin-session=[^;]+; Max-Age=\d+; Path=\/; HttpOnly; Secure; SameSite=Lax$/);
+    expect({ status: login.status, cookie: login.headers.get("Set-Cookie"), cache: login.headers.get("Cache-Control") }).toEqual({ status: 200, cookie: null, cache: "no-store" });
     expect(shown.site.addresses.public).toBe("https://yearly-page.example.com");
     expect({ status: named.status, text: await named.text() }).toEqual({ status: 200, text: "<h1>report</h1>" });
     expect({ status: stale.status, to: stale.headers.get("Location") }).toEqual({ status: 302, to: `${under(site, "u")}/data/table.csv?x=1` });
@@ -436,7 +434,6 @@ describe("the product, from a token to an opened site", () => {
     ["a token not yet valid", (from) => accessHeaders(from, { nbf: Math.floor(from.clock.now / 1000) + 3600 })],
     ["a token that names no email", (from) => accessHeaders(from, { email: undefined })],
     ["a token for an email that is not in the logins", (from) => accessHeaders(from, { email: "guest@example.com" })],
-    ["the owner's dashboard session and no token", async (from) => ({ Cookie: cookieOf(await logIn(instance(from), from)) })],
     ["a claim to be the owner in a header Access never sets", async () => ({ "Cf-Access-Authenticated-User-Email": OWNER })],
   ];
 
@@ -672,7 +669,7 @@ describe("the product, from a token to an opened site", () => {
   test("the Usage screen shows the rows the instance's database used: the ones a visitor's sampled request wrote to the day, the ones not written yet, and Cloudflare's pages of the Worker's account", async () => {
     const worker = instance(w);
     await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
-    const session = { headers: { Cookie: cookieOf(await logIn(worker, w)) } };
+    const session = { headers: await logIn(worker, w) };
     const { database, now } = await installOf(w);
     const day = new Date(now()).toISOString().slice(0, 10);
     const before = await database.readDayUse(day);
@@ -777,7 +774,7 @@ describe("a request over plain http", () => {
     const answers = [];
     for (const method of ["GET", "POST"]) {
       for (const bindings of [countedBindings(tally), { ...countedBindings(tally), ZONE: undefined, ACCOUNT_ID: undefined } as Bindings]) {
-        const answer = await ask(instance(w), address, { method, headers: { Cookie: "__Host-poplin-session=x" } }, bindings);
+        const answer = await ask(instance(w), address, { method, headers: { "Cf-Access-Jwt-Assertion": "x" } }, bindings);
         answers.push([answer.status, answer.headers.get("Location"), answer.headers.get("Set-Cookie"), await answer.text()]);
       }
     }
@@ -796,50 +793,103 @@ describe("a request over plain http", () => {
 
 describe("the admin hostname", () => {
   // Drift: a path of the admin hostname would be answered without the check its piece owns.
-  test("the API answers a token and refuses none, and the login refuses a request Access did not sign", async () => {
+  test("the API answers a token and refuses none, and takes no token of Access for one", async () => {
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`);
     const token = await tokenOf(w, "admin");
     const known = await api(worker, token).whoami.$get({ query: {} });
     const unknown = await api(worker, null).whoami.$get({ query: {} });
     const exported = await api(worker, token).export.settings.$get({ query: {} });
-    const unsigned = await ask(worker, `${ADMIN}/login`);
-    const posted = await ask(worker, `${ADMIN}/login`, { method: "POST" });
+    const user = await ask(worker, `${ADMIN}/api/whoami`, { headers: await accessHeaders(w) });
 
     expect({ status: known.status, body: await known.json() }).toMatchObject({ status: 200, body: { token: { scope: "admin", note: "a test" } } });
-    expect([unknown.status, exported.status, unsigned.status, posted.status]).toEqual([401, 200, 403, 405]);
-    expect([unsigned.headers.get("Set-Cookie"), posted.headers.get("Allow")]).toEqual([null, "GET"]);
+    expect([unknown.status, exported.status, user.status]).toEqual([401, 200, 401]);
   });
 
-  // Drift: the dashboard would be mounted without a session reader, or with one that trusts a key the install no longer has; or its session would open, or its sign-out would close, a private site.
-  // A change taken as a form would let a page of another origin send one with the owner's session.
-  test("the dashboard answers its page and its data to a session and sends anyone else to the login; a change is JSON alone; signing everyone out ends the dashboard's sessions at once and leaves a private site to Access", async () => {
+  // Drift: the dashboard would be mounted without the check of Access's token, or with one that trusts users the install no longer has.
+  // A change taken as a form would let a page of another origin send one with the owner's login.
+  test("the dashboard answers its page, its files, and its data to a user's token of Access and refuses anyone else; a change is JSON alone; no answer sets a cookie", async () => {
     const worker = instance(w);
     const token = await tokenOf(w, "admin");
     const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
-    const session = { Cookie: cookieOf(await logIn(worker, w)) };
-    const owner = await accessHeaders(w);
+    const session = await logIn(worker, w);
     const remove = `${ADMIN}/data/sites/${site.label}/delete`;
     const form = { ...session, "Content-Type": "application/x-www-form-urlencoded" };
 
-    const strangers = [await ask(worker, `${ADMIN}/`), await ask(worker, `${ADMIN}/data/sites`), await send(worker, remove, {})];
+    const strangers = [await ask(worker, `${ADMIN}/`), await ask(worker, `${ADMIN}/favicon.ico`), await ask(worker, `${ADMIN}/data/sites`), await send(worker, remove, {})];
     const shell = await ask(worker, `${ADMIN}/sites/${site.label}`, { headers: session });
+    const icon = await ask(worker, `${ADMIN}/favicon.ico`, { headers: session });
     const sites = await ask(worker, `${ADMIN}/data/sites`, { headers: session });
     const forms = [await send(worker, remove, {}, { ...form, Origin: "https://elsewhere.example.net", "Sec-Fetch-Site": "cross-site" }), await send(worker, remove, {}, form)];
     const after = await done<{ site: Published }>(await api(worker, token).sites[":site"].$get({ param: { site: site.label }, query: {} }));
     const unknown = await ask(worker, `${ADMIN}/data/no-such-data`, { headers: session });
+    const cookies = [...strangers, shell, icon, sites, ...forms, unknown].map((answer) => answer.headers.get("Set-Cookie"));
 
-    const out = await send(worker, `${ADMIN}/data/settings/sign-everyone-out`, {}, session);
-    const signedOut = [await ask(worker, `${ADMIN}/`, { headers: session }), await ask(worker, `${ADMIN}/data/sites`, { headers: session })];
-    wait(w, 1 / 60);
-    const privately = await ask(worker, `${under(site, "p")}/`, { headers: owner });
-
-    expect(strangers.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[302, `${ADMIN}/login?return=${encodeURIComponent("/")}`], [401, null], [401, null]]);
-    expect(await strangers[1]?.json()).toEqual(NO_SESSION);
+    expect(strangers.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[403, null], [403, null], [401, null], [401, null]]);
+    expect([await strangers[0]?.text(), await strangers[2]?.json()]).toEqual([`${NO_LOGIN.sentence}\n`, NO_LOGIN]);
     expect([shell.status, shell.headers.get("Content-Security-Policy"), shell.headers.get("Cache-Control"), ((await readShell(await shell.text())).boot as { email: string }).email]).toEqual([200, POLICY, "no-store", OWNER]);
-    expect([sites.status, (await sites.json<{ sites: Published[] }>()).sites.map((listed) => listed.label)]).toEqual([200, [site.label]]);
+    expect([icon.status, sites.status, (await sites.json<{ sites: Published[] }>()).sites.map((listed) => listed.label)]).toEqual([200, 200, [site.label]]);
     expect([forms.map((answer) => answer.status), after.site.state, unknown.status]).toEqual([[403, 415], "live", 404]);
-    expect([out.status, signedOut.map((answer) => answer.status), privately.status]).toEqual([200, [302, 401], 200]);
+    expect(cookies).toEqual(cookies.map(() => null));
+  });
+
+  // Drift: the dashboard would trust the header's presence, or a token Access did not make for a user of this install as they are now.
+  test.each([
+    ["a token that is no token", 403, 401, "no_login", async () => ({ "Cf-Access-Jwt-Assertion": "garbage" })],
+    ["a token another key signed under the team's key id", 403, 401, "no_login", async (from: World) => accessHeaders(from, {}, await signer("stranger-key"))],
+    ["a token of another application", 403, 401, "no_login", (from: World) => accessHeaders(from, { aud: ["0000000000000000000000000000000000000000000000000000000000000000"] })],
+    ["a token of another team", 403, 401, "no_login", (from: World) => accessHeaders(from, { iss: "https://other.cloudflareaccess.com" })],
+    ["a token past its expiry", 403, 401, "no_login", (from: World) => accessHeaders(from, { exp: Math.floor(from.clock.now / 1000) - 3600 })],
+    ["a token that names no email", 403, 401, "no_login", (from: World) => accessHeaders(from, { email: undefined })],
+    ["a token for an email that is no user", 403, 403, "not_a_user", (from: World) => accessHeaders(from, { email: "guest@example.com" })],
+    ["a claim to be the owner in a header Access never sets", 403, 401, "no_login", async () => ({ "Cf-Access-Authenticated-User-Email": OWNER })],
+    ["a cookie that names the owner", 403, 401, "no_login", async () => ({ Cookie: `__Host-poplin-session=${OWNER}; CF_Authorization=${OWNER}` })],
+  ] as const)("the dashboard refuses %s on a page, a file, and a data route, and changes nothing for it", async (_what, pageStatus, dataStatus, code, headersOf) => {
+    const worker = instance(w);
+    const site = await publish(worker, await tokenOf(w, "admin"), { name: "report" }, [page("<h1>report</h1>")]);
+    const headers = await headersOf(w);
+    const pages = await Promise.all(["/", "/settings", "/assets/no-such-file.js", "/favicon.ico", "/login"].map((path) => ask(worker, `${ADMIN}${path}`, { headers })));
+    const read = await ask(worker, `${ADMIN}/data/frame`, { headers });
+    const change = await send(worker, `${ADMIN}/data/sites/${site.label}/delete`, {}, headers);
+    const { database } = await installOf(w);
+
+    expect(pages.map((answer) => answer.status)).toEqual(pages.map(() => pageStatus));
+    expect([read.status, change.status, ((await read.json()) as { code: string }).code, ((await change.json()) as { code: string }).code]).toEqual([dataStatus, dataStatus, code, code]);
+    expect([(await database.getSite(site.id as never))?.state, await database.hasLoggedIn()]).toEqual(["live", false]);
+  });
+
+  // Drift: a user who was removed would keep the dashboard until a session of poplin's own ran out, which it no longer has; or a new user would wait for one.
+  test("a removed user is refused on the very next request, on the instance that removed them and on every other, and a new user is admitted at once", async () => {
+    const [worker, other] = [instance(w), instance(w)];
+    const owner = await logIn(worker, w);
+    const second = await accessHeaders(w, { email: "second@example.com" });
+    const asSecond = async (on: ReturnType<typeof instance>): Promise<number[]> => [(await ask(on, `${ADMIN}/`, { headers: second })).status, (await ask(on, `${ADMIN}/data/sites`, { headers: second })).status];
+    const before = [await asSecond(worker), await asSecond(other)];
+    await send(worker, `${ADMIN}/data/people/add`, { login: "second@example.com" }, owner);
+    const during = [await asSecond(worker), await asSecond(other)];
+    const removal = await send(other, `${ADMIN}/data/people/remove`, { login: "second@example.com" }, owner);
+    const after = [await asSecond(worker), await asSecond(other), (await send(worker, `${ADMIN}/data/people/add`, { login: "third@example.com" }, second)).status];
+
+    expect([before, during, removal.status, after]).toEqual([[[403, 403], [403, 403]], [[200, 200], [200, 200]], 200, [[403, 403], [403, 403], 403]]);
+  });
+
+  // Drift: every page a person opens would write a row, which the free plan counts by the day; or a login would leave no line, and the setup page would stay open after the first one.
+  test("one login at Access leaves one Activity line, whatever instance its pages reach and however many it opens; a second login leaves a second", async () => {
+    const [worker, other] = [instance(w), instance(w)];
+    const { database } = await installOf(w);
+    const lines = async (): Promise<number> => (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "login").length;
+    const first = await accessHeaders(w, { exp: Math.floor(w.clock.now / 1000) + 86_400 });
+    await ask(worker, `${ADMIN}/data/frame`, { headers: first });
+    const afterData = [await lines(), await database.hasLoggedIn()];
+    for (const on of [worker, worker, other]) await ask(on, `${ADMIN}/`, { headers: first });
+    const afterPages = await lines();
+    wait(w, 2);
+    await ask(instance(w), `${ADMIN}/`, { headers: first });
+    const hoursLater = await lines();
+    const again = await accessHeaders(w);
+    for (const on of [worker, other]) await ask(on, `${ADMIN}/settings`, { headers: again });
+
+    expect([afterData, afterPages, hoursLater, await lines(), await database.hasLoggedIn()]).toEqual([[0, false], 1, 1, 2, true]);
   });
 
   // Drift: at Cloudflare the login stands in front of the whole admin hostname but the open paths of the shared table. A route a program calls under none of them would meet a login no program can pass.
@@ -848,41 +898,33 @@ describe("the admin hostname", () => {
     const worker = instance(w);
     const open: readonly string[] = INSTALL_OBJECTS.openPaths;
     const below = (start: string, path: string): boolean => path === start || path.startsWith(`${start}/`);
-    const toLogin = async (path: string): Promise<boolean> => (await ask(worker, `${ADMIN}${path}`)).headers.get("Location")?.startsWith(`${ADMIN}${INSTALL_OBJECTS.loginPath}?`) === true;
-    const answered = async (paths: readonly string[]): Promise<(readonly [string, boolean])[]> => Promise.all(paths.map(async (path) => [path, await toLogin(path)] as const));
+    const refused = async (path: string): Promise<boolean> => (await (await ask(worker, `${ADMIN}${path}`)).text()) === `${NO_LOGIN.sentence}\n`;
+    const answered = async (paths: readonly string[]): Promise<(readonly [string, boolean])[]> => Promise.all(paths.map(async (path) => [path, await refused(path)] as const));
 
     const outside = [...Object.keys(EVERY_ROUTE), ...SETUP_CALLS].filter((route) => !open.some((start) => below(start, route)));
     const own = await answered(open.flatMap((start) => [start, `${start}/no-such-route`]));
-    const beside = await answered(["/", "/tokens", ...open.flatMap((start) => [`${start}x`, `${start}-more/data`])]);
+    const beside = await answered(["/", "/tokens", "/login", ...open.flatMap((start) => [`${start}x`, `${start}-more/data`])]);
 
     expect([outside, Object.keys(EVERY_ROUTE).length > 25]).toEqual([[], true]);
     expect(own.filter(([, sent]) => sent)).toEqual([]);
     expect(beside.filter(([, sent]) => !sent)).toEqual([]);
   });
 
-  // Drift: with the login in front of every path, the edge lets a person through to the page they asked for before the Worker has made its own session.
-  // A Worker that sent them on anywhere but to its login path, or whose login path did not send them back, would turn that into a loop.
-  test("a person the edge let through to a page, with no session of the dashboard's yet, is sent to the login path once, back once, and then sees the page", async () => {
-    const worker = instance(w);
-    const signed = await accessHeaders(w);
-    const asked = `${ADMIN}/settings?tab=access`;
+  // Drift: with the login in front of every path, the edge lets a person through to the page they asked for. A Worker that sent them on anywhere would turn the provider's way back into a detour, or a loop.
+  test("a person the edge let through to a page sees that page at once: no redirect, and no cookie", async () => {
+    const answered = await ask(instance(w), `${ADMIN}/settings?tab=access`, { headers: await accessHeaders(w) });
 
-    const first = await ask(worker, asked, { headers: signed });
-    const second = await ask(worker, first.headers.get("Location") ?? "", { headers: signed });
-    const third = await ask(worker, `${ADMIN}${second.headers.get("Location")}`, { headers: { ...signed, Cookie: cookieOf(second) } });
-
-    expect([first.status, first.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent("/settings?tab=access")}`]);
-    expect([second.status, second.headers.get("Location"), third.status, third.headers.get("Location")]).toEqual([302, "/settings?tab=access", 200, null]);
+    expect([answered.status, answered.headers.get("Location"), answered.headers.get("Set-Cookie")]).toEqual([200, null, null]);
   });
 
   // Drift: D1 answers one invocation 50 queries, a batch being one. Reads that left their batch would cost every request of the dashboard a query more each, unseen until a long request ran out of them.
-  test("a request of the dashboard on a warm instance asks the database as few questions as its row says, the session's read among them", async () => {
+  test("a request of the dashboard on a warm instance asks the database as few questions as its row says, the read of the users among them", async () => {
     const tally = { calls: 0 };
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, countedBindings(tally));
     const token = await tokenOf(w, "admin");
     const site = await publish(worker, token, { name: "report" }, [page("<h1>report</h1>")]);
-    const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const session = await logIn(worker, w);
     const counted = async (answer: () => Promise<Response>): Promise<readonly [status: number, queries: number]> => {
       tally.calls = 0;
 
@@ -892,26 +934,26 @@ describe("the admin hostname", () => {
 
     expect({
       "an address that asks nothing but who is there": await asked("/data/public-address?name=docs"),
-      "the people, who are in the settings the session read": await asked("/data/people"),
-      "a page of the dashboard: the session, then all its frame shows": await asked("/"),
+      "the people, who are in the settings read for the users": await asked("/data/people"),
+      "a page of the dashboard: the users with the settings, then all its frame shows": await asked("/"),
       "the frame alone": await asked("/data/frame"),
       "the sites, each with its views and who published it": await asked("/data/sites"),
       "the sites through the API: the token, then the settings with the sites and their views": await counted(() => ask(worker, `${ADMIN}/api/sites`, { headers: { Authorization: `Bearer ${token}` } })),
       "one site: the site, its views, and who published it": await asked(`/data/sites/${site.label}`),
-      "a change to one site: the session, the settings with the site, the change": await counted(() => send(worker, `${ADMIN}/data/sites/${site.label}/naming`, { title: "Report" }, session)),
+      "a change to one site: the users, the settings with the site, the change": await counted(() => send(worker, `${ADMIN}/data/sites/${site.label}/naming`, { title: "Report" }, session)),
       "one site through the API: the token, the settings with the site, its views": await counted(() => ask(worker, `${ADMIN}/api/sites/${site.id}`, { headers: { Authorization: `Bearer ${token}` } })),
       "an access and a title set together through the API: the token, the site, the one change": await counted(() =>
         ask(worker, `${ADMIN}/api/sites/${site.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ access: "unlisted", title: "Both" }) }),
       ),
     }).toEqual({
       "an address that asks nothing but who is there": [200, 1],
-      "the people, who are in the settings the session read": [200, 1],
-      "a page of the dashboard: the session, then all its frame shows": [200, 2],
+      "the people, who are in the settings read for the users": [200, 1],
+      "a page of the dashboard: the users with the settings, then all its frame shows": [200, 2],
       "the frame alone": [200, 2],
       "the sites, each with its views and who published it": [200, 2],
       "the sites through the API: the token, then the settings with the sites and their views": [200, 2],
       "one site: the site, its views, and who published it": [200, 2],
-      "a change to one site: the session, the settings with the site, the change": [200, 3],
+      "a change to one site: the users, the settings with the site, the change": [200, 3],
       "one site through the API: the token, the settings with the site, its views": [200, 2],
       "an access and a title set together through the API: the token, the site, the one change": [200, 3],
     });
@@ -920,7 +962,7 @@ describe("the admin hostname", () => {
   // Drift: a read is answered from the settings its own request read on the way in. Kept any longer than the request, a setting changed a moment ago would be shown as it was.
   test("a setting changed through the dashboard is what the very next read shows, on the same instance and on another", async () => {
     const [worker, other] = [instance(w), instance(w)];
-    const session = { Cookie: cookieOf(await logIn(worker, w)) };
+    const session = await logIn(worker, w);
     const people = async (from: ReturnType<typeof instance>): Promise<unknown> => (await (await ask(from, `${ADMIN}/data/people`, { headers: session })).json<{ logins: string[] }>()).logins;
     const before = [await people(worker), await people(other)];
     const added = await send(worker, `${ADMIN}/data/people/add`, { login: "bo@example.com" }, session);
@@ -928,11 +970,12 @@ describe("the admin hostname", () => {
     expect([before, added.status, await people(worker), await people(other)]).toEqual([[[OWNER], [OWNER]], 200, [OWNER, "bo@example.com"], [OWNER, "bo@example.com"]]);
   });
 
-  // Drift: the dashboard's client rides inside the Worker's one file. Built without it, or handed out behind the session, the page would load and draw nothing; without the header a browser would fetch two megabytes again at every visit.
-  test("the dashboard's page names a script and a stylesheet under /assets/, and each is answered to anyone by its media type, for a browser to keep for good; a name the build did not write is not found", async () => {
+  // Drift: the dashboard's client rides inside the Worker's one file. Built without it, the page would load and draw nothing; without the header a browser would fetch two megabytes again at every visit.
+  test("the dashboard's page names a script and a stylesheet under /assets/, and each is answered to a user by its media type, for a browser to keep for good; a name the build did not write is not found", async () => {
     const worker = instance(w);
-    const shell = await readShell(await (await ask(worker, `${ADMIN}/`, { headers: { Cookie: cookieOf(await logIn(worker, w)) } })).text());
-    const files = await Promise.all([...shell.scripts, ...shell.styles, "/assets/app-00000000.js"].map((path) => ask(worker, `${ADMIN}${path}`)));
+    const headers = await logIn(worker, w);
+    const shell = await readShell(await (await ask(worker, `${ADMIN}/`, { headers })).text());
+    const files = await Promise.all([...shell.scripts, ...shell.styles, "/assets/app-00000000.js"].map((path) => ask(worker, `${ADMIN}${path}`, { headers })));
     const sizes = await Promise.all(files.map(async (file) => (await file.arrayBuffer()).byteLength > 1000));
 
     expect([shell.scripts, shell.styles].map((names) => names.map((name) => name.startsWith("/assets/")))).toEqual([[true], [true]]);
@@ -947,7 +990,7 @@ describe("the admin hostname", () => {
 describe("the audit log as a file", () => {
   // Drift: the log is only ever added to, so its file is the one answer of the dashboard that grows with it. Built whole, read a listing's page at a time, or with no bound, it would pass what the Free plan gives one request.
   test("a log longer than a file holds is sent a reading at a time, 2,000 entries in 4 queries and a row read an entry, and says that the log holds more; where the next file goes on costs 3 queries and the same rows", async () => {
-    const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+    const session = await logIn(instance(w), w);
     await BINDINGS.DB.prepare(
       "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?) INSERT INTO audit (at, actor, action, detail) SELECT ?, ?, 'login', '{}' FROM counted",
     )
@@ -985,7 +1028,7 @@ describe("the audit log as a file", () => {
     ["an instance that answered before", true, { calls: 4, read: 2 * FILE_ENTRIES + 4 }],
     ["a new instance, its start counted with the file", false, { calls: 6 }],
   ])("a file of 2,000 entries, each about its own site that is gone and by its own token, is read by %s in the queries of any other file, far under the Free plan's 50", async (_which, warm, cost) => {
-    const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+    const session = await logIn(instance(w), w);
     const counted = "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?)";
     await BINDINGS.DB.batch([
       BINDINGS.DB.prepare(`${counted} INSERT INTO tokens (id, hash, scope, note, created_at) SELECT printf('%016x', entry), 'none', 'publisher', 'agent ' || entry, ? FROM counted`).bind(FILE_ENTRIES + 200, Date.now()),
@@ -1024,7 +1067,7 @@ describe("a copy of a site", () => {
     "through /%s, of %i files, takes %i requests, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
     async (by, count, requests, most) => {
       // The first request of an install stores its settings, which a publish reads: a login does.
-      const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+      const session = await logIn(instance(w), w);
       const asker = by === "api" ? { Authorization: `Bearer ${await tokenOf(w, "admin")}` } : session;
       const files = Array.from({ length: count }, (_page, at) => ({ path: at === 0 ? "index.html" : `pages/${at}.html`, size: 1, contentType: "text/html", open: () => new Blob(["x"]).stream() }));
       const source = await publishSite(await installOf(w), { scope: "admin", holder: OWNER }, { name: "report", files });
@@ -1182,11 +1225,16 @@ describe("the rows the live checks count", () => {
 
       return finish(await calls.import.sites.$post({ query: {}, json: { ...backup, files: paths.map((path) => ({ ...declared, path })) } }), paths);
     });
+    const report = { site: (await finish(await calls.uploads.$post({ query: {}, json: { name: "report", files: [declared] } }))).id };
+    await step("a new version that asks who may open the site and a title", async () => finish(await calls.uploads.$post({ query: {}, json: { ...report, access: "unlisted", title: "Report", files: [declared] } })));
+    await done(await calls.config.$patch({ query: {}, json: { default_expires: { count: 1, unit: "d" } } }));
+    await step("a new site that takes the install's own expiry", async () => finish(await calls.uploads.$post({ query: {}, json: { name: "inherits", files: [declared] } })));
     await step("a computer's login begun", async () => done(await api(worker, null, meter.fetch).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } })));
 
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
-        "a new site": [19, 19],
+        // A new site that names no expiry is counted as if the install gave it one.
+        "a new site": [19, 20],
         "a copy of a site, whole in one request": [21, 21],
         // A copy that takes more requests is counted as whole at its first, which writes the upload alone.
         "a copy of 113 files begun": [6, 21],
@@ -1205,9 +1253,9 @@ describe("the rows the live checks count", () => {
         "removed for good, with three versions, an earlier id, and a day's count": [13, 13],
         "put back from a backup, with three versions": [23, 23],
         // An upload that is given up was counted with the finish it never had.
-        "an upload begun, asked what it lacks, and given up": [9, 23],
-        // Three rows more are written where the logins change after a check of the domain: the mark that they changed, then the mark of the try at Cloudflare and its settling, or the problem noted where Cloudflare refused them.
-        "a setting changed": [2, 5],
+        "an upload begun, asked what it lacks, and given up": [9, 24],
+        // Four rows more are written where the logins change after a check of the domain and Cloudflare refuses them: the mark that they changed, the mark of the try, the mark set anew, and the problem noted.
+        "a setting changed": [2, 6],
         "a fourth version, which drops two once the install keeps two": [19, 19],
         "a new site that runs out": [20, 20],
         "who may open it and its title changed at once": [5, 5],
@@ -1219,6 +1267,8 @@ describe("the rows the live checks count", () => {
         // A removal for good is counted with the three versions an install keeps: this site has one.
         "a site that runs out removed for good": [9, 13],
         "a site that runs out put back from a backup": [20, 20],
+        "a new version that asks who may open the site and a title": [18, 18],
+        "a new site that takes the install's own expiry": [20, 20],
         "a computer's login begun": [3, 3],
       },
       stopped: undefined,
@@ -1227,8 +1277,8 @@ describe("the rows the live checks count", () => {
 });
 
 describe("a database that takes no more writes for the day", () => {
-  // Drift: an instance wrote on every start and the login wrote before its redirect, so a set-up install answered nobody once its writes were spent. Letting a first login through the same way would leave the setup page open behind a person who is in.
-  test("a new instance of a set-up install starts, serves a page and a file, logs a person in without the audit entry, which the log notes, and answers the dashboard; the first login of an install is refused and its setup stays open", async () => {
+  // Drift: an instance wrote on every start and a login wrote its line before its page, so a set-up install answered nobody once its writes were spent. Letting a first login through the same way would leave the setup page open behind a person who is in.
+  test("a new instance of a set-up install starts, serves a page and a file, lets a person who just logged in see the dashboard without the audit entry, which the log notes; the first login of an install is refused and its setup stays open", async () => {
     using warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const spent = withBindings({ DB: spentDatabase("write") });
@@ -1237,20 +1287,21 @@ describe("a database that takes no more writes for the day", () => {
     const signed = { headers: await accessHeaders(w) };
     const { database } = await installOf(w);
 
-    const first = await ask(worker, `${ADMIN}/login`, signed, spent);
+    const first = await ask(worker, `${ADMIN}/`, signed, spent);
     const open = !(await database.hasLoggedIn());
     await logIn(instance(w), w);
-    const later = await ask(worker, `${ADMIN}/login`, signed, spent);
-    const session = { headers: { Cookie: cookieOf(later) } };
+    w.clock.now += 60_000;
+    const session = { headers: await accessHeaders(w) };
+    const later = await ask(worker, `${ADMIN}/`, session, spent);
     const answers = [await ask(worker, `${site.addresses.public}/`, {}, spent), await ask(worker, `${site.addresses.public}/notes.txt`, {}, spent)];
     for (const path of ["/", "/data/frame", "/data/sites", `/data/sites/${site.label}`, "/data/activity", "/data/usage", "/data/tokens", "/data/people", "/data/settings"]) answers.push(await ask(worker, `${ADMIN}${path}`, session, spent));
     const logins = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "login");
 
     expect([first.status, first.headers.get("Set-Cookie"), open]).toEqual([503, null, true]);
-    expect([later.status, later.headers.get("Location"), logins.length]).toEqual([302, "/", 1]);
+    expect([later.status, later.headers.get("Location"), logins.length]).toEqual([200, null, 1]);
     expect(answers.map((answer) => answer.status)).toEqual(answers.map(() => 200));
     expect(warned.mock.calls).toEqual([]);
-    expect(failed.mock.calls.map(([fault]) => String(fault))).toEqual(["Error: poplin: a request failed (AllowanceSpent, caused by Error)", "Error: poplin: a login was not written to the audit log (AllowanceSpent, caused by Error)"]);
+    expect(failed.mock.calls.map(([fault]) => String(fault))).toEqual(["Error: poplin: a login was not written to the audit log (AllowanceSpent, caused by Error)"]);
   });
 });
 
@@ -1260,7 +1311,7 @@ describe("a database whose allowance for the day is used up", () => {
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const token = await tokenOf(w, "admin");
     const site = await publish(instance(w), token, { name: "report", access: "public" }, [page("<h1>report</h1>")]);
-    const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
+    const session = await logIn(instance(w), w);
     const bearer = { Authorization: `Bearer ${token}` };
     const noReading = withBindings({ DB: spentDatabase("read") });
     const noWriting = withBindings({ DB: spentDatabase("write") });
@@ -1307,16 +1358,15 @@ describe("a computer's login", () => {
     return api(worker, null).logins.token.$post({ query: {}, json: { secret } });
   }
 
-  // Drift: the pieces each hold their own rule, and the entry joins them: a route not mounted, a return path dropped at the login, or a dashboard built without its counters would leave no way to a first token.
-  test("a computer with no token begins a login, the owner allows it through the dashboard after the login brings them back to the address the terminal printed, and the computer collects one token", async () => {
+  // Drift: the pieces each hold their own rule, and the entry joins them: a route not mounted, a page that is not the one the terminal printed, or a dashboard built without its counters would leave no way to a first token.
+  test("a computer with no token begins a login, the owner allows it through the dashboard at the address the terminal printed, which nobody else is shown, and the computer collects one token", async () => {
     const worker = instance(w);
     const begun = await done<Begun>(await begin(worker, "192.0.2.1"));
     const waiting = await done<{ state: string }>(await collect(worker, begun.secret));
 
     const stranger = await ask(worker, begun.verify_url);
-    const login = await logIn(worker, w, stranger.headers.get("Location") ?? "");
-    const session = { Cookie: cookieOf(login) };
-    const opened = await ask(worker, `${ADMIN}${login.headers.get("Location")}`, { headers: session });
+    const session = await accessHeaders(w);
+    const opened = await ask(worker, begun.verify_url, { headers: session });
     const id = begun.secret.split("_")[2] ?? "";
     const found = await ask(worker, `${ADMIN}/data/logins/${id}`, { headers: session });
     const byCode = await ask(worker, `${ADMIN}/data/logins/find?code=${begun.code}`, { headers: session });
@@ -1335,8 +1385,8 @@ describe("a computer's login", () => {
     const shown = await found.text();
 
     expect([begun.verify_url, waiting.state]).toEqual([`${ADMIN}/tokens/review/${id}`, "pending"]);
-    expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent(`/tokens/review/${id}`)}`]);
-    expect([login.status, login.headers.get("Location"), opened.status, ((await readShell(await opened.text())).boot as { email: string }).email]).toEqual([302, `/tokens/review/${id}`, 200, OWNER]);
+    expect([stranger.status, stranger.headers.get("Location"), await stranger.text()]).toEqual([403, null, `${NO_LOGIN.sentence}\n`]);
+    expect([opened.status, ((await readShell(await opened.text())).boot as { email: string }).email]).toEqual([200, OWNER]);
     expect([found.status, JSON.parse(shown)]).toMatchObject([200, { ok: true, login: { id, computer: "laptop", scope: "publisher" } }]);
     // The code is in the terminal alone: no half of it is in what the page is given, no address that holds it leads to a login, and letters that are not its last allow nothing.
     expect([[begun.code.slice(0, 4), begun.code.slice(-4)].some((half) => shown.includes(half)), byCode.status, linkAlone.status]).toEqual([false, 400, 400]);
@@ -1435,30 +1485,33 @@ describe("the built bundle", () => {
 
   // Drift: every other test here runs the Worker's source, and the file an install runs is that source minified: a name the minifier changed that the code reads back would break that file alone.
   // A release writes its number into the package's manifest alone, so a bundle that held a number of its own would name an old release on every install.
-  test("logs a person in, hands out the dashboard's page and its files, refuses a call with no token, and publishes and serves a site, each as the Worker's source does; a token is answered the version the released package's manifest states", async () => {
+  test("logs a person in, hands out the dashboard's page and files, refuses a page and a call with no token, and publishes and serves a site, as the source does; a token is answered the version the released package's manifest states", async () => {
     // The built Worker reads the runtime's own clock and `fetch`, so the tokens are live now and the team's keys come from the stand-in. It starts once, so this one test asks it everything.
     const now = { ...w, clock: { now: Date.now() } };
     using keys = vi.spyOn(globalThis, "fetch").mockImplementation((address, init) => w.certs.fetch(String(address), init as Parameters<typeof w.certs.fetch>[1]));
-    const session = { Cookie: cookieOf(await logIn(built, now)) };
+    const session = await logIn(built, now);
     const shell = await ask(built, `${ADMIN}/`, { headers: session });
     const read = await readShell(await shell.text());
     const token = await tokenOf(now, "publisher");
     const site = await publish(built, token, { name: "report", access: "public", public_name: "yearly" }, [page("<h1>report</h1>")]);
     const answered = await done<{ version: string }>(await api(built, token).whoami.$get({ query: {} }));
 
-    const addresses = [`${ADMIN}/`, ...[...read.scripts, ...read.styles].map((path) => `${ADMIN}${path}`), `${ADMIN}/api/whoami`, "https://yearly-page.example.com/", "https://nothing-page.example.com/"];
-    const answers = (worker: typeof built): Promise<Said[]> => Promise.all(addresses.map(async (address) => said(await ask(worker, address))));
+    const signed = [`${ADMIN}/`, ...[...read.scripts, ...read.styles].map((path) => `${ADMIN}${path}`)];
+    const addresses = [...signed, `${ADMIN}/`, `${ADMIN}/api/whoami`, "https://yearly-page.example.com/", "https://nothing-page.example.com/"];
+    // The page and its files are asked as the owner, and the page once more as nobody.
+    const asked = (worker: typeof built, address: string, at: number): Promise<Response> => ask(worker, address, at < signed.length ? { headers: session } : {});
+    const answers = (worker: typeof built): Promise<Said[]> => Promise.all(addresses.map(async (address, at) => said(await asked(worker, address, at))));
     const fromBuilt = await answers(built);
 
     expect([shell.status, (read.boot as { email: string }).email, site.addresses.public, keys.mock.calls.length]).toEqual([200, OWNER, "https://yearly-page.example.com", 1]);
     expect(answered.version).toBe((JSON.parse(manifest) as { version: string }).version);
-    expect(fromBuilt.map((answer) => answer.status)).toEqual([302, 200, 200, 401, 200, 404]);
+    expect(fromBuilt.map((answer) => answer.status)).toEqual([200, 200, 200, 403, 401, 200, 404]);
     expect(fromBuilt).toEqual(await answers(instance(now)));
   });
 });
 
 describe("bytes as hex, inside the runtime the Worker runs in", () => {
-  // Drift: stored hashes, the signing key, and visitor keys were written in these exact characters; a hex library that failed in this runtime, or wrote capitals, would match none of them.
+  // Drift: stored hashes, the stored key, and visitor keys were written in these exact characters; a hex library that failed in this runtime, or wrote capitals, would match none of them.
   test.each([
     [[], ""],
     [[0], "00"],

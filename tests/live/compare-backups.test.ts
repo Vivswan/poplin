@@ -14,7 +14,7 @@ import { type Compared, compareBackups, differenceLines, IGNORED } from "./compa
 const ROOT = join(import.meta.dir, "..", "..");
 
 /** The pages that say what the compare passes over, each in the table's own words: the one a person reads before a restore, and the one of the live checks. */
-const PAGES = ["docs/use/back-up.md", "tests/live/README.md"] as const;
+const PAGES = ["docs/upkeep/back-up.md", "tests/live/README.md"] as const;
 
 /** The export's two forms: every kept version, and the live one alone. */
 const FORMS = ["--all-versions", ""] as const;

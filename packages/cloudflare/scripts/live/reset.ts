@@ -30,6 +30,7 @@ import { CEILINGS, meterBucket } from "./budget";
 import { meterRows, ROW_CEILINGS } from "./rows";
 import { isSameSite, type Wanted } from "./same-site";
 import { type Cli, publishSamples, type Sample, sampleSites, wantedOf } from "./samples";
+import { sendLive } from "./send";
 import { findDatabase, runSql, seedToken } from "./tokens";
 import { findInstall, isStop, openRun, type Run, reportStop, type Stop } from "./util";
 
@@ -345,7 +346,7 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
   return resetInstall({
     server: `https://${found.layout.adminHostname}`,
     token,
-    fetch: (input, init) => fetch(input, init),
+    fetch: sendLive,
     pause: (ms) => Bun.sleep(ms),
     now: () => Date.now(),
     sql: (statement) => runSql(run, database, statement, []),

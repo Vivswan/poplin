@@ -40,7 +40,7 @@ export function createUsersFollow(key: KeptKey | undefined, accountId: string): 
 
       const sent = await keyed(key, ALERT_RIGHT, (connection) => sendBudgetAlertTo(connection, accountId, first));
 
-      return sent.ok ? { ok: true } : { ok: false, refusal: sent.refusal };
+      return sent.ok ? { ok: true } : { ok: false, refusal: sent.refusal, written: true };
     },
   };
 }

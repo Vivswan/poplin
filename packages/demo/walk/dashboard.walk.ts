@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
+import { arrive, isUnanswered, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -551,7 +551,9 @@ async function watchClosely(page: Page, origin: string): Promise<string[]> {
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(`console: ${message.text()}`);
   });
-  page.on("pageerror", (error) => problems.push(`thrown: ${String(error)}`));
+  page.on("pageerror", (error) => {
+    if (!isUnanswered(error, origin)) problems.push(`thrown: ${String(error)}`);
+  });
   page.on("request", (request) => {
     if (!request.url().startsWith(`${origin}/`)) problems.push(`asked elsewhere: ${request.url()}`);
   });
@@ -608,6 +610,17 @@ test.describe("on a screen 1024 px wide", () => {
   test("the sites fit their room with no panel open: a link gives the end of its name, and the last column ends where the tools over the table end", async ({ page }) => {
     await arrive(page);
     await sitesFit(page);
+  });
+
+  // Drift: the tokens and the removed ones under them stand in the same columns, so the name of who removed a token would make both tables wider than their room again, and both would scroll sideways.
+  test("the tokens and the removed tokens under them are as wide as their room", async ({ page }) => {
+    await page.goto("tokens/list");
+    await page.getByRole("button", { name: /^Removed tokens/ }).click();
+    for (const name of ["Tokens", "Removed tokens"]) {
+      const table = page.getByRole("table", { name, exact: true });
+      // A table is measured again once the page's fonts are in, so its width is read until it has come to rest.
+      await expect(async () => expect(await table.evaluate((drawn) => drawn.scrollWidth - (drawn.closest('[data-slot="scroll-area"]')?.clientWidth ?? 0))).toBe(0)).toPass();
+    }
   });
 });
 
@@ -783,6 +796,22 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await under.focus();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(under).toBeFocused();
+  });
+});
+
+test.describe("on a screen 1440 px wide, at a press on the open site's row", () => {
+  test.use({ viewport: VIEWPORTS[0] });
+
+  // Drift: a press on a row would leave the focus on the area the table scrolls in, where the next key starts at no row; or the panel, closed as the button goes down, would open again as it comes up.
+  test("a press on the row of the open site, held as long as a hand holds it, closes the panel and leaves the focus on the row's button", async ({ page }) => {
+    await arrive(page);
+    const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true }) });
+
+    await openPanel(page, SAMPLE.site);
+    await expect(panel(page)).toBeVisible();
+    await row.getByText(/^(Private|Unlisted|Public)$/).click({ delay: 150 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(row.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true })).toBeFocused();
   });
 });
 

@@ -20,11 +20,11 @@ afterAll(clearPage);
 
 // Drift: the log would call a site by its name where the Sites list calls it by its title, so one site would read as two; or the name it had then, which the search and the file go by, would be nowhere on the row.
 test.each([
-  ["a site with a title", { name: "trip-notes", label: "trip-notes-abc123def456", title: "Trip notes" }, ["Trip notes", "trip-notes", true]],
-  ["a site with no title", { name: "trip-notes", label: "trip-notes-abc123def456", title: null }, ["trip-notes", "trip-notes", true]],
-  ["a site that is gone", { name: "old-draft", label: null, title: null }, ["old-draft", "This site is gone", false]],
+  ["a site with a title", { id: "abc123def456", name: "trip-notes", label: "trip-notes--abc123def456", title: "Trip notes" }, ["Trip notes", "trip-notes", true]],
+  ["a site with no title", { id: "abc123def456", name: "trip-notes", label: "trip-notes--abc123def456", title: null }, ["trip-notes", "trip-notes", true]],
+  ["a site that is gone", { id: "def456abc123", name: "old-draft", label: null, title: null }, ["old-draft", "This site is gone", false]],
 ] as const)("%s is called by its title, else by the name it had then, which stays in the tooltip of a site that is one", async (_what, site, [words, tooltip, linked]) => {
-  await drawAt("/activity", <SiteThen entry={entryAbout(site)} />);
+  await drawAt("/activity", <SiteThen entry={entryAbout(site as Entry["site"])} />);
   const cell = within(document.body).getByText(words);
 
   expect([cell.getAttribute("title"), cell.tagName === "A"]).toEqual([tooltip, linked]);

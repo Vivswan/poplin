@@ -83,7 +83,7 @@ Before part a, ask what the user has. Say which of these is missing, and stop un
 | a payment method on the account                   | part a asks for one, at a price of 0      |
 | a GitHub account, or git and bun on this computer | part b                                    |
 
-Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/run/limits-and-cost.md#what-can-cost-money).
+Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/cost/what-can-cost-money.md).
 
 **Never take the Cloudflare API token in the chat.** The token of parts c and d changes the user's Cloudflare account. The user pastes it into the setup page in their own browser, where it goes to the install and nowhere else.
 
@@ -130,7 +130,7 @@ Check: ask the user to open that address.
 | a page headed Setup | part c                                                                      |
 | anything else       | ask for its words; have the user wait a minute and reload, then check again |
 
-If the build fails, no page with the address opens and Cloudflare shows the build's log. Ask for its last lines, and look them up under step 2 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-2-the-build-fails).
+If the build fails, no page with the address opens and Cloudflare shows the build's log. Ask for its last lines, and look them up under step 2 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-2-the-build-fails).
 
 **Without a GitHub account**, you run part b yourself: the three commands under From a terminal instead, in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/from-a-terminal.md). First run `git --version` and `bun --version`: with either missing, the user installs it or takes the GitHub way.
 
@@ -151,7 +151,7 @@ On the Setup page, under Make an account token, the user presses Open the accoun
 
 The install never stores the token. After part e the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working. Only Check and Repair on the dashboard's Domain screen ask for a token again, and the same form makes a new one.
 
-If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the nine permissions by hand.
+If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the nine permissions by hand.
 
 ### d. Finish on the setup page
 
@@ -171,7 +171,7 @@ Ask the user to copy you the lines the page shows above its table. They hold no 
 | a count that is not done, or that is to repair             | a row needs work    | ask for those rows, then the install guide |
 | one sentence and no table, such as `Account token refused` | the run was refused | the install guide                          |
 
-For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-4-the-page-shows-something-else).
+For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-4-the-page-shows-something-else).
 
 Repair is safe to repeat. The page empties the token's box after every run and keeps the other two, so the user pastes the token again before they press it.
 

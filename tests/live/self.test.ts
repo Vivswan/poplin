@@ -49,7 +49,7 @@ const MANY_FILES = 7;
 const RUN_MS = 30_000;
 
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
-const CHECKS_ROWS = 861;
+const CHECKS_ROWS = 864;
 
 /** What a run says when it sends a stranger's request a second time. */
 const SENT_AGAIN = "a stranger's request was cut off before any answer, and was sent once more";
@@ -58,7 +58,7 @@ const SENT_AGAIN = "a stranger's request was cut off before any answer, and was 
 const OPENED: (() => void)[] = [];
 
 /** The checks skipped on an install with no login in front. */
-const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped" } as const;
+const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "users-follow": "skipped" } as const;
 
 /** One fake install, what the run knows of it, and the checks that do not pass on it, by id. `L1` and `dashboard-login` are skipped unless the login is in front, and `demo` unless the install holds the demo's site: whole, or without its worker. */
 type Case = readonly [
@@ -103,8 +103,8 @@ const CASES: readonly Case[] = [
     {},
     { ...NO_LOGIN, private: "failed", duplicate: "failed", L5: "failed" },
   ],
-  ["an install that holds no key of its provider fails the check of the users: the login list never takes the one it added", { noKey: true }, {}, { ...NO_LOGIN, "users-follow": "failed" }],
-  ["a run with no key to read the provider's login list skips the check of the users", {}, { "login-list": "a key of the provider" }, { ...NO_LOGIN, "users-follow": "skipped" }],
+  ["an install that holds no key of its provider fails the check of the users: the login list never takes the one it added", { access: true, noKey: true }, {}, { "users-follow": "failed" }],
+  ["a run with no key to read the provider's login list skips the check of the users", { access: true }, { "login-list": "a key of the provider" }, { "users-follow": "skipped" }],
   ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, NO_LOGIN],
   ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, NO_LOGIN],
   ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { ...NO_LOGIN, "burst-rate-rule": "failed" }],

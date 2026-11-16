@@ -9,7 +9,7 @@
     "build": "vite build",
     "watch": "vite build --watch",
     "dev": "vite",
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && tsc -p tests",
     "test": "bun test"
   },
   "dependencies": {

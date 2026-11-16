@@ -6,7 +6,7 @@ import type { SiteId } from "@poplin/core/src/sites/ids";
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 
-import { checkLimits, countRequest } from "@poplin/app/src/limits/limits";
+import { checkSiteLimits, countRequest, takeVisitorMinute } from "@poplin/app/src/limits/limits";
 import { type VisitorKey, visitorKey } from "@poplin/app/src/limits/visitor-key";
 import type { Bindings } from "../../src/worker/bindings";
 import { clientAddress } from "../../src/limits/client-address";
@@ -28,6 +28,13 @@ const UINT32_VALUES = 4_294_967_296;
 const STATED_ERROR = 0.016;
 const ALWAYS_ROOM = { limit: async () => ({ success: true }) };
 const NO_BOUND = { all: Number.MAX_SAFE_INTEGER, site: Number.MAX_SAFE_INTEGER };
+
+/** A request against every limit in the Worker's order: the visitor's minute first, then the site's minute and the day. */
+async function checkLimits(asked: Parameters<typeof takeVisitorMinute>[0] & Parameters<typeof checkSiteLimits>[0], counters: Parameters<typeof checkSiteLimits>[1]): ReturnType<typeof checkSiteLimits> {
+  const visitor = await takeVisitorMinute(asked, counters);
+
+  return visitor.ok ? checkSiteLimits(asked, counters) : visitor;
+}
 
 /** A request as the Worker takes it: checked against the limits, and counted against its day once they let it through. */
 async function takeRequest(asked: Parameters<typeof checkLimits>[0], counters: Parameters<typeof checkLimits>[1]): ReturnType<typeof checkLimits> {

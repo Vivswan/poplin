@@ -200,7 +200,7 @@ describe("the update link", () => {
     expect((await settingsOf(opened)).updateAddress).toEqual({ set: false, since: null });
   });
 
-  // Drift: an address the host starts no rebuild at would be kept, and the next update would send the session's admin nowhere.
+  // Drift: an address the host starts no rebuild at would be kept, and the next update would send the admin nowhere.
   test.each(["https://elsewhere.example.com/start/x", `http://${REBUILD_HOST}/start/x`, "not an address"])("refuses %s at its field and keeps none", async (address) => {
     const opened = await openConsole();
     const response = await opened.change("/data/settings/update-address", { address });
@@ -214,13 +214,13 @@ describe("the update link", () => {
 });
 
 describe("the sign-out of everyone", () => {
-  // Drift: the button would answer done while the session that pressed it, or any other, went on working.
-  test("ends the session that asked for it and writes one entry", async () => {
+  // Drift: the press would be done with no entry of it, or would shut out the admin who pressed it, whose login is the provider's and not the stored key's.
+  test("writes one entry, and the admin who asked goes on working", async () => {
     const opened = await openConsole();
     const done = await opened.change("/data/settings/sign-everyone-out", {});
     const after = await opened.get("/data/settings");
 
-    expect([done.status, await done.json(), after.status]).toEqual([200, { ok: true }, 401]);
+    expect([done.status, await done.json(), after.status]).toEqual([200, { ok: true }, 200]);
     expect((await opened.base.audit()).filter((entry) => entry.action === "signed_everyone_out")).toHaveLength(1);
   });
 });

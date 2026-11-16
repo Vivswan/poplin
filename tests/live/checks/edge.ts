@@ -44,6 +44,15 @@ const TEAM_LOGIN = { host: ".cloudflareaccess.com", path: "/cdn-cgi/access/login
 /** The paths of the dashboard a stranger must not reach the install on: its page, its data, a file of its client, and a page a link in a terminal opens. */
 const BEHIND_LOGIN = ["/", "/data/frame", "/assets/index.js", "/tokens/review/x"];
 
+/** What the dashboard's client sends with every call: the edge answers a script 401 where it would send a page on to the team's login. */
+const BY_SCRIPT = { "X-Requested-With": "XMLHttpRequest" };
+
+/** The code of the install's own refusal of a call no login stands behind. An answer of the edge never holds it. */
+const OWN_REFUSAL = "no_login";
+
+/** A token header in the shape the edge writes, which no team signed. */
+const FORGED = { "Cf-Access-Jwt-Assertion": ["eyJhbGciOiJSUzI1NiJ9", "eyJlbWFpbCI6Im93bmVyQGV4YW1wbGUuY29tIn0", "c2lnbmVk"].join(".") };
+
 /** What a browser sends with an image a page of another domain loads. */
 const OUTSIDE_PAGE = { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Dest": "image" };
 
@@ -293,7 +302,7 @@ export const EDGE_CHECKS: readonly Check[] = [
   },
   {
     id: "dashboard-login",
-    name: "the edge sends a stranger to the team's login from every path of the dashboard, before the install is asked, and the install sets no cookie",
+    name: "the edge sends a stranger to the team's login from every path of the dashboard, a forged token included, and answers a script's call 401 itself: the install is never asked, and sets no cookie",
     needs: ["access"],
     run: async (bench) => {
       for (const path of BEHIND_LOGIN) {
@@ -301,6 +310,13 @@ export const EDGE_CHECKS: readonly Check[] = [
         expect([path, sentToTeamLogin(bench, response)]).toEqual([path, true]);
         expect(response.headers.get("Set-Cookie") ?? "").not.toContain("poplin");
       }
+
+      const forged = await bench.visit(`${bench.admin}/`, { headers: FORGED });
+      expect(sentToTeamLogin(bench, forged)).toBe(true);
+
+      // The client reads this 401 as a login that ended. A redirect here would be followed to a page of another origin, which a script cannot read.
+      const called = await bench.visit(`${bench.admin}/data/frame`, { headers: BY_SCRIPT });
+      expect([called.status, called.headers.get("Location"), (await called.text()).includes(OWN_REFUSAL)]).toEqual([401, null, false]);
     },
   },
   {
@@ -315,13 +331,22 @@ export const EDGE_CHECKS: readonly Check[] = [
   },
   {
     id: "login-path",
-    name: "the login path gives a stranger no session",
+    name: "a path of the dashboard gives a stranger nothing of the install and no cookie, whether the edge or the install answers",
     needs: [],
     run: async (bench) => {
-      const response = await bench.visit(`${bench.admin}/login`);
-      expect(response.status).toBeGreaterThanOrEqual(300);
-      expect(response.status).toBeLessThan(500);
-      expect(response.headers.get("Set-Cookie") ?? "").not.toContain("poplin");
+      for (const [path, headers] of [
+        ["/", {}],
+        ["/login", {}],
+        ["/data/frame", BY_SCRIPT],
+        ["/data/sites", BY_SCRIPT],
+      ] as const) {
+        const response = await bench.visit(`${bench.admin}${path}`, { headers });
+        const text = await response.text();
+        // The edge's redirect or its 401, or the install's own refusal: 403 for a page, 401 for a call.
+        expect(response.status, path).toBeOneOf([302, 401, 403]);
+        expect(response.headers.get("Set-Cookie") ?? "", path).not.toContain("poplin");
+        expect(/"(?:sites|email|logins|recent)"/.test(text), path).toBe(false);
+      }
     },
   },
   {

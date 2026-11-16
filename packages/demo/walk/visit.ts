@@ -17,6 +17,9 @@ const RESET_DONE = "Sample data reset.";
 /** What the dashboard says when the sample data could not be made new. The line leaves after a few seconds. */
 const RESET_REFUSED = "The sample data was not reset. Try again.";
 
+/** WebKit's line for a request by script that ended with no answer, which it reports as an error of the page. The address is the request's. */
+const NO_ANSWER = /^Fetch API cannot load (\S+) due to access control checks\.$/m;
+
 /** The address of the Sites screen when it shows the trash. */
 export const TRASH = "./?view=trash";
 
@@ -29,15 +32,41 @@ interface Seen {
   readonly elsewhere: string[];
 }
 
-/** Watch a browser for a page's own error, and for a request to any origin but the demo's. */
-function watch(context: BrowserContext, origin: string): Seen {
+/** A watched browser: what it did that fails a test, and what else went wrong in it, which a failed test prints. */
+interface Watched {
+  readonly seen: Seen;
+  readonly besides: string[];
+}
+
+/**
+ * Whether an error a page reported is WebKit's line for a request to the demo's own origin that ended with no answer: a page that is reloaded or left while it still loads has such a request.
+ *
+ * The line does not say why the request ended. One that the demo left unanswered shows in what its step looks for on the screen.
+ */
+export function isUnanswered(error: Error, origin: string): boolean {
+  const address = NO_ANSWER.exec(`${error.message}\n${error.stack ?? ""}`)?.[1] ?? "";
+
+  return address.startsWith(`${origin}/`);
+}
+
+/** Watch a browser for an error a script of a page threw, and for a request to any origin but the demo's. */
+function watch(context: BrowserContext, origin: string): Watched {
   const seen: Seen = { errors: [], elsewhere: [] };
-  context.on("weberror", (error) => seen.errors.push(String(error.error())));
+  const besides: string[] = [];
+  context.on("weberror", (thrown) => {
+    const error = thrown.error();
+    besides.push(`reported on ${thrown.page()?.url()}: ${error.stack || String(error)}`);
+    if (!isUnanswered(error, origin)) seen.errors.push(String(error));
+  });
   context.on("request", (request) => {
     if (!request.url().startsWith(`${origin}/`)) seen.elsewhere.push(request.url());
   });
+  context.on("requestfailed", (request) => besides.push(`failed, ${request.failure()?.errorText}: ${request.resourceType()} ${request.url()}`));
+  context.on("response", (response) => {
+    if (response.status() >= 400) besides.push(`answered ${response.status()}: ${response.request().resourceType()} ${response.url()}`);
+  });
 
-  return seen;
+  return { seen, besides };
 }
 
 /** The heading of the screen a page shows. */
@@ -104,10 +133,10 @@ export async function reset(page: Page): Promise<void> {
 export const test = base.extend<{ seen: Seen }>({
   seen: [
     async ({ context, baseURL }, use) => {
-      const seen = watch(context, new URL(baseURL ?? "").origin);
+      const { seen, besides } = watch(context, new URL(baseURL ?? "").origin);
       await use(seen);
 
-      expect(seen).toEqual({ errors: [], elsewhere: [] });
+      expect(seen, `what else went wrong in the browser:\n${besides.join("\n")}`).toEqual({ errors: [], elsewhere: [] });
     },
     { auto: true },
   ],

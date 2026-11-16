@@ -10,6 +10,7 @@ import type { AuditEntry } from "../../../src/records/audit";
 import type { Site } from "../../../src/records/site";
 import {
   ADA,
+  ADMIN,
   BO,
   BY_ADA,
   DOCS,
@@ -74,8 +75,8 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         async (database: Database, site: Site): Promise<unknown> => [await database.deleteSite(site.id, signed), await storedBack(database, site, signed)],
         ["delete", "imported"],
       ],
-      ["the signing key replaced", async (database: Database): Promise<unknown> => database.rotateSigningKey(SECOND_KEY, signed), ["signed_everyone_out"]],
-      ["a signing key stored where none was", async (database: Database): Promise<unknown> => database.ensureSigningKey(FIRST_KEY, NOW), []],
+      ["the visitor key replaced", async (database: Database): Promise<unknown> => database.rotateVisitorKey(SECOND_KEY, signed), ["signed_everyone_out"]],
+      ["a visitor key stored where none was", async (database: Database): Promise<unknown> => database.ensureVisitorKey(FIRST_KEY, NOW), []],
       ["a site imported that is already there", async (database: Database, site: Site): Promise<unknown> => storedBack(database, site, signed), []],
       ["a note appended", async (database: Database): Promise<unknown> => database.appendAudit({ action: "login", detail: {} }, signed), ["login"]],
       [
@@ -395,6 +396,37 @@ export function everLoggedIn(label: string, makeDatabase: DatabaseFactory): void
       for (let entry = 0; entry < 150; entry += 1) await database.appendAudit({ action: "domain_synced", detail: { from: "setup" } }, by);
 
       expect([before, without, first, await database.hasLoggedIn()]).toEqual([false, false, true, true]);
+    });
+
+    // Drift: one login at the provider would leave a line for every instance that met it, or a later login of the same person, or a login of another, would leave none.
+    test("a login is noted once: again only when it began after the last entry of its email, and each email by its own entries", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, { by: ADMIN, at: NOW });
+      const eve = "eve@example.com" as Login;
+      const noted: string[] = [];
+      for (const [login, since, at] of [
+        [ADMIN, NOW, NOW + 10],
+        [ADMIN, NOW, NOW + 20],
+        [ADMIN, NOW + 10, NOW + 30],
+        [eve, NOW, NOW + 40],
+        [ADMIN, NOW + 11, NOW + 50],
+        [eve, NOW + 41, NOW + 41],
+        [eve, NOW + 41, NOW + 60],
+      ] as const) {
+        noted.push((await database.noteLogin(login, { since, at })).kind);
+      }
+      const entries = (await database.listAudit({ limit: 10 })).filter((entry) => entry.action === "login").map((entry) => [entry.by, entry.at, entry.detail, entry.site]);
+
+      expect([noted, entries, await database.hasLoggedIn()]).toEqual([
+        ["written", "known", "known", "written", "written", "written", "known"],
+        [
+          [eve, NOW + 41, {}, null],
+          [ADMIN, NOW + 50, {}, null],
+          [eve, NOW + 40, {}, null],
+          [ADMIN, NOW + 10, {}, null],
+        ],
+        true,
+      ]);
     });
   });
 }

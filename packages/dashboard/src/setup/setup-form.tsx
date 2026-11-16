@@ -13,6 +13,7 @@ import { TokenBox } from "@/domain/token-box";
 import { type Sent, useTokenRun } from "@/domain/token-run";
 import { TokenWay } from "@/domain/token-way";
 import type { Refused } from "@/lib/api";
+import { useUnsavedTyping } from "@/lib/unsaved";
 
 /** The box an install with nothing set is asked its domain in. */
 const DOMAIN = { name: "domain", label: "Domain", hint: "Your sites live under it: example.com", type: "text", autoComplete: "off", empty: "Type the domain first." } as const;
@@ -61,13 +62,14 @@ function TypedBox({ box, refusal }: { readonly box: Box; readonly refusal: strin
 export function SetupForm({ form, boxes, onRepair }: SetupFormProps): ReactNode {
   const { title, before, after } = FORMS[boxes];
   const { sheet, busy, saidAt, saidElsewhere, send } = useTokenRun([...before, ...after], (_run, sent) => onRepair(sent));
+  const typed = useUnsavedTyping();
   const onSubmit = (event: FormEvent): void => {
     event.preventDefault();
     void send("repair");
   };
 
   return (
-    <form ref={sheet} onSubmit={onSubmit} className="flex max-w-md flex-col gap-6" noValidate>
+    <form ref={sheet} onSubmit={onSubmit} onInput={typed} className="flex max-w-md flex-col gap-6" noValidate>
       <ol className="flex flex-col gap-6">
         <Step number={1} title="Make an account token">
           <TokenWay form={form} />

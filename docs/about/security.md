@@ -76,7 +76,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 
 | Who | Credential | Where it comes from |
 | --- | --- | --- |
-| a user at the dashboard | the dashboard's cookie | one login through Cloudflare Access, by email code or Google; the Worker checks the email against the list of allowed logins, then sets a cookie for the dashboard's hostname alone |
+| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by email code or Google; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time. poplin sets no cookie of its own |
 | a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
@@ -90,7 +90,7 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 | Scope | Given to | May |
 | --- | --- | --- |
 | publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
-| admin | a user, whose email is on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
+| admin | a user, whose email is on the list of allowed logins; a user's login at the dashboard carries the same rights | everything: every site, the settings, the tokens |
 
 The page that allows a computer's login treats what the login says of itself as a stranger's words, since anyone can begin one:
 
@@ -126,14 +126,14 @@ What guards each address:
 
 | Address | Guarded by |
 | --- | --- |
-| the login and the dashboard | Cloudflare Access authenticates the user at the login path; the Worker checks the email, then sets the dashboard's cookie |
+| the login and the dashboard | Cloudflare Access authenticates the user in front of the whole dashboard; the Worker checks Access's token and the email on every request |
 | the API, which the CLI and `poplin mcp` call | the token the Worker issued; no Access in front, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 | the setup page, `/setup`, until the first login | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it answers 404 for good |
 | the Worker's own `workers.dev` address | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
-One Access application covers the login path and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
+One Access application covers the dashboard and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
 
 Every site hostname answers GET and HEAD only. The Worker refuses every other method, and the optional bots rule at Cloudflare's edge blocks it before the Worker.
 
@@ -164,27 +164,27 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 | Measure | What poplin does |
 | --- | --- |
-| the dashboard's cookie | HttpOnly, Secure, SameSite Lax, for the dashboard's hostname alone, under a `__Host-` name: no script can read it, no site receives it, and no site can set or replace it. A browser counts every site of the install as the same site as the dashboard, so SameSite Lax holds back only what a page of another domain sends, a followed link aside; the row on writes covers a site's page |
+| the login of the dashboard | Cloudflare Access's cookie, HttpOnly and SameSite Lax, for the dashboard's hostname alone, 30 days: no script can read it, and no site receives it. A browser counts every site of the install as the same site as the dashboard, so SameSite Lax holds back only what a page of another domain sends, a followed link aside; the row on writes covers a site's page |
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
 | a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
-| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. A removed token's row is kept, and it never logs in again; [Removed tokens](../run/settings.md#tokens) lists the 50 that ended last |
-| the signing key | kept in the database, where the Worker can rotate it; Sign everyone out, under Access, rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. A computer's token is revoked on its own |
+| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. A removed token's row is kept, and it never logs in again; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last |
+| the stored key | kept in the database; the limits per visitor are made from it. Sign everyone out, under Access, replaces it: every visitor's limit starts again, and nobody is logged out. A login is Access's own: removing the user ends it. A computer's token is revoked on its own |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and correct content types on every answer of a site but three: the 308 from plain http, the 429 of a limit, and the page of a paused site carry neither header. The files of a site whose Allow embedding is off carry one more, which [Between sites](between-sites.md) describes |
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept a year; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files, and adds none to them. A site that holds no `favicon.ico` is answered poplin's own icon at `/favicon.ico`, from the Worker's code |
-| the activity log | the dashboard shows every action under Activity: publish, state change, delete, login, token issued. [Activity](../run/activity.md) says how it is paged and saved as files |
+| the activity log | the dashboard shows every action under Activity: publish, state change, delete, login, token issued. [Activity](../dashboard/activity.md) says how it is paged and saved as files |
 | plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days, but for the 308 from plain http, the 429 of a limit, the page of a paused site, and the Worker's own plain answers, such as the one of an install that could not start. The zone's other hostnames are left as they are |
-| the Worker's log | Cloudflare keeps the lines the Worker writes about refusals and errors, with its own record of each request switched off. poplin writes into no line a token, a cookie, a login code, an email, a visitor's address, or a site's id: [the Worker's log](../run/activity.md#the-workers-log-at-cloudflare) |
+| the Worker's log | Cloudflare keeps the lines the Worker writes about refusals and errors, with its own record of each request switched off. poplin writes into no line a token, a cookie, a login code, an email, a visitor's address, or a site's id: [the Worker's log](../dashboard/activity.md#the-workers-log-at-cloudflare) |
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
-| a release an update deploys | Cloudflare's build of an install runs a release only when the SHA-256 digest of its files is the one poplin's website publishes for that version; any other file deploys nothing. A release publishes its source archive and its built Worker, and the website publishes their digests only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins. [Update](../run/update.md#what-a-build-checks) has each refusal, and [what a release publishes](../run/update.md#what-a-release-publishes) |
-| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../run/limits-and-cost.md#where-a-limit-is-counted). Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
+| a release an update deploys | Cloudflare's build of an install runs a release only when the SHA-256 digest of its files is the one poplin's website publishes for that version; any other file deploys nothing. A release publishes its source archive and its built Worker, and the website publishes their digests only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins. [Update](../upkeep/update.md#what-a-build-checks) has each refusal, and [what a release publishes](../upkeep/update.md#what-a-release-publishes) |
+| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../upkeep/cost/limits.md#where-a-limit-is-counted). Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
 
 ## Optional edge rules
 
-The install's setup token needs nine permissions. Four more are optional: three switch on rules at Cloudflare's edge, and one makes a budget alert. [Domain](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The install's setup token needs nine permissions. Four more are optional: three switch on rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | Switches on | Without it |
 | --- | --- | --- |

@@ -5,8 +5,7 @@
 import { type Login, parseLogin } from "@poplin/core/src/auth/logins";
 import { errors, type JWTPayload, jwtVerify } from "jose";
 import { type AccessKeys, KeysUnavailable } from "./keys";
-import type { Identify } from "@poplin/app/src/login/login";
-import type { RequestHeaders } from "@poplin/app/src/login/session";
+import type { Identify, RequestHeaders } from "@poplin/app/src/login/admit";
 
 const TOKEN_HEADER = "Cf-Access-Jwt-Assertion";
 const MAX_TOKEN_LENGTH = 8192;
@@ -32,7 +31,10 @@ type Refused = { readonly ok: false; readonly refusal: TokenRefusal };
 
 type Checked<Value> = { readonly ok: true; readonly value: Value } | Refused;
 
-/** The Access application in front of the login path and of every private site. */
+/** A token's person, and `since`, the moment Access issued the token, in milliseconds since the epoch: a login at Access issues one token, which every request of that login then carries. */
+type Vouched = { readonly ok: true; readonly value: Login; readonly since: number } | Refused;
+
+/** The Access application in front of the dashboard and of every private site. */
 interface AccessApplication {
   /** The team's keys; its team domain is the only issuer accepted. */
   readonly keys: AccessKeys;
@@ -84,7 +86,7 @@ async function claimsOf(token: string, check: AccessCheck): Promise<Checked<JWTP
   }
 }
 
-async function verifyAccessToken(headers: RequestHeaders, check: AccessCheck): Promise<Checked<Login>> {
+async function verifyAccessToken(headers: RequestHeaders, check: AccessCheck): Promise<Vouched> {
   const token = headers.get(TOKEN_HEADER);
   if (token === null || token === "") return refuse("missing");
 
@@ -103,13 +105,13 @@ async function verifyAccessToken(headers: RequestHeaders, check: AccessCheck): P
   const login = parseLogin(email);
   if (!login.ok) return refuse("no-email");
 
-  return login;
+  return { ok: true, value: login.value, since: issuedAt * 1000 };
 }
 
 /**
  * Make the login of an install behind Cloudflare Access.
  *
- * @returns a check that answers the email of a token this team's Access signed for this application and that is live at the given time, in normal form; it never throws
+ * @returns a check that answers the email of a token this team's Access signed for this application and that is live at the given time, in normal form, with the moment the token was issued; it never throws
  */
 export function accessIdentity(application: AccessApplication): Identify<TokenRefusal> {
   return (headers, now) => verifyAccessToken(headers, { ...application, now });

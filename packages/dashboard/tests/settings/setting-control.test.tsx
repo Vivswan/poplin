@@ -1,6 +1,6 @@
 // The control of each kind of setting: every kind the server can name draws a control that a person can change, a number has its unit fixed beside it, and nothing is typed as a word.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
@@ -25,7 +25,7 @@ function rowOf(key: string, control: Row["control"], text: string, unit = ""): R
 }
 
 /** Draw the control of a row over a text, and collect every text it sends. */
-function drawn(row: Row, text = row.text): { readonly page: ReturnType<typeof within>; readonly sent: string[] } {
+function drawn(row: Row, text = row.text): { readonly page: Within; readonly sent: string[] } {
   const sent: string[] = [];
   render(<SettingControl row={row} id="the-control" text={text} onChange={(next) => sent.push(next)} refused={false} />);
 

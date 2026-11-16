@@ -21,7 +21,7 @@ export const DOMAIN = "example.com";
 /** The invented person every demo page is shown to. */
 const ADMIN_EMAIL = "mira@example.com";
 
-/** The bytes of a signing key. */
+/** The bytes of a visitor key. */
 const KEY_BYTES = 32;
 
 /** A clock that follows the machine's own unless the seed holds it at one moment. */
@@ -43,7 +43,7 @@ export interface World {
   /** The install the actions work on. */
   readonly install: Install;
 
-  /** The sample admin, as a person behind a session. */
+  /** The sample admin, as a person in a browser. */
   readonly admin: Actor & { readonly holder: Login };
 
   /** The clock of the install: `held` set, every action happens at that moment. */
@@ -68,7 +68,7 @@ export const ADDRESSES = layout();
  *
  * @param driver - a SQL database of the host's own, such as SQLite in memory: empty, or holding a demo opened before
  * @param kept - the store of a host that keeps one; a memory store when left out
- * @returns the install, with nothing published in an empty database; settings and a signing key that are there already stay as they are
+ * @returns the install, with nothing published in an empty database; settings and a visitor key that are there already stay as they are
  * @throws {Error} the database did not open
  */
 export async function openWorld(driver: SqlDriver, kept: Kept = {}): Promise<World> {
@@ -83,7 +83,7 @@ export async function openWorld(driver: SqlDriver, kept: Kept = {}): Promise<Wor
 
   const { database } = opened;
   await database.initSettings(defaultSettings({ installer: holder }), { by: holder, at: kept.since ?? now() });
-  await database.ensureSigningKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now());
+  await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now());
 
   return {
     install: { database, store: kept.store ?? new MemoryStore(), now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },

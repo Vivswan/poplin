@@ -124,13 +124,13 @@ export const settings = sqliteTable(
 export const secrets = sqliteTable(
   "secrets",
   {
-    name: text({ enum: ["session_key", "update_address"] })
+    name: text({ enum: ["visitor_key", "update_address"] })
       .notNull()
       .primaryKey(),
     value: text().notNull(),
     created_at: integer().notNull(),
   },
-  (table) => [check("secrets_name", sql`${table.name} IN ('session_key', 'update_address')`)],
+  (table) => [check("secrets_name", sql`${table.name} IN ('visitor_key', 'update_address')`)],
 );
 
 /** How many sites there are, how many of them sit in the trash, and the bytes and files of every kept version, in one row the triggers keep true. */
@@ -167,7 +167,7 @@ export const audit = sqliteTable(
   (table) => [
     check("audit_detail", sql`json_valid(${table.detail})`),
     check("audit_names_its_site", sql`(${table.site_id} IS NULL) = (${table.site_name} IS NULL)`),
-    index("audit_logins").on(table.action).where(sql`action = 'login'`),
+    index("audit_logins").on(table.action, table.actor, table.at).where(sql`action = 'login'`),
   ],
 );
 
@@ -298,7 +298,7 @@ export const updateCheck = sqliteTable(
   ],
 );
 
-/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: when a user was last added or removed and the change has not reached the domain. */
+/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: above zero, a change of the users waits; below zero, none does. */
 export const domainCheck = sqliteTable(
   "domain_check",
   {

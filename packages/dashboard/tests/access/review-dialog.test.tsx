@@ -1,6 +1,6 @@
 // The review of a waiting login: what a stranger's login cannot make it say or start at, what a person must type before Allow, what one who came by a link is told, and what each decision sends.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -62,7 +62,7 @@ function Reviewing({ login, byLink = false, onClose = () => undefined }: { reado
   );
 }
 
-function dialog(): ReturnType<typeof within> {
+function dialog(): Within {
   return within(within(document.body).getByRole("dialog"));
 }
 

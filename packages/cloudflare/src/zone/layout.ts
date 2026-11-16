@@ -4,8 +4,8 @@ import { ADMIN_LABEL, type Hostname, parseHostname } from "@poplin/core/src/name
 import { DEFAULT_PUBLIC_WORD, MARKER, type PublicWord, parsePublicWord } from "@poplin/core/src/names/marker";
 import { INSTALL_OBJECTS } from "./install-objects";
 
-/** The most characters Access takes in the address of an application. */
-const MAX_ACCESS_ADDRESS = 63;
+/** The most characters Access takes in the address of an application, on an install of either kind. */
+export const MAX_ACCESS_ADDRESS = 63;
 
 declare const layoutBrand: unique symbol;
 

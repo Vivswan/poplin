@@ -39,6 +39,9 @@ const IN_BYTES: ReadonlySet<Line["what"]> = new Set(["stored", "host_stored"]);
 /** What the line over the table ends with when the host gave no figures: the numbers under it are then the install's own. */
 const OWN_COUNT = "The numbers here are poplin's own count.";
 
+/** What gives an install a new key, said after a key that works no more. */
+const NEW_KEY = "Open Domain and press Repair: it makes a new key.";
+
 /** The width of the last column, wide enough for a row's two icons, in pixels. */
 const ACTIONS_WIDTH = 88;
 
@@ -178,9 +181,12 @@ function officialWords(official: NonNullable<Usage["official"]>, host: string): 
 
   if (official.refusal === "unreachable") return `${host} did not answer. ${OWN_COUNT}`;
 
-  if (official.refusal === "key_refused") return `The kept key no longer works. ${OWN_COUNT}`;
+  if (official.refusal === "key_refused") return `The kept key no longer works. ${NEW_KEY} ${OWN_COUNT}`;
 
-  return `The kept key has no right to read usage${official.right === null ? "" : `: ${official.right}`}. ${OWN_COUNT}`;
+  // Repair leaves a key the host still takes as it is, so one that lost a right is deleted first.
+  const lacks = `The kept key has no right to read usage${official.right === null ? "" : `: ${official.right}`}.`;
+
+  return `${lacks} Delete the key at ${host}, then open Domain and press Repair: it makes a new key. ${OWN_COUNT}`;
 }
 
 /** The line over the table about the host's own figures. Nothing for an install that keeps no key. */

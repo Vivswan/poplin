@@ -96,6 +96,7 @@ test("a reload keeps the visit", async ({ page }) => {
   const [victim = ""] = await arrive(page);
   await trash(page, victim);
   await page.goto(TRASH);
+  await expect(siteName(page, victim)).toBeVisible();
   await page.reload();
 
   await expect(siteName(page, victim)).toBeVisible();

@@ -6,7 +6,6 @@ import { join } from "node:path";
 
 import { readShell } from "../packages/app/tests/console/support/shell";
 import { BunSqliteDriver } from "../packages/core/tests/database/support/bun-sqlite-driver";
-import { withAddresses } from "../packages/demo/src/preview/addresses";
 import { createPreview } from "../packages/demo/src/preview/preview";
 import { readRealSites } from "../packages/demo/src/preview/real-sites";
 import { HOST, PID_PATH, pidFile, stopRunning } from "../packages/demo/scripts/running";
@@ -216,21 +215,21 @@ describe("the local preview", () => {
     const empty = await shellOf(await (await ask(first, `${base}/empty/`)).text());
     const listed = (await (await ask(first, `${base}/data/sites?access=public&sort=name&dir=asc`)).json()) as Listed;
     const again = (await (await ask(resumed, `${base}/data/sites?access=public&sort=name&dir=asc`)).json()) as Listed;
-    const stranger = await ask(first, `${base}/empty/settings?as=visitor`);
-    const back = await ask(first, `${stranger.headers.get("Location")}&preview-login=admin`);
-    const bare = await ask(first, `${(await ask(first, `${base}/empty?as=visitor`)).headers.get("Location")}&preview-login=admin`);
-    const links: string[] = [];
-    withAddresses(await (await ask(first, (await ask(first, `${base}/settings?as=visitor`)).headers.get("Location") ?? "")).text(), (link) => `${links.push(link)}`);
-    const chosen = await ask(first, links.find((link) => link.includes("preview-login=admin"))?.replaceAll("&amp;", "&") ?? "");
+    const strangers = await Promise.all(["visitor", "removed", "unchecked"].map((as) => ask(first, `${base}/empty/settings?as=${as}`)));
+    const strangersData = await Promise.all(["visitor", "removed", "unchecked"].map((as) => ask(first, `${base}/data/frame?as=${as}`)));
 
     expect([home.boot.base, home.boot.demo?.reset, empty.boot.base, empty.boot.demo?.reset]).toEqual([base, `${base}/reset`, `${base}/empty`, `${base}/empty/reset`]);
     expect(home.files).toEqual([`${base}/assets/app-test.css`, `${base}/assets/app-test.js`]);
     expect((await ask(first, `${base}/assets/app-test.js`)).status).toBe(200);
     expect(listed.sites.map((site) => site.url)).toContain(`${ORIGIN}${base}/served/lisbon-page/`);
-    expect([stranger.status, stranger.headers.get("Location")]).toEqual([302, `${base}/empty/login?return=%2Fempty%2Fsettings`]);
-    expect([back.status, back.headers.get("Location")]).toEqual([302, `${base}/empty/settings`]);
-    expect([bare.status, bare.headers.get("Location")]).toEqual([302, `${base}/empty`]);
-    expect([chosen.status, chosen.headers.get("Location")]).toEqual([302, `${base}/settings`]);
+    // Drift: the preview has no provider's login, so its stand-in is the only place a person sees what the dashboard says to somebody who is not let in.
+    expect(strangers.map((answer) => [answer.status, answer.headers.get("Location"), answer.headers.get("Content-Type")])).toEqual([403, 403, 503].map((status) => [status, null, "text/html; charset=utf-8"]));
+    expect(await Promise.all(strangers.map(async (answer) => (await answer.text()).includes("<script")))).toEqual([false, false, false]);
+    expect(await Promise.all(strangersData.map(async (answer) => [answer.status, ((await answer.json()) as { code: string }).code]))).toEqual([
+      [401, "no_login"],
+      [403, "not_a_user"],
+      [503, "login_unchecked"],
+    ]);
     expect((await ask(first, `${base}/setup`)).headers.get("Location")).toBe(`${base}/setup/fresh`);
     expect((await ask(first, "/settings")).status).toBe(404);
     expect(again.sites.map((site) => site.label)).toEqual(listed.sites.map((site) => site.label));
@@ -396,12 +395,16 @@ describe("the local preview", () => {
     expect([await names("?q=sales-report"), (await names("?view=trash")).includes("sales-report")]).toEqual([["sales-report"], false]);
   }, SEED_MS);
 
-  // Drift: the session cookie is made for the install's own domain. Handed to a browser at this origin it would be kept for a domain it never asks.
-  test("a login on a preview page hands the browser no cookie", async () => {
+  // Drift: the dashboard keeps no session, so a page that set a cookie would be one a browser keeps for nothing; and `/login` is a screen path like any other, with no stand-in page left behind it.
+  test("a preview page hands the browser no cookie, and the old login address is the dashboard's own page", async () => {
     const preview = await openPreview(false);
-    const login = await preview.fetch(new Request(`${ORIGIN}/login?preview-login=admin`));
+    const pages = await Promise.all(["/", "/login", "/settings?as=visitor"].map((path) => preview.fetch(new Request(`${ORIGIN}${path}`))));
 
-    expect([login.status, login.headers.getSetCookie()]).toEqual([302, []]);
+    expect(pages.map((answer) => [answer.status, answer.headers.getSetCookie(), answer.headers.get("Location")])).toEqual([
+      [200, [], null],
+      [200, [], null],
+      [403, [], null],
+    ]);
   });
 
   test("the API takes the seeded admin token and writes addresses of the preview: without this the printed token and the listed addresses are of no use", async () => {

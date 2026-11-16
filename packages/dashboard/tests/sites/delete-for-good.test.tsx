@@ -1,6 +1,6 @@
 // Deleting a site in the trash for good: what arms the button, what a done delete says and leaves, and where a refusal is said.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -81,14 +81,14 @@ async function press(control: HTMLElement): Promise<void> {
 }
 
 /** Open the question from a button, and answer what it is read through. */
-async function ask(): Promise<ReturnType<typeof within>> {
+async function ask(): Promise<Within> {
   await press(within(document.body).getByRole("button", { name: "Delete for good" }));
 
   return within(await within(document.body).findByRole("alertdialog"));
 }
 
 /** Type into the question's field. */
-async function type(dialog: ReturnType<typeof within>, text: string): Promise<void> {
+async function type(dialog: Within, text: string): Promise<void> {
   await act(async () => fireEvent.change(dialog.getByRole("textbox", { name: "Site's name" }), { target: { value: text } }));
 }
 

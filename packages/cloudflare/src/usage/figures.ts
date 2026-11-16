@@ -16,9 +16,7 @@ import * as v from "valibot";
 
 import { type KeptKey, keyed } from "../key/kept-key";
 import { callCloudflare } from "../zone/client";
-
-/** The one right the figures need, in Cloudflare's words. */
-const RIGHT = "Account Analytics: Read";
+import { USAGE_RIGHT } from "../zone/key/rights";
 
 /** The code of the error the API answers a key that may not read a dataset. */
 const DENIED_CODE = "authz";
@@ -111,7 +109,7 @@ function withoutGroups(answer: unknown): KeyRefusal {
 /** Send one query with the kept key. */
 async function ask(asking: Asking, query: string, variables: Readonly<Record<string, string>>): Promise<Asked> {
   const body = { query, variables: { account: asking.accountId, ...variables } };
-  const answer = await keyed(asking.key, RIGHT, (connection) => callCloudflare(connection, (api) => api.post<unknown>("/graphql", { body })));
+  const answer = await keyed(asking.key, USAGE_RIGHT, (connection) => callCloudflare(connection, (api) => api.post<unknown>("/graphql", { body })));
   if (!answer.ok) return answer.refusal;
 
   const read = v.safeParse(ANSWER, answer.value);
@@ -130,7 +128,7 @@ function refusalOf(answers: readonly Asked[]): Extract<Keyed<never>, { readonly 
 
   if (answers.some(holdsGroups)) return undefined;
 
-  return answers.includes("lacks_right") ? { ok: false, refusal: "lacks_right", right: RIGHT } : { ok: false, refusal: "unreachable" };
+  return answers.includes("lacks_right") ? { ok: false, refusal: "lacks_right", right: USAGE_RIGHT } : { ok: false, refusal: "unreachable" };
 }
 
 /** One figure of an answer: its groups added up, or none for an answer that holds no groups, so the figure is left out. */

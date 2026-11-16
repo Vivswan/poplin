@@ -234,28 +234,49 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
   },
   {
     group: SCREEN,
-    name: "log in: the first login of an install",
-    // The first login is what shuts the setup page: it is written to the log, as every login is.
+    name: "open the dashboard right after a login: the first login of an install",
+    // The first login is what shuts the setup page. Its line is written to the log by the first page it opens, as every login's is: the users, the line, the frame.
     arrange: async (stage) => {
       const headers = await accessHeaders(stage.w);
 
-      return (measured) => get(measured, `${ADMIN}/login`, headers);
+      return (measured) => get(measured, `${ADMIN}/`, headers);
     },
-    status: 302,
-    budget: { queries: 2, reads: 0, writes: 0 },
+    status: 200,
+    budget: { queries: 3, reads: 0, writes: 0 },
   },
   {
     group: SCREEN,
-    name: "log in, new instance",
+    name: "open the dashboard right after a login, new instance",
     start: "new",
-    // The start of the instance adds its queries to the login's.
+    // The start of the instance adds its queries to the page's.
     arrange: async (stage) => {
       const headers = await accessHeaders(stage.w);
 
-      return (measured) => get(measured, `${ADMIN}/login`, headers);
+      return (measured) => get(measured, `${ADMIN}/`, headers);
     },
-    status: 302,
-    budget: { queries: 4, reads: 0, writes: 0 },
+    status: 200,
+    budget: { queries: 5, reads: 0, writes: 0 },
+  },
+  {
+    group: SCREEN,
+    name: "open the dashboard right after a login another instance wrote the line of",
+    // An instance asks once about a login that began under five minutes ago, and writes nothing where the line stands.
+    arrange: async (stage) => {
+      const headers = await accessHeaders(stage.w);
+      await get(unmeasured(stage), `${ADMIN}/`, headers);
+
+      return (measured) => get(measured, `${ADMIN}/`, headers);
+    },
+    status: 200,
+    budget: { queries: 3, reads: 0, writes: 0 },
+  },
+  {
+    group: SCREEN,
+    name: "the dashboard's page, asked with no token of Access",
+    // A request that came around Access is refused after the one read of the users, with nothing of the install.
+    arrange: async () => (measured) => get(measured, `${ADMIN}/`),
+    status: 403,
+    budget: { queries: 1, reads: 0, writes: 0 },
   },
   {
     group: SCREEN,
@@ -304,7 +325,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     group: BACKGROUND,
     name: "the first request of a new install",
     start: "new",
-    // Worst start: the database is empty, so the schema is made, the first settings stored, and the signing key drawn before the request is answered.
+    // Worst start: the database is empty, so the schema is made, the first settings stored, and the visitor key drawn before the request is answered.
     arrange: async () => {
       await reset();
 
@@ -317,7 +338,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     group: BACKGROUND,
     name: "the first request of a new instance",
     start: "new",
-    // What a start adds to any request: the schema's step read, the settings, and the signing key.
+    // What a start adds to any request: the schema's step read, the settings, and the visitor key.
     arrange: async () => (measured) => get(measured, `${ADMIN}/api/whoami`),
     status: 401,
     budget: { queries: 2, read: 3, reads: 0, writes: 0 },
