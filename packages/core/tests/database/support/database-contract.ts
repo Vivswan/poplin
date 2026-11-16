@@ -317,7 +317,8 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       // Each run that settles nothing sets a mark later than the one before, so a try that began under an earlier one can tell.
       expect([beforeAnyRun, afterFirstRun, afterAdd, afterRepairOfOtherUsers, afterRepairBegunBeforeTheChange]).toEqual([undefined, null, NOW + 1, NOW + 9, NOW + 10]);
-      expect([afterRepair, afterRepairThatStoppedShort, await waits()]).toEqual([null, NOW + 9, NOW + 3]);
+      // A settled mark is remembered: the marks after it are later than it, though the clock of what sets them is behind.
+      expect([afterRepair, afterRepairThatStoppedShort, await waits()]).toEqual([null, NOW + 11, NOW + 13]);
     });
 
     // Drift: the logins are also replaced as a setting, by `poplin config logins` and by an import with its users. A list that marked nothing would let Domain say all is well while the user it added cannot log in.
@@ -346,6 +347,25 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([beforeAnyRun, otherSetting, sameUser, added, otherOrderBehind, otherFirst, dropped, swapped]).toEqual([undefined, null, null, NOW + 4, NOW + 4, NOW + 6, NOW + 7, NOW + 8]);
       expect((await database.readSettings())?.logins).toEqual([cy]);
+    });
+
+    // Drift: three tries inside one moment of the clock. The second settles the change; the first, whose older list landed after it, is refused and sets the mark anew; the third, under way all along, then settles.
+    // A mark that began again from the clock once it was settled would be no later than the third try's own, which would take it for untouched and end the waiting over a domain that holds the older list.
+    test("a mark set after a settled one is later than every try that began before it, so such a try settles nothing", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
+      const logins = [...SETTINGS.logins];
+
+      const first = await database.claimUsers(NOW);
+      const third = await database.claimUsers(NOW);
+      const second = await database.claimUsers(NOW);
+      const settledBySecond = await database.settleUsers({ logins, since: second.mark ?? 0 }, NOW);
+      await database.settleUsers({ logins: null, since: first.mark ?? 0 }, NOW);
+      const settledByThird = await database.settleUsers({ logins, since: third.mark ?? 0 }, NOW);
+
+      expect([first.mark, third.mark, second.mark]).toEqual([NOW, NOW + 1, NOW + 2]);
+      expect([settledBySecond.waits, settledByThird.waits, (await database.readDomainCheck())?.users_changed_at]).toEqual([false, true, NOW + 4]);
     });
 
     // Drift: a list is carried to the domain while the users may change again, and while another try may write the domain.

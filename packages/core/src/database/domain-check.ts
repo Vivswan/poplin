@@ -1,4 +1,10 @@
 // The statements that keep and read the last check or repair of the domain: one row, replaced by each run, which also remembers that the users changed and the change has not reached the domain.
+//
+//   users_changed_at   above zero   a change of the users waits, under this mark
+//                      below zero   none waits; its size is the last mark there was
+//                      NULL         none ever waited
+//
+// A mark is always later than every mark before it, the settled ones too, so a try that began under an earlier mark can never take a later one for its own.
 
 import { and, eq, sql as fragment } from "drizzle-orm";
 import * as v from "valibot";
@@ -9,8 +15,16 @@ import type { Statement, StatementResult } from "./driver";
 import { domainCheck, settings } from "./schema";
 import { BUILD, built, CHANGED } from "./statements";
 
+/** The size of the mark the row holds, waiting or settled: zero where none was ever set. */
+const LAST_MARK = fragment`abs(coalesce(${domainCheck.users_changed_at}, 0))`;
+
 /** The columns a new run replaces in the kept row. */
 const REPLACED = [domainCheck.ran_at, domainCheck.ran_by, domainCheck.run, domainCheck.pieces] as const;
+
+/** The mark of a change of the users, set anew: no earlier than the moment given and later than any mark before it, so whoever holds an earlier mark can tell that something happened since. */
+function laterMark(at: number): ReturnType<typeof fragment> {
+  return fragment`max(${LAST_MARK} + 1, ${v.parse(MOMENT, at)})`;
+}
 
 /**
  * Build the statement that reads the kept run.
@@ -43,7 +57,7 @@ export function domainCheckKept(check: DomainCheck): Statement {
  * @param at - the moment of the change
  */
 export function usersChanged(at: number): Statement {
-  return built(BUILD.update(domainCheck).set({ users_changed_at: at }).where(and(eq(domainCheck.id, 1), CHANGED)));
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(and(eq(domainCheck.id, 1), CHANGED)));
 }
 
 /**
@@ -61,12 +75,7 @@ export function usersReplaced(logins: readonly string[], at: number): Statement 
   const moved = fragment`json_extract(${settings.value}, '$.logins[0]') IS NOT ${logins[0] ?? null}`;
   const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added} OR ${moved}))`;
 
-  return built(BUILD.update(domainCheck).set({ users_changed_at: at }).where(and(eq(domainCheck.id, 1), differs)));
-}
-
-/** The mark of a change of the users, set anew: later than the moment given and than any mark before it, so whoever holds an earlier mark can tell that something happened since. */
-function laterMark(at: number): ReturnType<typeof fragment> {
-  return fragment`max(coalesce(${domainCheck.users_changed_at}, 0) + 1, ${v.parse(MOMENT, at)})`;
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(and(eq(domainCheck.id, 1), differs)));
 }
 
 /**
@@ -89,9 +98,20 @@ export function usersCarried(carried: CarriedUsers, at: number): Statement {
   if (carried.logins === null) return usersClaimed(at);
 
   const same = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND json_extract(${settings.value}, '$.logins') = json(${JSON.stringify(carried.logins)}))`;
-  const untouched = fragment`(${domainCheck.users_changed_at} IS NULL OR ${domainCheck.users_changed_at} <= ${v.parse(MOMENT, carried.since)})`;
+  const untouched = fragment`${LAST_MARK} <= ${v.parse(MOMENT, carried.since)}`;
+  // A settled mark keeps its size, below zero: the next one is later than it.
+  const settled = fragment`-abs(${domainCheck.users_changed_at})`;
 
-  return built(BUILD.update(domainCheck).set({ users_changed_at: fragment`CASE WHEN ${same} AND ${untouched} THEN NULL ELSE ${laterMark(at)} END` }).where(eq(domainCheck.id, 1)));
+  return built(BUILD.update(domainCheck).set({ users_changed_at: fragment`CASE WHEN ${same} AND ${untouched} THEN ${settled} ELSE ${laterMark(at)} END` }).where(eq(domainCheck.id, 1)));
+}
+
+/**
+ * Read the mark a change of the users waits under out of the stored column.
+ *
+ * @returns the mark, or `undefined` where none waits: a column that was never set, or one that holds a settled mark
+ */
+export function waitingMark(stored: unknown): number | undefined {
+  return typeof stored === "number" && stored > 0 ? stored : undefined;
 }
 
 /**
@@ -106,5 +126,5 @@ export function domainCheckIn(result: StatementResult | undefined): RememberedCh
   const check = v.safeParse(DOMAIN_CHECK, { ran_at: row.ran_at, by: row.ran_by, run: row.run, pieces: JSON.parse(row.pieces) });
   if (!check.success) return undefined;
 
-  return { ...check.output, users_changed_at: typeof row.users_changed_at === "number" ? row.users_changed_at : null };
+  return { ...check.output, users_changed_at: waitingMark(row.users_changed_at) ?? null };
 }
