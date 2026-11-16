@@ -22,6 +22,7 @@ import { privateSitesPattern } from "../../src/zone/layout";
 import { createDomainPlug } from "../../src/zone/zone-plug";
 import { capInstall } from "./caps";
 import { readFreePlans } from "./plan";
+import { sendLive } from "./send";
 import { settleDatabase } from "./shape";
 import { removeTokens, seedToken } from "./tokens";
 import { BUCKET, type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, SCRIPT, type Stop, stopOf } from "./util";
@@ -334,7 +335,7 @@ async function capTestInstall(run: Run, found: Found, databaseId: string): Promi
   const token = await seedToken(run, databaseId, Date.now());
   if (typeof token !== "string") return token;
 
-  const uncapped = await capInstall({ server: `https://${found.layout.adminHostname}`, token, fetch: (input, init) => fetch(input, init) });
+  const uncapped = await capInstall({ server: `https://${found.layout.adminHostname}`, token, fetch: sendLive });
   const kept = await removeTokens(run, databaseId, Date.now());
 
   return uncapped ?? kept;
