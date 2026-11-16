@@ -22,7 +22,7 @@ const PUSH_CASES: readonly (readonly [what: string, changed: readonly string[], 
   ["a page of the website alone", ["website/src/index.html"], false],
   [
     "pages, pictures, the skill, a root guard, another workflow, and a lint setting together",
-    ["README.md", "docs/use/publish.md", "brand/icon.svg", "skills/poplin/SKILL.md", "tests/layout.test.ts", ".github/workflows/checks.yml", "biome.json"],
+    ["README.md", "docs/sites/publish.md", "brand/icon.svg", "skills/poplin/SKILL.md", "tests/layout.test.ts", ".github/workflows/checks.yml", "biome.json"],
     false,
   ],
   ["a fuzz test and a helper the tests share", ["tests/fuzz/names.test.ts", "tests/support/markdown-page.ts"], false],
@@ -37,7 +37,7 @@ const PUSH_CASES: readonly (readonly [what: string, changed: readonly string[], 
   ["a dotfile at the root that no line names", [".gitattributes"], true],
   ["a folder that no line names", ["plugins/a/index.ts"], true],
   ["a new folder of tests that no line names", ["tests/browser/a.test.ts"], true],
-  ["one file that reaches the install among pages", ["docs/use/publish.md", "wrangler.jsonc", "README.md"], true],
+  ["one file that reaches the install among pages", ["docs/sites/publish.md", "wrangler.jsonc", "README.md"], true],
 ];
 
 /** One step of a workflow, as far as a test reads it. */

@@ -1,6 +1,6 @@
 ---
 title: Remove
-order: 60
+order: 30
 ---
 
 # Remove an install
@@ -13,7 +13,7 @@ stops working:   every address of the install, each link you shared included
 stays:           your Cloudflare account, your domain, and every record, route, and rule poplin did not make
 ```
 
-**Export first.** `npx poplin export --all-versions --out backup.zip` downloads every site and the settings as one zip. [Back up](../use/back-up.md) says what the zip holds and how an import puts it back.
+**Export first.** `npx poplin export --all-versions --out backup.zip` downloads every site and the settings as one zip. [Back up](back-up.md) says what the zip holds and how an import puts it back.
 
 `example.com` stands for your own domain. Each piece carries the name poplin gave it. Find that name in the place the table says, and delete it there.
 
@@ -48,7 +48,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | the bucket                            | `poplin-sites`                                                                                        | the account's R2 buckets                            |
 | the Cloudflare API token of step 3    | "poplin setup", unless you named it otherwise                                                         | My Profile, then API Tokens                         |
 
-- **The three rules** are there only when the token held an [optional permission](domain.md#optional-block-junk-traffic-and-crawlers).
+- **The three rules** are there only when the token held an [optional permission](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers).
 - **A rule set** can stay behind, empty, where the domain had none before: "poplin redirect rule", "poplin guard rules", "poplin rate rule". An empty set stops nothing.
 - **The wildcard record** `*` is there only when the domain had none of its own. A `*` record with no `poplin: ` comment is yours: leave it.
 - **The policy** goes after the application that uses it.

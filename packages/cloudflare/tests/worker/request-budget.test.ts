@@ -7,7 +7,7 @@ import { dataRoutes } from "@poplin/app/src/console/routes";
 import { MOST_STORE_CALLS } from "@poplin/app/src/sites/serve";
 import type { ExtractSchema } from "hono/types";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import guide from "../../../../docs/run/limits-and-cost.md?raw";
+import guide from "../../../../docs/upkeep/cost/limits.md?raw";
 import { API_ROWS } from "./support/budget-rows-api";
 import { CONSOLE_ROWS } from "./support/budget-rows-console";
 import { ENTRY_ROWS } from "./support/budget-rows-entry";

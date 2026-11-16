@@ -1,6 +1,6 @@
 ---
 title: Domain
-order: 30
+order: 50
 ---
 
 # Domain
@@ -87,4 +87,4 @@ One more permission on the account token lets Repair make a budget alert in your
 | --------- | ------------- | --------- | ------------------------------------------------------------------------------------------------ | ------------------ |
 | Account   | Notifications | Edit      | emails your first user when the account's usage charges for the billing period reach 1 US dollar | Repair makes no alert, and leaves one it made |
 
-The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](limits-and-cost.md#what-can-cost-money) says what can cost money.
+The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](../upkeep/cost/limits.md#what-can-cost-money) says what can cost money.

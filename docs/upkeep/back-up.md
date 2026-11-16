@@ -1,11 +1,11 @@
 ---
 title: Back up
-order: 40
+order: 20
 ---
 
 # Back up and put back
 
-Export downloads sites and the settings as one zip, and import puts them back; [When poplin refuses](when-poplin-refuses.md) lists what each can refuse.
+Export downloads sites and the settings as one zip, and import puts them back; [When poplin refuses](../fix/poplin-refuses.md) lists what each can refuse.
 
 | Example                                              | Does                                                    |
 | ---------------------------------------------------- | ------------------------------------------------------- |

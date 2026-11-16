@@ -1,11 +1,11 @@
 ---
 title: When a step fails
-order: 40
+order: 10
 ---
 
 # When a step fails
 
-Each failure of [the six steps](by-hand.md#the-steps) and what to do next; the steps themselves are not repeated here.
+Each failure of [the six steps](../start/by-hand.md#the-steps) and what to do next; the steps themselves are not repeated here.
 
 ## Step 2: the build fails
 
@@ -17,7 +17,7 @@ Each failure of [the six steps](by-hand.md#the-steps) and what to do next; the s
 | names R2                                                                | finish the R2 row of step 1     |
 | says anything else                                                      | build again in a few minutes    |
 
-Then build again: [Build again](../run/update.md#build-again) has the three clicks. A log that fails the same way twice goes to your agent: paste its last lines.
+Then build again: [Build again](../upkeep/update.md#build-again) has the three clicks. A log that fails the same way twice goes to your agent: paste its last lines.
 
 ## Step 3: the form opens empty
 
@@ -35,7 +35,7 @@ Then build again: [Build again](../run/update.md#build-again) has the three clic
 | Zone      | Workers Routes                                        | Edit      | sending the addresses to the Worker         |
 | Zone      | Zone Settings                                         | Read      | seeing whether the domain redirects already |
 
-Then finish the form as in the table of [step 3](by-hand.md#the-steps).
+Then finish the form as in the table of [step 3](../start/by-hand.md#the-steps).
 
 ## Step 4: the page shows something else
 
@@ -56,7 +56,7 @@ after every run:   the token's box is empty    paste the token again
 | `Too many tries. Wait a minute.`                                         | the page takes five tries a minute                                  | wait a minute                                                              |
 | `The database takes no more today`, and when to try again                | the day's free allowance of the database is used up                 | try again after midnight UTC                                               |
 | `Open Zero Trust and pick a plan (Free works): that switches Access on.` | Zero Trust is not switched on: the first row of step 1              | open the link beside that line, pick the Free plan, then press Repair      |
-| a row `optional`                                                         | nothing is wrong: an optional permission is not on the token        | nothing, or [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers) |
+| a row `optional`                                                         | nothing is wrong: an optional permission is not on the token        | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
 | a row `failed` ending `Add this right to the account token` and a name   | the token lacks the permission of that name                         | add it to the token: the table below                                       |
 | a row `failed` with other words, and rows `not run`                      | that one step failed, and the row says why                          | do what the row asks, then press Repair again; a row that asks nothing: Repair again |
 
@@ -67,7 +67,7 @@ after every run:   the token's box is empty    paste the token again
 | still have the token's text | choose Edit, add the permission, save. Paste the same text and press Repair          |
 | no longer have it           | choose Roll. Roll makes a new token text. Add the permission, and paste the new text |
 
-A right's name holds two of the form's three boxes. `Zone WAF: Edit` means Zone WAF in the second box and Edit in the third. The first box is in the table of [step 3](#step-3-the-form-opens-empty), or of [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers).
+A right's name holds two of the form's three boxes. `Zone WAF: Edit` means Zone WAF in the second box and Edit in the third. The first box is in the table of [step 3](#step-3-the-form-opens-empty), or of [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers).
 
 ## Step 5: no code arrives
 
@@ -87,6 +87,6 @@ No code arrives when the email differs from the one in step 4. Go back to the se
 | `no token was sent, or it expired`                         | the login ran out: it lasts 30 days                  | `npx poplin login`, and allow it again                    |
 | `the install could not be reached`                         | the address is mistyped, or the network is down      | check the address after `--server`                        |
 | a line of `poplin doctor` that starts with `failed`        | that one read failed; the rest of the line says why  | fix what it names, then run `npx poplin doctor` again     |
-| `failed  problems`, then kinds                             | something went wrong in the install today            | [Problems](../run/problems.md#what-is-noted) has each kind |
+| `failed  problems`, then kinds                             | something went wrong in the install today            | [Problems](problems.md#what-is-noted) has each kind |
 
-Any other sentence is a refusal: [When poplin refuses](../use/when-poplin-refuses.md) has each.
+Any other sentence is a refusal: [When poplin refuses](poplin-refuses.md) has each.

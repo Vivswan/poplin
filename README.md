@@ -71,7 +71,7 @@ npx poplin set report--k3f9x2ab71qz --public --public-name docs   # everyone, at
 
 ## Where it runs
 
-In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment method to switch two parts on, the bucket and the login: [What can cost money](docs/run/limits-and-cost.md#what-can-cost-money) says when it is charged. You need the account and a domain on it.
+In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment method to switch two parts on, the bucket and the login: [What can cost money](docs/upkeep/cost/limits.md#what-can-cost-money) says when it is charged. You need the account and a domain on it.
 
 | The install is  | It                                              |
 | --------------- | ----------------------------------------------- |
@@ -86,4 +86,4 @@ In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment 
 | [The guide](docs/README.md)               | every command, every agent tool, and every error     |
 | [Install](docs/start/by-hand.md)          | getting your own install                             |
 | [Security](docs/about/security.md)        | what poplin protects against and what it does not    |
-| [Remove](docs/run/remove.md)              | taking an install down, piece by piece               |
+| [Remove](docs/upkeep/remove.md)              | taking an install down, piece by piece               |

@@ -5,7 +5,7 @@ order: 10
 
 # Publish a site
 
-How to publish a site, name it, and put new content on it; [who can open it](who-can-open.md) and [its other settings](manage-sites.md#other-settings-of-a-site) have their own pages.
+How to publish a site, name it, and put new content on it; [who can open it](who-can-open.md) and [its other settings](manage.md#other-settings-of-a-site) have their own pages.
 
 ## How a site is named
 
@@ -26,7 +26,7 @@ That is the label. Every command and tool takes it to name one site. The bare id
 | `poplin ./report.html`                         | makes a new site from one HTML file                 |
 | `poplin ./report --site report--k3f9x2ab71qz`  | puts new content on that site; the address stays    |
 | `poplin ./report --name q3-report`             | makes a new site with that name                     |
-| `poplin ./demo --unlisted --expires 7d`        | makes a new site with [settings](manage-sites.md#other-settings-of-a-site)     |
+| `poplin ./demo --unlisted --expires 7d`        | makes a new site with [settings](manage.md#other-settings-of-a-site)     |
 | `poplin ./report --dry-run`                    | lists the files and the name, and uploads nothing   |
 
 Every other example runs the same way, with `npx` before `poplin`.
