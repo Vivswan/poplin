@@ -183,7 +183,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => post(measured, `/data/sites/${LABEL}/delete-for-good`, {}, session);
     },
     status: 200,
-    budget: { queries: 8, reads: 0, writes: 2 },
+    budget: { queries: 8, reads: 0, writes: 2, deletes: 2 },
   },
   {
     group,

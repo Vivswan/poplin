@@ -63,7 +63,7 @@ The CLI and the MCP tools print both addresses when a change moved a site.
 What a private site costs:
 
 - **One login step per site.** The first open of each private site passes once through Cloudflare's login. It is silent while the login session lasts.
-- **Embedding needs a direct visit first, and works as a frame alone.** A private site loads in a frame of another site of the install, in a browser that opened that private site itself during the login session. It loads in no page of another domain. [Between sites](between-sites.md) has the rows. Unlisted and public sites embed as before.
+- **Embedding needs a direct visit first.** While Allow embedding is on, as on a new site, a private site and its files load in a page of another site of the install, in a browser that opened that private site itself during the login session. Neither loads in a page of another domain. Off stops both: turn it off for anything sensitive. [Between sites](between-sites.md) has the rows.
 
 | Switch for search engines | Set on | Off, the default | On |
 | --- | --- | --- | --- |
@@ -90,6 +90,17 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 | --- | --- | --- |
 | publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
 | admin | a user, whose email is on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
+
+The page that allows a computer's login treats what the login says of itself as a stranger's words, since anyone can begin one:
+
+| The page | So |
+| --- | --- |
+| has the fixed title `Allow this login?`, and shows the computer's name in quotes beside `Name it gave` | a login cannot write the question a user answers |
+| starts at Own sites only, whatever the login asked for | a token for everything is given only by a user who chose Everything |
+| is reached by an address that names the login and holds no part of its code | a link someone sent gives nothing to type |
+| is given no part of the code; the Worker checks the 4 letters the user types | the letters are in the terminal alone, so only its reader can allow the login |
+| opened by an address and not by a press on Review, says that anyone can start a login and send its link | a user who was sent a link is told so |
+| refuses a name with a line break, a control character, or a character that hides or turns text around | a name reads as it was written |
 
 A site belongs to the token that created it, or to the admin's email when it was duplicated on the dashboard. A publisher token updates and manages only the sites it created.
 
@@ -142,7 +153,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. A removed token's row is kept, and it never logs in again; [Removed tokens](../run/settings.md#tokens) lists the 50 that ended last |
 | the signing key | kept in the database, where the Worker can rotate it; Sign everyone out, under Access, rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. A computer's token is revoked on its own |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
-| site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and correct content types on every answer of a site but three: the 308 from plain http, the 429 of a limit, and the page of a paused site carry neither header. A private site's files carry one more, which [Between sites](between-sites.md) describes |
+| site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and correct content types on every answer of a site but three: the 308 from plain http, the 429 of a limit, and the page of a paused site carry neither header. The files of a site whose Allow embedding is off carry one more, which [Between sites](between-sites.md) describes |
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept a year; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | content | the Worker never reads, parses, or rewrites a site's files, and adds none to them. A site that holds no `favicon.ico` is answered poplin's own icon at `/favicon.ico`, from the Worker's code |

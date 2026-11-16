@@ -102,7 +102,7 @@ type SiteState = { readonly state: "live" } | { readonly state: "trash"; readonl
  * A site.
  *
  * `title` is the title its owner typed, `null` when none was, and `page_title` the title its entry page had when it was last published, `null` for a page with none.
- * A site is shown under the typed title, and under the page's when none is typed. `expires` is `"never"` or the moment the site stops being served. `embeddable` says whether other pages may show the site in a frame.
+ * A site is shown under the typed title, and under the page's when none is typed. `expires` is `"never"` or the moment the site stops being served. `embeddable` says whether other pages may show the site in a frame and load its files.
  *
  * `versions` is in ascending order and holds `live_version`. `owner` is whoever made the site. Times are milliseconds since the epoch.
  */

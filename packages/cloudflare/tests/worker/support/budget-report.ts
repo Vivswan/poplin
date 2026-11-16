@@ -69,6 +69,12 @@ export class BudgetReport implements Reporter {
   /** The rows whose test failed before it had measured them. */
   readonly #unmeasured: string[] = [];
 
+  // A watched run starts again on the same reporter: what the run before it measured is not this run's.
+  onTestRunStart(): void {
+    this.#lines.length = 0;
+    this.#unmeasured.length = 0;
+  }
+
   onTestCaseResult(testCase: TestCase): void {
     const { row, cost } = testCase.meta();
     if (cost !== undefined) this.#lines.push(cost);

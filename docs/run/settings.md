@@ -102,11 +102,13 @@ Sign everyone out, on the same tab, makes every browser log in to the dashboard 
 ```text
 $ poplin login --server https://poplin.example.com
   ->  prints an address and a short code
-  ->  you open the address, check that the code is the same, and allow it
+  ->  you open the address, type the last 4 letters of the code, and allow it
   ->  the login is saved on this computer
 ```
 
 An install begins two logins a minute from one address, and eight a minute for all addresses together. In a minute that is full, `poplin login` is told how long to wait, waits, and asks again.
+
+The page that allows a login starts at Own sites only, whatever the computer asked for. Choose Everything there for a computer that changes settings or sees every site.
 
 A computer keeps one saved login: a new `poplin login` replaces it. An agent on the computer uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
 

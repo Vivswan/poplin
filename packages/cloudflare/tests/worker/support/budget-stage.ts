@@ -52,6 +52,9 @@ export interface Budget {
 
   /** The writes of the bucket, which R2 bills as Class A: every put and every listing. */
   readonly writes: number;
+
+  /** The removals from the bucket, up to a thousand keys each, which R2 bills nothing for; none when left out. */
+  readonly deletes?: number;
 }
 
 /** What a person does that a row is part of, as the printed table groups its rows. */

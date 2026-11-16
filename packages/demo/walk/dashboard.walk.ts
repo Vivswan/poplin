@@ -221,16 +221,6 @@ const STOPS: readonly Stop[] = [
     close: leaveBy("Cancel"),
   },
   {
-    name: "the question before an update, from the account's menu",
-    only: "narrow",
-    open: async (page) => {
-      await page.getByRole("button", { name: /^Account/ }).click();
-      await page.getByRole("menuitem", { name: /^Update to / }).click();
-    },
-    shows: (page) => [question(page, /^Update to /)],
-    close: leaveBy("Cancel"),
-  },
-  {
     name: "the notes of the newer version in the sections of a phone, and from there the question before an update",
     only: "narrow",
     open: async (page) => {
@@ -416,17 +406,28 @@ function rows(page: Page, wide: boolean, name: string): Locator {
   return page.getByRole(wide ? "table" : "list", { name, exact: true });
 }
 
-/** Check that the Sites table is as wide as its room, with the end of its last column where the rows' actions begin. */
+/** Check that the Sites table is as wide as its room, and that the heading and the values of its last column end where the last tool over the table ends, with no value cut. */
 async function sitesFit(page: Page): Promise<void> {
+  const tool = page.getByRole("button", { name: "New site", exact: true });
   // The table is measured again once the page's fonts are in, so its widths are read until they have come to rest.
   await expect(async () => {
+    const box = await tool.boundingBox();
+    const toolEnd = Math.round((box?.x ?? Number.NaN) + (box?.width ?? Number.NaN));
     const widths = await page.getByRole("table", { name: "Sites", exact: true }).evaluate((table) => {
-      const [last, actions] = [...(table.querySelector("tbody tr")?.children ?? [])].slice(-2).map((cell) => cell.getBoundingClientRect());
+      const endOf = (part: Element | null | undefined): number =>
+        part === null || part === undefined ? Number.NaN : Math.round(part.getBoundingClientRect().right - Number.parseFloat(getComputedStyle(part).paddingRight));
+      const values = [...table.querySelectorAll("tbody tr > td:last-child")];
 
-      return { table: table.scrollWidth, room: table.closest('[data-slot="scroll-area"]')?.clientWidth, underActions: (last?.right ?? Number.NaN) - (actions?.left ?? Number.NaN) };
+      return {
+        table: table.scrollWidth,
+        room: table.closest('[data-slot="scroll-area"]')?.clientWidth,
+        headEnd: endOf([...table.querySelectorAll("thead th[data-column]")].at(-1)?.firstElementChild),
+        valueEnd: endOf(values[0]),
+        cut: values.filter((value) => (value.firstElementChild?.scrollWidth ?? 0) > (value.firstElementChild?.clientWidth ?? 0)).length,
+      };
     });
 
-    expect(widths).toEqual({ table: widths.room, room: widths.room, underActions: 0 });
+    expect(widths).toEqual({ table: widths.room, room: widths.room, headEnd: toolEnd, valueEnd: toolEnd, cut: 0 });
   }).toPass();
 }
 
@@ -600,8 +601,8 @@ for (const { width, height, wide } of VIEWPORTS) {
 test.describe("on a screen 1024 px wide", () => {
   test.use({ viewport: FITS_FROM });
 
-  // Drift: the table would be a few pixels wider than its room again, so it would scroll sideways with the end of its last column under the rows' actions.
-  test("the sites fit their room with no panel open: a link gives the end of its name, and no cell lies under the rows' actions", async ({ page }) => {
+  // Drift: the table would be a few pixels wider than its room again and scroll sideways; or its last column would run on past the tools over it, to 12 px from the table's edge where they keep 24.
+  test("the sites fit their room with no panel open: a link gives the end of its name, and the last column ends where the tools over the table end", async ({ page }) => {
     await arrive(page);
     await sitesFit(page);
   });
@@ -964,20 +965,32 @@ test.describe("on a phone, on Activity", () => {
     await expect(entries.filter({ has: ofSite })).not.toHaveCount(0);
     await expect(page.getByRole("button", { name: "Only this site", exact: true })).toHaveCount(0);
   });
+
+  // Drift: one engine would cut the end off a site's name again though the row has room for it: the name's link reaches past the box that cuts it by the link's own edges.
+  test("a site's name in a row with room for it is whole", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Activity");
+    const names = page.getByRole("list", { name: "Activity", exact: true }).getByRole("link");
+    await expect(names.first()).toBeVisible();
+    const cut = await names.evaluateAll((links) => links.filter((link) => (link.parentElement?.scrollWidth ?? 0) > (link.parentElement?.clientWidth ?? 0)).map((link) => link.textContent));
+
+    expect([await names.count() > 0, cut]).toEqual([true, []]);
+  });
 });
 
 for (const viewport of SMALL_PHONES) {
   test.describe(`on a phone of ${viewport.width}x${viewport.height}, in the sections`, () => {
     test.use({ viewport });
 
-    // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the start of an update would lie under its edge, out of reach.
-    test("the start of an update can be reached and pressed, by scrolling where the sheet is too short", async ({ page }) => {
+    // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the start of an update would lie under its edge, out of reach; or the button that closes the sheet would scroll away with its top.
+    test("the start of an update can be reached and pressed, by scrolling where the sheet is too short, with the way to close the sheet still in sight", async ({ page }) => {
       await arrive(page);
       await page.getByRole("button", { name: "Sections", exact: true }).click();
       const start = page.getByRole("dialog").getByRole("button", { name: "Update now", exact: true });
 
       await start.scrollIntoViewIfNeeded();
       await expect(start).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole("dialog").getByRole("button", { name: "Close", exact: true })).toBeInViewport({ ratio: 1 });
       await start.click();
       await expect(question(page, /^Update to /)).toBeVisible();
     });

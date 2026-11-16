@@ -39,7 +39,7 @@ const SETTINGS = {
   public_name: "With access public: the public address's name, e.g. docs. Left out: kept, or the site's name.",
   title: "Its title on the dashboard, e.g. Q3 sales. null: the page's own title.",
   search_engines: "true: search engines may list it once it is public.",
-  embeddable: "false: other pages cannot show it in a frame.",
+  embeddable: "false: other pages cannot show it in a frame or load its files.",
   expires: "When it moves to the trash: 7d (units s, m, h, d), 2026-12-01, or never.",
 } as const;
 
