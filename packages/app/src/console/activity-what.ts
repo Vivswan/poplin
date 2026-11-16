@@ -32,24 +32,46 @@ const WITH_DETAIL: Readonly<Partial<Record<keyof typeof WORDS, (detail: AuditEnt
   publish: (detail) => (typeof detail.version === "number" ? `Published version ${detail.version}` : undefined),
   live_version: (detail) => (typeof detail.version === "number" ? `Made version ${detail.version} live` : undefined),
   access: (detail) => (typeof detail.access === "string" ? `Made it ${detail.access}` : undefined),
-  details: expiryWords,
+  details: detailsWords,
   token_added: (detail) => named("Added the token", detail.note),
   token_revoked: (detail) => named(typeof detail.user === "string" ? "Removed with its user, the token" : "Removed the token", detail.note),
   login_allowed: (detail) => named("Allowed the token", detail.computer),
   login_denied: (detail) => named("Denied the token", detail.computer),
+  settings_changed: usersWords,
   update_started: (detail) => (typeof detail.to === "string" ? `Started an update to ${detail.to}${detail.automatic === true ? " by itself" : ""}` : undefined),
   update_went_back: (detail) => (typeof detail.from === "string" && typeof detail.to === "string" ? `Went back to ${detail.to}: the update to ${detail.from} could not change the database` : undefined),
 };
+
+/** What a change of one thing of a site says, by the thing its entry holds. A switch says which way it went. */
+const ONE_DETAIL: Readonly<Record<string, (value: unknown) => string>> = {
+  expires: (value) => (value === "never" ? "Set it to never delete itself" : "Set when it deletes itself"),
+  title: () => "Changed the title",
+  name: () => "Changed the name",
+  search_engines: (value) => (value === true ? "Let search engines show it" : "Kept it out of search engines"),
+  embeddable: (value) => (value === true ? "Allowed embedding" : "Stopped embedding"),
+};
+
+/** What a change of a site's title and name together says: the one form sets both. */
+const TITLE_AND_NAME = "Changed the title and the name";
 
 function named(words: string, name: unknown): string | undefined {
   return typeof name === "string" && name !== "" ? `${words} "${name}"` : undefined;
 }
 
-/** A change of when a site deletes itself, and of nothing else, says so. */
-function expiryWords(detail: AuditEntry["detail"]): string | undefined {
-  if (Object.keys(detail).join() !== "expires") return undefined;
+/** A change of one thing of a site says which, and so does a change of its title and name together. Any other says that the site's settings changed. */
+function detailsWords(detail: AuditEntry["detail"]): string | undefined {
+  const keys = Object.keys(detail);
+  const [only] = keys;
+  if (keys.length === 1 && only !== undefined) return ONE_DETAIL[only]?.(detail[only]);
 
-  return detail.expires === "never" ? "Set it to never delete itself" : "Set when it deletes itself";
+  return keys.length === 2 && "title" in detail && "name" in detail ? TITLE_AND_NAME : undefined;
+}
+
+/** A change of the users says so, with how many may log in after it: its entry holds them and nothing else. A change of any setting holds no user. */
+function usersWords(detail: AuditEntry["detail"]): string | undefined {
+  if (Object.keys(detail).join() !== "logins" || !Array.isArray(detail.logins)) return undefined;
+
+  return `Changed the users: ${detail.logins.length} now`;
 }
 
 /** A run at the provider says which it was, and a repair with a failure names the first step that failed: the run may have gone on past it. */
