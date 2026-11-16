@@ -1,16 +1,21 @@
 // How a change is sent and its result said: one line at the edge of the screen, with Undo where one press takes the change back.
 
+import { createElement } from "react";
 import { toast } from "sonner";
 
 import { type Answering, answerOf, type Done, Refused } from "@/lib/api";
 import { focusBack } from "@/lib/focus";
 import { PHONE } from "@/lib/media";
+import { LineButtons } from "@/shared/line-buttons";
 
 /** What goes wrong that is no refusal: a fault of the client itself. */
 const FAULT = "That did not work. Try again.";
 
-/** How long a line with a button stays, in milliseconds: twice a plain line's time, to read it and to decide. */
-const BUTTON_STAYS_MS = 8000;
+/** How long a line with a button stays, in milliseconds: time to read it, to decide, and to reach the button with the keys. */
+const BUTTON_STAYS_MS = 20_000;
+
+/** The keys that move the focus to the lines, as the library that draws them hears them. */
+const KEYS = "Alt+T";
 
 /** What a line that takes the place of a line of work does not keep of it: its button, and that it stays. */
 const NOT_KEPT = { action: undefined, duration: undefined };
@@ -61,10 +66,28 @@ export function leaveAtPress(event: MouseEvent): void {
   toast.dismiss(name);
 }
 
-/** Do what a line's button stands for. The button leaves with its line, and the focus with it: it goes back to where it was. */
+/** Do what the button of a line that stays stands for. The focus goes back to where it was. */
 function pressed(undo: Undo): void {
   undo.run();
   focusBack();
+}
+
+/**
+ * Say a done change in a line with a button, then Close. Where keys are in reach the line names the ones that lead to its button.
+ *
+ * A pressed button leaves with its line, and the focus with it: it goes back to where it was.
+ */
+function sayWithButton(text: string, { label = "Undo", run, id }: Undo): void {
+  const leave = (): void => {
+    toast.dismiss(shown);
+    focusBack();
+  };
+  const onPress = (): void => {
+    run();
+    leave();
+  };
+  const description = window.matchMedia(PHONE).matches ? undefined : `Press ${KEYS} to reach ${label}.`;
+  const shown = toast.success(text, { action: createElement(LineButtons, { label, onPress, onClose: leave }), description, duration: BUTTON_STAYS_MS, id });
 }
 
 /**
@@ -78,7 +101,7 @@ export function sayDone(text: string, undo?: Undo, over?: string): void {
   const name = over ?? text;
   makeRoom(undo === undefined ? name : undo.id);
   if (undo === undefined) toast.success(text, { id: name, testId: name, ...(over === undefined ? {} : NOT_KEPT) });
-  else toast.success(text, { action: { label: undo.label ?? "Undo", onClick: () => pressed(undo) }, duration: BUTTON_STAYS_MS, closeButton: true, id: undo.id });
+  else sayWithButton(text, undo);
 }
 
 /**

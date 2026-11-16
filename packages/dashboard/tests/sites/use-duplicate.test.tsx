@@ -138,7 +138,7 @@ async function letGo(): Promise<void> {
 
 /** Every line that is shown and not on its way out, as its words and then the words of its button. */
 function lines(): readonly string[] {
-  return [...document.querySelectorAll('[data-sonner-toast]:not([data-removed="true"])')].map((line) => [line.querySelector("[data-title]")?.textContent, line.querySelector("[data-button]")?.textContent ?? ""].join("|"));
+  return [...document.querySelectorAll('[data-sonner-toast]:not([data-removed="true"])')].map((line) => [line.querySelector("[data-title]")?.textContent, line.querySelector("button")?.textContent ?? ""].join("|"));
 }
 
 /** Draw the screen, open the dialog, and press Duplicate with `name` typed, or with the name the dialog opened with. */

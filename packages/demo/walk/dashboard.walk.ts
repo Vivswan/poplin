@@ -923,6 +923,26 @@ for (const size of [PHONE, FITS_FROM]) {
   });
 }
 
+// Drift: the keys would reach Close before Undo again, or the result would name keys that do not lead to it.
+test("a result's Undo is reached with the keys the result names, then Tab twice, and Close comes after it", async ({ page }) => {
+  await arrive(page);
+  await openPanel(page, SAMPLE.site);
+  await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
+  const saved = lines(page).filter({ hasText: "Saved." });
+  await expect(saved).toContainText("Press Alt+T to reach Undo.");
+
+  await page.keyboard.press("Alt+T");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(saved.getByRole("button", { name: "Undo", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(saved.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Enter");
+  await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
+});
+
 // Drift: a move to another screen would leave the focus on the page itself again, where no key reaches anything and nothing is said; or every screen's tab would be named alike.
 test("a screen that follows another one gives its title the focus and names the tab, on a wide screen and from a phone's sections; the first Tab stop leads past the sections", async ({ page }) => {
   await arrive(page);
