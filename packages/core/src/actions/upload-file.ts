@@ -130,7 +130,7 @@ export async function uploadFile(
   if (file === undefined) return unread(request.body, "not_found", "path");
 
   const key = uploadKey(upload, file.path);
-  if (!key.ok) throw new Error(`${JSON.stringify(file.path)} is no key of upload ${upload.id}: ${key.refusal}`);
+  if (!key.ok) throw new Error(`a path of the manifest is no key of its upload: ${key.refusal}`);
 
   const stored = await storeOnce(install, { upload, file, key: key.key }, request.body);
   if (stored !== "stored") return stored;

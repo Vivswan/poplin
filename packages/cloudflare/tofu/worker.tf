@@ -8,6 +8,9 @@ resource "cloudflare_workers_script" "poplin" {
   main_module        = "worker.js"
   compatibility_date = "2026-11-01"
 
+  # The key poplin keeps is a secret Repair writes onto the Worker, and no binding below declares it: an upload of a new bundle keeps every secret the Worker already has.
+  keep_bindings = ["secret_text"]
+
   # Cloudflare keeps the lines the Worker writes and its errors, of every request. The record Cloudflare would make of each request by itself is off: it holds the request's address, and the address of an unlisted or a private site is its link.
   observability = {
     enabled            = true

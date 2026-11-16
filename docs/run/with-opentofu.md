@@ -19,4 +19,4 @@ module "poplin" {
 }
 ```
 
-**To update it**, an install the module made takes a new bundle and an apply. [The module's page](../../packages/cloudflare/tofu/README.md#update-the-install) has the steps.
+**To update it**, an install the module made takes a new bundle and an apply. The apply keeps the key a Repair made. [The module's page](../../packages/cloudflare/tofu/README.md#update-the-install) has the steps.

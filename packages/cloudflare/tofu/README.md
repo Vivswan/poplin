@@ -255,6 +255,7 @@ tofu apply
 | `poplin update --check`             | says which version is out, and whether an update link is saved                                 |
 | `poplin update`                     | answers `no_update_address` with no update link saved: the module makes no build to call |
 | the build variable `POPLIN_VERSION` | nothing: no build reads it. The tag you check out is the version                               |
+| the key a Repair made               | stays: the Worker is uploaded with `keep_bindings = ["secret_text"]`, so its secrets go on to the new version |
 
 ## What it does not do
 

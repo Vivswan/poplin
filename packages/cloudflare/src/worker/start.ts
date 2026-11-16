@@ -311,6 +311,13 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const opened = await openDatabase(driver, now);
   if (opened.kind === "newer") return { ok: false, failure: { kind: "newer" } };
 
+  if (opened.kind === "failed") {
+    // The step's message ends in the database's own words, which can repeat a stored value: the log gets the step's number and the kind of the failure.
+    logFault(`step ${opened.step} of the database's schema failed and nothing of it was kept`, opened.failure);
+
+    return { ok: false, failure: { kind: "failed" } };
+  }
+
   if (opened.kind !== "open") {
     console.error(`poplin: ${opened.message}`);
 

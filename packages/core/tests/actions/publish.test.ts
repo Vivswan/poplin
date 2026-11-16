@@ -400,7 +400,7 @@ describe("publishSite", () => {
 
     const failed = publishSite(world.install, OWNER, { files: [file("index.html", "x"), file("late.html", "twelve bytes", 3)], name: "report" });
 
-    await expect(failed).rejects.toThrow(/^the publish was not made, and its files under [0-9a-z]{16}\/v1\/ could not all be removed$/);
+    await expect(failed).rejects.toThrow(/^the publish was not made, and its files could not all be removed$/);
     expect([await world.audit(), await siteCount(world)]).toEqual([[], 0]);
   });
 

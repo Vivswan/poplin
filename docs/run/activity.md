@@ -86,11 +86,11 @@ On Cloudflare's Workers Paid plan, lines past the plan's own allowance are charg
 | `poplin: a login was not written to the audit log`                    | the database took no write, and the person was let in                     | the error's kind, places in code   |
 | `poplin: the day's count of writes to the bucket was not written`     | the database took no write after a request                                | the error's kind, places in code   |
 | `poplin: the stored settings are not the ones this build reads, at`   | another build of poplin wrote the settings                                | the names of the settings          |
-| `poplin: step`, `poplin: the database could not be brought up to date` | the database could not be opened or brought up to date                    | the step that failed, its error    |
+| `poplin: step`                                                        | a step of the database was applied by another build, or failed            | the step, and a failure's kind     |
 | `poplin: the sweep did not run.`                                      | a scheduled run found the variables or the database not ready             | the names of the variables, if any |
 | `poplin: the sweep failed`                                            | a scheduled run met an error                                              | the error's kind, places in code   |
 
-- **An error the Worker caught is written by its kind, never by its message.** `RangeError`, then the places in the code it passed through; for a scheduled run that failed, Cloudflare names them by the source's file and line. a message could repeat a site's id or a file's path. The database's own error at a step that failed is the one message kept.
+- **An error the Worker caught is written by its kind, never by its message.** `RangeError`, then the places in the code it passed through; for a scheduled run that failed, Cloudflare names them by the source's file and line. a message could repeat a site's id or a file's path.
 - **poplin writes into no line** a token, a login's token, a login code, an email, a visitor's address, a site's id, or a value of a setting or a variable.
 - **Cloudflare's own record of each request is off.** It would hold the request's address, and the address of an unlisted or a private site is its link.
 - **Cloudflare adds fields of its own to every line.** The log is in your Cloudflare account, and whoever can open the account can read it.

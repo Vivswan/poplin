@@ -71,7 +71,7 @@ async function importSite(install: Install, plan: Extract<UploadPlan, { kind: "i
   if (imported.kind === "id_taken") return refuse("id_taken", "id");
 
   // The folder was minted for this import, so a site in it is a failure and no conflict: the upload stays as it is, with the files under it.
-  throw new Error(`the folder minted for import ${commit.upload.id} is a site's`);
+  throw new Error("the folder minted for an import is a site's");
 }
 
 /** Add the upload as a version, with the settings asked with it: the database makes all of it, or nothing. */

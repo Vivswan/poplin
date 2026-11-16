@@ -123,3 +123,30 @@ describe("the kept key of an instance", () => {
     expect([...texts, ...printed].filter((text) => text.includes(KEY))).toEqual([]);
   });
 });
+
+describe("a schema step that fails at the start", () => {
+  // Drift: the database's own error can repeat a stored value, and an unlisted site's id is its link. A line that printed the step's message would put it in the log.
+  test("the instance does not start, and the log names the step and the kind of the failure, never the database's words", async () => {
+    await reset();
+    const stored = "kqzmxpwtlrvn";
+    // A step is a batch of several statements; a batch of one is a read of where the schema stands, which goes on answering.
+    const failing = new Proxy(BINDINGS.DB, {
+      get(target, name) {
+        const value: unknown = Reflect.get(target, name);
+        if (typeof value !== "function") return value;
+
+        if (name !== "batch") return value.bind(target);
+
+        return async (statements: D1PreparedStatement[]) => (statements.length > 1 ? Promise.reject(new RangeError(`UNIQUE constraint failed: site ${stored}`)) : target.batch(statements));
+      },
+    });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const started = await startInstance({ ...BINDINGS, DB: failing }, outsideOf(w, []), async () => "a visitor");
+    const printed = error.mock.calls.map((line) => line.map(printedOf).join(" "));
+    error.mockRestore();
+
+    expect(started).toEqual({ ok: false, failure: { kind: "failed" } });
+    expect(printed.map((line) => line.split("\n")[0])).toEqual(["Error: poplin: step 1 of the database's schema failed and nothing of it was kept (RangeError)"]);
+    expect(printed.filter((line) => line.includes(stored) || line.includes("UNIQUE"))).toEqual([]);
+  });
+});

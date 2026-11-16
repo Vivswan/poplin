@@ -10,8 +10,8 @@ const ACCOUNT = "0123456789abcdef0123456789abcdef";
 /** Half past two on the fifteenth of November 2026, UTC. */
 const NOW = Date.UTC(2026, 10, 15, 14, 30);
 
-/** The right the figures need, as a refusal names it. */
-const RIGHT = "Account Analytics: Read";
+/** The right the figures need, as a refusal names it and as Cloudflare lists the group a key is made with. */
+const RIGHT = "Account Analytics Read";
 
 /** The groups Cloudflare answers for each dataset: two Workers, two databases, two buckets, and the bucket operations of each kind of billing. */
 const GROUPS: Readonly<Record<string, readonly unknown[]>> = {
