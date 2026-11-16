@@ -3,7 +3,7 @@
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
 import type { Provider } from "../records";
-import { optionLines } from "../report";
+import { DRY_RUN_HELP, optionLines } from "../report";
 import { UNINSTALL_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -28,6 +28,7 @@ function commandHelp(providers: readonly Provider[]): string {
     ["Providers:", ...indented(listed)],
     ["Options:", ...optionLines(UNINSTALL_OPTIONS)],
     ["A run lists what it would remove, then asks you to type the install's address.", "A run that asks nothing takes it with --confirm; --yes alone confirms nothing."],
+    [...DRY_RUN_HELP],
     [...TOKEN_HELP],
     ["It logs no computer out: run poplin logout on each one."],
     ...(own.length === 0 ? [] : [indented(columns(own))]),

@@ -30,6 +30,9 @@ Options:
   --no-wait        do not wait for the install to answer
   --json           print one JSON value, and nothing else on stdout
 
+A dry run exits as the run after it would, as far as reading can tell: 0 when a
+run would go through, and 1 when something stops it first.
+
 The account token is read from POPLIN_INSTALL_TOKEN, or from standard input
 with --token-stdin, or asked for without being shown. It is used for the run
 and stored nowhere.

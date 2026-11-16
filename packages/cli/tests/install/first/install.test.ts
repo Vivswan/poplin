@@ -11,6 +11,9 @@ const HELD = { [TOKEN_VARIABLE]: TOKEN };
 /** A run that gives every answer and asks nothing. */
 const RUN = "install stand-in --no-place --login you@example.com --yes";
 
+/** What runs the command again, as the one JSON value names it. */
+const AGAIN = { step: "install", command: "npx poplin install stand-in" };
+
 /** What the made-up provider found with the token. */
 const PLACE: Place = { token: TOKEN as Token };
 
@@ -127,6 +130,7 @@ describe("--json", () => {
       ],
       blocked: [],
       steps: [],
+      next: { step: "login", command: `npx poplin login --server ${ADDRESS}` },
     });
   });
 
@@ -153,7 +157,7 @@ describe("--json", () => {
     const ran = await runLine("install stand-in --yes --json", account);
 
     expect(ran.code).toBe(2);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", missing: ["where", "login", "token"] });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", next: { step: "install", command: "npx poplin install" }, missing: ["where", "login", "token"] });
     expect(ran.err).toEqual([
       "poplin install: an answer is missing: where it answers. Give --place <name> or --no-place (or POPLIN_PLACE).",
       "poplin install: an answer is missing: the first login. Give --login <email> (or POPLIN_LOGIN).",
@@ -166,7 +170,7 @@ describe("--json", () => {
     const ran = await runLine("install stand-in --place example.com --no-place --json", emptyAccount());
 
     expect(ran.code).toBe(2);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "usage", words: ["poplin install: give one of --place <name> and --no-place"] });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "usage", next: { step: "install", command: "npx poplin install" }, words: ["poplin install: give one of --place <name> and --no-place"] });
   });
 
   test("the list of providers is one value: without this an agent cannot learn what it may install at", async () => {
@@ -200,7 +204,7 @@ describe("what a look finds", () => {
     const dry = await runLine(`${RUN} --dry-run --json`, account, { env: HELD });
 
     expect([run.code, dry.code]).toEqual([1, 1]);
-    expect(jsonOf(run)).toEqual({ ok: false, problem: "already_installed", found: { version: null, address: ADDRESS, newest: null }, run: "apply", ready: false });
+    expect(jsonOf(run)).toEqual({ ok: false, problem: "already_installed", next: { step: "repair", command: "npx poplin doctor --repair" }, found: { version: null, address: ADDRESS, newest: null }, run: "apply", ready: false });
     expect(jsonOf(dry)).toMatchObject({ problem: "already_installed", run: "dry-run", ready: false });
     expect(run.err[0]).toBe(`This account already holds poplin (version not read), at ${ADDRESS}. nothing was changed. The way on is npx poplin doctor --repair.`);
   });
@@ -218,7 +222,7 @@ describe("what a look finds", () => {
       "nothing was changed",
     ]);
     expect(dry.code).toBe(1);
-    expect(jsonOf(dry)).toEqual({ ok: false, problem: "leftover", words: LEFTOVER.words, address: LEFTOVER.address, run: "dry-run", ready: false });
+    expect(jsonOf(dry)).toEqual({ ok: false, problem: "leftover", next: AGAIN, words: LEFTOVER.words, address: LEFTOVER.address, run: "dry-run", ready: false });
     expect(account.runs).toEqual([]);
   });
 
@@ -368,7 +372,7 @@ describe("what a run comes to", () => {
     const ran = await runLine(`${RUN} --json`, account, { env: HELD });
 
     expect(ran.code).toBe(5);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "unreachable", words: "the project's website gave no answer. nothing was changed", run: "apply", ready: false });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "unreachable", next: AGAIN, words: "the project's website gave no answer. nothing was changed", run: "apply", ready: false });
   });
 
   test("--log-in logs this computer in at the dashboard's address, and a login that fails leaves the install done: without this the offer is words alone", async () => {

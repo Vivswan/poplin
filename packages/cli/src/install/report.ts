@@ -7,7 +7,7 @@ import type { Blocked, Installed, OptionRow, Row, RowState, Run } from "../../..
 import type { TokenFacts } from "../../../core/src/install/token-facts";
 import { columns, countText } from "../commands/text";
 import type { Tone } from "../local/screen";
-import type { Provider, Stop } from "./records";
+import type { Next, Provider, Stop } from "./records";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
 const STATES: Readonly<Record<RowState, StateWords>> = {
@@ -47,6 +47,18 @@ const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 /** The line every stop before the first change ends in. */
 export const UNCHANGED = "nothing was changed";
 
+/** What every dry run of the three commands exits with, as each help says it. */
+export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
+
+/** Every step a command can name as the next, with its command line. A command of a provider names it where the line got as far as one, and a repair may be the newest poplin's. */
+export const NEXT = {
+  install: (provider: Provider | undefined): Next => ({ step: "install", command: provider === undefined ? "npx poplin install" : `npx poplin install ${provider.id}` }),
+  repair: (poplin: "this" | "newest" = "this"): Next => ({ step: "repair", command: poplin === "newest" ? "npx poplin@latest doctor --repair" : "npx poplin doctor --repair" }),
+  uninstall: (provider: Provider | undefined): Next => ({ step: "uninstall", command: provider === undefined ? "npx poplin uninstall" : `npx poplin uninstall ${provider.id}` }),
+  login: (address: string): Next => ({ step: "login", command: `npx poplin login --server ${address}` }),
+  none: (): Next => ({ step: "none", command: null }),
+} satisfies Readonly<Record<Next["step"], (...given: never[]) => Next>>;
+
 /** The word of one state of a row in a dry run and in a run, and what kind of line it is. */
 export interface StateWords {
   readonly "dry-run": string;
@@ -54,10 +66,11 @@ export interface StateWords {
   readonly tone: Tone;
 }
 
-/** How the last lines of a run are worded: what a run that left nothing undone is called, and the command that goes on from what stands after one that did not, as a sentence names it. */
+/** How the last lines of a run are worded: what a run that left nothing undone is called, what goes on from what stands after one that did not, and what runs the same command again. */
 export interface Ending {
   readonly done: string;
-  readonly next: string;
+  readonly next: Next;
+  readonly again: Next;
 }
 
 /** One line as it is shown: its text, and what kind of line it is. */
@@ -83,6 +96,11 @@ export function followed(sentence: string, tail: string): string {
 /** The lines of what stops a piece until a person acts: what it is, then the address to open, under it. */
 export function blockedLines(blocked: readonly Blocked[]): Line[] {
   return blocked.flatMap((one) => [{ tone: "warning", text: one.words }, plain(`${INDENT}${one.address}`)]);
+}
+
+/** Name what to run next in a sentence: the command that just ran as `this command again`, and another by its line. */
+function nextWords(next: Next, again: Next): string {
+  return next.step === again.step || next.command === null ? "this command again" : next.command;
 }
 
 /** The four commands that own an install that is there, each with what it is for. */
@@ -163,7 +181,7 @@ export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: tr
  *
  * @param provider - the provider, whose name says where the token can be deleted
  * @param answers - whether the install answered at its address once it was made; `null` for a run that did not wait
- * @param ending - what a run that left nothing undone is called, and what to run after one that did
+ * @param ending - what a run that left nothing undone is called, what to run after one that did, and what runs this command again
  * @returns the last lines: what the run is called and the dashboard's address, or what is not done and what only a person can do. A run that never learned its address names none
  */
 export function runLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "steps" | "blocked" | "address" | "ready">, provider: Provider, answers: boolean | null, ending: Ending): Line[] {
@@ -177,9 +195,10 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
 
   const undone = installed.rows.filter((row) => UNDONE.has(row.state)).length;
   const steps = installed.steps.flatMap((step) => [`${INDENT}${step.text}`, `${INDENT}${step.address}`]);
-  const byHand = steps.length === 0 ? [] : [`Do this in your browser, then run ${ending.next}:`, ...steps];
+  const next = nextWords(ending.next, ending.again);
+  const byHand = steps.length === 0 ? [] : [`Do this in your browser, then run ${next}:`, ...steps];
 
-  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `${undone} not done. Run ${ending.next}: it goes on from what stands.` }, stored];
+  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `${undone} not done. Run ${next}: it goes on from what stands.` }, stored];
 }
 
 /**
@@ -213,7 +232,7 @@ function stopWords(stop: Exclude<Stop, { readonly problem: "missing_answer" | "b
   const version = stop.version ?? "(version not read)";
   const owners = provider === undefined ? [] : ownerLines(provider, stop.version, stop.newest);
 
-  return [`This account already holds poplin ${version}, at ${stop.address}. ${UNCHANGED}. The way on is npx poplin doctor --repair.`, ...owners];
+  return [`This account already holds poplin ${version}, at ${stop.address}. ${UNCHANGED}. The way on is ${stop.next.command}.`, ...owners];
 }
 
 /**
@@ -232,12 +251,13 @@ export function stopLines(stop: Stop, provider: Provider | undefined, command: s
 }
 
 /**
- * The JSON value of a command that made no install.
+ * The JSON value of a command that stopped before its work was done.
  *
- * @returns `ok` false, the problem's code, and what a program needs of it: the answers that are missing, the install that is there, or what blocks
+ * @param again - what runs the command that stopped again: the next step of every stop that names no other
+ * @returns `ok` false, the problem's code, what a program needs of it (the answers that are missing, the install that is there, or what blocks), and what to run next
  */
-export function stopValue(stop: Stop): Readonly<Record<string, unknown>> {
-  const said = { ok: false, problem: stop.problem };
+export function stopValue(stop: Stop, again: Next): Readonly<Record<string, unknown>> {
+  const said = { ok: false, problem: stop.problem, next: "next" in stop ? stop.next : again };
 
   if (stop.problem === "usage" || stop.problem === "no_provider") return { ...said, words: stop.lines };
 
@@ -257,9 +277,10 @@ export function stopValue(stop: Stop): Readonly<Record<string, unknown>> {
  *
  * @param found - what the look for an install found, which the run went on from
  * @param answers - whether the install answered at its address once it was made; `null` for a dry run and for a run that did not wait
+ * @param next - what to run after this run
  * @returns the same value for both, but for `run` and the key of each row's state: `will` in a dry run, `did` in a run. `ok` is whether the command exits with 0
  */
-export function runValue(installed: Extract<Installed, { readonly ok: true }>, run: Run, found: string, answers: boolean | null): Readonly<Record<string, unknown>> {
+export function runValue(installed: Extract<Installed, { readonly ok: true }>, run: Run, found: string, answers: boolean | null, next: Next): Readonly<Record<string, unknown>> {
   return {
     ok: installed.ready && answers !== false,
     run,
@@ -272,5 +293,6 @@ export function runValue(installed: Extract<Installed, { readonly ok: true }>, r
     rows: rowValues(installed.rows, run),
     blocked: installed.blocked,
     steps: installed.steps,
+    next,
   };
 }

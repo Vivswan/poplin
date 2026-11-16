@@ -57,20 +57,29 @@ export type Plan = { readonly provider: Provider; readonly json: boolean } & (
 export type InstallRequest = { readonly provider: Provider; readonly json: boolean; readonly where: unknown; readonly login: Login; readonly token: Token } & Asking;
 
 /**
+ * What to run after a command ended: the step as one word for a program, and its command line, without the answers the line before it gave.
+ *
+ * `install`, `repair`, and `uninstall` are the three commands; `login` logs a computer in to an install that is whole; `none` is an end with nothing left to run.
+ */
+export type Next = { readonly step: "install" | "repair" | "uninstall" | "login"; readonly command: string } | { readonly step: "none"; readonly command: null };
+
+/**
  * Why a command stopped before its work was done. `exit` is the command's exit code.
  *
  * `usage` is a line written wrong, and `missing_answer` a run that asks nothing and lacks one. The rest are what the provider's account holds, or that it gave no answer.
  * `no_install`, `other_place`, `not_confirmed`, and `changed` are a removal's: nothing to remove, an install of another place than the one named, a typed name that is not the install's, and an account that changed since the look.
  * A repair has `no_install`, `other_place`, and `changed` too, and an install that is `unfinished`, or whose records are of `another_version` of the product.
+ * A stop carries `next` where what goes on from it is another command than the one that stopped; from every other stop, the same command goes on.
  */
 export type Stop =
   | { readonly problem: "usage"; readonly exit: 2; readonly lines: readonly string[] }
   | { readonly problem: "missing_answer"; readonly exit: 2; readonly missing: readonly Missing[] }
   | { readonly problem: "no_provider"; readonly exit: 1; readonly lines: readonly string[] }
-  | { readonly problem: "already_installed"; readonly exit: 1; readonly version: string | undefined; readonly address: string; readonly newest: string | undefined }
+  | { readonly problem: "already_installed"; readonly exit: 1; readonly version: string | undefined; readonly address: string; readonly newest: string | undefined; readonly next: Next }
+  | { readonly problem: "no_install" | "unfinished" | "another_version"; readonly exit: 1; readonly words: string; readonly next: Next }
   | { readonly problem: "leftover" | "name_held"; readonly exit: 1; readonly words: string; readonly address: string }
   | { readonly problem: "blocked"; readonly exit: 1; readonly blocked: readonly Blocked[] }
-  | { readonly problem: "token_refused" | "no_domain" | "stopped" | "crashed" | "no_install" | "other_place" | "not_confirmed" | "changed" | "unfinished" | "another_version"; readonly exit: 1; readonly words: string }
+  | { readonly problem: "token_refused" | "no_domain" | "stopped" | "crashed" | "other_place" | "not_confirmed" | "changed"; readonly exit: 1; readonly words: string }
   | { readonly problem: "unreachable"; readonly exit: 5; readonly words: string };
 
 /**

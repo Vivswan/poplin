@@ -4,7 +4,7 @@ import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
 import { SHARED_OPTIONS } from "./parse";
 import type { Provider } from "../records";
-import { optionLines } from "../report";
+import { DRY_RUN_HELP, optionLines } from "../report";
 
 /** How far a line of a list stands in. */
 const INDENT = "  ";
@@ -27,6 +27,7 @@ function commandHelp(providers: readonly Provider[]): string {
     ["Make your own install at a provider. It looks for one first: where one is, it", "says so and changes nothing."],
     ["Providers:", ...indented(listed)],
     ["Options:", ...optionLines(SHARED_OPTIONS)],
+    [...DRY_RUN_HELP],
     [...TOKEN_HELP],
     ["An install that is there:", ...indented(["poplin doctor", "poplin doctor --repair", "poplin update", "poplin uninstall <provider>"])],
     ...(own.length === 0 ? [] : [indented(columns(own))]),

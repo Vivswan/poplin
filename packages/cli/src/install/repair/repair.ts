@@ -10,12 +10,15 @@ import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor, STOPPED } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { InstallEnds, Stop } from "../records";
-import { rowLine } from "../report";
+import { NEXT, rowLine } from "../report";
 import { parseRepair, REPAIR_COMMAND, type RepairPlan } from "./parse";
-import { allWell, foundWords, repairedLines, repairedValue, repairHelp, stopOf, unmended } from "./report";
+import { foundWords, repairedLines, repairedValue, repairHelp, stopOf, unmended } from "./report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
+
+/** The command as it is typed after `poplin`, and what runs it again. */
+const COMMAND = { name: REPAIR_COMMAND, again: () => NEXT.repair() } as const;
 
 /** A plan with every answer in: where the install is, and the token. */
 interface Request {
@@ -61,7 +64,7 @@ async function look(request: Request, ends: InstallEnds, show: Show): Promise<{ 
 /** Settle a plan's open answers, find the install, and mend it or say what a run would change. The token is hidden from the moment it is read. */
 async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const { provider, run } = plan;
-  const at = { name: REPAIR_COMMAND, provider, run };
+  const at = { command: COMMAND, provider, run };
   const request = await settled(plan, ends);
   if ("problem" in request) return stopped(request, show, at);
 
@@ -83,7 +86,7 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
 
   show.value(repairedValue(repaired, run, ground.found));
 
-  return exitCode({ kind: allWell(repaired, run) ? "done" : "failed" });
+  return exitCode({ kind: repaired.ready ? "done" : "failed" });
 }
 
 /**
@@ -91,8 +94,8 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
  *
  * @param io - the machine's ends: where to print, the environment, and whether a person is there to ask
  * @param ends - the providers the package carries, the screen, standard input, and what a provider reaches the world through
- * @returns the exit code: 0 nothing is left undone, or a dry run found nothing to change; 1 something is, or would be, or no whole install is there; 2 written wrong or an answer missing; 5 no answer. Nothing throws
+ * @returns the exit code: 0 nothing is left undone, or a dry run says a run would leave nothing; 1 something is, or would be, or no whole install is there; 2 written wrong or an answer missing; 5 no answer. Nothing throws
  */
 export function runRepair(words: readonly string[], io: Io, ends: InstallEnds): Promise<number> {
-  return runCommand({ name: REPAIR_COMMAND, parse: parseRepair, help: repairHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
+  return runCommand({ ...COMMAND, parse: parseRepair, help: repairHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
 }

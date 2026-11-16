@@ -14,8 +14,8 @@ import { lookFor, STOPPED, settle } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
-import type { InstallEnds, InstallRequest, Plan, Stop } from "../records";
-import { dryRunLines, followed, rowLine, runLines, runValue, UNCHANGED } from "../report";
+import type { InstallEnds, InstallRequest, Next, Plan, Stop } from "../records";
+import { dryRunLines, followed, NEXT, rowLine, runLines, runValue, UNCHANGED } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -32,8 +32,8 @@ const FOUND_WORDS: Readonly<Record<Found<unknown, unknown>["state"], string>> = 
   refused: "no",
 };
 
-/** What goes on from a run that left something undone, as its last lines name it: this command where the install is not found whole yet, and the repair where it is. */
-const [AGAIN, REPAIR] = ["this command again", "npx poplin doctor --repair"] as const;
+/** The command as it is typed after `poplin`, and what runs it again. */
+const COMMAND = { name: "install", again: NEXT.install } as const;
 
 /** The last line of a run that named no release: it went on with a program that was there, and uploaded none. */
 const UNCHECKED = "poplin is installed. Its code was there before this run, and this run did not check it against a release.";
@@ -52,7 +52,7 @@ interface Ended {
 
 /** The stop a look that found no ground to start from is. */
 function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" }>): Stop {
-  if (found.state === "whole") return { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest };
+  if (found.state === "whole") return { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest, next: NEXT.repair() };
 
   if (found.state === "held") return { problem: "name_held", exit: 1, words: found.words, address: found.address };
 
@@ -115,12 +115,12 @@ async function look(request: InstallRequest, ends: InstallEnds, show: Show): Pro
   return "problem" in ground ? ground : { found: ground, where };
 }
 
-/** Log this computer in to the install that was made, when the person or the option says so; else say how. */
+/** Log this computer in to the install that was made, when the person or the option says so; else say how. Answers what the value of the run gains: how the login went, and after one that worked, that nothing is left to run. */
 async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: string, io: Io, ends: InstallEnds, show: Show): Promise<Readonly<Record<string, unknown>>> {
   const wanted = login === "ask" ? await ends.screen.confirm("Log this computer in now?", true) : login === "yes";
 
   if (wanted !== true) {
-    show.line("plain", `To log this computer in: npx poplin login --server ${address}`);
+    show.line("plain", `To log this computer in: ${NEXT.login(address).command}`);
 
     return {};
   }
@@ -130,7 +130,7 @@ async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: s
   if (!outcome.ok) {
     for (const line of problemLines(outcome.problem)) show.aside("error", line);
 
-    show.aside("plain", `To try again: npx poplin login --server ${address}`);
+    show.aside("plain", `To try again: ${NEXT.login(address).command}`);
 
     return { login: { ok: false, problem: outcome.problem.code } };
   }
@@ -139,7 +139,7 @@ async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: s
 
   for (const note of outcome.notes ?? []) show.aside("note", note);
 
-  return { login: { ok: true } };
+  return { login: { ok: true }, next: NEXT.none() };
 }
 
 /** Wait for an install that was made whole to answer at its address, unless the run was told not to; `null` where nothing is waited for. */
@@ -154,26 +154,32 @@ async function waited(installed: Extract<Installed, { readonly ok: true }>, mode
 }
 
 /**
- * Say which command goes on from a run that left something undone, as a sentence names it.
+ * Say what to run after a run that worked through its rows.
  *
- * A run that got as far as writing where the install answers has made an install that is found whole: this command makes no change to it, and the repair finishes it.
+ * A dry run is followed by the run, and an install that was made by the login at its address.
+ * A run that left something undone and got as far as writing where the install answers has made an install that is found whole: this command makes no change to it, and the repair finishes it.
  * So the account is looked in once more, and what is found there says which.
  */
-async function nextAfter(ground: Ground, request: InstallRequest, ends: InstallEnds): Promise<string> {
-  const found = await request.provider.find(request.token, ground.where, ends.reach);
+async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, ends: InstallEnds): Promise<Next> {
+  const { provider } = request;
+  if (request.mode.mode === "dry-run") return NEXT.install(provider);
 
-  return found.state === "whole" ? REPAIR : AGAIN;
+  if (installed.ready) return installed.address === undefined ? NEXT.none() : NEXT.login(installed.address);
+
+  const found = await provider.find(request.token, ground.where, ends.reach);
+
+  return found.state === "whole" ? NEXT.repair() : NEXT.install(provider);
 }
 
 /** Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. */
 async function ended(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<Ended> {
   const { mode } = request;
   const answers = await waited(installed, mode, ends, show);
-  const value = runValue(installed, mode.mode, ground.found.state, answers);
+  const next = await nextAfter(installed, ground, request, ends);
+  const value = runValue(installed, mode.mode, ground.found.state, answers, next);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
-  const next = mode.mode === "dry-run" || installed.ready ? AGAIN : await nextAfter(ground, request, ends);
   const done = installed.release === undefined ? UNCHECKED : `poplin ${installed.release} is installed.`;
-  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next });
+  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next, again: NEXT.install(request.provider) });
 
   for (const line of lines) show.line(line.tone, line.text);
 
@@ -186,7 +192,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
 async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
   const ground = await look(request, ends, show);
-  if ("problem" in ground) return stopped(ground, show, { name: "install", provider, run: mode.mode });
+  if ("problem" in ground) return stopped(ground, show, { command: COMMAND, provider, run: mode.mode });
 
   if (ground.found.state === "started") show.line("note", "An install was started here and not finished: this run goes on with it.");
 
@@ -199,7 +205,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
     show.working(doing);
   });
 
-  if (!installed.ok) return stopped({ problem: "unreachable", exit: 5, words: installed.words }, show, { name: "install", provider, run: mode.mode });
+  if (!installed.ok) return stopped({ problem: "unreachable", exit: 5, words: installed.words }, show, { command: COMMAND, provider, run: mode.mode });
 
   const { code, value } = await ended(installed, ground, request, io, ends, show);
   show.value(value);
@@ -210,7 +216,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: Plan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const request = await settle(plan, ends);
-  if ("problem" in request) return stopped(request, show, { name: "install", provider: plan.provider, run: plan.mode.mode });
+  if ("problem" in request) return stopped(request, show, { command: COMMAND, provider: plan.provider, run: plan.mode.mode });
 
   secrets.add(request.token);
 
@@ -225,5 +231,5 @@ async function planned(plan: Plan, io: Io, ends: InstallEnds, show: Show, secret
  * @returns the exit code: 0 installed or a dry run that is ready, 1 nothing or not all was made, 2 written wrong or an answer missing, 5 no answer. Nothing throws
  */
 export function runInstall(words: readonly string[], io: Io, ends: InstallEnds): Promise<number> {
-  return runCommand({ name: "install", parse: parseInstall, help: installHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
+  return runCommand({ ...COMMAND, parse: parseInstall, help: installHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
 }

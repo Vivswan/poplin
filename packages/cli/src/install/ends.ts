@@ -12,7 +12,7 @@ import { loadProviders } from "../local/providers";
 import { processScreen, type Screen, type Tone } from "../local/screen";
 import { VERSION } from "../poplin";
 import { STOPPED, TOKEN_VARIABLE } from "./ask";
-import type { InstallEnds, Parsed, Provider, Stop } from "./records";
+import type { InstallEnds, Next, Parsed, Provider, Stop } from "./records";
 import { stopLines, stopValue } from "./report";
 
 /** The folder of the providers, beside the file this code is built into. */
@@ -44,6 +44,9 @@ export interface CommandRun<Planned> {
   /** The command as it is typed after `poplin`, such as `install`. */
   readonly name: string;
 
+  /** What runs the command again, at the provider the line got as far as: the next step of a stop that names no other. */
+  readonly again: (provider: Provider | undefined) => Next;
+
   /** Reads the words into what they ask for. */
   readonly parse: (words: readonly string[], providers: readonly Provider[], env: Io["machine"]["env"], canAsk: boolean) => Parsed<Planned>;
 
@@ -59,7 +62,7 @@ export interface CommandRun<Planned> {
 
 /** Where a stop came: in which command, at which provider when the line got as far as one, and in which kind of run when it came after the plan. */
 interface StoppedAt {
-  readonly name: string;
+  readonly command: Pick<CommandRun<never>, "name" | "again">;
   readonly provider?: Provider | undefined;
   readonly run?: Run;
 }
@@ -125,9 +128,10 @@ export function processEnds(io: Io): InstallEnds {
 
 /** Say why the command stopped before its work was done, and choose its exit code. A program reads `ready` of a stop that came after the plan as it does of a run. */
 export function stopped(stop: Stop, show: Show, at: StoppedAt): number {
-  for (const line of stopLines(stop, at.provider, at.name)) show.aside(line.tone, line.text);
+  for (const line of stopLines(stop, at.provider, at.command.name)) show.aside(line.tone, line.text);
 
-  show.value(at.run === undefined ? stopValue(stop) : { ...stopValue(stop), run: at.run, ready: false });
+  const value = stopValue(stop, at.command.again(at.provider));
+  show.value(at.run === undefined ? value : { ...value, run: at.run, ready: false });
 
   return exitCode({ kind: ENDINGS[stop.exit] });
 }
@@ -163,17 +167,17 @@ async function answered<Planned>(command: CommandRun<Planned>, parsed: Parsed<Pl
   }
 
   const show = showOf(parsed.kind === "plan" ? command.json(parsed.plan) : parsed.json, io, ends, secrets);
-  if (providers.length === 0) return stopped({ problem: "no_provider", exit: 1, lines: [`this build of poplin carries no provider to ${name} at`, `install the published package: npx poplin ${name}`] }, show, { name });
+  if (providers.length === 0) return stopped({ problem: "no_provider", exit: 1, lines: [`this build of poplin carries no provider to ${name} at`, `install the published package: npx poplin ${name}`] }, show, { command });
 
   if (parsed.kind === "list") return list(command, providers, parsed.json, io);
 
-  if (parsed.kind === "stop") return stopped(parsed.stop, show, { name });
+  if (parsed.kind === "stop") return stopped(parsed.stop, show, { command });
 
   if (parsed.kind === "plan") return command.run(parsed.plan, io, ends, show, secrets);
 
   const provider = await picked(providers, ends);
 
-  return provider === undefined ? stopped(STOPPED, show, { name }) : answered(command, parsed.named(provider), providers, io, ends, secrets);
+  return provider === undefined ? stopped(STOPPED, show, { command }) : answered(command, parsed.named(provider), providers, io, ends, secrets);
 }
 
 /**
@@ -196,6 +200,6 @@ export async function runCommand<Planned>(command: CommandRun<Planned>, words: r
     const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
     const said = io.stopped.aborted ? "the command was stopped. Run it again: it goes on from what stands." : `poplin ${command.name} failed in a way it has no word for: ${what}. Run it again: it goes on from what stands.`;
 
-    return stopped({ problem: io.stopped.aborted ? "stopped" : "crashed", exit: 1, words: said }, showOf(words.includes("--json"), io, ends, secrets), { name: command.name });
+    return stopped({ problem: io.stopped.aborted ? "stopped" : "crashed", exit: 1, words: said }, showOf(words.includes("--json"), io, ends, secrets), { command });
   }
 }

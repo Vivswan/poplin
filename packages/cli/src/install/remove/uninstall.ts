@@ -10,14 +10,14 @@ import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { InstallEnds, Stop } from "../records";
-import { followed } from "../report";
+import { followed, NEXT } from "../report";
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { UninstallPlan, UninstallRequest } from "./records";
 import { listedLines, removalLine, removalValue, removedLines, warningLines } from "./report";
 
-/** The command as it is typed after `poplin`. */
-const NAME = "uninstall";
+/** The command as it is typed after `poplin`, and what runs it again. */
+const COMMAND = { name: "uninstall", again: NEXT.uninstall } as const;
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -26,10 +26,10 @@ const LOOKING = "looking for an install";
 const UNTOUCHED = "Nothing was removed.";
 
 /** The stop of an account that holds nothing of an install. */
-const NO_INSTALL: Stop = { problem: "no_install", exit: 1, words: `No install is in this account. ${UNTOUCHED}` };
+const NO_INSTALL: Stop = { problem: "no_install", exit: 1, words: `No install is in this account. ${UNTOUCHED}`, next: NEXT.none() };
 
 /** The stop of a run that was told to keep the data, where the data is all that is left. */
-const ONLY_DATA: Stop = { problem: "no_install", exit: 1, words: `Only the data is left here, and --keep-data keeps it. ${UNTOUCHED}` };
+const ONLY_DATA: Stop = { problem: "no_install", exit: 1, words: `Only the data is left here, and --keep-data keeps it. ${UNTOUCHED}`, next: NEXT.none() };
 
 /** The states of a row that is nothing a removal does or was to do: it stays, is kept, or is not this install's. */
 const UNTOUCHED_STATES: readonly RemovalRow["state"][] = ["stay", "keep", "skip"];
@@ -51,7 +51,7 @@ async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<Uninstal
   const { provider, json } = plan;
 
   if (plan.asking === "never") {
-    const token = await givenToken(plan.token, provider, ends.input, NAME);
+    const token = await givenToken(plan.token, provider, ends.input, COMMAND.name);
 
     return typeof token === "object" ? token : { provider, json, asking: "never", mode: plan.mode, where: plan.where, token };
   }
@@ -131,14 +131,14 @@ function ended(removed: Listed, run: Run, ground: Ground, request: UninstallRequ
   const lines = run === "dry-run" ? listedLines(removed) : removedLines(removed, request.provider);
   for (const line of lines) show.line(line.tone, line.text);
 
-  show.value(removalValue(removed, run, ground.found.state));
+  show.value(removalValue(removed, run, ground.found.state, request.provider));
 
   return exitCode({ kind: removed.ready ? "done" : "failed" });
 }
 
 async function work(request: UninstallRequest, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
-  const at = { name: NAME, provider, run: mode.mode };
+  const at = { command: COMMAND, provider, run: mode.mode };
   const ground = await look(request, ends, show);
   if ("problem" in ground) return stopped(ground, show, at);
 
@@ -164,7 +164,7 @@ async function work(request: UninstallRequest, ends: InstallEnds, show: Show): P
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: UninstallPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const request = await settled(plan, ends);
-  if ("problem" in request) return stopped(request, show, { name: NAME, provider: plan.provider, run: plan.mode.mode });
+  if ("problem" in request) return stopped(request, show, { command: COMMAND, provider: plan.provider, run: plan.mode.mode });
 
   secrets.add(request.token);
 
@@ -179,5 +179,5 @@ async function planned(plan: UninstallPlan, _io: Io, ends: InstallEnds, show: Sh
  * @returns the exit code: 0 removed or a dry run that is ready, 1 nothing or not all was removed, 2 written wrong or an answer missing, 5 no answer. Nothing throws
  */
 export function runUninstall(words: readonly string[], io: Io, ends: InstallEnds): Promise<number> {
-  return runCommand({ name: NAME, parse: parseUninstall, help: uninstallHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
+  return runCommand({ ...COMMAND, parse: parseUninstall, help: uninstallHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
 }

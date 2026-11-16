@@ -27,6 +27,9 @@ Options:
 A run lists what it would remove, then asks you to type the install's address.
 A run that asks nothing takes it with --confirm; --yes alone confirms nothing.
 
+A dry run exits as the run after it would, as far as reading can tell: 0 when a
+run would go through, and 1 when something stops it first.
+
 The account token is read from POPLIN_INSTALL_TOKEN, or from standard input
 with --token-stdin, or asked for without being shown. It is used for the run
 and stored nowhere.

@@ -4,8 +4,8 @@
 import type { Found, Repaired, RowState, Run, Whole } from "../../../../core/src/install/installer";
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
-import type { Provider, Stop } from "../records";
-import { dryRunLines, followed, type Line, optionLines, rowValues, runLines, UNCHANGED } from "../report";
+import type { Next, Provider, Stop } from "../records";
+import { DRY_RUN_HELP, dryRunLines, followed, type Line, NEXT, optionLines, rowValues, runLines, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** The states of an object that a run changes, or a dry run would. */
@@ -14,8 +14,8 @@ const CHANGES: ReadonlySet<RowState> = new Set(["make", "change", "remove"]);
 /** How far a line of a list stands in. */
 const INDENT = "  ";
 
-/** The problem each of the provider's own refusals of a repair is, as the command's JSON names it. */
-const PROBLEMS = { elsewhere: "other_place", another: "another_version", changed: "changed" } as const;
+/** The problem each of the provider's own refusals of a repair is, as the command's JSON names it, where the same command goes on from it. */
+const PROBLEMS = { elsewhere: "other_place", changed: "changed" } as const;
 
 /** What each end of a repair that left nothing undone is called. */
 const DONE = { same: `the install is as it should be. ${UNCHANGED}`, mended: "the install is mended." } as const;
@@ -35,13 +35,11 @@ function changesOf(repaired: Mended): number {
   return repaired.rows.filter((row) => CHANGES.has(row.state)).length;
 }
 
-/**
- * Choose the exit of a repair that worked through its rows.
- *
- * @returns whether the command exits with 0: a run that left nothing undone, and a dry run that found nothing to change
- */
-export function allWell(repaired: Mended, run: Run): boolean {
-  return repaired.ready && (run === "apply" || changesOf(repaired) === 0);
+/** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the repair where a run has something to mend yet. */
+function nextOf(repaired: Mended, run: Run): Next {
+  const mended = repaired.ready && (run === "apply" || changesOf(repaired) === 0);
+
+  return mended ? NEXT.login(repaired.address) : NEXT.repair();
 }
 
 /** Say which install a look found: its version where it could be read, and where its dashboard is. */
@@ -56,13 +54,14 @@ export function foundWords(found: Whole<unknown>): string {
  * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one
  */
 export function stopOf(found: NotWhole, provider: Provider): Stop {
-  const install = `npx poplin install ${provider.id}`;
+  const next = NEXT.install(provider);
+  const install = next.command;
 
-  if (found.state === "none") return { problem: "no_install", exit: 1, words: `No install is in this account. To make one: ${install}` };
+  if (found.state === "none") return { problem: "no_install", exit: 1, words: `No install is in this account. To make one: ${install}`, next };
 
-  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${install} --adopt`) };
+  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${install} --adopt`), next };
 
-  if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}` };
+  if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
 
   if (found.state === "held") return { problem: "name_held", exit: 1, words: found.words, address: found.address };
 
@@ -80,6 +79,9 @@ export function unmended(repaired: Extract<Repaired, { readonly ok: false }>): S
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
 
+  // Records of another version are mended by the poplin of that version, or the newest: this one would stop here again.
+  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: NEXT.repair("newest") };
+
   return { problem: PROBLEMS[repaired.why], exit: 1, words };
 }
 
@@ -96,18 +98,19 @@ export function repairedLines(repaired: Mended, run: Run, provider: Provider): L
   // What a person is told to do after a run that mended everything, such as where to log in, stands before its last lines.
   const told = repaired.ready ? repaired.steps.flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
 
-  return [...told, ...runLines(repaired, provider, null, { done: same ? DONE.same : DONE.mended, next: "this command again" })];
+  return [...told, ...runLines(repaired, provider, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair() })];
 }
 
 /**
  * The JSON value of a repair that worked through its rows.
  *
  * @param found - the install the repair went on from
- * @returns `ok` is whether the command exits with 0, `ready` whether nothing is left undone or a run would leave nothing, and `changes` how many objects were changed or would be. Each row's state is under `will` in a dry run and under `did` in a run
+ * @returns `ok` and `ready` are whether the command exits with 0: nothing is left undone, or a run would leave nothing. `changes` is how many objects were changed or would be.
+ *   Each row's state is under `will` in a dry run and under `did` in a run
  */
 export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>): Readonly<Record<string, unknown>> {
   return {
-    ok: allWell(repaired, run),
+    ok: repaired.ready,
     run,
     ready: repaired.ready,
     changes: changesOf(repaired),
@@ -115,6 +118,7 @@ export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>)
     rows: rowValues(repaired.rows, run),
     blocked: repaired.blocked,
     steps: repaired.steps,
+    next: nextOf(repaired, run),
   };
 }
 
@@ -136,6 +140,7 @@ export function repairHelp(providers: readonly Provider[], provider?: Provider):
     ["Mend your install at its provider, with an account token. It needs no login,", "so it is the way back in. It finds the install first, then makes each piece", "that is missing or differs, and leaves the rest."],
     ...listed,
     ["Options:", ...optionLines(REPAIR_OPTIONS)],
+    [...DRY_RUN_HELP],
     ...own,
     [...TOKEN_HELP, "The token an install is made with has every permission a repair needs."],
     ["--add-user stores the email only after the provider took a change of who may", "log in from this token: a token that may only read adds nobody."],
