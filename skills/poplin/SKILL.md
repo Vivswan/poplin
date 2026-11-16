@@ -7,7 +7,7 @@ description: Use when the user asks to publish, share, host, or put online an HT
 
 > Poplin publishes a folder, or one HTML file, as a static site on an install in the user's own Cloudflare account. Each site gets its own address, and a new site is private.
 
-**Not set up yet, or asked to set poplin up?** Follow [`references/setup.md`](references/setup.md). It takes the user through a first install when they have none, uses the login saved on this computer, and adds the tools after the user's yes.
+**Not set up yet, or asked to set poplin up?** Follow [`references/setup.md`](references/setup.md). It makes a first install with the user when they have none, with one command, `npx poplin install cloudflare`. It uses the login saved on this computer, and adds the tools after the user's yes.
 
 ## When to Apply
 

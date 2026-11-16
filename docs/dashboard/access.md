@@ -21,7 +21,7 @@ The line that follows says how the change went:
 | ------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
 | `Added.` or `Removed.`                                  | has the change: a new user can log in            | nothing                                               |
 | `... is tried again by itself.`                         | gave no answer, for the list or for the budget alert | nothing: poplin tries again within 15 minutes         |
-| `... Open Domain and press Repair.`                     | is as it was or only partly changed: the install holds no key, Cloudflare refused the key, or the list is missing | on Domain, press Repair, paste an account token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
+| `... Open Domain and press Repair.`                     | is as it was or only partly changed: the install holds no key, Cloudflare refused the key, or the list is missing | on Domain, press Repair, paste an account token as in [step 3](../start/install.md#3-make-the-account-token), and press Repair again |
 
 The change is saved in every case. `poplin config logins` shows the same list.
 

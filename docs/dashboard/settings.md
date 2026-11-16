@@ -50,13 +50,13 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 | `poplin doctor`                                                      | checks that the install answers, and prints its version beside this poplin's, as `install 0.1.0, this poplin 0.1.0`; changes nothing |
 | `poplin update`                                                      | starts an update of the install to the newest version; `--dry-run` says what it would do |
 | `poplin update --to 0.2.0`                                           | takes that version in place of the newest: a lower one [goes back](../upkeep/update.md#go-back) |
-| `poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com` | finishes a new install, as its setup page does |
-| `poplin setup --dry-run --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
+| `poplin install cloudflare --domain example.com --login you@example.com` | makes a new install under a domain; `--no-domain` makes one without |
+| `poplin install cloudflare --no-domain --login you@example.com --dry-run` | lists what that would make, with the same options; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
 `poplin update` works on an install that holds its key: [Update the install](../upkeep/update.md#with-the-kept-key) shows what it does. An install that holds none answers `no_key`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
-`poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--login`, and `--domain` under a domain: [without a domain](../start/without-a-domain.md#the-steps) it takes none. On an install that has them, `--login` alone corrects a first login that was mistyped, until the first login. After it, the command only repairs: `--dry-run` is refused. It needs no login. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
+`poplin install` makes an install and needs no login: it reads an account token from `POPLIN_INSTALL_TOKEN`, or asks for it without showing it. Where an install already is, it says so and changes nothing. [Install](../start/install.md) has every option.
 
 The settings `poplin config` takes:
 

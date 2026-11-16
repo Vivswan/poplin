@@ -10,6 +10,7 @@ import { problem } from "../packages/cli/src/commands/problems";
 import { TOOLS } from "../packages/cli/src/mcp/tools";
 import { PROBLEM_KINDS } from "../packages/core/src/records/problem";
 import { words } from "../packages/cli/tests/commands/support/command-line";
+import { INSTALL_FLAGS, INSTALL_WORDS, installRefusal } from "./support/install-words";
 import { readPage } from "./support/markdown-page";
 
 /** The repository this file sits in. */
@@ -70,6 +71,9 @@ const COMMAND_ALONE = /^poplin ([a-z-]+)$/;
 /** What ends a command on its line: a comment, or an arrow to what it does. */
 const AFTER_COMMAND = /\s+(?:#|->)\s.*$/;
 
+/** A line a command prints that opens with the product's name and a version, such as `poplin 0.1.0 is installed.`: it is no command line. */
+const VERSION_LINE = /^\s*poplin \d+\.\d+\.\d+ /;
+
 /** A word written the way tools, their inputs, codes, and settings are: lowercase words joined by underscores. */
 const SNAKE_WORD = /^[a-z]+(?:_[a-z]+)+$/;
 
@@ -112,7 +116,9 @@ function unique(values: readonly string[]): string[] {
 function commandLines(page: Pick<Page, "spans" | "blocks">): string[] {
   const fenced = page.blocks.flatMap((block) => block.split("\n"));
 
-  return unique([...fenced, ...page.spans].flatMap((line) => COMMAND_LINE.exec(line)?.[1]?.replace(AFTER_COMMAND, "") ?? []));
+  const lines = [...fenced, ...page.spans].filter((line) => !VERSION_LINE.test(line));
+
+  return unique(lines.flatMap((line) => COMMAND_LINE.exec(line)?.[1]?.replace(AFTER_COMMAND, "") ?? []));
 }
 
 /** Whether a line is the name of a command of the CLI's table and nothing else. A sentence names a command that way, and the parser would refuse some of them for an argument they lack. */
@@ -120,6 +126,14 @@ function namesCommand(line: string): boolean {
   const name = COMMAND_ALONE.exec(line)?.[1];
 
   return COMMANDS.some((spec: CommandSpec) => spec.name === name);
+}
+
+/** What the CLI refuses of a command line, or nothing when it reads it. The words after `install` are read by that command's own parser. */
+function refusalOf(line: string): string | undefined {
+  const parsed = parseCommand(words(line), NOW);
+  if (parsed.kind === "install") return installRefusal(parsed.words);
+
+  return parsed.kind === "usage-error" ? parsed.message : undefined;
 }
 
 /** Whether the CLI's table holds the code: the table is not exported, and a code it lacks has no sentence, or throws. */
@@ -180,15 +194,16 @@ describe("the pages a person reads", () => {
       read += lines.length;
 
       for (const line of lines.filter((written) => !namesCommand(written))) {
-        const parsed = parseCommand(words(line), NOW);
-        if (parsed.kind === "usage-error") refusals.push(`${path}: ${line}: ${parsed.message}`);
+        const refused = refusalOf(line);
+        if (refused !== undefined) refusals.push(`${path}: ${line}: ${refused}`);
       }
     }
 
     expect(read).toBeGreaterThan(0);
     expect(refusals).toEqual([]);
     expect(["poplin new-link", "poplin no-such-command", "poplin new-link --no-such-flag"].filter(namesCommand)).toEqual(["poplin new-link"]);
-    expect(commandLines({ spans: ["poplin list --trash", "poplin.example.com"], blocks: ["$ npx poplin ./report --site report   # new content\n"] })).toEqual([
+    expect([["cloudflare", "--no-domain", "--dry-run"], ["cloudflare", "--no-such-flag"], ["no-such-provider"]].map(installRefusal)).toEqual([undefined, expect.any(String), expect.any(String)]);
+    expect(commandLines({ spans: ["poplin list --trash", "poplin.example.com"], blocks: ["$ npx poplin ./report --site report   # new content\npoplin 0.1.0 is installed.\n"] })).toEqual([
       "poplin ./report --site report",
       "poplin list --trash",
     ]);
@@ -202,7 +217,7 @@ describe("the pages a person reads", () => {
   });
 
   test("every flag a page names on its own is one a command takes: without this a removed flag stays in a sentence", async () => {
-    const flags = new Set<string>(COMMANDS.flatMap((spec: CommandSpec) => spec.flags.map((flag) => flag.name)));
+    const flags = new Set<string>([...COMMANDS.flatMap((spec: CommandSpec) => spec.flags.map((flag) => flag.name)), ...INSTALL_FLAGS]);
     const named = (await Promise.all(PAGES.map((path) => parse(ROOT, path)))).flatMap((page) => page.spans).flatMap((span) => FLAG.exec(span)?.[1] ?? []);
 
     expect(named.length).toBeGreaterThan(0);
@@ -211,7 +226,7 @@ describe("the pages a person reads", () => {
 
   test("every word written like a tool, a code, a setting, or a kind of problem is one: without this a renamed one stays in a page", async () => {
     const inputs = Object.values(TOOLS).flatMap((tool) => Object.keys(tool.parameters));
-    const known = new Set<string>([...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...PROBLEM_KINDS, ...OTHER_WORDS]);
+    const known = new Set<string>([...Object.keys(TOOLS), ...inputs, ...Object.keys(SETTING_SAMPLES), ...PROBLEM_KINDS, ...INSTALL_WORDS, ...OTHER_WORDS]);
     const unknown: string[] = [];
 
     for (const path of PAGES) {
@@ -239,7 +254,7 @@ describe("the pages a person reads", () => {
     const codes = cells.flatMap((cell) => (BETWEEN_CODES.test(cell.rest) ? cell.spans : []));
 
     expect(codes.length).toBeGreaterThan(0);
-    expect(codes.filter((code) => code !== USAGE_CODE && !isCode(code))).toEqual([]);
+    expect(codes.filter((code) => code !== USAGE_CODE && !isCode(code) && !INSTALL_WORDS.includes(code))).toEqual([]);
     expect(["constructor", "no_such_code"].filter(isCode)).toEqual([]);
   });
 
@@ -251,9 +266,9 @@ describe("the pages a person reads", () => {
     }
 
     expect(dead).toEqual([]);
-    expect(await deadLink(ROOT, "docs/README.md", "start/by-hand.md#the-steps")).toEqual([]);
-    expect(await deadLink(ROOT, "docs/README.md", "start/by-hand.md#no-such-heading")).toEqual(["no heading no-such-heading"]);
-    expect(await deadLink(ROOT, "docs/start/by-hand.md", "install.md")).toEqual(["no file docs/start/install.md"]);
+    expect(await deadLink(ROOT, "docs/README.md", "start/install.md#what-you-need")).toEqual([]);
+    expect(await deadLink(ROOT, "docs/README.md", "start/install.md#no-such-heading")).toEqual(["no heading no-such-heading"]);
+    expect(await deadLink(ROOT, "docs/start/install.md", "by-hand.md")).toEqual(["no file docs/start/by-hand.md"]);
     expect(await deadLink(ROOT, "skills/poplin/references/setup.md", `${GUIDE_ON_GITHUB}docs/install.md`)).toEqual(["no file docs/install.md"]);
     expect(await deadLink(ROOT, "docs/README.md", "https://example.com/docs/install.md")).toEqual([]);
   });
