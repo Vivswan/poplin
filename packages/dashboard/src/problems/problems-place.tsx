@@ -1,4 +1,4 @@
-// Where the Usage screen draws the panel of a problem: over the end of what the screen shows on a wide screen, and in its place on a narrower one. The address holds which problem is open, so a link to it opens it again.
+// Where the Usage screen draws the panel of a problem: over the end of what the screen shows, and in its place on a phone. The address holds which problem is open, so a link to it opens it again.
 
 import { Link, useNavigate } from "@tanstack/react-router";
 import { cn } from "cn";
