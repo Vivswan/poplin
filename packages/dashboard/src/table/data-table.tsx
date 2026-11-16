@@ -78,6 +78,12 @@ const FOCUSED_ROW_LOOK = cn(
   "[&:is(:focus-visible,:has([data-opens]:focus-visible))>td:last-child]:shadow-[inset_-2px_0_0_var(--ring),inset_0_2px_0_var(--ring),inset_0_-2px_0_var(--ring)]",
 );
 
+/** The room after the last column of a table with no column of actions: its headings and values end where the tools over the table end. */
+const END_ROOM = "pr-6";
+
+/** The height and the room of a cell under a heading. */
+const CELL_LOOK = "h-11 px-3 py-0";
+
 /** The look of a heading while it is dragged to another place. */
 const DRAGGED_LOOK = "flex h-9 w-fit cursor-grabbing items-center rounded-md border bg-popover px-3 text-xs text-foreground shadow-md";
 
@@ -198,15 +204,22 @@ function landingMark(over: boolean, from: number, at: number): string | false {
   return from > at ? "shadow-[inset_2px_0_0_var(--ring)]" : "shadow-[inset_-2px_0_0_var(--ring)]";
 }
 
+/** The room after a cell's value where the cell is the last of a row that no actions follow. */
+function endRoom(cells: readonly unknown[], at: number, withoutActions: boolean): string | false {
+  return withoutActions && at === cells.length - 1 && END_ROOM;
+}
+
 function HeadCell<Row>({
   header,
   spec,
   sort,
   onSort,
   onNudge,
+  ends,
 }: {
   readonly header: Head;
   readonly spec: ColumnSpec<Row>;
+  readonly ends: boolean;
   readonly sort: Sort;
   readonly onSort: ((next: Sort | undefined) => void) | undefined;
   readonly onNudge: (id: string, by: number) => void;
@@ -246,7 +259,7 @@ function HeadCell<Row>({
       )}
     >
       <div
-        className={cn("flex h-9 min-w-0 items-center gap-0.5 pr-3 pl-3", fixed && "pl-6", spec.numeric === true && "flex-row-reverse")}
+        className={cn("flex h-9 min-w-0 items-center gap-0.5 pr-3 pl-3", fixed && "pl-6", ends && END_ROOM, spec.numeric === true && "flex-row-reverse")}
         onPointerDown={fixed ? undefined : (listeners?.onPointerDown as PointerEventHandler | undefined)}
       >
         {sortable ? (
@@ -328,7 +341,7 @@ function BodyRow<Row>({
       )}
     >
       {cells.map((spec, at) => (
-        <td key={spec.id} className={cn("h-11 bg-inherit px-3 py-0", spec.fixed === true && "sticky left-0 z-10 pl-6", spec.numeric === true && "text-right")}>
+        <td key={spec.id} className={cn(CELL_LOOK, "bg-inherit", spec.fixed === true && "sticky left-0 z-10 pl-6", endRoom(cells, at, actions === undefined), spec.numeric === true && "text-right")}>
           {/* The row's own button is its first control and is out of sight: a press anywhere on the row does the same, and the row draws the ring while the button holds the focus. */}
           {at === 0 && opens !== undefined ? <Button variant="ghost" data-opens={id} aria-label={opens.name(row)} className="sr-only" onClick={() => opens.open(row)} /> : null}
           <div className="truncate">{spec.cell(row)}</div>
@@ -366,7 +379,9 @@ function HeadRow<Row>({
         {headers.map((header) => {
           const spec = specs.get(header.column.id);
 
-          return spec === undefined ? null : <HeadCell key={header.id} header={header} spec={spec} sort={sort} onSort={onSort} onNudge={onNudge} />;
+          const ends = !withActions && header === headers.at(-1);
+
+          return spec === undefined ? null : <HeadCell key={header.id} header={header} spec={spec} sort={sort} onSort={onSort} onNudge={onNudge} ends={ends} />;
         })}
       </SortableContext>
       {spare ? <td className="h-9 border-b bg-background p-0" /> : null}
@@ -391,8 +406,8 @@ function LoadingRow<Row>({
 }): ReactNode {
   return (
     <tr className="[&>td]:border-b">
-      {cells.map((spec) => (
-        <td key={spec.id} className={cn("h-11 px-3 py-0", spec.fixed === true && "pl-6")}>
+      {cells.map((spec, at) => (
+        <td key={spec.id} className={cn(CELL_LOOK, spec.fixed === true && "pl-6", endRoom(cells, at, !withActions))}>
           <Skeleton className={cn("h-4", spec.fixed === true ? "w-32" : "w-16")} />
         </td>
       ))}

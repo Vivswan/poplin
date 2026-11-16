@@ -5,8 +5,6 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
 import {
   ActivityIcon,
-  ArrowUpCircleIcon,
-  ChevronsUpDownIcon,
   GaugeIcon,
   GlobeIcon,
   KeyRoundIcon,
@@ -21,15 +19,6 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
@@ -62,9 +51,8 @@ const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focu
 /** What keeps the router from marking a link of the frame as the place the address is at for every address under it, and from adding a class of its own. */
 const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const;
 
-/** The start of an update, where one can be started: the release it leads to, and what asks before it starts. */
+/** The start of an update, where one can be started: what asks before it starts. */
 interface Offer {
-  readonly newest: string;
   readonly ask: () => void;
 }
 
@@ -109,52 +97,6 @@ function Email({ className }: { readonly className?: string }): ReactNode {
       <span className="max-w-full break-all text-foreground">{BOOT.email.slice(0, at)}</span>
       <span className="max-w-full break-all text-muted-foreground">{BOOT.email.slice(at)}</span>
     </span>
-  );
-}
-
-/** The account menu: who is logged in. */
-function AccountMenu({ compact, offer }: { readonly compact?: boolean; readonly offer: Offer | undefined }): ReactNode {
-  const initial = BOOT.email.slice(0, 1).toUpperCase();
-  const avatar = (
-    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">{initial}</span>
-  );
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={`Account: ${BOOT.email}`}
-        className={cn(
-          "flex items-center gap-2 rounded-md text-left outline-none hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-sidebar-accent/60",
-          compact ? "p-1" : "min-h-10 w-full px-2 py-1.5",
-        )}
-      >
-        {avatar}
-        {compact ? null : (
-          <>
-            <Email className="flex-1" />
-            <ChevronsUpDownIcon className="size-3.5 shrink-0 text-faint" />
-          </>
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side={compact ? "bottom" : "top"} align={compact ? "end" : "start"} className="w-(--anchor-width) min-w-52">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            <Email />
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        {compact && offer !== undefined ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={offer.ask}>
-                <ArrowUpCircleIcon />
-                Update to {offer.newest}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -280,7 +222,7 @@ function useOffer(): { readonly offer: Offer | undefined; readonly started: bool
   );
 
   // A started update is not offered again from this page: the new version takes its place within minutes.
-  return { offer: update !== null && starts && !started ? { newest: update.newest, ask: () => setAsking(true) } : undefined, started, question };
+  return { offer: update !== null && starts && !started ? { ask: () => setAsking(true) } : undefined, started, question };
 }
 
 /** The sections on a phone: behind a button at the top, in a sheet that closes once a place is chosen or an update is asked about. */
@@ -297,23 +239,25 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
       <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Sections" className="-ml-2 md:hidden" />}>
         <MenuIcon />
       </SheetTrigger>
-      {/* A phone lying on its side is shorter than what the sheet holds: the sheet scrolls. */}
-      <SheetContent side="left" className="gap-4 overflow-y-auto bg-sidebar px-3 pt-3 pb-3 data-[side=left]:w-72">
-        <SheetTitle className="flex h-10 items-center gap-2 px-2.5">
+      <SheetContent side="left" className="gap-0 bg-sidebar data-[side=left]:w-72">
+        <SheetTitle className="mx-3 mt-3 flex h-10 shrink-0 items-center gap-2 px-2.5">
           <BrandMark />
           <span className="truncate font-bold tracking-tight">{NAME}</span>
         </SheetTitle>
         <SheetDescription className="sr-only">The sections of this dashboard.</SheetDescription>
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: the press is a link's own, which a key presses too; the sheet only closes after it. */}
-        <nav aria-label="Sections" className="flex flex-col gap-0.5" onClick={() => setOpen(false)}>
-          {SECTIONS.map((section) => (
-            <SectionLink key={section.key} section={section} current={current} />
-          ))}
-        </nav>
-        <div className="mt-auto flex flex-col gap-2">
-          <DomainNote onGo={() => setOpen(false)} />
-          <VersionLine offer={offer === undefined ? undefined : { ...offer, ask: askAndClose }} started={started} />
-          <Email className="px-2.5 pb-1" />
+        {/* A phone lying on its side is shorter than what the sheet holds: what is under the name scrolls, and the name and Close stay in sight. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pt-4 pb-3">
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: the press is a link's own, which a key presses too; the sheet only closes after it. */}
+          <nav aria-label="Sections" className="flex flex-col gap-0.5" onClick={() => setOpen(false)}>
+            {SECTIONS.map((section) => (
+              <SectionLink key={section.key} section={section} current={current} />
+            ))}
+          </nav>
+          <div className="mt-auto flex flex-col gap-2">
+            <DomainNote onGo={() => setOpen(false)} />
+            <VersionLine offer={offer === undefined ? undefined : { ...offer, ask: askAndClose }} started={started} />
+            <Email className="px-2.5 pb-1" />
+          </div>
         </div>
       </SheetContent>
     </Sheet>
@@ -365,7 +309,7 @@ export function AppShell({
         <div className="mt-auto flex flex-col gap-2">
           <DomainNote />
           <VersionLine offer={offer} started={started} />
-          <AccountMenu offer={offer} />
+          <Email className="px-2.5 pb-1" />
         </div>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">
@@ -378,9 +322,6 @@ export function AppShell({
             {tools}
             <DemoTag />
             <ThemeButton />
-            <span className="md:hidden">
-              <AccountMenu compact offer={offer} />
-            </span>
           </div>
         </header>
         {children}
