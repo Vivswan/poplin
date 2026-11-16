@@ -1,6 +1,6 @@
 // The table of the Usage screen: each number beside its limit, with words only once a number nears it, the way to the setting that holds the limit, and the way to the host's own page of the number.
 //
-// A number the install counted itself reads "about", since its count can read low. Once the host gave its own figures, the line over the table says when.
+// A number the install counted itself reads "about", since its count can read low. The account's storage reads "at most", since the host's figure of it can read high. Once the host gave its own figures, the line over the table says when.
 // A day's number is of a UTC day: its line says "today" where that is the reader's date too, and names the day where it is not.
 
 import { showBytes } from "@poplin/core/src/records/settings";
@@ -18,12 +18,12 @@ import { IconButton } from "@/shared/icon-button";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
 import type { Line, Usage } from "@/usage/usage-queries";
 import { spansOf } from "@/usage/usage-spans";
-import { shareOf } from "@/usage/usage-values";
+import { raisedBytes, shareOf } from "@/usage/usage-values";
 
 /** What each line counts, in the words of the screen. A line counted over a day or a month says which after them. */
 const NAMES: Readonly<Record<Line["what"], string>> = {
   stored: "Storage, all sites",
-  host_stored: "Account storage, highest in 24 hours",
+  host_stored: "Account storage, last 24 hours",
   sites: "Sites, the trash included",
   trashed: "In the trash",
   files: "Files",
@@ -48,6 +48,9 @@ const OVER: Readonly<Partial<Record<Line["what"], "day" | "month">>> = {
 /** The lines counted in bytes. */
 const IN_BYTES: ReadonlySet<Line["what"]> = new Set(["stored", "host_stored"]);
 
+/** The lines whose number the account never passed and may not have reached: the host's figure of its storage adds up the most each part of it held, and the parts need not have held that at one time. They are counted in bytes. */
+const AT_MOST: ReadonlySet<Line["what"]> = new Set(["host_stored"]);
+
 /** What the line over the table ends with when the host gave no figures: the numbers under it are then the install's own. */
 const OWN_COUNT = "The numbers here are poplin's own count.";
 
@@ -64,8 +67,10 @@ function amount(line: Line, value: number): string {
   return IN_BYTES.has(line.what) ? showBytes(value) : showCount(value);
 }
 
-/** What a line has used: the number, and "about" before one the install counted itself. */
+/** What a line has used: the number, "about" before one the install counted itself, and "at most" before one the account never passed. */
 function used(line: Line): string {
+  if (AT_MOST.has(line.what)) return `at most ${amount(line, raisedBytes(line.used))}`;
+
   return line.about ? `about ${amount(line, line.used)}` : amount(line, line.used);
 }
 

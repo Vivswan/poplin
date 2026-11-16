@@ -44,7 +44,7 @@ const OFFICIAL: Usage = {
   ...OWN,
   official: { at: Date.UTC(2026, 10, 15, 14, 5) },
   lines: [
-    line("host_stored", 5_000_000, 10_000_000_000, { link: PAGES.storage }),
+    line("host_stored", 5_099_999, 10_000_000_000, { link: PAGES.storage }),
     line("host_requests", 1318, 100_000, { link: PAGES.requests }),
     line("rows_read", 13_902, 5_000_000, { link: PAGES.database }),
     line("storage_writes", 41_200, 1_000_000, { link: PAGES.storage }),
@@ -151,13 +151,14 @@ describe("the table of the Usage screen", () => {
   });
 
   // Drift: the host's figures are exact and of the whole account; shown with "about", or under the names of the install's own lines, a person could not tell which number is whose.
-  test("shows the host's own figures as exact numbers under their own names, and says when they were read", async () => {
+  // The figure of the storage adds up the most each part held in a day: read as what the account holds, or as the most it held, it says more than the account ever had.
+  test("shows the host's own figures as exact numbers under their own names, the storage as the most it can have been, and says when they were read", async () => {
     await draw(OFFICIAL);
 
     expect([officialLine(), tableRows().slice(1)]).toEqual([
       `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}.`,
       [
-        ["Account storage, highest in 24 hours", "5 MB", "10 GB", "0%", ""],
+        ["Account storage, last 24 hours", "at most 5.1 MB", "10 GB", "0%", ""],
         ["Account requests today", "1,318", "100,000", "1%", ""],
         ["Database rows read today", "13,902", "5,000,000", "0%", ""],
         ["Storage writes this month", "41,200", "1,000,000", "4%", ""],
