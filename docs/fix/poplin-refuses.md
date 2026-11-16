@@ -38,7 +38,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `no_update`          | there is no newer version the install can take              | `poplin update --dry-run` says which version the install runs    |
 | `update_unreachable` | Cloudflare did not answer; the new version may be in         | wait a minute, then `poplin update --dry-run`                    |
 | `no_key`, `key_refused` | the install holds no key, or Cloudflare no longer takes it | press Repair on the dashboard's Domain screen                  |
-| `lacks_right`        | the install's key lacks the right shown                     | press Repair on the dashboard's Domain screen: it makes a key with the right |
+| `lacks_right`        | the install's key lacks the permission shown                | press Repair on the dashboard's Domain screen: it makes a key with the permission |
 | `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason |
 | `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, report it             |
 
@@ -54,7 +54,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 | `usage`             | the line is written wrong; `words` says how                        | the command's own help: `npx poplin install --help`             |
 | `already_installed` | the account holds an install; `found` has its version, its address, and in `mend` whether it needs mending | nothing was changed: run what `next` names, the login for `mend` nothing, and for the rest the repair as `next.command` writes it |
 | `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or delete it at `address`    |
-| `name_held`         | a Worker named poplin that is not poplin's                         | rename or delete it at `address`                                |
+| `name_held`         | a Worker named poplin that is not poplin's own, or an install's Worker that lost a binding; `words` says which | do what `words` says at `address`, then run what `next` names |
 | `blocked`           | a person must act first; `blocked` lists what, with the address to open | the table below                                            |
 | `token_refused`     | Cloudflare refused the token, or it shows no such account          | make the token again, for the account the install goes to       |
 | `no_domain`         | the token shows no active domain of that name                      | correct `--domain`, or the token's Zone Resources               |

@@ -78,7 +78,7 @@ const MESSAGES: Readonly<Record<Code, string>> = {
   no_update: "no newer version is known to the install",
   no_key: "the install holds no key of its host, so it cannot update itself",
   key_refused: "the install's host no longer takes the install's key",
-  lacks_right: "the install's key lacks this right at its host",
+  lacks_right: "the install's key lacks this permission at its host",
   too_large: "a size limit is passed",
   too_many_requests: "the install is asked too often: wait, then ask again",
   internal: "the install failed to do that",

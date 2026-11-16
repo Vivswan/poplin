@@ -17,7 +17,7 @@ function FormHelp({ form }: { readonly form: Domain["form"] }): ReactNode {
         <p>{form.tokenNote}</p>
         <PopoverHeader>
           <PopoverTitle>Form opened empty?</PopoverTitle>
-          <PopoverDescription>Add these {form.tokenRights.length} rights by hand:</PopoverDescription>
+          <PopoverDescription>Add these {form.tokenRights.length} permissions by hand:</PopoverDescription>
         </PopoverHeader>
         <ul className="flex flex-col gap-1">
           {form.tokenRights.map((right) => (
@@ -29,7 +29,7 @@ function FormHelp({ form }: { readonly form: Domain["form"] }): ReactNode {
         {form.tokenOptional.length === 0 ? null : (
           <>
             <PopoverHeader>
-              <PopoverTitle>Optional rights</PopoverTitle>
+              <PopoverTitle>Optional permissions</PopoverTitle>
               <PopoverDescription>The install works without them.</PopoverDescription>
             </PopoverHeader>
             <ul className="flex flex-col gap-2">
@@ -63,7 +63,7 @@ export function TokenWay({ form }: { readonly form: Domain["form"] }): ReactNode
             Open the account token form
             <ExternalLinkIcon data-icon="inline-end" />
           </Button>
-          <p className="text-muted-foreground">The rights are already ticked. Create the account token, then copy it.</p>
+          <p className="text-muted-foreground">The permissions are already ticked. Create the account token, then copy it.</p>
         </>
       )}
       <FormHelp form={form} />

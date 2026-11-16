@@ -14,8 +14,8 @@ import { lookFor, STOPPED, settle } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
-import type { InstallEnds, InstallRequest, Next, Plan, Stop } from "../records";
-import { changesIn, dryRunLines, followed, NEXT, repairAfter, rowLine, runLines, runValue, UNCHANGED } from "../report";
+import type { InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
+import { changesIn, dryRunLines, followed, heldStop, NEXT, repairAfter, rowLine, runLines, runValue, UNCHANGED } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -69,8 +69,8 @@ async function standing(found: Whole<unknown>, where: unknown, request: InstallR
 }
 
 /** The stop a look that found no ground to start from is, and no install either. */
-function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>): Stop {
-  if (found.state === "held") return { problem: "name_held", exit: 1, words: found.words, address: found.address };
+function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>, provider: Provider): Stop {
+  if (found.state === "held") return heldStop(found, NEXT.install(provider), provider);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -130,7 +130,7 @@ async function look(request: InstallRequest, ends: InstallEnds, show: Show): Pro
     return standing(found, where, request, ends);
   }
 
-  if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found);
+  if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found, request.provider);
 
   const ground = await grounded(found, request, ends, show);
 

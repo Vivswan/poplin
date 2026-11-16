@@ -311,7 +311,7 @@ function officialWords(official: NonNullable<Usage["official"]>, host: string): 
 
   if (official.refusal === "key_refused") return `The kept key no longer works. ${NEW_KEY} ${OWN_COUNT}`;
 
-  const lacks = `The kept key has no right to read usage${official.right === null ? "" : `: ${official.right}`}.`;
+  const lacks = `The kept key has no permission to read usage${official.right === null ? "" : `: ${official.right}`}.`;
 
   return `${lacks} ${NEW_KEY} ${OWN_COUNT}`;
 }

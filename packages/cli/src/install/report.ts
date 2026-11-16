@@ -3,7 +3,7 @@
 //   a dry run    would make   <object>   <detail>
 //   a run        made         <object>   <detail>
 
-import type { Blocked, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
+import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
 import { columns, countText } from "../commands/text";
 import type { Tone } from "../local/screen";
@@ -97,6 +97,18 @@ function plain(text: string): Line {
  */
 export function followed(sentence: string, tail: string): string {
   return `${sentence.replace(/\.$/, "")}. ${tail}`;
+}
+
+/**
+ * The stop of a name the install needs that another thing holds, with the command the provider's sentence names as its next step.
+ *
+ * @param again - what runs the command that stopped again
+ * @param provider - the provider, which an install's command line names
+ */
+export function heldStop(found: Extract<Found<unknown, unknown>, { readonly state: "held" }>, again: Next, provider: Provider): Stop {
+  const named = { again, install: NEXT.install(provider), repair: NEXT.repair() };
+
+  return { problem: "name_held", exit: 1, words: found.words, address: found.address, next: named[found.after] };
 }
 
 /** What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again. */

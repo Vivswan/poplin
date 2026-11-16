@@ -10,8 +10,8 @@ import { exitCode } from "../../commands/exit-codes";
 import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
-import type { InstallEnds, Stop } from "../records";
-import { followed, NEXT } from "../report";
+import type { InstallEnds, Provider, Stop } from "../records";
+import { followed, heldStop, NEXT } from "../report";
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { UninstallPlan, UninstallRequest } from "./records";
@@ -72,8 +72,8 @@ function foundWords(found: Found<unknown, unknown>): string {
 }
 
 /** The stop a look that found nothing a removal can start from is. */
-function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held" | "blocked" | "refused" }>): Stop {
-  if (found.state === "held") return { problem: "name_held", exit: 1, words: found.words, address: found.address };
+function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held" | "blocked" | "refused" }>, provider: Provider): Stop {
+  if (found.state === "held") return heldStop(found, NEXT.uninstall(provider), provider);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -92,7 +92,7 @@ async function look(request: UninstallRequest, ends: InstallEnds, show: Show): P
 
   const { found, where } = looked;
 
-  return found.state === "whole" || found.state === "started" || found.state === "leftover" || found.state === "none" ? { found, where } : stopOf(found);
+  return found.state === "whole" || found.state === "started" || found.state === "leftover" || found.state === "none" ? { found, where } : stopOf(found, request.provider);
 }
 
 /**
