@@ -47,12 +47,16 @@ describe("the states of an account", () => {
   // Drift: every name is fixed, so what a run does next hangs on which of these is found. A state read wrong makes a second copy, or writes over what is not poplin's.
   test.each([
     ["nothing", fresh(), { state: "none", notes: [] }],
-    ["a database of the name", fresh({ databases: [{ uuid: "database-9", name: "poplin" }] }), { state: "leftover", words: "There is a database named poplin in this account, and no poplin runs. It may hold an earlier install's sites and records." }],
+    [
+      "a database of the name",
+      fresh({ databases: [{ uuid: "database-9", name: "poplin" }] }),
+      { state: "leftover", words: "There is a database named poplin in this account, and no poplin runs. It may hold an earlier install's sites and records. It is matched by its name alone." },
+    ],
     ["a bucket of the name", fresh({ buckets: [{ name: "poplin-sites" }] }), { state: "leftover", address: `https://dash.cloudflare.com/${ACCOUNT}/r2/overview` }],
     [
       "both",
       fresh({ databases: [{ uuid: "database-9", name: "poplin" }], buckets: [{ name: "poplin-sites" }] }),
-      { state: "leftover", words: "There is a database named poplin and a bucket named poplin-sites in this account, and no poplin runs. It may hold an earlier install's sites and records." },
+      { state: "leftover", words: "There is a database named poplin and a bucket named poplin-sites in this account, and no poplin runs. They may hold an earlier install's sites and records. They are matched by their names alone." },
     ],
     ["a database and a bucket of other names", fresh({ databases: [{ uuid: "database-9", name: "poplin-old" }], buckets: [{ name: "poplin-sites-2" }] }), { state: "none" }],
     ["poplin's Worker with nothing set", fresh({ noWorker: false, bindings: MARKS }), { state: "started", notes: [] }],

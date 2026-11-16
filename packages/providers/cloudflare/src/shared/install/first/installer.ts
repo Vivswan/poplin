@@ -24,8 +24,8 @@ import { putCrons, putFirst, readCrons } from "../../release/update/upload";
 import { type AccountAddresses, parseAccountAddresses } from "../../../without-domain/address-layout";
 import { syncBucket } from "../pieces/bucket/bucket";
 import { type CloudflareFailure, type CloudflareResult, callCloudflare } from "../client";
-import { syncDatabase } from "../pieces/database/database";
-import { INSTALL_OBJECTS } from "../install-objects";
+import { holderWords, readHolder, syncDatabase } from "../pieces/database/database";
+import { BY_NAME, INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
@@ -64,6 +64,7 @@ const WORDS = {
   noAddress: "This account has no free address yet, or one whose name is too long for the login. Open Workers & Pages in your browser and set the account's subdomain.",
   lacks: LACKS,
   refusedLater: "Cloudflare refused the token before the install was finished",
+  notUsed: "it is not used, and an install needs a database of this name",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
@@ -353,13 +354,44 @@ async function prepared(work: Work, where: Where, reach: Reach): Promise<{ reado
   return "what" in release ? done({ ...work, blocked: [...work.blocked, release] }, {}) : { target, release };
 }
 
-/** Make what the install's own repair cannot: the bucket, the database, and the Worker with its trigger and its address. Each stops the ones after it. */
-async function madeFirst(work: Work, target: Target, release: Release, standing: boolean): Promise<boolean> {
+/**
+ * Find the database of poplin's name in an account whose data a person said to use, and read whose it is: no Worker is bound to it, so only its tables say.
+ *
+ * @returns the database as it was found, with what its row says of it; `undefined` where the account has none; or `false` once the row of a database that is not poplin's, or that could not be read, is in the run
+ */
+async function leftDatabase(work: Work): Promise<{ readonly found: Awaited<ReturnType<typeof syncDatabase>>; readonly detail: string } | undefined | false> {
   const { connection, accountId } = work.place;
-  if (!synced(work, "R2 bucket", INSTALL_OBJECTS.bucket, await syncBucket(connection, accountId, work.mode))) return false;
+  const name = INSTALL_OBJECTS.database;
+  const found = await syncDatabase(connection, accountId, "plan");
+  if (!found.ok) return failed(work, "D1 database", name, found);
 
-  const database = await syncDatabase(connection, accountId, work.mode);
-  if (!synced(work, "D1 database", INSTALL_OBJECTS.database, database)) return false;
+  if (found.id === undefined) return undefined;
+
+  const holder = await readHolder(connection, accountId, found.id);
+  if (!holder.ok) return failed(work, "D1 database", name, holder);
+
+  if (holder.value !== "other") return { found, detail: `${name} (${holderWords(holder.value)})` };
+
+  note(work, { object: "D1 database", state: "block", detail: `${name}: ${holderWords(holder.value)}: ${WORDS.notUsed}` });
+
+  return false;
+}
+
+/** Make what the install's own repair cannot: the bucket, the database, and the Worker with its trigger and its address. Each stops the ones after it. */
+async function madeFirst(work: Work, target: Target, release: Release, stood: { readonly standing: boolean; readonly adopted: boolean }): Promise<boolean> {
+  const { connection, accountId } = work.place;
+  const { standing } = stood;
+  // A database that is somebody else's stops the run before the bucket is made beside it.
+  const left = stood.adopted ? await leftDatabase(work) : undefined;
+  if (left === false) return false;
+
+  const bucket = await syncBucket(connection, accountId, work.mode);
+  const taken = stood.adopted && bucket.ok && bucket.report.changedNothing;
+  if (!synced(work, "R2 bucket", taken ? `${INSTALL_OBJECTS.bucket} (${BY_NAME})` : INSTALL_OBJECTS.bucket, bucket)) return false;
+
+  // A database that was found and read is left as it is: it is not looked for again.
+  const database = left?.found ?? (await syncDatabase(connection, accountId, work.mode));
+  if (!synced(work, "D1 database", left?.detail ?? INSTALL_OBJECTS.database, database)) return false;
 
   return workerPieces(work, target, release, { standing, databaseId: database.ok ? database.id : undefined });
 }
@@ -375,7 +407,7 @@ async function install(found: Startable<Place>, where: Where, login: Login, run:
   const address = `https://${target.kind === "domain" ? target.layout.adminHostname : target.layout.adminHost}`;
   const standing = found.state === "started";
   const known = { release: standing ? undefined : release.bundle.version, address };
-  if (!(await madeFirst(work, target, release, standing))) return done(work, known);
+  if (!(await madeFirst(work, target, release, { standing, adopted: found.state === "adopted" }))) return done(work, known);
 
   return (await finish(work, target, login, reach)) ? done(work, known) : UNREACHABLE;
 }

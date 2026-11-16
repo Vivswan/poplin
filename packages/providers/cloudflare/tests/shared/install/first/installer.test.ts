@@ -102,6 +102,12 @@ function placeOf(given: { readonly flags?: readonly (readonly [string, string | 
   return read.where;
 }
 
+/** What the look says of data that was left behind: no mark says who made it. */
+const BY_NAME = "It is matched by its name alone.";
+
+/** What a row says of a database of poplin's name that somebody else filled. */
+const OTHERS_TABLES = "matched by its name alone, and it holds tables that are not poplin's";
+
 /** An account with nothing of poplin's in it, and no Worker. */
 function fresh(changes: Partial<Account> = {}): Account {
   return { ...emptyAccount(), bindings: [], noWorker: true, ...changes };
@@ -229,8 +235,32 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const { found, done } = await installed(account, kind, APPLY);
     const [upload] = account.uploads as { metadata: { bindings: { name: string; id?: string }[] } }[];
 
-    expect(found).toMatchObject({ state: "leftover", words: "There is a database named poplin in this account, and no poplin runs. It may hold an earlier install's sites and records.", address: `https://dash.cloudflare.com/${ACCOUNT}/workers/d1` });
-    expect([shown(done)[1], done.ok && done.ready, account.databases, upload?.metadata.bindings.find((binding) => binding.name === "DB")?.id]).toEqual(["D1 database | leave | poplin", true, [{ uuid: "database-9", name: "poplin" }], "database-9"]);
+    const words = `There is a database named poplin in this account, and no poplin runs. It may hold an earlier install's sites and records. ${BY_NAME}`;
+    const bound = upload?.metadata.bindings.find((binding) => binding.name === "DB")?.id;
+
+    expect(found).toMatchObject({ state: "leftover", words, address: `https://dash.cloudflare.com/${ACCOUNT}/workers/d1` });
+    expect([shown(done)[1], done.ok && done.ready, account.databases, bound]).toEqual(["D1 database | leave | poplin (empty; matched by its name alone)", true, [{ uuid: "database-9", name: "poplin" }], "database-9"]);
+  });
+
+  // Drift: the name is a common one. A database that holds tables and none of poplin's schema steps is somebody else's records: a run that took it would let the Worker write its schema beside them, and a later removal would delete all of it.
+  test.each([
+    ["tables that are not poplin's", { tables: ["invoices"] }, [], [`D1 database | block | poplin: ${OTHERS_TABLES}: it is not used, and an install needs a database of this name`], false, 0],
+    ["an answer that is no list of tables", { tables: "failed" }, [], ["D1 database | fail | poplin: no answer from Cloudflare"], false, 0],
+    [
+      "poplin's schema steps, beside a bucket of the name",
+      { sites: 3 },
+      ["poplin-sites"],
+      ["R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"],
+      true,
+      1,
+    ],
+  ] as const)("a database of poplin's name left behind with %s: the dry run and the run say which, and only poplin's is used", async (_holds, holds, buckets, rows, ready, uploads) => {
+    const account = fresh({ databases: [{ uuid: "database-9", name: "poplin" }], buckets: buckets.map((name) => ({ name })), ...holds });
+    const dry = await installed(account, kind, DRY);
+    const run = await installed(account, kind, APPLY);
+
+    expect([shown(dry.done).slice(0, rows.length), dry.done.ok && dry.done.ready]).toEqual([[...rows], ready]);
+    expect([shown(run.done).slice(0, rows.length), run.done.ok && run.done.ready, account.uploads.length, account.buckets.length]).toEqual([[...rows], ready, uploads, uploads]);
   });
 
   // Drift: the key's value and the token are secrets of the run. A row, a step, or a block that held one would print it.

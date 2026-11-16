@@ -277,7 +277,8 @@ function withoutWorker(place: Place, notes: readonly Blocked[], held: { readonly
 
   const pages = pagesOf(place.accountId);
   const things = [...(held.database ? [`a database named ${INSTALL_OBJECTS.database}`] : []), ...(held.bucket ? [`a bucket named ${INSTALL_OBJECTS.bucket}`] : [])].join(" and ");
-  const words = `There is ${things} in this account, and no poplin runs. It may hold an earlier install's sites and records.`;
+  const both = held.database && held.bucket;
+  const words = `There is ${things} in this account, and no poplin runs. ${both ? "They" : "It"} may hold an earlier install's sites and records. ${both ? "They are matched by their names alone." : "It is matched by its name alone."}`;
 
   return { state: "leftover", place, notes, words, address: held.database ? pages.database : pages.storage };
 }
