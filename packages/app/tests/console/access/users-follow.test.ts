@@ -231,6 +231,32 @@ describe("followUsers", () => {
     expect(await followUsers(opened.install, follow)).toEqual({ carried: false, why: "half_refused", sentence: "The login list at Example Cloud was written, but the change is not complete. Open Domain and press Repair." });
     expect(await problems(opened)).toEqual(["users_not_carried"]);
   });
+
+  // Drift: a try reads [owner, bo] before the install kept any run of its domain. While its write is under way cy is added and a first repair carries all three and is kept. The try's older list then lands, and it is refused the rest.
+  // A try that set no mark because it began under none would leave the kept run saying nothing waits, over a provider that holds the list without cy.
+  test("a try that began before the install's first run was kept, and is refused after that run, leaves the change waiting under it", async () => {
+    const opened = await openOwned();
+    await opened.install.database.addLogin(BO, { by: opened.owner, at: opened.install.now() });
+    const provider: { held: readonly Login[] } = { held: [] };
+    const follow: UsersFollow = {
+      where: "Example Cloud",
+      holdsKey: () => true,
+      push: async (logins) => {
+        await opened.install.database.addLogin(CY, { by: opened.owner, at: opened.install.now() });
+        const repaired = [opened.owner, BO, CY];
+        await opened.install.database.keepDomainCheck({ ran_at: opened.install.now(), by: opened.owner, run: "repair", pieces: [] }, {}, { logins: repaired, since: opened.install.now() });
+        expect(await waits(opened)).toBe(false);
+        provider.held = logins;
+
+        return { ok: false, refusal: "unreachable", written: true };
+      },
+    };
+    const followed = await followUsers(opened.install, follow);
+
+    // The run is kept by now, so the scheduled run carries the users again: the words say so, and no problem is noted.
+    expect(followed).toEqual({ carried: false, why: "half_retried", sentence: "The login list at Example Cloud was written, but the change is not complete; the rest is tried again by itself." });
+    expect([provider.held, await waits(opened), await problems(opened)]).toEqual([[opened.owner, BO], true, []]);
+  });
 });
 
 describe("the console", () => {

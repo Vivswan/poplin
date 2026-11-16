@@ -84,11 +84,13 @@ function waitingOf(pushed: Refusal, remembers: boolean): Waiting {
 /**
  * Leave a change waiting after a try the provider refused, and note the one no later try mends: a refusal a person must repair, and any refusal on an install that keeps no run of its domain to remember the change by.
  *
- * @param since - the mark the try began under, `undefined` on an install that keeps no run. A mark is set anew whatever became of that one: the try may have written a list that is stale by now, after another try settled a newer one
+ * A mark is set anew whatever became of the one the try began under: the try may have written a list that is stale by now, after another try settled a newer one.
+ * It is set too where the try began under none and a first run of the domain was kept while it was under way. On an install that still keeps none, the statement writes nothing.
+ *
+ * @param since - the mark the try began under, `undefined` on an install that kept no run then
  */
 async function refused(install: Pick<Install, "database" | "now">, follow: UsersFollow, pushed: Refusal, since: number | undefined): Promise<Followed> {
-  const remembers = since !== undefined;
-  if (remembers) await install.database.settleUsers({ logins: null, since }, install.now());
+  const { waits: remembers } = await install.database.settleUsers({ logins: null, since: since ?? 0 }, install.now());
   if (!remembers || NOTED.includes(pushed.refusal)) await noteProblem(install, "users_not_carried");
 
   return waits(follow, waitingOf(pushed, remembers));
