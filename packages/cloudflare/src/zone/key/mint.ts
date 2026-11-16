@@ -14,7 +14,7 @@ import { BasePermissionGroups } from "cloudflare/resources/accounts/tokens/permi
 import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
 import { type CloudflareFailure, type Connection, callCloudflare } from "../client";
 import { reportOf, type SyncFailure, type Synced } from "../sync";
-import { type KeyPlace, keyPolicies } from "./rights";
+import { type KeyPlace, keyPolicies, noGroup } from "./rights";
 
 /** What stands where the key was in a text Cloudflare sent. */
 const HIDDEN = "[key]";
@@ -95,7 +95,7 @@ export async function mintKey(connection: Connection, place: KeyPlace & { readon
   if (!groups.ok) return { ok: false, made: false, why: groups };
 
   const wanted = keyPolicies(place, groups.value);
-  if (!wanted.ok) return { ok: false, made: false, why: { ok: false, failure: "no-group", message: `Cloudflare lists no permission group named ${wanted.missing.join(", ")}` } };
+  if (!wanted.ok) return { ok: false, made: false, why: noGroup(wanted.missing) };
 
   // A create that is tried again makes a second token, and only the last one's id comes back: this call is sent once.
   const created = await callCloudflare(connection, (api) => new BaseTokens(api).create({ account_id: accountId, name, policies: wanted.policies }, { maxRetries: 0 }));

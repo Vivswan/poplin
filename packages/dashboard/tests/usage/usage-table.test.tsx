@@ -167,8 +167,8 @@ describe("the table of the Usage screen", () => {
   test.each([
     [null, null],
     [{ refusal: "key_refused", right: null }, "The kept key no longer works. Open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
-    [{ refusal: "lacks_right", right: "Figures: Read" }, "The kept key has no right to read usage: Figures: Read. Delete the key at Provider, then open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
-    [{ refusal: "lacks_right", right: null }, "The kept key has no right to read usage. Delete the key at Provider, then open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
+    [{ refusal: "lacks_right", right: "Figures: Read" }, "The kept key has no right to read usage: Figures: Read. Open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
+    [{ refusal: "lacks_right", right: null }, "The kept key has no right to read usage. Open Domain and press Repair: it makes a new key. The numbers here are poplin's own count."],
     [{ refusal: "unreachable", right: null }, "Provider did not answer. The numbers here are poplin's own count."],
   ] as const)("over the install's own numbers, %j reads %p", async (official, says) => {
     await draw({ ...OWN, official });
