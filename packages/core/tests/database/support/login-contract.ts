@@ -35,24 +35,21 @@ const DAY_MS = 86_400_000;
 export function visitorKey(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the visitor key`, () => {
     // Drift: two Workers that each kept their own key would count one visitor under two keys, and let each through twice as often.
-    test("starters at the same moment end with one key, a later starter gets it, and replacing it is the only thing that changes it", async () => {
+    test("starters at the same moment end with one key, a later starter gets it, and nothing changes it", async () => {
       const database = await opened(makeDatabase);
       const none = await database.readVisitorKey();
       const started = await Promise.all([FIRST_KEY, SECOND_KEY, THIRD_KEY].map((fresh) => database.ensureVisitorKey(fresh, NOW)));
       const winner = started.find((start) => start.kind === "created")?.key;
       const later = await database.ensureVisitorKey(new Uint8Array(32).fill(0xd4), NOW + 1);
-      await database.rotateVisitorKey(new Uint8Array(48).fill(0xe5), { by: BO, at: NOW + 2 });
 
       expect(none).toBeUndefined();
       expect(started.map((start) => start.kind).sort()).toEqual(["created", "kept", "kept"]);
       expect<unknown>(started.map((start) => start.key)).toEqual([winner, winner, winner]);
       expect<unknown>([FIRST_KEY, SECOND_KEY, THIRD_KEY]).toContainEqual(winner);
       expect<unknown>(later).toEqual({ kind: "kept", key: winner });
-      expect<unknown>(await database.readVisitorKey()).toEqual(new Uint8Array(48).fill(0xe5));
-      expect(await auditTrail(database)).toEqual([{ seq: 1, at: NOW + 2, by: BO, action: "signed_everyone_out", site: null, detail: {} }]);
+      expect(await auditTrail(database)).toEqual([]);
       await expect(database.ensureVisitorKey(new Uint8Array(31), NOW)).rejects.toThrow(RangeError);
-      await expect(database.rotateVisitorKey(new Uint8Array(31), BY_ADA)).rejects.toThrow(RangeError);
-      expect<unknown>(await database.readVisitorKey()).toEqual(new Uint8Array(48).fill(0xe5));
+      expect<unknown>(await database.readVisitorKey()).toEqual(winner);
     });
 
     // Drift: a request is checked against both; a joint read that gave either one differently from its own read would count a visitor under another key or trust a removed login.
@@ -73,14 +70,13 @@ export function visitorKey(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: a backup or a dashboard page that carried the key would let whoever reads it work out the key a visitor is counted under.
-    test("no listing, export, settings read, or audit entry holds the key, before or after it is replaced", async () => {
+    test("no listing, export, settings read, or audit entry holds the key", async () => {
       const database = await opened(makeDatabase);
       await database.initSettings(SETTINGS, BY_ADA);
       await database.addToken((await mintToken({ scope: "admin", note: "laptop", now: NOW })).record, BY_ADA);
       const site = await made(database, draft(REPORT, "public", DOCS));
       await database.trashSite((await made(database, draft(REPORT))).id, BY_ADA);
       await database.ensureVisitorKey(FIRST_KEY, NOW);
-      await database.rotateVisitorKey(SECOND_KEY, BY_ADA);
 
       const shown = JSON.stringify([
         await database.exportSites({ limit: 100 }),
@@ -93,11 +89,10 @@ export function visitorKey(label: string, makeDatabase: DatabaseFactory): void {
         await database.listTokens(),
         await database.listAudit({ limit: 100 }),
       ]);
-      const needles = ["a1".repeat(32), "b2".repeat(32), "161,161", "178,178", '"161"', '"178"'];
+      const needles = ["a1".repeat(32), "161,161", '"161"'];
 
       expect(needles.filter((needle) => shown.includes(needle))).toEqual([]);
-      expect(shown).toContain("signed_everyone_out");
-      expect<unknown>(await database.readVisitorKey()).toEqual(SECOND_KEY);
+      expect<unknown>(await database.readVisitorKey()).toEqual(FIRST_KEY);
     });
   });
 }

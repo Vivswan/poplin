@@ -82,7 +82,6 @@
       "name": "@poplin/core",
       "dependencies": {
         "drizzle-orm": "0.45.4",
-        "jose": "6.2.17",
         "nanoid": "6.0.2",
         "p-map": "7.1.1",
         "pretty-bytes": "7.2.0",

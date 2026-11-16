@@ -1302,10 +1302,6 @@ export class SqlDatabase implements Database {
     return { kind: changed(inserted) ? "created" : "kept", key };
   }
 
-  async rotateVisitorKey(fresh: Uint8Array, signed: Signed): Promise<void> {
-    await this.#driver.batch([keepSecret("visitor_key", visitorKeyToText(fresh), signed.at), auditPlain(signed, "signed_everyone_out", {})]);
-  }
-
   async readUpdateAddress(): Promise<UpdateAddress | undefined> {
     const [read] = await this.#driver.batch([READ_UPDATE_ADDRESS]);
 
