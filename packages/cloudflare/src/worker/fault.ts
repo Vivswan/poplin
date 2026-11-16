@@ -1,11 +1,13 @@
-// The one way an error the Worker caught reaches Cloudflare's log: by its kind and the places in the code it passed through, never by its message.
+// The one way an error the Worker caught reaches Cloudflare's log: as an error of fixed words that keeps the places in the code the caught one passed through, and nothing of its message.
+//
+// Cloudflare maps the places of an error a run throws back to the source's files and lines, from the uploaded source map. A stack written as text is never mapped, so the places travel on an error.
 //
 // A message is written for whoever reads the code, so it may repeat a stored value: a site's id, a file's path, a key of the bucket. An unlisted or private site's id is its link, and the log is no place for one.
 
 /** How a line of a stack names a place in the code. */
 const FRAME = /^\s*at /;
 
-/** The most places one line of the log names, nearest first. */
+/** The most places a fault keeps, nearest first. */
 const MOST_FRAMES = 12;
 
 function kindOf(error: unknown): string {
@@ -27,13 +29,21 @@ function framesOf(error: unknown): readonly string[] {
 }
 
 /**
- * Write one error line to the log for an error the Worker caught.
+ * Make the error that stands for one the Worker caught.
  *
  * @param what - what failed, in fixed words that hold no value of a request or a record
- * @param error - whatever was thrown; its message, and the message of its cause, are left out
+ * @param error - whatever was thrown; its message, its cause, and its cause's message are left out
+ * @returns an error whose message is `what` with the kind of the caught error and of its cause, and whose stack holds the caught error's places
  */
-export function logFault(what: string, error: unknown): void {
+export function faultOf(what: string, error: unknown): Error {
   const cause = error instanceof Error && error.cause !== undefined ? `, caused by ${kindOf(error.cause)}` : "";
+  const fault = new Error(`poplin: ${what} (${kindOf(error)}${cause})`);
+  fault.stack = [`${fault.name}: ${fault.message}`, ...framesOf(error)].join("\n");
 
-  console.error([`poplin: ${what} (${kindOf(error)}${cause})`, ...framesOf(error)].join("\n"));
+  return fault;
+}
+
+/** Write the fault of an error the Worker caught and answers itself to the log, as an error and not as text. */
+export function logFault(what: string, error: unknown): void {
+  console.error(faultOf(what, error));
 }
