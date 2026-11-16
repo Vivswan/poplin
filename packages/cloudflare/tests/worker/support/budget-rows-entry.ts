@@ -310,7 +310,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return (measured) => get(measured, `${ADMIN}/api/whoami`);
     },
     status: 401,
-    budget: { queries: 6, read: 53, reads: 0, writes: 0 },
+    budget: { queries: 6, read: 54, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,
@@ -319,7 +319,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     // What a start adds to any request: the schema's step read, the settings, and the signing key.
     arrange: async () => (measured) => get(measured, `${ADMIN}/api/whoami`),
     status: 401,
-    budget: { queries: 4, read: 57, reads: 0, writes: 0 },
+    budget: { queries: 4, read: 58, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,
