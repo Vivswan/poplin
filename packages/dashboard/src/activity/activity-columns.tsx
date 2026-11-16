@@ -44,7 +44,7 @@ export function SiteThen({ entry }: { readonly entry: Entry }): ReactNode {
       to="/sites/$label"
       params={{ label: entry.site.label }}
       title={entry.site.name}
-      className="-mx-1 rounded-sm px-1 py-0.5 text-link underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+      className="rounded-sm py-0.5 text-link underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
     >
       {shownName(entry.site)}
     </Link>
@@ -62,6 +62,6 @@ export function activityColumns(logins: LoginNames, timeZone: TimeZoneChoice): r
     { id: "when", header: timeZone === "utc" ? "When (UTC)" : "When", fixed: true, sortable: "desc", cell: (entry) => <When entry={entry} headed /> },
     { id: "who", header: "Who", cell: (entry) => <Who by={entry.by} logins={logins} unnamed="a token" /> },
     { id: "what", header: "What", widest: 480, cell: (entry) => <span title={whatOf(entry)}>{whatOf(entry)}</span> },
-    { id: "site", header: "Site", cell: (entry) => <SiteThen entry={entry} /> },
+    { id: "site", header: "Site", grows: true, cell: (entry) => <SiteThen entry={entry} /> },
   ];
 }
