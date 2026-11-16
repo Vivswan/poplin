@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
 import { deleteSite } from "../../src/actions/delete";
+import { cancelCopy, duplicateSite } from "../../src/actions/duplicate";
 import { listSites } from "../../src/actions/list";
 import { restoreSite } from "../../src/actions/restore";
 import { updateSite } from "../../src/actions/set";
@@ -10,11 +11,21 @@ import { abandonPublish } from "../../src/actions/abandon-publish";
 import { beginPublish } from "../../src/actions/begin-publish";
 import { publishSite } from "../../src/actions/publish";
 import { uploadFile } from "../../src/actions/upload-file";
+import type { Jobs } from "../../src/jobs/jobs";
+import { dayOf } from "../../src/records/views";
 import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, PAGE_SHA256, type World } from "./support/actions-fixture";
 
+/** The milliseconds of one hour. */
 const HOUR = 3_600_000;
+
+/** The one file of a fixture upload, as its manifest declares it. */
 const PAGE = { path: "index.html", size: 4, content_type: "text/html", sha256: PAGE_SHA256 };
+
+/** The files one removal takes from a folder whose list pages hold one object each. */
 const ONE_REMOVAL = 15;
+
+/** A host that runs jobs by itself, and runs none: every copy it starts is left as its first call left it. */
+const SILENT_JOBS: Jobs = { background: true, start: async () => undefined, stop: async () => undefined };
 
 /** Begin a publish of one four-byte page and send it; answers the upload's id. */
 async function staged(world: World, asked: object): Promise<string> {
@@ -261,6 +272,56 @@ describe("sweepExpired", () => {
       { ok: true, uploads: 1, left: [] },
     ]);
     expect([versionsOf(await world.keys()), await uploads(), await getSite(world.install, ADMIN, site)]).toMatchObject([["v4"], 0, { site: { live_version: 4 } }]);
+  });
+
+  // Drift: a job the host dropped leaves its copy pending with nobody told; swept in silence, the person who pressed Duplicate would never learn that no site was made.
+  // Each case has a database of its own: a note of the same kind and hour as another adds no row, so one case would hide a second one's note.
+  test.each([
+    ["two copies whose job never finished them are noted as copy_failed, in one row", ["copy", "copy"], [["copy_failed", 1]]],
+    ["a copy somebody cancelled is noted as nothing", ["cancelled"], []],
+    ["a publish nobody finished is noted as nothing", ["publish"], []],
+  ] as const)("%s, and each goes with its files once 25 hours have passed and not before", async (_case, left, problems) => {
+    const world = await makeWorld();
+    const source = await sized(world, "report", 120);
+    const kept = (await world.keys()).length;
+    const begin = async (): Promise<string> => {
+      const begun = await duplicateSite(world.install, OWNER, { site: source }, 1, SILENT_JOBS);
+      if (!begun.ok || begun.site !== null) throw new Error("the fixture copy was not left unfinished");
+
+      return begun.copy.upload;
+    };
+    const leave = { copy: begin, cancelled: async () => cancelCopy(world.install, OWNER, await begin(), SILENT_JOBS), publish: async () => staged(world, { name: "draft" }) };
+    for (const what of left) await leave[what]();
+
+    const noted = async (): Promise<unknown[]> => (await world.install.database.listProblems(dayOf(NOW))).map(({ kind, count, day }) => [kind, count, day]);
+
+    world.clock.now = NOW + 25 * HOUR;
+    const early = [await sweepExpired(world.install, ADMIN, { limit: 10, from: { uploads: true } }), await noted()];
+    world.clock.now = NOW + 25 * HOUR + 1;
+    const swept = await sweepExpired(world.install, ADMIN, { limit: 10, from: { uploads: true } });
+
+    expect(early).toMatchObject([{ ok: true, uploads: 0 }, []]);
+    // The source's own finished upload goes with the ones left.
+    expect([swept, await noted(), (await world.keys()).length - kept]).toMatchObject([{ ok: true, uploads: left.length + 1, left: [] }, problems.map((problem) => [...problem, dayOf(NOW + 25 * HOUR + 1)]), 0]);
+  });
+
+  // Drift: a host's scheduled run keeps one call to its database for this note in a step. A note for each copy asks again whenever the clock passes an hour between two, and the run would pass what one invocation may ask.
+  test("a step that passes an hour of the clock between two unfinished copies asks the database for one note", async () => {
+    const world = await makeWorld();
+    const source = await sized(world, "report", 120);
+    for (let copy = 0; copy < 2; copy += 1) await duplicateSite(world.install, OWNER, { site: source, name: `copy-${copy}` }, 1, SILENT_JOBS);
+
+    world.clock.now = NOW + 25 * HOUR + 1;
+    const abandon = world.install.database.abandonUpload.bind(world.install.database);
+    spyOn(world.install.database, "abandonUpload").mockImplementation((id) => {
+      world.clock.now += HOUR;
+
+      return abandon(id);
+    });
+    const notes = spyOn(world.install.database, "noteProblem");
+    const swept = await sweepExpired(world.install, ADMIN, { limit: 10, from: { uploads: true } });
+
+    expect([swept.ok && swept.uploads, notes.mock.calls.length]).toEqual([3, 1]);
   });
 
   // Drift: the sweep deletes sites for good; it must run for an admin alone and never on a limit that is no count.

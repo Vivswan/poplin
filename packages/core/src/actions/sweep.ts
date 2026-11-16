@@ -12,6 +12,7 @@ import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
 import type { Upload } from "../records/upload";
 import type { SiteId } from "../sites/ids";
 import { emptyLeftover, removeSite } from "./delete";
+import { noteProblem } from "./problems";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
 import { DAY_MS } from "./site-object";
@@ -86,14 +87,21 @@ function removeLeftovers(install: Install, upload: Upload): Promise<readonly str
   return removeUploadFiles(install, upload);
 }
 
-/** Remove the old uploads with what they left in the store. A record goes only once its files are gone, so a removal that ran out of pages is taken up by the next walk. */
+/** Remove the old uploads with what they left in the store. A record goes only once its files are gone, so a removal that ran out of pages is taken up by the next walk. Copies nobody finished are noted as the problem `copy_failed`, once a call. */
 async function removeOldUploads(install: Install, uploads: readonly Upload[]): Promise<{ readonly uploads: number; readonly left: readonly string[] }> {
   const left: string[] = [];
   let removed = 0;
+  let noted = false;
 
   for (const upload of uploads) {
     // A pending upload is given up first, so nothing can finish it while its files go.
     if (upload.state === "pending" && !(await install.database.abandonUpload(upload.id))) continue;
+
+    // A copy still pending here ended with no site, and nothing else told anybody. One note a call keeps a step to one call to the database for it.
+    if (upload.state === "pending" && upload.plan.kind === "duplicate" && !noted) {
+      await noteProblem(install, "copy_failed");
+      noted = true;
+    }
 
     const remaining = await removeLeftovers(install, upload);
     left.push(...remaining);
@@ -156,7 +164,7 @@ async function sweepLeftovers(install: Install, from: Extract<SweepPlace, { read
  * Take one step of the walk that moves every site past its expiry to the trash, removes for good every site that has sat in the trash for `trash_days`, and removes every upload begun over 25 hours ago.
  * The walk ends by removing the files removed sites left behind, then every login of a computer that ran out, and the audit entries and ended tokens of over 90 days ago, a bounded number a walk.
  *
- * One step lists once, up to `limit` due sites, uploads, or leftovers, so its cost is bounded: one change per site that is due, nothing for a site that is not, and one bounded file removal per item.
+ * One step lists once, up to `limit` due sites, uploads, or leftovers, so its cost is bounded: one change per site that is due, nothing for a site that is not, and one bounded file removal per item. A step over the uploads notes at most one problem more.
  * @param actor - an admin, who signs the audit entry of every site moved or removed
  * @param step - `limit` is 1 to 100; `from` is the `next` of the step before, and absent to start a walk
  * @returns what the step did, `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused

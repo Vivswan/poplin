@@ -9,6 +9,7 @@
 //                            noted                                                               fetched, and put in place
 //   one step, at most    12: a listing of what is due, 5 x (a change, a leftover gone),          150: 5 x 30 to the bucket   162
 //                            and the day's count of writes to the bucket, read before a run's first listing of it
+//   a step over uploads   1 more: a copy nobody finished, noted as a problem                     0                      1
 //   a walk, nothing due   5: a listing each of the expired sites, the sat-out ones, the old      0                      5
 //                            uploads, and the leftovers, and the logins that ran out removed
 //   one run, at most     40: the start, the answer, an update, the steps, the count and the place written                290
@@ -38,6 +39,9 @@ const STEP_ITEMS = 5;
 
 /** The most calls one step can make, to the database and in all, as the table above adds them up. */
 const STEP_CALLS = { database: 12, all: 162 } as const;
+
+/** The call to the database a step over the uploads may make beyond those: a copy nobody finished, noted as a problem. */
+const NOTE_CALLS = 1;
 
 /** The most calls one run makes, which leaves an instance that starts first 10 of an invocation's 50 to the database and of its 300 in all. */
 const RUN_CALLS = { database: 40, all: 290 } as const;
@@ -91,10 +95,11 @@ function counted<Target extends object>(target: Target, tally: Tally, under: key
   });
 }
 
-/** Whether a whole step and the write of the place still fit the run, by the database's calls and by all of them. */
-function fitsAnotherStep(tally: Tally): boolean {
-  const database = tally.database + STEP_CALLS.database + CLOSING_CALLS;
-  const all = tally.database + tally.bucket + tally.web + STEP_CALLS.all + CLOSING_CALLS;
+/** Whether a whole step at a place and the write of the place still fit the run, by the database's calls and by all of them. */
+function fitsAnotherStep(tally: Tally, place: NonNullable<Place>): boolean {
+  const noting = "uploads" in place ? NOTE_CALLS : 0;
+  const database = tally.database + STEP_CALLS.database + noting + CLOSING_CALLS;
+  const all = tally.database + tally.bucket + tally.web + STEP_CALLS.all + noting + CLOSING_CALLS;
 
   return database <= RUN_CALLS.database && all <= RUN_CALLS.all;
 }
@@ -141,7 +146,7 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   let place: Place = start.place ?? START;
 
   try {
-    while (place !== undefined && fitsAnotherStep(tally)) {
+    while (place !== undefined && fitsAnotherStep(tally, place)) {
       const swept = await sweepExpired(watched, SWEEPER, { limit: STEP_ITEMS, from: place });
       if (!swept.ok) throw new Error(`the sweep was refused: ${swept.code}`);
 

@@ -309,6 +309,18 @@ describe("a copy that takes more requests", () => {
     expect([meanwhile, sent.slice(1)]).toEqual([[2, ["Duplicating. Ready in a few seconds.|Cancel"]], [`/sites/${SOURCE.id}/duplicate {"upload":"${UPLOAD}"}`, `/sites/${SOURCE.id}/duplicate {"upload":"${UPLOAD}"}`]]);
   }, 10_000);
 
+  // Drift: a copy whose job ended with no site is answered as gone; read as one more "still copying", the line would wait for good on a copy that is not made.
+  test("that the install makes by itself and no longer holds ends its line with the refusal's sentence, and is asked after no more", async () => {
+    const gone = (): Response => refusal(404, "not_found", "upload", "The copy stopped. If the site is not under All sites, duplicate it again.");
+    serve([() => partly(15), watched, gone], gone, 3);
+    await duplicate();
+    await waitFor(() => expect(lines()).toEqual(["The copy stopped. If the site is not under All sites, duplicate it again.|"]), { timeout: 4000 });
+    const asked = sent.length;
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+
+    expect([sent.length - asked, sent.slice(3), reads.list > 1]).toEqual([0, [`/copies/${UPLOAD}/cancel {}`], true]);
+  }, 10_000);
+
   // Drift: Cancel pressed during the pause would wait the pause out, or the copy would be given up in the page alone while the install goes on making it.
   test("that the install makes by itself is given up at Cancel without the pause being waited out", async () => {
     serve([() => partly(15), watched, whole], undefined, 3);

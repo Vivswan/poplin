@@ -26,7 +26,7 @@ test("a refusal that names a limit or an upload says so: the limit a copy does n
     ["too_large", "max_manifest_size", "The copy does not fit a limit of the install: max_manifest_size. No copy was made."],
     ["too_large", "<script>", "The request was too large, so nothing was changed."],
     ["not_found", undefined, "No site is at this address. It may have been deleted, or the link is an old one."],
-    ["not_found", "upload", "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again."],
+    ["not_found", "upload", "The copy stopped. If the site is not under All sites, duplicate it again."],
   ] as const;
 
   expect(cases.map(([code, about]) => refusalSentence(code, about))).toEqual(cases.map(([, , sentence]) => sentence));

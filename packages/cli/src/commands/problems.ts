@@ -80,6 +80,7 @@ const LOCAL_ROWS = {
     hint: "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css",
     exit: "failed",
   },
+  copy_gone: { sentence: "the copy stopped", hint: "if poplin list does not show the site, copy it again: poplin duplicate <site>", exit: "failed" },
   not_confirmed: { sentence: "what was typed is not the site's label, so nothing was deleted", exit: "failed" },
   no_terminal: {
     sentence: "delete --forever asks for the site's label to be typed, and there is no terminal to ask on",

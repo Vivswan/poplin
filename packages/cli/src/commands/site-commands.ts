@@ -181,13 +181,16 @@ function copied(site: SiteObject): string[] {
  * Give up a copy that a call failed in the middle of.
  *
  * @param upload - the upload the copy's last answer named; none when the first call failed, which may have made the copy or begun it all the same
- * @returns the failure with what became of the copy, or the copy as done when the install finished it though its answer was lost
+ * @returns the failure with what became of the copy, or the copy as done when the install finished it though its answer was lost; `copy_gone` for a copy the install stopped following
  */
 async function stopCopy(session: Session, upload: string | undefined, failure: Failure): Promise<Outcome> {
   if (upload === undefined) return failed({ ok: false, failure });
 
   const became = await giveUpUpload(session, upload);
   if (became.kind === "published") return { ok: true, value: became.answer, lines: copied(became.answer.site) };
+
+  // A refusal about the upload is no word about the site that was asked for: the install stopped following the copy.
+  if (failure.kind === "refused" && failure.code === "not_found" && failure.about === "upload") return { ok: false, problem: problem("copy_gone") };
 
   return givenUp(failure, AFTERMATH[became.kind]);
 }

@@ -3,12 +3,16 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { cancelCopy, duplicateSite } from "../../src/actions/duplicate";
 import { listSites } from "../../src/actions/list";
 import { publishSite } from "../../src/actions/publish";
+import { sweepExpired } from "../../src/actions/sweep";
 import type { Job, Jobs } from "../../src/jobs/jobs";
 import { failJob, runJob } from "../../src/jobs/run-job";
 import { dayOf } from "../../src/records/views";
 import type { ObjectKey } from "../../src/storage/storage";
 import { BunSqliteDriver } from "../database/support/bun-sqlite-driver";
-import { ADMIN, file, made, makeWorld, NOW, OWNER, STRANGER, type World } from "../actions/support/actions-fixture";
+import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, STRANGER, type World } from "../actions/support/actions-fixture";
+
+/** The milliseconds of one hour: how long after its day the sweep leaves an upload alone. */
+const HOUR = 3_600_000;
 
 /** The calls a caller made before the action: one, as a caller that read a token did. */
 const ASKING = 1;
@@ -188,6 +192,26 @@ describe("runJob", () => {
     expect([left, (await problems(world)).map((problem) => (problem as unknown[])[0]), await sites(world)]).toEqual([[], ["copy_failed"], 1]);
     expect(await duplicateSite(world.install, OWNER, { site: source, upload: job.upload }, ASKING, host.jobs)).toEqual({ ok: false, code: "not_found", about: "upload" });
     expect(await runJob(world.install, job)).toBe("done");
+  });
+
+  // Drift: a job the host dropped gives nothing up; an ask that went on answering "still copying" past the copy's day would keep a page and a command waiting on a copy the sweep removed.
+  test("a copy whose job ran no round is answered as still copying inside its day, and as gone once the day is over and once the sweep removed it, with `copy_failed` noted", async () => {
+    const world = await makeWorld();
+    const host = backgroundJobs();
+    const { source, job, before } = await begun(world, host);
+    const ask = async (): Promise<unknown> => duplicateSite(world.install, OWNER, { site: source, upload: job.upload }, ASKING, host.jobs);
+    const gone = { ok: false, code: "not_found", about: "upload" };
+
+    world.clock.now = NOW + DAY - 1;
+    const inside = await ask();
+    world.clock.now = NOW + DAY;
+    const over = await ask();
+    world.clock.now = NOW + DAY + HOUR + 1;
+    const swept = await sweepExpired(world.install, ADMIN, { limit: 10, from: { uploads: true } });
+    const noted = (await world.install.database.listProblems(dayOf(world.clock.now))).map(({ kind, count }) => [kind, count]);
+
+    expect([inside, over, await ask()]).toEqual([{ ok: true, before: null, site: null, copy: { upload: job.upload, copied: null, files: 300 } }, gone, gone]);
+    expect([swept.ok, noted, (await world.keys()).filter((key) => !before.includes(key)), await sites(world)]).toEqual([true, [["copy_failed", 1]], [], 1]);
   });
 
   // Drift: a host that refuses a job would leave an upload nobody runs and nobody can ask to run: a copy that stays "copying" until it runs out a day later.

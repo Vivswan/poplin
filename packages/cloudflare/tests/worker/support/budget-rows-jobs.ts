@@ -5,7 +5,7 @@ import { parseUploadId } from "@poplin/core/src/records/upload";
 import { giveUpStep, roundStep } from "../../../src/jobs/workflow";
 import { siteFolder, siteId, siteWithFiles } from "./budget-seeds";
 import { adminToken, apiOf, type BudgetRow, type Measured, post, sessionOf, type Stage, type Step, unmeasured } from "./budget-stage";
-import { BINDINGS, done } from "./install";
+import { BINDINGS, done, sweep } from "./install";
 
 /** The group of the requests around a job. */
 const PUBLISHING = "Publishing";
@@ -21,6 +21,9 @@ const COPIED_A_ROUND = 113;
 
 /** The rounds after the first request's that copy the last files of such a copy: the round after them only makes the site. */
 const ROUNDS_TO_WHOLE = 8;
+
+/** The milliseconds of one hour. */
+const HOUR_MS = 3_600_000;
 
 /** The label of the made-up site 1, as the dashboard's addresses name a site. */
 const LABEL = `site-1--${siteId(1)}`;
@@ -185,5 +188,27 @@ export const JOBS_ROWS: readonly BudgetRow[] = [
     },
     status: undefined,
     budget: { queries: 4, reads: 0, writes: 1, deletes: 1 },
+  },
+  {
+    group: BACKGROUND,
+    name: "scheduled run: a copy whose job ended without giving it up is removed and noted",
+    // What a run adds for a copy nobody finished, over 25 hours after it began: the upload given up, its 113 files listed and removed, its record removed, and the problem noted.
+    arrange: async (stage) => {
+      await begunCopy(stage);
+      stage.w.clock.now += 24 * HOUR_MS;
+      // The day's first run, which also asks for the newest version, is not the measured one.
+      await sweep(unmeasured(stage).worker, stage.w);
+      stage.w.clock.now += 2 * HOUR_MS;
+
+      return async (measured) => {
+        await sweep(measured.worker, measured.w, measured.bindings);
+        const left = (await copyStates()).join();
+        if (left !== "") throw new Error(`the row's run left the copy ${left}`);
+
+        return undefined;
+      };
+    },
+    status: undefined,
+    budget: { queries: 11, reads: 0, writes: 1, deletes: 1 },
   },
 ];
