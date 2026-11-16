@@ -31,6 +31,7 @@ const GROUP_NAMES = {
     ...["Zone WAF Write", "Dynamic URL Redirects Read", "Dynamic URL Redirects Write", "Bot Management Read", "Bot Management Write"],
   ],
   "com.cloudflare.api.account": ["Account Analytics Read", "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write", "Workers Scripts Write", "Account API Tokens Write"],
+  "com.cloudflare.edge.r2.bucket": ["Workers R2 Storage Bucket Item Read", "Workers R2 Storage Bucket Item Write"],
 } as const;
 
 /** Which account each token acts on. */

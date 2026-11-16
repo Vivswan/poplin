@@ -10,7 +10,7 @@
 //   Database          the database named `poplin`, with every record
 //   Bucket objects    every object of the test install's bucket; the bucket itself stays
 //   Budget alert      the notification policy with poplin's name                                   an install with a domain alone
-//   Key               every API token of the account with the name of the key an install keeps
+//   Keys              every API token of the account with the name of one of the two keys an install keeps
 //
 // A record, a route, a rule, a Worker, an application, a policy, a Workflow, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
 // It runs only on the test account: one that pays for nothing and holds the test install's bucket, a name no install of a person has.
@@ -70,8 +70,8 @@ const KEPT_KINDS: readonly Kind[] = [
 /** The login in front of an install of either kind. */
 const ACCESS_KIND: Kind = { name: "Access applications and policies", remove: removeAccess, optional: true };
 
-/** The key an install of either kind keeps. */
-const KEY_KIND: Kind = { name: "Key", remove: removeKeys, optional: true };
+/** The two keys an install of either kind keeps. */
+const KEY_KIND: Kind = { name: "Keys", remove: removeKeys, optional: true };
 
 /** The variables a run reads. */
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -228,7 +228,9 @@ async function removeKeys(run: Run): Promise<Removal> {
   const account = { account_id: run.accountId };
   const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseTokens(api).list({ ...account, include_expired: true })));
 
-  return removeOwn(listed, (token) => token.name === INSTALL_OBJECTS.keyName, (token) => callCloudflare(run.connection, (api) => new BaseTokens(api).delete(token.id ?? "", account)), "Account API Tokens: Edit");
+  const names: readonly (string | undefined)[] = [INSTALL_OBJECTS.keyName, INSTALL_OBJECTS.uploadKeyName];
+
+  return removeOwn(listed, (token) => names.includes(token.name), (token) => callCloudflare(run.connection, (api) => new BaseTokens(api).delete(token.id ?? "", account)), "Account API Tokens: Edit");
 }
 
 /**

@@ -1,12 +1,12 @@
 // The dashboard's zone plug for Cloudflare: every object of an install with a domain read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its key, https redirect, guard rules, rate rule, bot switches, database, budget alert, Workflow
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its keys, https redirect, guard rules, rate rule, bot switches, database, budget alert, Workflow
 //
-// The key is the one thing an install keeps of Cloudflare's: a repair makes it with the token where the install has none that works, and writes it onto the Worker in the same change as the variables.
+// The two keys are all an install keeps of Cloudflare's: a repair makes each with the token where the install has none that works, and writes them onto the Worker in the same change as the variables.
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 // The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
-// The plug of an install without a domain is made of the same pieces: the rows, the login, the Worker's variables with its key, and the token form are exported for it.
+// The plug of an install without a domain is made of the same pieces: the rows, the login, the Worker's variables with its keys, and the token form are exported for it.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
@@ -21,8 +21,10 @@ import { INSTALL_OBJECTS } from "./install-objects";
 import { INSTALL_PIECES } from "./install-pieces";
 import { syncJobs } from "./jobs/jobs";
 import { HTTPS_SWITCH, syncHttps } from "./https/https";
-import { type HeldKey, readKeyState } from "./key/key-state";
-import { mintKey, removeKeys } from "./key/mint";
+import { uploadKeyText } from "../key/upload-key";
+import { type HeldKey, type HeldKeys, type KeyRead, readBucket, readKeyStates } from "./key/key-state";
+import { type Minted, mintKeys, removeKeys, type WantedKey } from "./key/mint";
+import { type Bucket, keyPolicies, uploadKeyPolicies } from "./key/rights";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
@@ -81,23 +83,26 @@ const SWITCH_ON = "To switch this on, add this right to the account token and pr
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 
-/** What the key's row names: the name every key of an install has at Cloudflare. */
-const KEY = INSTALL_OBJECTS.keyName;
+/** The two keys of an install: the row each has, the name every key of its kind has at Cloudflare, which its row names, and the secret of the Worker that holds it. */
+const KEYS = {
+  kept: { object: "Key", name: INSTALL_OBJECTS.keyName, binding: INSTALL_OBJECTS.keyBinding },
+  upload: { object: "Upload key", name: INSTALL_OBJECTS.uploadKeyName, binding: INSTALL_OBJECTS.uploadKeyBinding },
+} as const;
 
-/** What the key's row says of a key a repair replaces: one Cloudflare takes no more, and one that works and was made before a right the install uses now. */
+/** The two keys, in the order of their rows. */
+const KEY_KINDS = ["kept", "upload"] as const;
+
+/** What a key's row says of a key a repair replaces: one Cloudflare takes no more, and one that works and was made before a right the install uses now. */
 const KEY_DIFFERS = { refused: "Cloudflare no longer takes the key the install holds", lacking: "the key the install holds lacks a right the install uses now" } as const;
 
-/** What the key's row says of a key of the name that the install does not hold, such as a new key whose write failed: as a check finds it, and once a repair deleted it. */
+/** What a key's row says of a key of the name that the install does not hold, such as a new key whose write failed: as a check finds it, and once a repair deleted it. */
 const KEY_SPARE = { left: "a key of its name that the install does not hold is at Cloudflare", removed: "a key of its name that the install does not hold was deleted" } as const;
 
-/** What a repair that could not delete such a key tells the person to do: by its name alone it cannot be told from the key the install holds. */
-const SPARE_KEY = `A key named ${KEY} that the install does not hold could not be deleted at Cloudflare. Press Repair again. The keys are listed there:`;
-
-/** What the key's row says of a new key whose write onto the Worker failed, by whether it could be deleted again. */
+/** What a key's row says of a new key whose write onto the Worker failed, by whether it could be deleted again. */
 const KEY_UNWRITTEN = { deleted: "made, and deleted again when its write onto the Worker failed", left: "made, and left at Cloudflare for you to delete when its write onto the Worker failed" } as const;
 
-/** What a repair that could not list or delete the older keys tells the person to do. */
-const OLD_KEY = `An older key named ${KEY} may still be at Cloudflare. Delete it there:`;
+/** What the upload key's row says on a Worker that is bound to no bucket. */
+const NO_BUCKET = "the Worker is bound to no bucket";
 
 /** Every permission the plug's calls use, in Cloudflare's own name: one an install needs, with its key as Cloudflare's page on token template links names it, or an optional one, which that page names no key for. */
 const RIGHT = {
@@ -133,6 +138,7 @@ const RIGHTS = {
   Workflow: [RIGHT.scripts],
   "Budget alert": [RIGHT.notifications],
   Key: [RIGHT.tokens, RIGHT.scripts],
+  "Upload key": [RIGHT.tokens, RIGHT.scripts],
   Forwarder: [RIGHT.scripts],
 } as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone | keyof typeof INSTALL_PIECES.noDomain, readonly Right[]>>;
 
@@ -153,6 +159,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   Workflow: "rest",
   "Budget alert": "rest",
   Key: "rest",
+  "Upload key": "rest",
   Forwarder: "reach",
   "Public word": "rest",
 };
@@ -193,9 +200,11 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
  *
  * One that is set has `accountId`, the account the Worker runs in, never one a token's holder names.
  * One with nothing set has `first`, its first login: its account is the one the token shows the install in, and a repair also writes where the install answers, this login, and that account onto the Worker.
- * `key` is the install's key as its own Worker holds it. Without one, how the key stands is read at Cloudflare with the token.
+ * `key` is the install's kept key as its own Worker holds it, and `uploadKeyId` the id of the upload key that Worker holds. Without `key`, how both keys stand is read at Cloudflare with the token.
  */
-export type Known = { readonly accountId: string; readonly first?: undefined; readonly key?: HeldKey } | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined };
+export type Known =
+  | { readonly accountId: string; readonly first?: undefined; readonly key?: HeldKey; readonly uploadKeyId?: string | undefined }
+  | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined; readonly uploadKeyId?: undefined };
 
 /** What the plug is built from. */
 type PlugParts = Known & {
@@ -210,6 +219,9 @@ type PlugParts = Known & {
 
   /** What sends a call; absent outside tests. */
   readonly fetch?: Connection["fetch"];
+
+  /** The clock a new upload key's moment of making is read from, in milliseconds since the epoch; absent outside tests. */
+  readonly now?: (() => number) | undefined;
 };
 
 /** One permission of a token: one an install needs, with its key and level in a link to the form, or an optional one, with what it adds. */
@@ -226,8 +238,14 @@ export interface Placed {
   /** The install's zone; an install without a domain has none. */
   readonly zoneId: string | undefined;
 
-  /** The install's key as its own Worker holds it. */
+  /** The install's kept key as its own Worker holds it. */
   readonly key: HeldKey | undefined;
+
+  /** The id of the upload key that Worker holds. */
+  readonly uploadKeyId: string | undefined;
+
+  /** The clock a new upload key's moment of making is read from; absent outside tests. */
+  readonly now: (() => number) | undefined;
 
   /** The dashboard's hostname. */
   readonly adminHost: Hostname;
@@ -237,6 +255,32 @@ export interface Placed {
 
   /** The values a repair gives a Worker with nothing set; none on an install that is set. */
   readonly firstValues: Wanted;
+}
+
+/** What the keys of an install are read and made from: where its Worker is, the keys that Worker holds, and the clock. */
+type KeyHolder = Pick<Placed, "script" | "accountId" | "zoneId" | "key" | "uploadKeyId" | "now">;
+
+/** Which of an install's two keys. */
+type KeyKind = (typeof KEY_KINDS)[number];
+
+/** Which keys a run makes anew: for each one it makes, whether the install held one before, which the new one stands in for. `bucket` is the install's bucket where the run has read it already. */
+interface Making {
+  readonly kept?: boolean | undefined;
+  readonly upload?: boolean | undefined;
+  readonly bucket?: Bucket | undefined;
+}
+
+/** One key a run makes: what Cloudflare and the Worker are sent for it, which key it is, and whether it stands in for an older one. */
+interface Minting extends WantedKey {
+  readonly kind: KeyKind;
+  readonly replaces: boolean;
+}
+
+/** What mending keys came to: the row of each key the run made or tidied, a step for each key that is still at Cloudflare and should not be, and what the one change came to; no change is `undefined`, of a run that made no key. */
+interface Mended {
+  readonly rows: Partial<Record<KeyKind, Found>>;
+  readonly steps: DomainStep[];
+  readonly written: Synced | undefined;
 }
 
 /** The variables a run wants on the Worker. */
@@ -432,12 +476,13 @@ export function firstValues(known: Known, zone: Readonly<Record<string, string>>
 }
 
 /** The row of a key that failed: `what` came of it, why, and for a missing permission the one to add, unless another row of the run names it. */
-function keyFailed(what: string, failure: CloudflareFailure | { readonly ok: false; readonly failure: string; readonly message: string }, right: Right | undefined): Found {
+function keyFailed(kind: KeyKind, what: string, failure: CloudflareFailure | { readonly ok: false; readonly failure: string; readonly message: string }, right: Right | undefined): Found {
+  const { object, name } = KEYS[kind];
   const stopped: Stopped = { ...failure, report: reportOf([]) };
-  const why = `${KEY}${what}: ${failureText(stopped)}`;
-  if (right === undefined || !lacksRight(stopped)) return { object: "Key", state: "failed", detail: why };
+  const why = `${name}${what}: ${failureText(stopped)}`;
+  if (right === undefined || !lacksRight(stopped)) return { object, state: "failed", detail: why };
 
-  return { object: "Key", state: "failed", detail: `${why}. ${ADD_RIGHT}: ${right.name}`, right: right.name };
+  return { object, state: "failed", detail: `${why}. ${ADD_RIGHT}: ${right.name}`, right: right.name };
 }
 
 /**
@@ -445,62 +490,126 @@ function keyFailed(what: string, failure: CloudflareFailure | { readonly ok: fal
  *
  * @param variables - whether the run also reads the Worker's bindings for its variables, whose row then names the permission that reading lacks
  */
-function keyRead(state: Awaited<ReturnType<typeof readKeyState>>, variables: boolean): Found {
-  if (!state.ok && state.read === "bindings") return keyFailed("", state, variables ? undefined : RIGHT.scripts);
+function keyRead(kind: KeyKind, state: KeyRead, variables: boolean): Found {
+  const { object, name } = KEYS[kind];
+  if (!state.ok && state.read === "bindings") return keyFailed(kind, "", state, variables ? undefined : RIGHT.scripts);
 
-  if (!state.ok) return keyFailed("", state, RIGHT.tokens);
+  if (!state.ok) return keyFailed(kind, "", state, RIGHT.tokens);
 
-  if (state.value === "refused" || state.value === "lacking") return { object: "Key", state: "differs", detail: `${KEY}: ${KEY_DIFFERS[state.value]}` };
+  if (state.value === "refused" || state.value === "lacking") return { object, state: "differs", detail: `${name}: ${KEY_DIFFERS[state.value]}` };
 
-  if (state.spare.length > 0) return { object: "Key", state: "differs", detail: `${KEY}: ${KEY_SPARE.left}` };
+  if (state.spare.length > 0) return { object, state: "differs", detail: `${name}: ${KEY_SPARE.left}` };
 
-  return { object: "Key", state: state.value, detail: KEY };
+  return { object, state: state.value, detail: name };
+}
+
+/** The row of a key a run tried to make. */
+function mintedRow({ kind, replaces }: Minting, minted: Minted): Found {
+  const { object, name } = KEYS[kind];
+  if (minted.ok) return { object, state: replaces ? "changed" : "created", detail: name };
+
+  if (!minted.made) return keyFailed(kind, "", minted.why, RIGHT.tokens);
+
+  return keyFailed(kind, `, ${minted.left ? KEY_UNWRITTEN.left : KEY_UNWRITTEN.deleted}`, minted.kept, RIGHT.scripts);
+}
+
+/** The upload key as a run makes it, or the row that says why it cannot: the key is of the install's one bucket, which is read from the Worker's bindings where the run has not read them. */
+async function uploadMinting(connection: Connection, placed: KeyHolder, making: Making & { readonly upload: boolean }): Promise<Minting | Found> {
+  const { object, name } = KEYS.upload;
+  const read = making.bucket === undefined ? await readBucket(connection, placed) : ({ ok: true, value: making.bucket } as const);
+  if (!read.ok) return keyFailed("upload", "", read, RIGHT.scripts);
+
+  const bucket = read.value;
+  if (bucket === undefined) return { object, state: "failed", detail: `${name}: ${NO_BUCKET}` };
+
+  const text: WantedKey["text"] = async (made) => {
+    const written = await uploadKeyText(made, bucket, (placed.now ?? Date.now)());
+
+    return { text: written.text, secrets: [written.secret] };
+  };
+
+  return { kind: "upload", replaces: making.upload, name, policies: (groups) => uploadKeyPolicies({ accountId: placed.accountId, bucket }, groups), text };
 }
 
 /**
- * Make a new key with the token and write it onto the Worker, in one change with the variables a run wants there.
+ * Make new keys with the token and write them onto the Worker, in one change with the variables a run wants there.
  *
- * @param replaces - whether the install held a key before, which the new one stands in for
- * @returns the key's row, a step for an older key that is still at Cloudflare, and what the one change came to; no change is `undefined`, of a key that was never made
+ * @returns the row of each key the run was to make, a step for each older key that is still at Cloudflare, and what the one change came to
  */
-async function mintInto(connection: Connection, placed: Placed, wanted: Wanted, replaces: boolean): Promise<{ readonly row: Found; readonly steps: DomainStep[]; readonly written: Synced | undefined }> {
-  const place = { accountId: placed.accountId, zoneId: placed.zoneId, name: KEY };
-  const minted = await mintKey(connection, place, (value) => syncVariables(connection, placed, wanted, "apply", { name: INSTALL_OBJECTS.keyBinding, text: value }));
-  if (minted.ok) {
-    const steps = minted.stale ? [{ text: OLD_KEY, address: `https://dash.cloudflare.com/${placed.accountId}/api-tokens` }] : [];
-
-    return { row: { object: "Key", state: replaces ? "changed" : "created", detail: KEY }, steps, written: minted.kept };
+async function mintInto(connection: Connection, placed: KeyHolder, wanted: Wanted, making: Making): Promise<Mended> {
+  const rows: Mended["rows"] = {};
+  const minting: Minting[] = [];
+  if (making.kept !== undefined) {
+    minting.push({ kind: "kept", replaces: making.kept, name: KEYS.kept.name, policies: (groups) => keyPolicies(placed, groups), text: async ({ value }) => ({ text: value, secrets: [] }) });
   }
 
-  if (!minted.made) return { row: keyFailed("", minted.why, RIGHT.tokens), steps: [], written: undefined };
+  const upload = making.upload === undefined ? undefined : await uploadMinting(connection, placed, { ...making, upload: making.upload });
+  if (upload !== undefined && "kind" in upload) minting.push(upload);
+  else if (upload !== undefined) rows.upload = upload;
 
-  return { row: keyFailed(`, ${minted.left ? KEY_UNWRITTEN.left : KEY_UNWRITTEN.deleted}`, minted.kept, RIGHT.scripts), steps: [], written: minted.kept };
+  if (minting.length === 0) return { rows, steps: [], written: undefined };
+
+  const outcomes = await mintKeys(connection, placed.accountId, minting, (texts) => {
+    const secrets = texts.map(({ key, text }) => ({ name: KEYS[key.kind].binding, text }));
+
+    return syncVariables(connection, placed, wanted, "apply", secrets);
+  });
+  const steps: DomainStep[] = [];
+  let written: Synced | undefined;
+
+  for (const { key, minted } of outcomes) {
+    rows[key.kind] = mintedRow(key, minted);
+    if (minted.ok || minted.made) written = minted.kept;
+
+    if (minted.ok && minted.stale) steps.push({ text: `An older key named ${key.name} may still be at Cloudflare. Delete it there:`, address: `https://dash.cloudflare.com/${placed.accountId}/api-tokens` });
+  }
+
+  return { rows, steps, written };
 }
 
-/** What a repair does about the key it read: a new one where none works and carries every right, and beside one that does, every key of the name that the install does not hold deleted. Nothing to do is `undefined`. */
-async function mendKey(connection: Connection, placed: Placed, wanted: Wanted, state: Awaited<ReturnType<typeof readKeyState>>): Promise<Awaited<ReturnType<typeof mintInto>> | undefined> {
-  if (!state.ok) return undefined;
-
-  if (state.value !== "present") return mintInto(connection, placed, wanted, state.value !== "missing");
-
-  if (state.spare.length === 0) return undefined;
-
-  if (await removeKeys(connection, placed.accountId, state.spare)) return { row: { object: "Key", state: "changed", detail: `${KEY}: ${KEY_SPARE.removed}` }, steps: [], written: undefined };
-
-  return { row: { object: "Key", state: "present", detail: KEY }, steps: [{ text: SPARE_KEY, address: `https://dash.cloudflare.com/${placed.accountId}/api-tokens` }], written: undefined };
+/** For a key a repair makes anew, whether the new one stands in for one the install held; `undefined` for a key that is left as it is: one that works and carries every right, or one whose state could not be read. */
+function replacesHeld(state: KeyRead): boolean | undefined {
+  return state.ok && state.value !== "present" ? state.value !== "missing" : undefined;
 }
 
-// The key and the variables are one piece of work on the Worker: a key is made only where a repair finds none that works and carries every right, and then both go in one change.
-async function workerPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, wanted: Wanted): Promise<Synced | undefined> {
+/** What a repair does about the keys it read: a new one where none works and carries every right, and beside one that does, every key of its name that the install does not hold deleted. */
+async function mendKeys(connection: Connection, placed: KeyHolder, wanted: Wanted, states: Awaited<ReturnType<typeof readKeyStates>>): Promise<Mended> {
+  const making: Making = { kept: replacesHeld(states.kept), upload: replacesHeld(states.upload), bucket: states.bucket };
+  const mended: Mended = making.kept === undefined && making.upload === undefined ? { rows: {}, steps: [], written: undefined } : await mintInto(connection, placed, wanted, making);
+
+  for (const kind of KEY_KINDS) {
+    const state = states[kind];
+    const { object, name } = KEYS[kind];
+    if (!state.ok || state.value !== "present" || state.spare.length === 0) continue;
+
+    if (await removeKeys(connection, placed.accountId, state.spare)) {
+      mended.rows[kind] = { object, state: "changed", detail: `${name}: ${KEY_SPARE.removed}` };
+      continue;
+    }
+
+    // By its name alone such a key cannot be told from the one the install holds, so the person is sent to the list.
+    mended.rows[kind] = { object, state: "present", detail: name };
+    mended.steps.push({
+      text: `A key named ${name} that the install does not hold could not be deleted at Cloudflare. Press Repair again. The keys are listed there:`,
+      address: `https://dash.cloudflare.com/${placed.accountId}/api-tokens`,
+    });
+  }
+
+  return mended;
+}
+
+// The keys and the variables are one piece of work on the Worker: a key is made only where a repair finds none that works and carries every right, and then everything goes in one change.
+async function workerPiece(progress: Progress, mode: Mode, placed: KeyHolder, connection: Connection, wanted: Wanted): Promise<Synced | undefined> {
   const object = (): Piece => "Worker variable";
-  const state = await readKeyState(placed.key, connection, placed);
-  const made = mode === "apply" ? await mendKey(connection, placed, wanted, state) : undefined;
-  const written = made?.written;
+  const held: HeldKeys | undefined = placed.key === undefined ? undefined : { kept: placed.key, uploadId: placed.uploadKeyId };
+  const states = await readKeyStates(held, connection, placed);
+  const mended = mode === "apply" ? await mendKeys(connection, placed, wanted, states) : undefined;
+  const written = mended?.written;
   const run = written === undefined ? (): Promise<Synced> => syncVariables(connection, placed, wanted, mode) : async (): Promise<Synced> => written;
-  // With no variable to write, the key's own row says everything the change came to.
+  // With no variable to write, the keys' own rows say everything the change came to.
   const synced = wanted.length === 0 ? written : await piece(progress, mode, object, run);
-  progress.rows.push(made?.row ?? keyRead(state, wanted.length > 0));
-  progress.steps.push(...(made?.steps ?? []));
+  progress.rows.push(...KEY_KINDS.map((kind) => mended?.rows[kind] ?? keyRead(kind, states[kind], wanted.length > 0)));
+  progress.steps.push(...(mended?.steps ?? []));
 
   return synced;
 }
@@ -534,7 +643,7 @@ async function wantedVariables(progress: Progress, mode: Mode, placed: Placed, c
 export async function variablesPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, accessReady: boolean | undefined): Promise<void> {
   const wanted = await wantedVariables(progress, mode, placed, connection, accessReady);
   if (wanted === undefined) {
-    progress.rows.push({ object: "Key", state: "not-run", detail: "" });
+    progress.rows.push(...KEY_KINDS.map((kind): Found => ({ object: KEYS[kind].object, state: "not-run", detail: "" })));
 
     return;
   }
@@ -579,7 +688,7 @@ async function prove(parts: PlugParts, token: string): Promise<{ readonly connec
   const { layout } = parts;
   const { accountId, id: zoneId } = zone;
   const firsts = firstValues(parts, { domain: layout.domain }, accountId);
-  const placed: Placed = { script: parts.script, accountId, zoneId, key: parts.key, adminHost: layout.adminHostname, privateSites: privateSitesPattern(layout), firstValues: firsts };
+  const placed: Placed = { script: parts.script, accountId, zoneId, key: parts.key, uploadKeyId: parts.uploadKeyId, now: parts.now, adminHost: layout.adminHostname, privateSites: privateSitesPattern(layout), firstValues: firsts };
 
   return { connection, zone, placed };
 }
@@ -701,28 +810,40 @@ export function tokenFacts(kind: keyof typeof TOKEN_FORMS): TokenFacts {
 }
 
 /**
- * Give an install a new key, made with a token that has proven itself, and nothing else: no other object is read or changed.
+ * Mend the keys of an install as a repair does, with a token that has proven itself, and nothing else: no other object is read or changed.
  *
- * @param replaces - whether the install holds a key, which the new one stands in for
- * @returns the key's one row, and a step for an older key that is still at Cloudflare. The older keys of the name are deleted once the new one is on the Worker
+ * @returns a row a key: one that stands is left, one that is missing, refused, or lacks a right is made anew, and a key of either name that the install does not hold is deleted
  */
-export async function keyGiven(connection: Connection, placed: Placed, replaces: boolean): Promise<DomainReading> {
-  const { row, steps } = await mintInto(connection, placed, [], replaces);
+export async function keysMended(connection: Connection, placed: KeyHolder): Promise<Extract<DomainReading, { readonly ok: true }>> {
+  const progress: Progress = { rows: [], steps: [], stopped: false };
+  await workerPiece(progress, "apply", placed, connection, []);
 
-  return { ok: true, rows: [{ ...row, part: PART[row.object] }], steps };
+  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object] })), steps: progress.steps };
 }
 
 /**
- * Give an install with a domain a new key, made with a token a person pasted.
+ * Give an install new keys, both made with a token that has proven itself, and nothing else: no other object is changed.
  *
- * @param parts - the install; with `key`, a key the install holds is said to be replaced
+ * @param replaces - for each key, whether the install holds one, which the new one stands in for
+ * @returns a row a key, and a step for an older key that is still at Cloudflare. The older keys of each name are deleted once the new ones are on the Worker
+ */
+export async function keyGiven(connection: Connection, placed: KeyHolder, replaces: Readonly<Record<KeyKind, boolean>>): Promise<DomainReading> {
+  const { rows, steps } = await mintInto(connection, placed, [], replaces);
+
+  return { ok: true, rows: KEY_KINDS.flatMap((kind) => rows[kind] ?? []).map((row) => ({ ...row, part: PART[row.object] })), steps };
+}
+
+/**
+ * Give an install with a domain new keys, made with a token a person pasted.
+ *
+ * @param parts - the install; with `key` or `uploadKeyId`, a key the install holds is said to be replaced
  * @returns what `keyGiven` answers; a token that does not prove itself is refused as a check refuses it
  */
 export async function giveKey(parts: Extract<PlugParts, { readonly accountId: string }>, token: string): Promise<DomainReading> {
   const proven = await prove(parts, token);
   if ("ok" in proven) return proven;
 
-  return keyGiven(proven.connection, proven.placed, parts.key?.has() === true);
+  return keyGiven(proven.connection, proven.placed, { kept: parts.key?.has() === true, upload: parts.uploadKeyId !== undefined });
 }
 
 /**

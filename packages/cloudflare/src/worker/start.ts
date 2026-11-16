@@ -8,6 +8,7 @@
 //   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`
 //   visitor key        stored, only while none exists
 //   KEPT_KEY           read once; absent or no key, the install holds none   never a fault, and never quoted
+//   UPLOAD_KEY         read once, as the kept key is                         never a fault, and never quoted
 
 import { createApi } from "@poplin/app/src/api/api";
 import type { Counters } from "@poplin/app/src/limits/limits";
@@ -36,6 +37,7 @@ import { D1Driver } from "../database/d1";
 import { workflowJobs } from "../jobs/workflow-jobs";
 import { readKeptKey } from "../key/kept-key";
 import { createEndLogins } from "../key/logins-end";
+import { readUploadKey } from "../key/upload-key";
 import { createUsersFollow } from "../key/users-follow";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
@@ -356,7 +358,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: driver });
   const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
   const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
-  const { key, domain, rules } = hosts.sideOf({ ...own.value, kept, fetch: outside.cloudflare });
+  const { key, domain, rules } = hosts.sideOf({ ...own.value, kept, uploadKey: readUploadKey(env[INSTALL_OBJECTS.uploadKeyBinding]), fetch: outside.cloudflare, now: outside.now });
   const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules };
   const api = createApi({
     ...install,

@@ -42,6 +42,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Access open paths | ${state("access")} | poplin open paths policy`,
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key")} | poplin kept key`,
+    `Upload key | ${state("key")} | poplin upload key`,
     `D1 database | ${state("database")} | poplin`,
     `Workflow | ${state("jobs")} | poplin-jobs`,
   ];
@@ -79,12 +80,12 @@ test("a check of an account with nothing in it names the two forwarders, the log
 });
 
 // Drift: the count is what one request of a Worker spends on a repair: past 50 the setup page's one press could not finish on the free plan.
-test("a repair makes every object in 26 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
+test("a repair makes every object in 27 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
   const account = deployed();
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created" }));
-    expect(asked).toHaveLength(26);
+    expect(asked).toHaveLength(27);
     expect(account.workers).toEqual(
       ["poplin-sites", "poplin-private"].map((id) => ({ id, tags: ["poplin-forwarder"], bindings: [{ type: "service", name: "POPLIN", service: "poplin" }], enabled: true, previews_enabled: false })),
     );
@@ -95,6 +96,7 @@ test("a repair makes every object in 26 calls, the forwarders bound to the one W
     expect(account.bindings.slice(3)).toEqual([
       { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } },
       { name: "KEPT_KEY", type: "secret_text" },
+      { name: "UPLOAD_KEY", type: "secret_text" },
     ]);
 
     const sent = asked.length;
@@ -127,13 +129,15 @@ test.each(["check", "repair"] as const)("a %s of an install whose open sites' na
 });
 
 // Drift: the key of an install with a zone carries rights on that zone. Asked for here, the key could not be made: an account with no zone has no place to allow them on.
-test("the key a repair makes is allowed on the account alone, and its value goes into the one change of the Worker and into no row", async () => {
+test("the kept key a repair makes is allowed on the account alone and the upload key on the one bucket, and the kept key's value goes into the one change of the Worker and into no row", async () => {
   const account = deployed();
 
   await withAccount(account, async (plug, asked) => {
     const repaired = await plug.repair(TOKEN, SETTINGS);
 
-    expect(account.tokens.map((token) => (token.policies as { resources: object }[]).map((policy) => Object.keys(policy.resources)))).toEqual([[[`com.cloudflare.api.account.${ACCOUNT}`]]]);
+    const allowedOn = account.tokens.map((token) => (token.policies as { resources: object }[]).map((policy) => Object.keys(policy.resources)));
+
+    expect(allowedOn).toEqual([[[`com.cloudflare.api.account.${ACCOUNT}`]], [[`com.cloudflare.edge.r2.bucket.${ACCOUNT}_default_poplin-sites`]]]);
     expect(asked.filter((entry) => JSON.stringify(entry.body ?? "").includes(KEY_VALUE_START)).map((entry) => entry.method)).toEqual(["PATCH"]);
     expect(JSON.stringify(repaired).includes(KEY_VALUE_START)).toBe(false);
   });
@@ -160,17 +164,17 @@ test("a token of another account, a malformed one, and one Cloudflare does not k
   });
 });
 
-// Drift: a new key is the one paste left after install. One that also ran a repair would change the forwarders or the login with a token pasted for the key alone.
-test("a new key replaces the one the install holds and changes nothing else: one row, the secret written, and no forwarder, application, or database made", async () => {
+// Drift: new keys are the one paste left after install. One that also ran a repair would change the forwarders or the login with a token pasted for the keys alone.
+test("new keys replace the kept key the install holds, make the upload key it lacks, and change nothing else: a row a key, both secrets in one change, and no forwarder, application, or database made", async () => {
   const account = deployed();
 
   await withAccount(account, async (_plug, asked, baseUrl) => {
     const key = { has: () => true, verify: async () => ({ ok: false, refusal: "key_refused" }) as const };
     const given = await givePathKey({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES, baseUrl, key }, TOKEN);
 
-    expect(shown(given)).toEqual(["Key | changed | poplin kept key"]);
-    expect([account.bindings.at(-1), account.workers, account.applications, account.databases]).toEqual([{ name: "KEPT_KEY", type: "secret_text" }, [], [], []]);
-    expect(writes(asked).map((call) => call.split(" ")[0])).toEqual(["POST", "PATCH"]);
+    expect(shown(given)).toEqual(["Key | changed | poplin kept key", "Upload key | created | poplin upload key"]);
+    expect([account.bindings.slice(-2), account.workers, account.applications, account.databases]).toEqual([[{ name: "KEPT_KEY", type: "secret_text" }, { name: "UPLOAD_KEY", type: "secret_text" }], [], [], []]);
+    expect(writes(asked).map((call) => call.split(" ")[0])).toEqual(["POST", "POST", "PATCH"]);
   });
 });
 
@@ -187,12 +191,35 @@ test("a repair judges the key the Worker holds by the account's rights alone: a 
       rows = shown(await createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES, baseUrl, key }).repair(TOKEN, SETTINGS));
     });
 
-    return [rows.filter((row) => row.startsWith("Key | ")), account.tokens.map((token) => token.id === "held-key")];
+    return [rows.filter((row) => row.startsWith("Key | ")), account.tokens.filter((token) => token.name === "poplin kept key").map((token) => token.id === "held-key")];
   };
 
   expect([await rowOf(whole), await rowOf(early)]).toEqual([
     [["Key | changed | poplin kept key: a key of its name that the install does not hold was deleted"], [true]],
     [["Key | changed | poplin kept key"], [false]],
+  ]);
+});
+
+// Drift: the upload key is judged by the same piece on both kinds of install. Left out of this one's repair, an install without a domain would keep a key of another bucket and send every file where no site is read from.
+test("a repair judges the upload key the Worker holds by its one right on the install's bucket: a whole one stands, and one made for another bucket is replaced by one of the Worker's own", async () => {
+  const groups = emptyAccount().groups.flatMap((group) => (group.name === "Workers R2 Storage Bucket Item Write" ? [{ id: group.id }] : []));
+  const policyOn = (bucket: string): object => ({ effect: "allow", permission_groups: groups, resources: { [`com.cloudflare.edge.r2.bucket.${ACCOUNT}_default_${bucket}`]: "*" } });
+  const on = (bucket: string): Record<string, unknown> => ({ id: "held-upload", name: "poplin upload key", status: "active", policies: [policyOn(bucket)] });
+  const key = { has: () => true, verify: async () => ({ ok: true, value: { id: "held-key" } }) as const };
+  const rowOf = async (bucket: string): Promise<unknown> => {
+    const account = { ...deployed(), tokens: [on(bucket)] };
+    let rows: string[] = [];
+    await withAccount(account, async (_plug, _asked, baseUrl) => {
+      rows = shown(await createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES, baseUrl, key, uploadKeyId: "held-upload" }).repair(TOKEN, SETTINGS));
+    });
+    const kept = account.tokens.map((token) => [token.id === "held-upload", (token.policies as { resources: object }[]).flatMap((policy) => Object.keys(policy.resources))]);
+
+    return [rows.filter((row) => row.startsWith("Upload key | ")), kept];
+  };
+
+  expect([await rowOf("poplin-sites"), await rowOf("other-sites")]).toEqual([
+    [["Upload key | present | poplin upload key"], [[true, [`com.cloudflare.edge.r2.bucket.${ACCOUNT}_default_poplin-sites`]]]],
+    [["Upload key | changed | poplin upload key"], [[false, [`com.cloudflare.edge.r2.bucket.${ACCOUNT}_default_poplin-sites`]]]],
   ]);
 });
 

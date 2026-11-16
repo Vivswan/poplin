@@ -77,7 +77,7 @@ describe("the kept key of an instance", () => {
   });
 
   // Drift: the way to a new key is wired at the start, beside the plug. One built over another account, Worker, or fetch would make a key for an install that is not this one.
-  test("an instance with no key is given one with a pasted token: the key is made in the Worker's own account, written onto this Worker as its secret, and no word of the answer or the log holds it", async () => {
+  test("an instance with no key is given both with a pasted token: the keys are made in the Worker's own account, written onto this Worker as its secrets, and no word of the answer or the log holds one", async () => {
     const prints = PRINTS.map((name) => vi.spyOn(console, name).mockImplementation(() => undefined));
     const account = emptyAccount();
     const asked: Asked[] = [];
@@ -89,9 +89,18 @@ describe("the kept key of an instance", () => {
 
     for (const print of prints) print.mockRestore();
 
-    expect(given).toEqual({ ok: true, rows: [{ object: "Key", state: "created", detail: "poplin kept key", part: "rest" }], steps: [] });
-    expect([account.tokens.map((token) => token.name), account.bindings.filter((binding) => binding.type === "secret_text")]).toEqual([["poplin kept key"], [{ name: "KEPT_KEY", type: "secret_text" }]]);
-    expect(asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path}`)).toEqual([`POST /accounts/${EXAMPLE_ACCOUNT}/tokens`, `PATCH /accounts/${EXAMPLE_ACCOUNT}/workers/scripts/poplin/settings`]);
+    const made = ["Key | poplin kept key", "Upload key | poplin upload key"].map((row) => ({ object: row.split(" | ")[0], state: "created", detail: row.split(" | ")[1], part: "rest" }));
+
+    expect<unknown>(given).toEqual({ ok: true, rows: made, steps: [] });
+    expect([account.tokens.map((token) => token.name), account.bindings.filter((binding) => binding.type === "secret_text").map((binding) => binding.name)]).toEqual([
+      ["poplin kept key", "poplin upload key"],
+      ["KEPT_KEY", "UPLOAD_KEY"],
+    ]);
+    expect(asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path}`)).toEqual([
+      `POST /accounts/${EXAMPLE_ACCOUNT}/tokens`,
+      `POST /accounts/${EXAMPLE_ACCOUNT}/tokens`,
+      `PATCH /accounts/${EXAMPLE_ACCOUNT}/workers/scripts/poplin/settings`,
+    ]);
     expect([JSON.stringify(given), ...printed].filter((text) => text.includes(KEY_VALUE_START))).toEqual([]);
   });
 

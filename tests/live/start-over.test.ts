@@ -39,7 +39,7 @@ const REMOVED = [
   "Database: removed 1",
   "Bucket objects: removed 2",
   "Budget alert: removed 1",
-  "Key: removed 1",
+  "Keys: removed 2",
 ];
 
 /** What a run on an account that holds nothing of poplin's tells. */
@@ -264,7 +264,7 @@ describe("the start-over of the test install, against a local fake account", () 
 
     expect(first).toEqual({
       code: 0,
-      lines: ["Forwarders: removed 1", "Access applications and policies: removed 0", "Workflow: removed 1", "Worker: removed 1", "Database: removed 1", "Bucket objects: removed 1", "Key: removed 1"],
+      lines: ["Forwarders: removed 1", "Access applications and policies: removed 0", "Workflow: removed 1", "Worker: removed 1", "Database: removed 1", "Bucket objects: removed 1", "Keys: removed 1"],
     });
     expect(left).toEqual([["poplin-sites", "poplin"], [theirs], [THEIRS.token], [], [], undefined, [THEIRS.workflow]]);
     expect(second.lines).toEqual(first.lines.map((line) => line.replace(/\d+$/, "0")));

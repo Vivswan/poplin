@@ -25,6 +25,7 @@ export const INSTALL_PIECES = {
   repairAlone: {
     "Budget alert": [],
     Key: [],
+    "Upload key": [],
   },
   moduleAlone: {
     "Bucket cleanup": ["cloudflare_r2_bucket_lifecycle.sites"],
@@ -39,5 +40,6 @@ export const INSTALL_PIECES = {
     "D1 database": [],
     Workflow: [],
     Key: [],
+    "Upload key": [],
   },
 } as const;

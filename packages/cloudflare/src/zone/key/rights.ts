@@ -1,8 +1,9 @@
-// What the key poplin keeps may do: every right, by the policy it belongs to, in the name Cloudflare's list of permission groups gives it.
+// What each key poplin keeps may do: every right, by the policy it belongs to, in the name Cloudflare's list of permission groups gives it.
 //
-//   policy    allowed on              rights
-//   account   the install's account   usage figures, the login and who it lets in, the team's domain, the budget alert, and the Worker's code: an update the install takes by itself
-//   zone      the install's zone      reading the zone, its records, its routes, its redirect rules, and its bot switches; writing its WAF rules
+//   key      policy    allowed on                rights
+//   kept     account   the install's account     usage figures, the login and who it lets in, the team's domain, the budget alert, and the Worker's code: an update the install takes by itself
+//   kept     zone      the install's zone        reading the zone, its records, its routes, its redirect rules, and its bot switches; writing its WAF rules
+//   upload   bucket    the install's one bucket  reading, writing, listing, and deleting its objects: Cloudflare has no narrower group that writes
 //
 // Cloudflare takes the right to write a Worker for a whole account alone: a key limited to one Worker is refused on every call, so the key can replace any Worker of the account.
 // A group is found by its name each time a key is made, so no id of Cloudflare's is written here.
@@ -19,28 +20,57 @@ export const USAGE_RIGHT = "Account Analytics Read";
 /** The scope of an account's own permission groups, and what every resource of an account starts with. */
 const ACCOUNT_SCOPE = "com.cloudflare.api.account";
 
-/** Every policy of the key, in the order a key carries them: the scope its groups have in Cloudflare's list, its rights, and what they are allowed on, or nothing for a place the install has none of. */
-const POLICIES = [
+/** The scope of a bucket's permission groups, and what the resource of one bucket starts with. */
+const BUCKET_SCOPE = "com.cloudflare.edge.r2.bucket";
+
+/** The jurisdiction Cloudflare names a bucket of none by, in the resource of a policy. */
+const NO_JURISDICTION = "default";
+
+/** Every policy of the kept key, in the order a key carries them: the scope its groups have in Cloudflare's list, its rights, and what they are allowed on, or nothing for a place the install has none of. */
+const KEPT_POLICIES: readonly Policy[] = [
   {
     scope: ACCOUNT_SCOPE,
     rights: [USAGE_RIGHT, "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write", "Workers Scripts Write"],
-    resource: (place: KeyPlace): string | undefined => `${ACCOUNT_SCOPE}.${place.accountId}`,
+    resource: (place) => `${ACCOUNT_SCOPE}.${place.accountId}`,
   },
   {
     scope: "com.cloudflare.api.account.zone",
     rights: ["Zone Read", "Zone Settings Read", "DNS Read", "Workers Routes Read", "Zone WAF Write", "Dynamic URL Redirects Read", "Bot Management Read"],
-    resource: (place: KeyPlace): string | undefined => (place.zoneId === undefined ? undefined : `com.cloudflare.api.account.zone.${place.zoneId}`),
+    resource: (place) => (place.zoneId === undefined ? undefined : `com.cloudflare.api.account.zone.${place.zoneId}`),
   },
-] as const;
+];
 
-/** Where a key acts: the install's account, and its zone on an install that has one. */
+/** The one policy of the upload key. Cloudflare takes its resource at the top of the policy, never under the account's. */
+const UPLOAD_POLICIES: readonly Policy[] = [
+  {
+    scope: BUCKET_SCOPE,
+    rights: ["Workers R2 Storage Bucket Item Write"],
+    resource: (place) => (place.bucket === undefined ? undefined : `${BUCKET_SCOPE}.${place.accountId}_${place.bucket.jurisdiction ?? NO_JURISDICTION}_${place.bucket.name}`),
+  },
+];
+
+/** The bucket an install keeps its files in: its name, and its jurisdiction where it was made in one. */
+export interface Bucket {
+  readonly name: string;
+  readonly jurisdiction?: string | undefined;
+}
+
+/** Where a key acts: the install's account, its zone on an install that has one, and its bucket for a key of the bucket. */
 export interface KeyPlace {
   readonly accountId: string;
   readonly zoneId?: string | undefined;
+  readonly bucket?: Bucket | undefined;
+}
+
+/** One policy of a key before it is written for an install. */
+interface Policy {
+  readonly scope: string;
+  readonly rights: readonly string[];
+  readonly resource: (place: KeyPlace) => string | undefined;
 }
 
 /** A permission group as Cloudflare lists it. */
-interface ListedGroup {
+export interface ListedGroup {
   readonly id?: string;
   readonly name?: string;
   readonly scopes?: readonly string[];
@@ -52,6 +82,9 @@ interface KeyPolicy {
   readonly permission_groups: { readonly id: string }[];
   readonly resources: Record<string, string>;
 }
+
+/** The policies of one key, or the name of every right Cloudflare lists no group of that scope for, and then no policy. */
+export type KeyPolicies = { readonly ok: true; readonly policies: KeyPolicy[] } | { readonly ok: false; readonly missing: string[] };
 
 /** One policy of a token as Cloudflare lists it. */
 interface ListedPolicy {
@@ -79,17 +112,11 @@ export function noGroup(missing: readonly string[]): { readonly ok: false; reado
   return { ok: false, failure: "no-group", message: `Cloudflare lists no permission group named ${missing.join(", ")}` };
 }
 
-/**
- * Write the policies of a key for one install.
- *
- * @param groups - every permission group Cloudflare lists for the account
- * @returns the policies, the zone's left out on an install with no zone; or the name of every right Cloudflare lists no group of that scope for, and then no policy
- */
-export function keyPolicies(place: KeyPlace, groups: readonly ListedGroup[]): { readonly ok: true; readonly policies: KeyPolicy[] } | { readonly ok: false; readonly missing: string[] } {
+function written(table: readonly Policy[], place: KeyPlace, groups: readonly ListedGroup[]): KeyPolicies {
   const missing: string[] = [];
   const policies: KeyPolicy[] = [];
 
-  for (const { scope, rights, resource } of POLICIES) {
+  for (const { scope, rights, resource } of table) {
     const on = resource(place);
     if (on === undefined) continue;
 
@@ -99,6 +126,27 @@ export function keyPolicies(place: KeyPlace, groups: readonly ListedGroup[]): { 
   }
 
   return missing.length > 0 ? { ok: false, missing } : { ok: true, policies };
+}
+
+/**
+ * Write the policies of the kept key for one install.
+ *
+ * @param groups - every permission group Cloudflare lists for the account
+ * @returns the policies, the zone's left out on an install with no zone
+ */
+export function keyPolicies(place: KeyPlace, groups: readonly ListedGroup[]): KeyPolicies {
+  return written(KEPT_POLICIES, place, groups);
+}
+
+/**
+ * Write the one policy of the upload key for one install: the objects of its one bucket, and nothing else of the account.
+ *
+ * @param place - the install's account and its bucket
+ * @param groups - every permission group Cloudflare lists for the account
+ * @returns the policy; none for a place that names no bucket
+ */
+export function uploadKeyPolicies(place: KeyPlace, groups: readonly ListedGroup[]): KeyPolicies {
+  return written(UPLOAD_POLICIES, place, groups);
 }
 
 /**

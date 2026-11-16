@@ -260,7 +260,7 @@ function answerFree(world: FreeWorld, asked: Asked): Response {
   return reply({ enabled: current.enabled, previews_enabled: current.previews_enabled });
 }
 
-/** Make the forwarders and the key on a fake account without a domain, once for each number given, and answer what each run stopped at, the rows it told, and what it told the suite. */
+/** Make the forwarders and the keys on a fake account without a domain, once for each number given, and answer what each run stopped at, the rows it told, and what it told the suite. */
 async function settleFree(world: FreeWorld, runs = 1): Promise<{ readonly stops: unknown[]; readonly rows: string[][]; readonly missing: Record<string, string> }> {
   const told = { stops: [] as unknown[], rows: [] as string[][], missing: {} };
 
@@ -378,21 +378,21 @@ describe("the script that makes the test install, against a local fake account",
   });
 });
 
-describe("the forwarders and the key of an install without a domain, against a local fake account", () => {
-  // Drift: the run makes both on every push. One that uploaded a forwarder or made a key each time would leave the account a new Worker version and a new token a run.
-  test("the first run makes both forwarders, the key, and the Workflow, and a second run leaves all four", async () => {
+describe("the forwarders and the keys of an install without a domain, against a local fake account", () => {
+  // Drift: the run makes them on every push. One that uploaded a forwarder or made a key each time would leave the account a new Worker version and a new token a run.
+  test("the first run makes both forwarders, both keys, and the Workflow, and a second run leaves all five", async () => {
     const world: FreeWorld = { account: emptyAccount(), workers: [] };
     const told = await settleFree(world, 2);
 
     expect(told).toEqual({
       stops: [undefined, undefined],
       rows: [
-        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created", "Workflow: created"],
-        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present", "Workflow: present"],
+        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created", "Upload key: created", "Workflow: created"],
+        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present", "Upload key: present", "Workflow: present"],
       ],
       missing: {},
     });
-    expect([world.workers.map((worker) => worker.id), world.account.tokens.length]).toEqual([["poplin-sites", "poplin-private"], 1]);
+    expect([world.workers.map((worker) => worker.id), world.account.tokens.length]).toEqual([["poplin-sites", "poplin-private"], 2]);
   });
 
   // Drift: the first runs meet the real provider for the first time. A stop that said only "refused" would not tell the upload from the address switch, and one that quoted Cloudflare would put the account's own names in a public log.
@@ -419,14 +419,21 @@ describe("the forwarders and the key of an install without a domain, against a l
     expect(world.workers[0]).toEqual({ id: "poplin-private", tags: ["somebody-s-own"] });
   });
 
-  test("a token that may not make the key is a lack the suite skips for: the forwarders are made and the run goes on", async () => {
+  test("a token that may not make a key is a lack the suite skips for: the forwarders are made and the run goes on", async () => {
     const world: FreeWorld = { account: { ...emptyAccount(), refuse: `GET /accounts/${INSTALL_ACCOUNT}/tokens/permission_groups` }, workers: [] };
     const told = await settleFree(world);
 
     expect(told).toMatchObject({
       stops: [undefined],
-      rows: [["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: skipped: needs the token permission Account API Tokens: Edit", "Workflow: created"]],
-      missing: { "kept-key": "the token permission Account API Tokens: Edit" },
+      rows: [
+        [
+          "Forwarders: created 2, changed 0, left 0, not poplin's 0",
+          "Key: failed (refused with status 403): needs the token permission for the Key",
+          "Upload key: failed (refused with status 403): needs the token permission for the Upload key",
+          "Workflow: created",
+        ],
+      ],
+      missing: { "kept-key": "the token permission for the Key", "upload-key": "the token permission for the Upload key" },
     });
   });
 });
@@ -544,6 +551,7 @@ describe("the zone's repair with the nine rights of the token link alone, agains
       "Access open paths",
       "Worker variable",
       "Key",
+      "Upload key",
       "D1 database",
       "Workflow",
     ]);
@@ -566,25 +574,25 @@ describe("the zone's repair with the nine rights of the token link alone, agains
   });
 
   // Drift: the run holds no key of the install, so it reads the key's state at Cloudflare. A run that made a key on every push would leave the test install a new Worker version and a new token each time.
-  test("the key: the first run makes it, a later run finds it present and makes none, and a token that may not make one is a lack the suite skips for", async () => {
+  test("the two keys: the first run makes them, a later run finds them present and makes none, and a token that may not make one is a lack the suite skips for", async () => {
     const [account, lacking] = [emptyAccount(), { ...emptyAccount(), refuse: `GET /accounts/${INSTALL_ACCOUNT}/tokens/permission_groups` }];
     const settings = async (): Promise<DomainSettings> => ({ logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" });
     const keyOf = async (baseUrl: string | undefined): Promise<(string | undefined)[]> => {
       const reading = await createDomainPlug({ accountId: INSTALL_ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl }).repair(TOKEN, settings);
 
-      return (reading.ok ? reading.rows : []).filter((row) => row.object === "Key").flatMap((row) => [row.state, needOf(row)]);
+      return (reading.ok ? reading.rows : []).filter((row) => row.object === "Key" || row.object === "Upload key").flatMap((row) => [row.state, needOf(row)]);
     };
 
     await withFake(
       (asked) => answerInstall(account, asked),
       async (connection) => {
-        expect([await keyOf(connection.baseUrl), await keyOf(connection.baseUrl), account.tokens.length]).toEqual([["created", undefined], ["present", undefined], 1]);
+        expect([await keyOf(connection.baseUrl), await keyOf(connection.baseUrl), account.tokens.length]).toEqual([["created", undefined, "created", undefined], ["present", undefined, "present", undefined], 2]);
       },
     );
     await withFake(
       (asked) => answerInstall(lacking, asked),
       async (connection) => {
-        expect(await keyOf(connection.baseUrl)).toEqual(["failed", "the token permission for the Key"]);
+        expect(await keyOf(connection.baseUrl)).toEqual(["failed", "the token permission for the Key", "failed", "the token permission for the Upload key"]);
       },
     );
   });

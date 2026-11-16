@@ -26,12 +26,9 @@ import { syncDatabase } from "../../src/zone/database/database";
 import { syncForwarders } from "../../src/zone/forwarders/forwarders";
 import { syncJobs } from "../../src/zone/jobs/jobs";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
-import { readKeyState } from "../../src/zone/key/key-state";
-import { mintKey } from "../../src/zone/key/mint";
 import { privateSitesPattern } from "../../src/zone/layout";
 import type { Report } from "../../src/zone/sync";
-import { syncVariables } from "../../src/zone/variables/variables";
-import { createDomainPlug } from "../../src/zone/zone-plug";
+import { createDomainPlug, keysMended } from "../../src/zone/zone-plug";
 import { capInstall } from "./caps";
 import { readFreePlans } from "./plan";
 import { sendLive } from "./send";
@@ -83,6 +80,7 @@ const CAPABILITIES: Readonly<Record<string, string>> = {
   "Access open paths": "access",
   Key: "kept-key",
   Workflow: "jobs",
+  "Upload key": "upload-key",
 };
 
 /** An error code of Cloudflare's, as wrangler prints it. */
@@ -90,12 +88,6 @@ const ERROR_CODE = /\[code: (\d+)\]/g;
 
 /** The code Cloudflare refuses a token with that lacks a permission. */
 const NOT_AUTHENTICATED = "10000";
-
-/** The token permission the making of the key needs. */
-const KEY_PERMISSION = "Account API Tokens: Edit";
-
-/** What stops the key on an account whose list of permission groups lacks one of the key's rights. */
-const NO_GROUP = "Cloudflare lists no permission group for a right of the key";
 
 /** What an install lacks whose Workflow was not made. */
 const NO_WORKFLOW = "the Worker's Workflow, which Cloudflare did not make";
@@ -327,10 +319,15 @@ async function repairZone(run: Run, found: Extract<Found, { readonly kind: "doma
   const reading = await plug.repair(run.connection.key, async () => settings);
   if (!reading.ok) return { kind: "failed", what: `the zone plug refused the run (${reading.refusal})` };
 
+  return sortRows(run, progress, reading.rows);
+}
+
+/** Sort the rows of a repair into the summary and the lacking things, and answer what stops the run. */
+function sortRows(run: Run, progress: Progress, rows: readonly DomainRow[]): Stop | undefined {
   let failed: Stop | undefined;
   let skipped: Stop | undefined;
 
-  for (const row of reading.rows) {
+  for (const row of rows) {
     if (SETTLED.has(row.state)) {
       note(run, progress, { piece: row.object, result: row.state });
       continue;
@@ -363,66 +360,15 @@ async function ensureForwarders(run: Run, layout: AccountAddresses, progress: Pr
   return { kind: "failed", what: `${synced.report.skipped.length} of the 2 forwarders' names are held by a Worker without poplin's tag` };
 }
 
-/** Whether a key was not read or not made for a call Cloudflare refused or did not answer, and not for an answer that named no group or no key. */
-function isCloudflareFailure(why: CloudflareFailure | { readonly failure: "no-group" | "no-value" }): why is CloudflareFailure {
-  return why.failure !== "no-group" && why.failure !== "no-value";
-}
-
-/** Tell what stopped the key. A token that may not make one is a lack the suite skips for, and the run goes on. */
-function keyStopped(run: Run, progress: Progress, stop: Stop): Stop | undefined {
-  if (stop.kind === "failed") {
-    note(run, progress, { piece: "Key", result: `failed: ${stop.what}` });
-
-    return stop;
-  }
-
-  note(run, progress, { piece: "Key", result: "skipped", needs: stop.needs });
-  progress.missing["kept-key"] = stop.needs;
-
-  return undefined;
-}
-
-/** Say why no key stands on the Worker after a making that did not end well: a key made and not written is a failure, whatever the write lacked. */
-function keyNotMade(minted: Extract<Awaited<ReturnType<typeof mintKey>>, { readonly ok: false }>): Stop {
-  if (minted.made) {
-    const written = stopOf(minted.kept, "Workers Scripts: Edit");
-    const why = written.kind === "failed" ? written.what : `it needs ${written.needs}`;
-
-    return { kind: "failed", what: `the key was made and not written onto the Worker, and ${minted.left ? "is still at Cloudflare" : "was deleted again"}: ${why}` };
-  }
-
-  const { why } = minted;
-  if (isCloudflareFailure(why)) return stopOf(why, KEY_PERMISSION);
-
-  return { kind: "failed", what: why.failure === "no-group" ? NO_GROUP : "Cloudflare answered no key" };
-}
-
 /**
- * Give the Worker of an install without a domain the key it keeps, where it holds none Cloudflare lists as active.
+ * Give the Worker of an install without a domain the two keys it keeps, where it holds one that Cloudflare does not list as active and whole.
  *
- * The key is made and written by the calls the zone plug's repair makes for an install with a domain; its value goes from the one to the other and is never printed.
+ * The keys are read, made, and written by the piece the Domain tab's repair runs; a value goes from Cloudflare onto the Worker and is never printed. A token that may not make a key is a lack the suite skips for.
  */
-async function ensureKey(run: Run, progress: Progress): Promise<Stop | undefined> {
-  const worker = { accountId: run.accountId, script: SCRIPT };
-  const state = await readKeyState(undefined, run.connection, worker);
-  if (!state.ok) return keyStopped(run, progress, isCloudflareFailure(state) ? stopOf(state, state.read === "bindings" ? "Workers Scripts: Edit" : KEY_PERMISSION) : { kind: "failed", what: NO_GROUP });
+async function ensureKeys(run: Run, progress: Progress): Promise<Stop | undefined> {
+  const reading = await keysMended(run.connection, { script: SCRIPT, accountId: run.accountId, zoneId: undefined, key: undefined, uploadKeyId: undefined, now: undefined });
 
-  if (state.value === "present") {
-    note(run, progress, { piece: "Key", result: "present" });
-
-    return undefined;
-  }
-
-  const secret = (text: string): Parameters<typeof syncVariables>[4] => ({ name: INSTALL_OBJECTS.keyBinding, text });
-  const minted = await mintKey(run.connection, { accountId: run.accountId, name: INSTALL_OBJECTS.keyName }, (value) => syncVariables(run.connection, worker, [], "apply", secret(value)));
-  if (minted.ok) {
-    const made = state.value === "missing" ? "created" : "changed";
-    note(run, progress, { piece: "Key", result: minted.stale ? `${made}, and an older key of its name may be left at Cloudflare` : made });
-
-    return undefined;
-  }
-
-  return keyStopped(run, progress, keyNotMade(minted));
+  return sortRows(run, progress, reading.rows);
 }
 
 /** Make the Worker's Workflow where the deploy left none, by the call the zone plug's repair makes. One that is not made is a lack the suite skips for, and stops no run. */
@@ -444,19 +390,19 @@ async function ensureJobs(run: Run, progress: Progress): Promise<void> {
 }
 
 /**
- * Make what an install without a domain adds to its deployed Worker: the two forwarders, the key it keeps, then its Workflow.
+ * Make what an install without a domain adds to its deployed Worker: the two forwarders, the two keys it keeps, then its Workflow.
  *
  *  progress - gathers a row for each, and the things only a zone gives, whose checks the suite is told to skip
  *  what stopped the run, or `undefined`; a token that may not make the key stops nothing, and neither does a Workflow that was not made
  */
 export async function settleFreeAddress(run: Run, layout: AccountAddresses, progress: Progress): Promise<Stop | undefined> {
-  const stopped = (await ensureForwarders(run, layout, progress)) ?? (await ensureKey(run, progress));
+  const stopped = (await ensureForwarders(run, layout, progress)) ?? (await ensureKeys(run, progress));
   if (stopped === undefined) await ensureJobs(run, progress);
 
   return stopped;
 }
 
-/** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain tab's repair, or the forwarders and the key of an install without a domain. */
+/** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain tab's repair, or the forwarders and the keys of an install without a domain. */
 function settleKind(run: Run, found: Found, login: string, progress: Progress): Promise<Stop | undefined> {
   return found.kind === "domain" ? repairZone(run, found, login, progress) : settleFreeAddress(run, found.layout, progress);
 }

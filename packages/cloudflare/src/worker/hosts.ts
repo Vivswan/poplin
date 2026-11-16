@@ -21,6 +21,7 @@ import type { Hostname } from "@poplin/core/src/names/hostname";
 import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
 import { createInstallKey } from "../key/install-key";
 import type { KeptKey } from "../key/kept-key";
+import type { UploadKey } from "../key/upload-key";
 import { createRulesFollow } from "../key/rules-follow";
 import type { AccountAddresses } from "../zone/address-layout";
 import type { Connection } from "../zone/client";
@@ -49,12 +50,14 @@ const REFUSALS = {
 /** What a hostname is answered as: the dashboard and its open paths, the setup page alone, or a site. */
 type HostPart = "admin" | "setup" | "site";
 
-/** The Worker's own place at Cloudflare, and the key the install keeps. */
+/** The Worker's own place at Cloudflare, the two keys the install keeps, and the clock a new upload key is dated by. */
 interface Own {
   readonly accountId: string;
   readonly script: string;
   readonly kept: KeptKey | undefined;
+  readonly uploadKey: UploadKey | undefined;
   readonly fetch: Connection["fetch"] | undefined;
+  readonly now: () => number;
 }
 
 /** The install's side at Cloudflare: the key it keeps, the plug of its kind, which the Domain screen and the setup page run, and `rules`, which carries a changed setting to the zone's guard rules. */
@@ -88,6 +91,13 @@ export interface InstallHosts {
 /** The hosts a binding names, or what is wrong with it: `absent`, or the rule it breaks followed by a sentence. */
 type ReadHosts = { readonly ok: true; readonly value: InstallHosts } | { readonly ok: false; readonly refusal: string };
 
+/** What a plug of either kind is told of the Worker: where it is, how calls are sent, the clock, and the id of the upload key it holds. */
+function placedOf(own: Own): Pick<Own, "accountId" | "script" | "fetch" | "now"> & { readonly uploadKeyId: string | undefined } {
+  const { accountId, script, fetch, now, uploadKey } = own;
+
+  return { accountId, script, fetch, now, uploadKeyId: uploadKey?.id };
+}
+
 function domainHosts(layout: DomainLayout): InstallHosts {
   function partOf(hostname: string): HostPart {
     // The Worker's own address is the one that resolves before setup made the domain's records.
@@ -97,7 +107,7 @@ function domainHosts(layout: DomainLayout): InstallHosts {
   }
 
   function sideOf(own: Own): Side {
-    const placed = { accountId: own.accountId, script: own.script, layout, fetch: own.fetch };
+    const placed = { ...placedOf(own), layout };
     const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
 
     return { key, domain: createDomainPlug({ ...placed, key }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
@@ -108,7 +118,7 @@ function domainHosts(layout: DomainLayout): InstallHosts {
 
 function accountHosts(layout: AccountAddresses): InstallHosts {
   function sideOf(own: Own): Side {
-    const placed = { accountId: own.accountId, script: own.script, layout, fetch: own.fetch };
+    const placed = { ...placedOf(own), layout };
     const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => givePathKey({ ...placed, key }, authorisation));
 
     return { key, domain: createPathPlug({ ...placed, key }), rules: NO_RULES };
