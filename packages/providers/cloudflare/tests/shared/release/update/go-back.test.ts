@@ -47,7 +47,7 @@ interface Start {
   last: unknown;
   failed: { version: string; stored: number };
   secret: unknown;
-  worker: typeof WORKER | undefined;
+  worker: typeof WORKER;
 }
 
 function account(): Account {
@@ -149,7 +149,6 @@ describe("an install that goes back by itself", () => {
     { name: "a database an earlier step of this start already changed", given: (given) => { given.failed.stored = OWN_SCHEMA + 1; }, calls: [] },
     { name: "code a deploy put in place since the update", given: (given) => { given.failed.version = "0.4.0"; }, calls: [] },
     { name: "an install that holds no key", given: (given) => { given.secret = undefined; }, calls: [] },
-    { name: "a Worker whose variables do not say its place", given: (given) => { given.worker = undefined; }, calls: [] },
     { name: "a key without the right", held: (held) => { held.instead[`GET ${DEPLOYMENTS}`] = () => refusal(403, 10_000, `Authentication error ${KEY}`); }, calls: LISTED },
     { name: "an answer that lists no deployments", held: (held) => { held.instead[`GET ${DEPLOYMENTS}`] = () => reply({}); }, calls: LISTED },
     { name: "a deployment that splits its requests over two versions", held: (held) => { held.deployments[0] = { versions: [{ version_id: NEW, percentage: 50 }, { version_id: OLD, percentage: 50 }] }; }, calls: LISTED },

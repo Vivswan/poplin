@@ -340,6 +340,40 @@ describe("an instance's first request", () => {
     expect(recovered.status).toBe(401);
   });
 
+  // Drift: between an install's first upload and the values it writes, the Worker runs with nothing set. A page there took a token from anyone who found the address, and opened the database of an install nobody had finished.
+  test.each([
+    ["neither value", { ZONE: undefined, ACCOUNT_ID: undefined, FIRST_SETTINGS: undefined, ACCESS: undefined }],
+    ["no ZONE", { ZONE: undefined }],
+    ["no ACCOUNT_ID", { ACCOUNT_ID: undefined }],
+  ])("a Worker with %s answers every address and method the same two lines, asks its database and its bucket nothing, sweeps nothing, and starts once its values are there", async (_name, absent) => {
+    const tally = { calls: 0 };
+    const bare = { ...countedBindings(tally), ...absent } as Bindings;
+    const worker = instance(w);
+    const json = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "a-token-0123456789-abcdefgh", login: "stranger@example.com" }) };
+    const asked: readonly (readonly [string, RequestInit])[] = [
+      [`${ADMIN}/`, {}],
+      [`${ADMIN}/api/whoami`, {}],
+      [`${ADMIN}/setup`, {}],
+      [`${ADMIN}/setup/api/repair`, json],
+      ["https://poplin.example-account.workers.dev/setup/data/repair", json],
+      ["https://docs-page.example.com/", {}],
+    ];
+    const answers: unknown[] = [];
+    for (const [address, init] of asked) {
+      const answer = await ask(worker, address, init, bare);
+      answers.push([answer.status, answer.headers.get("Cache-Control"), answer.headers.get("Content-Type"), answer.headers.get("Location"), await answer.text()]);
+    }
+
+    const head = await ask(worker, `${ADMIN}/`, { method: "HEAD" }, bare);
+    // Plain http is sent on to https before anything is read, as on every install, and meets the two lines there.
+    const plainly = await ask(worker, "http://poplin.example.com/setup/api/repair", json, bare);
+    await sweep(worker, w, bare);
+    const recovered = await ask(worker, `${ADMIN}/api/whoami`);
+
+    expect(answers).toEqual(asked.map(() => [503, "no-store", "text/plain; charset=utf-8", null, "This poplin is not finished.\nRun: npx poplin install cloudflare\n"]));
+    expect([head.status, await head.text(), plainly.status, plainly.headers.get("Location"), tally.calls, recovered.status]).toEqual([503, "", 308, "https://poplin.example.com/setup/api/repair", 0, 401]);
+  });
+
   // Drift: after an update whose step failed, every request and every scheduled run meets the same failed start. Asked each time, the install would deploy the code before on every one of them.
   // The answer is the one place a person reads at once which version runs again.
   // An instance that went back tries its step no more: a step that ran on a later try would leave the code before a database it cannot read. One that stays starts again on every request, as before.

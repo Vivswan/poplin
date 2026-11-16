@@ -36,7 +36,7 @@ import { CLIENT_FILES } from "./client-files";
 import { faultOf, logFault } from "./fault";
 import { createHolding, type Held, SETTINGS_LIFETIME_MS, type SiteHeld } from "./held";
 import { answerSite } from "./site";
-import { answerFirstSetup, answerSetup, isSetupPath } from "./setup";
+import { answerSetup, isSetupPath } from "./setup";
 import { answerSpent } from "./spent";
 import { type Failure, type Instance, type Outside, type Started, startInstance, whyRefused } from "./start";
 import { runSweep } from "./sweep";
@@ -56,6 +56,9 @@ const SOON = "Reload in a minute.";
 
 /** What a scheduled run that failed is thrown as. */
 const SWEEP_FAILED = "the sweep failed";
+
+/** The whole answer of a Worker with nothing set: its code is in place, and no install command has finished it. It names the command of this provider and nothing of the account. */
+const NOT_FINISHED = "This poplin is not finished.\nRun: npx poplin install cloudflare";
 
 /** The setup page, for a redirect from the Worker's own address. */
 const SETUP = "/setup";
@@ -301,7 +304,7 @@ export function createWorker(given: Partial<Outside> = {}, starting: typeof star
     if (!made.ok) {
       const { failure } = made;
 
-      return failure.kind === "unset" ? answerFirstSetup(request, failure.unset, outside.now) : failureAnswer(request, failure, wentBack);
+      return failure.kind === "unset" ? plain(request, 503, NOT_FINISHED) : failureAnswer(request, failure, wentBack);
     }
 
     const { instance } = made;

@@ -1,20 +1,17 @@
 // The setup page of a real install: the token form of a Worker nobody has logged in to yet, and after that the way back in when the login is broken.
 //
-//                           a set install                      a Worker with nothing set
-//   nobody has logged in    the token, a corrected first login the kind of install, its first login, the token
-//   somebody has, ever      the token alone: a repair          shut, for good
+//   nobody has logged in    the token, a corrected first login
+//   somebody has, ever      the token alone: a repair
 //
 // A login is an entry of the audit log, which only ever grows, so no first login is corrected here once there is one.
 // The page answers on the admin hostname and, on an install with a domain, on the Worker's own workers.dev address, which is the only one that resolves before setup made the records.
-// A Worker with nothing set answers the page on every hostname: it has no domain yet to tell one from another.
-// There a person chooses the kind of install. One without a domain is set up from the Worker's own workers.dev address, whose account's name the install then answers under.
 
 import { createSetupConsole } from "@poplin/app/src/console/setup-console";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { clientAddress } from "../limits/client-address";
 import { CLIENT_FILES } from "./client-files";
 import type { Held } from "./held";
-import type { Instance, Unset } from "./start";
+import type { Instance } from "./start";
 
 /** Where the setup page answers; its two runs are one level below. */
 const SETUP_PATH = "/setup";
@@ -26,27 +23,6 @@ const SETUP_PATH = "/setup";
  */
 export function isSetupPath(pathname: string): boolean {
   return pathname === SETUP_PATH || pathname.startsWith(`${SETUP_PATH}/`);
-}
-
-/**
- * Answer a request to a Worker with nothing set: its setup page, which asks the kind of install and the first login, and from every other path the way there.
- *
- * @param now - the clock, in milliseconds since the epoch
- * @returns the page's own answer. A run stores nothing here: what it changes is at Cloudflare, under the account of the token it was given
- */
-export function answerFirstSetup(request: Request, unset: Unset, now: () => number): Promise<Response> {
-  if (!isSetupPath(new URL(request.url).pathname)) return Promise.resolve(new Response(null, { status: 302, headers: { "Cache-Control": "no-store", Location: SETUP_PATH } }));
-
-  const setup = createSetupConsole({
-    client: CLIENT_FILES,
-    install: { database: unset.database, now },
-    domain: unset.first,
-    loggedIn: () => unset.database.hasLoggedIn(),
-    counters: unset.counters,
-    visitorOf: (asked) => visitorKey(clientAddress(asked.headers), unset.secrets.visitorSecret, now()),
-  });
-
-  return setup.fetch(request);
 }
 
 /**

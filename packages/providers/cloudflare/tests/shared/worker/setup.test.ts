@@ -7,7 +7,7 @@ import { readShell } from "../../../../../app/tests/console/support/shell";
 import type { Bindings } from "../../../src/shared/worker/bindings";
 import { type Account, emptyAccount, OTHER_TOKEN, TEAM, TOKEN } from "../install/support/fake-install";
 import type { Asked } from "../install/support/replies";
-import { ADMIN, accessHeaders, ask, awayFromMinuteEnd, BINDINGS, cloudflareOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, send, sweep, type World, tokenOf, under, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, awayFromMinuteEnd, BINDINGS, cloudflareOf, countedBindings, installOf, instance, logIn, OWNER, page, publish, send, type World, tokenOf, under, world } from "./support/install";
 
 /** The Worker's own address, which Cloudflare gives it whatever its routes. */
 const OWN = "https://poplin.example-account.workers.dev";
@@ -251,99 +251,6 @@ describe("an install whose setup has not written ACCESS", () => {
     expect([setup.status, login.status, await login.text(), login.headers.get("Set-Cookie")]).toEqual([200, 503, "The login is not set up yet. Finish the setup of this install first.\n", null]);
     expect([data.status, ((await data.json()) as { code: string }).code]).toEqual([503, "login_not_set_up"]);
     expect([shut.status, (await shut.text()).includes("report"), opened.status, await opened.text()]).toEqual([404, false, 200, "<h1>report</h1>"]);
-  });
-});
-
-describe("a Worker with nothing set", () => {
-  /** The bindings of a Worker a deploy made: its bucket, its database, its limiter, and its own name. */
-  const DEPLOYED = { ...BINDINGS, ZONE: undefined, ACCOUNT_ID: undefined, FIRST_SETTINGS: undefined, ACCESS: undefined } as Bindings;
-
-  /** What a person types into the two boxes. */
-  const TYPED = { domain: "example.com", login: OWNER };
-
-  /** Send the repair of the setup page with the two boxes and a token, as the page's client does. */
-  function first(worker: ReturnType<typeof instance>, token: string, bindings: Bindings = DEPLOYED, from: Record<string, string> = {}): Promise<Response> {
-    return repair(worker, `${OWN}/setup`, { token, ...TYPED }, from, bindings);
-  }
-
-  beforeEach(() => {
-    account.bindings = account.bindings.filter((binding) => binding.name !== "ZONE");
-  });
-
-  // Drift: a Worker that was deployed and nothing more used to answer a page of missing variables, which a person had to fill in by hand before any setup could run.
-  test("answers its setup page with the two boxes and no hostname of an install, sends every other path there, and serves nothing else", async () => {
-    const worker = instance(w);
-    const opened = await ask(worker, `${OWN}/setup`, {}, DEPLOYED);
-    const text = await opened.text();
-    const hosts = (text.match(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/g) ?? []).filter((host) => host.endsWith(".example.com"));
-    const elsewhere = await Promise.all([`${OWN}/`, `${OWN}/api/whoami`, `${OWN}/data/sites`, `${ADMIN}/login`, "https://report--k3f9x2ab71qz-u-poplin.example.com/"].map((address) => ask(worker, address, {}, DEPLOYED)));
-
-    expect([opened.status, ((await readShell(text)).boot as SetupBoot).setup.boxes, hosts]).toEqual([200, "first", []]);
-    expect(elsewhere.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual(elsewhere.map(() => [302, "/setup"]));
-    await sweep(worker, w, DEPLOYED);
-  });
-
-  // Drift: whoever posts here has proven nothing of this install. The run may change what its token's own account holds at Cloudflare, and nothing this install keeps.
-  test("a repair gives the Worker its values at Cloudflare in one press, within what one request may send and ask, and writes nothing to this install's database or bucket, whatever the token", async () => {
-    const tally = { calls: 0 };
-    const counted = { ...countedBindings(tally), ZONE: undefined, ACCOUNT_ID: undefined, FIRST_SETTINGS: undefined, ACCESS: undefined } as Bindings;
-    const worker = instance(w, cloudflareOf(account, asked));
-    await ask(worker, `${OWN}/setup`, {}, DEPLOYED);
-    const before = [await stored(), (await BINDINGS.SITES.list()).objects.length];
-
-    const stranger = await first(worker, OTHER_TOKEN);
-    const strangers = asked.length;
-    tally.calls = 0;
-    await ask(worker, `${OWN}/setup`, {}, counted);
-    const repaired = await first(worker, TOKEN, counted);
-    const text = await repaired.text();
-    const ran = JSON.parse(text) as Ran;
-
-    expect([stranger.status, repaired.status, ran.summary.tone, text.includes(TOKEN)]).toEqual([200, 200, "good", false]);
-    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "ACCESS", "KEPT_KEY", "UPLOAD_KEY"]);
-    expect([await stored(), (await BINDINGS.SITES.list()).objects.length]).toEqual(before);
-    // The page and the run together: 42 calls to Cloudflare of the 50 a request of the Free plan may send, and 8 to the database of its 50.
-    // Two of the 42 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
-    // Two are the Workflow: the account's Workflows are searched for its name, and it is made where a deploy left none.
-    // Six are the two keys: the Worker's bindings read for them, the permission groups, a new token each, and the two pages of the account's tokens.
-    expect([asked.length - strangers, tally.calls]).toEqual([42, 8]);
-  });
-
-  // Drift: an install without a domain is found by the hostname its setup was sent to. Taken from anywhere else, its values would go to a Worker that does not answer there, and its sites would have no address.
-  test("with no domain sent, a repair at the Worker's own free address sets the install up there in one press, and at any other hostname nothing is asked of Cloudflare", async () => {
-    const worker = instance(w, cloudflareOf(account, asked));
-    const typed = { token: TOKEN, login: OWNER };
-    const elsewhere = await repair(worker, `${ADMIN}/setup`, typed, {}, DEPLOYED);
-    const unasked = asked.length;
-    const repaired = await repair(worker, "https://poplin.example.workers.dev/setup", typed, {}, DEPLOYED);
-    const ran = (await repaired.json()) as Ran;
-
-    expect([elsewhere.status, ((await elsewhere.json()) as { code: string }).code, unasked]).toEqual([400, "bad_address", 0]);
-    expect([repaired.status, ran.summary.tone, ran.steps.map((step) => step.address)]).toEqual([200, "good", ["https://poplin.example.workers.dev"]]);
-    expect(ran.rows.filter((row) => row.piece === "Forwarder").map((row) => row.detail)).toEqual([
-      "poplin-private: https://poplin-private.example.workers.dev (private sites)",
-      "poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)",
-    ]);
-    expect([account.bindings.find((binding) => binding.name === "ZONE"), account.workers.map((made) => made.id)]).toEqual([{ name: "ZONE", type: "json", json: { account_address: "example" } }, ["poplin-sites", "poplin-private"]]);
-    // One press: 31 calls to Cloudflare of the 50 a request of the Free plan may send, the search for the Workflow and its making among them, and the two of the budget alert.
-    expect(asked.length - unasked).toBe(31);
-  });
-
-  // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.
-  test("the sixth run one address sends in a minute is refused before Cloudflare is asked, and a Worker whose values are gone while its database holds settings names them and offers no setup", async () => {
-    const worker = instance(w, cloudflareOf(account, asked));
-    const from = { "CF-Connecting-IP": "192.0.2.9" };
-    const statuses: number[] = [];
-    await awayFromMinuteEnd();
-    for (let post = 0; post < 5; post += 1) statuses.push((await first(worker, "no-such-token-0123456789", DEPLOYED, from)).status);
-
-    const calls = asked.length;
-    statuses.push((await first(worker, TOKEN, DEPLOYED, from)).status);
-    await ask(instance(w), `${ADMIN}/setup`);
-    const lost = await ask(instance(w), `${OWN}/setup`, {}, DEPLOYED);
-
-    expect([statuses, asked.length]).toEqual([[403, 403, 403, 403, 403, 429], calls]);
-    expect([lost.status, (await lost.text()).includes("  ZONE: absent\n  ACCOUNT_ID: absent")]).toEqual([503, true]);
   });
 });
 
