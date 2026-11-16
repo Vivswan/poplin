@@ -63,6 +63,9 @@ export type InstallRequest = { readonly provider: Provider; readonly json: boole
  */
 export type Next = { readonly step: "install" | "repair" | "uninstall" | "login"; readonly command: string } | { readonly step: "none"; readonly command: null };
 
+/** Whether an install that is there needs mending, as a repair's dry run read it; `unread` where the provider refused that read, with the sentence it refused in. */
+type Mending = { readonly mend: "nothing" | "something" } | { readonly mend: "unread"; readonly unread: string };
+
 /**
  * Why a command stopped before its work was done. `exit` is the command's exit code.
  *
@@ -75,7 +78,7 @@ export type Stop =
   | { readonly problem: "usage"; readonly exit: 2; readonly lines: readonly string[] }
   | { readonly problem: "missing_answer"; readonly exit: 2; readonly missing: readonly Missing[] }
   | { readonly problem: "no_provider"; readonly exit: 1; readonly lines: readonly string[] }
-  | { readonly problem: "already_installed"; readonly exit: 1; readonly version: string | undefined; readonly address: string; readonly newest: string | undefined; readonly next: Next }
+  | ({ readonly problem: "already_installed"; readonly exit: 1; readonly version: string | undefined; readonly address: string; readonly newest: string | undefined; readonly next: Next } & Mending)
   | { readonly problem: "no_install" | "unfinished" | "another_version"; readonly exit: 1; readonly words: string; readonly next: Next }
   | { readonly problem: "leftover" | "name_held"; readonly exit: 1; readonly words: string; readonly address: string }
   | { readonly problem: "blocked"; readonly exit: 1; readonly blocked: readonly Blocked[] }

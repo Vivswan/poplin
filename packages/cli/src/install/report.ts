@@ -3,7 +3,7 @@
 //   a dry run    would make   <object>   <detail>
 //   a run        made         <object>   <detail>
 
-import type { Blocked, Installed, OptionRow, Row, RowState, Run } from "../../../core/src/install/installer";
+import type { Blocked, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
 import { columns, countText } from "../commands/text";
 import type { Tone } from "../local/screen";
@@ -20,6 +20,12 @@ const STATES: Readonly<Record<RowState, StateWords>> = {
   fail: { "dry-run": "failed", apply: "failed", tone: "error" },
   "not-run": { "dry-run": "not run", apply: "not run", tone: "warning" },
 };
+
+/** The states of an object that a run changes, or a dry run would. */
+const CHANGES: ReadonlySet<RowState> = new Set(["make", "change", "remove"]);
+
+/** What the line of an install that is there says of it, by whether it needs mending. */
+const STANDING = { nothing: ", and it is as it should be", something: ", and it is not as it should be", unread: "" } as const;
 
 /** The states of an object a run did not bring to what it should be. */
 const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);
@@ -91,6 +97,16 @@ function plain(text: string): Line {
  */
 export function followed(sentence: string, tail: string): string {
   return `${sentence.replace(/\.$/, "")}. ${tail}`;
+}
+
+/** What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again. */
+export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>): Next {
+  return NEXT.repair(refused.why === "another" ? "newest" : "this");
+}
+
+/** How many objects a run changed, or with a dry run would. */
+export function changesIn(rows: readonly Row[]): number {
+  return rows.filter((row) => CHANGES.has(row.state)).length;
 }
 
 /** The lines of what stops a piece until a person acts: what it is, then the address to open, under it. */
@@ -182,7 +198,8 @@ export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: tr
  * @param provider - the provider, whose name says where the token can be deleted
  * @param answers - whether the install answered at its address once it was made; `null` for a run that did not wait
  * @param ending - what a run that left nothing undone is called, what to run after one that did, and what runs this command again
- * @returns the last lines: what the run is called and the dashboard's address, or what is not done and what only a person can do. A run that never learned its address names none
+ * @returns the last lines: what the run is called and the dashboard's address, or what is not done and what only a person can do. A run that never learned its address names none.
+ *   One whose address gave no answer is told what to run once it does, and what to run if it does not
  */
 export function runLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "steps" | "blocked" | "address" | "ready">, provider: Provider, answers: boolean | null, ending: Ending): Line[] {
   const { address } = installed;
@@ -190,6 +207,12 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
   const answer = answers === null ? [] : [answers ? plain(`${address} answers`) : silent];
   const dashboard = address === undefined ? [] : [plain(`Your dashboard: ${address}`)];
   const stored = plain(`The token was used for this run and is stored nowhere. You can delete it at ${provider.name}.`);
+
+  if (installed.ready && answers === false && address !== undefined) {
+    const later = [`Once it answers, log in: ${NEXT.login(address).command}`, `If it still does not: ${NEXT.repair().command}`];
+
+    return [...answer, { tone: "warning", text: ending.done }, ...dashboard, ...later.map(plain), stored];
+  }
 
   if (installed.ready) return [...answer, { tone: "done", text: ending.done }, ...dashboard, stored];
 
@@ -223,7 +246,7 @@ export function factsLines(facts: TokenFacts): string[] {
 function stopWords(stop: Exclude<Stop, { readonly problem: "missing_answer" | "blocked" }>, provider: Provider | undefined): string[] {
   if (stop.problem === "usage" || stop.problem === "no_provider") return [...stop.lines];
 
-  if (stop.problem === "leftover") return [stop.words, "To use it, with what it holds: run this again with --adopt. To set it aside, rename or delete it here:", `${INDENT}${stop.address}`, UNCHANGED];
+  if (stop.problem === "leftover") return [stop.words, "To use it, with what it holds: run this again with --adopt. To start without it, delete it here first, with what it holds:", `${INDENT}${stop.address}`, UNCHANGED];
 
   if (stop.problem === "name_held") return [stop.words, `${INDENT}${stop.address}`, UNCHANGED];
 
@@ -232,7 +255,9 @@ function stopWords(stop: Exclude<Stop, { readonly problem: "missing_answer" | "b
   const version = stop.version ?? "(version not read)";
   const owners = provider === undefined ? [] : ownerLines(provider, stop.version, stop.newest);
 
-  return [`This account already holds poplin ${version}, at ${stop.address}. ${UNCHANGED}. The way on is ${stop.next.command}.`, ...owners];
+  const way = stop.mend === "unread" ? [`Whether it is as it should be was not read: ${stop.unread}`, `To see: ${stop.next.command} --dry-run`] : [`The way on: ${stop.next.command}`];
+
+  return [`This account already holds poplin ${version}, at ${stop.address}${STANDING[stop.mend]}. ${UNCHANGED}.`, ...way, ...owners];
 }
 
 /**
@@ -254,7 +279,7 @@ export function stopLines(stop: Stop, provider: Provider | undefined, command: s
  * The JSON value of a command that stopped before its work was done.
  *
  * @param again - what runs the command that stopped again: the next step of every stop that names no other
- * @returns `ok` false, the problem's code, what a program needs of it (the answers that are missing, the install that is there, or what blocks), and what to run next
+ * @returns `ok` false, the problem's code, what a program needs of it (the answers that are missing, the install that is there and whether it needs mending, or what blocks), and what to run next
  */
 export function stopValue(stop: Stop, again: Next): Readonly<Record<string, unknown>> {
   const said = { ok: false, problem: stop.problem, next: "next" in stop ? stop.next : again };
@@ -269,7 +294,9 @@ export function stopValue(stop: Stop, again: Next): Readonly<Record<string, unkn
 
   if (stop.problem !== "already_installed") return { ...said, words: stop.words };
 
-  return { ...said, found: { version: stop.version ?? null, address: stop.address, newest: stop.newest ?? null } };
+  const unread = stop.mend === "unread" ? { unread: stop.unread } : {};
+
+  return { ...said, found: { version: stop.version ?? null, address: stop.address, newest: stop.newest ?? null, mend: stop.mend, ...unread } };
 }
 
 /**
