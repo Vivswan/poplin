@@ -17,6 +17,9 @@ const BUTTON_STAYS_MS = 20_000;
 /** The keys that move the focus to the lines, as the library that draws them hears them. */
 const KEYS = "Alt+T";
 
+/** The place every line is drawn in: the library gives it the focus at its keys. */
+const PLACE = "[data-sonner-toaster]";
+
 /** The look of the words of a line with a button: on a wide screen they stay on one row, so the line stays lower than the header. A name they begin with is cut before the rest. A phone ends them as it ends every line's. */
 const ONE_ROW = { words: "block md:truncate", named: "block md:flex md:min-w-0", name: "md:truncate", rest: "md:shrink-0 md:whitespace-pre" } as const;
 
@@ -73,6 +76,15 @@ export function leaveAtPress(event: MouseEvent): void {
   if (line === null || name === undefined || line.querySelector("button") !== null) return;
 
   toast.dismiss(name);
+}
+
+/**
+ * Lead the focus on to the button of a line: the library's keys give the focus to the place of the lines, two stops before the button, and a line names those keys as the way to its button.
+ *
+ * A move of the focus to anything else is left alone, and so are the keys while no line has a button.
+ */
+export function reachButton(event: FocusEvent): void {
+  if (event.target instanceof HTMLElement && event.target.matches(PLACE)) event.target.querySelector<HTMLElement>("[data-sonner-toast] button")?.focus();
 }
 
 /** Do what the button of a line that stays stands for. The focus goes back to where it was. */

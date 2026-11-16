@@ -34,6 +34,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          // Wide enough for the second row of a line with a button, which names its keys, to stay one row.
+          "--width": "400px",
         } as React.CSSProperties
       }
       toastOptions={{

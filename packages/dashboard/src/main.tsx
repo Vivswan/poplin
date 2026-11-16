@@ -13,7 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QUERIES } from "@/lib/api";
 import { noteFocus } from "@/lib/focus";
 import { IN_BROWSER, PHONE } from "@/lib/media";
-import { leaveAtPress } from "@/lib/notify";
+import { leaveAtPress, reachButton } from "@/lib/notify";
 import { Screens } from "@/screens";
 
 /** How long a pointer rests on a control before its hint shows, in milliseconds. */
@@ -31,10 +31,12 @@ function Lines(): ReactNode {
   useEffect(() => {
     document.addEventListener("click", leaveAtPress);
     document.addEventListener("focusin", noteFocus);
+    document.addEventListener("focusin", reachButton);
 
     return () => {
       document.removeEventListener("click", leaveAtPress);
       document.removeEventListener("focusin", noteFocus);
+      document.removeEventListener("focusin", reachButton);
     };
   }, []);
 
