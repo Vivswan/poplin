@@ -3,7 +3,6 @@
 // A JSON body goes with `Content-Type: application/json`, a file's bytes to the address and with the headers the file's ticket names.
 // A done request answers 200 with JSON, or with the bytes of one file; any other answers an `ApiError`.
 
-import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
 import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
 import { beginImport, type ImportRequest } from "@poplin/core/src/actions/begin-import";
 import { beginPublish, type PUBLISH_REQUEST, type UploadLimits } from "@poplin/core/src/actions/begin-publish";
@@ -12,7 +11,7 @@ import { type LOGIN_REQUEST, LOGIN_SECRET, redeemLogin } from "@poplin/core/src/
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
 import { domainState } from "@poplin/core/src/actions/domain-state";
-import { DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
+import { cancelCopy, DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
 import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
 import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import-settings";
@@ -30,6 +29,8 @@ import { showUpload } from "@poplin/core/src/actions/show-upload";
 import { type EndLogins, signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { type SelfUpdate, startUpdate } from "@poplin/core/src/actions/start-update";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
+import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
+import type { Jobs } from "@poplin/core/src/jobs/jobs";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
 import { WritesSpent } from "@poplin/core/src/storage/metered";
@@ -91,6 +92,9 @@ export interface ApiDeps extends Install, Gate {
   /** The provider's side of the users: a change of the logins is carried there by itself. Without it a change waits for a repair. */
   readonly follow?: UsersFollow;
 
+  /** The host's background work, which runs the rounds of a copy after its first request's. Without it the client's own requests run them, one each. */
+  readonly jobs?: Jobs;
+
   /** Ends every login of the dashboard at the provider. Without it nobody can be signed out here. */
   readonly endLogins?: EndLogins;
 
@@ -121,6 +125,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
   const noQuery = queried(NO_QUERY);
   const site = namesSite();
   const updating = { self: deps.update, counters: deps.counters };
+  const jobs = deps.jobs ?? inlineJobs;
 
   return new Hono()
     .basePath("/api")
@@ -152,7 +157,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     })
     .post("/sites/:site/restore", token, install, noQuery, site, async (context) => respond(await restoreSite(context.var.install, context.var.actor, context.req.param("site"))))
     .post("/sites/:site/duplicate", token, install, json, noQuery, site, sent<v.InferInput<typeof DUPLICATE_REQUEST>>(JSON_BYTES), async (context) => {
-      const copy = (asked: v.InferOutput<typeof DUPLICATE_REQUEST>): ReturnType<typeof duplicateSite> => duplicateSite(context.var.install, context.var.actor, { ...asked, site: context.req.param("site") }, TOKEN_CALLS);
+      const copy = (asked: v.InferOutput<typeof DUPLICATE_REQUEST>): ReturnType<typeof duplicateSite> => duplicateSite(context.var.install, context.var.actor, { ...asked, site: context.req.param("site") }, TOKEN_CALLS, jobs);
 
       return respond(await checked(DUPLICATE_REQUEST, context.req.valid("json"), copy), deps.now());
     })
@@ -172,7 +177,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
       return respond(await storeBody(context.var.install, context.var.actor, file), deps.now());
     })
     .post("/uploads/:upload/finish", token, install, noQuery, async (context) => respond(await finishPublish(context.var.install, context.var.actor, context.req.param("upload"))))
-    .delete("/uploads/:upload", token, install, noQuery, async (context) => respond(await abandonPublish(context.var.install, context.var.actor, context.req.param("upload"))))
+    .delete("/uploads/:upload", token, install, noQuery, async (context) => respond(await cancelCopy(context.var.install, context.var.actor, context.req.param("upload"), jobs)))
 
     .get("/export/settings", token, install, noQuery, async (context) => respond(await exportSettings(context.var.install, context.var.actor)))
     .get("/export/sites", token, install, queried(EXPORT_QUERY), async (context) => respond(await exportSites(context.var.install, context.var.actor, context.req.valid("query"))))

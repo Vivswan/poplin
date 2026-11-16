@@ -13,7 +13,7 @@ export default defineConfig({
   resolve: { alias: { "bun:test": "vitest" } },
 
   test: {
-    include: ["tests/{worker,storage,database,limits}/**/*.test.ts"],
+    include: ["tests/{worker,storage,database,limits,jobs}/**/*.test.ts"],
     testTimeout: 30_000,
     reporters: ["default", new RuntimeLog(), new BudgetReport()],
     // The pool sends a file's cached imports as one message, and the Cloudflare SDK takes that past workerd's 32 MiB limit.

@@ -52,6 +52,7 @@ const CONFIG = {
   r2_buckets: [{ binding: "SITES", bucket_name: "poplin-sites" }],
   d1_databases: [{ binding: "DB", database_name: "poplin" }],
   ratelimits: [{ name: "MINUTE_LIMITS", namespace_id: "1001", simple: { limit: 1_000_000, period: 60 } }],
+  workflows: [{ name: "poplin-jobs", binding: "JOBS", class_name: "PoplinJobs" }],
   vars: { WORKER_NAME: "poplin" },
 };
 
@@ -59,6 +60,7 @@ const CONFIG = {
 const BINDINGS = [
   { name: "SITES", type: "r2_bucket" },
   { name: "DB", type: "d1" },
+  { name: "JOBS", type: "workflow" },
   { name: "MINUTE_LIMITS", type: "ratelimit" },
   { name: "WORKER_NAME", type: "plain_text" },
   { name: "ACCOUNT_ID", type: "plain_text" },
@@ -74,7 +76,7 @@ const METADATA = {
   compatibility_date: "2026-11-01",
   compatibility_flags: [],
   bindings: [
-    ...["SITES", "DB", "WORKER_NAME", "ACCOUNT_ID", "ZONE", "ACCESS", "FIRST_SETTINGS", "KEPT_KEY"].map((name) => ({ name, type: "inherit" })),
+    ...["SITES", "DB", "JOBS", "WORKER_NAME", "ACCOUNT_ID", "ZONE", "ACCESS", "FIRST_SETTINGS", "KEPT_KEY"].map((name) => ({ name, type: "inherit" })),
     { type: "ratelimit", namespace_id: "1001", simple: { limit: 1_000_000, period: 60 }, name: "MINUTE_LIMITS" },
   ],
   observability: OBSERVABILITY,

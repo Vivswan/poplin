@@ -5,6 +5,7 @@ import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import type { Updating } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
+import type { Jobs } from "@poplin/core/src/jobs/jobs";
 import type { Context, TypedResponse } from "hono";
 import * as v from "valibot";
 
@@ -48,6 +49,9 @@ interface Host {
 
   /** The host's side of the Usage screen. */
   readonly usage: UsageHost;
+
+  /** What runs the rounds of a copy after its first request's. */
+  readonly jobs: Jobs;
 }
 
 /** What the handlers of one request share. */

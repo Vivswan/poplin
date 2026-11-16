@@ -221,9 +221,9 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
-    name: "duplicate a site of 1,001 files: a later round",
+    name: "duplicate a site of 1,001 files: a later round, on an install with no Workflow",
     route: "POST /api/sites/:site/duplicate",
-    // Worst of a later round: the copy is listed for what it lacks, and as many more files are copied.
+    // Worst of a later round where the asking request runs it: the copy is listed for what it lacks, and as many more files are copied.
     arrange: async (stage) => {
       await siteWithFiles(stage, TWO_PAGES);
       const token = await adminToken(stage);

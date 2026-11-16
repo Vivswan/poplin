@@ -3,8 +3,8 @@
 //   version, schema, files   portable: which release it is, how many steps its database has been through, and each built file's digest and size
 //   deploy                   Cloudflare's: what an upload of those files states beside them, read from the release's own wrangler.jsonc
 //
-// A binding to a thing the account holds, or to a value the install's own Worker carries, is `kept`: the bucket, the database, a variable.
-// One whose whole value the release decides is `stated`, with that value.
+// A binding to a thing the account holds, or to a value the install's own Worker carries, is `kept`: the bucket, the database, the Workflow, a variable.
+// One whose whole value the release decides is `stated`, with that value. The Workflow is named after the install's own Worker and made beside its deploy, so no release states it.
 // A setting of wrangler.jsonc this file does not know stops the build: a release cannot ship a setting its manifest leaves out.
 
 import { releaseDigest } from "@poplin/core/src/records/release";
@@ -34,6 +34,7 @@ const CONFIG = v.strictObject({
   r2_buckets: v.array(NAMED),
   d1_databases: v.array(NAMED),
   ratelimits: v.array(v.strictObject({ name: v.string(), namespace_id: v.string(), simple: v.strictObject({ limit: v.number(), period: v.number() }) })),
+  workflows: v.array(v.strictObject({ name: v.string(), binding: v.string(), class_name: v.string() })),
   vars: v.record(v.string(), v.string()),
   observability: v.optional(v.record(v.string(), v.unknown())),
 });
@@ -57,10 +58,10 @@ interface Built {
 }
 
 function bindingsOf(config: v.InferOutput<typeof CONFIG>): readonly Binding[] {
-  const kept = [...config.r2_buckets.map((bucket) => bucket.binding), ...config.d1_databases.map((database) => database.binding), ...Object.keys(config.vars)];
-  const stated = config.ratelimits.map(({ name, ...limit }): Binding => ({ name, kind: "stated", binding: { type: "ratelimit", ...limit } }));
+  const things = [...config.r2_buckets, ...config.d1_databases, ...config.workflows].map((thing) => thing.binding);
+  const limits = config.ratelimits.map(({ name, ...limit }): Binding => ({ name, kind: "stated", binding: { type: "ratelimit", ...limit } }));
 
-  return [...kept.map((name): Binding => ({ name, kind: "kept" })), ...stated];
+  return [...[...things, ...Object.keys(config.vars)].map((name): Binding => ({ name, kind: "kept" })), ...limits];
 }
 
 async function stated(bytes: Uint8Array<ArrayBuffer>): Promise<{ readonly sha256: string; readonly bytes: number }> {

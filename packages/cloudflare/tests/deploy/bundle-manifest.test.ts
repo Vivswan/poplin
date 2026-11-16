@@ -24,6 +24,7 @@ const CONFIG = {
   r2_buckets: [{ binding: "SITES", bucket_name: "example-sites" }],
   d1_databases: [{ binding: "DB", database_name: "example" }],
   ratelimits: [{ name: "MINUTE_LIMITS", namespace_id: "1001", simple: { limit: 1000, period: 60 } }],
+  workflows: [{ name: "example-jobs", binding: "JOBS", class_name: "ExampleJobs" }],
   vars: { WORKER_NAME: "example" },
 };
 
@@ -31,8 +32,8 @@ const CONFIG = {
 const FILES = { [MODULE_FILE]: ENCODER.encode("export default {};\n//# sourceMappingURL=worker.js.map"), [MAP_FILE]: ENCODER.encode('{"version":3}') };
 
 describe("bundleManifest", () => {
-  // Drift: an install that takes the built files states these beside them. A binding written as the wrong kind would hand an install the release's bucket name, or drop its rate limit.
-  test("the manifest states the version, the schema, each file's digest and size, and what an upload states beside the files: the account's own things as kept, the rate limit by value", async () => {
+  // Drift: an install that takes the built files states these beside them. A binding written as the wrong kind would hand an install the release's bucket name, drop its rate limit, or send the Workflow's binding with no Workflow named in it.
+  test("the manifest states the version, the schema, each file's digest and size, and what an upload states beside the files: the account's own things as kept, the Workflow among them, and the rate limit by value", async () => {
     const manifest: unknown = JSON.parse(await bundleManifest({ version: "0.2.0", schema: 3, config: { ...CONFIG, compatibility_flags: ["nodejs_compat"], observability: { enabled: true } }, files: FILES }));
 
     expect(manifest).toEqual({
@@ -49,6 +50,7 @@ describe("bundleManifest", () => {
         bindings: [
           { name: "SITES", kind: "kept" },
           { name: "DB", kind: "kept" },
+          { name: "JOBS", kind: "kept" },
           { name: "WORKER_NAME", kind: "kept" },
           { name: "MINUTE_LIMITS", kind: "stated", binding: { type: "ratelimit", namespace_id: "1001", simple: { limit: 1000, period: 60 } } },
         ],

@@ -1,22 +1,27 @@
 // Duplicate: a new private site that holds a copy of another site's live version. The install copies the files itself, some a call, and the copy is a site only once every file is there.
 //
-//   first call         the source is reached, its live version listed, an upload recorded for the copy, and the first files copied
-//   each later call    names that upload: the files the copy still lacks are found, and the next ones copied
-//   the last call      finishes the upload as a publish is finished, which makes the site in one step
+//   first call         the source is reached, its live version listed, an upload recorded for the copy, and the first files copied; a copy that is not whole then is started as a job
+//   each later round   the files the copy still lacks are found, and the next ones copied
+//   the last round     finishes the upload as a publish is finished, which makes the site in one step
 //
-// Until that step the copy is an upload: no address serves it and no listing holds it. An upload that is never finished goes as every upload does, with its files.
+// Who runs the later rounds is the host's part. Where it runs jobs by itself, the copy goes on with nobody asking, and a later call is only told whether the copy is a site yet.
+// Anywhere else each later call, which names the upload, runs one round.
+//
+// Until the last step the copy is an upload: no address serves it and no listing holds it. An upload that is never finished goes as every upload does, with its files.
 
 import pMap from "p-map";
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
 import { parseSiteName, type SiteName } from "../names/names";
+import type { Jobs } from "../jobs/jobs";
 import { COUNT, POSITIVE } from "../records/fields";
 import type { Site } from "../records/site";
 import { mintSiteFolder } from "../records/site";
-import { type ManifestFile, mintUploadId, parseUploadId, UPLOAD_ID, type Upload } from "../records/upload";
+import { type ManifestFile, mintUploadId, parseUploadId, UPLOAD_ID, type Upload, type UploadId } from "../records/upload";
 import { dayOf } from "../records/views";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
+import { abandonPublish } from "./abandon-publish";
 import { checkManifest, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
 import { defaultExpiry } from "./changes";
 import { fileKey, versionPrefix } from "./files";
@@ -24,7 +29,7 @@ import { finishPublish, PUBLISHED_SITE } from "./finish-publish";
 import { noteProblem } from "./problems";
 import { reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { CLEANUP_CALLS, discardUpload, isWithinReach, missingFiles, uploadKey } from "./uploads";
+import { CLEANUP_CALLS, discardUpload, isWithinReach, missingFiles, removeUploadFiles, uploadKey } from "./uploads";
 
 /** The most calls to the database one request that copies makes, whoever asks: six under the 50 past which the smallest plan of a host ends a request, so a count that is off by a few still fits. */
 const DATABASE_BUDGET = 44;
@@ -68,10 +73,10 @@ const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Num
 /** What a duplicate may ask for besides its site: the `name` of the copy on the first call, or the `upload` an earlier call answered, to go on with it. */
 export const DUPLICATE_REQUEST = v.strictObject({ name: v.optional(v.string()), upload: v.optional(v.string()) });
 
-/** How far a copy is: the upload that holds it, and how many of its files are stored. */
-const PROGRESS = v.object({ upload: UPLOAD_ID, copied: COUNT, files: POSITIVE });
+/** How far a copy is: the upload that holds it, and how many of its files are stored. `copied` is `null` while the install copies with nobody asking: no call counts the files then. */
+const PROGRESS = v.object({ upload: UPLOAD_ID, copied: v.nullable(COUNT), files: POSITIVE });
 
-/** A copy that is not a site yet: `copy.upload` is what the next call names. `copied` may equal `files` here, one call before the site is made. */
+/** A copy that is not a site yet: `copy.upload` is what the next call names. `copied` may equal `files` here, one round before the site is made. */
 const COPYING = v.object({ before: v.null(), site: v.null(), copy: PROGRESS });
 
 /** A copy that is a site. */
@@ -104,6 +109,9 @@ interface Staged {
   readonly upload: CopyUpload;
   readonly missing: readonly string[];
 }
+
+/** The upload of a copy that the install copies with nobody asking: its files are not listed. */
+type Watched = Omit<Staged, "missing"> & { readonly missing: null };
 
 /** A staged copy, and whether this call recorded its upload: nobody else knows an upload no answer has named yet. */
 type StagedNow = Staged & { readonly fresh: boolean };
@@ -191,8 +199,12 @@ async function beginCopy(
   return { ok: true, upload: { ...upload, state: "pending", bytes: listed.bytes, files: manifest.length, dropped: [] }, missing: manifest.map((file) => file.path) };
 }
 
-/** Find the upload of a copy that an earlier call began from this site, and what it still lacks. */
-async function resumeCopy(install: Install, actor: Actor, asked: { readonly site: Site; readonly reference: string; readonly now: number }): Promise<Staged | Refused<"bad_argument" | "not_found">> {
+/** Find the upload of a copy that an earlier call began from this site, and what it still lacks. A copy the install is at with nobody asking is found, and not listed. */
+async function resumeCopy(
+  install: Install,
+  actor: Actor,
+  asked: { readonly site: Site; readonly reference: string; readonly now: number; readonly watching: boolean },
+): Promise<Staged | Watched | Refused<"bad_argument" | "not_found">> {
   const id = parseUploadId(asked.reference);
   if (id === undefined) return refuse("bad_argument", "upload");
 
@@ -203,9 +215,11 @@ async function resumeCopy(install: Install, actor: Actor, asked: { readonly site
   const { plan } = upload;
   if (plan.kind !== "duplicate" || plan.from.folder !== asked.site.folder) return refuse("not_found", "upload");
 
-  const missing = upload.state === "finished" ? [] : await missingFiles(install.store, upload, found.manifest);
+  if (upload.state === "finished") return { ok: true, upload: { ...upload, plan }, missing: [] };
 
-  return { ok: true, upload: { ...upload, plan }, missing };
+  if (asked.watching) return { ok: true, upload: { ...upload, plan }, missing: null };
+
+  return { ok: true, upload: { ...upload, plan }, missing: await missingFiles(install.store, upload, found.manifest) };
 }
 
 /** The files of one call that are on their way: how they ended, once one is missing or fails, after which none is begun, and how many writes the store did not keep. A failure outranks a missing file. */
@@ -275,12 +289,17 @@ async function copyFiles(install: Install, upload: CopyUpload, paths: readonly s
   return batch.ended === undefined;
 }
 
-/** Reach the source, and the upload of its copy: a new one, or the one `upload` names. */
+/**
+ * Reach the source, and the upload of its copy: a new one, or the one `upload` names.
+ *
+ * @param watching - whether the install runs the later rounds itself, so that a copy an earlier call began is found and not listed
+ */
 async function stageCopy(
   install: Install,
   actor: Actor,
   request: v.InferInput<typeof DUPLICATE_REQUEST> & { readonly site: string },
-): Promise<StagedNow | Refused<DuplicateCode>> {
+  watching: boolean,
+): Promise<StagedNow | Watched | Refused<DuplicateCode>> {
   const reached = await reachSite(install, actor, request.site);
   if (!reached.ok) return reached;
 
@@ -290,9 +309,9 @@ async function stageCopy(
   if (request.upload !== undefined) {
     if (request.name !== undefined) return refuse("bad_argument", "name");
 
-    const resumed = await resumeCopy(install, actor, { site, reference: request.upload, now: signed.at });
+    const resumed = await resumeCopy(install, actor, { site, reference: request.upload, now: signed.at, watching });
 
-    return resumed.ok ? { ...resumed, fresh: false } : resumed;
+    return resumed.ok && resumed.missing !== null ? { ...resumed, fresh: false } : resumed;
   }
 
   const name = request.name === undefined ? ({ ok: true, value: site.name } as const) : parseSiteName(request.name);
@@ -332,29 +351,106 @@ async function advanceCopy(install: Install, actor: Actor, staged: StagedNow): P
   return finished;
 }
 
+/** Find the pending upload of a copy by its id alone, as its owner would: one that is gone, given up, run out, or a site already is none. */
+async function pendingCopy(install: Install, id: UploadId): Promise<{ readonly upload: CopyUpload; readonly owner: Actor; readonly manifest: readonly ManifestFile[] } | undefined> {
+  const found = await install.database.getUpload(id);
+  if (found === undefined) return undefined;
+
+  const { upload } = found;
+  const { plan } = upload;
+  const owner: Actor = { scope: "publisher", holder: upload.owner };
+  if (plan.kind !== "duplicate" || upload.state !== "pending" || !isWithinReach(upload, owner, install.now())) return undefined;
+
+  return { upload: { ...upload, plan }, owner, manifest: found.manifest };
+}
+
 /**
- * Make a new site that holds a copy of a site's live version, or go on with a copy an earlier call began: while `site` is `null` the caller calls again with `copy.upload`.
+ * Give up a copy whose round failed for good: its files are removed as an abandoned upload's are, and the failure is noted as the problem `copy_failed`. A copy that is gone or a site already is left as it is.
+ *
+ * @param failure - what the round threw
+ * @throws {Error} the store or the database failed
+ */
+export async function failCopy(install: Install, id: UploadId, failure: unknown): Promise<void> {
+  const pending = await pendingCopy(install, id);
+  // A copy somebody gave up meanwhile, or that became a site, did not fail.
+  if (pending === undefined || !(await install.database.abandonUpload(id))) return;
+
+  await removeUploadFiles(install, pending.upload);
+  await noteProblem(install, "copy_failed", failure);
+}
+
+/**
+ * Run one round of a copy with nobody asking, as the copy's owner: the files it still lacks are found, the next ones copied, and a whole copy made a site.
+ *
+ * A copy that cannot be made is given up and noted as the problem `copy_failed`: its source stopped keeping the version, or the site was refused.
+ *
+ * @returns `more` while files are left or the site is still to make, and `done` once the copy is a site, was given up, ran out, or is gone
+ * @throws {Error} the store or the database failed: the copy stays, and the round may be run again
+ */
+export async function continueCopy(install: Install, id: UploadId): Promise<"more" | "done"> {
+  const pending = await pendingCopy(install, id);
+  if (pending === undefined) return "done";
+
+  const { upload, owner } = pending;
+  const copied = await advanceCopy(install, owner, { ok: true, upload, missing: await missingFiles(install.store, upload, pending.manifest), fresh: false });
+  if (copied.ok) return copied.site === null ? "more" : "done";
+
+  // An upload that was given up meanwhile is no failure: somebody stopped the copy.
+  if (copied.code === "not_found") return "done";
+
+  // Files went missing between the listing and the finish, which leaves the upload pending: no later round would end it.
+  if (copied.code === "missing_files") await discardUpload(install, upload);
+
+  await noteProblem(install, "copy_failed");
+
+  return "done";
+}
+
+/**
+ * Give an unfinished copy up, as an upload is given up, and stop the job that copies it.
+ *
+ * @param reference - the copy's upload as sent
+ * @returns what giving the upload up answers. Only an upload that was given up has its job stopped
+ * @throws {Error} the database failed
+ */
+export async function cancelCopy(install: Install, actor: Actor, reference: string, jobs: Jobs): ReturnType<typeof abandonPublish> {
+  const abandoned = await abandonPublish(install, actor, reference);
+  const upload = parseUploadId(reference);
+  if (abandoned.ok && upload !== undefined) await jobs.stop({ kind: "copy", upload });
+
+  return abandoned;
+}
+
+/**
+ * Make a new site that holds a copy of a site's live version, or ask after a copy an earlier call began: while `site` is `null` the caller calls again with `copy.upload`.
  * The copy is private whatever the source is, under a new id and a new folder, with no public name, at version 1, and its owner is the caller. Its name is the source's unless `name` is given.
- * It takes the source's typed title, its page's own title, and its search-engine and frame settings. Its expiry is a new site's, from `default_expires`: the source's is not copied.
- * The install's limits bound it as they bound a publish.
+ * It takes the source's typed title, its page's own title, and its search-engine and frame settings; its expiry is a new site's, from `default_expires`. The install's limits bound it as they bound a publish.
  * @param request - `site` is a reference to the source; `name` goes with the first call alone, and `upload` with every later one
  * @param asking - the calls to the database the caller's request made before this action, to learn who asks: they count against the calls to the database one request may make
- * @returns the copy's progress, and the new site once every file is copied; `no_such_version` when the source stopped keeping the version meanwhile. Every refusal left no site behind
- * @throws {Error} the store or the database failed: a copy just begun is given up, and one named by `upload` stays to be gone on with. A `RangeError` before anything is read: `asking` leaves the action too few calls to the database
+ * @param jobs - what a copy the first call left unfinished is started on. Where it runs by itself, a later call copies nothing and answers `copy.copied` as `null`; anywhere else each later call copies the next files
+ * @returns the copy's progress, and the new site once every file is copied; `no_such_version` when the source stopped keeping the version meanwhile; `not_found` about `upload` for a copy that was given up. Every refusal left no site behind
+ * @throws {Error} the store or the database failed, or the host did not take the job: a copy just begun is given up, and one named by `upload` stays. A `RangeError` before anything is read: `asking` leaves the action too few calls to the database
  */
 export async function duplicateSite(
   install: Install,
   actor: Actor,
   request: v.InferInput<typeof DUPLICATE_REQUEST> & { readonly site: string },
   asking: number,
+  jobs: Jobs,
 ): Promise<Copying | Duplicated | Refused<DuplicateCode>> {
   if (databaseCalls(asking) > DATABASE_BUDGET) throw new RangeError(`a request that made ${asking} calls to the database leaves a copy too few`);
 
-  const staged = await stageCopy(install, actor, request);
+  const staged = await stageCopy(install, actor, request, jobs.background);
   if (!staged.ok) return staged;
 
+  const { upload } = staged;
+  if (staged.missing === null) return { ok: true, before: null, site: null, copy: { upload: upload.id, copied: null, files: upload.files } };
+
   try {
-    return await advanceCopy(install, actor, staged);
+    const copied = await advanceCopy(install, actor, staged);
+    if (staged.fresh && copied.ok && copied.site === null) await jobs.start({ kind: "copy", upload: upload.id });
+
+    return copied;
   } catch (error) {
     // An upload that became a site meanwhile is left as it is.
     if (staged.fresh) await discardUpload(install, staged.upload);
