@@ -19,7 +19,7 @@ const KINDS = {
 } as const;
 
 /** A dry run, and a run that removes everything once the install's address was typed. */
-const DRY: Removal = { run: "dry-run" };
+const DRY: Removal = { run: "dry-run", data: "remove" };
 
 /** What both kinds end with: the login, the alert, the keys, the Workflow, the Worker, and the data, then the token, which stays. */
 const SHARED = [
@@ -200,6 +200,26 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
 
     expect([again.found, shown(again.done).slice(0, 2), again.done.ok && again.done.confirm, left(account)]).toEqual(["leftover", data, "poplin-sites", NOTHING]);
     expect((await removed(account, kind, DRY)).found).toBe("none");
+  });
+
+  // Drift: a dry run once knew nothing of what a run keeps, so the list a person reads before the removal said their sites' files and records would go.
+  test("a dry run told to keep the data lists the bucket and the database as kept, with what they hold, sends no change, and every other row is the row of a dry run that keeps nothing", async () => {
+    const account = await installedAccount(kind);
+    const dry = await removed(account, kind, { run: "dry-run", data: "keep" });
+    const kept = ["Sites' files | keep | poplin-sites (files: 2, 15 B) | 2 | 15", "Database | keep | poplin (sites: 3) | 3"];
+
+    expect([shown(dry.done), dry.writes]).toEqual([ROWS[kind].map((row) => kept.find((one) => one.split(" | ")[0] === row.split(" | ")[0]) ?? row), []]);
+    expect(dry.done).toMatchObject({ ok: true, ready: true });
+  });
+
+  // Drift: a run that keeps the data never reads what the bucket holds, and its dry run does, to count it. A dry run that failed on that read said not ready of a run that goes through.
+  test("a dry run told to keep the data, where what the bucket holds cannot be read, lists the bucket as kept with no count and is ready, as the run after it is", async () => {
+    const account = await installedAccount(kind, { refuse: `GET /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects`, refuseAs: { status: 500, code: 10001 } });
+    const dry = await removed(account, kind, { run: "dry-run", data: "keep" });
+    const run = await removed(account, kind, applyOf(KINDS[kind].confirm, "keep"));
+    const files = (done: Removed): string[] => shown(done).filter((row) => row.startsWith("Sites' files"));
+
+    expect([files(dry.done), dry.done.ok && dry.done.ready, files(run.done), run.done.ok && run.done.ready]).toEqual([["Sites' files | keep | poplin-sites"], true, ["Sites' files | keep | poplin-sites"], true]);
   });
 
   // Drift: with no Worker, a database is poplin's by its name alone, and the name is a common one. One that holds tables and none of poplin's schema steps is somebody else's records, which no run may delete.

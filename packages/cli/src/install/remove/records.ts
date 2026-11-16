@@ -20,11 +20,11 @@ interface Typing {
 }
 
 /**
- * How a run goes. A dry run lists and removes nothing, so it has no proof and nothing to keep.
+ * How a run goes. A dry run lists what a run with the same `data` would do, and removes nothing, so it has no proof.
  *
  * @typeParam Asked - `Typing` for a run that can ask a person, and `never` for one that cannot: then the proof is given with the line
  */
-export type RemovalMode<Asked> = { readonly mode: "dry-run" } | { readonly mode: "apply"; readonly confirm: Given | Asked; readonly data: "remove" | "keep" };
+export type RemovalMode<Asked> = { readonly mode: "dry-run"; readonly data: "remove" | "keep" } | { readonly mode: "apply"; readonly confirm: Given | Asked; readonly data: "remove" | "keep" };
 
 /**
  * The command line, read. A run that asks nothing holds every answer; one on a terminal holds each answer given, and asks for the rest.

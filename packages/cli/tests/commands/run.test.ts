@@ -614,7 +614,7 @@ describe("run", () => {
     expect(summary(down)).toEqual({
       code: 5,
       out: [],
-      err: ["the install could not be reached", "the saved login was removed from this machine; the token may still be live: revoke it on the install's dashboard"],
+      err: ["the install could not be reached", "the saved login was removed from this machine; if the install still stands, the token may still be live: revoke it on the install's dashboard"],
     });
     expect(existsSync(file)).toBe(false);
   });

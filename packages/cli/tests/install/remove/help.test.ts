@@ -17,7 +17,7 @@ Providers:
   stand-in  Stand-In Host: under your own place, or without one
 
 Options:
-  --dry-run            list what would be removed, and remove nothing
+  --dry-run            list what a run would remove and keep, and remove nothing
   --confirm <address>  the install's address, as proof; asked for when left out
   --keep-data          leave the sites' files and the database
   --yes                ask nothing; a missing answer stops the run and is named
@@ -34,7 +34,7 @@ The account token is read from POPLIN_INSTALL_TOKEN, or from standard input
 with --token-stdin, or asked for without being shown. It is used for the run
 and stored nowhere.
 
-It logs no computer out: run poplin logout on each one.
+It logs no computer out: run poplin logout on each one first.
 
   poplin uninstall stand-in --help  its own options, and what the account token needs`;
 

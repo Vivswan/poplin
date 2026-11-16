@@ -9,7 +9,7 @@ import type { RemovalMode, UninstallPlan } from "./records";
 
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
 export const UNINSTALL_OPTIONS: readonly OptionRow[] = [
-  { flag: "--dry-run", value: null, about: "list what would be removed, and remove nothing", variable: null },
+  { flag: "--dry-run", value: null, about: "list what a run would remove and keep, and remove nothing", variable: null },
   { flag: "--confirm", value: "<address>", about: "the install's address, as proof; asked for when left out", variable: null },
   { flag: "--keep-data", value: null, about: "leave the sites' files and the database", variable: null },
   { flag: "--yes", value: null, about: "ask nothing; a missing answer stops the run and is named", variable: null },
@@ -24,8 +24,8 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
 };
 
-/** The options of a real run alone, which a dry run refuses. */
-const RUN_ALONE = ["--confirm", "--keep-data"] as const;
+/** The option of a real run alone, which a dry run refuses: a dry run removes nothing, and takes no proof. */
+const RUN_ALONE = "--confirm";
 
 /** The command, as its words are read. */
 const COMMAND: CommandWords = { name: "uninstall", options: UNINSTALL_OPTIONS, elsewhere: ELSEWHERE };
@@ -33,9 +33,9 @@ const COMMAND: CommandWords = { name: "uninstall", options: UNINSTALL_OPTIONS, e
 /** The proof a run that asks nothing lacks, as a missing answer. */
 const MISSING_PROOF: Missing = { key: "confirm", name: "the install's address, as proof you mean this one", give: "Give --confirm <address>: a run with --dry-run shows it." };
 
-/** What the switches say of how the run goes: a dry run, or a run with the proof `--confirm` gave, if it gave one, and whether the data stays. */
+/** What the switches say of how the run goes: a dry run, or a run with the proof `--confirm` gave, if it gave one; and for both whether the data stays. */
 type Switches =
-  | { readonly mode: "dry-run" }
+  | { readonly mode: "dry-run"; readonly data: "remove" | "keep" }
   | {
       readonly mode: "apply";
       readonly given: { readonly by: "flag"; readonly typed: string } | undefined;
@@ -44,13 +44,13 @@ type Switches =
 
 /** Read how the run goes from its switches. */
 function switchesOf(shared: Typed): Switches | Stop {
-  const stray = RUN_ALONE.find((flag) => shared.has(flag.slice(2)));
-  if (shared.has("dry-run")) return stray === undefined ? { mode: "dry-run" } : usage(COMMAND, `--dry-run removes nothing: leave out ${stray}`);
-
+  const data = shared.has("keep-data") ? "keep" : "remove";
   const typed = shared.get("confirm");
+  if (shared.has("dry-run")) return typed === undefined ? { mode: "dry-run", data } : usage(COMMAND, `--dry-run removes nothing: leave out ${RUN_ALONE}`);
+
   if (typeof typed === "string" && typed.trim() === "") return usage(COMMAND, "--confirm takes the install's address", "a run with --dry-run shows it");
 
-  return { mode: "apply", given: typeof typed === "string" ? { by: "flag", typed } : undefined, data: shared.has("keep-data") ? "keep" : "remove" };
+  return { mode: "apply", given: typeof typed === "string" ? { by: "flag", typed } : undefined, data };
 }
 
 /** The mode of a run that asks nothing; `undefined` for one that removes and was given no proof. */

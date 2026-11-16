@@ -2,7 +2,8 @@
 //
 //   words -> a plan -> the answers still open -> look for an install -> the list of what would go -> the install's address, typed -> every row as the provider removes it
 //
-// A dry run ends at the list, and a run given its proof with `--confirm` skips it. The provider compares the proof before it removes anything.
+// A dry run ends at the list, and a run given its proof with `--confirm` skips it. The list is of a run with the same answers: data that a run keeps is listed as kept.
+// The provider compares the proof before it removes anything.
 
 import type { Found, Removable, Removal, RemovalRow, Removed, Run } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
@@ -14,7 +15,7 @@ import { followed, NEXT } from "../report";
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { UninstallPlan, UninstallRequest } from "./records";
-import { listedLines, removalLine, removalValue, removedLines, warningLines } from "./report";
+import { listedLines, removalLine, removalValue, removedLines, unlookedWords, warningLines } from "./report";
 
 /** The command as it is typed after `poplin`, and what runs it again. */
 const COMMAND = { name: "uninstall", again: NEXT.uninstall } as const;
@@ -25,11 +26,8 @@ const LOOKING = "looking for an install";
 /** What ends the line of every stop here. */
 const UNTOUCHED = "Nothing was removed.";
 
-/** The stop of an account that holds nothing of an install. */
-const NO_INSTALL: Stop = { problem: "no_install", exit: 1, words: `No install is in this account. ${UNTOUCHED}`, next: NEXT.none() };
-
-/** The stop of a run that was told to keep the data, where the data is all that is left. */
-const ONLY_DATA: Stop = { problem: "no_install", exit: 1, words: `Only the data is left here, and --keep-data keeps it. ${UNTOUCHED}`, next: NEXT.none() };
+/** What a run that met nothing to remove says is there: nothing of an install, or with a run told to keep the data, the data alone. */
+const NOTHING = { none: "No install is in this account.", data: "Only the data is left here, and --keep-data keeps it." } as const;
 
 /** The states of a row that is nothing a removal does or was to do: it stays, is kept, or is not this install's. */
 const UNTOUCHED_STATES: readonly RemovalRow["state"][] = ["stay", "keep", "skip"];
@@ -115,12 +113,17 @@ async function removal(ground: Ground, request: UninstallRequest, how: Removal, 
 
   if (removed.rows.some((row) => !UNTOUCHED_STATES.includes(row.state))) return removed;
 
-  return removed.rows.some((row) => row.state === "keep") ? ONLY_DATA : NO_INSTALL;
+  // A kind the token could not look for may still be there, so the stop names it beside what is left.
+  const there = removed.rows.some((row) => row.state === "keep") ? NOTHING.data : NOTHING.none;
+  const unlooked = unlookedWords(removed, how.run);
+  const words = unlooked === undefined ? `${there} ${UNTOUCHED}` : `${there} ${unlooked} ${UNTOUCHED}`;
+
+  return { problem: "no_install", exit: 1, words, next: NEXT.none() };
 }
 
 /** Warn, then take the proof: what the person types once they saw what goes. `undefined` once they ended the question, or typed nothing. */
 async function typedProof(listed: Listed, data: "remove" | "keep", ends: InstallEnds, show: Show): Promise<string | undefined> {
-  for (const line of warningLines(data)) show.aside(line.tone, line.text);
+  for (const line of warningLines(listed, data)) show.aside(line.tone, line.text);
 
   const typed = await ends.screen.ask(`Type ${listed.confirm} to go on:`);
 
@@ -128,7 +131,7 @@ async function typedProof(listed: Listed, data: "remove" | "keep", ends: Install
 }
 
 function ended(removed: Listed, run: Run, ground: Ground, request: UninstallRequest, show: Show): number {
-  const lines = run === "dry-run" ? listedLines(removed) : removedLines(removed, request.provider);
+  const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, request.provider);
   for (const line of lines) show.line(line.tone, line.text);
 
   show.value(removalValue(removed, run, ground.found.state, request.provider));
@@ -151,7 +154,7 @@ async function work(request: UninstallRequest, ends: InstallEnds, show: Show): P
 
   // A person sees the list before the proof is asked for, also where the result is one JSON value: there it is shown beside the result.
   const beside = mode.mode === "apply" && request.json ? { working: show.working, line: show.aside } : show;
-  const listed = await removal(ground, request, { run: "dry-run" }, ends, beside);
+  const listed = await removal(ground, request, { run: "dry-run", data: mode.data }, ends, beside);
   if ("problem" in listed) return stopped(listed, show, at);
 
   if (mode.mode === "dry-run") return ended(listed, "dry-run", ground, request, show);

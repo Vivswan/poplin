@@ -398,6 +398,11 @@ function unread(name: string, bound: boolean): string {
   return bound ? name : `${name} (${BY_NAME})`;
 }
 
+/** The row of data whose holdings a list could not read. A run that leaves the data never reads them, so its list names the data with no count; for data a run removes, the read failed. */
+function uncounted(work: Work, object: "Sites' files" | "Database", detail: string, why: { readonly own: boolean; readonly workerGone: boolean; readonly leaves: boolean }, failure: CloudflareFailure): boolean {
+  return why.leaves ? left(work, object, detail, why) : failed(work, object, failure);
+}
+
 /** The sites' files: every object of the bucket, counted with its bytes, then the bucket. A run that leaves the bucket does not list what it holds. */
 async function removeFiles(work: Work, why: { readonly own: boolean; readonly bound: boolean; readonly workerGone: boolean }): Promise<boolean> {
   const { connection, accountId } = work.place;
@@ -414,7 +419,7 @@ async function removeFiles(work: Work, why: { readonly own: boolean; readonly bo
   // A bucket that went between the two reads is gone, which is no failure.
   if (!objects.ok && objects.failure === "refused" && objects.status === NOT_FOUND) return note(work, { object: "Sites' files", state: "gone", detail: name });
 
-  if (!objects.ok) return failed(work, "Sites' files", objects);
+  if (!objects.ok) return uncounted(work, "Sites' files", unread(name, why.bound), { ...why, leaves }, objects);
 
   const held = { count: objects.value.length, bytes: objects.value.reduce((sum, object) => sum + (object.size ?? 0), 0) };
   const named = `${name} (files: ${held.count}, ${showBytes(held.bytes)}${why.bound ? "" : `; ${BY_NAME}`})`;
@@ -479,7 +484,7 @@ async function removeDatabase(work: Work, why: { readonly boundId: string | unde
   if (leaves && work.mode === "apply") return left(work, "Database", unread(name, why.bound), reasons);
 
   const read = await databaseFacts(work, id, why.bound);
-  if ("ok" in read) return failed(work, "Database", read);
+  if ("ok" in read) return uncounted(work, "Database", unread(name, why.bound), { ...reasons, leaves }, read);
 
   const { holder, sites } = read;
   if (holder === "other") return note(work, { object: "Database", state: "skip", detail: `${name}: ${holderWords(holder)}: ${WORDS.stays}` });
@@ -587,7 +592,7 @@ export async function removeInstall(found: Removable<Place>, where: Where, remov
   if (stands !== stood || (bindings.value !== undefined && !isOwn(bindings.value))) return { ok: false, why: "changed", words: WORDS.changed };
 
   const bound = boundTo(bindings.value ?? []);
-  const work: Work = { mode: removal.run === "apply" ? "apply" : "plan", place, data: removal.run === "apply" ? removal.data : "remove", kind: where.kind, zoneId: zone.value, form, rows: [], say };
+  const work: Work = { mode: removal.run === "apply" ? "apply" : "plan", place, data: removal.data, kind: where.kind, zoneId: zone.value, form, rows: [], say };
   await removeReach(work);
   await removeAccess(work);
   await removeAlerts(work);

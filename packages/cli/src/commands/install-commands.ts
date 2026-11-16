@@ -17,8 +17,8 @@ import { type Problem, problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import { columns, countText, dayText } from "./text";
 
-/** What the login is still good for after a logout that the install did not answer. */
-const STILL_LIVE = "the token may still be live: revoke it on the install's dashboard";
+/** What the login is still good for after a logout that the install did not answer: an install that was removed answers none, and its tokens went with it. */
+const STILL_LIVE = "if the install still stands, the token may still be live: revoke it on the install's dashboard";
 
 /** What a change of the logins still needs on an install that did not carry it to the login page by itself: that page keeps a list of its own. */
 const LOGINS_STEP = "one more step: on the dashboard's Domain screen, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";

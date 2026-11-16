@@ -149,17 +149,17 @@ export type Installed =
 export type Removable<Place> = Extract<Found<never, Place>, { readonly state: "whole" | "started" | "leftover" | "none" }>;
 
 /**
- * How a removal goes. A dry run lists and removes nothing.
+ * How a removal goes. A dry run lists what a run with the same `data` would do, and removes nothing.
  *
- * A run carries `confirmed`, what the person typed as proof of which install is meant, and whether the sites' files and the records go too.
+ * `data` is whether the sites' files and the records go too. A run carries `confirmed`, what the person typed as proof of which install is meant.
  */
-export type Removal = { readonly run: "dry-run" } | { readonly run: "apply"; readonly confirmed: string; readonly data: "remove" | "keep" };
+export type Removal = { readonly run: "dry-run"; readonly data: "remove" | "keep" } | { readonly run: "apply"; readonly confirmed: string; readonly data: "remove" | "keep" };
 
 /**
  * What a removal does, or a dry run would do, to one kind of object.
  *
  * `remove` it is there and is the product's; `gone` it was there when the run listed it, and gone before the run reached it; `keep` it is data the run was told to leave.
- * `stay` it is nothing a removal takes away, and the row says what to do by hand; `skip` it carries a name of the product's and is not this install's.
+ * `stay` it is nothing a removal takes away, and the row says what to do by hand; one with a `right` is a kind the token could not look for, which may still be there. `skip` it carries a name of the product's and is not this install's.
  * `block` the token lacks the right to remove it; `fail` the provider refused; `not-run` an earlier object still stands that must go first.
  */
 export type RemovalState = "remove" | "gone" | "keep" | "stay" | "skip" | "block" | "fail" | "not-run";
