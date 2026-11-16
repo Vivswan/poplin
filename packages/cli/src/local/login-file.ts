@@ -73,9 +73,9 @@ function readJson(text: string): unknown {
   }
 }
 
-/** This machine, as the running process sees it. */
+/** This machine, as the running process sees it now: the environment is a copy, so a later change to the process's own does not show in it. */
 export function thisMachine(): Machine {
-  return { env: process.env, platform: process.platform, home: homedir() };
+  return { env: { ...process.env }, platform: process.platform, home: homedir() };
 }
 
 /**

@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import { openBrowser } from "../../src/local/browser";
-import type { Machine } from "../../src/local/login-file";
+import { type Machine, thisMachine } from "../../src/local/login-file";
 
+/** An address an install hands over to be opened. */
 const ADDRESS = "https://poplin.example.com/tokens/review/0123456789abcdef";
+
+/** Every variable a command reads a token from. */
+const TOKENS = ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN", "POPLIN_INSTALL_TOKEN"];
 
 /** What was handed to the browser. */
 function recorder(): { readonly started: string[][]; readonly start: NonNullable<Parameters<typeof openBrowser>[2]> } {
@@ -45,6 +49,40 @@ describe("openBrowser", () => {
     const { started, start } = recorder();
 
     expect([await openBrowser(address, machineOf(), start), started]).toEqual([false, []]);
+  });
+
+  // Drift: what is started inherits this process's environment, and a browser lives long after the run: a token left there stays readable by every process of the same user.
+  // The command goes on while the browser starts, so the environment it read beforehand must still hold each token.
+  test.each([
+    ["starts", async (): Promise<void> => undefined, true],
+    ["cannot be started", (): Promise<void> => Promise.reject(new Error("spawn xdg-open ENOENT")), false],
+  ])("a browser that %s sees none of the tokens, the command beside it still reads each, and each is back afterwards", async (_name, outcome, opened) => {
+    const kept = [...TOKENS, "POPLIN_SERVER"].map((name) => [name, process.env[name]] as const);
+    const held = TOKENS.map((name) => `token-in-${name}`);
+    const seen: unknown[] = [];
+    for (const name of TOKENS) process.env[name] = `token-in-${name}`;
+    process.env.POPLIN_SERVER = "https://poplin.example.com";
+    const command = thisMachine();
+
+    try {
+      const started = await openBrowser(ADDRESS, machineOf(), () => {
+        seen.push(
+          TOKENS.map((name) => process.env[name]),
+          process.env.POPLIN_SERVER,
+          TOKENS.map((name) => command.env[name]),
+        );
+
+        return outcome();
+      });
+      const after = TOKENS.map((name) => process.env[name]);
+
+      expect([started, seen, after]).toEqual([opened, [[undefined, undefined, undefined], "https://poplin.example.com", held], held]);
+    } finally {
+      for (const [name, value] of kept) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 
   test("a browser that cannot be started is not an error: the login goes on with the printed address", async () => {

@@ -3,7 +3,7 @@
 import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import { type Client, createClient } from "../client/client";
-import { currentLogin } from "../local/current-login";
+import { currentLogin, TOKEN_VARIABLES } from "../local/current-login";
 import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
@@ -12,7 +12,6 @@ import { processEnds } from "../install/ends";
 import { runInstall } from "../install/first/install";
 import { runUninstall } from "../install/remove/uninstall";
 import { runRepair } from "../install/repair/repair";
-import { TOKEN_VARIABLE } from "../install/ask";
 import type { InstallEnds } from "../install/records";
 import { exitCode } from "./exit-codes";
 import { runExport } from "./export";
@@ -68,7 +67,7 @@ function guarded(io: Io, tokens: ReadonlySet<string>): Io {
  */
 async function knownTokens(io: Io): Promise<ReadonlySet<string>> {
   const tokens = new Set<string>();
-  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN", TOKEN_VARIABLE]) {
+  for (const variable of Object.values(TOKEN_VARIABLES)) {
     const inEnvironment = io.machine.env[variable];
     if (inEnvironment !== undefined && inEnvironment !== "") tokens.add(inEnvironment);
   }

@@ -8,13 +8,14 @@
 import * as v from "valibot";
 
 import { domainStateWords } from "../../../core/src/records/domain-states";
+import { TOKEN_VARIABLES } from "../local/current-login";
 import { isServer } from "../local/login";
 import { type Problem, problem } from "./problems";
 import type { Io, Outcome, RequestOf } from "./records";
 import { columns } from "./text";
 
 /** The environment variable the token is read from. */
-const TOKEN_VARIABLE = "POPLIN_SETUP_TOKEN";
+const TOKEN_VARIABLE = TOKEN_VARIABLES.setup;
 
 /** How long a run may take: a repair makes every object in turn, so two minutes. */
 const RUN_TIMEOUT_MS = 120_000;
