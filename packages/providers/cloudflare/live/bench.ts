@@ -15,6 +15,7 @@ import { openSession } from "../../../cli/tests/mcp/support/session";
 import type { JobRun } from "../scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 import type { Bench, Draft, LiveSite, Missing, Ran, Shared } from "./records";
+import { failureOf } from "./util";
 
 /** What every site name a live run makes starts with, whatever the run: the sweep removes each such site. */
 const SWEPT_PREFIX = "live-";
@@ -30,6 +31,9 @@ const API = "/api/";
 
 /** What a run says when it sends a stranger's request a second time. */
 const SENT_AGAIN = "a stranger's request was cut off before any answer, and was sent once more";
+
+/** The first status that is a refusal or a failure. */
+const REFUSED_FROM = 400;
 
 /** The most sites one page of a listing holds. */
 const PAGE = 100;
@@ -145,11 +149,11 @@ export function openBench(parts: BenchParts): OpenBench {
     return parts.fetch(input, init);
   };
 
-  const io = (out: (line: string) => void): Io => ({
+  const io = (out: (line: string) => void, fetch: Fetch = counted): Io => ({
     out,
     err: () => undefined,
     status: () => undefined,
-    fetch: counted,
+    fetch,
     machine: {
       env: { POPLIN_CONFIG_DIR: join(scratch, "config"), POPLIN_SERVER: admin, POPLIN_TOKEN: parts.token },
       platform: process.platform,
@@ -168,22 +172,39 @@ export function openBench(parts: BenchParts): OpenBench {
     stopped: new AbortController().signal,
   });
 
+  // One watch for each command and each tool call, so a status is never another call's.
+  const watched = (): { readonly fetch: Fetch; readonly refused: () => number | undefined } => {
+    let refused: number | undefined;
+
+    return {
+      fetch: async (input, init) => {
+        const answer = await counted(input, init);
+        if (answer.status >= REFUSED_FROM) refused = answer.status;
+
+        return answer;
+      },
+      refused: () => refused,
+    };
+  };
+
   const cli = async (...words: readonly string[]): Promise<Ran> => {
     const lines: string[] = [];
+    const sent = watched();
     const code = await run(
       [...words, "--json"],
-      io((line) => lines.push(line)),
+      io((line) => lines.push(line), sent.fetch),
     );
 
-    return { code, value: printed(lines) };
+    return { code, value: printed(lines), refused: sent.refused() };
   };
 
   const mcp = async (tool: string, input: Record<string, unknown>): Promise<Record<string, unknown>> => {
-    const session = await openSession(io(() => undefined));
+    const sent = watched();
+    const session = await openSession(io(() => undefined, sent.fetch));
 
     try {
       const result = await session.client.callTool({ name: tool, arguments: input });
-      if (result.isError === true || !isRecord(result.structuredContent)) throw new Error(`the MCP tool ${tool} answered an error`);
+      if (result.isError === true || !isRecord(result.structuredContent)) throw new Error(`the MCP tool ${tool} answered an error: ${failureOf(isRecord(result.structuredContent) ? result.structuredContent.error : undefined, sent.refused())}`);
 
       return result.structuredContent;
     } finally {
