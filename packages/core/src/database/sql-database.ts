@@ -396,7 +396,7 @@ function requestsIn(result: StatementResult | undefined): number {
   return Number(result?.rows[0]?.requests ?? 0);
 }
 
-/** Core's database over any SQLite a driver reaches: D1 in the Worker, `bun:sqlite` in the tests. */
+/** Core's database over any SQLite a driver reaches: the host's own in an install, `bun:sqlite` in the tests. */
 export class SqlDatabase implements Database {
   readonly #driver: SqlDriver;
 

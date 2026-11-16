@@ -1,4 +1,4 @@
-// The address grammar: the first label of every site hostname ends in a word, so routes that start with a wildcard send only site hostnames to the Worker.
+// The address grammar: the first label of every site hostname ends in a word, so routes that start with a wildcard send only site hostnames to the install.
 //
 //   <name>--<id>-p-poplin          a private site, by its label
 //   <name>--<id>-u-poplin          an unlisted or a public site, by its label

@@ -117,7 +117,7 @@ interface ConsoleParts extends CodeTries {
   readonly jobs?: Jobs;
 }
 
-/** Something that answers a request, as a Worker's `fetch` does. */
+/** Something that answers a request, as a host's `fetch` handler does. */
 interface Console {
   readonly fetch: (request: Request, later?: Later) => Promise<Response>;
 }

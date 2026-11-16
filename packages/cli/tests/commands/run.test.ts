@@ -390,7 +390,7 @@ describe("run", () => {
     bench.install.users.takes = false;
     const added = await bench.run("config logins ada@example.com,second@example.com");
 
-    const step = "one more step: on the dashboard's Domain tab, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
+    const step = "one more step: on the dashboard's Domain screen, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
 
     expect([added.out, added.err, carried.out, carried.err]).toEqual([["logins  ada@example.com,second@example.com"], [step], ["logins  ada@example.com,cy@example.com"], []]);
 

@@ -9,7 +9,7 @@
 // The day's two checks and the count are one step with nothing awaited in it, so of requests that arrive together only as many pass as the day has room for.
 // A request that passes is in the day's count at once, and is written once it is answered, with whether it opened a page.
 // The one count feeds the day's limits and a site's views.
-// A refused request is still a request the Worker answered: the limits keep visitors and sites fair to each other, they do not save Cloudflare's own daily quota.
+// A refused request is still a request the install answered: the limits keep visitors and sites fair to each other, they do not save the host's own daily quota.
 // A counter that cannot answer lets the request through: a site keeps working when its counters do not.
 
 import type { RequestCounts } from "@poplin/core/src/database/database";

@@ -1,4 +1,4 @@
-// A hostname as DNS and Cloudflare's rule language may see it: lowercase ASCII labels only, so it holds no quote, backslash, or wildcard.
+// A hostname as DNS and a provider's rule language may see it: lowercase ASCII labels only, so it holds no quote, backslash, or wildcard.
 
 /** The first label of the hostname every install's dashboard, login, and API answer at: `poplin.<domain>`. No site address is that hostname, since each ends in a dash and a word. */
 export const ADMIN_LABEL = "poplin";
@@ -37,13 +37,4 @@ export function parseHostname(raw: string): CheckedHostname {
   if (!labels.every((label) => LABEL.test(label))) return { ok: false, refusal: "bad-label" };
 
   return { ok: true, value: raw as Hostname };
-}
-
-/**
- * Decide whether a hostname sits below another.
- *
- * @returns `false` for the parent itself
- */
-export function isUnder(hostname: Hostname, parent: Hostname): boolean {
-  return hostname.endsWith(`.${parent}`);
 }
