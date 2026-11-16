@@ -31,8 +31,8 @@ const STARTED_FOR = {
 
 /** What a look answers for an install that was started for another place than the one named. */
 const ELSEWHERE = {
-  domain: { state: "refused", why: "other_place", words: "An install was started in this account under the domain example.com, and not finished: give --domain example.com." },
-  none: { state: "refused", why: "other_place", words: "An install was started in this account without a domain, and not finished: give --no-domain." },
+  domain: { state: "refused", why: "other_place", words: "An install was started in this account under the domain example.com, and not finished: give --domain example.com.", give: "--domain example.com" },
+  none: { state: "refused", why: "other_place", words: "An install was started in this account without a domain, and not finished: give --no-domain.", give: "--no-domain" },
 } as const;
 
 /** The account an install that is set runs in, as its Worker holds it. */
