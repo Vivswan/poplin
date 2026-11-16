@@ -49,6 +49,9 @@ const PARSERS: Readonly<Record<ProviderCommand, (words: readonly string[]) => Pa
   repair: (words) => parseRepair(words, [installer], {}, false),
 };
 
+/** Every command that works at a provider, by the word a parsed line carries. */
+export const PROVIDER_COMMAND_NAMES = Object.keys(PARSERS) as readonly ProviderCommand[];
+
 /** Every option of the three commands: each command's own, and the ones their provider declares. */
 export const INSTALL_FLAGS: readonly string[] = [...SHARED_OPTIONS, ...UNINSTALL_OPTIONS, ...REPAIR_OPTIONS, ...installer.options].map((row) => row.flag);
 

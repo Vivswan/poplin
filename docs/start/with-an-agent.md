@@ -29,12 +29,12 @@ Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a 
 
 **The account token stays out of the chat.** Steps 5 and 6 need it, and it reaches the command one of two ways:
 
-| The token is                                              | Steps 5 and 6 are run by                                                  |
-| --------------------------------------------------------- | ------------------------------------------------------------------------- |
-| in `POPLIN_INSTALL_TOKEN`, [set](install.md#every-answer-as-an-option) before you started the agent | the agent                       |
-| nowhere yet                                               | you, in a terminal of your own: the agent gives you each line, and you paste back what it prints |
+| The agent runs                               | Steps 5 and 6 are run by                                                                  | The token is given                                             |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| on your computer, with you                   | you, in a terminal of your own: the agent gives you each line, and you paste back what it prints | at the command's question `Account token (not shown):`  |
+| in a script or a CI job, with nobody to ask  | the agent                                                                                 | in `POPLIN_INSTALL_TOKEN`, which the job's secret store sets   |
 
-What the command prints holds no token, so it is safe to paste.
+What the command prints holds no token, so it is safe to paste. Do not type an `export` line with the token to hand it to the agent: the shell keeps that line in its history.
 
 - **One yes, at the start.** It covers the setup, the tools of step 8 included, and nothing else: the agent publishes, shares, and deletes only when you ask.
 - **Your agent's own questions are expected.** The tool may ask you to approve each command before it runs, such as `node --version`. That is the tool's own safety, apart from the one yes.

@@ -28,18 +28,24 @@ After `unreachable`, `timeout`, or `internal` on a publish, check the list befor
 
 The table holds the codes an agent meets most. Any other code carries its own sentence, and sometimes a hint: tell the user what it says.
 
-## From the install command
+## From the commands that work at Cloudflare
 
-`npx poplin install cloudflare --json` names why it made no install in `problem`, not in `code`. [`setup.md`](setup.md) has the ones of a dry run. The rest:
+Three commands work with the user's account token: `npx poplin install cloudflare`, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. With `--json` each names why it stopped in `problem`, not in `code`. [`setup.md`](setup.md) has the ones of an install's dry run. The rest:
 
 | Problem                  | Means                                                      | What to do                                                        |
 | ------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------- |
 | `missing_answer`         | a run that asks nothing lacks an answer, named in its list | give the option the line on stderr names                          |
 | `usage`                  | the line is written wrong, and the value says how          | correct the line: `npx poplin install --help`                     |
-| `already_installed`      | the account holds an install; nothing was changed          | log in to the address under `found`                               |
+| `already_installed`      | the account holds an install; nothing was changed          | log in to the address under `found`; after a run that left something undone, `npx poplin doctor --repair` |
 | `leftover`               | a bucket or a database of poplin's name, and no install    | ask the user; `--adopt` uses it with what it holds                |
 | `name_held`              | a Worker named poplin that is not poplin's                 | the user renames or deletes it at `address`                       |
 | `blocked`                | the user must act first, as its list says                  | the table of blocks in [`setup.md`](setup.md)                     |
 | `token_refused`          | Cloudflare refused the token, or it shows no such account  | the user makes the token again, for the right account             |
 | `no_domain`              | the token shows no active domain of that name              | check the domain with the user, and the token's Zone Resources    |
 | `unreachable`, `crashed` | no answer, or a failure with no word for it                | run it again in a minute                                          |
+| `no_install`             | the repair or the removal found no install in the account; or a removal with `--keep-data` found kept data alone | tell the user what its sentence says: a token of another account, or kept data that a removal without `--keep-data` removes |
+| `other_place`            | the install is of the other kind than the line named       | give `--domain` and its domain, or `--no-domain`, as the sentence says |
+| `unfinished`             | the repair found an install that was started and never set | finish it with the install command: part e of [`setup.md`](setup.md) |
+| `another_version`        | the install's records are of another version than this command | run the repair as `npx poplin@latest`                         |
+| `not_confirmed`          | the removal was given an address that is not the install's; nothing was removed | tell the user; the address is theirs to give |
+| `changed`                | the account changed between the look and the work          | run it again                                                      |

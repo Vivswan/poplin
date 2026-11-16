@@ -103,4 +103,4 @@ In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment 
 | [The guide](docs/README.md)               | every command, every agent tool, and every error     |
 | [Start](docs/start/README.md)             | getting your own install, under a domain or without  |
 | [Security](docs/about/security.md)        | what poplin protects against and what it does not    |
-| [Remove](docs/upkeep/remove.md)              | taking an install down, piece by piece               |
+| [Remove](docs/upkeep/remove.md)              | taking an install down, with one command or by hand  |

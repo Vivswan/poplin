@@ -85,7 +85,7 @@ Your email, the first login: you@example.com
 The account token needs 10 permissions, for this account and this domain:
   Zone: Read, DNS: Edit, Workers Routes: Edit, ...
 Optional:
-  Zone WAF: Edit: Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin.
+  Single Redirect: Edit: Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself.
   ...
 This link opens the form with each one chosen that a link can choose:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
@@ -99,7 +99,7 @@ Account token (not shown):
 | `Your email, the first login:`                      | an email whose inbox you can read                                  |
 | `Account token (not shown):`                        | leave the terminal at this question, and make the token: step 3    |
 
-An **account token** is a long password that lets a program change your Cloudflare account.
+An **account token** is a long password that lets a program change your Cloudflare account. You give it at this question and nowhere else: what you paste there is not shown, and nothing keeps it.
 
 An option answers a question before it is asked: with `--domain example.com` on the line, the first is not asked. To see what a run would make before it makes anything, read [the dry run](#check-first-the-dry-run) first.
 
@@ -169,9 +169,20 @@ Log this computer in now?
 
 Under a domain, the command adds records, routes, and rules of its own. A website or a mailbox on the domain stays as it is.
 
-**Where an install already is**, the command says so, with its version and its address, and changes nothing.
+**Where an install already is**, the command says so, changes nothing, and names the command for each thing you may want:
 
-**After the run** you choose: keep the token where you keep passwords, or delete it at Cloudflare, under My Profile, then API Tokens. The install and every site keep working without it. Repair on the dashboard's [Domain](../dashboard/domain.md) screen asks for a token again; the same link makes a new one.
+```text
+looking for an install ... found
+This account already holds poplin 0.1.0, at https://poplin.example.com. nothing was changed. The way on is npx poplin doctor --repair.
+  to check it   npx poplin doctor
+  to mend it    npx poplin doctor --repair
+  to update it  npx poplin update
+  to remove it  npx poplin uninstall cloudflare
+```
+
+An install that works needs none of them: log this computer in, as step 5 shows.
+
+**After the run** you choose: keep the token where you keep passwords, or delete it at Cloudflare, under My Profile, then API Tokens. The install and every site keep working without it. Three things ask for a token again: Repair on the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. The same link makes a new one.
 
 ## 5. Log this computer in, and check
 
@@ -277,15 +288,19 @@ Each question has an option and a variable, so a run can ask nothing. An agent a
 | under a domain           | `--domain example.com`                 | `POPLIN_DOMAIN`                      |
 | without a domain         | `--no-domain`                          | `POPLIN_DOMAIN` set to the word none |
 | the first login          | `--login you@example.com`              | `POPLIN_LOGIN`                       |
-| the account token        | `--token-stdin` reads it from standard input | `POPLIN_INSTALL_TOKEN`         |
+| the account token, for a script alone | `--token-stdin` reads it from standard input | `POPLIN_INSTALL_TOKEN` |
 | the account, when the token shows more than one | `--account` and the account's id | `POPLIN_ACCOUNT`    |
 
-No option carries the token itself. The question is the safest way for a person. A script or an agent reads the token from the variable; a shell may keep the line that sets it in its history.
+No option carries the token itself.
 
-```text
-Mac:      export POPLIN_INSTALL_TOKEN="paste the account token here"
-Windows:  $env:POPLIN_INSTALL_TOKEN = "paste the account token here"
-```
+| Who runs the command | The token is given                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| a person             | at the question `Account token (not shown):`. What you paste is not shown, and nothing keeps it |
+| a script or a CI job | in the variable `POPLIN_INSTALL_TOKEN`, which the secret store of the CI sets; or on standard input, with `--token-stdin` |
+
+**Do not type an `export` line with the token into a terminal.** The shell keeps every line you type in its history, and the token with it. The variable is for a program that nobody types into.
+
+A script's line names every answer but the token, and adds `--yes`:
 
 ```sh
 npx poplin install cloudflare --no-domain --login you@example.com --yes
@@ -310,4 +325,10 @@ A run that asks nothing logs no computer in unless `--log-in` says so. It ends b
 
 `npx poplin install --help` lists the options, and `npx poplin install cloudflare --help` the permissions with both links.
 
-To take an install down, see [Remove](../upkeep/remove.md).
+## Afterwards
+
+| To                                  | Run                                | Page                                              |
+| ----------------------------------- | ---------------------------------- | ------------------------------------------------- |
+| get back in when nobody can log in  | `npx poplin doctor --repair`       | [I cannot log in](../fix/cannot-log-in.md)        |
+| update the install                  | `npx poplin update`                | [Update](../upkeep/update.md)                     |
+| take the install down               | `npx poplin uninstall cloudflare`  | [Remove](../upkeep/remove.md)                     |

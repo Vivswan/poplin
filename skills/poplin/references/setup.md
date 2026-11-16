@@ -119,6 +119,13 @@ The team name can be any word. Zero Trust and R2 each ask for the payment method
 
 If the user pastes it to you all the same, do not repeat it. Ask them to open My Profile, then API Tokens, at Cloudflare, to choose Roll in that token's menu, and to use the new text.
 
+| You run                                     | The token reaches the command                                  | Parts d and e are run by |
+| ------------------------------------------- | -------------------------------------------------------------- | ------------------------ |
+| on the user's computer, in a chat           | at its question `Account token (not shown):`, typed by the user | the user, in a terminal of their own |
+| in a script or a CI job, with nobody to ask | in `POPLIN_INSTALL_TOKEN`, which the job's secret store set    | you                      |
+
+Never ask the user to set that variable for you. A line that sets it, such as an export line, stays in their shell's history with the token in it. The first run of part d tells you which row you are in.
+
 Run this, and give the user the link of their kind from what it prints:
 
 ```sh
@@ -161,7 +168,7 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. It pr
 | `ready` is true                                        | 0         | no read found anything that blocks a run       | part e                                                |
 | `ready` is false, and `blocked` has entries            | 1         | the user must act first                        | the table of blocks below, then this part again       |
 | `ready` is false, `blocked` is empty, and no `problem` | 1         | a read failed, and its row says why            | run it again in a minute                              |
-| `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`, and go to step 4      |
+| `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`, and go to step 4. After a run of part e that left something undone: part f |
 | `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt` |
 | any other `problem`                                    | 1, 2, 5   | a stop                                         | [`refusals.md`](refusals.md)                          |
 
@@ -204,7 +211,7 @@ npx poplin install cloudflare --domain example.com --login you@example.com --yes
 | a `problem`                             | 1, 2, 5   | a stop, with no rows: the table of part d, then [`refusals.md`](refusals.md) |
 | `ok` is true                            | 0         | the install is made: keep `address`, the dashboard's, and go to step 4 |
 | `ready` is true, and `answers` is false | 1         | the install is made, and its new address does not answer yet: wait a few minutes, then step 4 |
-| `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows |
+| `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows. Then part f |
 
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
 
@@ -219,6 +226,33 @@ Log this computer in now?
 Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Then run the check of step 4.
 
 The command stores the token nowhere. Afterwards the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working.
+
+### f. When a run left something undone
+
+The user first does what `blocked` and `steps` name, such as switching Zero Trust on. Then run the dry run of part d again: its value says which command goes on from what stands.
+
+| The dry run says                            | The install is                          | Run next                                    |
+| ------------------------------------------- | --------------------------------------- | ------------------------------------------- |
+| rows, as the first time                     | started, and not set yet                | the line of part e again                    |
+| `already_installed`                         | set, with pieces missing: often the login, made with Zero Trust off | the repair below    |
+
+A run without `--json`, as the user's is, names the same in its last line: it ends `Run this command again`, or names the repair.
+
+`poplin install` only makes a new install: a second run on one that is set answers `already_installed` and changes nothing. The repair mends it, with the same token and the option of the install's kind:
+
+```sh
+npx poplin doctor --repair --domain example.com --yes --json
+```
+
+Without a domain, `--no-domain` stands in place of `--domain example.com`. When the user runs it, the line is `npx poplin doctor --repair` alone: it asks for the domain, or Enter for none, and for the token.
+
+| The value says                              | Exit code | Next                                                                  |
+| ------------------------------------------- | --------- | --------------------------------------------------------------------- |
+| `ok` is true                                | 0         | nothing is left undone: keep `address` under `found`, and go to step 4 |
+| `ready` is false                            | 1         | tell the user each row that did not come to make, change, or leave, and each entry of `blocked` and `steps`; then this line again |
+| a `problem`                                 | 1, 2, 5   | [`refusals.md`](refusals.md)                                          |
+
+With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits with 1 while `changes` is above 0: that is no failure.
 
 ## 4. Log this computer in
 
@@ -286,5 +320,17 @@ Before a restart, tell the user four things, since the chat may not come back:
 A check that answers a refusal goes to [`refusals.md`](refusals.md).
 
 Then tell the user, in a line or two: poplin is ready, which install it talks to, and that they can now ask you to put a page or a folder online. If a step was skipped or failed, say which one and what is still missing.
+
+## When the user cannot log in, or asks to remove the install
+
+Both are commands the user's account token runs, so the rule of part c holds: the token never passes through the chat.
+
+| The user says                               | The command                                      | You                                                                                   |
+| ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| nobody can log in to the dashboard          | `npx poplin doctor --repair`                     | give the user the line, and read what it printed with them: the table of part f       |
+| their mailbox is gone, or the first email was mistyped | the same, with `--add-user` and the email | add the option only with an email the user gave you for this                        |
+| remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | show the user its list first. The removal itself is the user's: they type the install's address at its question |
+
+Never pass `--confirm` on your own: it is the proof that the user means this install, and a removal cannot be undone. The guide has both: [I cannot log in](https://github.com/Vivswan/poplin/blob/main/docs/fix/cannot-log-in.md) and [Remove](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/remove.md).
 
 Nothing is published by the setup. When the user later asks you to publish, [`../SKILL.md`](../SKILL.md) holds the rules. The two that matter most: a new site is private until the user asks otherwise, and you keep the label a publish returns so the next publish updates the same site.

@@ -5,7 +5,7 @@ order: 20
 
 # When poplin refuses
 
-Every code poplin refuses with, what it means, and what to do; the lines `poplin install` stops at are in [When the install stops](an-install-step-fails.md).
+Every code poplin refuses with, what it means, and what to do. The lines a command stops at are on its own page: [When the install stops](an-install-step-fails.md) for `poplin install`, [I cannot log in](cannot-log-in.md#when-it-stops) for `poplin doctor --repair`, and [Remove](../upkeep/remove.md#when-it-stops) for `poplin uninstall`.
 
 A refused command prints one sentence and often a hint. With `--json` it prints an object with a `code`. A tool answers with the same object. Every example runs as the first does, with `npx` before `poplin`.
 
@@ -42,15 +42,15 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason |
 | `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, report it             |
 
-**Making an install**
+**Making, mending, and removing an install**
 
-`poplin install` with `--json` prints one object. A run that made no install names why in `problem`, where the other commands write `code`.
+Three commands work at Cloudflare with an account token: `poplin install`, `poplin doctor --repair`, and `poplin uninstall`. With `--json` each prints one object. A run that stopped before its work names why in `problem`, where the other commands write `code`.
 
 | Problem             | Means                                                              | What to do                                                      |
 | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, login, token, account, provider | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
-| `usage`             | the line is written wrong; `words` says how                        | `npx poplin install --help`                                     |
-| `already_installed` | the account holds an install; `found` has its version and address  | nothing was changed: `npx poplin login --server https://poplin.example.com` |
+| `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, login, token, account, provider, confirm | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
+| `usage`             | the line is written wrong; `words` says how                        | the command's own help: `npx poplin install --help`             |
+| `already_installed` | the account holds an install; `found` has its version and address  | nothing was changed: `npx poplin login --server https://poplin.example.com`; to mend it, `npx poplin doctor --repair` |
 | `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or rename or delete it at `address` |
 | `name_held`         | a Worker named poplin that is not poplin's                         | rename or delete it at `address`                                |
 | `blocked`           | a person must act first; `blocked` lists what, with the address to open | the table below                                            |
@@ -59,6 +59,19 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `no_provider`       | this build of poplin carries no provider to install at             | run the published package: `npx poplin install`                 |
 | `unreachable`       | Cloudflare or poplin's website gave no answer                      | run it again in a minute                                        |
 | `stopped`, `crashed` | the command was stopped, or failed with no word for it            | run it again                                                    |
+
+`poplin doctor --repair` and `poplin uninstall` stop with some of those, and with these:
+
+| Problem           | From               | Means                                                                    | What to do                                                        |
+| ----------------- | ------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `no_install`      | both               | the account holds no install; or a removal with `--keep-data` found kept data alone | make the token in the account the install is in; for kept data, run the removal without `--keep-data` |
+| `other_place`     | both               | the install is of the other kind than the line named                     | give `--domain` and its domain, or `--no-domain`, as `words` says |
+| `changed`         | both               | the account changed between the look and the work; nothing was done      | run it again                                                      |
+| `unfinished`      | the repair         | an install was started and never set, so there is nothing to mend        | finish it: `npx poplin install cloudflare`                        |
+| `another_version` | the repair         | the install's records are of another version than this command           | `npx poplin@latest doctor --repair`                               |
+| `not_confirmed`   | the removal        | the address typed, or given with `--confirm`, is not the install's own; nothing was removed | give the address a run with `--dry-run` prints |
+
+A repair or a removal that worked through its rows prints them, with `ready` false where a row is left undone.
 
 Each entry of `blocked` names what blocks in `what`:
 

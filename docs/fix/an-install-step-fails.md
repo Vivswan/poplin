@@ -28,8 +28,9 @@ stopped part way             rows say stopped, failed, or not run: what is made 
 | `This account has no free address yet, or one whose name is too long for the login.` | without a domain: the account has no `workers.dev` subdomain, or one of more than 36 characters | open Workers & Pages at the address it prints, and set a subdomain of 36 characters at most |
 | a line that ends `The token lacks a permission. Add this one:` and a name | the token lacks the permission of that name                  | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `There is a database named poplin in this account, and no poplin runs.` | an earlier install left its database, its bucket, or both      | answer yes at `Use it, with what it holds?` to keep its sites; or rename or delete it at the address it prints |
-| `A Worker named poplin is in this account and is not poplin's.`        | the name the install needs is taken                             | rename or delete that Worker at the address it prints                 |
-| `This account already holds poplin 0.1.0, at https://poplin.example.com.` | an install is there, and nothing was changed                 | log in to it: `npx poplin login`, with `--server` and the address the line names |
+| `A Worker named poplin is in this account and does not carry poplin's name`  | the name the install needs is taken                       | rename that Worker at the address it prints                           |
+| `A Worker named poplin is in this account. It carries poplin's name and lacks`, and a list | an install whose Worker lost a binding, as one deployed again by hand does | keep it. Put the bindings back on the Worker's Bindings page, then run the command the line names |
+| `This account already holds poplin 0.1.0, at https://poplin.example.com.` | an install is there, and nothing was changed                 | an install that works: log in, `npx poplin login`, with `--server` and the address the line names. One whose run left rows undone: [the second run](#the-second-run) |
 | `No release of poplin is published yet.`                               | poplin's website names no version to install                    | nothing can be installed until it does                                |
 | `This release needs a newer poplin`                                    | the newest version needs a newer command                        | `npx poplin@latest install cloudflare`                                |
 | `The release's files are not the ones the project published.`          | the release's files are not the ones poplin's website names for that version | run it again; if it comes back, report it                |
@@ -44,19 +45,48 @@ A row says what happened to one piece, and calls a permission a right. [Step 4 o
 | ------------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------- |
 | `left out`, ending `add this right to the account token and press Repair:` and a name | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
 | `stopped`, ending `Add this one:` or `Add this right to the account token:` and a name | the token lacks the permission of that name | add it to the token: [the table below](#add-a-permission-to-the-token) |
-| `stopped`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows                 |
+| `stopped`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows, then [finish with the repair](#the-second-run) |
 | `failed`, ending `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
 | `failed`, with other words                                         | the row says why, such as a Worker of the name that is not poplin's | do what the row asks                                  |
 | `failed`, ending `Cloudflare asked to wait` or `no answer from Cloudflare` | Cloudflare was busy, or gave no answer          | run the command again in a minute                                 |
 | `not run`                                                          | an earlier row stopped the run before this piece        | fix that row first                                                |
 | `no answer yet at` and the address                                 | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-computer-in-and-check) |
 
-After the fix, run the same command again. It goes one of two ways:
+## The second run
 
-| The second run says                                  | Means                                         | Do                                                                           |
-| ---------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------- |
-| `An install was started here and not finished`       | it goes on with what stands                   | read the rows as before                                                      |
-| `This account already holds poplin`                  | the install is set, and only its last pieces are left | where no row of Access stopped: log in to the dashboard, open [Domain](../dashboard/domain.md), a screen of both kinds of install, and press Repair with the same token |
+The last line of a run that left something undone names the command that goes on. It is one of two:
+
+| The last line says                               | The install is                                        | Run, after the fix                                         |
+| ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
+| `Run this command again`                         | started, and not set yet                              | the same `npx poplin install cloudflare` line: it says `An install was started here and not finished`, and goes on |
+| `Run npx poplin doctor --repair`                 | set: its address is written, and pieces are missing   | `npx poplin doctor --repair`, with the same token          |
+
+Both go on from what stands: every piece reads before it writes. `poplin install` only makes a new install, so a second `install` on one that is set says `This account already holds poplin`, and changes nothing.
+
+**A run that went on with Zero Trust switched off** is finished this way. Switch Zero Trust on first, then:
+
+```sh
+npx poplin doctor --repair
+```
+
+```text
+looking for an install ... found: poplin 0.1.0, at https://poplin.example.com
+made      Access application    poplin: poplin.example.com, *-p-poplin.example.com
+made      Access policy         poplin logins
+The login is ready. Open your dashboard and log in:
+  https://poplin.example.com
+the install is mended.
+```
+
+The sample shows a few of the rows. The repair asks for the domain, or Enter for none, and for the token, as the install did. [I cannot log in](cannot-log-in.md) has every line it can stop at.
+
+**A first login that was mistyped** gets no code, so nobody can log in. The repair lets the right email in:
+
+```sh
+npx poplin doctor --repair --add-user you@example.com
+```
+
+Then log in with it, and remove the mistyped one under Access, Users. [The row of the new user](cannot-log-in.md#the-row-of-the-new-user) has what each answer means.
 
 ## Add a permission to the token
 
@@ -92,7 +122,7 @@ Then finish the form as in the table of [step 3](../start/install.md#3-make-the-
 
 ## No code arrives
 
-Cloudflare's login sends its code only to an email that is a login of the install. The first one is the email you gave the command.
+Cloudflare's login sends its code only to an email that is a login of the install. The first one is the email you gave the command. If that email was mistyped, or its mailbox is gone, [I cannot log in](cannot-log-in.md) has the way back in.
 
 ## The computer is not logged in
 
