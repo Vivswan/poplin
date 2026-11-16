@@ -186,7 +186,7 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).sites[":site"].duplicate.$post({ param: { site: siteId(1) }, query: {}, json: { name: "copy" } });
     },
     status: 200,
-    budget: { queries: 9, reads: 112, writes: 114 },
+    budget: { queries: 8, reads: 112, writes: 114 },
   },
   {
     group,
