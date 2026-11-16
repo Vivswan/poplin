@@ -5,20 +5,20 @@
 //   no release newer than the running version is known        nothing is started
 //   the release's schema differs from this install's own      never started: it changes the database, so a person starts it
 //   less than three days since the install first knew of it   nothing is started yet
-//   a start the provider took for that version or a newer one never a second one
-//   no address that starts a rebuild is saved, on a host that cannot replace the install's code   nothing is started, and nothing is kept
+//   a start that went in for that version or a newer one      never a second one
+//   the host holds no key                                     nothing is started, and nothing is kept
 //   all of the above passed                                   one start of that version, as `startUpdate` makes it for the sweep's own actor
 //
-// The version is kept as taken before anything is sent, and taken back only when nothing was sent or the provider answered that it did not take it.
+// The version is kept as taken before anything is sent, and taken back only when nothing was sent or the host answered that it did not take it.
 // A start taken back is tried again on the next UTC day, and no sooner. One with no answer may have been taken, so it is not tried again.
-// On a host that replaces the install's code, sent means the files were handed over to be put in place: a release that could not be fetched or checked sent nothing.
+// Sent means the files were handed over to be put in place: a release that could not be fetched or checked sent nothing.
 
 import gt from "semver/functions/gt";
 
 import type { Learned } from "./check-update";
 import type { Install } from "./records";
 import { DAY_MS } from "./site-object";
-import { type Rebuilding, type SelfUpdate, startUpdate } from "./start-update";
+import { type SelfUpdate, startUpdate, type Updating } from "./start-update";
 import { SWEEPER } from "./sweep";
 import { changesDatabase, newerRelease } from "./update";
 
@@ -46,9 +46,10 @@ function dueVersion(running: Running, now: number): string | undefined {
   return newer.version;
 }
 
-/** Wrap what takes a release by itself so that handing its files over to be put in place is seen as sent. */
+/** Wrap what takes a release so that handing its files over to be put in place is seen as sent. */
 function watched(self: SelfUpdate, asked: { sent: boolean }): SelfUpdate {
   return {
+    holdsKey: self.holdsKey,
     async ready(wanted) {
       const ready = await self.ready(wanted);
       if (!ready.ok) return ready;
@@ -65,33 +66,25 @@ function watched(self: SelfUpdate, asked: { sent: boolean }): SelfUpdate {
 }
 
 /**
- * Start the update that is due, if one is, and keep the try. It adds no call to the database while none is due.
+ * Start the update that is due, if one is, and keep the try. It adds no call to the database while none is due, or while the host holds no key.
  *
- * A start at the saved address costs six calls to the database and one request, seven when the provider did not take it and that is noted as a problem, and a day with no saved address one.
- * A release the install takes by itself costs four calls to the database, five when it is refused and noted, and what the host asks to fetch, check, and place the files.
+ * A start costs four calls to the database, five when it is refused and noted, and what the host asks to fetch, check, and place the files.
  *
  * @param running - what `checkForUpdate` answered on this run, and the version the install runs
- * @throws {Error} the database failed; a request that was sent stays sent, and its version stays kept as taken, so it is not started again by itself
+ * @throws {Error} the database failed; files that were handed over stay handed over, and their version stays kept as taken, so it is not started again by itself
  */
-export async function startDueUpdate(install: Pick<Install, "database" | "now">, running: Running, rebuilding: Rebuilding): Promise<void> {
+export async function startDueUpdate(install: Pick<Install, "database" | "now">, running: Running, updating: Updating): Promise<void> {
   const at = install.now();
   const version = dueVersion(running, at);
-  if (version === undefined) return;
-
-  if (rebuilding.self === undefined && (await install.database.readUpdateAddress()) === undefined) return;
+  if (version === undefined || !updating.self.holdsKey()) return;
 
   const asked = { sent: false };
-  const fetch: Rebuilding["fetch"] = (address, init) => {
-    asked.sent = true;
-
-    return rebuilding.fetch(address, init);
-  };
-  const self = rebuilding.self === undefined ? undefined : watched(rebuilding.self, asked);
+  const self = watched(updating.self, asked);
   const takeBack = (): Promise<void> => install.database.keepAutoStart({ version, at, taken: running.check.auto?.taken ?? null });
 
-  // Kept before the request: a start whose record could not be written after it would be sent again the next day.
+  // Kept before the files are handed over: a start whose record could not be written after it would be sent again the next day.
   await install.database.keepAutoStart({ version, at, taken: version });
-  const start = await startUpdate(install, SWEEPER, { version: running.version, automatic: true, to: version }, { ...rebuilding, fetch, self }).catch(async (error: unknown) => {
+  const start = await startUpdate(install, SWEEPER, { version: running.version, automatic: true, to: version }, { ...updating, self }).catch(async (error: unknown) => {
     if (!asked.sent) await takeBack().catch(() => undefined);
 
     throw error;

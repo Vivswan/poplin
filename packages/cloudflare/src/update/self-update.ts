@@ -94,6 +94,7 @@ export function createSelfUpdate(parts: Parts): SelfUpdate {
   const releases = projectReleases({ fetch: (url, init) => parts.fetch(url, { signal: init.signal ?? AbortSignal.timeout(ANSWER_WITHIN) }) });
 
   return {
+    holdsKey: () => parts.key !== undefined,
     async ready(wanted) {
       const picked = await published(releases, wanted, parts.version);
       if (!picked.ok) return picked;

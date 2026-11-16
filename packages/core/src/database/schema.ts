@@ -124,13 +124,13 @@ export const settings = sqliteTable(
 export const secrets = sqliteTable(
   "secrets",
   {
-    name: text({ enum: ["visitor_key", "update_address"] })
+    name: text({ enum: ["visitor_key"] })
       .notNull()
       .primaryKey(),
     value: text().notNull(),
     created_at: integer().notNull(),
   },
-  (table) => [check("secrets_name", sql`${table.name} IN ('visitor_key', 'update_address')`)],
+  (table) => [check("secrets_name", sql`${table.name} IN ('visitor_key')`)],
 );
 
 /** How many sites there are, how many of them sit in the trash, and the bytes and files of every kept version, in one row the triggers keep true. */

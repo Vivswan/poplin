@@ -21,7 +21,7 @@ import { hostnameAddresses } from "@poplin/app/src/sites/hostname-addresses";
 import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
-import type { Rebuilding } from "@poplin/core/src/actions/start-update";
+import type { Updating } from "@poplin/core/src/actions/start-update";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
 import type { PublicName } from "@poplin/core/src/names/names";
@@ -44,7 +44,6 @@ import { accessKeys } from "../login/keys";
 import { R2Store } from "../storage/r2";
 import { readAccessBinding } from "../zone/access-binding";
 import type { Connection } from "../zone/client";
-import { isDeployHook } from "../zone/deploy-hook";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { DomainLayout } from "../zone/layout";
 import { readZoneBinding } from "../zone/zone-binding";
@@ -93,11 +92,8 @@ export interface Outside {
   /** Sends setup's calls to Cloudflare; the runtime's own fetch when absent. */
   readonly cloudflare?: Connection["fetch"];
 
-  /** What asks the project's website, once a day, which version of poplin is the newest. An install that updates itself fetches the release's files through it too. */
+  /** What asks the project's website, once a day, which version of poplin is the newest. An update fetches the release's files through it too. */
   readonly latest: Asking;
-
-  /** Sends the one request that starts a build of the Worker, to the Deploy Hook an admin saved. */
-  readonly rebuild: Rebuilding["fetch"];
 }
 
 /** The key one visitor's requests are counted by, from the address Cloudflare saw and the secret the instance holds for the database. */
@@ -150,8 +146,8 @@ export interface Instance {
   /** The version of poplin the install runs. */
   readonly version: string;
 
-  /** What starts a build of the Worker: only a Deploy Hook is taken as its address, and the starts are counted in `counters`. */
-  readonly rebuilding: Rebuilding;
+  /** What updates the install: the release is taken with the kept key, and the starts are counted in `counters`. */
+  readonly updating: Updating;
 }
 
 /** A variable of the Worker that cannot be used. `refusal` says what is wrong with it and never quotes its value. */
@@ -360,9 +356,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   };
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: driver });
   const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
-  // An install that holds its key takes a release by itself; one that holds none starts a build at the saved address.
-  const self = kept === undefined ? undefined : createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
-  const rebuild = { accepts: isDeployHook, fetch: outside.rebuild, self };
+  const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
   const placed = { ...own.value, layout, fetch: outside.cloudflare };
   const key: InstallKey = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
   const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules: createRulesFollow(kept, { accountId: own.value.accountId, layout }) };
@@ -375,7 +369,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     report: (error) => logFault("an API request failed", error),
     counters,
     visitorOf: (request) => visitorOf(request, database),
-    rebuild,
+    update,
     ...carried,
   });
 
@@ -393,7 +387,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     ...carried,
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), key: kept }),
     version: VERSION,
-    rebuilding: { ...rebuild, counters },
+    updating: { self: update, counters },
   };
 
   return { ok: true, instance };

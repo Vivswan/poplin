@@ -26,6 +26,9 @@ export const UPDATE_NOTICE = v.object({
   database: v.boolean(),
 });
 
+/** What an install answers about updating: the version it runs, the newer release it knows of or `null`, and whether its host holds the key an update is sent with. */
+export const UPDATE_STATE = v.object({ version: v.string(), update: v.nullable(UPDATE_NOTICE), key: v.boolean() });
+
 /** A release newer than the running version. */
 export type Update = Readonly<v.InferOutput<typeof UPDATE_NOTICE>>;
 

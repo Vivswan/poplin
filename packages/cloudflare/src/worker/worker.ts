@@ -128,7 +128,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held,
     rules: instance.rules,
     freeLimits: FREE_LIMITS,
     usage: instance.usage,
-    rebuild: instance.rebuilding,
+    update: instance.updating.self,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
   });
@@ -210,7 +210,6 @@ function outsideOf(given: Partial<Outside>): Outside {
     fetch: given.fetch ?? ((url, init) => fetch(url, init)),
     cloudflare: given.cloudflare,
     latest: given.latest ?? { fetch: (address, init) => fetch(address, init) },
-    rebuild: given.rebuild ?? ((address, init) => fetch(address, init)),
   };
 }
 

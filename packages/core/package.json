@@ -44,7 +44,6 @@
     "./src/actions/sweep": "./src/actions/sweep.ts",
     "./src/actions/tool-inputs": "./src/actions/tool-inputs.ts",
     "./src/actions/update": "./src/actions/update.ts",
-    "./src/actions/update-address": "./src/actions/update-address.ts",
     "./src/actions/upload-file": "./src/actions/upload-file.ts",
     "./src/actions/uploads": "./src/actions/uploads.ts",
     "./src/api/loopback": "./src/api/loopback.ts",
