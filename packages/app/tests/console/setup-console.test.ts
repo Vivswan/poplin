@@ -131,6 +131,7 @@ describe("the page", () => {
       back: null,
       demo: null,
       domain: false,
+      signOut: null,
       domainNote: null,
       recent: [],
       marks: { usage: null, domain: null, settings: null },

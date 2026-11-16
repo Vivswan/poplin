@@ -5,7 +5,7 @@ import { html } from "hono/html";
 
 import { ICON_FILE, shellPage } from "../../src/console/shell";
 import { DEFAULT_ICON } from "../../src/sites/default-icon";
-import { openConsole, SINCE_HEADER } from "./support/console";
+import { openConsole, SIGN_OUT, SINCE_HEADER } from "./support/console";
 import { LOGIN_HEADER, ORIGIN } from "./support/install";
 import { readShell } from "./support/shell";
 
@@ -47,14 +47,14 @@ describe("the shell page", () => {
     const opened = await openConsole("/next");
     const page = await (await opened.get("/")).text();
 
-    expect((await readShell(page)).boot).toMatchObject({ base: "/next", email: opened.base.owner, version: "1.0.0", demo: { reset: "/reset" } });
+    expect((await readShell(page)).boot).toMatchObject({ base: "/next", email: opened.base.owner, version: "1.0.0", demo: { reset: "/reset" }, signOut: SIGN_OUT });
   });
 
   // Drift: a start value that holds markup would end the data block and run in the dashboard's page: a browser ends a script block at `</script>` whatever JSON says.
   test("writes a start value that holds markup so that a browser reads it back whole and runs nothing of it", async () => {
     const hostile = "</script><script>alert(1)</script><!-- & &amp; -->";
     const marked = { recent: [], marks: { usage: { count: 1, says: hostile }, domain: null, settings: null } };
-    const boot = { base: "", email: hostile, title: hostile, version: "1.0.0", update: null, starts: false, back: null, demo: null, domain: true, domainNote: { label: hostile, sentence: hostile, quiet: false }, ...marked };
+    const boot = { base: "", email: hostile, title: hostile, version: "1.0.0", update: null, starts: false, back: null, demo: null, domain: true, signOut: null, domainNote: { label: hostile, sentence: hostile, quiet: false }, ...marked };
     const shell = readShell(String(await shellPage(boot, { script: "app-4f1c.js", style: "app-9d2e.css" })));
 
     expect([shell.boot, shell.runs, shell.scripts]).toEqual([boot, 0, ["/assets/app-4f1c.js"]]);
@@ -88,12 +88,13 @@ describe("the shell page", () => {
 describe("a request that is not admitted", () => {
   // Drift: a path of the dashboard would answer something of the install to a request no login vouches for, an email that is no user, or a login nobody could check; or a script's call would get a page where it reads JSON.
   test.each([
-    ["no login behind it", "", { page: 403, data: 401, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again.", wait: null }],
-    ["a word that is no email where the login goes", "nobody", { page: 403, data: 401, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again.", wait: null }],
-    ["a verified email that is no user", "mallory@example.com", { page: 403, data: 403, code: "not_a_user", sentence: "This email is not a user of this install.", wait: null }],
-    ["a login that cannot be checked now", "keys-down", { page: 503, data: 503, code: "login_unchecked", sentence: "The login cannot be checked right now. Try again.", wait: "60" }],
-    ["an install with no login in front yet", "nothing-set", { page: 503, data: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first.", wait: null }],
-  ])("with %s gets one sentence and nothing of the install, on a page, a file of the client, and a data route", async (_case, login, { page, data, code, sentence, wait }) => {
+    ["no login behind it", "", { page: 403, data: 401, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again.", out: "", wait: null }],
+    ["a word that is no email where the login goes", "nobody", { page: 403, data: 401, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again.", out: "", wait: null }],
+    // An email the login let through stays that email until the browser's login ends: its page alone says where that is, as an address of the console's own origin.
+    ["a verified email that is no user", "mallory@example.com", { page: 403, data: 403, code: "not_a_user", sentence: "This email is not a user of this install.", out: `To log in with another email, open ${DASHBOARD}${SIGN_OUT}\n`, wait: null }],
+    ["a login that cannot be checked now", "keys-down", { page: 503, data: 503, code: "login_unchecked", sentence: "The login cannot be checked right now. Try again.", out: "", wait: "60" }],
+    ["an install with no login in front yet", "nothing-set", { page: 503, data: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first.", out: "", wait: null }],
+  ])("with %s gets its sentence and nothing of the install, on a page, a file of the client, and a data route", async (_case, login, { page, data, code, sentence, out, wait }) => {
     const opened = await openConsole("/next");
     await opened.base.publish("a-site", "private");
     const ask = (path: string, method = "GET"): Promise<Response> =>
@@ -101,7 +102,7 @@ describe("a request that is not admitted", () => {
     const pages = await Promise.all(["/", "/sites/a-site?q=x", "/assets/app-4f1c.js", "/favicon.ico", "/data"].map((path) => ask(path)));
     const calls = [await ask("/data/sites"), await ask("/data/frame"), await ask("/data/settings/sign-everyone-out", "POST")];
 
-    expect(await Promise.all(pages.map(async (answer) => [answer.status, await answer.text()]))).toEqual(pages.map(() => [page, `${sentence}\n`]));
+    expect(await Promise.all(pages.map(async (answer) => [answer.status, await answer.text()]))).toEqual(pages.map(() => [page, `${sentence}\n${out}`]));
     expect(await Promise.all(calls.map(async (answer) => [answer.status, await answer.json()]))).toEqual(calls.map(() => [data, { ok: false, code, about: null, sentence }]));
     expect([...pages, ...calls].map((answer) => [answer.headers.get("Cache-Control"), answer.headers.get("Retry-After"), answer.headers.get("Set-Cookie"), answer.headers.get("Location")])).toEqual(
       [...pages, ...calls].map(() => ["no-store", wait, null, null]),

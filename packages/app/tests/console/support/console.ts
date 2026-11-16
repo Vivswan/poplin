@@ -18,6 +18,9 @@ import { hostUpdate, type UpdateHost, updateHost } from "../../api/support/updat
 /** The header the stand-in reads the moment a login began from, in milliseconds since the epoch; left out, the login began an hour before the request. */
 export const SINCE_HEADER = "Test-Login-Since";
 
+/** The address the console is told the login ends at. */
+export const SIGN_OUT = "/leave";
+
 /** What the stand-in for a provider's login refuses a request as, by the word its header holds where an email would be, and what a host tells the console each means. */
 const PROVIDER_REFUSALS = { "keys-down": "unchecked", "nothing-set": "not-set-up", "": "no-proof" } as const;
 
@@ -106,6 +109,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
     usage,
     update: hostUpdate(host),
     demo: { reset: "/reset" },
+    signOut: SIGN_OUT,
     domain,
     ...(follow === undefined ? {} : { follow }),
     endLogins: async () => {

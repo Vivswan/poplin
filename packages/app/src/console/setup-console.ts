@@ -143,7 +143,7 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
   app.use(secureHeaders({ contentSecurityPolicy: POLICY, xFrameOptions: "DENY", referrerPolicy: "same-origin" }), gate);
 
   app.get(at, async (context) => {
-    const frame = { update: null, starts: false, back: null, domainNote: null, ...NOTHING_MARKED };
+    const frame = { update: null, starts: false, back: null, signOut: null, domainNote: null, ...NOTHING_MARKED };
 
     return context.html(shellPage({ base: at, email: "", title: TITLE, version: "", demo: null, domain: false, ...frame, setup: startOf(domain, context.get("form")) }, await parts.client.entry()));
   });

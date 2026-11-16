@@ -56,6 +56,16 @@ afterEach(() => {
 });
 afterAll(clearPage);
 
+describe("the way out of the login", () => {
+  // Drift: the provider ends a login at an address of its own, which the server hands the page. A link to any other place, or a button that asks the dashboard, would leave the browser logged in.
+  test("is named Log out, beside the email at the foot of the side, and leads to the address the page was handed", async () => {
+    await drawWith(null);
+    const out = screen.getByRole("button", { name: "Log out" });
+
+    expect([out.getAttribute("href"), out.parentElement?.textContent]).toEqual([BOOT.signOut, `${BOOT.email}Log out`]);
+  });
+});
+
 describe("the mark at a section of the side", () => {
   // Drift: a problem would show only on its own screen, the mark would be a colour with no name for a screen reader, or a section with nothing wrong would carry one.
   test("names how many problems the section's screen holds, on the section's link, and stands at no section without one", async () => {
