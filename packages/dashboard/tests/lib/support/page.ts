@@ -31,6 +31,12 @@ function refuseKept(): void {
   throw new Error(`left: ${keys.join(", ")}`);
 }
 
+/** The library keeps every said line for the whole run, so one left would be drawn where a later test draws its lines. It is loaded here, once the page is there. */
+async function takeLinesAway(): Promise<void> {
+  const { toast } = await import("sonner");
+  toast.dismiss();
+}
+
 if (!GlobalRegistrator.isRegistered) {
   GlobalRegistrator.register({ url: "https://poplin.example.com/next/" });
   Object.assign(globalThis, OWN);
@@ -44,9 +50,10 @@ if (document.getElementById("boot") === null) {
   document.head.append(block);
 }
 
-// Every test file shares the page's two stores, so a key one file left would be the state another starts from. Hooks set here hold for every file: the first two run around each test, the last once the whole run ends.
+// Every test file shares the page's two stores and the lines that say results, so what one file left would be the state another starts from. Hooks set here hold for every file: the first two run around each test, the last once the whole run ends.
 beforeEach(refuseKept);
 afterEach(emptyStores);
+afterEach(takeLinesAway);
 afterAll(refuseKept);
 
 /** Empty the page a test file drew into, so the file that follows starts from an empty body. */
