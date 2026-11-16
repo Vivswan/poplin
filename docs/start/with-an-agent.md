@@ -5,7 +5,7 @@ order: 10
 
 # Install with an agent
 
-What happens after you paste the line below, and what you do yourself; the agent follows [the skill's setup page](../../skills/poplin/references/setup.md), and the command it runs is the one of [Install](install.md).
+What happens after you paste the line below, and what you do yourself. The agent follows [its own setup file](../../skills/poplin/references/setup.md), which counts the same steps, and the command is the one of [Install](install.md).
 
 ```text
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
@@ -15,32 +15,67 @@ Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a 
 
 **Have ready** what [What you need](install.md#what-you-need) lists. The domain is your choice: the agent asks.
 
-| Step | What happens                                             | Who does it                                                             |
-| ---- | -------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 1    | the agent says what it will do, and asks once            | you say yes                                                             |
-| 2    | a check: Node.js, a saved login, an install              | the agent; you install Node.js when it is missing                       |
-| 3    | with no install: two questions, a domain or none, and your email | you answer                                                      |
-| 4    | what no command can switch on, and the account token     | you, in your browser; the agent gives you the link, and says what to choose |
-| 5    | a dry run: what the install would make, and what blocks it | the agent reads it, and tells you what is left to switch on           |
-| 6    | the install: `npx poplin install cloudflare`, with your two answers | the agent, or you in a terminal of your own: the second table below |
-| 7    | with no saved login: `npx poplin login`                  | the agent runs it; you allow it in your browser                         |
-| 8    | poplin's tools are added to the agent's configuration    | the agent; it may ask you to restart it, so that the tools show         |
-| 9    | a last check                                             | the agent names your install                                            |
+```text
+the agent   asks, checks, says what to choose, and gives you each line to run
+you         choose in your browser, run two lines in a terminal of your own, and paste back what they print
+the token   goes from Cloudflare's page into the command's question, and nowhere else
+```
 
-**The account token stays out of the chat.** Steps 5 and 6 need it, and it reaches the command one of two ways:
+| Step | What happens                                                        | Who does it                                                                  |
+| ---- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 1    | the agent says what it will do, and asks once                       | you say yes                                                                  |
+| 2    | a check: Node.js, a saved login, an install                         | the agent; you install Node.js when it is missing                            |
+| 3a   | two questions: a domain or none, and your email                     | you answer                                                                   |
+| 3b   | what no command can switch on                                       | you, in your browser; the agent says what to open                            |
+| 3c   | the account token                                                   | you, in your browser; the agent gives you the link, and says what to choose  |
+| 3d   | a dry run: what the install would make, and what blocks it          | you run the agent's line, and paste back what it prints: [the table below](#you-run-steps-3d-and-3e) |
+| 3e   | the install: `npx poplin install cloudflare`, with your two answers | you, the same way; then you press Enter at `Log this computer in now?`       |
+| 4    | the login of this computer                                          | you, at the end of step 3e. With an install that was there: the agent runs `npx poplin login`, and you allow it in your browser |
+| 5    | poplin's tools are added to the agent's configuration               | the agent; it may ask you to restart it, so that the tools show              |
+| 6    | a last check                                                        | the agent names your install                                                 |
 
-| The agent runs                               | Steps 5 and 6 are run by                                                                  | The token is given                                             |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| on your computer, with you                   | you, in a terminal of your own: the agent gives you each line, and you paste back what it prints | at the command's question `Account token (not shown):`  |
-| in a script or a CI job, with nobody to ask  | the agent                                                                                 | in `POPLIN_INSTALL_TOKEN`, which the job's secret store sets   |
+Step 3 makes the install, in parts a to e. With an install that is there already, the agent leaves it out. Where a run left something undone, the agent names the one line that goes on: its part f.
 
-What the command prints holds no token, so it is safe to paste. Do not type an `export` line with the token to hand it to the agent: the shell keeps that line in its history.
+## You run steps 3d and 3e
 
-- **One yes, at the start.** It covers the setup, the tools of step 8 included, and nothing else: the agent publishes, shares, and deletes only when you ask.
+**The agent never sees the account token.** On your own computer you run the two lines yourself, in a terminal the agent does not run in:
+
+| You                                               | What happens                                         |
+| ------------------------------------------------- | ---------------------------------------------------- |
+| open a second terminal, as the lines below say    | a new window, beside the agent's                     |
+| paste the agent's line there, and press Enter     | the command asks `Account token (not shown):`        |
+| paste the token at that question, and press Enter | a row of small marks shows, never the letters        |
+| copy all that the command printed into the chat   | it holds no token, so it is safe to paste            |
+
+```text
+Mac:      press Command and Space, type Terminal, press Enter; then press Command and N for a new window
+Windows:  press the Windows key, type Command Prompt, press Enter
+Linux:    open a new window of the program named Terminal
+```
+
+**The token is asked for twice:** by the dry run of step 3d, and by the install of step 3e. Cloudflare shows it once, and what you copy for the agent takes its place on the clipboard.
+
+| The token                     | Do                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| is still on Cloudflare's page | leave that page open until the install is made, and copy the token from it again for step 3e           |
+| is gone                       | at Cloudflare, open My Profile, then API Tokens, and choose Roll in the token's menu: it shows a new text |
+
+**The login of step 4** is the last question of step 3e. On the page `Allow this login?`, choose Everything under Can change, on a computer of your own: [step 5 of Install](install.md#5-log-this-computer-in-and-check) says what each choice gives. The agent uses that login.
+
+A script or a CI job has nobody to ask, so the agent runs both lines itself there:
+
+| The agent runs                               | Steps 3d and 3e are run by | The token is given                                             |
+| -------------------------------------------- | -------------------------- | -------------------------------------------------------------- |
+| on your computer, with you                   | you                        | at the command's question `Account token (not shown):`         |
+| in a script or a CI job, with nobody to ask  | the agent                  | in `POPLIN_INSTALL_TOKEN`, which the job's secret store sets   |
+
+Do not type an `export` line with the token to hand it to the agent: the shell keeps that line in its history.
+
+## What to expect
+
+- **One yes, at the start.** It covers the setup, the tools of step 5 included, and nothing else: the agent publishes, shares, and deletes only when you ask.
 - **Your agent's own questions are expected.** The tool may ask you to approve each command before it runs, such as `node --version`. That is the tool's own safety, apart from the one yes.
-- **A restart** is closing the agent, opening a new terminal window, and starting the agent again there, in the same folder. The agent asks for one when its terminal, open since before Node.js was installed, does not find it, and when the tools of step 8 do not show. The chat may not come back: afterwards, say `Go on with the poplin setup.`
+- **A restart** is closing the agent, opening a new terminal window, and starting the agent again there, in the same folder. The agent asks for one when its terminal, open since before Node.js was installed, does not find it, and when the tools of step 5 do not show. The chat may not come back: afterwards, say `Go on with the poplin setup.`
 - **The dashboard's address** is asked only when you have an install and this computer has no login.
-- **The agent acts as you**, with the login step 7 saves on this computer. It leaves a saved login as it is. When a login has run out, the agent asks you before it makes a new one.
+- **The agent acts as you**, with the login step 4 saves on this computer. It leaves a saved login as it is. When a login has run out, the agent asks you before it makes a new one.
 - **It worked when** the agent names your install. To see for yourself, run `npx poplin doctor`: [step 5 of Install](install.md#5-log-this-computer-in-and-check) shows what it prints.
-
-The tools reach the agent as an MCP server, which is how an agent gets tools.

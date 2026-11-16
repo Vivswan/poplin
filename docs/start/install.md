@@ -60,7 +60,8 @@ Open a terminal, the window where you type commands:
 
 ```text
 Mac:      press Command and Space, type Terminal, press Enter
-Windows:  press the Windows key, type PowerShell, press Enter
+Windows:  press the Windows key, type Command Prompt, press Enter
+Linux:    open the program named Terminal
 ```
 
 First check Node.js. Type the line and press Enter:
@@ -202,11 +203,20 @@ At `Log this computer in now?`, Yes is chosen already: press Enter. It prints a 
 | Cloudflare's login, first    | type your email, the one of step 2, then the code Cloudflare sends it |
 | `Allow this login?`, then    | the table below, with the short code of your terminal                 |
 
-| On the page                                 | Do                                                                               |
-| ------------------------------------------- | -------------------------------------------------------------------------------- |
-| Can change                                  | choose Everything: this computer is yours, and the check below reads the settings |
-| Last 4 letters of the code in your terminal | type them                                                                        |
-| Allow                                       | press it                                                                         |
+| On the page                                 | Do                                                    |
+| ------------------------------------------- | ----------------------------------------------------- |
+| Can change                                  | choose Everything, on a computer of your own          |
+| Last 4 letters of the code in your terminal | type them                                             |
+| Allow                                       | press it                                              |
+
+Can change has two choices, and the page opens on the second:
+
+| Can change     | Choose it for                             | This computer reaches                                                              | The login lasts       |
+| -------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- | --------------------- |
+| Everything     | a computer of your own                    | every site, and the settings: `npx poplin config`, `export`, `import`, and `update` need it | 30 days       |
+| Own sites only | a computer that should only publish, such as a shared one | the sites that one login published, and no other                   | until you remove it   |
+
+An agent on this computer uses the same login. With Everything it reaches a site that an earlier login published. With Own sites only it does not: after a new login it no longer reaches the sites of the login before.
 
 The page takes only the letters of the code your terminal printed. If it refuses them, or you did not start a login, press Deny.
 
@@ -265,6 +275,8 @@ Windows:  npx poplin "C:\Users\user\Desktop\my report" --name my-report
 ## Check first: the dry run
 
 `--dry-run` reads everything, changes nothing, and lists what a run would make. It asks for what its line does not give: here, the token alone.
+
+The run after it asks for the token again. Leave Cloudflare's page with the token open until the install is made, and copy the token from it a second time.
 
 ```sh
 npx poplin install cloudflare --domain example.com --login you@example.com --dry-run

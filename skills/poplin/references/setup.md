@@ -10,10 +10,12 @@ Poplin publishes a static site (a folder, or one HTML file) to an install: the u
 | ---- | ----------------------------------------------------- | --------------------------------------------------- |
 | 1    | Say what is about to happen, and ask                  | you                                                 |
 | 2    | Check what exists: Node.js, a saved login, an install | you                                                 |
-| 3    | Make the install, when there is none                  | one command; the user does what only a browser can  |
-| 4    | Log this computer in, when no login is saved          | you run it; the user allows it in a browser         |
+| 3    | Make the install, when there is none                  | the user: in a browser, then one command in a terminal of their own. You run the command in a script alone |
+| 4    | Log this computer in, when no login is saved          | you run it, or the user at the end of step 3; the user allows it in a browser |
 | 5    | Add the MCP server to your own configuration          | you                                                 |
 | 6    | Confirm that it works, and tell the user              | you                                                 |
+
+The user's page, [With an agent](https://github.com/Vivswan/poplin/blob/main/docs/start/with-an-agent.md), counts the same steps. Its steps 3a to 3e are parts a to e of step 3 here: name a step to the user by that number, such as "step 3d".
 
 `example.com` stands for the user's own domain, and `https://poplin.example.com` for the address of their dashboard, here and below. On an install without a domain the dashboard is at `https://poplin.your-name.workers.dev`, where `your-name` is a word of the user's account. The poplin repository and the place you read this page from are neither. `npx` may ask to download the `poplin` package the first time it runs: answer yes.
 
@@ -142,7 +144,7 @@ The link opens Cloudflare's form with every permission chosen but one.
 | Zone Resources    | under a domain alone: chooses Include, then Specific zone, then their domain         |
 | every other field | leaves it as it is                                                                   |
 | the bottom        | presses Continue to summary, then Create Token                                       |
-| the next page     | copies the token: it is shown once                                                   |
+| the next page     | copies the token: it is shown once. They leave that page open until the install is made: parts d and e each ask for the token |
 
 That makes ten permissions under a domain, and six without one. If the form opens empty, the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#the-token-form-opens-empty) has the rows to add by hand.
 
@@ -203,7 +205,22 @@ Each entry of `blocked` has the address to open, and says what blocks:
 npx poplin install cloudflare --domain example.com --login you@example.com --dry-run
 ```
 
-It asks `Account token (not shown):`. The user pastes the token there and presses Enter. Ask them to copy you everything it printed: the token is in no line.
+Say how to open that terminal: a new window, beside the one you run in.
+
+```text
+Mac:      press Command and Space, type Terminal, press Enter; then press Command and N for a new window
+Windows:  press the Windows key, type Command Prompt, press Enter
+Linux:    open a new window of the program named Terminal
+```
+
+It asks `Account token (not shown):`. The user pastes the token there and presses Enter: a row of small marks shows, never the letters. Ask them to copy you everything it printed: the token is in no line.
+
+**The token is asked for twice**, by this dry run and by the run of part e, and Cloudflare shows it once. What the user copies for you takes its place on their clipboard. Say so before the dry run:
+
+| The token                     | The user                                                                                  |
+| ----------------------------- | ----------------------------------------------------------------------------------------- |
+| is still on Cloudflare's page | leaves that page open until the install is made, and copies the token from it again for part e |
+| is gone                       | opens My Profile, then API Tokens, at Cloudflare, and chooses Roll in the token's menu: it shows a new text |
 
 | Its last line starts with | Next                                                |
 | ------------------------- | --------------------------------------------------- |
@@ -228,7 +245,7 @@ npx poplin install cloudflare --domain example.com --login you@example.com --yes
 
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
 
-**When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again, prints a row for each thing it makes, and ends:
+**When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again: the user copies it from Cloudflare's page a second time, or rolls it, as part d has it. It prints a row for each thing it makes, and ends:
 
 ```text
 poplin 0.1.0 is installed.
@@ -236,7 +253,7 @@ Your dashboard: https://poplin.example.com
 Log this computer in now?
 ```
 
-Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Then run the check of step 4.
+Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Tell them the two choices of Can change first, as step 4 has them. Then run the check of step 4.
 
 The command stores the token nowhere. Afterwards the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working.
 
@@ -286,7 +303,14 @@ On a new install Cloudflare's login comes first: it asks for the user's email an
 | asked you for this login           | types the last 4 letters, then presses Allow      |
 | sees the page refuse those letters | presses Deny: that page is of some other login    |
 
-The page starts at Own sites only, which is all you need to publish and to manage the sites you publish. Do not ask the user to choose Everything.
+The page has one choice, Can change, and it starts at Own sites only. Tell the user both rows before they press Allow. The choice is theirs: you use the login they allow.
+
+| Can change     | The guide says it is for                  | You then reach                                                        | The login lasts        |
+| -------------- | ----------------------------------------- | --------------------------------------------------------------------- | ---------------------- |
+| Everything     | the user's own computer                   | every site of the install, and its settings                           | 30 days                |
+| Own sites only | a computer that should only publish       | the sites that one login published, and no other                      | until the user removes it |
+
+With Own sites only, a site another login published is refused, with `not_found` or `not_allowed`. After a new login, that holds for every site you published before it. That is why the guide says Everything on the user's own computer.
 
 If you read output as JSON, add `--json`: the first line then carries the web address and the code.
 
@@ -306,6 +330,7 @@ npx poplin doctor
 | It prints                                                | Exit code | Next                                                 |
 | -------------------------------------------------------- | --------- | ---------------------------------------------------- |
 | lines that all start with ok, then `nothing was changed` | 0         | step 5                                               |
+| the same, where the login line says publisher token, and the settings line says `not read: this token is no admin's` | 0 | the login is of Own sites only, and nothing is wrong: step 5 |
 | a line that starts with failed                           | 1         | tell the user that line, and stop until it is sorted |
 
 ## 5. Add the MCP server to your own configuration
@@ -342,7 +367,7 @@ Both are commands the user's account token runs, so the rule of part c holds: th
 | ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | nobody can log in to the dashboard          | `npx poplin doctor --repair`                     | give the user the line, and read what it printed with them: the table of part f       |
 | their mailbox is gone, or the first email was mistyped | the same, with `--add-user` and the email | add the option only with an email the user gave you for this                        |
-| remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | show the user its list first. The removal itself is the user's: they type the install's address at its question |
+| remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | give the user the line, and read its list with them: it asks for the token. The removal itself is the user's too: they type the install's address at its question |
 
 Never pass `--confirm` on your own: it is the proof that the user means this install, and a removal cannot be undone. The guide has both: [I cannot log in](https://github.com/Vivswan/poplin/blob/main/docs/fix/cannot-log-in.md) and [Remove](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/remove.md).
 

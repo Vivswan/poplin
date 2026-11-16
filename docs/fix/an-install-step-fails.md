@@ -134,7 +134,7 @@ The login line is `npx poplin login`, with `--server` and your dashboard's addre
 | `node --version` prints a number below `v24`               | poplin runs on Node.js 24 or higher                  | run the LTS installer from nodejs.org                     |
 | the browser cannot find the dashboard                      | a new address takes a few minutes                    | wait a few minutes and reload                             |
 | the page refuses the letters you typed                     | that login is not the one your terminal began        | press Deny, and run the login line again                  |
-| `poplin doctor` says `publisher token`                     | the page was left at Own sites only                  | run the login line again, and choose Everything           |
+| `poplin doctor` says `publisher token`                     | the page was left at Own sites only: this login reaches the sites it published, and no settings | on a computer of your own, run the login line again, and choose Everything |
 | `the login was denied on the dashboard`                    | Deny was pressed; nothing was saved                  | run the login line again                                  |
 | `nobody allowed the login before it ran out`               | the code ran out before Allow; nothing was saved     | run the login line again                                  |
 | `not logged in`                                            | the login did not finish                             | run the login line again                                  |
