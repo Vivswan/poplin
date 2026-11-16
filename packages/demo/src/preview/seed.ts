@@ -17,7 +17,7 @@ import { restoreSite } from "../../../core/src/actions/restore";
 import { updateSite } from "../../../core/src/actions/set";
 import { parseLogin } from "../../../core/src/auth/logins";
 import type { Actor } from "../../../core/src/auth/scopes";
-import { previewPlug } from "./domain-plug";
+import { standingPlug } from "./domain-plug";
 import { type Draft, SITE_HISTORY, type SiteMoment, SITES, THE_DEMO, type Who } from "./sample-sites";
 import type { World } from "./world";
 
@@ -38,18 +38,6 @@ const WAITING = [
   { scope: "publisher", computer: "studio-laptop" },
   { scope: "admin", computer: "build-server" },
 ] as const;
-
-/** The site that stands for the demo itself: one page, which leads back to the demo, two folders above the place the site is served at. */
-const STAND_IN: Sample = {
-  title: "poplin demo",
-  files: [
-    {
-      path: "index.html",
-      contentType: "text/html; charset=utf-8",
-      bytes: new TextEncoder().encode('<!doctype html>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0; url=../../">\n<title>poplin demo</title>\n<p><a href="../../">Open the demo</a></p>\n'),
-    },
-  ],
-};
 
 /** The token the seed's check of the domain is run with. The preview's plug takes any, and nothing keeps it. */
 const DOMAIN_TOKEN = "sample-token";
@@ -216,9 +204,20 @@ function made<Value>(known: ReadonlyMap<string, Value>, name: string): Value {
   return value;
 }
 
-/** A sample by its name; a name the host handed no sample for is a mistake in the seed. */
+/**
+ * The site that stands for the demo itself: one page, which sends its visitor to the demo's dashboard and links there.
+ *
+ * @param home - the dashboard's first page as a page at the root of a public site links to it; an address or a relative path, with no quote in it
+ */
+function standIn(home: string): Sample {
+  const page = `<!doctype html>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0; url=${home}">\n<title>poplin demo</title>\n<p><a href="${home}">Open the demo</a></p>\n`;
+
+  return { title: "poplin demo", files: [{ path: "index.html", contentType: "text/html; charset=utf-8", bytes: new TextEncoder().encode(page) }] };
+}
+
+/** A sample by its name; a name the seed has no sample for is a mistake in the seed. */
 function sampleOf(name: string, samples: Samples): Sample {
-  const sample = name === THE_DEMO ? STAND_IN : samples[name];
+  const sample = samples[name];
   if (sample === undefined) throw new Error(`the demo's seed has no sample called ${name}`);
 
   return sample;
@@ -410,7 +409,7 @@ async function checkDomain(world: World): Promise<void> {
   const settings = await world.install.database.readSettings();
   if (settings === undefined) throw new Error("the demo's seed lost its settings");
 
-  await runDomain(previewPlug("done"), world.install, { run: "check", token: DOMAIN_TOKEN, settings: async () => settings, by: world.admin.holder, from: "dashboard" });
+  await runDomain(standingPlug(world.kind.provider), world.install, { run: "check", token: DOMAIN_TOKEN, settings: async () => settings, by: world.admin.holder, from: "dashboard" });
 }
 
 /**
@@ -423,8 +422,10 @@ async function checkDomain(world: World): Promise<void> {
 export async function seedWorld(world: World, samples: Samples): Promise<Seeded> {
   const start = world.install.now();
   const cast: Cast = { actors: people(world), tokens: new Map(), sites: new Map() };
+  // No folder holds the sample of the demo's own row: its one page is written for the kind of install, which says where the dashboard is from a site.
+  const given = { ...samples, [THE_DEMO]: standIn(world.kind.homeFromSite) };
   const moments = [
-    ...SITES.map((draft) => ({ ago: draft.ago, run: () => makeSite(world, cast, draft, samples) })),
+    ...SITES.map((draft) => ({ ago: draft.ago, run: () => makeSite(world, cast, draft, given) })),
     ...[...EARLIER, ...HISTORY, ...SITE_HISTORY].map((moment) => ({ ago: moment.ago, run: () => play(world, cast, moment) })),
   ];
 

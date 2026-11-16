@@ -51,6 +51,12 @@ const SCREENS = ["/", "/tokens", "/activity", "/usage", "/settings", "/domain"];
 /** Any address at the install's own domain, which no answer may send a browser to. */
 const INSTALL_ADDRESS = /https?:\/\/[a-z0-9.-]*example\.com[^"]*/g;
 
+/** The three origins a preview of an install without a domain is asked at. */
+const LOCAL = { admin: "http://poplin.localhost:4400", sites: "http://sites.localhost:4400", private: "http://private.localhost:4400" } as const;
+
+/** Any address of that install as the app writes it, over https and without the port: no answer may send a browser to one. */
+const APP_ADDRESS = /https:\/\/[a-z]+\.localhost[^"]*/g;
+
 /** A running preview. */
 type Preview = Awaited<ReturnType<typeof createPreview>>;
 
@@ -64,6 +70,9 @@ interface Boot {
 interface Listed {
   readonly sites: readonly { readonly name: string; readonly label: string; readonly url: string }[];
 }
+
+/** What one request to a preview without a domain is expected to answer: its status, where it sends the browser, and whether its body is the dashboard's page. */
+type Answered = readonly [status: number, location: string | null, dashboard: boolean];
 
 /** Follow a path through its redirects, as a browser would. */
 async function open(preview: Preview, path: string): Promise<Response> {
@@ -102,9 +111,9 @@ function freePort(): number {
   return port ?? 0;
 }
 
-/** Start the preview's command on a port and wait until a preview other than `before` answers there with its pid. */
-async function start(port: number, before?: number): Promise<number> {
-  Bun.spawn([process.execPath, SERVE, "--port", String(port)], { stdio: ["ignore", "ignore", "inherit"] });
+/** Start the preview's command on a port, with any flags after it, and wait until a preview other than `before` answers there with its pid. */
+async function start(port: number, before?: number, flags: readonly string[] = []): Promise<number> {
+  Bun.spawn([process.execPath, SERVE, "--port", String(port), ...flags], { stdio: ["ignore", "ignore", "inherit"] });
 
   for (const deadline = Date.now() + START_MS; Date.now() < deadline; await Bun.sleep(50)) {
     const answer = await fetch(`http://${HOST}:${port}${PID_PATH}`).catch(() => undefined);
@@ -424,4 +433,209 @@ describe("the local preview", () => {
 
     expect(((await who.json()) as { update?: unknown }).update).toEqual({ current: VERSION, newest: "1.1.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", database: false });
   });
+
+  // Drift: an address that names no site under `/served/` was sent on to itself with one more slash, and a browser followed that until it gave up.
+  test("the place of the served sites, asked with no site after it, is not found and sends the browser nowhere", async () => {
+    const preview = await openPreview(false);
+    const asked = await Promise.all(["/served/", "/served//"].map((path) => preview.fetch(new Request(`${ORIGIN}${path}`))));
+
+    expect(asked.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([
+      [404, null],
+      [404, null],
+    ]);
+  });
+});
+
+/** Open the demo as the command does for an install without a domain, asked at the three origins of `LOCAL`; `listed` gives it the page of every state. */
+async function openLocal(listed = false): Promise<Preview> {
+  return createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, gallery: listed, client: CLIENT, noDomain: LOCAL });
+}
+
+/** Follow a whole address through its redirects, as a browser would: each hop is asked at the host it names. */
+async function visit(preview: Preview, address: string): Promise<Response> {
+  let at = address;
+  let response = await preview.fetch(new Request(at));
+
+  for (let hop = 0; hop < MAX_HOPS && response.status >= 300 && response.status < 400; hop += 1) {
+    at = new URL(response.headers.get("Location") ?? "", at).href;
+    response = await preview.fetch(new Request(at));
+  }
+
+  return response;
+}
+
+/** The sites the dashboard of a preview without a domain lists, by name. */
+async function listedAt(preview: Preview): Promise<Readonly<Record<string, Listed["sites"][number]>>> {
+  const { sites } = (await (await preview.fetch(new Request(`${LOCAL.admin}/data/sites`))).json()) as Listed;
+
+  return Object.fromEntries(sites.map((site) => [site.name, site]));
+}
+
+/** Send one change as the dashboard's client does, from a page at the dashboard's own origin. */
+function changeAt(preview: Preview, path: string, body: unknown): Promise<Response> {
+  return preview.fetch(new Request(`${LOCAL.admin}${path}`, { method: "POST", headers: { ...CHANGE_HEADERS, Origin: LOCAL.admin }, body: JSON.stringify(body) }));
+}
+
+describe("the local preview of an install without a domain", () => {
+  // Drift: the three hosts are three origins only while each answers its own side. A site host that answered the dashboard's data, or a dashboard host that served a site's page, would put a site's script and the dashboard on one origin.
+  test("each host answers its own side alone: the dashboard's serves no site, a site host serves no path of the dashboard, the API, or the preview, and a site's address without its slash, or with an id from before a reset, leads to the site", async () => {
+    const preview = await openLocal();
+    const sites = await listedAt(preview);
+    const [deck, report] = [sites["launch-deck"]?.label, sites["sales-report"]?.label];
+    const others = [LOCAL.sites, LOCAL.private].flatMap((host) => ["/api/whoami", "/data/sites", "/login/", "/gallery/", "/setup/fresh", "/"].map((path) => `${host}${path}`));
+    const asked: readonly (readonly [address: string, answer: Answered, init?: RequestInit])[] = [
+      [`${LOCAL.admin}/`, [200, null, true]],
+      [`${LOCAL.admin}/lisbon/`, [200, null, true]],
+      [`${LOCAL.admin}/${deck}/`, [200, null, true]],
+      [`${LOCAL.sites}/lisbon/`, [200, null, false]],
+      [`${LOCAL.sites}/${deck}/`, [200, null, false]],
+      [`${LOCAL.sites}/${deck}`, [302, `/${deck}/`, false]],
+      [`${LOCAL.sites}/launch-deck--000000000000/deck.js?x=1`, [302, `/${deck}/deck.js?x=1`, false]],
+      [`${LOCAL.private}/${report}/`, [200, null, false]],
+      [`${LOCAL.private}/${report}/?as=visitor`, [404, null, false]],
+      [`${LOCAL.private}/lisbon/`, [404, null, false]],
+      ...others.map((address) => [address, [404, null, false]] as const),
+      [`${LOCAL.sites}/reset`, [405, null, false], { method: "POST" }],
+    ];
+    const answered = await Promise.all(
+      asked.map(async ([address, , init]) => {
+        const answer = await preview.fetch(new Request(address, init));
+
+        return [address, [answer.status, answer.headers.get("Location"), (await answer.text()).includes("app-test.js")]] as const;
+      }),
+    );
+
+    expect(answered).toEqual(asked.map(([address, answer]) => [address, answer]));
+    // The reset posted to a site host started nothing over: the sample keeps its id.
+    expect((await listedAt(preview))["launch-deck"]?.label).toBe(deck);
+  });
+
+  // Drift: the layout writes an address and reads it back. One the dashboard shows that a request then reads as another site, or as none, is a Copy button that hands out a dead link.
+  test("the address the dashboard gives a private, an unlisted, and a public sample is on the host of its kind, and a request to it is answered with that sample's own page", async () => {
+    const preview = await openLocal();
+    const [samples, sites] = [await readSamples(), await listedAt(preview)];
+    const pageOf = (sample: string): string => new TextDecoder().decode(samples[sample]?.files.find((file) => file.path === "index.html")?.bytes);
+    const rows = [
+      ["sales-report", "sales-report", `${LOCAL.private}/sales-report--`],
+      ["launch-deck", "launch-deck", `${LOCAL.sites}/launch-deck--`],
+      ["lisbon-trip", "trip-summary", `${LOCAL.sites}/lisbon/`],
+    ] as const;
+    const served = await Promise.all(
+      rows.map(async ([name, sample, start]) => {
+        const url = sites[name]?.url ?? "";
+        const answer = await preview.fetch(new Request(url));
+
+        return [name, url.startsWith(start), answer.status, (await answer.text()) === pageOf(sample)];
+      }),
+    );
+
+    expect(served).toEqual(rows.map(([name]) => [name, true, 200, true]));
+  });
+
+  // Drift: a link handed out while a site was unlisted must still open once it is private, behind the login, and the other way round. A redirect that dropped the file or the query would land every such link on the site's first page.
+  test("a site moved between unlisted and private moves between the two site hosts, and its address at the other host leads to it with the path and the query kept", async () => {
+    const preview = await openLocal();
+    const before = (await listedAt(preview))["launch-deck"];
+    const file = `/${before?.label}/deck.js?x=1`;
+    const shut = await changeAt(preview, `/data/sites/${before?.label}/access`, { access: "private" });
+    const moved = (await listedAt(preview))["launch-deck"]?.url;
+    const old = await preview.fetch(new Request(`${LOCAL.sites}${file}`));
+    const opened = await changeAt(preview, `/data/sites/${before?.label}/access`, { access: "unlisted" });
+    const back = await preview.fetch(new Request(`${LOCAL.private}${file}`));
+
+    expect([before?.url, shut.status, moved, opened.status]).toEqual([`${LOCAL.sites}/${before?.label}/`, 200, `${LOCAL.private}/${before?.label}/`, 200]);
+    expect([old.status, old.headers.get("Location"), back.status, back.headers.get("Location")]).toEqual([302, `${LOCAL.private}${file}`, 302, `${LOCAL.sites}${file}`]);
+    expect((await visit(preview, `${LOCAL.private}${file}`)).status).toBe(200);
+  });
+
+  // Drift: the app writes every address over https and without a port. One that reached a page, the data, or the API as written would send a browser, or the command line, to a host nothing listens on.
+  test("no page and no data of the dashboard names an address of the install as the app writes it, every site's address is at one of the two site origins, and the API says the path layout with the hosts a browser here asks", async () => {
+    const preview = await openLocal();
+    const sites = Object.values(await listedAt(preview));
+    const paths = [...SCREENS, "/data/sites", "/data/sites?view=trash", "/data/activity", "/data/usage", "/data/settings", "/data/domain", "/data/frame", ...sites.map((site) => `/data/sites/${site.label}`)];
+    const answers = await Promise.all(
+      paths.map(async (path) => {
+        const answer = await visit(preview, `${LOCAL.admin}${path}`);
+
+        return [path, await answer.text(), answer.status] as const;
+      }),
+    );
+    const added = await changeAt(preview, "/data/people/add", { login: "nora@sites.localhost" });
+    const bearer = { headers: { Authorization: `Bearer ${preview.token()}` } };
+    const who = (await (await preview.fetch(new Request(`${LOCAL.admin}/api/whoami`, bearer))).json()) as { readonly layout: unknown };
+    const listed = await (await preview.fetch(new Request(`${LOCAL.admin}/api/sites`, bearer))).text();
+
+    expect(sites.length).toBeGreaterThan(8);
+    expect(answers.filter(([, , status]) => status !== 200).map(([path]) => path)).toEqual([]);
+    expect(answers.flatMap(([path, text]) => (text.match(APP_ADDRESS) ?? []).map((found) => [path, found]))).toEqual([]);
+    // An email at a host of the install is no address of a site: it is written back as it was typed.
+    expect([added.status, (await added.text()).includes('"nora@sites.localhost"')]).toEqual([200, true]);
+    expect(sites.filter((site) => !site.url.startsWith(`${LOCAL.sites}/`) && !site.url.startsWith(`${LOCAL.private}/`))).toEqual([]);
+    expect(who.layout).toEqual({ kind: "path", sites_host: "sites.localhost:4400", private_host: "private.localhost:4400" });
+    expect([listed.includes(`"${LOCAL.sites}/lisbon/"`), listed.includes("https://")]).toEqual([true, false]);
+  });
+
+  // Drift: the gallery's links are written for one origin. On three, a link to a served site that stayed a path of the dashboard's host would open the dashboard's "no such screen".
+  test("every link of the gallery answers the status the gallery states, a link to a site at the host that serves it", async () => {
+    const preview = await openLocal(true);
+    const entries = await preview.entries();
+    const answered = await Promise.all(entries.map(async (entry) => [entry.path, (await visit(preview, new URL(entry.path, LOCAL.admin).href)).status] as const));
+
+    expect(entries.filter((entry) => entry.group === "Served sites" && !entry.path.startsWith("http://") && !entry.path.startsWith("/state/"))).toEqual([]);
+    expect(answered.filter(([path, status]) => status !== (entries.find((entry) => entry.path === path)?.status ?? 200))).toEqual([]);
+  });
+
+  // Drift: the sample site that stands for the demo holds one page, which sends its visitor to the dashboard. Two folders up is the dashboard on one origin; on three it is the root of the sites' host, which serves no site.
+  test("the sample site that stands for the demo sends its visitor, and its one link leads, to the dashboard: across to the dashboard's host on three origins, two folders up on one, under a base path too", async () => {
+    const base = "/poplin/demo";
+    const based = await createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, client: CLIENT, base });
+    const rows = [
+      [await openLocal(), `${LOCAL.sites}/demo/`, `${LOCAL.admin}/`],
+      [await openPreview(false), `${ORIGIN}/served/demo-page/`, `${ORIGIN}/`],
+      [based, `${ORIGIN}${base}/served/demo-page/`, `${ORIGIN}${base}/`],
+    ] as const;
+    const led = await Promise.all(
+      rows.map(async ([preview, address]) => {
+        const page = await (await preview.fetch(new Request(address))).text();
+        const targets = [/url=([^"]+)"/.exec(page)?.[1], /href="([^"]+)"/.exec(page)?.[1]].map((target) => new URL(target ?? "missing", address).href);
+        const opened = await Promise.all(targets.map(async (target) => (await (await preview.fetch(new Request(target))).text()).includes("app-test.js")));
+
+        return [targets, opened];
+      }),
+    );
+
+    expect(led).toEqual(rows.map(([, , home]) => [[home, home], [true, true]]));
+  }, SEED_MS);
+
+  // Drift: the seed's remembered check and the Domain screen's own runs are two plugs. One of them left on the pieces of an install under a domain would list records and routes that an install without one cannot have.
+  test("the check the seed remembers and a Check on the Domain screen name the same pieces, none of them a piece of an install under a domain but the login's, and the token form asks for no domain", async () => {
+    const preview = await openLocal();
+    const pieces = (rows: readonly { readonly piece: string }[]): readonly string[] => rows.map((row) => row.piece);
+    const seeded = (await (await preview.fetch(new Request(`${LOCAL.admin}/data/domain`))).json()) as { form: { tokenNote: string }; last: { rows: [] } };
+    const run = await changeAt(preview, "/data/domain/check", { token: "sample-token" });
+    const checked = pieces(((await run.json()) as { rows: [] }).rows);
+    const ofDomain = pieces(((await (await change(await openPreview(false), "/data/domain/check", { token: "sample-token" })).json()) as { rows: [] }).rows);
+
+    expect([run.status, checked.length > 0, pieces(seeded.last.rows)]).toEqual([200, true, checked]);
+    expect([checked.filter((piece) => ofDomain.includes(piece) && !piece.startsWith("Login")), seeded.form.tokenNote.includes("domain")]).toEqual([[], false]);
+  }, SEED_MS);
+
+  // Drift: the flag is read by the command, which alone knows the port the three hosts answer on. A flag it dropped would start the install with a domain, and one that wrote another port would list sites nothing serves.
+  test("the command started with --no-domain lists its sites at the sites host of its own port, serves one there, and its dashboard host does not", async () => {
+    const port = freePort();
+    const ask = (host: string, path: string): Promise<Response> => fetch(`http://${HOST}:${port}${path}`, { headers: { Host: `${host}.localhost:${port}` }, redirect: "manual" });
+
+    try {
+      await start(port, undefined, ["--no-domain"]);
+      const listed = (await (await ask("poplin", "/data/sites?access=public&sort=name&dir=asc")).json()) as Listed;
+      const [site, home] = [await ask("sites", "/lisbon/"), await ask("poplin", "/lisbon/")];
+
+      expect(listed.sites.map((each) => each.url)).toContain(`http://sites.localhost:${port}/lisbon/`);
+      expect([site.status, (await site.text()).includes("<script"), home.status, (await shellOf(await home.text())).files.length]).toEqual([200, false, 200, 2]);
+    } finally {
+      await stopRunning(port);
+    }
+
+    expect(existsSync(pidFile(port))).toBe(false);
+  }, 90_000);
 });

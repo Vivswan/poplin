@@ -35,27 +35,30 @@ interface Flags {
 
   /** Whether the client is served hot by its dev server, in front of a watched preview. */
   readonly dev: boolean;
+
+  /** Whether the sample install is one without a domain, on three local hosts. */
+  readonly noDomain: boolean;
 }
 
 /**
- * Read the flags of a command line: `--port <port>`, `--watch`, `--gallery`, `--dev`.
+ * Read the flags of a command line: `--port <port>`, `--watch`, `--gallery`, `--dev`, `--no-domain`.
  *
  * @param args - the arguments after the script's own path
  * @param defaultPort - the port of a command line that names none
  * @returns the flags
- * @throws {TypeError} a flag is not one of the four
+ * @throws {TypeError} a flag is not one of the five
  * @throws {RangeError} the port is none
  */
 export function readFlags(args: readonly string[], defaultPort: number = DEFAULT_PORT): Flags {
   const { values } = parseArgs({
     args: [...args],
-    options: { port: { type: "string" }, watch: { type: "boolean" }, gallery: { type: "boolean" }, dev: { type: "boolean" } },
+    options: { port: { type: "string" }, watch: { type: "boolean" }, gallery: { type: "boolean" }, dev: { type: "boolean" }, "no-domain": { type: "boolean" } },
     strict: true,
   });
   const port = values.port === undefined ? defaultPort : Number(values.port);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new RangeError(`--port takes a port from 1 to 65535, not ${JSON.stringify(values.port)}`);
 
-  return { port, watch: values.watch === true, gallery: values.gallery === true, dev: values.dev === true };
+  return { port, watch: values.watch === true, gallery: values.gallery === true, dev: values.dev === true, noDomain: values["no-domain"] === true };
 }
 
 /** The pid file of the preview on a port. */

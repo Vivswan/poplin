@@ -1,4 +1,4 @@
-// The preview answers on one local origin, and the app expects each piece at the root of a hostname. A mount stands between the two.
+// The app expects each piece at the root of a hostname of the install, and a browser on this machine asks a local address. A mount stands between the two.
 //
 //   the browser asks   http://127.0.0.1:4400/data/sites
 //   the app is asked   https://poplin.example.com/data/sites
@@ -6,35 +6,19 @@
 //   the browser gets   "url": "http://127.0.0.1:4400/served/<a site's host label>/"    Location: /served/<a site's host label>/
 //   a site with a real address, where the host has one: "url": "https://<its address on a real install>/"
 //
-// A site's place is its whole first host label, so the mount knows nothing of how a label is built.
+// Where a site's address is on this machine is the kind's to say: `kind.ts` holds both layouts.
 //
 // Only addresses are rewritten: in an HTML page, in the `Location` header, and the install's own origins in a JSON answer.
 // A refusal in plain text is shown inside a page of the preview that says so.
 
-import { ADMIN_LABEL } from "../../../core/src/names/hostname";
 import { withAddresses } from "./addresses";
-import { ADDRESSES, DOMAIN } from "./world";
+import type { Kind } from "./kind";
 
-/** The origin the dashboard and the API are asked at. */
-export const ADMIN_ORIGIN = `https://${ADMIN_LABEL}.${DOMAIN}`;
-
-/** The hostname of that origin, as a page writes it without a scheme. */
-const ADMIN_HOSTNAME = new URL(ADMIN_ORIGIN).hostname;
-
-/** Where every site is served, each under its label or its public name. */
+/** Where every site of an install under a domain is served, each under its label or its public name. */
 export const SERVED_PREFIX = "/served";
-
-/** The end of every hostname of the install. */
-const DOMAIN_ENDING = `.${DOMAIN}`;
-
-/** A hostname one label under the install's domain, with the scheme before it and the slash after it when a text writes them. */
-const HOST_ADDRESS = new RegExp(`(https://)?(?<![%\\w.-])([a-z0-9-]+)${DOMAIN_ENDING.replaceAll(".", "\\.")}/?`, "g");
 
 /** The query keys that speak to the preview and never reach the app, each with the request header that carries its value on. */
 const PREVIEW_KEYS = { as: "Preview-As", "preview-visitor": "Preview-Visitor" } as const;
-
-/** The scheme every real address of a site begins with. */
-const HTTPS = "https://";
 
 /** No site with a real address. */
 const NO_REAL: ReadonlyMap<string, string> = new Map();
@@ -61,10 +45,13 @@ export interface Mount {
 }
 
 /** A body the mount rewrites: a page, JSON, or a refusal in plain text. */
-type Kind = "html" | "json" | "plain";
+type Body = "html" | "json" | "plain";
 
 /** How a preview request asks its pages to look. */
 interface Look {
+  /** The kind of install the piece belongs to, which says where each of its addresses is here. */
+  readonly kind: Kind;
+
   /** The origin the browser asked. */
   readonly origin: string;
 
@@ -75,37 +62,28 @@ interface Look {
   readonly real?: ReadonlyMap<string, string>;
 }
 
+/** Where an address is read from. */
+interface From {
+  /** The mount whose answer holds the address, which a path without a host belongs to. */
+  readonly here: Pick<Mount, "prefix" | "origin" | "base">;
+
+  /** The kind of install, which says where a site's address is here. */
+  readonly kind: Kind;
+
+  /** The address a site's own leads to instead, by the site's hostname. None when left out. */
+  readonly real?: ReadonlyMap<string, string>;
+}
+
 function mountedPath(mount: Pick<Mount, "prefix" | "base">, path: string): string {
   return `${mount.prefix}${path.startsWith(mount.base) ? path.slice(mount.base.length) : path}`;
 }
 
 /**
- * Write the preview path of a site's hostname.
- *
- * @param hostname - a hostname one label under the install's domain
- * @returns the path the preview serves that site's root at, without a closing slash
- */
-export function servedPath(hostname: string): string {
-  return `${SERVED_PREFIX}/${hostname.slice(0, -DOMAIN_ENDING.length)}`;
-}
-
-/**
- * Write the origin a site is asked at from the part of a preview path that names it.
- *
- * @param label - what follows `/served/` in the path: the site's first host label
- */
-export function siteOrigin(label: string): string {
-  return `https://${label}${DOMAIN_ENDING}`;
-}
-
-/**
  * Write the address in the preview of one the app wrote.
  *
- * @param here - the mount whose page holds the address, which a path without a host belongs to
- * @param real - the address a site's own leads to instead, by the site's hostname
- * @returns a path of the preview, or the real address of a site that has one; an address of neither the install nor the mount stays as it is
+ * @returns an address of the preview, as a path where it is at the origin the mount answers on, or the real address of a site that has one; an address of neither the install nor the mount stays as it is
  */
-export function localAddress(address: string, here: Pick<Mount, "prefix" | "origin" | "base">, real: ReadonlyMap<string, string> = NO_REAL): string {
+export function localAddress(address: string, { here, kind, real = NO_REAL }: From): string {
   if (address.startsWith("/") && !address.startsWith("//")) return mountedPath(here, address);
 
   const url = URL.parse(address);
@@ -114,48 +92,32 @@ export function localAddress(address: string, here: Pick<Mount, "prefix" | "orig
   const rest = `${url.search}${url.hash}`;
   if (url.origin === here.origin) return `${mountedPath(here, url.pathname)}${rest}`;
 
-  if (url.origin === ADMIN_ORIGIN) return `${url.pathname}${rest}`;
+  if (url.origin === kind.adminOrigin) return `${url.pathname}${rest}`;
 
-  if (!ADDRESSES.isSiteHost(url.hostname)) return address;
+  if (!kind.addresses.isSiteHost(url.hostname)) return address;
 
   const root = real.get(url.hostname);
-  if (root === undefined) return `${servedPath(url.hostname)}${url.pathname}${rest}`;
+  if (root === undefined) return `${kind.siteRoot(url.hostname)}${url.pathname}${rest}`;
 
   // The dashboard's own root is a path of the preview, as every address of the dashboard is.
   const moved = `${root}${url.pathname.slice(1)}${rest}`;
 
-  return moved.startsWith(`${ADMIN_ORIGIN}/`) ? moved.slice(ADMIN_ORIGIN.length) : moved;
+  return moved.startsWith(`${kind.adminOrigin}/`) ? moved.slice(kind.adminOrigin.length) : moved;
 }
 
-/** Every address of the install a text holds outside an attribute, written as the preview's own: what a person reads and copies is what works here. */
-function localText(text: string, origin: string, real: ReadonlyMap<string, string>): string {
-  const host = origin.replace(/^https?:\/\//, "");
-  const written = text.replace(HOST_ADDRESS, (...[whole = "", scheme, label = ""]: string[]) => {
-    if (!ADDRESSES.isSiteHost(`${label}${DOMAIN_ENDING}`)) return whole;
-
-    // A real address is written as the text wrote the site's own: with its scheme or without.
-    const root = real.get(`${label}${DOMAIN_ENDING}`);
-    if (root !== undefined) return scheme === undefined ? root.slice(HTTPS.length) : root;
-
-    return `${scheme === undefined ? host : origin}${SERVED_PREFIX}/${label}/`;
-  });
-
-  return written.replaceAll(ADMIN_ORIGIN, origin).replaceAll(ADMIN_HOSTNAME, host);
-}
-
-async function rewriteBody(text: string, kind: Kind, here: Mount, look: Look, status: number): Promise<string> {
+async function rewriteBody(text: string, body: Body, here: Mount, look: Look, status: number): Promise<string> {
   const real = look.real ?? NO_REAL;
-  if (kind === "json") return localText(text, look.origin, real);
+  if (body === "json") return look.kind.localText(text, look.origin, real);
 
-  if (kind === "plain") return look.framed(text, status);
+  if (body === "plain") return look.framed(text, status);
 
-  const linked = withAddresses(text, (address) => localAddress(address, here, real));
+  const linked = withAddresses(text, (address) => localAddress(address, { here, kind: look.kind, real }));
 
-  return localText(linked, look.origin, real);
+  return look.kind.localText(linked, look.origin, real);
 }
 
 /** Which kind of text a response holds that this mount rewrites; none for a body that goes out as it is. */
-function rewrittenKind(response: Response, here: Mount): Kind | undefined {
+function rewrittenBody(response: Response, here: Mount): Body | undefined {
   const type = response.headers.get("Content-Type") ?? "";
   if (response.body === null || response.status === 206) return undefined;
 
@@ -210,15 +172,15 @@ export async function askMount(request: Request, here: Mount, look: Look): Promi
   const response = await here.answer(await appRequest(request, here));
   const headers = new Headers(response.headers);
   const location = headers.get("Location");
-  if (location !== null) headers.set("Location", localAddress(location, here, look.real));
+  if (location !== null) headers.set("Location", localAddress(location, { here, kind: look.kind, real: look.real }));
 
-  const kind = rewrittenKind(response, here);
-  if (kind === undefined) return new Response(response.body, { status: response.status, headers });
+  const body = rewrittenBody(response, here);
+  if (body === undefined) return new Response(response.body, { status: response.status, headers });
 
   for (const name of BODY_HEADERS) headers.delete(name);
-  if (kind !== "json") headers.set("Cache-Control", "no-store");
+  if (body !== "json") headers.set("Cache-Control", "no-store");
 
-  if (kind === "plain") headers.set("Content-Type", "text/html; charset=utf-8");
+  if (body === "plain") headers.set("Content-Type", "text/html; charset=utf-8");
 
-  return new Response(await rewriteBody(await response.text(), kind, here, look, response.status), { status: response.status, headers });
+  return new Response(await rewriteBody(await response.text(), body, here, look, response.status), { status: response.status, headers });
 }
