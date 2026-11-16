@@ -228,6 +228,17 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Billing: Read                                               | the account | reading that every subscription is at a price of 0 |
 | Notifications: Edit                                         | the account | the budget alert                                  |
 
+## What one request costs
+
+No live check reads what a request cost: no address of an install answers it, to a visitor or to a token.
+
+| What                                                        | Where it is held                                                                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the database queries, rows, and storage calls of a request  | `packages/cloudflare/tests/worker/request-budget.test.ts`: every route on the local Workers runtime, through the driver the deployed Worker uses  |
+| the processing time of a request                            | the checks `L6` and `download` below, by hand: Cloudflare shows it in the Worker's metrics alone, and the local runtime reports none              |
+
+The test's `About ms` column is time by the clock, the local database and storage included. It is no measure of processing time, and no test fails on it.
+
 ## The checklist a person makes
 
 Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN` secret of the environment holds an email you can read. Run the workflow once, so the install lets that login in. Use a private browser window for every step that says logged out.

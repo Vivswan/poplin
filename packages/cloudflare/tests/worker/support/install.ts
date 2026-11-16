@@ -332,6 +332,17 @@ export async function awayFromMinuteEnd(): Promise<void> {
   if (left < MINUTE_END_MS) await scheduler.wait(left);
 }
 
+/** The bucket with every list page cut to one object, so one removal, which walks 15 pages, takes 15 files. */
+export function shortPages(bucket: R2Bucket): R2Bucket {
+  return new Proxy(bucket, {
+    get(inner, name) {
+      if (name !== "list") return Reflect.get(inner, name, inner);
+
+      return (options: R2ListOptions): Promise<R2Objects> => inner.list({ ...options, limit: 1 });
+    },
+  });
+}
+
 /** Move the clock forward. */
 export function wait(from: World, hours: number): void {
   from.clock.now += hours * HOUR_MS;
