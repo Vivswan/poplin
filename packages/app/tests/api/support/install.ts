@@ -1,10 +1,12 @@
 // An install the API tests send requests to: a real database on bun's SQLite, a store in memory, three tokens, and a client typed from the routes the API declares.
 
 import type { Login } from "@poplin/core/src/auth/logins";
+import type { Install } from "@poplin/core/src/actions/records";
 import { mintToken } from "@poplin/core/src/auth/tokens";
 import type { Database } from "@poplin/core/src/database/database";
 import type { SqlDriver, Statement, StatementResult } from "@poplin/core/src/database/driver";
 import { openDatabase } from "@poplin/core/src/database/open";
+import type { Jobs } from "@poplin/core/src/jobs/jobs";
 import { DEFAULT_PUBLIC_WORD } from "@poplin/core/src/names/marker";
 import { defaultSettings, type RuleSettings } from "@poplin/core/src/records/settings";
 import { ADDRESS_LAYOUT } from "@poplin/core/src/sites/address-layout";
@@ -65,6 +67,7 @@ export interface Answered {
  */
 export interface ApiInstall {
   readonly api: ReturnType<typeof createApi>;
+  readonly install: Install;
   readonly database: Database;
   readonly store: MemoryStore;
   readonly calls: { database: number; store: number };
@@ -151,8 +154,9 @@ export async function answered(sent: Promise<Pick<Response, "status" | "headers"
  *
  * @param limits - what one request can carry, in place of the small caps of `LIMITS`
  * @param layout - how the install says its site addresses are laid out, in place of hostnames that end in `page`; the addresses it answers stay hostnames
+ * @param jobs - the host's background work; left out, a host that has none
  */
-export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}, limits: ApiLimits = LIMITS, layout: LayoutInput = DEFAULT_LAYOUT): Promise<ApiInstall> {
+export async function openApi(overrides: Partial<ReturnType<typeof defaultSettings>> = {}, limits: ApiLimits = LIMITS, layout: LayoutInput = DEFAULT_LAYOUT, jobs?: Jobs): Promise<ApiInstall> {
   const calls = { database: 0, store: 0 };
   const driver = new CountingDriver(calls);
   const opened = await openDatabase(driver, NOW);
@@ -177,13 +181,17 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const rules: ApiInstall["rules"] = { pushed: [] };
   const said = v.parse(ADDRESS_LAYOUT, layout);
   const addresses = addressesUnder(said.kind === "hostname" ? said.public_word : DEFAULT_PUBLIC_WORD);
-  const api = createApi({
+  const install: Install = {
     database,
     store: counted(store, calls),
     now: () => clock.now,
     addressOf: addresses.addressOf,
     publicAddressOf: addresses.publicAddressOf,
     reservedNames: addresses.reservedNames,
+  };
+  const api = createApi({
+    ...install,
+    ...(jobs === undefined ? {} : { jobs }),
     readToken: (id) => database.getToken(id),
     limits,
     version: INSTALL_VERSION,
@@ -231,6 +239,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
 
   return {
     api,
+    install,
     database,
     store,
     calls,

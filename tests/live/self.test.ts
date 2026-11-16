@@ -32,6 +32,7 @@ const WITH_TOKEN = [
   "set-private",
   "delete-restore",
   "duplicate",
+  "duplicate-job",
   "mcp",
   "export-import",
   "backup-drill",
@@ -46,6 +47,15 @@ const WITH_TOKEN = [
 
 /** How many files the fake's publish of many files holds: what the caps of the API's test install take. */
 const MANY_FILES = 7;
+
+/** How many files the fake's copy for the install's job holds: one more than a first request copies, as on a real run, and under the caps of the API's test install. */
+const LARGE_COPY = 113;
+
+/** Why a run that is not the midnight one leaves out the copy the install's job finishes. */
+const NOT_MIDNIGHT = "the midnight run";
+
+/** The rows the midnight run counts beside a usual one: the copy the install's job finishes, with its source, its one round, its site set unlisted and opened three times, and both sites removed. */
+const JOB_COPY_ROWS = 93;
 
 /** How long one install's run of every check may take, in milliseconds: each publishes, reads and removes sites in this process with no wait in it, all of it work of the processor, which on a busy machine passes the five seconds a test gets. */
 const RUN_MS = 30_000;
@@ -65,10 +75,10 @@ const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "users-follow": 
 /** The checks a run on an install without a domain skips: each needs a rule or a switch of a zone. */
 const ZONE_CHECKS = { crawler: "skipped", "burst-rate-rule": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
 
-/** One fake install, what the run knows of it, and the checks that do not pass on it, by id. `L1` and `dashboard-login` are skipped unless the login is in front, and `demo` unless the install holds the demo's site: whole, or without its worker. */
+/** One fake install, what the run knows of it, and the checks that do not pass on it, by id. Skipped unless said: `L1` and `dashboard-login` behind no login, `demo` with no whole site of it, and `duplicate-job` off the midnight run. */
 type Case = readonly [
   what: string,
-  switches: FakeSwitches & { readonly noToken?: boolean; readonly demoSite?: "whole" | "no-worker" },
+  switches: FakeSwitches & { readonly noToken?: boolean; readonly demoSite?: "whole" | "no-worker"; readonly midnight?: boolean },
   known: Missing,
   notPassed: Readonly<Record<string, "skipped" | "failed">>,
 ];
@@ -126,6 +136,10 @@ const CASES: readonly Case[] = [
   ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, NO_LOGIN],
   ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { ...NO_LOGIN, "burst-rate-rule": "failed" }],
   ["an install with no limit of its own fails the check of that limit", { noOwnLimit: true }, {}, { ...NO_LOGIN, "own-limit": "failed" }],
+  ["the midnight run copies a site too large for one request, and the install's job finishes it", { access: true, midnight: true }, {}, {}],
+  ["the midnight run on an install without a domain copies such a site too, read at the paths of its layout, and the install's job finishes it", { noDomain: true, access: true, midnight: true }, {}, ZONE_CHECKS],
+  ["an install whose provider runs no job, on a midnight run not told so, fails the check of the job: the requests made the copy, and the provider holds no job of it", { access: true, midnight: true, noJobs: true }, {}, { "duplicate-job": "failed" }],
+  ["a midnight run told that the install has no Workflow skips the check of the job", { access: true, midnight: true, noJobs: true }, { jobs: "the Worker's Workflow" }, { "duplicate-job": "skipped" }],
   [
     "a zone whose rules are gone, on a run not told so, fails the checks of those rules",
     { noGuards: true },
@@ -207,7 +221,7 @@ async function drillOn(refusal: Refusal | undefined): Promise<{ readonly result:
 
     return meter.fetch(input, init);
   };
-  const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: counted, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES };
+  const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: counted, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY };
   const { bench, close } = openBench({ ...parts, say: (text) => said.push(text) });
   OPENED.push(close);
 
@@ -231,7 +245,7 @@ afterEach(() => {
 describe("the live checks, against a local fake", () => {
   test.each(CASES)("%s", async (_what, switches, known, notPassed) => {
     const fake = await openFake(switches);
-    const meter = meterBucket(fake.fetch, CEILINGS.checks);
+    const meter = meterBucket(fake.fetch, switches.midnight === true ? CEILINGS.jobCopy : CEILINGS.checks);
     using writes = spyOn(MemoryStore.prototype, "write");
     using lists = spyOn(MemoryStore.prototype, "list");
     const uncounted: string[] = [];
@@ -256,19 +270,22 @@ describe("the live checks, against a local fake", () => {
       pause: fake.pause,
       now: fake.now,
       say: () => undefined,
-      manyFiles: MANY_FILES,
+      manyFiles: MANY_FILES, largeCopy: LARGE_COPY,
       loginList: fake.loginList,
+      jobRun: fake.jobRun,
     });
     OPENED.push(close);
     await settle();
-    Object.assign(missing, await probeMissing(bench, { ...known, ...(switches.noToken === true ? { token: "a token" } : {}) }));
+    const unasked: Missing = switches.midnight === true ? {} : { "job-copy": NOT_MIDNIGHT };
+    Object.assign(missing, await probeMissing(bench, { ...unasked, ...known, ...(switches.noToken === true ? { token: "a token" } : {}) }));
 
     if (switches.demoSite !== undefined) await publishDemoSite(bench, switches.demoSite);
 
     const outcomes = [];
     for (const check of CHECKS) outcomes.push(await runCheck(bench, check));
 
-    const unmet: Case[3] = switches.demoSite === undefined ? { demo: "skipped", ...notPassed } : notPassed;
+    const usual: Case[3] = switches.midnight === true ? {} : { "duplicate-job": "skipped" };
+    const unmet: Case[3] = switches.demoSite === undefined ? { demo: "skipped", ...usual, ...notPassed } : { ...usual, ...notPassed };
     const expected = Object.fromEntries(CHECKS.map((check): [string, Outcome["result"]] => [check.id, BY_HAND.includes(check.id) ? "skipped" : (unmet[check.id] ?? "passed")]));
     expect(Object.fromEntries(outcomes.map((outcome) => [outcome.id, outcome.result]))).toEqual(expected);
 
@@ -282,19 +299,24 @@ describe("the live checks, against a local fake", () => {
   }, RUN_MS);
 
   // The README states what a usual run of the checks makes the database write; a check that grew a publish would spend more of the test account's day than a reader was told, and come nearer the ceiling.
-  test("a run of every check counts the rows the README states, the suite's settings and its sweep among them", async () => {
+  test.each([
+    ["a run of every check counts the rows the README states, the suite's settings and its sweep among them", { "job-copy": NOT_MIDNIGHT }, CHECKS_ROWS, []],
+    ["the midnight run counts the rows of the copy the install's job finishes beside them, the job's own round among them, and says what the job came to", {}, CHECKS_ROWS + JOB_COPY_ROWS, ["duplicate-job: 113 files, 1595 bytes, 1 steps, 2000 ms"]],
+  ] as const)("%s", async (_what, unasked, counted, told) => {
     const fake = await openFake({ access: true });
     const rows = meterRows(fake.fetch, ROW_CEILINGS.checks);
     const missing: Missing = {};
-    const { bench, settle, sweep, close } = openBench({ addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, say: () => undefined, manyFiles: MANY_FILES, loginList: fake.loginList });
+    const said: string[] = [];
+    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY, loginList: fake.loginList, jobRun: fake.jobRun };
+    const { bench, settle, sweep, close } = openBench({ ...parts, say: (line) => said.push(line) });
     OPENED.push(close);
     await settle();
-    Object.assign(missing, await probeMissing(bench, { "many-files": "asked" }));
+    Object.assign(missing, await probeMissing(bench, { "many-files": "asked", ...unasked }));
 
     for (const check of CHECKS) await runCheck(bench, check);
     await sweep();
 
-    expect({ rows: rows.written(), stopped: rows.stopped() }).toEqual({ rows: CHECKS_ROWS, stopped: undefined });
+    expect({ rows: rows.written(), stopped: rows.stopped(), job: said.filter((line) => line.startsWith("duplicate-job")) }).toEqual({ rows: counted, stopped: undefined, job: [...told] });
   }, RUN_MS);
 
   // The README and the check state what one drill costs the install; a drill that grew would spend more of the plan's day than a reader was told.
@@ -333,7 +355,7 @@ describe("the live checks, against a local fake", () => {
       cut += 1;
       throw Object.assign(new TypeError("The socket connection was closed unexpectedly"), { code: "ECONNRESET" });
     };
-    const { bench, close } = openBench({ addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: cutting, pause: fake.pause, now: fake.now, say: (text) => said.push(text), manyFiles: MANY_FILES });
+    const { bench, close } = openBench({ addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: cutting, pause: fake.pause, now: fake.now, say: (text) => said.push(text), manyFiles: MANY_FILES, largeCopy: LARGE_COPY });
     OPENED.push(close);
 
     const check = CHECKS.find((one) => one.id === id);
@@ -355,7 +377,7 @@ describe("the live checks, against a local fake", () => {
       pause: fake.pause,
       now: fake.now,
       say: (text) => said.push(text),
-      manyFiles: MANY_FILES,
+      manyFiles: MANY_FILES, largeCopy: LARGE_COPY,
     });
     OPENED.push(close);
 

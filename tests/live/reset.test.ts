@@ -257,7 +257,8 @@ function demoWith(page: string): Differ {
 /** One more version of a site, published by a person: a page of their own, or a sample's folder as it is. */
 function publishOnto(site: string, sample?: string): Differ {
   return async ({ install, samples }) => {
-    const { bench, close } = openBench({ addresses: ADDRESSES, token: await install.addToken("a person's own"), run: "reset", missing: {}, fetch: install.fetch, pause: async () => undefined, now: () => 0, say: () => undefined, manyFiles: 1 });
+    const parts = { addresses: ADDRESSES, token: await install.addToken("a person's own"), run: "reset", missing: {}, fetch: install.fetch, pause: async () => undefined, now: () => 0, manyFiles: 1, largeCopy: 1 };
+    const { bench, close } = openBench({ ...parts, say: () => undefined });
     OPENED.push(close);
     const [row] = await install.sql("SELECT id FROM sites WHERE name = ?", [site]);
     const folder = sample === undefined ? bench.folder("<p>one more</p>") : join(samples, sample);
@@ -279,6 +280,7 @@ async function fill(install: Install): Promise<void> {
     now: () => 0,
     say: () => undefined,
     manyFiles: 1,
+    largeCopy: 1,
   });
   OPENED.push(close);
 

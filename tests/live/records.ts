@@ -1,9 +1,10 @@
 // What the live checks share: a check, what an install may lack, and what a check came to.
 
+import type { JobRun } from "../../packages/cloudflare/scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 
 /** Something a check needs that an install, its account, or a run may lack. `person` is always lacking: such a check is done by hand. */
-type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "kept-key" | "person";
+type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "kept-key" | "jobs" | "job-copy" | "person";
 
 /** Why each lacking capability is lacking, in words that name no host and no account. */
 export type Missing = Partial<Record<Capability, string>>;
@@ -73,6 +74,12 @@ export interface Bench {
 
   /** Writes a folder of many small files, an `index.html` among them, and answers its path. */
   readonly manyFiles: () => string;
+
+  /** How many files a site holds that one request of a copy does not take, so that the install's job copies the rest. */
+  readonly largeCopy: number;
+
+  /** Reads, at the provider itself and with the run's own key there, how the job of one upload went. A run with no such key rejects, and so does a provider that holds no such job. */
+  readonly jobRun: (upload: string) => Promise<JobRun>;
 
   /** Publishes a new site through the CLI. */
   readonly publish: (draft: Draft) => Promise<LiveSite>;

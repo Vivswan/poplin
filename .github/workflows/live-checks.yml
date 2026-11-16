@@ -1,4 +1,4 @@
-# Checks a real install on each of the two Cloudflare test accounts after a push to main that changed a file reaching it, and on a manual run.
+# Checks a real install on each of the two Cloudflare test accounts after a push to main that changed a file reaching it, at midnight UTC, and on a manual run.
 # Puts each back to the sample sites after each run of the checks, and at midnight UTC.
 #
 #   with-domain-ci-tests       the account that holds a domain: an install whose every site is a hostname under it
@@ -8,6 +8,7 @@
 #     -> make the standing test install match the commit -> run tests/live against it -> put the install back
 #   a push that changed no such file -> GitHub starts no run
 #   a run by hand with `start_over` ticked -> everything poplin made on the test account removed -> the same steps, from nothing
+#   midnight UTC -> the same steps for main as it is, with one check more: a copy too large for one request, which the install's job finishes
 #
 #   put back: every site that is no sample and not the demo removed, each sample that differs from demo/samples and its table published anew, the demo published when its files differ, waiting logins and every token removed
 #
@@ -75,7 +76,7 @@ concurrency:
 
 jobs:
   live:
-    if: github.event_name != 'schedule' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     # One leg for each test account, in this order and one at a time. A leg that fails stops no other: each ends with its own reset.
     strategy:
       fail-fast: false
@@ -154,8 +155,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bun run --silent --cwd packages/cloudflare live:reset
 
-  # The midnight run, one leg for each test account. It shares the lane of the checks, so it never touches an install
-  # while they do. On an account that holds no test install it says so and ends green.
+  # The midnight reset, one leg for each test account, beside the checks of that night. It shares their lane, so it never
+  # touches an install while they do, and it puts an install back when they stopped before their own reset. On an account
+  # that holds no test install it says so and ends green.
   reset:
     if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
     strategy:

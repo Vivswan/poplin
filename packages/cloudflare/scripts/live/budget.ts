@@ -3,7 +3,7 @@
 //   PUT    /api/uploads/:upload/file     a write         GET    /api/uploads/:upload              a list
 //   POST   /api/uploads/:upload/finish   a list          DELETE /api/uploads/:upload              a list
 //   DELETE /api/sites/:site              a list          POST   /api/sites/:site/duplicate        a list
-//                                                        GET    /api/export/sites/:site/files     a list
+//   POST   /api/uploads/:upload/tickets  a list          GET    /api/export/sites/:site/files     a list
 //
 // Each such request counts as one, before it is sent. A request past the ceiling is not sent, and every one after it: each is answered here as refused.
 // The refusal is a 403, which the CLI does not send again: a request that got no answer is one it sends again after a pause.
@@ -17,6 +17,7 @@ import type { Fetch } from "../../../cli/src/client/client";
 /** The routes whose every request makes the install write to the bucket or list it. One the app does not declare does not compile. */
 const SPENDING = [
   { method: "PUT", path: "/api/uploads/:upload/file" },
+  { method: "POST", path: "/api/uploads/:upload/tickets" },
   { method: "GET", path: "/api/uploads/:upload" },
   { method: "POST", path: "/api/uploads/:upload/finish" },
   { method: "DELETE", path: "/api/uploads/:upload" },
@@ -28,8 +29,8 @@ const SPENDING = [
 /** The method and the path of each spending route, as a request is matched against them. */
 const MATCHERS = SPENDING.map(({ method, path }) => ({ method, path: new URLPattern({ pathname: path }) }));
 
-/** The most bucket writes and lists each step of a run may ask for: the checks, the checks with the publish of two thousand files, and the reset. `orphans` is the most lists and deletes a run asks Cloudflare for to remove the files no record names. */
-export const CEILINGS = { checks: 150, manyFiles: 2300, reset: 150, orphans: 300 } as const;
+/** The most bucket writes and lists each step of a run may ask for: the checks, those with the job's copy, those with two thousand files, and the reset. `orphans`: the most lists and deletes a run asks Cloudflare for to remove files no record names. */
+export const CEILINGS = { checks: 150, jobCopy: 300, manyFiles: 2300, reset: 150, orphans: 300 } as const;
 
 /** The status a held-back request is answered with. */
 const HELD_BACK = 403;

@@ -5,6 +5,7 @@ import { reset } from "cloudflare:test";
 import type { Api } from "@poplin/app/src/api/api";
 import type { ExportedSite } from "@poplin/core/src/actions/export";
 import { publishSite } from "@poplin/core/src/actions/publish";
+import { parseUploadId } from "@poplin/core/src/records/upload";
 import { settingsFromText } from "@poplin/core/src/records/settings";
 import { dayOf } from "@poplin/core/src/records/views";
 import { sha256Of } from "@poplin/core/src/storage/storage";
@@ -19,9 +20,11 @@ import bundleMap from "../../dist/worker.js.map?raw";
 import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
 import { readShell } from "../../../app/tests/console/support/shell";
 import { meterRows } from "../../scripts/live/rows";
+import { roundStep } from "../../src/jobs/workflow";
 import type { Bindings } from "../../src/worker/bindings";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { signer } from "../login/support/access";
+import { idleWorkflow } from "./support/budget-rows-jobs";
 import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
 import {
   ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
@@ -1171,6 +1174,21 @@ describe("the rows the live checks count", () => {
     const copied = { site: large.site.id };
     const begun = await step("a copy of 113 files begun", async () => done<{ copy: { upload: string } }>(await calls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: {} })));
     await step("that copy gone on with, and finished", async () => done(await calls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: { upload: begun.copy.upload } })));
+    // The same copy on a Worker bound to its Workflow, which the harness reaches through a meter of its own: an ask writes nothing, and the job's one round, which no request shows, is counted with the answer that names the site.
+    const bound: Bindings = { ...bindings, JOBS: idleWorkflow() };
+    const jobWorker = instance(w);
+    const jobMeter = meterRows((input, init) => ask(jobWorker, input, init, bound), 10_000);
+    const jobCalls = api(jobWorker, await tokenOf(w, "admin"), jobMeter.fetch);
+    const beforeJob = rows.written;
+    const byJob = await done<{ copy: { upload: string } }>(await jobCalls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: { name: "large-by-job" } }));
+    const upload = parseUploadId(byJob.copy.upload);
+    if (upload === undefined) throw new Error("the copy named no upload");
+
+    const asked = await done<{ site: unknown; copy: { copied: number | null } }>(await jobCalls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: { upload } }));
+    const round = await roundStep(await jobWorker.starting(bound), { kind: "copy", upload });
+    const found = await done<{ site: unknown }>(await jobCalls.sites[":site"].duplicate.$post({ param: copied, query: {}, json: { upload } }));
+    expect({ watched: [asked.site, asked.copy.copied], round, made: found.site !== null }).toEqual({ watched: [null, null], round: "done", made: true });
+    pairs["a copy of 113 files the install's job finishes: its begin, an ask, the job's round, and the ask that finds the site"] = [rows.written - beforeJob, jobMeter.written()];
     const again = async (): Promise<Published> => finish(await calls.uploads.$post({ query: {}, json: { ...site, files: [declared] } }));
     await step("a second version", again);
     await again();
@@ -1237,6 +1255,8 @@ describe("the rows the live checks count", () => {
         // A copy that takes more requests is counted as whole at its first, which writes the upload alone.
         "a copy of 113 files begun": [6, 21],
         "that copy gone on with, and finished": [16, 16],
+        // The begin is counted as a copy made whole, 15 rows above what it wrote, and the job's round and its finish as 17, one above what they wrote.
+        "a copy of 113 files the install's job finishes: its begin, an ask, the job's round, and the ask that finds the site": [22, 38],
         "a second version": [13, 13],
         "a fourth version, which drops the first": [17, 17],
         "a page opened": [2, 2],

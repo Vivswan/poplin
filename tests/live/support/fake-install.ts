@@ -18,6 +18,7 @@
 // Every answer on a site hostname names the data center it came through, as the edge's `cf-ray` does, and `/cdn-cgi/trace` there says which address the edge saw.
 //
 // The fake's time stands still while requests are sent and moves on only in a pause, so its two limits count as the real ones do: by the minute and by ten seconds.
+// A pause is also when the fake's provider works with nobody asking: each job that was started runs one round in it, as one step.
 
 import { createApi } from "../../../packages/app/src/api/api";
 import type { SiteAddresses } from "../../../packages/app/src/sites/addresses";
@@ -26,6 +27,9 @@ import { serveSite } from "../../../packages/app/src/sites/serve";
 import { type ApiInstall, INSTALL_VERSION, LIMITS, openApi } from "../../../packages/app/tests/api/support/install";
 import { ADDRESSES } from "../../../packages/app/tests/sites/support/layout";
 import type { Fetch } from "../../../packages/cli/src/client/client";
+import type { JobRun } from "../../../packages/cloudflare/scripts/live/job-run";
+import type { Job, Jobs } from "../../../packages/core/src/jobs/jobs";
+import { runJob } from "../../../packages/core/src/jobs/run-job";
 import { type Hostname, parseHostname } from "../../../packages/core/src/names/hostname";
 import { type LiveAddresses, liveAddresses } from "../addresses";
 
@@ -135,14 +139,18 @@ export interface FakeSwitches {
 
   /** A fault: a site's hostname answers the API's paths as the dashboard's hostname does. */
   readonly apiOnSiteHosts?: boolean;
+
+  /** The install's provider runs no job, on a run not told so: each request that asks after a copy copies its next files, and the provider holds no job to read. */
+  readonly noJobs?: boolean;
 }
 
-/** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list its provider holds, and the pause that moves its time on. */
+/** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list and the jobs its provider holds, and the pause that moves its time on. */
 interface Fake {
   readonly fetch: Fetch;
   readonly addresses: LiveAddresses;
   readonly token: string;
   readonly loginList: () => Promise<readonly string[]>;
+  readonly jobRun: (upload: string) => Promise<JobRun>;
   readonly pause: (ms: number) => Promise<void>;
   readonly now: () => number;
 }
@@ -211,8 +219,10 @@ function hostOf(raw: string): Hostname {
  * The place of a fake without a domain: the test install's database, store, tokens, and users behind an API that writes each site's address as a path.
  *
  * The hosts are written here by hand, and not taken from the addresses the checks type, so a check that typed another host would get no answer.
+ *
+ * @param jobs - the provider's background work; left out, a provider that runs no job
  */
-function freeAddressPlace(install: ApiInstall): Place {
+function freeAddressPlace(install: ApiInstall, jobs: Jobs | undefined): Place {
   const sites = pathAddresses({ sitesHost: hostOf(FREE_HOSTS.sites), privateHost: hostOf(FREE_HOSTS.private) });
   const api = createApi({
     database: install.database,
@@ -237,6 +247,7 @@ function freeAddressPlace(install: ApiInstall): Place {
       },
     },
     update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
+    ...(jobs === undefined ? {} : { jobs }),
   });
 
   return { adminHost: FREE_HOSTS.admin, sites, api, typed: liveAddresses({ kind: "account address", account: FAKE_ACCOUNT }), privateHost: FREE_HOSTS.private };
@@ -248,13 +259,24 @@ function freeAddressPlace(install: ApiInstall): Place {
  * @returns the fake; a request to a hostname it does not answer on rejects, as one to a hostname with no server does
  */
 export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
-  const install = await openApi();
+  // The fake's provider keeps each job it was handed, with how many steps it ran: one that was stopped is told as failed.
+  const runs = new Map<string, { readonly job: Job; steps: number; state: JobRun["state"] }>();
+  const jobs: Jobs = {
+    background: true,
+    start: async (job) => void runs.set(job.upload, { job, steps: 0, state: "running" }),
+    stop: async (job) => {
+      const run = runs.get(job.upload);
+      if (run?.state === "running") run.state = "failed";
+    },
+  };
+  const held = switches.noJobs === true ? undefined : jobs;
+  const install = await openApi({}, LIMITS, undefined, held);
   const settings = await install.database.readSettings();
   if (settings === undefined) throw new Error("the fake install has no settings");
 
   const place: Place =
     switches.noDomain === true
-      ? freeAddressPlace(install)
+      ? freeAddressPlace(install, held)
       : { adminHost: `poplin.${FAKE_DOMAIN}`, sites: ADDRESSES, api: install.api, typed: liveAddresses({ kind: "domain", domain: FAKE_DOMAIN }), privateHost: undefined };
   // The rules of a zone: an install without a domain has no zone, so none of them stands in front of it.
   const zone = switches.noDomain !== true;
@@ -368,7 +390,19 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
   const pause = async (ms: number): Promise<void> => {
     time += ms;
+
+    for (const run of [...runs.values()].filter((held) => held.state === "running")) {
+      run.steps += 1;
+      if ((await runJob(install.install, run.job)) === "done") run.state = "done";
+    }
   };
 
-  return { fetch, addresses: place.typed, token: install.tokens.admin, loginList, pause, now: () => time };
+  const jobRun = async (upload: string): Promise<JobRun> => {
+    const run = runs.get(upload);
+    if (run === undefined) throw new Error("the fake's provider holds no job of this upload");
+
+    return { state: run.state, steps: run.steps };
+  };
+
+  return { fetch, addresses: place.typed, token: install.tokens.admin, loginList, jobRun, pause, now: () => time };
 }
