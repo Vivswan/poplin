@@ -187,26 +187,31 @@
 }
 
 /* On a phone every control is tall enough for a finger. The rule sits outside the layers, so it holds whatever size a screen gave the control. */
+/* A button that opens a menu, a dialog, a sheet, or a hint carries that part's slot name in place of its own, so a button is found by the class every button has. */
 @media (max-width: 767.98px) {
-  [data-slot="button"],
+  .group\/button,
   [data-slot="popover-trigger"],
   [data-slot="alert-dialog-action"],
   [data-slot="alert-dialog-cancel"],
   [data-slot="toggle"],
   [data-slot="toggle-group-item"],
+  [data-slot="tabs-trigger"],
   [data-slot="input"],
   [data-slot="input-group"],
   [data-slot="select-trigger"] {
     min-height: 2.5rem;
   }
-  [data-slot="button"],
+  .group\/button,
   [data-slot="popover-trigger"],
   [data-slot="toggle"] {
     min-width: 2.5rem;
   }
-  [data-slot="input-group"] [data-slot="button"] {
+  [data-slot="input-group"] .group\/button {
     min-width: 0;
     min-height: 0;
+  }
+  [data-slot="tabs-list"] {
+    height: auto;
   }
 }
 
