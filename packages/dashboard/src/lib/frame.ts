@@ -6,7 +6,7 @@ import type { InferResponseType } from "hono/client";
 import { answerOf, api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
 
-/** The key the frame's data is kept under. It sits under the settings' key: a saved setting, or a saved update link, makes it stale with them. A run on the domain, and a try to start an update, mark it stale by this key. */
+/** The key the frame's data is kept under. It sits under the settings' key: a saved setting makes it stale with them. A run on the domain, and a try to start an update, mark it stale by this key. */
 export const FRAME_KEY = ["settings", "frame"] as const;
 
 /** How long the frame's data stands as it was read, in milliseconds. Past it, a page that is looked at again, or moved to another screen, reads it again. */
@@ -17,6 +17,9 @@ const READ_AGAIN_MS = 15 * 60_000;
 
 /** The key it is kept under that an update was started from this page. */
 const STARTED_KEY = ["update", "started"] as const;
+
+/** Where a key is to be had, after a sentence that says the install holds none: only a console with a Domain screen has the place. */
+export const GET_KEY = BOOT.domain ? " Open Domain and press Repair." : "";
 
 /** What the server answers. */
 type Frame = InferResponseType<typeof api.frame.$get, 200>;

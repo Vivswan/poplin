@@ -24,7 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
 import { useScreenFocus } from "@/lib/focus";
-import { FRAME_KEY, useFrame, useStarted } from "@/lib/frame";
+import { FRAME_KEY, GET_KEY, useFrame, useStarted } from "@/lib/frame";
 import { sayDone, sayRefused, send } from "@/lib/notify";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { problemCount } from "@/problems/problem-words";
@@ -52,6 +52,9 @@ const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focu
 
 /** What keeps the router from marking a link of the frame as the place the address is at for every address under it, and from adding a class of its own. */
 const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const;
+
+/** What stands where the start of an update would, on an install that holds no key to send one with. */
+const NO_KEY = `poplin holds no key, so it cannot update itself.${GET_KEY}`;
 
 /** The start of an update, where one can be started: what asks before it starts. */
 interface Offer {
@@ -160,7 +163,7 @@ function DemoTag(): ReactNode {
 
 /** The version the install runs and, when a newer one is out, its notes and the start of the update. */
 function VersionLine({ offer, started }: { readonly offer: Offer | undefined; readonly started: boolean }): ReactNode {
-  const { update } = useFrame().data;
+  const { update, starts } = useFrame().data;
 
   return (
     <div className="flex flex-col items-start gap-1.5 px-2.5 text-xs leading-5 text-faint">
@@ -176,19 +179,20 @@ function VersionLine({ offer, started }: { readonly offer: Offer | undefined; re
       {update?.database === true ? (
         <p>This release changes the database, so it never starts by itself.{offer === undefined ? "" : " Press Update now."}</p>
       ) : null}
+      {update !== null && !starts ? <p>{NO_KEY}</p> : null}
       {offer === undefined ? null : (
         <Button variant="outline" size="xs" onClick={offer.ask}>
           Update now
         </Button>
       )}
-      {started ? <p>Update started.</p> : null}
+      {started ? <p>Updated. Reload the page.</p> : null}
     </div>
   );
 }
 
 /** The question before an update is started. An update that changes the database says that no older version reads it afterwards. */
 function questionOf(newest: string, database: boolean): Question {
-  const says = "The install is built again from the newest release. It takes a few minutes, and the sites stay up meanwhile.";
+  const says = "poplin fetches the newest release, checks it, and puts it in place of the running code. It takes a moment, and the sites stay up meanwhile.";
 
   return {
     title: `Update to ${newest}?`,
@@ -198,7 +202,7 @@ function questionOf(newest: string, database: boolean): Question {
 }
 
 /**
- * Offer the start of an update where one can be started: a newer release is known and an update link is saved.
+ * Offer the start of an update where one can be started: a newer release is known and the install holds its key.
  *
  * @returns the offer for the controls that show it, `undefined` where there is none or one was just started, and the question to draw once
  */
@@ -217,13 +221,13 @@ function useOffer(): { readonly offer: Offer | undefined; readonly started: bool
     if (taken === undefined) return;
 
     setStarted();
-    sayDone("Update started. The new version runs in a few minutes.");
+    sayDone(`Updated to ${taken.to}. Reload the page.`);
   };
   const question = (
     <Confirm question={asking && update !== null ? questionOf(update.newest, update.database) : undefined} onAnswer={(yes) => void answer(yes)} />
   );
 
-  // A started update is not offered again from this page: the new version takes its place within minutes.
+  // A started update is not offered again from this page: it runs the client it was loaded with until it is loaded again.
   return { offer: update !== null && starts && !started ? { ask: () => setAsking(true) } : undefined, started, question };
 }
 

@@ -27,7 +27,7 @@ const COUNT = { kind: "number", word: null } as const;
 const OWN_FETCH = globalThis.fetch;
 
 /** The texts the server of these tests starts with, by setting. */
-const AT_START = { default_search_engines: "off", trash_days: "7", max_total_size: "9000MB", update_check: "on", update_channel: "off" } as const;
+const AT_START = { default_search_engines: "off", trash_days: "7", max_total_size: "9000MB", update_check: "on", auto_update: "off", update_channel: "off" } as const;
 
 /** The texts the server of these tests holds, by setting. */
 const stored: Record<string, string> = {};
@@ -61,10 +61,11 @@ function serve({ refusedKey, refusedKeys = [], holds = false }: { readonly refus
         rowOf("trash_days", COUNT),
         rowOf("max_total_size", COUNT, "MB"),
         rowOf("update_check", { kind: "switch" }),
+        rowOf("auto_update", { kind: "switch" }),
         rowOf("update_channel", { kind: "switch" }),
       ];
 
-      return Response.json({ ok: true, rows, updateAddress: { set: false, since: null } });
+      return Response.json({ ok: true, rows });
     }
 
     const { texts } = JSON.parse(String(init.body)) as { readonly texts: Record<string, string> };
@@ -159,7 +160,7 @@ describe("the one page", () => {
       [
         ["New sites", "Show in search engines", "Keep deleted sites"],
         ["Storage", "All sites together"],
-        ["Updates", "Check for new versions", "Update channel", "Update link"],
+        ["Updates", "Check for new versions", "Update automatically", "Update channel"],
       ],
       false,
     ]);
@@ -174,25 +175,6 @@ describe("the address of one setting", () => {
     await waitFor(() => expect(document.activeElement === field(page, "Keep deleted sites")).toBe(true));
 
     expect([document.getElementById(hash)?.contains(document.activeElement), document.getElementById(hash)?.classList.contains("bg-muted/60")]).toEqual([true, true]);
-  });
-});
-
-describe("the update link", () => {
-  // Drift: Escape would do nothing in the field the link is pasted into, where it closes every other thing that was opened, or it would leave the focus on the page itself.
-  test.each([
-    ["Escape in the field", (page: Within) => fireEvent.keyDown(page.getByPlaceholderText("Paste the update link"), { key: "Escape" })],
-    ["Cancel", (page: Within) => fireEvent.click(page.getByRole("button", { name: "Cancel" }))],
-  ] as const)("%s drops what was pasted, closes the field, and gives the focus back to the button that opened it", async (_way, leave) => {
-    const page = await drawn();
-    await press(page.getByRole("button", { name: "Add" }));
-    fireEvent.change(page.getByPlaceholderText("Paste the update link"), { target: { value: "https://poplin.example.com/update/abc" } });
-    const counted = bar(page);
-    await act(async () => {
-      leave(page);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect([counted, page.queryByPlaceholderText("Paste the update link"), bar(page), document.activeElement?.textContent]).toEqual(["1 unsaved change", null, null, "Add"]);
   });
 });
 

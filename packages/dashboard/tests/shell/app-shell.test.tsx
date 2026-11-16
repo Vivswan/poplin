@@ -19,7 +19,7 @@ const THEME_KEY = "test.theme";
 /** What the frame holds besides the note on the domain and the marks. */
 const FRAME = { ok: true, update: null, starts: false, recent: [] } as const;
 
-/** A newer release the install knows of, with an update link saved. */
+/** A newer release the install knows of, on an install that holds its key. */
 const NEWER = { update: { current: BOOT.version, newest: "1.1.0", released: "2026-11-02", notes: "https://example.com/notes", database: false }, starts: true } as const;
 
 /** The marks of an install where nothing went wrong. */

@@ -13,7 +13,7 @@ const BLOCKS = [
   { id: "updates", heading: "Updates" },
 ] as const;
 
-/** The block that is always drawn: it also holds the update link. */
+/** The block that says what went wrong with an update. */
 export const UPDATES = "updates";
 
 /** What the units of a number's text are called beside its field. A unit missing here is shown as it is, such as `MB` or `%`. */
@@ -62,7 +62,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "The most requests one site answers in a minute.", unit: "requests" },
   visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "The most requests one visitor gets in a minute.", unit: "requests" },
   update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day." },
-  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above and an update link." },
+  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above." },
 };
 
 /** A block's id. */
@@ -142,12 +142,12 @@ export function unitWord(key: string, unit: string): string {
 /**
  * Sort the rows into the blocks of the screen.
  *
- * @returns the blocks that hold a row, in the order shown, and the Updates block whether it holds one or not
+ * @returns the blocks that hold a row, in the order shown
  */
 export function blocksOf(rows: readonly Row[]): readonly Block[] {
   const order = Object.keys(WORDS);
   const place = (row: Row): number => (order.includes(row.key) ? order.indexOf(row.key) : order.length);
   const shown = rows.toSorted((one, other) => place(one) - place(other));
 
-  return BLOCKS.map((block) => ({ ...block, rows: shown.filter((row) => wordsOf(row.key).block === block.id) })).filter((block) => block.rows.length > 0 || block.id === UPDATES);
+  return BLOCKS.map((block) => ({ ...block, rows: shown.filter((row) => wordsOf(row.key).block === block.id) })).filter((block) => block.rows.length > 0);
 }

@@ -5,18 +5,17 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFocusHome } from "@/lib/focus";
+import { GET_KEY, useFrame } from "@/lib/frame";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { HomeProblems } from "@/problems/home-problems";
 import { LeaveGuard } from "@/shared/leave-guard";
 import { MiddleColumn } from "@/shared/middle-column";
 import { SaveBar } from "@/shared/save-bar";
-import { type AddressDraft, useAddressDraft } from "@/settings/address-draft";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
 import { controlId, SettingRow } from "@/settings/setting-row";
 import { useDraft } from "@/settings/settings-draft";
 import { type Settings, useSettings } from "@/settings/settings-queries";
 import { type Block, blocksOf, UPDATES, wordsOf } from "@/settings/settings-words";
-import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
 
 /** A group: its heading over its rows, and a line between it and the group before. */
@@ -25,8 +24,8 @@ const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 fi
 /** The look of a group's heading: as large as the screen's title and no larger, and larger than a setting's name. */
 const HEADING = "mb-1 text-base leading-6 font-bold";
 
-/** The setting that starts updates by itself, and what its row says while no update link is saved: the switch then starts nothing. */
-const [AUTO_UPDATE, NEEDS_LINK] = ["auto_update", "Needs an update link to work."] as const;
+/** The setting that starts updates by itself, and what its row says while the install holds no key: the switch then starts nothing. */
+const [AUTO_UPDATE, NEEDS_KEY] = ["auto_update", `Needs poplin's key to work.${GET_KEY}`] as const;
 
 /** How long a block an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
@@ -55,16 +54,16 @@ function RepairNote({ block }: { readonly block: Block }): ReactNode {
   );
 }
 
-/** The blocks of the page: every group of settings under its heading, and the update link at the end of Updates. */
+/** The blocks of the page: every group of settings under its heading. */
 function Groups({
   settings,
   draft,
-  address,
+  keyed,
   marked,
 }: {
   readonly settings: Settings;
   readonly draft: Draft;
-  readonly address: AddressDraft;
+  readonly keyed: boolean;
   readonly marked: string | undefined;
 }): ReactNode {
   return (
@@ -82,10 +81,9 @@ function Groups({
               refusal={draft.refusals[row.key]}
               onChange={(text) => draft.change(row, text)}
               marked={marked === row.key}
-              note={row.key === AUTO_UPDATE && !settings.updateAddress.set ? NEEDS_LINK : undefined}
+              note={row.key === AUTO_UPDATE && !keyed ? NEEDS_KEY : undefined}
             />
           ))}
-          {block.id === UPDATES ? <UpdateAddressRow state={settings.updateAddress} draft={address} /> : null}
         </section>
       ))}
     </>
@@ -143,23 +141,19 @@ export function SettingsScreen(): ReactNode {
   const { data: settings, error } = useSettings();
   // A refused setting may be out of sight: its field takes the focus.
   const draft = useDraft(settings?.rows ?? [], (key) => focus(controlId(key)));
-  const address = useAddressDraft();
-  const count = draft.pending.length + (address.unsaved ? 1 : 0);
-  const busy = draft.busy || address.busy;
+  const keyed = useFrame().data.starts;
+  const count = draft.pending.length;
+  const { busy } = draft;
   const marked = useNamedSetting(settings !== undefined);
-  // Save and Discard leave with their bar, and the focus with them: it goes back to the control of the page that had it last, or, where that was the update link's field and is gone, to the button that opens it.
+  // Save and Discard leave with their bar, and the focus with them: it goes back to the control of the page that had it last.
   const last = useRef<HTMLElement | null>(null);
   const kept = useFocusHome(() => last.current);
 
   const save = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    if (busy || count === 0 || !(await draft.save())) return;
+    if (busy || count === 0) return;
 
-    if (!(await address.save())) focus(ADDRESS_FIELD);
-  };
-  const discard = (): void => {
-    draft.discard();
-    address.discard();
+    await draft.save();
   };
 
   return (
@@ -175,10 +169,10 @@ export function SettingsScreen(): ReactNode {
             <p className="mb-5 text-muted-foreground">How this install treats new sites, visitors, limits, and updates.</p>
             {error === null ? null : <p className="py-8 text-muted-foreground">{error.message}</p>}
             {settings === undefined && error === null ? <Waiting /> : null}
-            {settings === undefined ? null : <Groups settings={settings} draft={draft} address={address} marked={marked} />}
+            {settings === undefined ? null : <Groups settings={settings} draft={draft} keyed={keyed} marked={marked} />}
           </MiddleColumn>
         </div>
-        <SaveBar count={count} busy={busy} onDiscard={discard} />
+        <SaveBar count={count} busy={busy} onDiscard={draft.discard} />
       </form>
       <LeaveGuard unsaved={count > 0} />
     </AppShell>
