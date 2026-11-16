@@ -1,8 +1,8 @@
-// The Usage table: where the icons at a row's end stand, what a day's line is called once the reader's date is another than the UTC day of its number, and the lines of the host's own figures.
+// The Usage screen in a browser: that the table fits its room, where the icons at a row's end stand, what a day's line is called, the lines of the host's own figures, and where the numbers of a phone's list end.
 
 import { expect, type Page } from "@playwright/test";
 
-import { arrive, FIRST_LOAD_MS, screenHeading, test } from "./visit";
+import { arrive, FIRST_LOAD_MS, screenHeading, test, toSection } from "./visit";
 
 /** The screens the walk is taken on: the widest, and the narrowest the table fits. */
 const SCREENS = [
@@ -33,6 +33,32 @@ async function openUsage(page: Page, empty: boolean): Promise<void> {
   await expect(screenHeading(page, "Usage")).toBeVisible();
 }
 
+/** How much wider than its room the Usage table is, in pixels, and the values of it that lost their end. */
+function fit(page: Page): Promise<{ over: number; cut: string[] }> {
+  return page.getByRole("table", { name: "Usage", exact: true }).evaluate((drawn) => {
+    const room = drawn.closest('[data-slot="scroll-area-viewport"]');
+    const cut = [...drawn.querySelectorAll<HTMLElement>("tbody .truncate")].filter((value) => value.scrollWidth > value.clientWidth).map((value) => value.textContent ?? "");
+
+    return { over: (room?.scrollWidth ?? 0) - (room?.clientWidth ?? -1), cut };
+  });
+}
+
+// Drift: the table would keep the widths it measured with its bars after the window is made too narrow for them, and scroll sideways in a room a fresh load fits.
+test("a window made narrower, from 1440 px to 1024 px, still holds the whole Usage table, and its bars are gone", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openUsage(page, false);
+  const bars = page.getByRole("table", { name: "Usage", exact: true }).getByRole("progressbar");
+  await expect(bars.first()).toBeVisible();
+  // The control: the wide table is measured for good, with its fonts in, before the window changes. A measuring still to come would fit the narrow table whatever the resize did.
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(() => fit(page)).toEqual({ over: 0, cut: [] });
+
+  await page.setViewportSize({ width: 1024, height: 768 });
+
+  await expect(bars).toHaveCount(0);
+  await expect.poll(() => fit(page)).toEqual({ over: 0, cut: [] });
+});
+
 for (const size of SCREENS) {
   test.describe(`on a screen ${size.width} px wide, in the Usage table`, () => {
     test.use({ viewport: size });
@@ -54,12 +80,25 @@ for (const size of SCREENS) {
         expect([...new Set(rows.map((row) => row.kinds.join(" ")))].sort()).toEqual([...install.kinds]);
         expect({ ends: new Set(rows.map((row) => row.end)).size, sizes: new Set(rows.flatMap((row) => row.sizes)).size }).toEqual({ ends: 1, sizes: 1 });
       });
+
+      // Drift: the columns would need more than the room of the narrowest screen again, so the table scrolls sideways inside itself and "Near the limit" loses its end.
+      test(`in ${install.name}, the table is as wide as its room and no value is cut`, async ({ page }) => {
+        await openUsage(page, install.empty);
+        const table = page.getByRole("table", { name: "Usage", exact: true });
+        await expect(table.getByRole("row").nth(1)).toBeVisible();
+
+        // The control: the sample install has a line near its limit, whose words are the widest of their column.
+        expect((await table.getByText("Near the limit", { exact: true }).count()) > 0).toBe(!install.empty);
+        // The table measures its columns again once its fonts are in: the reading is taken until it holds.
+        await expect.poll(() => fit(page)).toEqual({ over: 0, cut: [] });
+      });
     }
   });
 }
 
 // Drift: a day's number is of a UTC day; called "today" on a reader's other date, it reads as the number of a day it is not of.
-test("with the reader's clock three days on, a day's line names the UTC day of its number in place of today", async ({ page }) => {
+// A name with a day in it is the longest there is: held to the width of any other column, it would lose its end on a screen with room to spare.
+test("with the reader's clock three days on, a day's line names the UTC day of its number in place of today, and every name is whole", async ({ page }) => {
   await page.clock.setFixedTime(Date.now() + THREE_DAYS_MS);
   await openUsage(page, false);
   const names = page.getByRole("table", { name: "Usage", exact: true }).locator("tbody td:first-child");
@@ -72,6 +111,32 @@ test("with the reader's clock three days on, a day's line names the UTC day of i
     "Database rows read on DD Mon UTC",
     "Database rows written on DD Mon UTC",
   ]);
+  // The table measures its columns again once its fonts are in: the reading is taken until it holds.
+  await expect.poll(() => names.locator(".truncate").evaluateAll((all) => all.filter((name) => name.scrollWidth > name.clientWidth).map((name) => name.textContent))).toEqual([]);
+});
+
+test.describe("on a phone, in the list of Usage", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  // Drift: a line's limit would stand beside its number again, so each number ends where its own limit starts, and the numbers of the list end at as many edges as the limits have lengths.
+  test("every number ends at one right edge, and every limit ends under it", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Usage");
+    const lines = page.getByRole("list", { name: "Usage", exact: true }).getByRole("listitem");
+    await expect(lines.first()).toBeVisible();
+
+    // Of every line: where its number ends, where its limit ends, and the limit's words.
+    const ends = await lines.evaluateAll((all) =>
+      all.map((line) => {
+        const [used, limit] = [line.children[0]?.children[1], line.children[1]?.children[0]];
+
+        return { used: Math.round(used?.getBoundingClientRect().right ?? 0), limit: Math.round(limit?.getBoundingClientRect().right ?? -1), words: limit?.textContent ?? "" };
+      }),
+    );
+    // The control: what is measured as a limit reads as one, and the limits are of more than one length.
+    expect([ends.every((line) => /^(of .+|No limit)$/u.test(line.words)), new Set(ends.map((line) => line.words.length)).size > 1]).toEqual([true, true]);
+    expect([...new Set(ends.flatMap((line) => [line.used, line.limit]))]).toHaveLength(1);
+  });
 });
 
 test.describe("for a reader in UTC, whose date is the day of the numbers", () => {
