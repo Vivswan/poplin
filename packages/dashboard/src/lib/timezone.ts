@@ -6,8 +6,11 @@ import useLocalStorageState from "use-local-storage-state";
 /** The key the choice is kept under in the browser. */
 const KEY = "poplin.timezone";
 
-/** How many milliseconds an hour and a day hold. */
-const [HOUR_MS, DAY_MS] = [3_600_000, 86_400_000] as const;
+/** How many milliseconds a second, a minute, an hour, and a day hold. */
+const [SECOND_MS, MINUTE_MS, HOUR_MS, DAY_MS] = [1000, 60_000, 3_600_000, 86_400_000] as const;
+
+/** How many seconds the age of a young moment is told in steps of. */
+const SECONDS_STEP = 10;
 
 /** How a moment within a week is written: 3 hours ago, yesterday, 2 days ago. */
 const RELATIVE_FORMAT = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
@@ -123,6 +126,21 @@ export function briefMomentIn(moment: number, now: number, choice: TimeZoneChoic
   if (days === 0 || Math.abs(moment - now) < DAY_MS / 2) return RELATIVE_FORMAT.format(hours, "hour");
 
   return Math.abs(days) >= 7 ? dayIn(moment, choice, own) : RELATIVE_FORMAT.format(days, "day");
+}
+
+/**
+ * Write how long ago a read was made, as the words after "Updated": "just now" within ten seconds, the seconds in tens within a minute, the minutes within an hour, and a brief time otherwise.
+ *
+ * @param moment - milliseconds since the epoch
+ * @param now - the moment it is read at
+ */
+export function agoWords(moment: number, now: number): string {
+  const passed = Math.max(now - moment, 0);
+  if (passed < SECONDS_STEP * SECOND_MS) return "just now";
+  if (passed < MINUTE_MS) return RELATIVE_FORMAT.format(-Math.floor(passed / (SECONDS_STEP * SECOND_MS)) * SECONDS_STEP, "second");
+  if (passed < HOUR_MS) return RELATIVE_FORMAT.format(-Math.floor(passed / MINUTE_MS), "minute");
+
+  return briefMomentIn(moment, now);
 }
 
 /**
