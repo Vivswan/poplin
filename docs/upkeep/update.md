@@ -59,7 +59,7 @@ the install now runs 0.3.1; it ran 0.3.0
 
 | The install finds                                         | It answers            | Changed |
 | --------------------------------------------------------- | --------------------- | ------- |
-| no release above the running version                      | `no_update`           | nothing |
+| no release above the running version, or `--to` the version it runs | `no_update` | nothing |
 | a start in the same minute                                | `too_many_requests`   | nothing |
 | a key Cloudflare no longer takes, or none                 | `key_refused`, `no_key` | nothing |
 | a key made before poplin could update itself              | `lacks_right`, about `Workers Scripts Write` | nothing |
@@ -92,7 +92,7 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | did not change the database                       | you start it: the button, or the command                                                |
 | could not change the database: its step failed    | the install does it by itself, at the new version's first request                       |
-| changed the database                              | refused: `release_refused`, about `database`. The older code cannot read that database  |
+| changed the database                              | refused: `no_update`, and no button. The older code cannot read that database           |
 | left code too broken to answer                    | by hand, at Cloudflare: [Roll back at Cloudflare](#roll-back-at-cloudflare)             |
 
 | Where          | Do                                                                                          |
@@ -113,7 +113,9 @@ the install now runs 0.3.0; it ran 0.3.1
 
 The upload of an update writes one variable onto the Worker, `LAST_UPDATE`: the version it came from, the version it took, the schema of the database, and when.
 
-The button is there while that variable names the running version and the database is as that update found it. A deploy of another version, made any other way, takes the button away. `--to` still takes any published version, and is refused the same way when the database changed.
+The button is there while that variable names the running version as one taken from a lower version, and the database is as that update found it. Going back takes the button away, and so does a deploy of another version made any other way.
+
+`--to` goes below the running version only where the button is: to the version before, and no further. Any other lower version, and the running one, is answered `no_update`. A published version above the running one is taken.
 
 ### When a database step fails
 
