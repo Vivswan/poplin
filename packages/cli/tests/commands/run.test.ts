@@ -51,6 +51,15 @@ const CODES: Readonly<Record<Code, true>> = {
 /** An id in the form of a site id that no site has. */
 const NO_SITE = "zzzzzzzzzzzz";
 
+/** The layout of an install whose public addresses end in `page`. */
+const PAGE = { kind: "hostname", public_word: "page" } as const;
+
+/** The layout of an install whose public addresses end in `site`. */
+const SITE = { kind: "hostname", public_word: "site" } as const;
+
+/** The layout of an install that keeps its sites at paths on two hosts. */
+const PATHS = { kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" } as const;
+
 function answer(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
@@ -98,20 +107,30 @@ describe("run", () => {
     expect(json).toEqual((await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body);
   });
 
-  // Drift: only the install knows the word its public addresses end in. A command that guessed it would read `notes-site.example.com` as the public name `notes` on an install whose word is `page`, and delete the site at `notes-page`.
+  // Drift: only the install knows how its addresses are laid out. A command that guessed would delete the site at `notes-page` when given `notes-site.example.com`, or take the first path segment of any host for a site of this install.
   test.each([
-    ["page", "https://LABEL-p-poplin.example.com/", ["GET /api/sites/LABEL"]],
-    ["page", "https://LABEL-u-poplin.example.com/", ["GET /api/sites/LABEL"]],
-    ["page", "https://notes-page.example.com/", ["GET /api/whoami", "GET /api/sites/notes"]],
-    ["site", "https://notes-site.example.com/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
-    ["site", "ID", ["GET /api/sites/ID"]],
-    ["site", "LABEL", ["GET /api/sites/LABEL"]],
-    ["site", "notes", ["GET /api/sites/notes"]],
-    ["page", "https://notes-site.example.com/", "https://poplin.example.com"],
-    ["site", "https://notes-page.example.com/", "https://poplin.example.com"],
-    ["page", "https://notes-page.example.org/", "example.org"],
-  ] as const)("on an install whose public word is %j, %s names the one site, or none: %j", async (publicWord, form, outcome) => {
-    const bench = await openBench(publicWord);
+    [PAGE, "https://LABEL-p-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    [PAGE, "https://LABEL-u-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    [PAGE, "https://notes-page.example.com/", ["GET /api/whoami", "GET /api/sites/notes"]],
+    [SITE, "https://notes-site.example.com/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
+    [SITE, "ID", ["GET /api/sites/ID"]],
+    [SITE, "LABEL", ["GET /api/sites/LABEL"]],
+    [SITE, "notes", ["GET /api/sites/notes"]],
+    [PATHS, "https://private.example.net/LABEL/", ["GET /api/whoami", "GET /api/sites/LABEL"]],
+    [PATHS, "sites.example.net/ID/pages/1.html?x=1#top", ["GET /api/whoami", "GET /api/sites/ID"]],
+    [PATHS, "https://sites.example.net/notes/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
+    [PATHS, "LABEL", ["GET /api/sites/LABEL"]],
+    [PAGE, "https://notes-site.example.com/", "https://poplin.example.com"],
+    [SITE, "https://notes-page.example.com/", "https://poplin.example.com"],
+    [PAGE, "https://notes-page.example.org/", "example.org"],
+    [PAGE, "https://sites.example.net/LABEL/", "sites.example.net/LABEL is not the address of a site of https://poplin.example.com"],
+    [PAGE, "https://notes-page.example.org/guide", "notes-page.example.org/guide is not the address of a site of https://poplin.example.com"],
+    [PATHS, "https://private.example.net/notes/", "private.example.net/notes is not the address of a site of https://poplin.example.com"],
+    [PATHS, "https://sites.example.org/LABEL/", "sites.example.org/LABEL is not the address of a site of https://poplin.example.com"],
+    [PATHS, "https://sites.example.net:8443/LABEL/", "sites.example.net:8443/LABEL is not the address of a site of https://poplin.example.com"],
+    [PATHS, "https://notes-page.example.com/", "notes-page.example.com is not the address of a site of https://poplin.example.com"],
+  ] as const)("on an install laid out as %j, %s names the one site, or none: %j", async (layout, form, outcome) => {
+    const bench = await openBench(layout);
     const label = (jsonOf(await bench.run(`${folderOf("report", { "index.html": "<title>Report</title>" })} --public --public-name notes --json`)).site as { label: string }).label;
     const typed = form.replace("LABEL", label).replace("ID", label.slice(-12));
     const before = await stateOf(bench);
@@ -122,7 +141,10 @@ describe("run", () => {
     const deleted = await bench.run(`delete ${typed} --json`);
 
     if (typeof outcome === "string") {
-      expect([shown.code, shown.out, shown.err[0]?.startsWith("no site with that id or public name: "), shown.err[0]?.includes(outcome), jsonOf(deleted).error]).toEqual([1, [], true, true, expect.objectContaining({ code: "not_found" })]);
+      const said = shown.err[0] ?? "";
+
+      expect([shown.code, shown.out, said.startsWith("no site with that id or public name: "), said.includes(outcome.replace("LABEL", label)), shown.err[1]]).toEqual([1, [], true, true, "poplin list shows every site"]);
+      expect(jsonOf(deleted).error).toEqual(expect.objectContaining({ code: "not_found" }));
       expect([asked, await stateOf(bench)]).toEqual([outcome === "example.org" ? [] : ["GET /api/whoami"], before]);
 
       return;
@@ -518,7 +540,7 @@ describe("run", () => {
     const machine = { env: { POPLIN_CONFIG_DIR: join(bench.home, "config") }, platform: process.platform, home: bench.home };
     await saveLogin({ server: ORIGIN, token } as Login, machine);
     const deep = `${'{"a":'.repeat(10_000)}1${"}".repeat(10_000)}`;
-    bench.hook = () => new Response(`{"token":{"id":"0000000000000000","scope":"admin","note":"","created":0,"expires":"never"},"version":"1.0.0","public_word":"page","more":${deep}}`, { status: 200 });
+    bench.hook = () => new Response(`{"token":{"id":"0000000000000000","scope":"admin","note":"","created":0,"expires":"never"},"version":"1.0.0","layout":{"kind":"hostname","public_word":"page"},"more":${deep}}`, { status: 200 });
 
     const typed = await bench.run(`show ${token} --json`, { env: {} });
     const dry = await bench.run(`${folderOf("report", { "index.html": "x" })} --dry-run --title ${token}`, { env: {} });

@@ -206,12 +206,12 @@ describe("parseCommand", () => {
       ),
     ],
     [
-      "poplin show https://example.com/report",
-      refusal('<site> "https://example.com/report" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
+      "poplin show https://example.com/report.html",
+      refusal('<site> "https://example.com/report.html" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
     ],
     [
-      "poplin show <https://example.com/report>",
-      refusal('<site> "<https://example.com/report>" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
+      "poplin show <https://example.com/report.html>",
+      refusal('<site> "<https://example.com/report.html>" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
     ],
     ["poplin show report.html", refusal('<site> "report.html" is not a site: it is not the address of a site, such as report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS)],
     ["poplin ./report --site ./other", refusal('"./other" is a path. Give the site\'s label; poplin list shows it.')],

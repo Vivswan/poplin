@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { isOfInstall, readSiteReference, settleSite } from "../../src/sites/references";
+import * as v from "valibot";
+
+import { ADDRESS_LAYOUT } from "../../src/sites/address-layout";
+import { mayBeOfInstall, readSiteReference, settleSite } from "../../src/sites/references";
 
 const ID = "k3f9x2ab71qz";
 const LABEL = `report--${ID}`;
@@ -8,6 +11,9 @@ const SITE = { kind: "site", name: "report", id: ID };
 const SERVER = "https://poplin.example.com";
 const NO_ADDRESS = { ok: false, refusal: "no-site-address" };
 const NO_URL = { ok: false, refusal: "no-site-url" };
+const PAGE = { kind: "hostname", public_word: "page" } as const;
+const SITE_WORD = { kind: "hostname", public_word: "site" } as const;
+const PATHS = { kind: "path", sites_host: "sites.example.net", private_host: "private.example.net:8443" } as const;
 
 describe("readSiteReference", () => {
   // Drift: a person pastes whatever the browser, the dashboard, or an agent showed; each form must name the one site its label names, and say where an address sits.
@@ -35,7 +41,8 @@ describe("readSiteReference", () => {
     [`${LABEL}-poplin`, SITE],
     ["https://docs-page.example.com/", { kind: "address", label: "docs-page", under: "example.com" }],
     ["docs-page.example.com", { kind: "address", label: "docs-page", under: "example.com" }],
-    ["https://q3-docs-site.example.com/guide", { kind: "address", label: "q3-docs-site", under: "example.com" }],
+    ["https://q3-docs-site.example.com/guide", { kind: "address", label: "q3-docs-site", under: "example.com", segment: { kind: "public-name", name: "guide" } }],
+    [`https://${LABEL}-p-poplin.example.com/docs/`, { ...SITE, under: "example.com" }],
     ["https://docs-poplin.example.com/", { kind: "address", label: "docs-poplin", under: "example.com" }],
     [`  ${LABEL}\n`, SITE],
     [`"${LABEL}"`, SITE],
@@ -59,7 +66,16 @@ describe("readSiteReference", () => {
   // Drift: an address that is no site's must be refused as one, never read on as a name: a guess would change or delete some other site.
   test.each([
     ["https://example.com/", NO_URL],
-    ["https://poplin.example.com/sites", NO_URL],
+    ["https://poplin.example.com/", NO_URL],
+    [`https://sites.example.net/Report--${ID}/`, NO_URL],
+    ["https://sites.example.net/report--short/", NO_URL],
+    ["https://sites.example.net/a.html", NO_URL],
+    ["https://sites.example.net//docs/", NO_URL],
+    ["https://sites.example.net/?docs", NO_URL],
+    ["https://localhost:4400/docs/", NO_URL],
+    ["https://[::1]/docs/", NO_URL],
+    ["docs/report", NO_ADDRESS],
+    ["../docs", NO_ADDRESS],
     ["https://report-p-poplin.example.com/", NO_URL],
     ["https://report--short-p-poplin.example.com/", NO_URL],
     [`https://${LABEL}-x-poplin.example.com/`, NO_URL],
@@ -72,7 +88,6 @@ describe("readSiteReference", () => {
     [`https://example.org/?next=${LABEL}-p-poplin.example.com`, NO_URL],
     [`${LABEL}-p-poplin.example.com://user:secret@other--w8t1c5n0ze4u-p-poplin.example.com/`, NO_URL],
     [`${LABEL}-p-poplin.example.com://other--w8t1c5n0ze4u-p-poplin.example.com/`, NO_URL],
-    ["<https://example.com/report>", NO_URL],
     [`https://${LABEL}-p-poplin/`, NO_URL],
     [`https://${LABEL}-p-poplin.example.com:port/`, NO_ADDRESS],
     ["https://docs-page2.example.com/", NO_URL],
@@ -94,25 +109,43 @@ describe("readSiteReference", () => {
 });
 
 describe("settleSite", () => {
-  // Drift: the public word is the install's own, so one address is a site under one install and nothing under another; a guess would change or delete the site of another name.
+  // Drift: the layout is the install's own, so one address is a site under one install and nothing under another; a guess would change or delete the site of another name, or of another install.
   test.each([
-    ["https://docs-page.example.com/", "page", { kind: "public-name", name: "docs", under: "example.com" }],
-    ["https://docs-site.example.com/", "site", { kind: "public-name", name: "docs", under: "example.com" }],
-    ["https://q3-docs-site.example.com:8443/guide", "site", { kind: "public-name", name: "q3-docs", under: "example.com:8443" }],
-    ["https://docs-poplin.example.com/", "poplin", { kind: "public-name", name: "docs", under: "example.com" }],
-    ["https://notes-site.example.com/", "page", undefined],
-    ["https://docs-page.example.com/", "site", undefined],
-    ["https://docs-poplin.example.com/", "page", undefined],
-  ] as ReadonlyArray<readonly [string, string, unknown]>)("%j, under the public word %j, is %j", (typed, publicWord, site) => {
+    ["https://docs-page.example.com/", SERVER, PAGE, { kind: "public-name", name: "docs", under: "example.com" }],
+    ["https://docs-site.example.com/", SERVER, SITE_WORD, { kind: "public-name", name: "docs", under: "example.com" }],
+    ["https://q3-docs-site.example.com:8443/guide", "https://poplin.example.com:8443", SITE_WORD, { kind: "public-name", name: "q3-docs", under: "example.com:8443" }],
+    ["https://docs-poplin.example.com/", SERVER, { kind: "hostname", public_word: "poplin" }, { kind: "public-name", name: "docs", under: "example.com" }],
+    ["https://notes-site.example.com/", SERVER, PAGE, undefined],
+    ["https://docs-page.example.com/", SERVER, SITE_WORD, undefined],
+    ["https://docs-poplin.example.com/", SERVER, PAGE, undefined],
+    ["https://docs-page.example.org/guide", SERVER, PAGE, undefined],
+    ["https://docs-page.example.com:8443/guide", SERVER, PAGE, undefined],
+    ["https://docs-page.example.com/guide", "https://admin.example.com", PAGE, undefined],
+    [`https://sites.example.net/${LABEL}/`, SERVER, PAGE, undefined],
+    [`https://sites.example.net/${LABEL}/a?b#c`, SERVER, PATHS, SITE],
+    [`https://private.example.net:8443/${LABEL}`, SERVER, PATHS, SITE],
+    [`HTTPS://Sites.Example.NET./${LABEL}/Page`, SERVER, PATHS, SITE],
+    [`sites.example.net/old-name--${ID}/`, SERVER, PATHS, { kind: "site", name: "old-name", id: ID }],
+    [`https://private.example.net:8443/${ID}/`, SERVER, PATHS, { kind: "id", id: ID }],
+    ["https://sites.example.net/docs/guide", SERVER, PATHS, { kind: "public-name", name: "docs" }],
+    ["https://sites.example.net/docs-page/", SERVER, PATHS, { kind: "public-name", name: "docs-page" }],
+    ["https://private.example.net:8443/docs/", SERVER, PATHS, undefined],
+    [`https://private.example.net/${LABEL}/`, SERVER, PATHS, undefined],
+    [`https://sites.example.net:8443/${LABEL}/`, SERVER, PATHS, undefined],
+    [`https://sites.example.org/${LABEL}/`, SERVER, PATHS, undefined],
+    [`https://evil.sites.example.net/${LABEL}/`, SERVER, PATHS, undefined],
+    [`https://poplin.example.com/${LABEL}/`, SERVER, PATHS, undefined],
+    ["https://docs-page.example.com/", SERVER, PATHS, undefined],
+  ] as ReadonlyArray<readonly [string, string, v.InferInput<typeof ADDRESS_LAYOUT>, unknown]>)("%j, asked of %j laid out as %j, is %j", (typed, server, layout, site) => {
     const read = readSiteReference(typed);
     if (!read.ok) throw new Error(`fixture is no site: ${typed}`);
 
-    expect<unknown>(settleSite(read.value, publicWord)).toEqual(site);
+    expect<unknown>(settleSite(read.value, { server, layout: v.parse(ADDRESS_LAYOUT, layout) })).toEqual(site);
   });
 });
 
-describe("isOfInstall", () => {
-  // Drift: the install is asked by label alone, so this is the one place an address of another install, or a look-alike of this one, is told apart.
+describe("mayBeOfInstall", () => {
+  // Drift: the install is asked by label alone, so this is the one place a label address of another install, or a look-alike of this one, is told apart.
   test.each([
     [LABEL, SERVER, true],
     [`https://${LABEL}-p-poplin.example.com/`, SERVER, true],
@@ -131,6 +164,6 @@ describe("isOfInstall", () => {
     const site = readSiteReference(typed);
     if (!site.ok) throw new Error(`fixture is no site: ${typed}`);
 
-    expect(isOfInstall(site.value, server)).toBe(expected);
+    expect(mayBeOfInstall(site.value, server)).toBe(expected);
   });
 });

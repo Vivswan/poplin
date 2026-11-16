@@ -11,7 +11,7 @@ import { REVIEW_PAGE } from "@poplin/core/src/api/routes";
 import { parseLoginSecret } from "@poplin/core/src/auth/computer-logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { TokenRecord } from "@poplin/core/src/auth/tokens";
-import type { PublicWord } from "@poplin/core/src/names/marker";
+import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
 import * as v from "valibot";
 
 import { capBody } from "./body";
@@ -30,8 +30,8 @@ interface Running {
   /** The version of poplin the install runs. */
   readonly version: string;
 
-  /** The word every public-name address of the install ends in. */
-  readonly publicWord: PublicWord;
+  /** How the install's site addresses are laid out. */
+  readonly layout: AddressLayout;
 }
 
 /** One file as its upload sends it: the upload it belongs to, the query that names its path, and the request whose body holds its bytes. */
@@ -112,13 +112,13 @@ export async function saveAddress(install: Install, actor: Actor, body: unknown,
 }
 
 /**
- * Say who a token is, which version the install runs, and the word its public addresses end in, with the newer release when one is out.
+ * Say who a token is, which version the install runs, and how its site addresses are laid out, with the newer release when one is out.
  *
- * @param running - the version of poplin the install runs, and the public word it was installed with
+ * @param running - the version of poplin the install runs, and the layout of its site addresses
  */
 export async function answerWhoami(install: Install, token: TokenRecord, running: Running): Promise<{ readonly ok: true } & v.InferOutput<typeof WHOAMI_ANSWER>> {
   const update = await updateOf(install, running.version);
-  const answer = { ok: true, token: tokenObject(token), version: running.version, public_word: running.publicWord } as const;
+  const answer = { ok: true, token: tokenObject(token), version: running.version, layout: running.layout } as const;
 
   return update === undefined ? answer : { ...answer, update };
 }

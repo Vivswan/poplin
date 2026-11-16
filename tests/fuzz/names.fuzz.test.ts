@@ -7,7 +7,7 @@ import { type AccessLetter, keptPublicNames, letterOf, parsePublicWord, publicHo
 import { nameFromEntry, parsePublicName, parseSiteName } from "../../packages/core/src/names/names";
 import { parseSiteId } from "../../packages/core/src/sites/ids";
 import { siteLabel, siteReference, splitLabel } from "../../packages/core/src/sites/labels";
-import { isOfInstall, readSiteReference, settleSite } from "../../packages/core/src/sites/references";
+import { mayBeOfInstall, readSiteReference, settleSite } from "../../packages/core/src/sites/references";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 
@@ -81,6 +81,20 @@ const typedAddresses = fc.tuple(addressedSites, domains, dressings).map(([{ publ
 
   return { text: `${wrap[0]}${scheme}${capitals ? host.toUpperCase() : host}${dot}${port}${path}${wrap[1]}`, publicWord, site, under: `${domain}${port}` };
 });
+
+const pathHosts = { sites: "sites.example.net", private: "private.example.net" };
+const pathSites = fc.oneof(
+  fc.tuple(siteNames, siteIds).map(([name, id]) => ({ segment: siteLabel(name, id) as string, site: { kind: "site", name, id } })),
+  siteIds.map((id) => ({ segment: id as string, site: { kind: "id", id } })),
+  publicNames.filter((name) => !parseSiteId(name).ok).map((name) => ({ segment: name as string, site: { kind: "public-name", name } })),
+);
+const typedPaths = fc
+  .tuple(pathSites, fc.constantFrom<keyof typeof pathHosts>("sites", "private"), fc.constantFrom("", ":8443"), dressings, fc.constantFrom("", "/", "/pages/1.html?x=1#top", "?x", "#y", "/Report"))
+  .map(([{ segment, site }, on, port, { scheme, dot, wrap, capitals }, rest]) => {
+    const host = pathHosts[on];
+
+    return { text: `${wrap[0]}${scheme}${capitals ? host.toUpperCase() : host}${dot}${port}/${segment}${rest}${wrap[1]}`, on, port, site };
+  });
 
 function followsPublishedRule(name: string): boolean {
   return name.length >= MIN_PUBLISHED_LENGTH && name.length <= MAX_PUBLISHED_LENGTH && PUBLISHED_SHAPE.test(name);
@@ -222,7 +236,7 @@ property(
 
 property(
   "a hostile typed site is refused, not thrown on, a word a command took before reads as it did, and whatever else is taken is an address, a marked label, or a padded or wrapped form of one, with an id and a name of the published shape",
-  fc.property(hostile(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID), typedAddresses.map((typed) => typed.text))), (raw) => {
+  fc.property(hostile(fc.oneof(wellFormed, siteLabels, fc.stringMatching(PUBLISHED_ID), typedAddresses.map((typed) => typed.text), typedPaths.map((typed) => typed.text))), (raw) => {
     const typed = readSiteReference(raw);
     const before = siteReference(raw);
 
@@ -246,8 +260,30 @@ property(
     const typed = readSiteReference(text);
     if (!typed.ok) throw new Error(`the address was refused: ${typed.refusal}`);
 
-    expect<unknown>(settleSite(typed.value, publicWord)).toEqual({ ...site, under });
+    const layout = { kind: "hostname", public_word: publicWord } as const;
+    const servers = [`https://poplin.${under}`, `https://poplin.other.${under}`, `https://${under}`];
+    const takenBy = servers.map((server) => mayBeOfInstall(typed.value, server) && settleSite(typed.value, { server, layout }) !== undefined);
 
-    expect([isOfInstall(typed.value, `https://poplin.${under}`), isOfInstall(typed.value, `https://poplin.other.${under}`), isOfInstall(typed.value, `https://${under}`)]).toEqual([true, false, false]);
+    expect<unknown>(settleSite(typed.value, { server: `https://poplin.${under}`, layout })).toEqual({ ...site, under });
+    expect(takenBy).toEqual([true, false, false]);
+  }),
+);
+
+property(
+  "the path address of any site, however it is dressed, names the same id and name as its first segment under the install whose two hosts hold it, no public name on the private host, and no site of any other install",
+  fc.property(typedPaths, publicWords, ({ text, on, port, site }, publicWord) => {
+    const typed = readSiteReference(text);
+    if (!typed.ok) throw new Error(`the address was refused: ${typed.refusal}`);
+
+    const server = `https://poplin.example.net${port}`;
+    const own = { kind: "path", sites_host: `${pathHosts.sites}${port}`, private_host: `${pathHosts.private}${port}` } as const;
+    const others = [
+      { kind: "path", sites_host: `${pathHosts.sites}:9443`, private_host: `${pathHosts.private}:9443` },
+      { kind: "path", sites_host: `other.${pathHosts.sites}${port}`, private_host: `other.${pathHosts.private}${port}` },
+      { kind: "hostname", public_word: publicWord },
+    ] as const;
+
+    expect<unknown>(settleSite(typed.value, { server, layout: own })).toEqual(on === "private" && site.kind === "public-name" ? undefined : site);
+    expect(others.map((layout) => settleSite(typed.value, { server, layout }))).toEqual([undefined, undefined, undefined]);
   }),
 );
