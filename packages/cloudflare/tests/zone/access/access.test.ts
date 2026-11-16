@@ -4,7 +4,7 @@ import { planAccess, syncAccess } from "../../../src/zone/access/access";
 import { reportOf } from "../../../src/zone/sync";
 import { withFake } from "../support/fake-cloudflare";
 import { page, reply } from "../support/replies";
-import { hostOf } from "../support/layouts";
+import { ADDRESSES, hostOf } from "../support/layouts";
 
 const ADMIN = hostOf("poplin.example.com");
 const PRIVATE_SITES = "*-p-poplin.example.com";
@@ -87,6 +87,23 @@ describe("planAccess", () => {
 
     expect(steps).toEqual([...LEFT]);
     expect(reportOf(steps).changedNothing).toBe(true);
+  });
+
+  // Drift: an install without a domain whose private host is left out of the application has no login in front of it, so the Worker answers every private site 404, to its owner too.
+  test("an install without a domain: the same four steps over its free addresses, the open paths of the admin host let through and the application over the whole admin host and the whole private host", () => {
+    const addresses = { hostname: ADDRESSES.adminHost, logins: owner, privateSites: ADDRESSES.privateHost };
+    const guarded = ["poplin.example.workers.dev", "poplin-private.example.workers.dev"];
+    const open = ["poplin.example.workers.dev/api", "poplin.example.workers.dev/setup"];
+    const made = [everyone(), policy("pol-1", emails)];
+    const applications = [applicationOver(open, "pol-open", { id: "app-open", name: "poplin open paths" }), applicationOver(guarded, "pol-1", { id: "app-1", name: "poplin" })];
+
+    expect(planAccess(addresses, NOTHING)).toEqual([
+      { kind: "create", subject: "poplin open paths policy", decision: "bypass", include: [{ everyone: {} }] },
+      { kind: "create", subject: "poplin open paths", uris: open, policy: "poplin open paths policy", policyId: undefined },
+      { kind: "create", subject: "poplin logins", decision: "allow", include },
+      { kind: "create", subject: "poplin", uris: guarded, policy: "poplin logins", policyId: undefined },
+    ]);
+    expect(planAccess(addresses, { policies: made, applications })).toEqual([...LEFT]);
   });
 
   // Drift: an install made while the login stood in front of `/login` alone would keep its dashboard open to the Worker's own check only.

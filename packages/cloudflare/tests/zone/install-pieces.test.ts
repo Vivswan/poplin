@@ -33,10 +33,12 @@ test("the module declares every object of the list and no other: a piece added t
 });
 
 // Drift: a piece of both ways with its addresses forgotten would pass the list above as one the module need not declare.
-test("only an object the repair alone makes has no address in the module, and the module's page says of each that the module does not make it", () => {
+// The module makes an install with a domain alone, so an object of an install without one has no address either, and the module's page has no row for it.
+test("only an object the repair alone makes, or one of an install without a domain, has no address in the module, and the module's page says of each the repair makes alone that the module does not make it", () => {
   const bare = Object.entries(INSTALL_PIECES).flatMap(([who, pieces]) => Object.entries<readonly string[]>(pieces).flatMap(([piece, addresses]) => (addresses.length === 0 ? [[who, piece]] : [])));
   const page = readFileSync(join(MODULE, "README.md"), "utf8");
+  const alone = Object.keys(INSTALL_PIECES.repairAlone).map((piece) => ["repairAlone", piece]);
 
-  expect(bare).toEqual(Object.keys(INSTALL_PIECES.repairAlone).map((piece) => ["repairAlone", piece]));
-  expect(bare.filter(([, piece]) => !new RegExp(`^\\| ${piece} \\| Repair, with the right [^|]+ \\| not made: `, "m").test(page))).toEqual([]);
+  expect(bare).toEqual([...alone, ...Object.keys(INSTALL_PIECES.noDomain).map((piece) => ["noDomain", piece])]);
+  expect(alone.filter(([, piece]) => !new RegExp(`^\\| ${piece} \\| Repair, with the right [^|]+ \\| not made: `, "m").test(page))).toEqual([]);
 });

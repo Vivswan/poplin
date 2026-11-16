@@ -25,12 +25,12 @@ export function page(asked: Asked, items: readonly unknown[]): Response {
   return reply(number === 1 ? items : []);
 }
 
-/** What a request carried: its JSON, or for a form the JSON text of each field, read. */
+/** What a request carried: its JSON, or for a form the JSON text of each field, read, and the whole text of each file. */
 export async function bodyOf(request: Request): Promise<unknown> {
   if (request.headers.get("content-type")?.startsWith("multipart/form-data") === true) {
-    const fields = [...(await request.formData()).entries()].map(([name, value]) => [name, JSON.parse(String(value))]);
+    const fields = [...(await request.formData()).entries()].map(async ([name, value]) => [name, typeof value === "string" ? JSON.parse(value) : await new Response(value).text()]);
 
-    return Object.fromEntries(fields);
+    return Object.fromEntries(await Promise.all(fields));
   }
 
   const text = await request.text();

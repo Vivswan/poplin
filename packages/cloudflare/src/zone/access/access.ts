@@ -73,7 +73,7 @@ interface DesiredAccess {
   /** The emails let through. */
   readonly logins: Logins;
 
-  /** The hostname pattern of every private site's address, from `privateSitesPattern`. */
+  /** What every private site answers at: the hostname pattern from `privateSitesPattern`, or on an install without a domain the private host whole. */
   readonly privateSites: string;
 }
 
