@@ -9,12 +9,14 @@
 //   POPLIN_LIVE_REPORT    a file that receives the table of outcomes
 //
 // On an install with a token, the suite first sets the two settings it counts on: `trash_days` and `visitor_requests_per_minute`.
+// Every request passes two meters: the bucket writes and lists it asks for, and the rows it makes the database write. A request past either ceiling is held back, and the run ends red with one line that says which.
 // Nothing here prints the domain, the token, or the login: a failure names the check and what was expected.
 
 import { afterAll, beforeAll, describe, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 
 import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
+import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
@@ -57,6 +59,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
   const outcomes: Outcome[] = [];
   // A request past the ceiling of bucket writes and lists is held back, which fails its check, and the run says so in one line.
   const meter = meterBucket((input, init) => fetch(input, init), setting("POPLIN_LIVE_MANY_FILES") === "1" ? CEILINGS.manyFiles : CEILINGS.checks);
+  const rows = meterRows(meter.fetch, ROW_CEILINGS.checks);
   const opened = LIVE
     ? openBench({
         domain: setting("POPLIN_LIVE_DOMAIN") ?? "",
@@ -64,7 +67,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
         run: setting("POPLIN_LIVE_RUN") ?? "local",
         missing,
         login: setting("POPLIN_LIVE_LOGIN"),
-        fetch: meter.fetch,
+        fetch: rows.fetch,
         pause: (ms) => Bun.sleep(ms),
         now: () => Date.now(),
         say: (line) => console.log(line),
@@ -91,9 +94,10 @@ describe.skipIf(!LIVE)("a deployed install", () => {
     } finally {
       opened?.close();
       console.log(`Bucket writes and lists the checks asked for: ${meter.spent()}`);
+      console.log(`Rows written this run: ${rows.written()} of at most ${ROW_CEILINGS.checks}`);
     }
 
-    const stopped = meter.stopped();
+    const stopped = meter.stopped() ?? rows.stopped();
     if (stopped === undefined) return;
 
     console.log(`::error::The live checks ${stopped}.`);

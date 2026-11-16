@@ -13,7 +13,7 @@ import { MemoryStore } from "../../../packages/core/src/storage/memory";
 import { BunSqliteDriver } from "../../../packages/core/tests/database/support/bun-sqlite-driver";
 
 /** The moment every request arrives at. */
-const NOW = 1_700_000_000_000;
+export const FAKE_NOW = 1_700_000_000_000;
 
 /** How long a token the fake makes is good for, in milliseconds. */
 const TOKEN_MS = 60 * 60 * 1000;
@@ -55,17 +55,17 @@ interface SqlInstall {
  */
 export async function openSqlInstall(): Promise<SqlInstall> {
   const driver = new BunSqliteDriver();
-  const opened = await openDatabase(driver, NOW);
+  const opened = await openDatabase(driver, FAKE_NOW);
   if (opened.kind !== "open") throw new Error(`the fake's database did not open: ${opened.kind}`);
 
   const { database } = opened;
-  await database.initSettings(defaultSettings({ installer: INSTALLER }), { by: INSTALLER, at: NOW });
+  await database.initSettings(defaultSettings({ installer: INSTALLER }), { by: INSTALLER, at: FAKE_NOW });
 
   const counters = new MemoryCounters();
   const api = createApi({
     database,
     store: new MemoryStore(),
-    now: () => NOW,
+    now: () => FAKE_NOW,
     addressOf: ADDRESSES.addressOf,
     publicAddressOf: ADDRESSES.publicAddressOf,
     reservedNames: ADDRESSES.reservedNames,
@@ -85,8 +85,8 @@ export async function openSqlInstall(): Promise<SqlInstall> {
     fetch: (input, init) => api.fetch(new Request(input, init)),
     sql,
     addToken: async (note) => {
-      const { token, record } = await mintToken({ scope: "admin", note, now: NOW });
-      await sql("INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) VALUES (?, ?, 'admin', ?, ?, ?)", [record.id, record.hash, record.note, NOW, NOW + TOKEN_MS]);
+      const { token, record } = await mintToken({ scope: "admin", note, now: FAKE_NOW });
+      await sql("INSERT INTO tokens (id, hash, scope, note, created_at, expires_at) VALUES (?, ?, 'admin', ?, ?, ?)", [record.id, record.hash, record.note, FAKE_NOW, FAKE_NOW + TOKEN_MS]);
 
       return token;
     },

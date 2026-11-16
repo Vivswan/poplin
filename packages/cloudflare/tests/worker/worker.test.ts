@@ -3,6 +3,7 @@
 
 import { reset } from "cloudflare:test";
 import type { Api } from "@poplin/app/src/api/api";
+import type { ExportedSite } from "@poplin/core/src/actions/export";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { settingsFromText } from "@poplin/core/src/records/settings";
 import { parse } from "es-module-lexer/js";
@@ -15,11 +16,12 @@ import bundle from "../../dist/worker.js?raw";
 import bundleMap from "../../dist/worker.js.map?raw";
 import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
 import { readShell } from "../../../app/tests/console/support/shell";
+import { meterRows } from "../../scripts/live/rows";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
 import {
   ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
-  PATHS, type Published, page, publish, send, spentDatabase, tokenOf, type World, under, wait, world,
+  PATHS, type Published, page, publish, send, sendFile, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
 
 /** This repository's own guard against a library pulled in whole: Cloudflare takes a Worker of up to 64 MiB as it is, on every plan. The bundle is about 1,812,000 bytes, the dashboard's built client in it as strings. */
@@ -957,6 +959,107 @@ describe("a copy of a site", () => {
     },
     COPY_MS,
   );
+});
+
+describe("the rows the live checks count", () => {
+  /** The bindings with every row a batch of the database wrote added to a sum. */
+  function rowBindings(rows: { written: number }): Bindings {
+    const batch = async <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
+      const results = await BINDINGS.DB.batch<Row>(statements);
+      for (const { meta } of results) rows.written += meta.rows_written;
+
+      return results;
+    };
+
+    return { ...BINDINGS, DB: { prepare: (query: string) => BINDINGS.DB.prepare(query), batch } as D1Database };
+  }
+
+  // Drift: the harness of the live checks counts the rows a run writes by the price of each request it sends, and stops a run past a ceiling.
+  // A statement that came to write more than its request's price would spend the test account's day while every run still counted itself under the ceiling.
+  test("each kind of request the live checks send writes no more rows than the harness counts for it, and as many where the request is at its most: the database's own count first, the harness's second", async () => {
+    const worker = instance(w);
+    const rows = { written: 0 };
+    const bindings = rowBindings(rows);
+    // An instance keeps the database of its first request, which also stores the settings a publish reads.
+    await ask(worker, `${ADMIN}/api/whoami`, {}, bindings);
+    const meter = meterRows((input, init) => ask(worker, input, init, bindings), 10_000);
+    const calls = api(worker, await tokenOf(w, "admin"), meter.fetch);
+    const pairs: Record<string, readonly [written: number, counted: number]> = {};
+    const html = page("page");
+    const declared = { path: html.path, size: html.body.byteLength, content_type: html.type };
+
+    /** Run one step, and keep what the database wrote in it beside what the harness counted. */
+    const step = async <Done>(what: string, run: () => Promise<Done>): Promise<Done> => {
+      const before = [rows.written, meter.written()] as const;
+      const ended = await run();
+      pairs[what] = [rows.written - before[0], meter.written() - before[1]];
+
+      return ended;
+    };
+
+    /** Send the page of a begun upload under each path, and finish the upload. */
+    const finish = async (begun: Answer, paths: readonly string[] = [html.path]): Promise<Published> => {
+      const { upload } = await done<{ upload: { id: string } }>(begun);
+      for (const path of paths) await done(await sendFile(calls, upload.id, { path, body: html.body }));
+
+      return (await done<{ site: Published }>(await calls.uploads[":upload"].finish.$post({ param: { upload: upload.id }, query: {} }))).site;
+    };
+
+    const made = await step("a new site", async () => finish(await calls.uploads.$post({ query: {}, json: { name: "docs", access: "unlisted", files: [declared] } })));
+    const site = { site: made.id };
+    const again = async (): Promise<Published> => finish(await calls.uploads.$post({ query: {}, json: { ...site, files: [declared] } }));
+    await step("a second version", again);
+    await again();
+    await step("a fourth version, which drops the first", again);
+    await step("a page opened", () => meter.fetch(under(made, "u"), {}));
+    await step("a rollback", async () => done(await calls.sites[":site"].rollback.$post({ param: site, query: {}, json: {} })));
+    await step("who may open it changed", async () => done(await calls.sites[":site"].$patch({ param: site, query: {}, json: { access: "private" } })));
+    await step("a new name", async () => done(await calls.sites[":site"].$patch({ param: site, query: {}, json: { name: "guide" } })));
+    await step("to the trash", async () => done(await calls.sites[":site"].$delete({ param: site, query: {} })));
+    await step("out of the trash", async () => done(await calls.sites[":site"].restore.$post({ param: site, query: {} })));
+    const linked = await step("a new link", async () => done<{ site: Published }>(await calls.sites[":site"]["new-link"].$post({ param: site, query: {} })));
+    const moved = { site: linked.site.id };
+    await step("the files of a version listed", async () => done(await calls.export.sites[":site"].files.$get({ param: moved, query: { version: "4" } })));
+    const stored = await done<{ format: number; site: ExportedSite }>(await calls.export.sites[":site"].$get({ param: moved, query: { all_versions: "true" } }));
+    await step("removed for good, with three versions, an earlier id, and a day's count", async () => done(await calls.sites[":site"].$delete({ param: moved, query: { forever: "true" } })));
+    await step("put back from a backup, with three versions", async () => {
+      const paths = stored.site.versions.map((version) => `v${version.number}/${html.path}`);
+
+      return finish(await calls.import.sites.$post({ query: {}, json: { ...stored, files: paths.map((path) => ({ ...declared, path })) } }), paths);
+    });
+    await step("an upload begun, asked what it lacks, and given up", async () => {
+      const { upload } = await done<{ upload: { id: string } }>(await calls.uploads.$post({ query: {}, json: { name: "draft", files: [declared] } }));
+      await done(await calls.uploads[":upload"].$get({ param: { upload: upload.id }, query: {} }));
+
+      return done(await calls.uploads[":upload"].$delete({ param: { upload: upload.id }, query: {} }));
+    });
+    await step("a setting changed", async () => done(await calls.config.$patch({ query: {}, json: { trash_days: 1 } })));
+    await step("a computer's login begun", async () => done(await api(worker, null, meter.fetch).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } })));
+
+    expect({ pairs, stopped: meter.stopped() }).toEqual({
+      pairs: {
+        "a new site": [25, 25],
+        "a second version": [15, 19],
+        "a fourth version, which drops the first": [19, 19],
+        "a page opened": [2, 2],
+        "a rollback": [3, 3],
+        "who may open it changed": [5, 5],
+        "a new name": [5, 5],
+        "to the trash": [9, 9],
+        "out of the trash": [9, 9],
+        "a new link": [12, 12],
+        "the files of a version listed": [1, 1],
+        "removed for good, with three versions, an earlier id, and a day's count": [14, 14],
+        "put back from a backup, with three versions": [29, 29],
+        // An upload that is given up was counted with the finish it never had.
+        "an upload begun, asked what it lacks, and given up": [10, 29],
+        // One row more is written where the logins change after a check of the domain.
+        "a setting changed": [3, 4],
+        "a computer's login begun": [3, 3],
+      },
+      stopped: undefined,
+    });
+  });
 });
 
 describe("a database that takes no more writes for the day", () => {

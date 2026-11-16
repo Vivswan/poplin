@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import type { Fetch } from "../../packages/cli/src/client/client";
 import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
+import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { MemoryStore } from "../../packages/core/src/storage/memory";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
@@ -44,6 +45,9 @@ const MANY_FILES = 7;
 
 /** How long one install's run of every check may take, in milliseconds: each publishes, reads and removes sites in this process with no wait in it, all of it work of the processor, which on a busy machine passes the five seconds a test gets. */
 const RUN_MS = 30_000;
+
+/** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
+const CHECKS_ROWS = 934;
 
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
@@ -212,13 +216,14 @@ describe("the live checks, against a local fake", () => {
 
       return response;
     };
+    const rows = meterRows(watched, ROW_CEILINGS.checks);
     const missing: Missing = {};
     const { bench, settle, sweep, close } = openBench({
       domain: FAKE_DOMAIN,
       token: switches.noToken === true ? undefined : fake.token,
       run: "selftest",
       missing,
-      fetch: watched,
+      fetch: rows.fetch,
       pause: fake.pause,
       now: fake.now,
       say: () => undefined,
@@ -242,8 +247,24 @@ describe("the live checks, against a local fake", () => {
 
     const left = await bench.cli("list");
     expect(switches.noToken === true ? [] : left.value.sites).toEqual([]);
-    // A check that grew into a loop of publishes would be held back on the real install alone, and a route the meter does not know would be billed uncounted.
-    expect({ stopped: meter.stopped(), uncounted }).toEqual({ stopped: undefined, uncounted: [] });
+    // A check that grew into a loop of publishes would be held back on the real install alone, and a route the meter does not know would be billed uncounted. A request that writes rows on a route with no price would stop the real run.
+    expect({ stopped: meter.stopped(), uncounted, rows: rows.stopped() }).toEqual({ stopped: undefined, uncounted: [], rows: undefined });
+  }, RUN_MS);
+
+  // The README states what a usual run of the checks makes the database write; a check that grew a publish would spend more of the test account's day than a reader was told, and come nearer the ceiling.
+  test("a run of every check counts the rows the README states, the suite's settings and its sweep among them", async () => {
+    const fake = await openFake({ access: true });
+    const rows = meterRows(fake.fetch, ROW_CEILINGS.checks);
+    const missing: Missing = {};
+    const { bench, settle, sweep, close } = openBench({ domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, say: () => undefined, manyFiles: MANY_FILES });
+    OPENED.push(close);
+    await settle();
+    Object.assign(missing, await probeMissing(bench, { "many-files": "asked" }));
+
+    for (const check of CHECKS) await runCheck(bench, check);
+    await sweep();
+
+    expect({ rows: rows.written(), stopped: rows.stopped() }).toEqual({ rows: CHECKS_ROWS, stopped: undefined });
   }, RUN_MS);
 
   // The README and the check state what one drill costs the install; a drill that grew would spend more of the plan's day than a reader was told.

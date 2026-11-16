@@ -1,0 +1,168 @@
+// A ceiling on the rows one step of a live run makes the install write to its database. D1's Free plan takes 100,000 rows written a day, every database of the account together, and refuses each write past them until midnight UTC.
+//
+//   POST   /api/uploads                    a new site 25, a new version 19: the begin and its finish together
+//   POST   /api/import/sites               a site with one version 25, and 2 for each version more
+//   DELETE /api/sites/:site                to the trash 9, for good 14
+//   POST   /api/sites/:site/new-link 12    POST /api/sites/:site/restore 9    PATCH /api/sites/:site 5    POST /api/sites/:site/rollback 3
+//   PATCH  /api/config 4                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
+//   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
+//   GET    a page or a file of a site      2, once it is answered 200 or 304
+//
+// D1 counts an index entry and a row a trigger writes as rows, so one new site is 12 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
+// A visit is counted once it is answered, since only the answer says that a site was served. A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
+// A request that would pass the ceiling is not sent, and every one after it: each is answered here as refused, with a 403, which the CLI does not send again.
+// A request that changes something on a route with no price is refused the same way, so a check that grows a new kind of write stops red until it has one.
+// The count is the harness's own, not the database's. The sweep later drops the row of each finished upload, 5 rows more, which no request of a run makes.
+
+import type { Fetch } from "../../../cli/src/client/client";
+import type { Declared } from "./budget";
+
+/** The rows of a new site, from its first request to its finish: the site and its first version 12, the upload 7, the day's counts 2, the version's size 2, and the log 2. */
+const NEW_SITE = 25;
+
+/** The rows of a new version of a site, from its first request to its finish, where it drops the oldest version an install keeps: 15 where it drops none. */
+const NEW_VERSION = 19;
+
+/** The rows of a site put back from a backup with one version. */
+const IMPORTED_SITE = 25;
+
+/** The rows each further version of a site put back from a backup adds. */
+const IMPORTED_VERSION = 2;
+
+/** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
+const REMOVED = { trash: 9, forever: 14 } as const;
+
+/** The rows a visit writes that a site answered with a page or a file: the day's count of the site, and of all sites. */
+const VISIT = 2;
+
+/** The answers of a site that count as a request of its day. */
+const SERVED: ReadonlySet<number> = new Set([200, 304]);
+
+/** The methods that change nothing. */
+const READS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
+
+/** Where the API answers, under the admin hostname. */
+const API = "/api/";
+
+/** Where the edge itself answers on every hostname, with no request to the install. */
+const EDGE = "/cdn-cgi/";
+
+/** The status a held-back request is answered with. */
+const HELD_BACK = 403;
+
+/** The routes whose requests make the install write rows, each with the most rows one request writes. One the app does not declare does not compile. */
+const PRICES = [
+  { method: "POST", path: "/api/uploads", rows: (asked) => (asked.body.site === undefined ? NEW_SITE : NEW_VERSION) },
+  { method: "POST", path: "/api/import/sites", rows: (asked) => IMPORTED_SITE + IMPORTED_VERSION * (versionsIn(asked.body) - 1) },
+  { method: "PUT", path: "/api/uploads/:upload/file", rows: () => 0 },
+  { method: "POST", path: "/api/uploads/:upload/finish", rows: () => 0 },
+  { method: "GET", path: "/api/uploads/:upload", rows: () => 1 },
+  { method: "DELETE", path: "/api/uploads/:upload", rows: () => 3 },
+  { method: "DELETE", path: "/api/sites/:site", rows: (asked) => (asked.query.get("forever") === "true" ? REMOVED.forever : REMOVED.trash) },
+  { method: "PATCH", path: "/api/sites/:site", rows: () => 5 },
+  { method: "POST", path: "/api/sites/:site/restore", rows: () => 9 },
+  { method: "POST", path: "/api/sites/:site/new-link", rows: () => 12 },
+  { method: "POST", path: "/api/sites/:site/rollback", rows: () => 3 },
+  { method: "PATCH", path: "/api/config", rows: () => 4 },
+  { method: "POST", path: "/api/logins", rows: () => 3 },
+  { method: "GET", path: "/api/export/sites/:site/files", rows: () => 1 },
+] as const satisfies readonly (Declared & { readonly rows: (asked: Asked) => number })[];
+
+/** The method and the path of each priced route, as a request is matched against them. */
+const MATCHERS = PRICES.map(({ method, path, rows }) => ({ method, path: new URLPattern({ pathname: path }), rows }));
+
+/** The most rows each step of a run may make the install write: the checks, and the reset when it keeps no sample. */
+export const ROW_CEILINGS = { checks: 1100, reset: 600 } as const;
+
+/** What a price reads of a request: its query, and its JSON body, empty for a request that carries none. */
+interface Asked {
+  readonly query: URLSearchParams;
+  readonly body: Readonly<Record<string, unknown>>;
+}
+
+/** A `fetch` that counts, and what it counted. */
+interface Meter {
+  /** Sends a request, unless it would pass the ceiling or has no price. */
+  readonly fetch: Fetch;
+
+  /** How many rows the requests sent so far write at most. */
+  readonly written: () => number;
+
+  /** What stopped the step, as the end of a sentence, once a request was held back; `undefined` while none was. */
+  readonly stopped: () => string | undefined;
+}
+
+/** How many versions the site of an import carries; one for a body that names none. */
+function versionsIn(body: Asked["body"]): number {
+  const site: unknown = body.site;
+  const versions: unknown = typeof site === "object" && site !== null && "versions" in site ? site.versions : undefined;
+
+  return Array.isArray(versions) ? Math.max(1, versions.length) : 1;
+}
+
+/** The JSON object a request carries; empty for a body that is none, such as a file's bytes. */
+function bodyOf(init: RequestInit): Asked["body"] {
+  if (typeof init.body !== "string") return {};
+
+  try {
+    const body: unknown = JSON.parse(init.body);
+
+    return typeof body === "object" && body !== null && !Array.isArray(body) ? { ...body } : {};
+  } catch {
+    return {};
+  }
+}
+
+function refusal(message: string): Response {
+  return Response.json({ error: { code: "forbidden", message } }, { status: HELD_BACK });
+}
+
+/**
+ * Say how many rows a request to the API makes an install write, at most.
+ *
+ * @returns the rows; 0 for a request that reads; `undefined` for one that changes something on a route with no price
+ */
+function rowsOf(input: string, init: RequestInit): number | undefined {
+  const method = init.method ?? "GET";
+  const url = new URL(input);
+  const priced = MATCHERS.find((matcher) => matcher.method === method && matcher.path.test(input));
+  if (priced !== undefined) return priced.rows({ query: url.searchParams, body: bodyOf(init) });
+
+  return READS.has(method) || !url.pathname.startsWith(API) ? 0 : undefined;
+}
+
+/**
+ * Count the rows a step makes an install write, and hold back every request past a ceiling, and every request of a kind that has no price.
+ *
+ * @param ceiling - the most rows the step may make the install write
+ * @returns the counting `fetch`; a request it holds back reaches nothing and is answered 403, in the API's own form of a refusal
+ */
+export function meterRows(fetch: Fetch, ceiling: number): Meter {
+  let written = 0;
+  let stopped: string | undefined;
+
+  return {
+    fetch: async (input, init) => {
+      const rows = rowsOf(input, init);
+      if (rows === undefined) stopped ??= `sent ${init.method} to a route of the API that has no price in rows`;
+
+      if (rows !== undefined && written + rows > ceiling) stopped ??= `passed its ceiling of ${ceiling} rows written to the database`;
+
+      // A request that writes nothing goes out after the stop too: the step's own listings, and its last lines, read the install.
+      if (stopped !== undefined && rows !== 0) return refusal(`Held back: the step ${stopped}.`);
+
+      written += rows ?? 0;
+      const answer = await fetch(input, init);
+      const { pathname } = new URL(input);
+      const visited = (init.method ?? "GET") === "GET" && !pathname.startsWith(API) && !pathname.startsWith(EDGE) && SERVED.has(answer.status);
+      if (visited) written += VISIT;
+
+      // A visit is sent before its rows are known, so the one that passes the ceiling went out: the step stops with the next request that writes.
+      if (written > ceiling) stopped ??= `passed its ceiling of ${ceiling} rows written to the database`;
+
+      return answer;
+    },
+    written: () => written,
+    stopped: () => stopped,
+  };
+}
