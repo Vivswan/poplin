@@ -105,6 +105,7 @@ describe("createBackup", () => {
     const refused = await createBackup(target, false);
     const linked = await createBackup(join(folder, "link.zip"), false);
     const nowhere = await createBackup(join(folder, "absent", "backup.zip"), false);
+    const slashed = await createBackup(`${join(folder, "absent")}/`, false);
     const failing = await begun(target, true);
     await failing.addFile("a", streamOf("a"), 1);
     await failing.abandon();
@@ -114,7 +115,8 @@ describe("createBackup", () => {
     writer.addJson("a.json", 1);
     await writer.finish();
 
-    expect([refused, linked, nowhere]).toEqual([{ ok: false, reason: "exists" }, { ok: false, reason: "exists" }, { ok: false, reason: "unwritable", why: expect.stringContaining("ENOENT") }]);
+    expect(slashed).toEqual(nowhere);
+    expect([refused, linked, nowhere]).toEqual([{ ok: false, reason: "exists" }, { ok: false, reason: "exists" }, { ok: false, reason: "unwritable", why: `the folder "${join(folder, "absent")}" does not exist` }]);
     expect(kept).toEqual([["backup.zip", "link.zip"], "the last good backup"]);
     expect((await readZip(target)).map(([name]) => name)).toEqual(["a.json"]);
   });

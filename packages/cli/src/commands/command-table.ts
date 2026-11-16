@@ -127,9 +127,10 @@ export const COMMANDS = [
     about: "make a private copy of a site, with a new address",
     arguments: [{ ...SITE, required: true }],
     flags: [{ name: "--name", value: "<name>", about: "the copy's name; the site's own without it" }, ...installFlags("the copy")],
-    examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report --name report-draft"],
+    examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report--k3f9x2ab71qz --name report-draft"],
     notes: [
-      "The copy holds the live version's files and the site's settings.",
+      "The copy holds the live version's files and the site's settings, but for",
+      "when it expires: that is set as for a new site.",
       "Its title is the one the site shows, with (copy) after it.",
       "A title that ends that way already is kept as it is.",
       "It is always private, whatever the site is, and the site is not changed.",
