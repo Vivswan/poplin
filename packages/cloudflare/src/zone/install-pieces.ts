@@ -1,6 +1,6 @@
 // Every object of an install, with the address of each block of the OpenTofu module in `packages/cloudflare/tofu/` that declares it. Both ways of installing are held to this one list, so neither gains an object the other lacks unnoticed.
 
-/** Every object by who makes it: `repair` and `deploy` beside the module, the repair alone, the module alone, or an install without a domain, which the module never makes. An address is `<type>.<name>`, or `data.<type>.<name>` for a read. */
+/** Every object by who makes it: `repair` and `deploy` beside the module, the repair alone, the module alone, or the repair of an install without a domain, which the module never makes. An address is `<type>.<name>`, or `data.<type>.<name>` for a read. */
 export const INSTALL_PIECES = {
   repair: {
     Zone: ["data.cloudflare_zone.this"],
@@ -31,5 +31,11 @@ export const INSTALL_PIECES = {
   },
   noDomain: {
     Forwarder: [],
+    "Access application": [],
+    "Access policy": [],
+    "Access open paths": [],
+    "Worker variable": [],
+    "D1 database": [],
+    Key: [],
   },
 } as const;

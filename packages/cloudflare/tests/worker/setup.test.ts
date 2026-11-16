@@ -291,6 +291,26 @@ describe("a Worker with nothing set", () => {
     expect([asked.length - strangers, tally.calls]).toEqual([39, 8]);
   });
 
+  // Drift: an install without a domain is found by the hostname its setup was sent to. Taken from anywhere else, its values would go to a Worker that does not answer there, and its sites would have no address.
+  test("with no domain sent, a repair at the Worker's own free address sets the install up there in one press, and at any other hostname nothing is asked of Cloudflare", async () => {
+    const worker = instance(w, cloudflareOf(account, asked));
+    const typed = { token: TOKEN, login: OWNER };
+    const elsewhere = await repair(worker, `${ADMIN}/setup`, typed, {}, DEPLOYED);
+    const unasked = asked.length;
+    const repaired = await repair(worker, "https://poplin.example.workers.dev/setup", typed, {}, DEPLOYED);
+    const ran = (await repaired.json()) as Ran;
+
+    expect([elsewhere.status, ((await elsewhere.json()) as { code: string }).code, unasked]).toEqual([400, "bad_address", 0]);
+    expect([repaired.status, ran.summary.tone, ran.steps.map((step) => step.address)]).toEqual([200, "good", ["https://poplin.example.workers.dev"]]);
+    expect(ran.rows.filter((row) => row.piece === "Forwarder").map((row) => row.detail)).toEqual([
+      "poplin-private: https://poplin-private.example.workers.dev (private sites)",
+      "poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)",
+    ]);
+    expect([account.bindings.find((binding) => binding.name === "ZONE"), account.workers.map((made) => made.id)]).toEqual([{ name: "ZONE", type: "json", json: { account_address: "example" } }, ["poplin-sites", "poplin-private"]]);
+    // One press: 26 calls to Cloudflare of the 50 a request of the Free plan may send.
+    expect(asked.length - unasked).toBe(26);
+  });
+
   // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.
   test("the sixth run one address sends in a minute is refused before Cloudflare is asked, and a Worker whose values are gone while its database holds settings names them and offers no setup", async () => {
     const worker = instance(w, cloudflareOf(account, asked));

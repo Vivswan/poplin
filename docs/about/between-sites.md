@@ -50,6 +50,26 @@ The switch means the same for a private, an unlisted, and a public site, and a c
 - **No script fetches another site's file and reads it.** No response carries a header that lets another origin's script read what it fetched. A script file that a page loads as a script is the row above it: it runs in that page.
 - **A frame rule goes out with every file** unless the site is `embeddable` and `outside_pages` is `allowed`. For an `embeddable` site under `blocked` it names every hostname under the install's domain.
 
+## Without a domain
+
+An install [without a domain](../start/without-a-domain.md) has three hostnames. Every unlisted and public site is a path on one, every private site a path on another, and the dashboard has the third to itself.
+
+**The open sites share one browser origin, and so do the private sites: publish only pages you trust, or add a domain.**
+
+| A script of one site | Under a domain | Without a domain |
+| --- | --- | --- |
+| reads the dashboard's data, or changes anything in it | cannot | cannot: the dashboard is another origin |
+| reads a private site, from an open site | cannot | cannot: the private sites are another origin |
+| reads another open site whose address it knows | cannot | can |
+| reads another private site whose address it knows, in the browser of a viewer who is logged in | cannot | can |
+| reads another site's browser storage, or the cookies a script set | cannot | can, among the open sites and among the private sites |
+| takes over another site with a service worker | cannot | cannot: a worker's reach ends at its own site's path |
+
+- **One login opens every private site.** They are one hostname, so Cloudflare's login cookie is one.
+- **`embeddable` off keeps a site's files from pages of another hostname alone.** A page of another site on the same hostname is the same origin, and loads them.
+- **A site's browser cache is its hostname's.** When the Worker tells a browser to clear a site's cache, the browser clears it for every site on that hostname.
+- **Nothing runs before the Worker.** No rule of Cloudflare's stops a request first, so every request counts against the day's quota; the limits per visitor and per site still hold.
+
 The Worker decides from the request's `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, `Origin`, and `Referer` headers and reads no content. Opening an address as the top-level page always passes, and so does a request with no `Sec-Fetch-Site` header.
 
 | Under `blocked`, a page under the install's domain that is not a site | Result |

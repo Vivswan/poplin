@@ -81,6 +81,14 @@ async function openSetup(options: Options = {}) {
   return { opened, plug, reads, get, run, fetch: setup.fetch };
 }
 
+/** What the fake plug says of its token, which the page carries: one form for an install that is set, and one for each kind a person can choose on an install with nothing set. */
+const FORM = {
+  tokenRights: ["Records: Edit", "Routes: Edit"],
+  tokenLink: "https://provider.example/tokens/new",
+  tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
+  tokenNote: "Choose what the account token is for.",
+};
+
 describe("the page", () => {
   // Drift: every request would ask the database twice whether anybody has logged in.
   test.each(["/setup", "/setup/assets/app.js", "/setup/api/check"])("asks once whether it is open, for %s", async (path) => {
@@ -124,15 +132,7 @@ describe("the page", () => {
       domainNote: null,
       recent: [],
       marks: { usage: null, domain: null, settings: null },
-      setup: {
-        boxes,
-        form: {
-          tokenRights: ["Records: Edit", "Routes: Edit"],
-          tokenLink: "https://provider.example/tokens/new",
-          tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
-          tokenNote: "Choose what the account token is for.",
-        },
-      },
+      setup: first ? { boxes, forms: { domain: FORM, "no-domain": { ...FORM, tokenRights: ["Login: Edit"] } } } : { boxes, form: FORM },
     });
     // The install's own host, as the test opened it: the page names it nowhere.
     const host = new URL(ORIGIN).hostname;

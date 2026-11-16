@@ -5,9 +5,12 @@ import { clearPage, type Within } from "../lib/support/page";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 
+import { type ReactNode, useState } from "react";
+
 import type { Sent } from "@/domain/token-run";
 import { Refused } from "@/lib/api";
 import { SetupForm } from "@/setup/setup-form";
+import type { Kind, Start } from "@/setup/setup-start";
 
 /** What a token must hold, in an invented provider's words. */
 const FORM = {
@@ -17,11 +20,21 @@ const FORM = {
   tokenNote: "Choose what the account token is for.",
 };
 
+/** The same for an install without a domain. */
+const NO_DOMAIN_FORM = { ...FORM, tokenRights: ["Login: Edit"], tokenNote: "Choose the account." };
+
 /** The token the tests paste. */
 const TOKEN = "planted-token-0123456789";
 
 /** What the form was asked to repair with. */
 const repairs: Sent[] = [];
+
+/** The form with the kind of install held as the screen holds it. */
+function Held({ start, onRepair }: { readonly start: Start; readonly onRepair: (sent: Sent) => Promise<Refused | undefined> }): ReactNode {
+  const [kind, setKind] = useState<Kind>("domain");
+
+  return <SetupForm start={start} kind={kind} onKind={setKind} onRepair={onRepair} />;
+}
 
 /** Draw the form of one install over a repair that answers `refusal`, and hand back the page's queries. */
 function drawn(boxes: "first" | "login", refusal?: Refused): Within {
@@ -30,7 +43,7 @@ function drawn(boxes: "first" | "login", refusal?: Refused): Within {
 
     return refusal;
   };
-  render(<SetupForm form={FORM} boxes={boxes} onRepair={onRepair} />);
+  render(<Held start={boxes === "login" ? { boxes, form: FORM } : { boxes, forms: { domain: FORM, "no-domain": NO_DOMAIN_FORM } }} onRepair={onRepair} />);
 
   return within(document.body);
 }
@@ -67,6 +80,36 @@ describe("the boxes", () => {
 
     expect([repairs, box(page, "Account token").value, document.activeElement === domain]).toEqual([[], TOKEN, true]);
     expect(domain.closest('[data-slot="field"]')?.querySelector('[role="alert"]')?.textContent).toBe("Type the domain first.");
+  });
+});
+
+describe("the kind of install", () => {
+  // Drift: a domain sent from the other kind's form would set the install up under it, and a missing choice would leave a person with no domain no way in.
+  test("No domain shows the email and the token alone, with that kind's token form, and sends no domain", async () => {
+    const page = drawn("first");
+    fireEvent.change(box(page, "Domain"), { target: { value: "example.com" } });
+    await act(async () => {
+      fireEvent.click(page.getByRole("tab", { name: "No domain" }));
+    });
+    fireEvent.change(box(page, "Your email"), { target: { value: "mira@example.com" } });
+    fireEvent.change(box(page, "Account token"), { target: { value: TOKEN } });
+    await act(async () => {
+      fireEvent.click(page.getByRole("button", { name: "Repair" }));
+    });
+
+    expect([page.queryByLabelText("Domain"), page.getByRole("heading", { name: /boxes/ }).textContent]).toEqual([null, "2Fill in two boxes"]);
+    expect(repairs).toEqual([{ token: TOKEN, login: "mira@example.com" }]);
+
+    await act(async () => {
+      fireEvent.click(page.getByRole("button", { name: "Account token help" }));
+    });
+
+    expect([page.queryByText("Choose the account.") !== null, page.queryByText("Login: Edit") !== null, page.queryByText("Records: Edit")]).toEqual([true, true, null]);
+  });
+
+  // Drift: an install nobody has logged in to has its kind already: asked again, the choice would do nothing.
+  test("is not asked on an install nobody has logged in to", () => {
+    expect(drawn("login").queryAllByRole("tab")).toEqual([]);
   });
 });
 

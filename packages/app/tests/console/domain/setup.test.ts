@@ -51,6 +51,7 @@ const mistyped: readonly { readonly name: string; readonly sent: Readonly<Record
   { name: "an email that is none", sent: { domain: "example.com", login: "owner" }, refusal: "bad_login", asked: 0 },
   { name: "no email", sent: { domain: "example.com" }, refusal: "bad_login", asked: 0 },
   { name: "text that is no domain", sent: { domain: "localhost", login: "owner@example.com" }, refusal: "bad_domain", asked: 1 },
+  { name: "no domain, at a hostname no install without one answers at", sent: { login: "owner@example.com" }, refusal: "bad_address", asked: 1 },
 ];
 
 /** How a test's setup differs from the usual one. */
@@ -109,12 +110,12 @@ async function openSetup(options: Options = {}) {
 }
 
 /** The setup of an install with nothing set, over a plug the test wrote. */
-function openFirstSetup() {
+function openFirstSetup(origin: string = ORIGIN) {
   const plug = usualPlug();
   const first = firstRunOf(plug);
   const setup = createSetup({ install: { database: NO_DATABASE, now: () => 1_700_000_000_000 }, domain: first, open: async () => true, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7" });
   const call = (run: string, body: object): Promise<Response> =>
-    setup.fetch(new Request(`${ORIGIN}/setup/api/${run}`, { method: "POST", headers: { "Content-Type": JSON_TYPE }, body: JSON.stringify(body) }));
+    setup.fetch(new Request(`${origin}/setup/api/${run}`, { method: "POST", headers: { "Content-Type": JSON_TYPE }, body: JSON.stringify(body) }));
 
   return { first, plug, call };
 }
@@ -325,8 +326,17 @@ test("on an install with nothing set a repair runs the plug of the sent domain a
   const reading = JSON.parse(text) as { readonly ok: boolean; readonly rows: readonly { readonly state: string }[]; readonly expects?: string };
 
   expect([repaired.status, reading.ok, reading.rows.filter((row) => row.state === "created").length, "expects" in reading, text.includes(OWN)]).toEqual([200, true, 1, false, false]);
-  expect(first.asked).toEqual([{ domain: "example.com", login: "owner@example.com" }]);
+  expect<unknown>(first.asked).toEqual([{ kind: "domain", domain: "example.com", login: "owner@example.com" }]);
   expect<unknown>(plug.calls.map(({ run, settings }) => [run, settings?.logins, settings?.outside_pages])).toEqual([["repair", ["owner@example.com"], "blocked"]]);
+});
+
+// Drift: the account of an install without a domain is found by the hostname the run was sent to. A run that named another host, or fell back to the domain's plug, would set the install up in the wrong place.
+test("on an install with nothing set a repair with no domain runs the plug of an install without one, made for the hostname the run was sent to and the sent login", async () => {
+  const { first, plug, call } = openFirstSetup("https://Poplin.Provider.Example");
+  const repaired = await call("repair", { login: "Owner@Example.com", token: OWN });
+
+  expect<unknown>([repaired.status, first.asked]).toEqual([200, [{ kind: "no-domain", host: "poplin.provider.example", login: "owner@example.com" }]]);
+  expect<unknown>(plug.calls.map(({ run, settings }) => [run, settings?.logins])).toEqual([["repair", ["owner@example.com"]]]);
 });
 
 // Drift: a mistyped value sent on would spend the person's token on a run under the wrong domain or for nobody's login.

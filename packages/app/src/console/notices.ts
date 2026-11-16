@@ -55,6 +55,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   unreachable: "No answer from the provider. Try again.",
   no_domain: "The account token shows no domain of that name.",
   bad_domain: "Type a domain alone, such as example.com.",
+  bad_address: "An install with no domain is set up at the address its provider gave it. Open the setup page there, or choose Your domain.",
   bad_login: "Type an email address, such as name@example.com.",
   no_update: "No newer version is known, so no update was started.",
   too_many_requests: "An update was tried in this minute already. Wait a minute.",

@@ -195,10 +195,10 @@ export function standingPlug(provider: Provider): DomainPlug {
 /**
  * Build the provider's side of an install with nothing set.
  *
- * @returns a first run whose plug creates every object; it takes any text with a dot in it as a domain
+ * @returns a first run whose plug creates every object; it takes any text with a dot in it as a domain, and an install without a domain at any address
  */
 export function previewFirstRun(): FirstRun {
-  return { ...WITH_DOMAIN.form, plugFor: (first) => (first.domain.includes(".") ? previewPlug("fresh") : undefined) };
+  return { forms: { domain: WITH_DOMAIN.form, "no-domain": WITHOUT_DOMAIN.form }, plugFor: (first) => (first.kind === "no-domain" || first.domain.includes(".") ? previewPlug("fresh") : undefined) };
 }
 
 /**

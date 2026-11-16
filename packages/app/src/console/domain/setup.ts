@@ -1,7 +1,7 @@
 // The setup's own handler: the two runs a program calls on an install nobody can log in to yet, with no login behind them.
 //
 //   POST /setup/api/check    read every piece with the token in a JSON body, and answer the reading as JSON
-//   POST /setup/api/repair   make every piece match; on an install with nothing set it also gives the install its domain and first login
+//   POST /setup/api/repair   make every piece match; on an install with nothing set it also gives the install where it answers and its first login
 //
 // The setup screen sends its repair through the second path, so a person's press and a program's call are one run.
 // The token is the only proof of ownership: the plug refuses one that does not act on the install's own account. Until one passes nothing of the install is read, so no answer can say anything of it.
@@ -23,7 +23,7 @@ import * as v from "valibot";
 import { hasContentType } from "../../api/body";
 import type { Counters } from "../../limits/limits";
 import { type DomainRun, REFUSAL_STATUS, runDomain } from "./domain-run";
-import type { DomainPlug, DomainReading, FirstRun } from "./records";
+import type { DomainPlug, DomainReading, FirstChoice, FirstRun } from "./records";
 
 /** How many runs one address may send in a minute. */
 const TRIES_PER_MINUTE = 5;
@@ -115,10 +115,13 @@ async function settingsWith(install: SetupParts["install"], run: DomainRun, logi
 /**
  * Run the plug once for what was sent.
  *
- * On an install with nothing set the plug is made for the sent domain and login, its settings are the defaults of such an install, and the run is not recorded: no value of it is stored here.
+ * On an install with nothing set the plug is made for the kind of install that was sent, and its settings are the defaults of such an install. The run is not recorded: no value of it is stored here.
+ * A sent domain is an install under it. None is an install without a domain, at the hostname the run was sent to.
  * On a set install an email is taken as the correction of the first login, and an empty one keeps the stored one.
+ *
+ * @param host - the hostname the run was sent to
  */
-async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent): Promise<DomainReading> {
+async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent, host: string): Promise<DomainReading> {
   const { domain, install } = parts;
   // A token pasted into the email's box is no email: it is refused before the plug is asked, so it is never stored as a login or answered back.
   if (sent.token !== "" && sent.login.toLowerCase().includes(sent.token.toLowerCase())) return { ok: false, refusal: "bad_login" };
@@ -133,8 +136,10 @@ async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent): Promise<D
   const login = parseLogin(sent.login);
   if (!login.ok) return { ok: false, refusal: "bad_login" };
 
-  const plug = domain.plugFor({ domain: typedDomain(sent), login: login.value });
-  if (plug === undefined) return { ok: false, refusal: "bad_domain" };
+  const typed = typedDomain(sent);
+  const first: FirstChoice = typed === "" ? { kind: "no-domain", host, login: login.value } : { kind: "domain", domain: typed, login: login.value };
+  const plug = domain.plugFor(first);
+  if (plug === undefined) return { ok: false, refusal: first.kind === "domain" ? "bad_domain" : "bad_address" };
 
   const settings = async (): Promise<ReturnType<typeof defaultSettings>> => defaultSettings({ installer: login.value });
 
@@ -142,9 +147,9 @@ async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent): Promise<D
 }
 
 /** Run the plug once for what was sent. A database whose allowance for the day is used up is the refusal `allowance_spent`, whatever the plug did before the database was asked. */
-async function runFor(parts: SetupParts, run: DomainRun, sent: Sent): Promise<DomainReading> {
+async function runFor(parts: SetupParts, run: DomainRun, sent: Sent, host: string): Promise<DomainReading> {
   try {
-    return await runOnce(parts, run, sent);
+    return await runOnce(parts, run, sent, host);
   } catch (error) {
     if (error instanceof AllowanceSpent) return { ok: false, refusal: "allowance_spent" };
 
@@ -187,7 +192,7 @@ export function createSetup(parts: SetupParts): Setup {
 
     if (!(await fits(parts, context.req.raw))) return context.json({ ok: false, refusal: "too_many_tries" }, 429);
 
-    const reading = await runFor(parts, run, v.parse(SENT, await context.req.raw.json().catch(() => undefined)));
+    const reading = await runFor(parts, run, v.parse(SENT, await context.req.raw.json().catch(() => undefined)), new URL(context.req.url).hostname);
     if (!reading.ok && reading.refusal === "allowance_spent") return spentRun(parts.install.now());
 
     if (!reading.ok) return context.json(reading, REFUSAL_STATUS[reading.refusal]);

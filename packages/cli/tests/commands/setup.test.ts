@@ -142,9 +142,14 @@ describe("poplin setup", () => {
     const noLogin = await bench.run(`${SETUP} --domain example.com`, { env: ENV });
     const noDomain = await bench.run(`${SETUP} --domain localhost --login owner@example.com`, { env: ENV });
 
-    expect([repaired.code, repaired.out.at(-1), first.asked[0]]).toEqual([0, "the install's side is as it should be", { domain: "example.com", login: "owner@example.com" }]);
+    expect<unknown>([repaired.code, repaired.out.at(-1), first.asked[0]]).toEqual([0, "the install's side is as it should be", { kind: "domain", domain: "example.com", login: "owner@example.com" }]);
     expect([noLogin.code, noLogin.err[0], noDomain.code, noDomain.err[0]]).toEqual([1, "--login takes an email address", 1, "--domain takes a domain alone"]);
     expect(plug.calls.map(({ run }) => run)).toEqual(["repair"]);
+
+    // With no --domain the install is asked for the kind without one, at the hostname of --server, and says so when that is no address of such an install.
+    const elsewhere = await bench.run(`${SETUP} --login owner@example.com`, { env: ENV });
+
+    expect<unknown>([elsewhere.code, elsewhere.err[0], first.asked.at(-1)]).toEqual([1, "without --domain, --server takes the address the provider gave the install", { kind: "no-domain", host: new URL(ORIGIN).hostname, login: "owner@example.com" }]);
   });
 
   // Drift: the token opens the person's whole account at the provider; the command's own output is the one place it could reach a log or a screen.

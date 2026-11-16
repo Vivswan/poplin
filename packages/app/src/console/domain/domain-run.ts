@@ -13,7 +13,7 @@ import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState,
 const HIDDEN = "[token]";
 
 /** The status of a page that holds no table. */
-export const REFUSAL_STATUS = { token: 403, unreachable: 502, no_domain: 403, bad_domain: 400, bad_login: 400, allowance_spent: 503 } as const;
+export const REFUSAL_STATUS = { token: 403, unreachable: 502, no_domain: 403, bad_domain: 400, bad_address: 400, bad_login: 400, allowance_spent: 503 } as const;
 
 /** How the install remembers a row of each state that says how the object stands: what a repair did stands, and one that only lacks an optional right is not set up. */
 const REMEMBERED: Readonly<Record<Exclude<DomainState, "failed" | "not-run" | "left-out">, Extract<CheckedPiece, { state: "ok" | "needs_repair" | "not_set_up" }>["state"]>> = {

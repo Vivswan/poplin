@@ -43,12 +43,13 @@ export interface DomainStep {
 /**
  * Every object of the install, or why none was read: `token` for a key that is malformed, refused, or of another account, all alike; `unreachable` when the provider did not answer.
  *
- * Three are of an install with nothing set: `no_domain` for a token that shows no such domain, and `bad_domain` and `bad_login` for a typed value that is no domain or no email, refused before the provider is asked.
+ * Four are of an install with nothing set: `no_domain` for a token that shows no such domain, and `bad_domain` and `bad_login` for a typed value that is no domain or no email, refused before the provider is asked.
+ * `bad_address` is a run for an install without a domain that was sent to a hostname no such install can answer at.
  * `allowance_spent` is a run of the setup page that the install's database refused a read or its audit entry, because its free allowance for the day is used up.
  */
 export type DomainReading =
   | { readonly ok: true; readonly rows: readonly DomainRow[]; readonly steps: readonly DomainStep[] }
-  | { readonly ok: false; readonly refusal: "token" | "unreachable" | "no_domain" | "bad_domain" | "bad_login" | "allowance_spent" };
+  | { readonly ok: false; readonly refusal: "token" | "unreachable" | "no_domain" | "bad_domain" | "bad_address" | "bad_login" | "allowance_spent" };
 
 /** The provider's side of an install. Neither method keeps the token past its own call, and neither throws for anything the provider answers. */
 export interface DomainPlug {
@@ -74,12 +75,23 @@ export interface DomainPlug {
 /** What the provider's form for a new token is and asks for, as both pages show it. */
 export type TokenFacts = Pick<DomainPlug, "tokenRights" | "tokenLink" | "tokenOptional" | "tokenNote">;
 
-/** The provider's side of an install with nothing set yet: no plug exists before a person names the domain and the first login. */
-export interface FirstRun extends TokenFacts {
+/**
+ * What a person chose for an install with nothing set, with its first login.
+ *
+ * `domain` is an install under a domain of their own, as it was typed.
+ * `no-domain` is one at the address the provider gave it: `host` is the hostname the run was sent to, which such an install answers at.
+ */
+export type FirstChoice = { readonly kind: "domain"; readonly domain: string; readonly login: Login } | { readonly kind: "no-domain"; readonly host: string; readonly login: Login };
+
+/** The provider's side of an install with nothing set yet: no plug exists before a person chooses the kind of install and names the first login. */
+export interface FirstRun {
+  /** What the provider's form for a new token is and asks for, by the kind of install the token is for. */
+  readonly forms: Readonly<Record<FirstChoice["kind"], TokenFacts>>;
+
   /**
-   * Make the plug of an install under a domain whose first login is an email. A repair of that plug also gives the install these two values, so that it starts.
+   * Make the plug of the install a person chose. A repair of that plug also gives the install where it answers and its first login, so that it starts.
    *
-   * @returns the plug, or `undefined` for text the provider cannot take as a domain
+   * @returns the plug, or `undefined` for text the provider cannot take as a domain, and for a hostname no install without a domain answers at
    */
-  plugFor(first: { readonly domain: string; readonly login: Login }): DomainPlug | undefined;
+  plugFor(first: FirstChoice): DomainPlug | undefined;
 }

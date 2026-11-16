@@ -42,6 +42,9 @@ const ZONES = [
   { id: "zone-b", name: "example.com", account: { id: "account-b" }, plan: { name: "Free Website" }, status: "active" },
 ];
 
+/** The name of the account in its free address, and of the other account in its own. */
+const FREE_ADDRESSES: Readonly<Record<string, string>> = { [ACCOUNT]: "example", "account-b": "other" };
+
 /** A stored object: its id and whatever was sent for it. */
 type Row = Record<string, unknown>;
 
@@ -82,6 +85,9 @@ export interface Account {
 
   /** The bindings of the install's Worker. */
   bindings: Row[];
+
+  /** The account's other Workers, each with its tags, its bindings, and its two address switches. */
+  workers: Row[];
 
   /** The API tokens the account owns: every key made for an install, as Cloudflare lists it, with no value. */
   tokens: Row[];
@@ -126,6 +132,7 @@ export function emptyAccount(): Account {
       { name: "DB", type: "d1", id: "database-1" },
       { name: "ZONE", type: "json", json: { domain: "example.com" } },
     ],
+    workers: [],
     accessOff: false,
     tokens: [],
     groups: Object.entries(GROUP_NAMES).flatMap(([scope, names]) => names.map((name) => ({ id: `${name} of ${scope}`, name, scopes: [scope] }))),
@@ -194,9 +201,34 @@ function applications(account: Account, asked: Asked, id: string | undefined, ac
   return answered;
 }
 
-/** The settings of the Worker named `poplin`: a change keeps a binding it names as inherited, takes each other as sent, and drops every binding it does not name. */
+/** Another Worker of the account: an upload makes it with the tags and bindings sent and Cloudflare's first addresses, and its settings and its address switches are read and set. */
+function otherWorker(account: Account, asked: Asked, parts: readonly string[]): Response {
+  const [name, part] = [parts[4], parts[5]];
+  const at = account.workers.findIndex((candidate) => candidate.id === name);
+  if (asked.method === "PUT" && part === undefined) {
+    const { metadata } = asked.body as { readonly metadata: Row };
+    account.workers.splice(at < 0 ? account.workers.length : at, 1, { enabled: false, previews_enabled: true, ...account.workers[at], id: name, tags: metadata.tags, bindings: metadata.bindings });
+
+    return reply({ id: name });
+  }
+
+  const current = account.workers[at];
+  if (current === undefined) return refusal(404, 10007, "This Worker does not exist on your account.");
+
+  if (part === "settings") return reply({ bindings: current.bindings ?? [], tags: current.tags });
+
+  if (asked.method === "POST") Object.assign(current, asked.body);
+
+  return reply({ enabled: current.enabled, previews_enabled: current.previews_enabled });
+}
+
+/** The account's Workers: the list, the settings of the Worker named `poplin`, and every other Worker. A change of those settings keeps a binding it names as inherited, takes each other as sent, and drops every binding it does not name. */
 function worker(account: Account, asked: Asked, parts: readonly string[]): Response {
-  if (parts[4] !== "poplin" || parts[5] !== "settings") return refusal(404, 10007, "This Worker does not exist on your account.");
+  if (parts[4] === undefined) return page(asked, [{ id: "poplin", tags: [] }, ...account.workers]);
+
+  if (parts[4] !== "poplin") return otherWorker(account, asked, parts);
+
+  if (parts[5] !== "settings") return refusal(404, 10007, "This Worker does not exist on your account.");
 
   if (asked.method === "GET") return reply({ bindings: account.bindings });
 
@@ -247,6 +279,8 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
 
   if (kind === "workers/scripts") return worker(account, asked, parts);
 
+  if (kind === "workers/subdomain") return reply({ subdomain: FREE_ADDRESSES[ACCOUNT] });
+
   if (kind === "d1/database") return stored(account.databases, asked, parts[4], "uuid");
 
   if (kind === "alerting/v3") return stored(account.alerts, asked, parts[5]);
@@ -261,7 +295,7 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
 /**
  * Answer one request as the account's API would.
  *
- * @returns the reply; a token the fake does not know is refused, and a known token sees only the zones of its own account
+ * @returns the reply; a token the fake does not know is refused, and a known token sees only its own account and that account's zones
  */
 export function answer(account: Account, asked: Asked): Response {
   const owner = ACCOUNT_OF[asked.key ?? ""];
@@ -274,8 +308,10 @@ export function answer(account: Account, asked: Asked): Response {
       ZONES.filter((zone) => zone.account.id === owner),
     );
 
-  // A token of another account reaches nothing of this one.
-  if (owner !== ACCOUNT) return refusal(403, 10000, "Authentication error");
+  if (path === "/accounts") return page(asked, [{ id: owner, name: "An account" }]);
+
+  // A token of another account reads its own free address, and reaches nothing of this account.
+  if (owner !== ACCOUNT) return path === `/accounts/${owner}/workers/subdomain` ? reply({ subdomain: FREE_ADDRESSES[owner] }) : refusal(403, 10000, "Authentication error");
 
   const call = `${asked.method} ${path}`;
   const refused = [account.refuse ?? []].flat().some((entry) => (entry.endsWith("*") ? call.startsWith(entry.slice(0, -1)) : entry === call));
