@@ -71,6 +71,7 @@ The files are those of the one push, first commit to last. GitHub reads the firs
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
 | a run started by hand                                  | deploy and checks, with no wait for CI                               |
 | a run started by hand with `start_over` ticked         | first removes the install with `poplin uninstall`, then the same     |
+| a run started by hand with `load` ticked               | the same, and [the load](#the-load) after the checks                 |
 | a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
 | the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
@@ -278,9 +279,9 @@ Each account has its own allowances, and every ceiling below holds for each inst
 | the zone's plan is Free, where the account holds a zone, and every subscription of the account that has not ended is at a price of 0 | `plan.ts`, before anything is made | the run stops red |
 | a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit; without it, the install's own key within a day | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
-| bucket writes and lists: 150 by the checks, 300 by the midnight run's, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
+| bucket writes and lists: 150 by the checks, 300 by the midnight run's, 2,300 with the many-files check, 80 more with the load, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | bucket lists and deletes: 300 together by the removal of the files no record names | `orphans.ts`, around every call to Cloudflare for the bucket | the removal stops, and the next run goes on |
-| rows written to the database: 1,100 by the checks, 600 by a reset | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
+| rows written to the database: 1,100 by the checks, 600 more with the load, 600 by a reset | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
 | the sample sites and the demo: 12 sites, 120 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
@@ -377,6 +378,34 @@ The harness's count is the most each request writes for a site a run made, so it
 ```text
 Rows written this run: 866 of at most 1100
 ```
+
+## The load
+
+A run started by hand with `load` ticked adds one check after all the others: some of the requests of the [load test](../README.md), at small, fixed sizes. No push and no midnight run makes it.
+
+| Step | Requests | Rows written, at most | Bucket writes and lists |
+| --- | --- | --- | --- |
+| publish 5 sites of one page | one publish each | 20 each | 2 each |
+| publish one site of 20 files | one publish | 20 | 21 |
+| open its page | 30 one after another, then 50 at once | 2 each | none |
+| ask for a file it does not hold | 10 one after another, then 10 at once | 2 each | none |
+| list the sites | 5 one after another | none | none |
+| copy the site of 20 files | one command | 21 | 22 |
+| the run's sweep removes the 7 sites | one removal each | 13 each | 1 each |
+
+```text
+load: at most 432 rows written of a ceiling of 600, 60 bucket writes and lists of a ceiling of 80, and 100 visits of one visitor's 120 a minute
+```
+
+| The load | What happens |
+| --- | --- |
+| says its plan before it sends anything | the first line above: the rows, the bucket writes and lists, and the visits it makes at the most |
+| plans more than a ceiling, or more visits than one visitor's minute holds | it sends nothing, and the check fails with the number that is over |
+| waits 61 seconds before its first visit | the checks of the edge before it used up its visitor's minute |
+| is answered a visitor's refusal, status 429 with `Retry-After` and the install's own words | counted as refused, and no failure |
+| is answered anything else that is not what the step asks for | the check fails, with the statuses alone |
+
+The plan counts each file a copy writes; the run's own meter counts a copy as one request, so its line of bucket writes and lists reads 21 under the plan. The times are those of the runner's requests over the network, and no measure of the Worker's processing. `live/checks/load.ts` holds the sizes, and `tests/live/checks/load.test.ts` runs the load against the local fake of both kinds of install.
 
 ## The backup drill
 
@@ -501,6 +530,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | one data center that takes more than 300 of the runner's requests in ten seconds | `burst-rate-rule`                                           |
 | a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
+| a run started by hand with the load switched on                     | `load`: it is no row of any other run's table                            |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`, `download`: the checklist below        |
 | a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` |
 

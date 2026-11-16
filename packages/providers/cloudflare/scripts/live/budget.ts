@@ -34,8 +34,8 @@ const MATCHERS = SPENDING.map(({ method, path }) => ({ method, path: new URLPatt
 /** The same of each route that spends nothing. */
 const FREE_MATCHERS = FREE.map(({ method, path }) => ({ method, path: new URLPattern({ pathname: path }) }));
 
-/** The most bucket writes and lists each step of a run may ask for: the checks, those with the job's copy, those with two thousand files, and the reset. `orphans`: the most lists and deletes a run asks Cloudflare for to remove files no record names. */
-export const CEILINGS = { checks: 150, jobCopy: 300, manyFiles: 2300, reset: 150, orphans: 300 } as const;
+/** The most bucket writes and lists each step of a run may ask for. `orphans`: the most lists and deletes a run asks Cloudflare for to remove files no record names. `load`: what a load started by hand adds, each file of its copy counted. */
+export const CEILINGS = { checks: 150, jobCopy: 300, manyFiles: 2300, reset: 150, orphans: 300, load: 80 } as const;
 
 /** Where the API answers. */
 const API = "/api/";

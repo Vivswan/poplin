@@ -40,6 +40,10 @@ on:
         description: First remove the test install from its account
         type: boolean
         default: false
+      load:
+        description: Also run the small load after the checks
+        type: boolean
+        default: false
     # The names the steps read. A caller must hand each name over, and the value may be empty: the one a step reads is the secret of the job's environment.
     secrets:
       CLOUDFLARE_API_TOKEN:
@@ -106,6 +110,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
           POPLIN_LIVE_MANY_FILES: ${{ inputs.many_files && '1' || '0' }}
+          POPLIN_LIVE_LOAD: ${{ inputs.load && '1' || '0' }}
           MISSING: ${{ steps.converge.outputs.missing }}
         run: bun run --silent --cwd packages/providers/cloudflare live:suite "$MISSING"
       # Whatever the checks came to, so the owner finds the samples and the demo. It removes every token, and with them

@@ -18,6 +18,7 @@
     "test": "bun run build && vitest run",
     "costs": "bun run build && vitest run tests/shared/worker/request-budget.test.ts",
     "costs:compare": "bun scripts/action-costs.ts",
+    "load": "bun run build && POPLIN_LOAD=full vitest run",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",
     "live:reset": "bun scripts/live/reset.ts"
