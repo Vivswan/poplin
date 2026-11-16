@@ -85,7 +85,7 @@ export async function ownRelease(version: string): Promise<OwnRelease> {
   const manifest = await bundleManifest({ version, schema: OWN_SCHEMA, config: CONFIG, files: built });
   const pins = { [version]: { source: "0".repeat(64), bundle: await releaseDigest(encoder.encode(manifest)), schema: OWN_SCHEMA } };
   const published: Readonly<Record<string, string | Uint8Array<ArrayBuffer>>> = {
-    "latest.json": JSON.stringify({ version, released: "2026-12-01", notes: "https://example.com/changelog/", schema: OWN_SCHEMA }),
+    "latest.json": JSON.stringify({ version, released: "2026-12-01", notes: `https://github.com/Vivswan/poplin/releases/tag/v${version}`, schema: OWN_SCHEMA }),
     "releases.json": JSON.stringify(pins),
     [bundleAsset(version, MANIFEST_FILE)]: manifest,
     [bundleAsset(version, MODULE_FILE)]: built[MODULE_FILE],
