@@ -24,6 +24,9 @@ const OUTSIDE_PAGES = ["blocked", "allowed"] as const;
 /** The zone's bot switches: `auto` sets them on a zone with no hostnames of its own, `on` on any zone, `off` leaves them alone. */
 const BLOCK_BOTS = ["auto", "on", "off"] as const;
 
+/** The settings the rules of the domain are written from: a change of one is carried to those rules, by the install itself or by a repair. */
+export const RULE_SETTINGS = ["outside_pages", "search_engines_allowed"] as const;
+
 /** The most files one publish may declare under any setting: finishing lists them a thousand a store call. */
 export const MOST_FILES_PER_PUBLISH = 10_000;
 
@@ -111,6 +114,9 @@ interface TextForm<Value> {
 
 /** The values of every setting. */
 export type SettingValues = v.InferOutput<typeof SETTING_VALUES>;
+
+/** The values the rules of the domain are written from. */
+export type RuleSettings = Pick<SettingValues, (typeof RULE_SETTINGS)[number]>;
 
 type SettingKey = keyof SettingValues;
 

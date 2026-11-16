@@ -6,7 +6,7 @@ import type { Database } from "@poplin/core/src/database/database";
 import type { SqlDriver, Statement, StatementResult } from "@poplin/core/src/database/driver";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { DEFAULT_PUBLIC_WORD } from "@poplin/core/src/names/marker";
-import { defaultSettings } from "@poplin/core/src/records/settings";
+import { defaultSettings, type RuleSettings } from "@poplin/core/src/records/settings";
 import { ADDRESS_LAYOUT } from "@poplin/core/src/sites/address-layout";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import type { ObjectStore } from "@poplin/core/src/storage/storage";
@@ -60,7 +60,7 @@ export interface Answered {
  * `routes` sends as the admin, `as` as another token or, for `null`, with no `Authorization` header, and `ask` sends a request written out by hand. `requests` holds every request the three sent, in order.
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
- * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`.
+ * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`. `rules` stands in for the provider's side of the domain's rules, on an install that holds a key: `pushed` holds the values of every try.
  * `users` stands in for the provider's side of the users: `pushed` holds every list of logins handed over, and `takes` says whether the provider takes them; it starts as an install with no key, which takes none.
  *
  * `provider` stands in for the install's provider: `sent` holds the method, the redirect mode, the body, and the address of every request to start a rebuild, and `status` is what the next one is answered with.
@@ -74,6 +74,7 @@ export interface ApiInstall {
   readonly clock: { now: number };
   readonly provider: { status: number; readonly sent: unknown[][] };
   readonly users: { takes: boolean; readonly pushed: (readonly string[])[] };
+  readonly rules: { readonly pushed: RuleSettings[] };
   readonly tokens: { readonly admin: string; readonly owner: string; readonly stranger: string };
   readonly reported: unknown[];
   readonly keys: () => Promise<string[]>;
@@ -175,6 +176,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const counters = new MemoryCounters();
   const provider: ApiInstall["provider"] = { status: 200, sent: [] };
   const users: ApiInstall["users"] = { takes: false, pushed: [] };
+  const rules: ApiInstall["rules"] = { pushed: [] };
   const said = v.parse(ADDRESS_LAYOUT, layout);
   const addresses = addressesUnder(said.kind === "hostname" ? said.public_word : DEFAULT_PUBLIC_WORD);
   const api = createApi({
@@ -199,6 +201,14 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
         users.pushed.push(logins);
 
         return users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
+      },
+    },
+    rules: {
+      holdsKey: () => true,
+      push: async (values) => {
+        rules.pushed.push(values);
+
+        return { ok: true };
       },
     },
     rebuild: {
@@ -231,6 +241,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     counters,
     clock,
     users,
+    rules,
     provider,
     tokens: { admin, owner, stranger },
     reported,

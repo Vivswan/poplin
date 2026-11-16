@@ -204,7 +204,7 @@ CREATE TABLE update_check (
   CHECK ((news IS NULL) = (seen_at IS NULL))
 ) STRICT`;
 
-/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: above zero, a change of the users waits; below zero, none does. */
+/** The last check or repair of the domain: when, by whom, which of the two, and its pieces as JSON; a run replaces the row. `users_changed_at`, `rules_changed_at`: above zero, a change of the users or the rules waits; below zero, none does. */
 const DOMAIN_CHECK = `
 CREATE TABLE domain_check (
   id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
@@ -212,14 +212,16 @@ CREATE TABLE domain_check (
   ran_by TEXT NOT NULL,
   run TEXT NOT NULL CHECK (run IN ('check', 'repair')),
   pieces TEXT NOT NULL CHECK (json_valid(pieces) AND json_type(pieces) = 'array'),
-  users_changed_at INTEGER
+  users_changed_at INTEGER,
+  rules_changed_at INTEGER
 ) STRICT`;
 
 /** What went wrong, per UTC day and kind. `count` is a floor, since a kind is written once an hour, and `more` says it came more often than it was written; `name` and `message` are of the latest failure. */
 const PROBLEMS = `
 CREATE TABLE problems (
   day TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-  kind TEXT NOT NULL CHECK (kind IN ('request_failed', 'api_failed', 'sweep_failed', 'count_unwritten', 'login_unwritten', 'login_unchecked', 'update_failed', 'users_not_carried', 'files_limit_reached', 'writes_limit_reached', 'requests_limit_reached')),
+  kind TEXT NOT NULL CHECK (kind IN ('request_failed', 'api_failed', 'sweep_failed', 'count_unwritten', 'login_unwritten', 'login_unchecked', 'update_failed', 'users_not_carried',
+    'rules_not_carried', 'files_limit_reached', 'writes_limit_reached', 'requests_limit_reached')),
   count INTEGER NOT NULL CHECK (count >= 1),
   more INTEGER NOT NULL DEFAULT 0 CHECK (more IN (0, 1)),
   first_at INTEGER NOT NULL,

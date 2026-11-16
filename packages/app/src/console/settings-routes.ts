@@ -1,7 +1,8 @@
 // The data of the Settings screen: every setting as a row, a save of some of them, the address that starts a rebuild, and the sign-out of every browser.
 //
 //   GET  /settings                         every setting with its control, its text, its default, and the free limits it can be put above; and whether a rebuild address is saved
-//   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting
+//   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting.
+//                                          A saved setting the domain's rules are written from is then carried to them, on an install that holds a key
 //   POST /settings/update-address          save the address that starts a rebuild
 //   POST /settings/update-address/remove   remove it
 //   POST /settings/sign-everyone-out       replace the stored key: every visitor's limit starts again
@@ -10,7 +11,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { removeUpdateAddress, saveUpdateAddress, UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
-import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, sizeBytes } from "@poplin/core/src/records/settings";
+import { defaultSettings, RULE_SETTINGS, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, sizeBytes } from "@poplin/core/src/records/settings";
 import { Hono } from "hono";
 import * as v from "valibot";
 
@@ -18,6 +19,7 @@ import { ACCESS_SETTINGS, DOMAIN_SETTINGS } from "./settings/constants";
 import { type FreeLimits, type FreeMark, freeLimitMarks } from "./settings/free-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 import { type Control, controlOf, screenText, unitOf } from "./setting-controls";
+import { carryRules } from "./settings/rules-follow";
 
 /** What a save carries: the text of each setting it changes, by the setting's key. */
 const SAVE = v.object({ texts: v.record(v.string(), v.string()) });
@@ -45,7 +47,7 @@ interface Row {
   /** The free limits of the host the setting can be put above: the largest count that earns no warning, the unit that count is typed in, and the host's sentence for a count above it. A size has each once for its text's unit and once for its default's. */
   readonly limits: readonly (FreeMark & { readonly unit: string })[];
 
-  /** `true` for a setting that also changes rules on the domain, in a dashboard that has the Domain screen: the domain's own rules follow at the next repair. */
+  /** `true` for a setting that also changes the domain, in a dashboard that has the Domain screen, where that half waits for the next repair. `false` for one the install carries to the domain by itself. */
   readonly repair: boolean;
 }
 
@@ -73,12 +75,17 @@ function limitsOf(marks: readonly FreeMark[], value: SettingValues[Key], texts: 
   });
 }
 
+/** Whether the install carries a setting to the domain by itself: one the domain's rules are written from, on an install that holds a key. */
+function isCarried(key: Key, carries: boolean): boolean {
+  return carries && (RULE_SETTINGS as readonly Key[]).includes(key);
+}
+
 /**
  * The rows of the screen.
  *
- * @param facts - the host's free limits, and whether the dashboard has the Domain screen
+ * @param facts - the host's free limits, whether the dashboard has the Domain screen, and whether the install carries the settings of the domain's rules there by itself
  */
-function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits; readonly domain: boolean }): readonly Row[] {
+function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits; readonly domain: boolean; readonly carries: boolean }): readonly Row[] {
   const texts = screenTexts(values);
   const [installer] = values.logins;
   const defaults = installer === undefined ? texts : screenTexts(defaultSettings({ installer }));
@@ -95,7 +102,7 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
       unit: control.kind === "number" ? unitOf(SETTING_VALUES.entries[key], texts[key]) : "",
       fallback: defaults[key],
       limits: limitsOf(marks[key] ?? [], values[key], [texts[key], defaults[key]]),
-      repair: facts.domain && DOMAIN_SETTINGS.includes(key),
+      repair: facts.domain && DOMAIN_SETTINGS.includes(key) && !isCarried(key, facts.carries),
     };
   });
 }
@@ -110,7 +117,7 @@ export const settingsRoutes = new Hono<Shared>()
     const address = await updateAddressState(install, actor);
     if (!address.ok) return refused(context, address);
 
-    const rows = rowsOf(config.values, { freeLimits: context.get("host").freeLimits, domain: context.get("domain") !== undefined });
+    const rows = rowsOf(config.values, { freeLimits: context.get("host").freeLimits, domain: context.get("domain") !== undefined, carries: context.get("rules")?.holdsKey() === true });
 
     return context.json({ ok: true as const, rows, updateAddress: { set: address.set, since: address.since } });
   })
@@ -132,6 +139,8 @@ export const settingsRoutes = new Hono<Shared>()
 
     const changed = await changeConfig(install, actor, Object.fromEntries(held.map((key) => [key, read.values[key]])));
     if (!changed.ok) return refused(context, changed);
+
+    if (held.some((key) => isCarried(key, true))) await carryRules(context, install, context.get("rules"));
 
     return context.json({ ok: true as const });
   })

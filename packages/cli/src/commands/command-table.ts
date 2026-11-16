@@ -211,9 +211,9 @@ export const COMMANDS = [
     flags: installFlags("the settings"),
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
     notes: [
-      "outside_pages, search_engines_allowed, and block_bots are also held in",
-      "rules on your domain. The install follows a changed outside_pages itself.",
-      "The domain's side changes only when it is synced.",
+      "outside_pages, search_engines_allowed, and block_bots also change your",
+      "domain. An install that holds its key writes the rules of the first two",
+      "there itself. block_bots changes there at the next Repair on Domain.",
     ],
   },
   {

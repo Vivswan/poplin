@@ -2,7 +2,8 @@
 
 import { decideLogin } from "@poplin/core/src/actions/computer-logins";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
-import { ADMIN, done, OWNER } from "./install";
+import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
+import { ADMIN, cloudflareOf, done, OWNER } from "./install";
 import { adminToken, apiOf, type BudgetRow, get, sql, type Stage, unmeasured } from "./budget-stage";
 import { manyEntries, manyProblems, manySites, manyTokens, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
 
@@ -352,6 +353,22 @@ export const API_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
+    name: "change a setting of the guard rules, carried to Cloudflare",
+    route: "PATCH /api/config",
+    // On an install that holds its key and keeps a run of its domain: the change, then the settings read under a mark and the change settled, around the write to Cloudflare.
+    arrange: async (stage) => {
+      const token = await adminToken(stage);
+      stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
+      stage.keptKey = TOKEN;
+      await stage.install.database.keepDomainCheck({ ran_at: stage.w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+
+      return (measured) => apiOf(measured, token).config.$patch({ query: {}, json: { outside_pages: "allowed" } });
+    },
+    status: 200,
+    budget: { queries: 4, reads: 0, writes: 0 },
+  },
+  {
+    group,
     name: "sign everyone out",
     route: "DELETE /api/sessions",
     // A new visitor key and one audit entry.
@@ -403,7 +420,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).problems.$get({ query: {} });
     },
     status: 200,
-    budget: { queries: 2, read: 78, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 85, reads: 0, writes: 0 },
   },
   {
     group,
