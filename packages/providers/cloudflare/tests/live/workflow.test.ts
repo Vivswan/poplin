@@ -50,6 +50,7 @@ const DECIDERS: readonly string[] = [
   "packages/providers/cloudflare/scripts/live/start-over.ts",
   "packages/providers/cloudflare/src/shared/install/first/installer.ts",
   "packages/providers/cloudflare/src/shared/install/kind/first-run.ts",
+  "packages/providers/cloudflare/src/shared/install/upkeep/remove/remove.ts",
   "packages/providers/cloudflare/src/shared/worker/hosts.ts",
   "packages/providers/cloudflare/src/with-domain/pieces/https/https.ts",
   "packages/providers/cloudflare/src/with-domain/pieces/rules/rules-follow.ts",

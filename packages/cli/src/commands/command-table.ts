@@ -41,13 +41,21 @@ export const SESSION = [
   "poplin delete report",
 ];
 
-/** The command that makes an install, as its row of the help: its providers and their options are known only when it runs, so its own parser reads its words. */
-export const INSTALL_COMMAND = {
-  name: "install",
-  group: "the install",
-  about: "make your own install at a provider",
-  arguments: [{ name: "provider", about: "where to install; without it, the providers are listed", required: false }],
-} as const;
+/** The commands that work at a provider, as their rows of the help: the providers and their options are known only when one runs, so its own parser reads its words. The first leads the group of the commands about an install, and the last ends it. */
+export const PROVIDER_COMMANDS = [
+  {
+    name: "install",
+    group: "the install",
+    about: "make your own install at a provider",
+    arguments: [{ name: "provider", about: "where to install; without it, the providers are listed", required: false }],
+  },
+  {
+    name: "uninstall",
+    group: "the install",
+    about: "remove your install from a provider",
+    arguments: [{ name: "provider", about: "where the install is; without it, the providers are listed", required: false }],
+  },
+] as const;
 
 /** Every command, in the order the help lists them. */
 export const COMMANDS = [

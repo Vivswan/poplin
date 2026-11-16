@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 
-import { COMMANDS, type CommandSpec, INSTALL_COMMAND } from "./command-table";
+import { COMMANDS, type CommandSpec, PROVIDER_COMMANDS } from "./command-table";
 
 /** The word of the program. */
 const PROGRAM = "poplin";
@@ -33,10 +33,20 @@ export function buildProgram(): Command {
     .argument("[words...]");
 
   const specs: readonly CommandSpec[] = COMMANDS;
-  const first = specs.findIndex((spec) => spec.group === INSTALL_COMMAND.group);
+  const [install, uninstall] = PROVIDER_COMMANDS;
+  const first = specs.findIndex((spec) => spec.group === install.group);
+  const after = first + specs.filter((spec) => spec.group === install.group).length;
 
-  // The command that makes an install leads the group of the commands about one.
-  for (const spec of [...specs.slice(0, first), { ...INSTALL_COMMAND, flags: [], examples: [] }, ...specs.slice(first)]) {
+  // The command that makes an install leads the group of the commands about one, and the one that removes it ends the group.
+  const ordered: readonly CommandSpec[] = [
+    ...specs.slice(0, first),
+    { ...install, flags: [], examples: [] },
+    ...specs.slice(first, after),
+    { ...uninstall, flags: [], examples: [] },
+    ...specs.slice(after),
+  ];
+
+  for (const spec of ordered) {
     const command = program.command(spec.name).description(spec.about).helpGroup(spec.group).usage(`${argumentsOf(spec)} [flags]`.trimStart());
 
     for (const argument of spec.arguments) command.argument(argument.required ? `<${argument.name}>` : `[${argument.name}]`, argument.about);

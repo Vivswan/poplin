@@ -10,6 +10,7 @@ import { type Pipes, serveOnPipes } from "../mcp/stdio";
 import { VERSION } from "../poplin";
 import { processEnds } from "../install/ends";
 import { runInstall } from "../install/first/install";
+import { runUninstall } from "../install/remove/uninstall";
 import { TOKEN_VARIABLE } from "../install/ask";
 import type { InstallEnds } from "../install/records";
 import { exitCode } from "./exit-codes";
@@ -18,7 +19,7 @@ import { helpText } from "./help";
 import { runImport } from "./import";
 import { runInstallCommand } from "./install-commands";
 import { logIn } from "./login";
-import { parseCommand } from "./parse-command";
+import { type ProviderCommand, parseCommand } from "./parse-command";
 import { type Problem, problem, problemLines } from "./problems";
 import { planPublish, previewPublish, sendPublish } from "./publish";
 import { runSetup } from "./setup";
@@ -34,6 +35,9 @@ export const AFTER_STOP_TIMEOUT_MS = 4000;
 
 /** The commands about the login and the install that this build runs. */
 const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
+
+/** What runs each command that works at a provider, from the words after it. */
+const PROVIDER_RUNS: Readonly<Record<ProviderCommand, (words: readonly string[], io: Io, ends: InstallEnds) => Promise<number>>> = { install: runInstall, uninstall: runUninstall };
 
 /** The commands about sites, but for `publish`. */
 const SITE_COMMANDS = ["set", "show", "list", "rollback", "new-link", "duplicate", "delete", "restore"] as const;
@@ -281,7 +285,7 @@ function mcpHost(io: Io): Host {
  *
  * @param io - the machine's ends: where to print, how to send, where the login is, and whether a person is there to ask
  * @param pipes - the two ends `poplin mcp` speaks its protocol on, which no other command touches; this process's stdin and stdout unless given
- * @param installEnds - what `poplin install` reaches beside `io`, made when that command runs; this process's own unless given
+ * @param installEnds - what `poplin install` and `poplin uninstall` reach beside `io`, made when one of them runs; this process's own unless given
  * @returns the exit code. Nothing throws: a failure nothing foresaw is printed as one line, without its stack
  */
 export async function run(
@@ -292,7 +296,7 @@ export async function run(
 ): Promise<number> {
   const parsed = parseCommand(argv);
 
-  if (parsed.kind === "install") return runInstall(parsed.words, io, installEnds(io));
+  if (parsed.kind === "provider") return PROVIDER_RUNS[parsed.command](parsed.words, io, installEnds(io));
 
   if (parsed.kind === "version") {
     io.out(VERSION);

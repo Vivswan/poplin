@@ -4,13 +4,13 @@
 //
 // A dry run goes the same way and changes nothing. Nothing is kept on this computer, and the token is in no line and no value.
 
-import type { Found, Installed, Question, Startable } from "../../../../core/src/install/installer";
+import type { Found, Installed, Startable } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
 import { logIn } from "../../commands/login";
 import { problemLines } from "../../commands/problems";
 import type { Io } from "../../commands/records";
 import { installAnswers } from "./answers";
-import { askWhere, STOPPED, settle } from "../ask";
+import { lookFor, STOPPED, settle } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
@@ -93,39 +93,20 @@ async function grounded(found: Extract<Found<unknown, unknown>, { readonly state
   return "problem" in taken ? taken : noted(taken, request, ends, show);
 }
 
-/** Ask which of the places a token shows is meant. A run that asks nothing is told which option answers it. */
-async function chosen(question: Question<unknown>, request: InstallRequest, ends: InstallEnds): Promise<{ readonly where: unknown } | Stop> {
-  if (request.asking === "never") return { problem: "missing_answer", exit: 2, missing: [{ key: question.key, name: question.name, give: question.give }] };
-
-  return (await askWhere([question], ends.screen)) ?? STOPPED;
-}
-
-/**
- * Look for an install with the token, and bring what is found to ground a run can start from.
- *
- * A token that shows more than one place is asked which, and looked with again at the place chosen.
- */
+/** Look for an install with the token, and bring what is found to ground a run can start from. */
 async function look(request: InstallRequest, ends: InstallEnds, show: Show): Promise<Ground | Stop> {
-  let { where } = request;
+  const looked = await lookFor(request, ends, {
+    looking: () => show.working(LOOKING),
+    found: (found) => show.line(found.state === "none" || found.state === "started" ? "note" : "warning", `${LOOKING} ... ${FOUND_WORDS[found.state]}`),
+  });
+  if ("problem" in looked) return looked;
 
-  for (;;) {
-    show.working(LOOKING);
-    const found = await request.provider.find(request.token, where, ends.reach);
-    show.line(found.state === "none" || found.state === "started" ? "note" : "warning", `${LOOKING} ... ${FOUND_WORDS[found.state]}`);
+  const { found, where } = looked;
+  if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found);
 
-    if (found.state === "none" || found.state === "started" || found.state === "leftover") {
-      const ground = await grounded(found, request, ends, show);
+  const ground = await grounded(found, request, ends, show);
 
-      return "problem" in ground ? ground : { found: ground, where };
-    }
-
-    if (found.state !== "choice") return stopOf(found);
-
-    const next = await chosen(found.question, request, ends);
-    if ("problem" in next) return next;
-
-    ({ where } = next);
-  }
+  return "problem" in ground ? ground : { found: ground, where };
 }
 
 /** Log this computer in to the install that was made, when the person or the option says so; else say how. */

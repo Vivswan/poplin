@@ -1,4 +1,4 @@
-// The providers the built package carries: one file each in the folder beside the command, loaded when `poplin install` runs and by no other command.
+// The providers the built package carries: one file each in the folder beside the command, loaded when a command that works at a provider runs, and by no other.
 //
 //   dist/bin.mjs
 //   dist/providers/<id>.mjs    exports `installer`, whose `id` is the file's own name
@@ -29,6 +29,7 @@ const SHAPE = v.object({
   facts: v.function(),
   find: v.function(),
   install: v.function(),
+  remove: v.function(),
 });
 
 /** The error of a folder that is not there. */
