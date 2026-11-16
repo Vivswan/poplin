@@ -37,6 +37,9 @@ const BINDINGS: Bindings = env;
 /** The moment every fixture is made at. */
 const NOW = 1_700_000_000_000;
 
+/** The SHA-256 of the four bytes `page` in base64, as `openssl dgst -sha256 -binary | base64` gives it: what a file that holds them declares. */
+const PAGE_SHA256 = "NmAxWprz3yVdjxmrB35Hl4IrQUiKDioEvGr3EhPCMnQ=";
+
 /** A midnight UTC after it, where an hour of the clock and a day both begin. */
 const MIDNIGHT = 1_700_006_400_000;
 
@@ -161,6 +164,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "getUpload": [1, 0],
   "getUploadFile": [1, 0],
   "getUploadFile, no such file": [1, 0],
+  "getUploadFiles, two files and one that is not there": [1, 0],
   "listUploads": [1, 0],
   "publishUploadAsSite": [14, 13],
   "publishUploadAsSite, not pending": [5, 0],
@@ -323,7 +327,7 @@ async function publishCost(files: number): Promise<RowCounts> {
   rows.read = 0;
   rows.written = 0;
 
-  const begun = await asRoute(install, (counted) => beginPublish(counted, PUBLISHER, { name: "report", files: paths.map((path) => ({ path, size: 4, content_type: "text/html" })) }));
+  const begun = await asRoute(install, (counted) => beginPublish(counted, PUBLISHER, { name: "report", files: paths.map((path) => ({ path, size: 4, content_type: "text/html", sha256: PAGE_SHA256 })) }));
   if (!begun.ok) throw new Error(`the publish was refused: ${begun.code}`);
 
   for (const path of paths) await asRoute(install, (counted) => uploadFile(counted, PUBLISHER, { upload: begun.upload.id, path, body: new Blob(["page"]).stream() }));
@@ -339,7 +343,7 @@ describeSqlDriver("D1", emptyDatabase);
 
 describe("D1: the rows a publish costs of a day's allowance", () => {
   // Drift: the provider counts every entry of a JSON value a statement walks as a row read, and a publish asks for a file once per file; a lookup that walked the manifest read as many rows as the publish had files, squared.
-  test.each([3, 5000])("one file of an upload of %d files is read as one row, and so is its whole manifest", async (files) => {
+  test.each([3, 5000])("one file of an upload of %d files is read as one row, and so are a hundred of its files in one call, and its whole manifest", async (files) => {
     const { driver, rows } = await meteredDatabase();
     const opened = await openDatabase(driver, NOW);
     if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
@@ -349,10 +353,12 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
     rows.written = 0;
     const one = await opened.database.getUploadFile(upload, "page-2.html");
     const lookup = { ...rows };
+    const hundred = await opened.database.getUploadFiles(upload, numberedFiles(Math.min(files, 100)).map((file) => file.path));
+    const tickets = { ...rows };
     const whole = await opened.database.getUpload(upload);
 
-    expect([one?.file?.size, whole?.manifest.length]).toEqual([2, files]);
-    expect([lookup, rows]).toEqual([{ read: 1, written: 0 }, { read: 2, written: 0 }]);
+    expect([one?.file?.size, hundred?.files.filter((file) => file !== undefined).length, whole?.manifest.length]).toEqual([2, Math.min(files, 100), files]);
+    expect([lookup, tickets, rows]).toEqual([{ read: 1, written: 0 }, { read: 2, written: 0 }, { read: 3, written: 0 }]);
   });
 
   // Drift: the files of a day are counted so that the bucket's free month is not passed. A count kept a row per file, or one that read the days before, would spend the database's day to guard the bucket's month.
@@ -601,7 +607,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     const idle = { ...rows };
 
     await publishSite(install, PUBLISHER, { name: "report", files: [{ path: "index.html", size: 4, contentType: "text/html", open: () => new Blob(["page"]).stream() }] });
-    await beginPublish(install, PUBLISHER, { name: "notes", files: [{ path: "index.html", size: 4, content_type: "text/html" }] });
+    await beginPublish(install, PUBLISHER, { name: "notes", files: [{ path: "index.html", size: 4, content_type: "text/html", sha256: PAGE_SHA256 }] });
     await beginLogin(install, { scope: "publisher", computer: "laptop" }, "visitor-1");
     rows.read = 0;
     rows.written = 0;
@@ -731,6 +737,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getUpload", () => database.getUpload(begun.id));
     await cost("getUploadFile", () => database.getUploadFile(begun.id, "index.html"));
     await cost("getUploadFile, no such file", () => database.getUploadFile(begun.id, "nowhere.html"));
+    await cost("getUploadFiles, two files and one that is not there", () => database.getUploadFiles(begun.id, ["index.html", "it's \"quoted\"/100%.css", "nowhere.html"]));
     await cost("listUploads", () => database.listUploads({ before: NOW + 1, limit: 10 }));
     await cost("publishUploadAsSite", () => database.publishUploadAsSite(begun.id, { ...begun.site, bytes: 1000, files: 2 }, BY_ADA));
     await cost("publishUploadAsSite, not pending", () => database.publishUploadAsSite(begun.id, { ...begun.site, bytes: 1000, files: 2 }, BY_ADA));

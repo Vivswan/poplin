@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 
 import { answered, bytes, ORIGIN, openApi } from "../../../app/tests/api/support/install";
 import { LISTED_SITES } from "../../../core/src/actions/list";
 import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { SITE_ANSWER } from "../../../core/src/actions/site-object";
-import { STORED_FILE } from "../../../core/src/actions/upload-file";
 import { createClient, type Fetch } from "../../src/client/client";
 
 /** A token in the form of one, which no install knows. */
@@ -13,6 +13,15 @@ const TOKEN = `poplin_${"0".repeat(16)}_${"a".repeat(64)}`;
 function answer(status: number, body: unknown): Response {
   return new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
 }
+
+/** A ticket for one file of six bytes at the install's own route, as the install hands one out. */
+const TICKET = {
+  path: "css/a b.css",
+  url: "/api/uploads/0123456789abcdef/file?path=css%2Fa+b.css",
+  method: "PUT",
+  headers: { "Content-Type": "application/octet-stream", "Content-Length": "6" },
+  expires: 1_700_086_400_000,
+} as const;
 
 /** A `fetch` that never answers until the request is given up. */
 const hangs: Fetch = (_input, init) => new Promise((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
@@ -30,7 +39,7 @@ describe("client", () => {
 
     await client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: { site: "report--k3f9x2ab71qz" } }));
     await client.call(SITE_ANSWER, (api) => api.sites[":site"].$patch({ param: { site: "docs" }, json: { title: "Q3 sales" } }));
-    await client.upload(STORED_FILE, { upload: "0123456789abcdef", path: "css/a b.css", body: new TextEncoder().encode("body{}"), length: 6 });
+    await client.send(TICKET, new TextEncoder().encode("body{}"));
     await client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true", limit: "5" } }));
 
     expect(seen.map((request) => `${request.method} ${request.url}`)).toEqual([
@@ -101,7 +110,7 @@ describe("client", () => {
   test("a download hands back the real API's file as a stream with its length and its stored type, and a refusal as its code: without this a file route would be read as JSON and capped at 16 MB", async () => {
     const install = await openApi();
     const type = "text/x-notes; charset=utf-8";
-    const begun = await answered(install.routes.uploads.$post({ json: { name: "notes", files: [{ path: "index.html", size: 5, content_type: type }] } }));
+    const begun = await answered(install.routes.uploads.$post({ json: { name: "notes", files: [{ path: "index.html", size: 5, content_type: type, sha256: createHash("sha256").update("hello").digest("base64") }] } }));
     const upload = (begun.body.upload as { id: string }).id;
     await install.routes.uploads[":upload"].file.$put({ param: { upload }, query: { path: "index.html" } }, bytes("hello"));
     const site = ((await answered(install.routes.uploads[":upload"].finish.$post({ param: { upload } }))).body.site as { id: string }).id;
@@ -149,6 +158,34 @@ describe("client", () => {
   ])("a call answered with %s keeps the wait with the failure, or none", async (_name, response, failure) => {
     const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => response });
 
-    expect(await client.upload(STORED_FILE, { upload: "0123456789abcdef", path: "index.html", body: new Uint8Array(1), length: 1 })).toEqual({ ok: false, failure } as never);
+    expect(await client.send(TICKET, new Uint8Array(6))).toEqual({ ok: false, failure } as never);
+  });
+
+  // Drift: a ticket may name any address. A token sent along to a place that is not the install would hand the login to whoever a ticket points at.
+  test.each([
+    ["a path of the install", "/api/uploads/0123456789abcdef/file?path=index.html", `Bearer ${TOKEN}`],
+    ["the install's own origin, written whole", `${ORIGIN}/api/uploads/0123456789abcdef/file?path=index.html`, `Bearer ${TOKEN}`],
+    ["the install's origin spelled with its port and in capitals", `${ORIGIN.replace("poplin", "POPLIN")}:443/api/uploads/0123456789abcdef/file?path=index.html`, `Bearer ${TOKEN}`],
+    ["another host", "https://files.example.net/sites/abc/v1/index.html?signature=1", undefined],
+    ["another host, named without its scheme", "//files.example.net/sites/abc/v1/index.html", undefined],
+    ["a host that only starts as the install's does", `${ORIGIN}.example.net/api/uploads/0123456789abcdef/file`, undefined],
+    ["the install's host over plain HTTP", `${ORIGIN.replace("https", "http")}/api/uploads/0123456789abcdef/file`, undefined],
+    ["the install's host on another port", `${ORIGIN}:8443/api/uploads/0123456789abcdef/file`, undefined],
+  ])("a file sent to %s goes by the ticket's method, with the ticket's headers and no other, and the token only to the install", async (_where, url, authorization) => {
+    const seen: { method: string; url: string; headers: Record<string, string>; body: string; redirect: unknown }[] = [];
+    const record: Fetch = async (input, init) => {
+      seen.push({ method: String(init.method), url: new URL(input).href, headers: Object.fromEntries(new Headers(init.headers)), body: await new Response(init.body).text(), redirect: init.redirect });
+
+      return new Response(null, { status: 200 });
+    };
+    const client = createClient({ server: ORIGIN, token: TOKEN, fetch: record });
+    const headers = { "Content-Length": "6", "Content-Type": "text/css", "X-Signed": "abc" };
+
+    const sent = await client.send({ ...TICKET, url, headers }, new Blob(["body{}"]).stream());
+
+    expect<unknown>([sent, seen]).toEqual([
+      { ok: true, value: undefined },
+      [{ method: "PUT", url: new URL(url, ORIGIN).href, headers: { "content-length": "6", "content-type": "text/css", "x-signed": "abc", ...(authorization === undefined ? {} : { authorization }) }, body: "body{}", redirect: "manual" }],
+    ]);
   });
 });

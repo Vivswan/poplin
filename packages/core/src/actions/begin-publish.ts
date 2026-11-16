@@ -16,7 +16,7 @@ import { checkFilePath } from "./files";
 import { noteProblem } from "./problems";
 import { enterInstall, reachSite } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
-import { type BegunUpload, uploadObject } from "./uploads";
+import { type BegunUpload, begunUpload } from "./uploads";
 
 /** The page every site has at its top. */
 export const ENTRY_PAGE = "index.html";
@@ -46,7 +46,7 @@ const UTF8 = new TextEncoder();
 /** A publish bounded by nothing but the install's own limits. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: MOST_FILES_PER_PUBLISH };
 
-/** What a publish asks for before any file is sent: its settings, `site` to add a version to that site, the `name` of a new site or the new name of that one, every file with its size and content type, and `page_title`, the entry page's own title. */
+/** What a publish asks for before any file is sent: its settings, `site` to add a version to that site, the `name` of a new site or the new name of that one, every file as a `MANIFEST_FILE`, and `page_title`, the entry page's own title. */
 export const PUBLISH_REQUEST = v.strictObject({
   ...SITE_CHANGES.entries,
   page_title: v.optional(TITLE_TEXT),
@@ -277,7 +277,7 @@ async function planVersion(
  * Then it mints the folder of a new site or sets aside the site's next version number, and records the upload. No file is stored, no site is made, and no site changes.
  * @param request - what the caller sent; anything is taken and checked
  * @param limits - what one request can carry; a file or a count beyond it is `too_large`, naming `max_file_size` or `max_files`. A count beyond the install's settings names `max_files_per_publish` or `max_files_per_day`
- * @returns the upload, whose id every later step names, or a refusal that left nothing behind but a version number that is skipped.
+ * @returns the upload, whose id every later step names, with the tickets its files are sent by when it declares at most 100, or a refusal that left nothing behind but a version number that is skipped.
  * `allowance_spent` about `max_storage_writes_per_day` when the day's writes to the store leave no room for its files, until the next midnight UTC
  * @throws {Error} the database failed
  */
@@ -305,5 +305,5 @@ export async function beginPublish(
 
   const bytes = files.reduce((sum, file) => sum + file.size, 0);
 
-  return { ok: true, upload: uploadObject({ ...upload, state: "pending", bytes, files: files.length, dropped: [] }) };
+  return begunUpload(install, { ...upload, state: "pending", bytes, files: files.length, dropped: [] }, files);
 }

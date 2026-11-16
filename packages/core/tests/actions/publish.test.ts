@@ -6,7 +6,7 @@ import { listSites } from "../../src/actions/list";
 import { beginPublish } from "../../src/actions/begin-publish";
 import { publishSite } from "../../src/actions/publish";
 import { deleteSite } from "../../src/actions/delete";
-import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
+import { ADMIN, DAY, file, hashOf, made, makeWorld, NOW, OWNER, pages, type World } from "./support/actions-fixture";
 
 type Request = Parameters<typeof publishSite>[2];
 
@@ -240,7 +240,7 @@ describe("publishSite", () => {
 
     const answers = [
       await publishSite(world.install, OWNER, { files: [page], name: "report" }),
-      await beginPublish(world.install, OWNER, { name: "report", files: [{ path: page.path, size: page.size, content_type: page.contentType }] }),
+      await beginPublish(world.install, OWNER, { name: "report", files: [{ path: page.path, size: page.size, content_type: page.contentType, sha256: await hashOf("home") }] }),
     ];
 
     expect(answers).toEqual([
@@ -375,12 +375,15 @@ describe("publishSite", () => {
   test("a publish overtaken by a newer one is refused as stale, and its files go", async () => {
     const world = await makeWorld();
     const id = await made(world, OWNER, "report");
+    // A file is opened twice: to be hashed before the publish begins, then to be sent. The newer publish comes in on the second.
+    let opened = 0;
     const slow = {
       ...file("index.html", "slow"),
       open: () =>
         new ReadableStream<Uint8Array>({
           async start(controller): Promise<void> {
-            await publishSite(world.install, OWNER, { files: pages("fast"), site: id });
+            opened += 1;
+            if (opened === 2) await publishSite(world.install, OWNER, { files: pages("fast"), site: id });
             controller.enqueue(new TextEncoder().encode("slow"));
             controller.close();
           },

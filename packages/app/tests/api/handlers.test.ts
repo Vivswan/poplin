@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { createHash } from "node:crypto";
 
 import { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
 import { sweepExpired } from "@poplin/core/src/actions/sweep";
@@ -24,6 +25,7 @@ interface BackupFile {
   readonly path: string;
   readonly size: number;
   readonly content_type: string;
+  readonly sha256: string;
   readonly bytes: Uint8Array;
 }
 
@@ -55,10 +57,15 @@ function pages(text: string): Record<string, string> {
   return { "index.html": `<h1>${text}</h1>`, "css/site.css": `/* ${text} */` };
 }
 
+/** The SHA-256 of a file's bytes in base64, by the runtime's own hash: what a publisher declares for the file. */
+function hashOf(bytes: string | Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("base64");
+}
+
 /** Publish over the staged routes, as the owner unless another token is given; answers the site's id. */
 async function published(install: ApiInstall, asked: Publish, files: Readonly<Record<string, string>>, token: string = install.tokens.owner): Promise<string> {
   const api = install.as(token);
-  const manifest = Object.entries(files).map(([path, text]) => ({ path, size: text.length, content_type: path.endsWith(".css") ? "text/css" : "text/html; charset=utf-8" }));
+  const manifest = Object.entries(files).map(([path, text]) => ({ path, size: text.length, content_type: path.endsWith(".css") ? "text/css" : "text/html; charset=utf-8", sha256: hashOf(text) }));
   const begun = await answered(api.uploads.$post({ json: { ...asked, files: manifest }, query: {} }));
   const upload = part(begun, "upload")?.id as string;
   for (const [path, text] of Object.entries(files)) await api.uploads[":upload"].file.$put({ param: { upload }, query: { path } }, bytes(text));
@@ -111,7 +118,7 @@ async function filesOf(install: ApiInstall, site: string, version: number, mater
       const { response } = await answered(install.routes.export.sites[":site"].file.$get({ param: { site }, query: { version: String(version), path } }));
       const bytes = new Uint8Array(await response.arrayBuffer());
       material.push(new TextDecoder().decode(bytes), JSON.stringify([...response.headers]));
-      files.push({ path: `v${version}/${path}`, size, content_type: decodeURIComponent(response.headers.get(STORED_TYPE_HEADER) ?? ""), bytes });
+      files.push({ path: `v${version}/${path}`, size, content_type: decodeURIComponent(response.headers.get(STORED_TYPE_HEADER) ?? ""), sha256: hashOf(bytes), bytes });
     }
 
     cursor = page.body.next as string | undefined;
@@ -144,7 +151,7 @@ async function exportAll(install: ApiInstall, allVersions: boolean): Promise<Bac
 
 /** Begin the import of one site of a backup; `change` alters what is sent. */
 function begin(install: ApiInstall, entry: Entry, change: object = {}): Promise<Answered> {
-  const files = entry.files.map(({ path, size, content_type }) => ({ path, size, content_type }));
+  const files = entry.files.map(({ bytes: _bytes, ...declared }) => declared);
 
   return answered(install.routes.import.sites.$post({ json: { format: 1, site: entry.site, files, ...change } as Import, query: {} }));
 }
@@ -408,7 +415,7 @@ describe("an import into an install that holds sites", () => {
     const before = [await stateOf(first), await stateOf(second)];
     const [owner, other] = [first.as(first.tokens.owner), second.as(second.tokens.owner)];
     const param = { site: first.ids.report };
-    const json = { format: 1, site: entry.site, files: entry.files.map(({ path, size, content_type }) => ({ path, size, content_type })) } as Import;
+    const json = { format: 1, site: entry.site, files: entry.files.map(({ bytes: _bytes, ...declared }) => declared) } as Import;
 
     const answers = [
       await answered(owner.export.settings.$get({ query: {} })),
@@ -434,7 +441,7 @@ describe("a route that declares files", () => {
   test.each([
     [
       "the route that begins a publish",
-      async () => ({ name: "report", files: [{ path: "index.html", size: 4, content_type: "text/html" }, { path: "css/site.css", size: 9, content_type: "text/css" }] }),
+      async () => ({ name: "report", files: [{ path: "index.html", size: 4, content_type: "text/html", sha256: hashOf("page") }, { path: "css/site.css", size: 9, content_type: "text/css", sha256: hashOf("body { }\n") }] }),
       (api: ApiClient, json: object) => api.uploads.$post({ json: json as never, query: {} }),
     ],
     [
@@ -442,7 +449,7 @@ describe("a route that declares files", () => {
       async () => {
         const [entry] = (await exportAll(await source(), false)).sites;
 
-        return { format: 1, site: entry?.site, files: entry?.files.map(({ path, size, content_type }) => ({ path, size, content_type })) ?? [] };
+        return { format: 1, site: entry?.site, files: entry?.files.map(({ bytes: _bytes, ...declared }) => declared) ?? [] };
       },
       (api: ApiClient, json: object) => api.import.sites.$post({ json: json as never, query: {} }),
     ],
@@ -490,7 +497,7 @@ describe("the one route that answers a file", () => {
     const first = await source();
     const owner = first.as(first.tokens.owner);
     const param = { site: first.ids.report };
-    const begun = await answered(owner.uploads.$post({ json: { site: first.ids.report, files: [{ path: "index.html", size: 6, content_type: "text/html" }] }, query: {} }));
+    const begun = await answered(owner.uploads.$post({ json: { site: first.ids.report, files: [{ path: "index.html", size: 6, content_type: "text/html", sha256: hashOf("secret") }] }, query: {} }));
     await owner.uploads[":upload"].file.$put({ param: { upload: part(begun, "upload").id as string }, query: { path: "index.html" } }, bytes("secret"));
 
     const listed = await first.routes.export.sites[":site"].files.$get({ param, query: { version: "2" } });

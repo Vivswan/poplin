@@ -10,10 +10,10 @@ import { getSite } from "../../src/actions/show";
 import { sweepExpired } from "../../src/actions/sweep";
 import { uploadFile } from "../../src/actions/upload-file";
 import { dayOf } from "../../src/records/views";
-import { ADMIN, DAY, file, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
+import { ADMIN, DAY, file, made, makeWorld, OWNER, PAGE_SHA256, STRANGER, type World } from "./support/actions-fixture";
 
 /** The one page a fixture upload declares: four bytes. */
-const PAGE = { path: "index.html", size: 4, content_type: "text/html" };
+const PAGE = { path: "index.html", size: 4, content_type: "text/html", sha256: PAGE_SHA256 };
 
 /** The ways an upload stops taking files while one of its files is still on its way in. */
 const ENDINGS: Readonly<Record<"abandon" | "expire" | "sweep" | "finish", (world: World, upload: string) => Promise<void>>> = {

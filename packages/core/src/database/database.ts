@@ -730,6 +730,9 @@ export interface Database {
   /** The upload with this id and the one file of its manifest at `path`, `undefined` when the manifest names none there. The manifest itself is not read out. */
   getUploadFile(id: UploadId, path: string): Promise<{ readonly upload: Upload; readonly file: ManifestFile | undefined } | undefined>;
 
+  /** The upload with this id and the files of its manifest at `paths`, in their order, `undefined` in the place of each the manifest names none at. One read, and the manifest itself is not read out. */
+  getUploadFiles(id: UploadId, paths: readonly string[]): Promise<{ readonly upload: Upload; readonly files: readonly (ManifestFile | undefined)[] } | undefined>;
+
   /**
    * Make a pending upload's site, at version 1 under a fresh id, and mark the upload finished, in one step. The site belongs to whoever began the upload, whoever finishes it.
    *

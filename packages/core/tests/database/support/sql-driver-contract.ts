@@ -38,6 +38,7 @@ import {
   storedBack,
   TODAY,
   TOMORROW,
+  SHA256,
 } from "./database-fixtures";
 
 const SCHEMA_VERSION = STEPS.length;
@@ -147,7 +148,7 @@ function plainManifestText(manifest: readonly ManifestFile[]): string {
     for (let at = 0; at < file.path.length; at += 1) hash = Math.imul(hash ^ file.path.charCodeAt(at), 0x01000193);
 
     const key = `f${(hash >>> 0).toString(16)}`;
-    keyed[key] = [...(keyed[key] ?? []), [file.path, file.size, file.content_type, place]];
+    keyed[key] = [...(keyed[key] ?? []), [file.path, file.size, file.content_type, place, file.sha256]];
   });
 
   return JSON.stringify(keyed);
@@ -707,7 +708,7 @@ function manifestRows(label: string, makeDriver: DriverFactory): void {
       const lookup = driver.statements.at(-1);
       const plan = await rows(inner, `EXPLAIN QUERY PLAN ${lookup?.sql}`, ...(lookup?.params ?? []));
 
-      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([3, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
+      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([3, 2, { path: "page-2.html", size: 2, content_type: "text/html", sha256: SHA256 }, files]);
       expect(plan.map((step) => String(step.detail).split(" ")[0])).toEqual(["SEARCH"]);
     });
 
@@ -716,7 +717,7 @@ function manifestRows(label: string, makeDriver: DriverFactory): void {
     test.each(AWKWARD_MANIFESTS)("a manifest of %s is stored as the text the plain builder writes, and reads back whole and file by file", async (_name, paths) => {
       const driver = await migrated(makeDriver);
       const database = new SqlDatabase(driver);
-      const manifest = paths.map((path, index) => ({ path, size: index * 1_000_003, content_type: index % 3 === 0 ? "text/html" : `text/x-${index}; charset="utf-8"; note=a",[[` }));
+      const manifest = paths.map((path, index) => ({ path, size: index * 1_000_003, content_type: index % 3 === 0 ? "text/html" : `text/x-${index}; charset="utf-8"; note=a",[[`, sha256: SHA256 }));
       const upload = await begunFiles(database, manifest);
       const [stored] = await rows(driver, "SELECT manifest FROM uploads WHERE id = ?1", upload);
       const each = await Promise.all(paths.map(async (path) => (await database.getUploadFile(upload, path))?.file));
@@ -726,12 +727,12 @@ function manifestRows(label: string, makeDriver: DriverFactory): void {
 
     // Drift: the cap on a manifest is measured on its list, and a database refuses a value of 2,000,000 bytes; a stored form longer than the list would be refused for a manifest the cap let through.
     test.each([
-      [1600, 850],
-      [10_000, 65],
+      [1600, 794],
+      [10_000, 9],
     ])("a manifest of %d files near the cap is stored in fewer bytes than its list, reads back whole, and is one text until the upload is given up", async (files, length) => {
       const driver = await migrated(makeDriver);
       const database = new SqlDatabase(driver);
-      const manifest = numberedFiles(files).map((file) => ({ ...file, path: `${"p".repeat(length)}/${file.path}`, content_type: 'text/html; charset="utf-8"' }));
+      const manifest = numberedFiles(files).map((file) => ({ ...file, path: `${"p".repeat(length)}/${file.path}`, content_type: 'text/html; charset="utf-8"', sha256: SHA256 }));
       const listed = new TextEncoder().encode(JSON.stringify(manifest)).length;
       const upload = await begunFiles(database, manifest);
       const held = async (): Promise<unknown> => (await rows(driver, "SELECT typeof(manifest) AS kind, length(CAST(manifest AS BLOB)) AS bytes FROM uploads WHERE id = ?1", upload))[0];

@@ -7,6 +7,7 @@ import { COUNT, MOMENT, POSITIVE } from "../records/fields";
 import { type ManifestFile, UPLOAD_ID, UPLOAD_STATE, type Upload } from "../records/upload";
 import { contentsOf, type VersionContents } from "../records/version-contents";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
+import { TICKET, TICKETS_PER_CALL, type Ticket, type Tickets } from "../storage/tickets";
 import { fileKey, removeFiles, sitePrefix, versionPrefix } from "./files";
 import type { Install } from "./records";
 import { DAY_MS } from "./site-object";
@@ -32,8 +33,8 @@ const IMPORTED_PATH = /^v([1-9]\d{0,15})\/(.+)$/s;
 /** A staged publish as an answer holds it. */
 export const UPLOAD_OBJECT = v.object({ id: UPLOAD_ID, state: UPLOAD_STATE, version: POSITIVE, files: POSITIVE, bytes: COUNT, expires: MOMENT });
 
-/** What beginning a publish or an import answers: the upload, whose id every later step names. */
-export const BEGUN_UPLOAD = v.object({ upload: UPLOAD_OBJECT });
+/** What beginning a publish or an import answers: the upload, whose id every later step names, and the ticket of every file when the upload declares few enough for one answer. */
+export const BEGUN_UPLOAD = v.object({ upload: UPLOAD_OBJECT, tickets: v.optional(v.array(TICKET)) });
 
 /** What says where an upload's files go. */
 type Placed = Pick<Upload, "folder" | "number" | "plan">;
@@ -94,6 +95,37 @@ export function uploadKey(upload: Placed, path: string): ReturnType<typeof fileK
   if (number === undefined || rest === undefined) return { ok: false, refusal: "empty" };
 
   return fileKey(upload.folder, Number(number), rest);
+}
+
+/**
+ * Ask for the tickets of some files of an upload.
+ *
+ * @param files - files the upload's manifest names
+ * @returns one ticket a file, in their order, none living past the upload's own end
+ * @throws {Error} a file's path is no key of the upload, which no manifest holds
+ */
+export function ticketsOf(tickets: Tickets, upload: Upload, files: readonly ManifestFile[]): Promise<readonly Ticket[]> {
+  const ticketed = files.map((file) => {
+    const key = uploadKey(upload, file.path);
+    if (!key.ok) throw new Error(`${JSON.stringify(file.path)} is no key of upload ${upload.id}: ${key.refusal}`);
+
+    return { file, key: key.key };
+  });
+
+  return tickets.issue({ id: upload.id, expires: uploadObject(upload).expires }, ticketed);
+}
+
+/**
+ * Build the answer of an upload that has just been recorded.
+ *
+ * @param manifest - every file the upload declared
+ * @returns the upload, with the ticket of every file when the install hands out tickets and one answer holds them all; a longer upload asks for its tickets as its files go
+ */
+export async function begunUpload(install: Pick<Install, "tickets">, upload: Upload, manifest: readonly ManifestFile[]): Promise<BegunUpload> {
+  const begun = { ok: true, upload: uploadObject(upload) } as const;
+  if (install.tickets === undefined || manifest.length > TICKETS_PER_CALL) return begun;
+
+  return { ...begun, tickets: [...(await ticketsOf(install.tickets, upload, manifest))] };
 }
 
 /**

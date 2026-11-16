@@ -58,10 +58,13 @@ export const TOMORROW = "2026-11-14";
 /** An id in the form of a site id, standing for a second site whose requests are counted. */
 export const OTHER_SITE = "aaaaaaaaaaaa" as SiteId;
 
+/** A hash in the form a declared file names one: the SHA-256 of `<h1>hi</h1>`, which no fixture file here holds. The database keeps it and never reads it. */
+export const SHA256 = "5/u2+79M4pSRPrYrU/8Dp1RmSc/cDYJNnjorRUFQL38=";
+
 /** The files a fixture upload declares: 1000 bytes in two files, one under a path that needs quoting. */
 export const MANIFEST = [
-  { path: "index.html", size: 700, content_type: "text/html" },
-  { path: "it's \"quoted\"/100%.css", size: 300, content_type: "text/css" },
+  { path: "index.html", size: 700, content_type: "text/html", sha256: SHA256 },
+  { path: "it's \"quoted\"/100%.css", size: 300, content_type: "text/css", sha256: SHA256 },
 ];
 
 /** Room no fixture upload fills. */
@@ -148,7 +151,7 @@ export async function begunSite(database: Database, site: NewSite, at: number = 
 
 /** `count` declared files, `page-0.html` to the last, each of as many bytes as its number. */
 export function numberedFiles(count: number): ManifestFile[] {
-  return Array.from(Array(count).keys(), (index) => ({ path: `page-${index}.html`, size: index, content_type: "text/html" }));
+  return Array.from(Array(count).keys(), (index) => ({ path: `page-${index}.html`, size: index, content_type: "text/html", sha256: SHA256 }));
 }
 
 /** Record an upload of a new site that declares the files of `manifest`, whatever they add up to; answers its id. */

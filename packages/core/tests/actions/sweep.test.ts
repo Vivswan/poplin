@@ -10,10 +10,10 @@ import { abandonPublish } from "../../src/actions/abandon-publish";
 import { beginPublish } from "../../src/actions/begin-publish";
 import { publishSite } from "../../src/actions/publish";
 import { uploadFile } from "../../src/actions/upload-file";
-import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, type World } from "./support/actions-fixture";
+import { ADMIN, DAY, file, made, makeWorld, NOW, OWNER, PAGE_SHA256, type World } from "./support/actions-fixture";
 
 const HOUR = 3_600_000;
-const PAGE = { path: "index.html", size: 4, content_type: "text/html" };
+const PAGE = { path: "index.html", size: 4, content_type: "text/html", sha256: PAGE_SHA256 };
 const ONE_REMOVAL = 15;
 
 /** Begin a publish of one four-byte page and send it; answers the upload's id. */

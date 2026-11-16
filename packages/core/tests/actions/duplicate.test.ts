@@ -12,7 +12,7 @@ import { uploadKey } from "../../src/actions/uploads";
 import { dayOf } from "../../src/records/views";
 import type { ObjectKey } from "../../src/storage/storage";
 import { BunSqliteDriver } from "../database/support/bun-sqlite-driver";
-import { ADMIN, file, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
+import { ADMIN, file, hashOf, made, makeWorld, OWNER, STRANGER, type World } from "./support/actions-fixture";
 
 /** How long a test that copies a thousand files may take, in milliseconds: it passes alone in under a second, and a busy machine takes it past the runner's five. */
 const COPY_MS = 30_000;
@@ -102,9 +102,10 @@ describe("duplicateSite", () => {
   // Drift: a copy declares its files from a listing, which names no media type; a stand-in longer than the types a publish declared makes the copy's manifest pass the cap its source's fitted under.
   test("a site whose manifest fitted the cap by under the length of a few letters a file is copied, not refused as too large", async () => {
     const world = await makeWorld();
-    const folder = Array.from({ length: 4 }, () => "x".repeat(218)).join("/");
-    const images = Array.from({ length: 1_600 }, (_image, at) => ({ path: `${folder}/${String(at).padStart(4, "0")}.png`, size: 1, content_type: "image/png" }));
-    const files = [{ path: "index.html", size: 1, content_type: "text/html" }, ...images];
+    const sha256 = await hashOf("x");
+    const folder = Array.from({ length: 4 }, () => "x".repeat(204)).join("/");
+    const images = Array.from({ length: 1_600 }, (_image, at) => ({ path: `${folder}/${String(at).padStart(4, "0")}.png`, size: 1, content_type: "image/png", sha256 }));
+    const files = [{ path: "index.html", size: 1, content_type: "text/html", sha256 }, ...images];
     const begun = await beginPublish(world.install, OWNER, { name: "gallery", files });
     if (!begun.ok) throw new Error(`the source was refused: ${begun.code}`);
 
@@ -114,7 +115,7 @@ describe("duplicateSite", () => {
 
     for (const { path, content_type } of files) {
       const key = uploadKey(staged.upload, path);
-      if (key.ok) await world.install.store.write(key.key, new Uint8Array([120]), { contentType: content_type });
+      if (key.ok) await world.install.store.write(key.key, new Uint8Array([120]), { contentType: content_type, sha256 });
     }
 
     const source = await finishPublish(world.install, OWNER, begun.upload.id);

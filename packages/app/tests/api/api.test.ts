@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 
 import { decideLogin } from "@poplin/core/src/actions/computer-logins";
 import { publishSite } from "@poplin/core/src/actions/publish";
@@ -69,11 +70,14 @@ const BYTES = { "Content-Type": "application/octet-stream" };
 /** The content type of a form. */
 const FORM = { "Content-Type": "application/x-www-form-urlencoded" };
 
+/** The SHA-256 of the four bytes `page` in base64: a hash in the form a declared file names one, for a file whose bytes no case sends. */
+const A_HASH = "NmAxWprz3yVdjxmrB35Hl4IrQUiKDioEvGr3EhPCMnQ=";
+
 /** One file more than the test install lets a publish declare. */
-const MANY_FILES = Array.from({ length: LIMITS.files + 1 }, (_file, at) => ({ path: `${at}.html`, size: 1, content_type: "text/html" }));
+const MANY_FILES = Array.from({ length: LIMITS.files + 1 }, (_file, at) => ({ path: `${at}.html`, size: 1, content_type: "text/html", sha256: A_HASH }));
 
 /** A file one byte longer than the test install lets a request carry. */
-const LONG_FILE = { path: "index.html", size: LIMITS.fileBytes + 1, content_type: "text/html" };
+const LONG_FILE = { path: "index.html", size: LIMITS.fileBytes + 1, content_type: "text/html", sha256: A_HASH };
 
 /** The two routes that take no token: a computer calls them to get one. */
 const OPEN_ROUTES = ["POST /api/logins", "POST /api/logins/token"] as const satisfies readonly RouteKey[];
@@ -100,6 +104,7 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "POST /api/sites/:site/duplicate": 47,
   "POST /api/uploads": 7,
   "GET /api/uploads/:upload": 14,
+  "POST /api/uploads/:upload/tickets": 2,
   "PUT /api/uploads/:upload/file": 6,
   "POST /api/uploads/:upload/finish": 44,
   "DELETE /api/uploads/:upload": 24,
@@ -149,6 +154,7 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Send
     "POST /api/sites/:site/duplicate": (api) => api.sites[":site"].duplicate.$post({ param: { site }, json: {}, query: {} }),
     "POST /api/uploads": (api) => api.uploads.$post({ json: { site, files: manifest(PAGES) }, query: {} }),
     "GET /api/uploads/:upload": (api) => api.uploads[":upload"].$get({ param: { upload }, query: {} }),
+    "POST /api/uploads/:upload/tickets": (api) => api.uploads[":upload"].tickets.$post({ param: { upload }, json: { paths: ["index.html"] }, query: {} }),
     "PUT /api/uploads/:upload/file": (api) => api.uploads[":upload"].file.$put({ param: { upload }, query: { path: "index.html" } }, bytes(PAGES["index.html"])),
     "POST /api/uploads/:upload/finish": (api) => api.uploads[":upload"].finish.$post({ param: { upload }, query: {} }),
     "DELETE /api/uploads/:upload": (api) => api.uploads[":upload"].$delete({ param: { upload }, query: {} }),
@@ -158,7 +164,7 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Send
     "GET /api/export/sites/:site/files": (api) => api.export.sites[":site"].files.$get({ param: { site }, query: { version: "1" } }),
     "GET /api/export/sites/:site/file": (api) => api.export.sites[":site"].file.$get({ param: { site }, query: { version: "1", path: "index.html" } }),
     "POST /api/import/settings": (api) => api.import.settings.$post({ json: { format: 1, settings: {} }, query: {} }),
-    "POST /api/import/sites": (api) => api.import.sites.$post({ json: { format: 1, site: BACKED_UP as never, files: [{ path: "v1/index.html", size: 4, content_type: "text/html" }] }, query: {} }),
+    "POST /api/import/sites": (api) => api.import.sites.$post({ json: { format: 1, site: BACKED_UP as never, files: [{ path: "v1/index.html", size: 4, content_type: "text/html", sha256: A_HASH }] }, query: {} }),
     "GET /api/config": (api) => api.config.$get({ query: {} }),
     "PATCH /api/config": (api) => api.config.$patch({ json: { trash_days: 9 }, query: {} }),
     "DELETE /api/sessions": (api) => api.sessions.$delete({ query: {} }),
@@ -172,8 +178,13 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Send
   };
 }
 
-function manifest(pages: Readonly<Record<string, string>>): { path: string; size: number; content_type: string }[] {
-  return Object.entries(pages).map(([path, text]) => ({ path, size: new TextEncoder().encode(text).length, content_type: "text/html; charset=utf-8" }));
+/** The SHA-256 of a text's bytes in base64, by the runtime's own hash: what a publisher declares for a file that holds it. */
+function hashOf(text: string): string {
+  return createHash("sha256").update(text).digest("base64");
+}
+
+function manifest(pages: Readonly<Record<string, string>>): { path: string; size: number; content_type: string; sha256: string }[] {
+  return Object.entries(pages).map(([path, text]) => ({ path, size: new TextEncoder().encode(text).length, content_type: "text/html; charset=utf-8", sha256: hashOf(text) }));
 }
 
 function part(answer: Answered, key: string): Record<string, unknown> {
@@ -300,6 +311,11 @@ describe("createApi", () => {
     const begun = await done((api) => api.uploads.$post({ json: { name: "report", files: manifest(PAGES) }, query: {} }));
     const upload = part(begun, "upload").id as string;
     expect((await done((api) => api.uploads[":upload"].$get({ param: { upload }, query: {} }))).body.missing).toEqual(["index.html", "css/site.css"]);
+    // Drift: a publisher sends each file where its ticket says and builds no address itself. A ticket that named another route, another length, or a life past the upload's would send a file where nothing takes it.
+    const ticket = { path: "css/site.css", url: `/api/uploads/${upload}/file?path=css%2Fsite.css`, method: "PUT", headers: { "Content-Type": "application/octet-stream", "Content-Length": "6" }, expires: NOW + DAY };
+    expect((await done((api) => api.uploads[":upload"].tickets.$post({ param: { upload }, json: { paths: ["css/site.css"] }, query: {} }))).body).toEqual({ tickets: [ticket] });
+    expect((begun.body.tickets as { path: string }[]).map((issued) => issued.path)).toEqual(["index.html", "css/site.css"]);
+    expect((begun.body.tickets as object[])[1]).toEqual(ticket);
     for (const [path, text] of Object.entries(PAGES)) await sendFile(upload, path, text);
     const first = part(await finish(upload), "site");
     const label = first.label as string;
@@ -542,6 +558,7 @@ describe("createApi", () => {
       ["POST /api/sites/:site/duplicate", 404, "not_found"],
       ["POST /api/uploads", 404, "not_found"],
       ["GET /api/uploads/:upload", 404, "not_found"],
+      ["POST /api/uploads/:upload/tickets", 404, "not_found"],
       ["PUT /api/uploads/:upload/file", 404, "not_found"],
       ["POST /api/uploads/:upload/finish", 404, "not_found"],
       ["DELETE /api/uploads/:upload", 404, "not_found"],
@@ -634,6 +651,85 @@ describe("the staged publish over HTTP", () => {
     expect(part(added, "site")).toMatchObject({ id: site, created: false, live_version: 2, access: "unlisted", title: "Q3 sales" });
     expect(part(added, "before")).toMatchObject({ live_version: 1, access: "private" });
     expect(await new Response((await install.store.read(`${folder}/v2/index.html` as never) as { body: ReadableStream }).body).text()).toBe("<h1>report, again</h1>");
+  });
+
+  // Drift: a ticket is all a publisher knows of where a file goes. One that could not be followed as it reads, or that let a file through without the sender's own token, would break every publish or open the route.
+  test("a file sent exactly as its ticket says, with the sender's token, is stored; without the token, or with another publisher's, the ticket is worth nothing", async () => {
+    const install = await openApi();
+    const begun = await answered(install.as(install.tokens.owner).uploads.$post({ json: { name: "report", files: manifest(PAGES) }, query: {} }));
+    const upload = part(begun, "upload").id as string;
+    const tickets = begun.body.tickets as { path: keyof typeof PAGES; url: string; method: string; headers: Record<string, string> }[];
+    const follow = (ticket: (typeof tickets)[number], token?: string): Promise<Answered> => {
+      const headers = token === undefined ? ticket.headers : { ...ticket.headers, Authorization: `Bearer ${token}` };
+
+      return install.ask(new Request(new URL(ticket.url, ORIGIN), { method: ticket.method, headers, body: PAGES[ticket.path] }));
+    };
+
+    const refused = [await follow(tickets[0] as never), await follow(tickets[0] as never, install.tokens.stranger)];
+    const sent = [await follow(tickets[0] as never, install.tokens.owner), await follow(tickets[1] as never, install.tokens.owner)];
+    const finished = await answered(install.as(install.tokens.owner).uploads[":upload"].finish.$post({ param: { upload }, query: {} }));
+
+    expect(refused.map((answer) => [answer.status, part(answer, "error").code])).toEqual([[401, "not_logged_in"], [404, "not_found"]]);
+    expect([sent.map((answer) => [answer.status, answer.body]), finished.status]).toEqual([[[200, { path: "index.html", size: 15 }], [200, { path: "css/site.css", size: 6 }]], 200]);
+  });
+
+  // Drift: the size alone once told a whole file from a damaged one. Bytes of the declared length and another hash must be refused in words a publisher can act on, and a publish that declares no hash must not begin.
+  test.each([
+    ["a file whose bytes are not the declared ones, though as many", "<h1>repork</h1>", 400, { code: "hash_mismatch", message: "a file's bytes are not the ones its declared hash names", about: "index.html" }],
+    ["a file one byte short", "<h1>short</h1>", 400, { code: "size_mismatch", message: "a file's bytes are not as many as its declared size", about: "index.html" }],
+  ])("%s is refused, nothing of it is stored, and the publish cannot be finished", async (_what, text, status, error) => {
+    const install = await openApi();
+    const asOwner = install.as(install.tokens.owner);
+    const begun = await answered(asOwner.uploads.$post({ json: { name: "report", files: manifest(PAGES) }, query: {} }));
+    const upload = part(begun, "upload").id as string;
+
+    const sent = await answered(asOwner.uploads[":upload"].file.$put({ param: { upload }, query: { path: "index.html" } }, bytes(text)));
+    const finished = await answered(asOwner.uploads[":upload"].finish.$post({ param: { upload }, query: {} }));
+
+    expect([sent.status, sent.body.error, await install.keys(), finished.status, part(finished, "error").code]).toEqual([status, error, [], 409, "missing_files"]);
+  });
+
+  // Drift: a file declared without a hash, or with one in another spelling, would be stored unchecked and compared with nothing. It is refused where the publish begins.
+  test.each([
+    ["no hash", { path: "index.html", size: 15, content_type: "text/html" }],
+    ["a hash in hex", { path: "index.html", size: 15, content_type: "text/html", sha256: createHash("sha256").update(PAGES["index.html"]).digest("hex") }],
+    ["a hash of another length", { path: "index.html", size: 15, content_type: "text/html", sha256: createHash("sha1").update(PAGES["index.html"]).digest("base64") }],
+  ])("a publish that declares a file with %s is refused as it begins, and nothing is recorded", async (_what, file) => {
+    const install = await openApi();
+    const begun = await answered(install.as(install.tokens.owner).uploads.$post({ json: { name: "report", files: [file as never] }, query: {} }));
+
+    expect([begun.status, begun.body.error, (await install.database.listUploads({ before: NOW + 1, limit: 10 })).uploads]).toEqual([
+      400,
+      { code: "bad_argument", message: "an argument is missing, unknown, or of the wrong form", about: "files" },
+      [],
+    ]);
+  });
+
+  // Drift: a call for tickets is bounded to a hundred paths of the upload's own manifest; one that answered more, or a path nobody declared, would hand out leave nobody counted.
+  test("tickets are refused for no path, more than a hundred, a path twice, a path the manifest does not name, and an upload that is finished", async () => {
+    const install = await openApi();
+    const asOwner = install.as(install.tokens.owner);
+    const upload = await staged(install, { name: "report" });
+    const ask = (paths: string[], to: string = upload): Promise<Answered> => answered(asOwner.uploads[":upload"].tickets.$post({ param: { upload: to }, json: { paths }, query: {} }));
+
+    const refused = [
+      await ask([]),
+      await ask(Array.from({ length: 101 }, (_path, at) => `${at}.html`)),
+      await ask(["index.html", "index.html"]),
+      await ask(["index.html", "index.htm"]),
+      await ask(["index.html"], NO_UPLOAD),
+    ];
+    await asOwner.uploads[":upload"].finish.$post({ param: { upload }, query: {} });
+    refused.push(await ask(["index.html"]));
+
+    expect(refused.map((answer) => [answer.status, part(answer, "error").code, part(answer, "error").about])).toEqual([
+      [400, "bad_argument", "paths"],
+      [400, "bad_argument", "paths"],
+      [400, "bad_argument", "paths"],
+      [404, "not_found", "path"],
+      [404, "not_found", "upload"],
+      [409, "upload_finished", "upload"],
+    ]);
   });
 
   // Drift: a client retries what it did not hear back from; a second upload of a file or a second finish that failed, or made a second site, would turn every lost answer into a broken publish.
@@ -842,7 +938,7 @@ describe("what the API refuses before any action runs", () => {
     const { owner: token } = install.tokens;
     const asOwner = install.as(token);
     const secret = "the body of a private page";
-    const begun = await answered(asOwner.uploads.$post({ json: { name: "report", files: [{ path: "index.html", size: 3, content_type: "text/html" }] }, query: {} }));
+    const begun = await answered(asOwner.uploads.$post({ json: { name: "report", files: [{ path: "index.html", size: 3, content_type: "text/html", sha256: A_HASH }] }, query: {} }));
     const upload = part(begun, "upload").id as string;
 
     const answers = [

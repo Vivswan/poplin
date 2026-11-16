@@ -17,12 +17,12 @@ import { EXPORTED_FILES, EXPORTED_SETTINGS, EXPORTED_SITE, EXPORTED_SITES } from
 import { PUBLISHED_SITE } from "../../packages/core/src/actions/finish-publish";
 import { LISTED_SITES } from "../../packages/core/src/actions/list";
 import { REVOKED_TOKEN, WHOAMI_ANSWER } from "../../packages/core/src/actions/manage-tokens";
+import { ISSUED_TICKETS } from "../../packages/core/src/actions/issue-tickets";
 import { SHOWN_UPLOAD } from "../../packages/core/src/actions/show-upload";
 import { SITE_ANSWER } from "../../packages/core/src/actions/site-object";
 import { STARTED_UPDATE } from "../../packages/core/src/actions/start-update";
 import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings";
 import { UPDATE_ADDRESS_STATE } from "../../packages/core/src/actions/update-address";
-import { STORED_FILE } from "../../packages/core/src/actions/upload-file";
 import { BEGUN_UPLOAD } from "../../packages/core/src/actions/uploads";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
@@ -58,6 +58,7 @@ const SITE = {
 const UPLOAD = { id: "0123456789abcdef", state: "pending", version: 1, files: 1, bytes: 1, expires: 0 };
 const ADMIN = { id: "0000000000000000", scope: "admin", note: "", created: 0, expires: "never" };
 const PARAM = { site: SITE.label, upload: UPLOAD.id };
+const TICKET = { path: "index.html", url: `/api/uploads/${UPLOAD.id}/file?path=index.html`, method: "PUT", headers: { "Content-Type": "application/octet-stream", "Content-Length": "1" }, expires: 0 } as const;
 const NEAR_ANSWERS: readonly unknown[] = [
   {},
   [],
@@ -81,6 +82,10 @@ const NEAR_ANSWERS: readonly unknown[] = [
   { state: "allowed", token: "a-token" },
   { site: null, before: null, copy: { upload: UPLOAD.id, copied: 0, files: 1 } },
   { upload: UPLOAD },
+  { upload: UPLOAD, tickets: [TICKET] },
+  { upload: UPLOAD, tickets: [{ ...TICKET, method: "DELETE" }] },
+  { tickets: [TICKET, { ...TICKET, path: "gone.css" }] },
+  { tickets: [{ path: "index.html", url: 7 }] },
   { upload: UPLOAD, missing: ["index.html", "gone.css"], more: false },
   { upload: { id: "0123456789abcdef", state: "pending" }, missing: "index.html", more: "no" },
   { path: "index.html", size: 1 },
@@ -124,9 +129,9 @@ const CALLS: readonly ((client: Client) => Promise<Called<unknown>>)[] = [
   (client) => client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: PARAM, query: {} })),
   (client) => client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: PARAM, query: { forever: "true" } })),
   (client) => client.call(DUPLICATED_SITE, (api) => api.sites[":site"].duplicate.$post({ param: PARAM, query: {}, json: {} })),
-  (client) => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ query: {}, json: { files: [{ path: "index.html", size: 1, content_type: "text/html" }] } })),
+  (client) => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ query: {}, json: { files: [{ path: "index.html", size: 1, content_type: "text/html", sha256: "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=" }] } })),
   (client) => client.call(SHOWN_UPLOAD, (api) => api.uploads[":upload"].$get({ param: PARAM, query: {} })),
-  (client) => client.upload(STORED_FILE, { upload: UPLOAD.id, path: "index.html", body: new Uint8Array(1) }),
+  (client) => client.call(ISSUED_TICKETS, (api) => api.uploads[":upload"].tickets.$post({ param: PARAM, query: {}, json: { paths: ["index.html"] } })),
   (client) => client.call(PUBLISHED_SITE, (api) => api.uploads[":upload"].finish.$post({ param: PARAM, query: {} })),
   (client) => client.call(ABANDONED_UPLOAD, (api) => api.uploads[":upload"].$delete({ param: PARAM, query: {} })),
   (client) => client.call(EXPORTED_SETTINGS, (api) => api.export.settings.$get({ query: {} })),
@@ -216,6 +221,27 @@ property(
     expect(EXIT_CODES).toContain(code);
     expect(text).not.toContain(CRASHED);
     expect(text).not.toContain(TOKEN);
+  }),
+);
+
+property(
+  "a file sent by its ticket is taken only for a status in the 200s, whatever the body, anything else is a failure and never a throw, and the token leaves for no origin but the one of the install",
+  fc.asyncProperty(answers, hostile(fc.constantFrom(TICKET.url, `${SERVER}${TICKET.url}`, "https://files.example.net/drop?leave=1", "//files.example.net/drop", "https://")), async (answer, url) => {
+    const answering = scripted([answer]);
+    const withToken: string[] = [];
+    const watched = (input: string, init: RequestInit): Promise<Response> => {
+      if (new Headers(init.headers).has("Authorization")) withToken.push(input);
+
+      return answering(input, init);
+    };
+    const client = createClient({ server: SERVER, token: TOKEN, fetch: watched, timeoutMs: 1000 });
+    const sent = await client.send({ ...TICKET, url }, new Uint8Array(1));
+
+    // The token goes with a file only to the install's own origin, whatever address a ticket names.
+    expect(withToken.filter((address) => new URL(address).origin !== SERVER)).toEqual([]);
+    if (!sent.ok) return;
+
+    expect("thrown" in answer ? undefined : answer.status >= 200 && answer.status < 300).toBe(true);
   }),
 );
 

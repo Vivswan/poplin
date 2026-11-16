@@ -134,7 +134,7 @@ Cloudflare's free plan     one request: 50 database queries
 | Download a file of the Activity log | 1 | 4 | 2,003 | 0 | 0 | 0 |
 
 - **A screen** counts its own requests. The frame around every screen is one more, of 2 queries.
-- **A publish** is three requests: its start, its one file, its finish.
+- **A publish** is three requests: its start, its one file, its finish. One of more than 100 files adds a request for every 100 files, which reads 2 rows and writes none.
 - **A copy** of up to 112 files is one request. A larger one takes several, each with a read and a write for every file it copies and a listing for every 1,000 files of the site.
 - **A search or a sort** reads every row it passes over, so a list reads more rows on an install with more sites.
 - **A page view** is measured on a Worker that served the site a moment before. A request for a site after a minute without one costs up to 3 queries.

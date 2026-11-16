@@ -27,6 +27,7 @@ const API_ROWS = {
   bad_path: { sentence: "a file's path is one no site can serve", hint: "rename or remove the file", exit: "failed" },
   no_index: { sentence: "a site needs an index.html at its top", exit: "failed" },
   size_mismatch: { sentence: "a file changed while it was sent", hint: "publish again once the folder is still", exit: "failed" },
+  hash_mismatch: { sentence: "a file changed after it was read, or was damaged on its way", hint: "publish again once the folder is still", exit: "failed" },
   name_taken: { sentence: "another site holds that public name", hint: "to pick another: poplin set <site> --public --public-name <public name>", exit: "failed" },
   in_trash: { sentence: "the site sits in the trash", hint: "to take it back: poplin restore <site>", exit: "failed" },
   id_taken: { sentence: "a site of the install already has that id", hint: "the site is already there: poplin show <site> shows it", exit: "failed" },

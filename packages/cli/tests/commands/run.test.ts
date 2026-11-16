@@ -25,6 +25,7 @@ const CODES: Readonly<Record<Code, true>> = {
   bad_path: true,
   no_index: true,
   size_mismatch: true,
+  hash_mismatch: true,
   name_taken: true,
   id_taken: true,
   backup_too_new: true,

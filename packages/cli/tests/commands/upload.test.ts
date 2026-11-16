@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import type { Io } from "../../src/commands/records";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
@@ -436,5 +438,86 @@ describe("upload", () => {
     const piped = await bench.run(`duplicate ${label}`);
 
     expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["copying 112 of 130 files", ""], 0, []]);
+  });
+
+  // Drift: a publisher builds no address of its own. A file sent to the route this code remembers, and not where its ticket says, would miss whatever place the install names for it.
+  test("each file goes to the address its ticket names, with the ticket's headers, and the token goes along only to the install", async () => {
+    const bench = await openBench();
+    const elsewhere: { url: string; headers: Record<string, string>; body: string }[] = [];
+
+    bench.hook = async (request) => {
+      if (request.method === "POST" && new URL(request.url).pathname === "/api/uploads") {
+        const begun = await bench.install.api.fetch(request);
+        const body = (await begun.json()) as { tickets: { path: string; url: string; headers: Record<string, string> }[] };
+        const tickets = body.tickets.map((ticket) => (ticket.path === "a.css" ? { ...ticket, url: "https://files.example.net/drop/a.css?leave=1", headers: { ...ticket.headers, "X-Leave": "once" } } : ticket));
+
+        return Response.json({ ...body, tickets });
+      }
+
+      if (new URL(request.url).host !== "files.example.net") return undefined;
+
+      // The file is passed on to the install's own route, as whatever a ticket names would store it.
+      const headers = Object.fromEntries(request.headers);
+      const body = await request.text();
+      elsewhere.push({ url: request.url, headers, body });
+      const upload = UPLOAD_ID.exec(bench.sent.find((line) => line.startsWith("PUT /api/uploads/")) ?? "")?.[1];
+
+      return bench.install.api.fetch(new Request(`https://poplin.example.com/api/uploads/${upload}/file?path=a.css`, { method: "PUT", headers: { ...headers, Authorization: `Bearer ${bench.install.tokens.admin}` }, body }));
+    };
+
+    const made = await bench.run(folderOf("notes", { "index.html": "<h1>notes</h1>", "a.css": "a{}" }));
+
+    expect([made.code, elsewhere]).toEqual([0, [{ url: "https://files.example.net/drop/a.css?leave=1", headers: { "content-length": "3", "content-type": "application/octet-stream", "x-leave": "once" }, body: "a{}" }]]);
+    expect(bench.sent.map((line) => line.replace(UPLOAD_ID, "/api/uploads/:upload"))).toEqual([
+      "POST /api/uploads",
+      "PUT /drop/a.css?leave=1",
+      "PUT /api/uploads/:upload/file?path=index.html",
+      "POST /api/uploads/:upload/finish",
+    ]);
+  });
+
+  // Drift: one answer holds a hundred tickets. A publish of more files that asked for a ticket a file would spend a request a file, as it did before tickets; one that asked for none would send nothing.
+  test("a publish of 130 files asks for its tickets in two calls, a hundred and thirty, each for the files that go next, and a file sent again goes by the ticket it had", async () => {
+    const bench = await openBench();
+    const asked: string[][] = [];
+    let failed = false;
+
+    bench.hook = async (request) => {
+      if (request.url.endsWith("/tickets")) asked.push(((await request.clone().json()) as { paths: string[] }).paths);
+
+      if (request.method !== "PUT" || !request.url.endsWith("pages%2F128.html") || failed) return undefined;
+
+      failed = true;
+
+      return new Response("<html>bad gateway</html>", { status: 502 });
+    };
+
+    const made = await bench.run(folderOf("report", MANY));
+    const calls = bench.sent.map((line) => line.split(" ")[1]?.replace(UPLOAD_ID, "").split("?")[0]);
+
+    expect([made.code, asked.map((paths) => paths.length), new Set(asked.flat()).size, asked[0]?.[0]]).toEqual([0, [100, 30], 130, "index.html"]);
+    expect([calls.filter((call) => call === "/tickets").length, calls.filter((call) => call === "/file").length, bench.sent.length]).toEqual([2, 131, 135]);
+  });
+
+  // Drift: a file is hashed when the folder is read and sent later. One that changed in between must stop the publish in words that say so, not go live as bytes nobody declared.
+  test("a file that changes after it was read, to other bytes of the same length, is refused by its hash: the publish is given up, no site changes, and the words say what to do", async () => {
+    const bench = await openBench();
+    const folder = folderOf("notes", ONE);
+    const before = await stateOf(bench);
+
+    bench.hook = async (request) => {
+      if (request.method === "POST" && request.url.endsWith("/api/uploads")) writeFileSync(join(folder, "index.html"), "<h1>motes</h1>");
+
+      return undefined;
+    };
+
+    const made = await bench.run(folder);
+
+    expect([made.code, made.out, made.err]).toEqual([
+      1,
+      [],
+      ["a file changed after it was read, or was damaged on its way: index.html", "the upload was given up and no site changed; publish again once the folder is still"],
+    ]);
+    expect([bench.sent.filter((line) => line.startsWith("PUT")).length, await stateOf(bench)]).toEqual([1, before]);
   });
 });

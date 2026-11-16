@@ -7,6 +7,7 @@ import type { Api } from "../../../app/src/api/api";
 import { mediaTypeOf } from "../../../core/src/api/media-type";
 import { API_ERROR, type ApiError, STORED_TYPE_HEADER } from "../../../core/src/api/routes";
 import { textUpTo } from "../../../core/src/api/text-up-to";
+import type { Ticket } from "../../../core/src/storage/tickets";
 
 /** How long a call that carries JSON, or nothing, may take: 30 seconds. */
 const CALL_TIMEOUT_MS = 30_000;
@@ -31,6 +32,12 @@ const CONTROL = /\p{Cc}/gu;
 
 /** The media type of an answer whose first line is kept. */
 const PLAIN_TEXT = "text/plain";
+
+/** The status of a done answer, and the first of the 200s. */
+const OK = 200;
+
+/** The first status past the 200s. */
+const REDIRECT = 300;
 
 /** The platform's `fetch`, or a stand-in for it. */
 export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -90,26 +97,19 @@ type Raw = Pick<Response, "status" | "headers" | "body">;
 /** The answer of a route whose done request answers JSON of one form. */
 type Answering<Done> = Promise<Raw & { json(): Promise<Done | ApiError> }>;
 
-/** One file of an upload as it is sent: the upload it belongs to, the path it is stored under, its bytes, and the exact count of bytes a stream holds, which is sent as `Content-Length`. */
-interface SentFile {
-  readonly upload: string;
-  readonly path: string;
-  readonly body: ReadableStream<Uint8Array> | Uint8Array;
-  readonly length?: number;
-}
-
 /**
  * A client of one install. None of its three calls throws.
  *
  * `call` sends the one request `ask` makes of the routes, and answers the route's answer, checked against `form`, or the failure. A form the route's answer does not fit does not compile.
  *
- * `upload` sends the bytes of one file of an upload, and answers as `call` does.
+ * `send` sends the bytes of one file of an upload to the address its ticket names, by the ticket's method and with its headers. A ticket that names a path is sent to that path of the install.
+ * The token goes with them only to the install's own origin. Any answer in the 200s is the file taken; any other is read as `call` reads a refusal.
  *
  * `download` asks for one stored file of one version of a site. Its bytes are not read here: the caller reads the stream to its end or cancels it, and a read that breaks off throws there.
  */
 export interface Client {
   readonly call: <Form extends v.GenericSchema>(form: Form, ask: (api: ApiCalls) => Answering<v.InferOutput<Form>>) => Promise<Called<v.InferOutput<Form>>>;
-  readonly upload: <Form extends v.GenericSchema>(form: Form, file: SentFile) => Promise<Called<v.InferOutput<Form>>>;
+  readonly send: (ticket: Ticket, body: ReadableStream<Uint8Array> | Uint8Array) => Promise<Called<undefined>>;
   readonly download: (file: { readonly site: string; readonly version: number; readonly path: string }) => Promise<Called<Download>>;
 }
 
@@ -157,7 +157,7 @@ async function readJson(response: Raw): Promise<Called<unknown>> {
   const parsed = text === undefined ? undefined : parseJson(text);
   if (parsed === undefined) return failed({ kind: "not-json", status, ...saidOf(response, text), ...wait });
 
-  if (status === 200) return { ok: true, value: parsed.value };
+  if (status === OK) return { ok: true, value: parsed.value };
 
   const refusal = v.safeParse(API_ERROR, parsed.value);
   if (!refusal.success || status < 400) return failed({ kind: "unexpected", status, ...wait });
@@ -177,6 +177,22 @@ async function readAnswer<Form extends v.GenericSchema>(form: Form, response: Ra
 
   return { ok: true, value: read.value };
 }
+
+/** Read the answer to a file sent by its ticket: taken on any status in the 200s, whatever the body, else the failure the answer is. */
+async function readSent(response: Raw): Promise<Called<undefined>> {
+  const { status } = response;
+
+  if (status >= OK && status < REDIRECT) {
+    await response.body?.cancel().catch(() => undefined);
+
+    return { ok: true, value: undefined };
+  }
+
+  const read = await readJson(response);
+
+  return read.ok ? failed({ kind: "unexpected", status }) : read;
+}
+
 
 /** The media type a header holds percent-encoded; `undefined` for a header that is absent or is no such text. */
 function storedType(header: string | null): string | undefined {
@@ -219,14 +235,14 @@ async function readDownload(response: Raw): Promise<Called<Download>> {
 export function createClient(options: ClientOptions): Client {
   const headers = { Accept: "application/json", ...(options.token === undefined ? {} : { Authorization: `Bearer ${options.token}` }) };
 
-  const ask = async <Done>(patienceMs: number, send: (api: ApiCalls) => Promise<Raw>, read: (response: Raw) => Promise<Called<Done>>): Promise<Called<Done>> => {
+  const ask = async <Done>(patienceMs: number, send: (api: ApiCalls, signal: AbortSignal) => Promise<Raw>, read: (response: Raw) => Promise<Called<Done>>): Promise<Called<Done>> => {
     const timeoutMs = options.timeoutMs ?? patienceMs;
     const tooLong = AbortSignal.timeout(timeoutMs);
     const signal = options.stopped === undefined ? tooLong : AbortSignal.any([tooLong, options.stopped]);
     const routes = hc<Api>(options.server, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => options.fetch(String(input), { ...init, redirect: "manual", signal }) });
 
     try {
-      return await read(await send(routes.api));
+      return await read(await send(routes.api, signal));
     } catch {
       if (options.stopped?.aborted === true) return failed({ kind: "stopped" });
 
@@ -239,13 +255,18 @@ export function createClient(options: ClientOptions): Client {
 
   const call: Client["call"] = (form, send) => ask(CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response));
 
-  const upload: Client["upload"] = (form, file) => {
-    const sent = { "Content-Type": "application/octet-stream", ...(file.length === undefined ? {} : { "Content-Length": String(file.length) }) };
-    // A stream is sent as it is read, which the request must say.
-    const init = { body: file.body, duplex: "half" } as RequestInit;
-    const send = (api: ApiCalls): Promise<Raw> => api.uploads[":upload"].file.$put({ param: { upload: file.upload }, query: { path: file.path } }, { headers: sent, init });
+  const send: Client["send"] = (ticket, body) => {
+    // A ticket names a whole address, or a path of the install, which is read against the address the install is reached at.
+    if (!URL.canParse(ticket.url, options.server)) return Promise.resolve(failed({ kind: "unexpected", status: OK }));
 
-    return ask(FILE_TIMEOUT_MS, send, (response) => readAnswer(form, response));
+    const place = new URL(ticket.url, options.server);
+    // The token is for the install alone: a ticket that names another place is sent with its own headers and nothing of the login.
+    const own = place.origin === new URL(options.server).origin && options.token !== undefined;
+    const sent = own ? { ...ticket.headers, Authorization: `Bearer ${options.token}` } : ticket.headers;
+    // A stream is sent as it is read, which the request must say.
+    const put = (signal: AbortSignal): Promise<Raw> => options.fetch(place.href, { method: ticket.method, headers: sent, body, duplex: "half", redirect: "manual", signal } as RequestInit);
+
+    return ask(FILE_TIMEOUT_MS, (_api, signal) => put(signal), readSent);
   };
 
   const download: Client["download"] = ({ site, version, path }) => {
@@ -254,5 +275,5 @@ export function createClient(options: ClientOptions): Client {
     return ask(FILE_TIMEOUT_MS, send, readDownload);
   };
 
-  return { call, upload, download };
+  return { call, send, download };
 }

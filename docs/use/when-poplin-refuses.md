@@ -79,6 +79,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `too_large`                                       | a size limit is passed                           | `poplin config` shows the limits                             |
 | `too_many_sites`                                  | the install holds as many sites as it may        | `poplin config max_sites`; `poplin list --trash` still counts |
 | `size_mismatch`, `stale_version`, `missing_files` | the publish did not complete; nothing went live  | publish again                                                |
+| `hash_mismatch`                                   | a file changed after it was read, or was damaged on its way; nothing went live | publish again once the folder is still |
 | `upload_finished`                                 | the publish is already live                      | nothing                                                      |
 | `stopped`                                         | you stopped the command with Ctrl-C              | run it again; an upload not given up runs out in about a day |
 
