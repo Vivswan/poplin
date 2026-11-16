@@ -1,6 +1,7 @@
 // A ceiling on the rows one step of a live run makes the install write to its database. D1's Free plan takes 100,000 rows written a day, every database of the account together, and refuses each write past them until midnight UTC.
 //
-//   POST   /api/uploads                    a new site 25, a new version 19: the begin and its finish together
+//   POST   /api/uploads                    a new site 25, a new version 15: the begin and its finish together
+//   POST   /api/uploads/:upload/finish     2 where the publish dropped older versions and 2 for each of them, once its answer says how many
 //   POST   /api/import/sites               a site with one version 25, and 2 for each version more
 //   DELETE /api/sites/:site                to the trash 9, for good 14
 //   POST   /api/sites/:site/new-link 12    POST /api/sites/:site/restore 9    PATCH /api/sites/:site 5    POST /api/sites/:site/rollback 3
@@ -9,7 +10,8 @@
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
 //
 // D1 counts an index entry and a row a trigger writes as rows, so one new site is 12 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
-// A visit is counted once it is answered, since only the answer says that a site was served. A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
+// A visit is counted once it is answered, since only the answer says that a site was served, and so is a dropped version. Once a step is stopped, no further request for a site's address is sent.
+// A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
 // A request that would pass the ceiling is not sent, and every one after it: each is answered here as refused, with a 403, which the CLI does not send again.
 // A request that changes something on a route with no price is refused the same way, so a check that grows a new kind of write stops red until it has one.
 // The count is the harness's own, not the database's. The sweep later drops the row of each finished upload, 5 rows more, which no request of a run makes.
@@ -20,8 +22,11 @@ import type { Declared } from "./budget";
 /** The rows of a new site, from its first request to its finish: the site and its first version 12, the upload 7, the day's counts 2, the version's size 2, and the log 2. */
 const NEW_SITE = 25;
 
-/** The rows of a new version of a site, from its first request to its finish, where it drops the oldest version an install keeps: 15 where it drops none. */
-const NEW_VERSION = 19;
+/** The rows of a new version of a site, from its first request to its finish, where it drops no older one. */
+const NEW_VERSION = 15;
+
+/** The rows a publish adds that drops older versions: 2 for the list of what it dropped and its listing of the bucket, and 2 for each version. One is dropped while an install keeps as many as it did, more once it was told to keep fewer. */
+const DROPPED = { any: 2, each: 2 } as const;
 
 /** The rows of a site put back from a backup with one version. */
 const IMPORTED_SITE = 25;
@@ -68,6 +73,9 @@ const PRICES = [
   { method: "GET", path: "/api/export/sites/:site/files", rows: () => 1 },
 ] as const satisfies readonly (Declared & { readonly rows: (asked: Asked) => number })[];
 
+/** The route whose answer says how many versions a publish dropped. */
+const FINISH = new URLPattern({ pathname: "/api/uploads/:upload/finish" });
+
 /** The method and the path of each priced route, as a request is matched against them. */
 const MATCHERS = PRICES.map(({ method, path, rows }) => ({ method, path: new URLPattern({ pathname: path }), rows }));
 
@@ -92,12 +100,16 @@ interface Meter {
   readonly stopped: () => string | undefined;
 }
 
-/** How many versions the site of an import carries; one for a body that names none. */
-function versionsIn(body: Asked["body"]): number {
-  const site: unknown = body.site;
+/** How many versions a site holds as a request or an answer names it; none for a value that is no site with such a list. */
+function versionsOf(site: unknown): number {
   const versions: unknown = typeof site === "object" && site !== null && "versions" in site ? site.versions : undefined;
 
-  return Array.isArray(versions) ? Math.max(1, versions.length) : 1;
+  return Array.isArray(versions) ? versions.length : 0;
+}
+
+/** How many versions the site of an import carries; one for a body that names none. */
+function versionsIn(body: Asked["body"]): number {
+  return Math.max(1, versionsOf(body.site));
 }
 
 /** The JSON object a request carries; empty for a body that is none, such as a file's bytes. */
@@ -111,6 +123,26 @@ function bodyOf(init: RequestInit): Asked["body"] {
   } catch {
     return {};
   }
+}
+
+/** The rows a finished publish wrote for the older versions it dropped, read from a copy of its answer: the site before it, one version more, less the site after it. None for a new site, and for an answer that is no publish. */
+async function droppedRows(answer: Response): Promise<number> {
+  const published: unknown = await answer
+    .clone()
+    .json()
+    .catch(() => undefined);
+  if (typeof published !== "object" || published === null || !("before" in published) || !("site" in published) || published.before === null) return 0;
+
+  const dropped = versionsOf(published.before) + 1 - versionsOf(published.site);
+
+  return dropped > 0 ? DROPPED.any + DROPPED.each * dropped : 0;
+}
+
+/** Whether a request may be a visit of a site: a read of an address outside the API that the edge does not answer itself. */
+function mayVisit(input: string, init: RequestInit): boolean {
+  const { pathname } = new URL(input);
+
+  return (init.method ?? "GET") === "GET" && !pathname.startsWith(API) && !pathname.startsWith(EDGE);
 }
 
 function refusal(message: string): Response {
@@ -148,16 +180,17 @@ export function meterRows(fetch: Fetch, ceiling: number): Meter {
 
       if (rows !== undefined && written + rows > ceiling) stopped ??= `passed its ceiling of ${ceiling} rows written to the database`;
 
-      // A request that writes nothing goes out after the stop too: the step's own listings, and its last lines, read the install.
-      if (stopped !== undefined && rows !== 0) return refusal(`Held back: the step ${stopped}.`);
+      // A read of the API goes out after the stop too: the step's own listings read the install. A visit of a site would write its rows.
+      const visit = mayVisit(input, init);
+      if (stopped !== undefined && (rows !== 0 || visit)) return refusal(`Held back: the step ${stopped}.`);
 
       written += rows ?? 0;
       const answer = await fetch(input, init);
-      const { pathname } = new URL(input);
-      const visited = (init.method ?? "GET") === "GET" && !pathname.startsWith(API) && !pathname.startsWith(EDGE) && SERVED.has(answer.status);
-      if (visited) written += VISIT;
+      if (visit && SERVED.has(answer.status)) written += VISIT;
 
-      // A visit is sent before its rows are known, so the one that passes the ceiling went out: the step stops with the next request that writes.
+      if (init.method === "POST" && FINISH.test(input) && answer.ok) written += await droppedRows(answer);
+
+      // A visit and a finish are sent before their rows are known, so the one that passes the ceiling went out: the step stops with the next request.
       if (written > ceiling) stopped ??= `passed its ceiling of ${ceiling} rows written to the database`;
 
       return answer;

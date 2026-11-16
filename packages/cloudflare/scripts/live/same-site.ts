@@ -79,6 +79,13 @@ function sameExpiry(expires: SiteObject["expires"], wanted: string, now: number)
   return left > DAY_MS && left <= span;
 }
 
+/** Whether a site keeps the versions a run of publishes leaves: every number from the newest down, as many as are kept, and no other. */
+function sameNumbers(versions: SiteObject["versions"], wanted: { readonly kept: number; readonly newest: number }): boolean {
+  const numbers = versions.map((version) => version.number).sort((one, other) => other - one);
+
+  return numbers.length === wanted.kept && numbers.every((number, at) => number === wanted.newest - at);
+}
+
 /** Whether a site's own record is what the publish leaves: every setting the publish sets, the side of the trash, and the newest version live. A site in the trash is that only while it stays there for more than a day, as one trashed just now does. */
 function sameSettings(site: SiteObject, wanted: Wanted, now: number): boolean {
   const publicName = wanted.reach.access === "public" ? wanted.reach.public_name : null;
@@ -93,7 +100,7 @@ function sameSettings(site: SiteObject, wanted: Wanted, now: number): boolean {
     (wanted.searchEngines === undefined || site.search_engines === wanted.searchEngines) &&
     (site.state === "trash") === wanted.trashed &&
     (site.gone_on === undefined || site.gone_on - now > DAY_MS) &&
-    (wanted.versions === "live" || (site.versions.length === wanted.versions.kept && newest === wanted.versions.newest)) &&
+    (wanted.versions === "live" || sameNumbers(site.versions, wanted.versions)) &&
     site.live_version === newest &&
     sameExpiry(site.expires, wanted.expires, now)
   );

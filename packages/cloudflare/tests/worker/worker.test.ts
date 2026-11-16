@@ -1053,12 +1053,18 @@ describe("the rows the live checks count", () => {
       return done(await calls.uploads[":upload"].$delete({ param: { upload: upload.id }, query: {} }));
     });
     await step("a setting changed", async () => done(await calls.config.$patch({ query: {}, json: { trash_days: 1 } })));
+    const restored = { site: (await finish(await calls.uploads.$post({ query: {}, json: { name: "kept", files: [declared] } }))).id };
+    const more = async (): Promise<Published> => finish(await calls.uploads.$post({ query: {}, json: { ...restored, files: [declared] } }));
+    await more();
+    await more();
+    await done(await calls.config.$patch({ query: {}, json: { versions_kept: 2 } }));
+    await step("a fourth version, which drops two once the install keeps two", more);
     await step("a computer's login begun", async () => done(await api(worker, null, meter.fetch).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } })));
 
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
         "a new site": [25, 25],
-        "a second version": [15, 19],
+        "a second version": [15, 15],
         "a fourth version, which drops the first": [19, 19],
         "a page opened": [2, 2],
         "a rollback": [3, 3],
@@ -1074,6 +1080,7 @@ describe("the rows the live checks count", () => {
         "an upload begun, asked what it lacks, and given up": [10, 29],
         // One row more is written where the logins change after a check of the domain.
         "a setting changed": [3, 4],
+        "a fourth version, which drops two once the install keeps two": [21, 21],
         "a computer's login begun": [3, 3],
       },
       stopped: undefined,
