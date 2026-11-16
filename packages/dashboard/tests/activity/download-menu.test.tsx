@@ -106,13 +106,19 @@ describe("the Download menu", () => {
     const menu = drawn(false, ["150", null], query);
     await choose("CSV");
     await said(done);
+    // The way to the next file stands on the line that says the result and beside the button, under one name.
     const offered = within(document.body).getAllByRole("button", { name: next }).length;
     await choose(next);
     await said("Downloaded the last part.");
 
-    expect([offered, within(document.body).queryByRole("button", { name: next }), menu]).toEqual([
-      1,
-      null,
+    // The line of the file before leaves a moment after its press: what stays beside the button is what counts.
+    const left = within(document.body)
+      .queryAllByRole("button", { name: next })
+      .filter((button) => button.closest("[data-sonner-toast]") === null).length;
+
+    expect([offered, left, menu]).toEqual([
+      2,
+      0,
       {
         asked: [`/data/activity/download/next${kept.replace("&", "?")}`, `/data/activity/download/next?${kept.slice(1)}${kept === "" ? "" : "&"}after=150`],
         saved: [`${BOOT.base}/data/activity/download?format=csv${kept}&after=900&part=1`, `${BOOT.base}/data/activity/download?format=csv${kept}&after=150&part=2`],
@@ -123,16 +129,22 @@ describe("the Download menu", () => {
   // Drift: an older result would keep its own way to the next file, which saves the last file twice once the log is done.
   // A result pressed for the next file would take the newer result away with it, or the focus would be lost with the button that saved the last file.
   test.each([
-    ["the toolbar", "Next 2,000"],
-    ["the result", "Download the next 2,000"],
-  ])("with the second file asked for from %s, keeps one result with a way to the next file at a time, none once the last file is saved, and then gives the focus to Download", async (_from, second) => {
+    ["the toolbar", false],
+    ["the result", true],
+  ] as const)("with the second file asked for from %s, keeps one result with a way to the next file at a time, none once the last file is saved, and then gives the focus to Download", async (_from, second) => {
     const menu = drawn(false, ["150", "300", null], "after=40");
-    const ways = (): number => within(document.body).queryAllByRole("button", { name: "Download the next 2,000" }).length;
+    // The way to the next file, on a line that says a result or beside the button: both carry one name.
+    const nexts = (onLine: boolean): HTMLElement[] =>
+      within(document.body)
+        .queryAllByRole("button", { name: "Next 2,000" })
+        .filter((button) => (button.closest("[data-sonner-toast]") !== null) === onLine);
+    const ways = (): number => nexts(true).length;
     const settle = (ms: number): Promise<void> => act(async () => void (await new Promise((resolve) => setTimeout(resolve, ms))));
-    const press = async (name: string): Promise<void> => {
-      const button = within(document.body).getByRole("button", { name });
-      button.focus();
-      fireEvent.click(button);
+    const press = async (onLine: boolean): Promise<void> => {
+      const [button] = nexts(onLine);
+      button?.focus();
+      if (button !== undefined) fireEvent.click(button);
+
       await settle(0);
     };
     await choose("CSV");
@@ -144,7 +156,7 @@ describe("the Download menu", () => {
     // The one result left is the newer one, which stays: it is still there once a result on its way out would be gone.
     await settle(STAYED_MS);
     const stayed = ways();
-    await press("Next 2,000");
+    await press(false);
     await said("Downloaded the last part.");
     await waitFor(() => expect(ways()).toBe(0), LEAVES_WITHIN);
 

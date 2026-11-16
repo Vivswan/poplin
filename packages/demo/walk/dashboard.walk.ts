@@ -970,8 +970,8 @@ for (const size of [PHONE, FITS_FROM]) {
   });
 }
 
-// Drift: the keys would reach Close before Undo again, or the result would name keys that do not lead to it.
-test("a result's Undo is reached with the keys the result names, then Tab twice, and Close comes after it", async ({ page }) => {
+// Drift: the keys would reach Close before Undo again, or the result would name keys that lead only near it: to the place of the lines, two Tab stops before Undo.
+test("a result's Undo is reached with the keys the result names, and Close comes after it", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
   await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
@@ -979,8 +979,6 @@ test("a result's Undo is reached with the keys the result names, then Tab twice,
   await expect(saved).toContainText("Press Alt+T to reach Undo.");
 
   await page.keyboard.press("Alt+T");
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
   await expect(saved.getByRole("button", { name: "Undo", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(saved.getByRole("button", { name: "Close", exact: true })).toBeFocused();

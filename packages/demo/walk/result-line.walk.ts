@@ -3,7 +3,7 @@
 
 import { expect } from "@playwright/test";
 
-import { arrive, openPanel, said, screenHeading, test, toSection, trash } from "./visit";
+import { arrive, FIRST_LOAD_MS, openPanel, said, screenHeading, test, toSection, trash } from "./visit";
 
 /** The screens the walk is taken on: the widest, and the narrowest the Sites table fits. */
 const SCREENS = [
@@ -107,3 +107,45 @@ test("the Undo of an added user leaves once the user is removed by the row's men
   await expect(undo).toHaveCount(0);
   expect(Date.now() - begun, "how long ago the line was asked for when it was gone: under the time it leaves in by itself").toBeLessThan(UNDO_STAYS_MS);
 });
+
+for (const size of SCREENS) {
+  test.describe(`on a screen ${size.width} px wide, the result of a file that is not the log's last`, () => {
+    test.use({ viewport: size });
+
+    // Drift: the button of this line carried five words, "Download the next 2,000": the line's own words were cut short, the row that names its keys took four rows,
+    // and the line lay over the tools of the log, where a press on the filter under it landed on the line.
+    test("lies inside the header with its words whole, the row of its keys one row, and its button named as the way beside Download is", async ({ page }) => {
+      await arrive(page);
+      await page.goto("state/activity/long");
+      const log = page.getByRole("region", { name: "Activity", exact: true });
+      // The stage opens on a narrowed log: the whole one has more entries than a file holds.
+      await log.getByRole("button", { name: "Show all activity", exact: true }).click({ timeout: FIRST_LOAD_MS });
+      await expect(log.locator("tbody > tr").first()).toBeVisible();
+      await log.getByRole("button", { name: "Download", exact: true }).filter({ visible: true }).click();
+      await page.getByRole("menuitem", { name: "CSV", exact: true }).click();
+
+      const line = page.getByRole("region", { name: /^Notifications/ }).getByRole("listitem").filter({ hasText: "Downloaded 2,000." });
+      const keys = line.getByText("Press Alt+T to reach Next 2,000.", { exact: true });
+      await expect(line.getByRole("button", { name: "Next 2,000", exact: true })).toBeVisible();
+      await expect(keys).toBeVisible();
+      const header = page.locator("header").filter({ has: screenHeading(page, "Activity") });
+
+      // The line slides into its place: its place counts once two frames read it alike.
+      await expect(async () => {
+        const before = await line.boundingBox();
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+        const [band, drawn] = await Promise.all([header.boundingBox(), line.boundingBox()]);
+
+        expect(drawn).toEqual(before);
+        expect(drawn?.y).toBeGreaterThanOrEqual(band?.y ?? Number.NaN);
+        expect((drawn?.y ?? Number.NaN) + (drawn?.height ?? Number.NaN)).toBeLessThanOrEqual((band?.y ?? Number.NaN) + (band?.height ?? Number.NaN));
+      }).toPass();
+
+      const words = line.getByText("Downloaded 2,000.", { exact: true });
+      const cut = await words.evaluate((drawn) => drawn.scrollWidth > drawn.clientWidth);
+      const rows = await keys.evaluate((drawn) => Math.round(drawn.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(drawn).lineHeight)));
+
+      expect([cut, rows]).toEqual([false, 1]);
+    });
+  });
+}
