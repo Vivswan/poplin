@@ -344,9 +344,11 @@ const STOPS: readonly Stop[] = [
   },
   {
     name: "a removed token, which then stands under Removed tokens",
-    open: async (page) => {
+    open: async (page, wide) => {
       await fromRowMenu(page, SAMPLE.token, "Remove");
       await leaveBy("Remove")(page);
+      // The token's row leaves the list a moment later and moves everything under it up by more than a button's height: a press sent before that lands beside the button.
+      await expect(rows(page, wide, "Tokens").getByText(SAMPLE.token, { exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: /^Removed tokens/ }).click();
     },
     shows: (page, wide) => [rows(page, wide, "Removed tokens").getByText(SAMPLE.token, { exact: true })],
