@@ -25,6 +25,8 @@
     "packages/providers/cloudflare/tests/shared/database",
     "packages/providers/cloudflare/tests/shared/limits",
     "packages/providers/cloudflare/tests/shared/jobs",
+    "packages/providers/cloudflare/load",
+    "packages/providers/cloudflare/tests/load",
     "packages/demo/src/browser/worker.ts",
     "packages/dashboard"
   ]
