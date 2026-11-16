@@ -5,6 +5,7 @@ import { clearPage } from "../lib/support/page";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { toast } from "sonner";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BOOT } from "@/lib/boot";
@@ -117,6 +118,8 @@ describe("the panel of a problem", () => {
 
     await waitFor(() => expect(copied.length).toBe(1));
     expect(copied[0]?.split("\n").slice(0, 2).concat(copied[0]?.split("\n").at(-1) ?? "")).toEqual(["poplin 1.0.0: request_failed", "A request failed", "Failure: TypeError: the store did not answer"]);
+    // The line that says so is waited for: said after this test, it would be drawn in the test that runs next.
+    await waitFor(() => expect(toast.getToasts().map((line) => line.id)).toContain("Details copied."));
   });
 
   // Drift: a link to a problem that has left the list would show a panel that waits for ever.
