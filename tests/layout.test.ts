@@ -32,6 +32,7 @@ const CHOOSERS: readonly (readonly [path: string, reason: string])[] = [
   ["packages/providers/cloudflare/src/shared/install/first/installer.ts", "makes a new install of the kind a person chose, with that kind's plug"],
   ["packages/providers/cloudflare/src/shared/install/kind/first-run.ts", "makes the plug of the kind a person chose when nothing is set yet"],
   ["packages/providers/cloudflare/src/shared/install/kind/zone-binding.ts", "reads the `ZONE` binding, which holds the values of one kind or of the other"],
+  ["packages/providers/cloudflare/src/shared/install/upkeep/remove/remove.ts", "removes an install of either kind, with that kind's own removals"],
   ["packages/providers/cloudflare/src/shared/worker/hosts.ts", "builds where the install answers from the kind its `ZONE` binding names"],
 ];
 

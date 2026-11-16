@@ -114,6 +114,12 @@ export interface Account {
   /** The account's R2 buckets. */
   buckets: Row[];
 
+  /** The objects of the bucket named `poplin-sites`, each with its key and its size. */
+  objects: Row[];
+
+  /** How many sites the database named `poplin` holds; left out, it has no table of sites, as one no Worker ever opened. */
+  sites?: number;
+
   /** Accounts the token shows beside its own. */
   alsoShown?: Row[];
 
@@ -172,6 +178,7 @@ export function emptyAccount(): Account {
     crons: [],
     address: { enabled: false, previews_enabled: true },
     buckets: [],
+    objects: [],
     workers: [],
     accessOff: false,
     tokens: [],
@@ -192,6 +199,8 @@ function stored(list: Row[], asked: Asked, id: string | undefined, key = "id"): 
   }
 
   const index = list.findIndex((row) => row[key] === id);
+  if (asked.method === "DELETE" && index < 0) return refusal(404, 10007, "no such object");
+
   if (asked.method === "DELETE") list.splice(index, 1);
   else list[index] = { [key]: id, ...body };
 
@@ -255,6 +264,12 @@ function otherWorker(account: Account, asked: Asked, parts: readonly string[]): 
   const current = account.workers[at];
   if (current === undefined) return refusal(404, 10007, "This Worker does not exist on your account.");
 
+  if (asked.method === "DELETE") {
+    account.workers.splice(at, 1);
+
+    return reply(null);
+  }
+
   if (part === "settings") return reply({ bindings: current.bindings ?? [], tags: current.tags });
 
   if (asked.method === "POST") Object.assign(current, asked.body);
@@ -282,13 +297,24 @@ function uploaded(account: Account, asked: Asked): Response {
   return reply({ id: "poplin" });
 }
 
+/** A change of the install's Worker as a whole: an upload, or a removal, with which its bindings, its versions, and its cron list go. */
+function written(account: Account, asked: Asked): Response {
+  if (asked.method === "PUT") return uploaded(account, asked);
+
+  if (account.noWorker === true) return refusal(404, 10007, "This Worker does not exist on your account.");
+
+  Object.assign(account, { noWorker: true, bindings: [], versions: [], crons: [] });
+
+  return reply(null);
+}
+
 /** The account's Workers: the list, the Worker named `poplin` with its settings, its versions, its cron list, and its address switches, and every other Worker. */
 function worker(account: Account, asked: Asked, parts: readonly string[]): Response {
   if (parts[4] === undefined) return page(asked, [{ id: "poplin", tags: [] }, ...account.workers]);
 
   if (parts[4] !== "poplin") return otherWorker(account, asked, parts);
 
-  if (asked.method === "PUT" && parts[5] === undefined) return uploaded(account, asked);
+  if (asked.method !== "GET" && parts[5] === undefined) return written(account, asked);
 
   if (account.noWorker === true) return refusal(404, 10007, "This Worker does not exist on your account.");
 
@@ -316,8 +342,26 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
   return reply({ bindings: account.bindings });
 }
 
-/** The account's R2 buckets: the list, as one object that holds it, and a new bucket of the name sent. */
-function buckets(account: Account, asked: Asked): Response {
+/** The objects of poplin's bucket: the list, and the removal of one by its key. Any other bucket holds none. */
+function objects(account: Account, asked: Asked, name: string, key: string | undefined): Response {
+  if (!account.buckets.some((bucket) => bucket.name === name)) return refusal(404, 10006, "The specified bucket does not exist.");
+
+  if (name !== "poplin-sites") return reply([]);
+
+  return key === undefined ? reply(account.objects) : stored(account.objects, asked, decodeURIComponent(key), "key");
+}
+
+/** The account's R2 buckets: the list, as one object that holds it, a new bucket of the name sent, a bucket's objects, and the removal of a bucket that holds none. */
+function buckets(account: Account, asked: Asked, parts: readonly string[]): Response {
+  const [name, part] = [parts[4], parts[5]];
+  if (name !== undefined && part === "objects") return objects(account, asked, name, parts[6]);
+
+  if (name !== undefined && asked.method === "DELETE") {
+    if (name === "poplin-sites" && account.objects.length > 0) return refusal(409, 10008, "The bucket you tried to delete is not empty.");
+
+    return stored(account.buckets, asked, name, "name");
+  }
+
   if (asked.method === "POST") account.buckets.push({ ...(asked.body as Row) });
 
   return reply(asked.method === "POST" ? asked.body : { buckets: account.buckets });
@@ -349,6 +393,14 @@ function workflows(account: Account, asked: Asked, name: string | undefined): Re
   return reply({ name });
 }
 
+/** A question to the database: the count of its sites is answered, and the test fails on anything that is no such read. */
+function queried(account: Account, asked: Asked): Response {
+  const { sql } = asked.body as { readonly sql: string };
+  if (sql !== "SELECT count(*) AS sites FROM sites") throw new Error(`the fake database was asked something it has no answer for: ${sql}`);
+
+  return account.sites === undefined ? refusal(400, 7500, "no such table: sites") : reply([{ results: [{ sites: account.sites }], success: true }]);
+}
+
 /** The zone's own switches: Always Use HTTPS, which is only read, and the bot switches. */
 function switches(account: Account, asked: Asked, parts: readonly string[]): Response {
   if (parts[2] === "settings") return reply({ id: parts[3], value: account.zoneRedirects ? "on" : "off" });
@@ -377,9 +429,11 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
 
   if (kind === "workers/subdomain") return reply({ subdomain: account.noFreeAddress === true ? null : FREE_ADDRESSES[ACCOUNT] });
 
+  if (kind === "d1/database" && parts[5] === "query") return queried(account, asked);
+
   if (kind === "d1/database") return stored(account.databases, asked, parts[4], "uuid");
 
-  if (kind === "r2/buckets") return buckets(account, asked);
+  if (kind === "r2/buckets") return buckets(account, asked, parts);
 
   if (kind === "alerting/v3") return stored(account.alerts, asked, parts[5]);
 

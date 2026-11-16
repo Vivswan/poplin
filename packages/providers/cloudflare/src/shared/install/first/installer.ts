@@ -32,6 +32,7 @@ import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
 import { createDomainPlug, lacksRight, rightFor, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, type Where } from "./find";
+import { removeInstall } from "../upkeep/remove/remove";
 import { firstBindings } from "./first-bindings";
 
 /** The name of the install's Worker. */
@@ -412,4 +413,5 @@ export const installer: Installer<Where, Place> = {
   facts: (where) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST),
   find: (token, where, reach) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor }),
   install,
+  remove: (found, where, removal, _reach, say) => removeInstall(found, where, removal, tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST).tokenLink, say),
 };

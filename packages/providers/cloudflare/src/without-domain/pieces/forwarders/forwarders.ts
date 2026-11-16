@@ -9,9 +9,12 @@
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
-import type { AccountAddresses } from "../../address-layout";
+import type { AccountAddresses, ForwarderNames } from "../../address-layout";
 import { type CloudflareResult, type Connection, callCloudflare } from "../../../shared/install/client";
 import { applySteps, type Mode, reportOf, type Synced } from "../../../shared/install/sync";
+
+/** The status Cloudflare answers for a Worker the account does not hold. */
+const NO_WORKER = 404;
 
 /** The tag that marks a Worker as a forwarder of poplin's. */
 const TAG = "poplin-forwarder";
@@ -90,7 +93,7 @@ function planForwarders(layout: AccountAddresses, workers: readonly AccountWorke
 }
 
 /** A step per Worker of a forwarder's name: a `remove` for one of poplin's and a `skip` for one that is not; none for a name the account has no Worker of. */
-function planRemoval(layout: AccountAddresses, workers: readonly AccountWorker[]): RemovalStep[] {
+function planRemoval(layout: ForwarderNames, workers: readonly AccountWorker[]): RemovalStep[] {
   return [layout.sitesWorker, layout.privateWorker].flatMap((name): RemovalStep[] => {
     const current = workers.find((worker) => worker.id === name);
     if (current === undefined) return [];
@@ -100,7 +103,7 @@ function planRemoval(layout: AccountAddresses, workers: readonly AccountWorker[]
 }
 
 /** The account's Workers of the two forwarders' names; with `compared`, each of poplin's carries its bindings and its two switches. */
-async function readForwarders(connection: Connection, accountId: string, layout: AccountAddresses, compared: boolean): Promise<CloudflareResult<AccountWorker[]>> {
+async function readForwarders(connection: Connection, accountId: string, layout: ForwarderNames, compared: boolean): Promise<CloudflareResult<AccountWorker[]>> {
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BaseScripts(api).list({ account_id: accountId })));
   if (!listed.ok) return listed;
 
@@ -158,17 +161,27 @@ export async function syncForwarders(connection: Connection, accountId: string, 
 }
 
 /**
- * Take the account's two forwarders away, as starting an install over does.
+ * Take the account's two forwarders away, as removing an install does.
  *
+ * @param layout - the two forwarders' names, which need no free address to be known
  * @param mode - `plan` reads the account's Workers and sends no change
  * @returns what was removed; a Worker of a forwarder's name that is not poplin's is skipped with the reason, and an account with neither changes nothing
  */
-export async function removeForwarders(connection: Connection, accountId: string, layout: AccountAddresses, mode: Mode): Promise<Synced> {
+export async function removeForwarders(connection: Connection, accountId: string, layout: ForwarderNames, mode: Mode): Promise<Synced> {
   const workers = await readForwarders(connection, accountId, layout, false);
   if (!workers.ok) return { ...workers, report: reportOf([]) };
 
   const steps = planRemoval(layout, workers.value);
 
-  // Asked for as the bare response: an answer with no body is a removal too.
-  return applySteps(steps, (step) => callCloudflare(connection, (api) => new BaseScripts(api).delete(step.subject, { account_id: accountId }).asResponse()), mode);
+  return applySteps(
+    steps,
+    async (step) => {
+      // Asked for as the bare response: an answer with no body is a removal too.
+      const removed = await callCloudflare(connection, (api) => new BaseScripts(api).delete(step.subject, { account_id: accountId }).asResponse());
+
+      // A forwarder that went since the list is gone, which is what the removal is for.
+      return !removed.ok && removed.failure === "refused" && removed.status === NO_WORKER ? { ok: true, value: undefined } : removed;
+    },
+    mode,
+  );
 }

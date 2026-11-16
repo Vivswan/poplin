@@ -51,11 +51,24 @@ export interface AccountAddresses {
   readonly [addressBrand]: true;
 }
 
+/** The names of the two forwarders, which are made from the Worker's name alone. */
+export type ForwarderNames = Pick<AccountAddresses, "sitesWorker" | "privateWorker">;
+
 /** Why a layout was refused. `bad-worker` is a Worker's name that is no single label of a hostname, or whose forwarder's name is none. `account-too-long` is an account's name under which an address passes what Access takes. */
 type AddressRefusal = "bad-account" | "bad-worker" | "account-too-long";
 
 /** A layout, or the first rule it breaks. */
 export type CheckedAccountAddresses = { readonly ok: true; readonly value: AccountAddresses } | { readonly ok: false; readonly refusal: AddressRefusal };
+
+/**
+ * Name the two forwarders of a Worker.
+ *
+ * @param worker - the one Worker's name
+ * @returns the names, which hold nothing of the account: they are the same in every account
+ */
+export function forwarderNames(worker: string): ForwarderNames {
+  return { sitesWorker: `${worker}${SITES_ENDING}`, privateWorker: `${worker}${PRIVATE_ENDING}` };
+}
 
 /**
  * Check the addresses of an install without a domain before any of them reaches Cloudflare.
@@ -67,8 +80,7 @@ export function parseAccountAddresses(raw: RawAccountAddresses, worker: string):
   // An account's name is one label: it holds no dot, and under the free address alone it is a hostname.
   if (raw.account_address.includes(".") || !parseHostname(`${raw.account_address}.${FREE_ADDRESS}`).ok) return { ok: false, refusal: "bad-account" };
 
-  const sitesWorker = `${worker}${SITES_ENDING}`;
-  const privateWorker = `${worker}${PRIVATE_ENDING}`;
+  const { sitesWorker, privateWorker } = forwarderNames(worker);
   const [adminHost, sitesHost, privateHost] = [worker, sitesWorker, privateWorker].map((name) => parseHostname(`${name}.${raw.account_address}.${FREE_ADDRESS}`));
   // A Worker's name is one label too: with a dot in it, each host would sit a level deeper than the free address gives.
   if (worker.includes(".") || !adminHost?.ok || !sitesHost?.ok || !privateHost?.ok) return { ok: false, refusal: "bad-worker" };

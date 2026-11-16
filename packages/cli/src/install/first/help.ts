@@ -1,21 +1,16 @@
 // The two help texts of `poplin install`: the command's own, which lists the providers, and one provider's, made from what the provider declares.
 
-import type { OptionRow } from "../../../../core/src/install/installer";
 import { columns } from "../../commands/text";
-import { TOKEN_VARIABLE } from "../ask";
+import { TOKEN_HELP } from "../ask";
 import { SHARED_OPTIONS } from "./parse";
 import type { Provider } from "../records";
+import { optionLines } from "../report";
 
 /** How far a line of a list stands in. */
 const INDENT = "  ";
 
 function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
-}
-
-/** The rows of some options: each as it is typed, what it means, and the variable that answers the same. */
-function optionRows(rows: readonly OptionRow[]): string[] {
-  return indented(columns(rows.map((row) => [row.value === null ? row.flag : `${row.flag} ${row.value}`, row.about, row.variable === null ? "" : `(${row.variable})`])));
 }
 
 function joined(sections: readonly (readonly string[])[]): string {
@@ -31,8 +26,8 @@ function commandHelp(providers: readonly Provider[]): string {
     ["poplin install <provider> [options]"],
     ["Make your own install at a provider. It looks for one first: where one is, it", "says so and changes nothing."],
     ["Providers:", ...indented(listed)],
-    ["Options:", ...optionRows(SHARED_OPTIONS)],
-    [`The account token is read from ${TOKEN_VARIABLE}, or from standard input`, "with --token-stdin, or asked for without being shown. It is used for the run", "and stored nowhere."],
+    ["Options:", ...optionLines(SHARED_OPTIONS)],
+    [...TOKEN_HELP],
     ["An install that is there:", ...indented(["poplin doctor", "poplin doctor --repair", "poplin update", "poplin uninstall <provider>"])],
     ...(own.length === 0 ? [] : [indented(columns(own))]),
   ]);
@@ -43,7 +38,7 @@ function providerHelp(provider: Provider): string {
   return joined([
     [`poplin install ${provider.id} ${provider.usage} [options]`],
     [provider.about],
-    [`Options of ${provider.name}:`, ...optionRows(provider.options)],
+    [`Options of ${provider.name}:`, ...optionLines(provider.options)],
     [...provider.tokenHelp],
     ["Every option of poplin install works here too: poplin install --help"],
   ]);

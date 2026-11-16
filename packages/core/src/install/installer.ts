@@ -143,6 +143,45 @@ export type Installed =
     }
   | { readonly ok: false; readonly why: "unreachable"; readonly words: string };
 
+/** What a removal starts from: an install that is set, one begun and not finished, data of the product's names that no install holds, or no install, where an earlier removal may have left an object behind. */
+export type Removable<Place> = Extract<Found<never, Place>, { readonly state: "whole" | "started" | "leftover" | "none" }>;
+
+/**
+ * How a removal goes. A dry run lists and removes nothing.
+ *
+ * A run carries `confirmed`, what the person typed as proof of which install is meant, and whether the sites' files and the records go too.
+ */
+export type Removal = { readonly run: "dry-run" } | { readonly run: "apply"; readonly confirmed: string; readonly data: "remove" | "keep" };
+
+/**
+ * What a removal does, or a dry run would do, to one kind of object.
+ *
+ * `remove` it is there and is the product's; `gone` it was there when the run listed it, and gone before the run reached it; `keep` it is data the run was told to leave.
+ * `stay` it is nothing a removal takes away, and the row says what to do by hand; `skip` it carries a name of the product's and is not this install's.
+ * `block` the token lacks the right to remove it; `fail` the provider refused; `not-run` an earlier object still stands that must go first.
+ */
+export type RemovalState = "remove" | "gone" | "keep" | "stay" | "skip" | "block" | "fail" | "not-run";
+
+/** One kind of object of an install, in the order removed. `detail` names what is there; `count` and `bytes` are how much it holds, where that was read; `right` is on a row that lacks one right of the token. */
+export interface RemovalRow {
+  readonly object: string;
+  readonly state: RemovalState;
+  readonly detail: string;
+  readonly count?: number;
+  readonly bytes?: number;
+  readonly right?: string;
+}
+
+/**
+ * What a removal came to: its rows, the same for a dry run and the run after it, and `confirm`, what a person types to say this install is meant.
+ *
+ * `ready` is true for a dry run that a run would go through after, and for a run that left nothing it was to remove.
+ * The second shape removed nothing: no answer, an install of another place than the one named, a `confirmed` that is not this install's `confirm`, or an account that changed since it was looked at.
+ */
+export type Removed =
+  | { readonly ok: true; readonly rows: readonly RemovalRow[]; readonly blocked: readonly Blocked[]; readonly confirm: string; readonly ready: boolean }
+  | { readonly ok: false; readonly why: "unreachable" | "other_place" | "not_confirmed" | "changed"; readonly words: string };
+
 /**
  * One provider, as the command works through it. `Where` is the provider's own answer of where the install goes, and `Place` what it found with a token: the command holds both and looks into neither.
  */
@@ -179,4 +218,7 @@ export interface Installer<Where, Place> {
 
   /** Make the install, or with a dry run say what a run would make. `say` is told each row as it is settled. */
   install(found: Startable<Place>, where: Where, login: Login, run: Run, reach: Reach, say: (row: Row) => void): Promise<Installed>;
+
+  /** Remove the install and nothing else, or with a dry run list what a run would remove. `say` is told each row as it is settled. */
+  remove(found: Removable<Place>, where: Where, removal: Removal, reach: Reach, say: (row: RemovalRow) => void): Promise<Removed>;
 }

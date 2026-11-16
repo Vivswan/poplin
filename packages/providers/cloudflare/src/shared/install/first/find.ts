@@ -161,8 +161,12 @@ async function accountOf(connection: Connection, where: Where): Promise<string |
   return { state: "refused", why: "no_domain", words: `The token shows no active domain ${where.layout.domain}. Add the domain to the account, or choose it under Zone Resources on the token's form.` };
 }
 
-/** Whether a Worker's bindings carry poplin's marks. */
-function isOwn(bindings: readonly ListedBinding[]): boolean {
+/**
+ * Tell whether a Worker is poplin's by the marks its bindings carry.
+ *
+ * @param bindings - every binding of the Worker named `poplin`, as Cloudflare lists them
+ */
+export function isOwn(bindings: readonly ListedBinding[]): boolean {
   const bound = (name: string, type: string): boolean => bindings.some((binding) => binding.name === name && binding.type === type);
   const named = bindings.some((binding) => binding.name === INSTALL_OBJECTS.workerBinding && binding.type === "plain_text" && binding.text === SCRIPT);
 

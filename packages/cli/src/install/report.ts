@@ -3,14 +3,14 @@
 //   a dry run    would make   <object>   <detail>
 //   a run        made         <object>   <detail>
 
-import type { Blocked, Installed, Row, RowState, Run } from "../../../core/src/install/installer";
+import type { Blocked, Installed, OptionRow, Row, RowState, Run } from "../../../core/src/install/installer";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
 import { columns, countText } from "../commands/text";
 import type { Tone } from "../local/screen";
 import type { Provider, Stop } from "./records";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
-const STATES: Readonly<Record<RowState, { readonly "dry-run": string; readonly apply: string; readonly tone: Tone }>> = {
+const STATES: Readonly<Record<RowState, StateWords>> = {
   make: { "dry-run": "would make", apply: "made", tone: "done" },
   change: { "dry-run": "would change", apply: "changed", tone: "done" },
   remove: { "dry-run": "would remove", apply: "removed", tone: "done" },
@@ -47,22 +47,26 @@ const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 /** The line every stop before the first change ends in. */
 const UNCHANGED = "nothing was changed";
 
+/** The word of one state of a row in a dry run and in a run, and what kind of line it is. */
+export interface StateWords {
+  readonly "dry-run": string;
+  readonly apply: string;
+  readonly tone: Tone;
+}
+
 /** One line as it is shown: its text, and what kind of line it is. */
 export interface Line {
   readonly tone: Tone;
   readonly text: string;
 }
 
-function widthOf(run: Run): number {
-  return Math.max(...Object.values(STATES).map((words) => words[run].length));
-}
 
 function plain(text: string): Line {
   return { tone: "plain", text };
 }
 
 /** The lines of what stops a piece until a person acts: what it is, then the address to open, under it. */
-function blockedLines(blocked: readonly Blocked[]): Line[] {
+export function blockedLines(blocked: readonly Blocked[]): Line[] {
   return blocked.flatMap((one) => [{ tone: "warning", text: one.words }, plain(`${INDENT}${one.address}`)]);
 }
 
@@ -80,16 +84,32 @@ function ownerLines(provider: Provider, version: string | undefined, newest: str
 }
 
 /**
+ * Lay one row out in columns: its state's word, as wide as the widest word of the run, then its object and its detail.
+ *
+ * @param states - the words of every state a row of this command can have
+ * @param run - whether the row is of a dry run or of a run
+ */
+export function wordedRow<State extends string>(states: Readonly<Record<State, StateWords>>, row: { readonly state: State; readonly object: string; readonly detail: string }, run: Run): Line {
+  const all: readonly StateWords[] = Object.values(states);
+  const width = Math.max(...all.map((words) => words[run].length));
+  const words = states[row.state];
+
+  return { tone: words.tone, text: [words[run].padEnd(width), row.object.padEnd(OBJECT_WIDTH), row.detail].join(GAP).trimEnd() };
+}
+
+/** The rows of some options in a help text: each as it is typed, what it means, and the variable that answers the same. */
+export function optionLines(rows: readonly OptionRow[]): string[] {
+  return columns(rows.map((row) => [row.value === null ? row.flag : `${row.flag} ${row.value}`, row.about, row.variable === null ? "" : `(${row.variable})`])).map((line) => `${INDENT}${line}`);
+}
+
+/**
  * Word one object of an install.
  *
  * @param run - whether the row is of a dry run or of a run: the state's word differs, and nothing else
  * @returns the line, and what kind of line it is
  */
 export function rowLine(row: Row, run: Run): Line {
-  const words = STATES[row.state];
-  const text = [words[run].padEnd(widthOf(run)), row.object.padEnd(OBJECT_WIDTH), row.detail].join(GAP).trimEnd();
-
-  return { tone: words.tone, text };
+  return wordedRow(STATES, row, run);
 }
 
 /**

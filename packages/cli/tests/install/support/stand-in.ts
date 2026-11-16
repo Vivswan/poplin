@@ -3,7 +3,7 @@
 // The provider is no real one: its options, its words, and its token's form are its own, so the command is proven to work through the interface alone.
 
 import type { Login } from "../../../../core/src/auth/logins";
-import type { Found, Given, Installed, Installer, Question, Read, Row, Run, Startable, Token } from "../../../../core/src/install/installer";
+import type { Found, Given, Installed, Installer, Question, Read, Removable, Removal, RemovalRow, Removed, Row, Run, Startable, Token } from "../../../../core/src/install/installer";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
 import type { InstallEnds } from "../../../src/install/records";
@@ -23,6 +23,15 @@ export const FRESH: readonly Row[] = [
   { object: "Program", state: "make", detail: "poplin, to run 0.1.0" },
   { object: "Address", state: "leave", detail: "poplin.example.com" },
   { object: "Guard rule", state: "leave-out", detail: "the token lacks Rules: Edit (optional)", right: "Rules: Edit" },
+];
+
+/** The rows a removal of a whole install works through, in the order removed. */
+export const WHOLE: readonly RemovalRow[] = [
+  { object: "Address", state: "remove", detail: "poplin.example.com" },
+  { object: "Program", state: "remove", detail: "poplin" },
+  { object: "Store", state: "remove", detail: "poplin-sites: 2 files, 15 B", count: 2, bytes: 15 },
+  { object: "Records", state: "remove", detail: "poplin: 3 sites", count: 3 },
+  { object: "Account token", state: "stay", detail: "delete it at Stand-In Host" },
 ];
 
 /** Where the made-up provider puts an install: at a place of a name, or at none. */
@@ -52,6 +61,12 @@ export interface Account {
 
   /** How many objects the runs made or changed. */
   changes: number;
+
+  /** What a removal comes to, in place of the rows of a whole install; given the removal, so a test can refuse what was typed. */
+  removed: ((removal: Removal) => Removed) | undefined;
+
+  /** What each call of `remove` was handed. */
+  readonly removals: { readonly found: Removable<Place>; readonly where: Where; readonly removal: Removal }[];
 }
 
 /** How one command line is run. */
@@ -79,7 +94,7 @@ interface Options {
 }
 
 /**
- * What one command printed and asked, and how it exited. `shown` holds every line in the order shown, each with where it went and its tone.
+ * What one command printed and asked, and how it exited. `shown` holds every line and every question in the order shown, each line with where it went and its tone.
  *
  * `fetched` lists what the login offer asked for, `reached` what the wait asked for, and `slept` how long each rest of the wait was.
  */
@@ -149,7 +164,12 @@ export function installedOf(rows: readonly Row[], more: Partial<Pick<Extract<Ins
 
 /** An account that holds nothing of the product. */
 export function emptyAccount(): Account {
-  return { scenes: [{ state: "none", place: { token: TOKEN as Token }, notes: [] }], installed: undefined, crash: undefined, finds: [], runs: [], changes: 0 };
+  return { scenes: [{ state: "none", place: { token: TOKEN as Token }, notes: [] }], installed: undefined, crash: undefined, finds: [], runs: [], changes: 0, removed: undefined, removals: [] };
+}
+
+/** What a removal of some rows comes to; the install's address is what a person types. */
+export function removedOf(rows: readonly RemovalRow[], more: Partial<Pick<Extract<Removed, { readonly ok: true }>, "blocked" | "ready">> = {}): Extract<Removed, { readonly ok: true }> {
+  return { ok: true, rows, blocked: more.blocked ?? [], confirm: new URL(ADDRESS).host, ready: more.ready ?? true };
 }
 
 /**
@@ -198,6 +218,19 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
 
       return installed;
     },
+    remove: async (found, where, removal, _reach, say) => {
+      account.removals.push({ found, where, removal });
+      if (account.crash !== undefined) throw account.crash;
+
+      const removed = account.removed?.(removal) ?? removedOf(WHOLE);
+      if (!removed.ok) return removed;
+
+      for (const row of removed.rows) say(row);
+
+      if (removal.run === "apply") account.changes += removed.rows.filter((row) => row.state === "remove").length;
+
+      return removed;
+    },
   };
 }
 
@@ -205,6 +238,7 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
 function screenOf(ran: Ran, typed: (string | boolean | undefined)[]): Screen {
   const answer = <Answer extends string | boolean>(question: string, kind: "string" | "boolean"): Answer | undefined => {
     ran.asked.push(question);
+    ran.shown.push(`ask: ${question}`);
     if (typed.length === 0) throw new Error(`a question was asked that the test has no answer for: ${question}`);
 
     const next = typed.shift();
