@@ -12,7 +12,7 @@ import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow, HISTORY_KEPT_MS } from "../records/audit";
-import type { CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
+import type { CarriedRules, CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
 import type { Problem } from "../records/problem";
 import { LOGIN, SITE_ID } from "../records/fields";
@@ -80,7 +80,7 @@ import type {
   UploadRoom,
   UploadsPage,
 } from "./database";
-import { domainCheckAsked, domainCheckIn, domainCheckKept, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
+import { domainCheckAsked, domainCheckIn, domainCheckKept, rulesCarried, rulesClaimed, rulesReplaced, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { type ProblemNote, problemNoted, problemsAsked, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
@@ -1182,6 +1182,20 @@ export class SqlDatabase implements Database {
     return { logins: settingsIn(read)?.logins, waits: waitingMark(kept?.rows[0]?.users_changed_at) !== undefined };
   }
 
+  async claimRules(at: number): Promise<{ readonly settings: SettingValues | undefined; readonly mark: number | null | undefined }> {
+    const [, read, kept] = await this.#driver.batch([rulesClaimed(at), READ_SETTINGS, domainCheckAsked()]);
+    const row = kept?.rows[0];
+    if (row === undefined) return { settings: settingsIn(read), mark: undefined };
+
+    return { settings: settingsIn(read), mark: waitingMark(row.rules_changed_at) ?? null };
+  }
+
+  async settleRules(carried: CarriedRules, at: number): Promise<{ readonly waits: boolean }> {
+    const [, kept] = await this.#driver.batch([rulesCarried(carried, at), domainCheckAsked()]);
+
+    return { waits: waitingMark(kept?.rows[0]?.rules_changed_at) !== undefined };
+  }
+
   async readStorageWrites(day: string): Promise<{ readonly writes: number; readonly most: number } | undefined> {
     requireDay(day);
     const [read] = await this.#driver.batch([written(fragment`SELECT (SELECT ${settings.value} FROM ${settings} WHERE ${settings.id} = 1) AS value, ${writesOf(day)} AS writes`)]);
@@ -1243,8 +1257,9 @@ export class SqlDatabase implements Database {
     // A merge patch: each key it names is replaced and every other key stays, only when a value differs.
     const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
     const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`json(${patched}) <> json(${settings.value})`)));
-    // The mark of changed users reads the logins as they still are, so it runs before they are replaced.
-    const marks = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed.at)];
+    // The marks of changed users and of changed rules read the settings as they still are, so they run before the change.
+    const rules = rulesReplaced(checked, signed.at);
+    const marks = [...(checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed.at)]), ...(rules === undefined ? [] : [rules])];
     const answers = await this.#driver.batch([...marks, update, auditPlain(signed, "settings_changed", checked), READ_SETTINGS]);
     const [updated, , read] = answers.slice(marks.length);
     const values = settingsIn(read);

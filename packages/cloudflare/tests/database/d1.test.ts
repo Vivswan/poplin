@@ -115,14 +115,17 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "claimUsers": [3, 1],
   "settleUsers, the stored logins carried": [4, 1],
   "settleUsers, a try whose outcome is unknown": [3, 1],
+  "claimRules": [3, 1],
+  "settleRules, the stored settings carried": [3, 1],
+  "claimRules, nothing waits": [3, 0],
   "readFrame": [4, 0],
   "noteProblem, the day's first": [1, 1],
   "noteProblem, the same hour": [1, 0],
   "noteProblem, a later hour": [1, 1],
   "noteProblem, once a day": [1, 1],
   "noteProblem, once a day and noted": [1, 0],
-  "listProblems, 7 days of 11 kinds": [77, 0],
-  "sweepRunOut, 13 problems past the days kept": [24, 13],
+  "listProblems, 7 days of 12 kinds": [84, 0],
+  "sweepRunOut, 14 problems past the days kept": [25, 14],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -633,7 +636,8 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
       },
     };
     const unbuilt = { accepts: () => false, fetch: () => Promise.reject(new Error("the test asked for a build")), counters: { takeMinute: async () => ({ ok: true as const }) } };
-    const running = { version: "0.1.0", rebuilding: unbuilt, follow: { where: "Cloudflare", holdsKey: () => false, push: async () => ({ ok: false as const, refusal: "no_key" as const }) } };
+    const keyless = { holdsKey: () => false, push: async () => ({ ok: false as const, refusal: "no_key" as const }) };
+    const running = { version: "0.1.0", rebuilding: unbuilt, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
     await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
     rows.read = 0;
     rows.written = 0;
@@ -913,6 +917,10 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("claimUsers", () => database.claimUsers(NOW + 2));
     await cost("settleUsers, the stored logins carried", () => database.settleUsers({ logins: carried, since: NOW + 2 }, NOW + 2));
     await cost("settleUsers, a try whose outcome is unknown", () => database.settleUsers({ logins: null, since: NOW + 2 }, NOW + 2));
+    await database.changeSettings({ outside_pages: "allowed" }, { by: BY_ADA.by, at: NOW + 3 });
+    await cost("claimRules", () => database.claimRules(NOW + 4));
+    await cost("settleRules, the stored settings carried", () => database.settleRules({ rules: { outside_pages: "allowed", search_engines_allowed: false }, since: NOW + 4 }, NOW + 4));
+    await cost("claimRules, nothing waits", () => database.claimRules(NOW + 5));
     await cost("readFrame", () => database.readFrame(NOW));
 
     const note = { kind: "request_failed", count: 1, more: false, name: "TypeError", message: "m".repeat(200) } as const;
@@ -925,8 +933,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     for (const kind of PROBLEM_KINDS) {
       for (let day = 1; day <= 7; day += 1) await database.noteProblem({ ...note, kind, at: MIDNIGHT + day * 86_400_000 });
     }
-    await cost("listProblems, 7 days of 11 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
-    await cost("sweepRunOut, 13 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
+    await cost("listProblems, 7 days of 12 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
+    await cost("sweepRunOut, 14 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
     await cost("changeAccessAndDetails", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
     await cost("changeAccessAndDetails, the same", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
     const copy = await begunSite(database, site(900));

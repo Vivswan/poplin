@@ -59,8 +59,8 @@ const SETUP = "/setup";
 const SET_THEM = "Setup writes them, and so does the OpenTofu module. In the Cloudflare dashboard they are under Workers & Pages, this Worker, Settings, Variables and Secrets.";
 
 /** What answers each path Access lets past its login, and everything below it. A path the list gains has no answer here until one is written, and the Worker does not build without it. */
-const OPEN: Readonly<Record<(typeof INSTALL_OBJECTS.openPaths)[number], (request: Request, instance: Instance, ways: Ways) => Promise<Response>>> = {
-  "/api": async (request, instance) => instance.api.fetch(request),
+const OPEN: Readonly<Record<(typeof INSTALL_OBJECTS.openPaths)[number], (request: Request, instance: Instance, ways: Ways, open: ExecutionContext | undefined) => Promise<Response>>> = {
+  "/api": async (request, instance, _ways, open) => instance.api.fetch(request, laterOf(open)),
   "/setup": async (request, instance, ways) => answerSetup(request, instance, await ways.held(FRESH), ways.setupOpen),
 };
 
@@ -93,8 +93,13 @@ function failureAnswer(request: Request, failure: Stopped): Response {
   return plain(request, 503, failureText(failure));
 }
 
+/** What the API and the dashboard hand the work they hold no answer for: the invocation is held open for it, where one is. */
+function laterOf(open: ExecutionContext | undefined): ((work: Promise<unknown>) => void) | undefined {
+  return open === undefined ? undefined : (work) => open.waitUntil(work);
+}
+
 /** Where the dashboard answers: every path of the admin hostname that Access guards. Who asks is decided on each request, from its Access token and the users just read. */
-async function answerDashboard(request: Request, instance: Instance, held: Held): Promise<Response> {
+async function answerDashboard(request: Request, instance: Instance, held: Held, open: ExecutionContext | undefined): Promise<Response> {
   const now = instance.install.now();
   // As the API does: every listing of the bucket this request makes is counted against the day, and written down once. What goes wrong with the count is noted.
   const meter = meterNoted(instance.install);
@@ -120,6 +125,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
     domain: instance.domain,
     follow: instance.follow,
     endLogins: instance.endLogins,
+    rules: instance.rules,
     freeLimits: FREE_LIMITS,
     usage: instance.usage,
     rebuild: instance.rebuilding,
@@ -128,7 +134,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
   });
 
   try {
-    return await dashboard.fetch(request);
+    return await dashboard.fetch(request, laterOf(open));
   } finally {
     await meter.settle().catch((error: unknown) => logFault("the day's count of writes to the bucket was not written", error));
   }
@@ -143,13 +149,17 @@ async function answerOwnAddress(request: Request, instance: Instance, ways: Ways
   return plain(request, 404, "Not found.");
 }
 
-/** The admin hostname: an open path is answered by its own piece, which checks who asks by itself, and every other path by the dashboard. */
-async function answerAdmin(request: Request, instance: Instance, ways: Ways): Promise<Response> {
+/**
+ * The admin hostname: an open path is answered by its own piece, which checks who asks by itself, and every other path by the dashboard.
+ *
+ * @param open - what holds the invocation open after its answer, for the work the API and the dashboard hold no answer for
+ */
+async function answerAdmin(request: Request, instance: Instance, ways: Ways, open: ExecutionContext | undefined): Promise<Response> {
   const { pathname } = new URL(request.url);
-  const open = INSTALL_OBJECTS.openPaths.find((path) => pathname === path || pathname.startsWith(`${path}/`));
-  if (open !== undefined) return OPEN[open](request, instance, ways);
+  const path = INSTALL_OBJECTS.openPaths.find((candidate) => pathname === candidate || pathname.startsWith(`${candidate}/`));
+  if (path !== undefined) return OPEN[path](request, instance, ways, open);
 
-  return answerDashboard(request, instance, await ways.held(FRESH));
+  return answerDashboard(request, instance, await ways.held(FRESH), open);
 }
 
 /** Run the scheduled sweep of a started instance, and note a run that failed. A Worker with nothing set has no site to sweep; any other start that failed is logged by what stopped it, and thrown. */
@@ -253,7 +263,7 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     return !loggedInOnce;
   }
 
-  async function answer(request: Request, env: Bindings): Promise<Response> {
+  async function answer(request: Request, env: Bindings, open: ExecutionContext | undefined): Promise<Response> {
     const started = await start(env);
     if (!started.ok) {
       const { failure } = started;
@@ -270,14 +280,14 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
 
     if (hostname !== instance.layout.adminHostname) return answerSite(request, instance, ways.siteHeld);
 
-    return answerAdmin(request, instance, ways);
+    return answerAdmin(request, instance, ways, open);
   }
 
   return {
-    async fetch(request, env) {
+    async fetch(request, env, open: ExecutionContext | undefined) {
       try {
         // Before the instance starts: a request over plain http reads nothing of the install.
-        return toHttps(request) ?? (await answer(request, env));
+        return toHttps(request) ?? (await answer(request, env, open));
       } catch (error) {
         return answerFailure(request, env, error, { now: outside.now(), noting });
       }

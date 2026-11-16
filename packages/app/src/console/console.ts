@@ -31,6 +31,8 @@ import { dataRoutes } from "./routes";
 import { assetOf, type ClientFiles, ICON, KEPT_A_DAY, KEPT_FOR_GOOD, shellPage } from "./shell";
 import { isSpent, spentAnswer } from "./spent";
 import type { UsersFollow } from "./access/users-follow";
+import { holding, type Later } from "./later";
+import type { RulesFollow } from "./settings/rules-follow";
 
 /** The title of every page of the dashboard, the same on every install. */
 const TITLE = "poplin";
@@ -105,11 +107,14 @@ interface ConsoleParts extends CodeTries {
 
   /** Ends every login of the dashboard at the provider. Without it nobody can be signed out here. */
   readonly endLogins?: EndLogins;
+
+  /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair on the Domain screen. */
+  readonly rules?: RulesFollow;
 }
 
 /** Something that answers a request, as a Worker's `fetch` does. */
 interface Console {
-  readonly fetch: (request: Request) => Promise<Response>;
+  readonly fetch: (request: Request, later?: Later) => Promise<Response>;
 }
 
 /** Ask every request who it is from. One that is not admitted reads nothing of the install: a data route answers the refusal as JSON, and any other path as one plain sentence. */
@@ -123,6 +128,7 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("domain", parts.domain);
       context.set("follow", parts.follow);
       context.set("endLogins", parts.endLogins);
+      context.set("rules", parts.rules);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
       context.set("host", { freeLimits: parts.freeLimits, rebuilding: { ...parts.rebuild, counters: parts.counters }, version: parts.version, usage: parts.usage });
 
@@ -164,7 +170,7 @@ const jsonOnly: MiddlewareHandler<Shared> = async (context, next) => {
  *
  * @returns a handler for every request under the console's base path. A request that is not admitted gets a refusal and nothing of the install:
  * 401 from a data route and 403 from a page with no login behind it, 403 for an email that is no user, 503 while the login cannot be checked.
- * Its `fetch` rejects with whatever a request failed with, but for a day's allowance used up, which it answers
+ * Its `fetch` rejects with whatever a request failed with, but for a day's allowance used up, which it answers. Given what the host holds a request open with, work an answer is not held for runs on past it
  */
 export function createConsole(parts: ConsoleParts): Console {
   const app = new Hono<Shared>().basePath(parts.base === "" ? "/" : parts.base);
@@ -214,5 +220,5 @@ export function createConsole(parts: ConsoleParts): Console {
     return spentAnswer(error, { path: new URL(context.req.url).pathname, base: parts.base, now: parts.install.now() });
   });
 
-  return { fetch: async (request) => app.fetch(request) };
+  return { fetch: async (request, later) => app.fetch(request, holding(later)) };
 }
