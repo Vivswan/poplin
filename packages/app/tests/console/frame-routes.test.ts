@@ -32,14 +32,27 @@ describe("the frame", () => {
     await learnRelease(opened);
     opened.host.key = true;
 
-    expect(before).toEqual({ ok: true, update: null, starts: false, domainNote: null, ...NOTHING_MARKED });
+    expect(before).toEqual({ ok: true, update: null, starts: false, back: null, domainNote: null, ...NOTHING_MARKED });
     expect(await (await opened.get("/data/frame")).json()).toEqual({
       ok: true,
       update: { current: "1.0.0", newest: "1.1.0", released: NEWER.released, notes: NEWER.notes, database: false },
       starts: true,
+      back: null,
       domainNote: null,
       ...NOTHING_MARKED,
     });
+  });
+
+  // Drift: the way back is offered from what the host keeps of the last update. Offered after an update that changed the database, the button would ask for code that cannot read it.
+  test.each([
+    ["the last update, with the database as it was", { from: "0.9.0", to: "1.0.0", schema: OWN_SCHEMA, at: 1_790_000_000_000 }, { to: "0.9.0", since: 1_790_000_000_000 }],
+    ["the last update, which changed the database", { from: "0.9.0", to: "1.0.0", schema: OWN_SCHEMA + 1, at: 1_790_000_000_000 }, null],
+    ["no update", undefined, null],
+  ])("of an install whose host keeps %s answers the way back %p", async (_what, last, back) => {
+    const opened = await openConsole();
+    opened.host.last = last;
+
+    expect(await (await opened.get("/data/frame")).json()).toMatchObject({ back });
   });
 
   // Drift: a record a check found missing would show only on the Domain screen, or a repaired domain would go on saying it needs fixing.
@@ -114,6 +127,16 @@ describe("starting an update", () => {
 
     expect([response.status, await response.json(), opened.host.put]).toEqual([200, { ok: true, to: "1.1.0" }, ["1.1.0"]]);
     expect((await opened.base.audit()).map((entry) => entry.action)).toContain("update_started");
+  });
+
+  // Drift: going back is a start that names the version before. A body the route passed over would take the newest release, and put the install forward where a person asked to go back.
+  test("with a version takes that one, a lower one too, and refuses a text that is no version", async () => {
+    const opened = await openConsole();
+    const back = await opened.change("/data/update", { to: "0.9.0" });
+    const bad = await opened.change("/data/update", { to: "the one before" });
+
+    expect([back.status, await back.json(), bad.status, opened.host.put]).toEqual([200, { ok: true, to: "0.9.0" }, 400, ["0.9.0"]]);
+    expect((await opened.base.audit()).filter((entry) => entry.action === "update_started").map((entry) => entry.detail)).toEqual([{ from: "1.0.0", to: "0.9.0" }]);
   });
 
   // Drift: a refused start would reach the admin as a code with no sentence, and the list of problems would tell them to check a link that no longer exists.

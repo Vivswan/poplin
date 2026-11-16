@@ -31,6 +31,9 @@ export interface Bindings {
   /** The Worker's own name, unchecked: the name its routes name and its variables are written under. */
   readonly WORKER_NAME: unknown;
 
+  /** The update the running code came in with, unchecked: the upload of an update states it, and no deploy does. A Worker without it was not put in place by an update of its own. */
+  readonly LAST_UPDATE?: unknown;
+
   /** The key poplin keeps for the Cloudflare API, unchecked: a secret of the Worker, which no deploy names and none removes. A Worker without it holds no key. */
   readonly KEPT_KEY: unknown;
 

@@ -235,15 +235,19 @@ export const COMMANDS = [
     arguments: [],
     flags: [
       { name: "--check", about: "say what an update would come to, and start nothing" },
+      { name: "--to", value: "<version>", about: "take this version, not the newest: a lower one goes back" },
       ...installFlags("what was put in place, or what a start would come to"),
     ],
-    examples: ["poplin update", "poplin update --check"],
+    examples: ["poplin update", "poplin update --check", "poplin update --to 0.2.0"],
     notes: [
       "The install fetches the built files of the newest release, checks them",
       "against what the project published, and puts them in place of its",
       "running code with the key it keeps. No build runs anywhere. An install",
       "that holds no key cannot update itself: --check says which it is. One",
-      "update a minute can be started.",
+      "update a minute can be started. --to with a lower version goes back to",
+      "it, by the same steps: it is refused when the database changed since",
+      "that version, whose code cannot read it. --check names the version an",
+      "install can go back to.",
     ],
   },
   {

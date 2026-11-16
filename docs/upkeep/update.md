@@ -73,9 +73,80 @@ the install now runs 0.3.1; it ran 0.3.0
 
 `release_refused` comes with a word for which row it is. For `key_refused`, `no_key`, and `lacks_right`, press Repair on the Domain screen with an account token: it makes a key with every right the install uses. [When poplin refuses](../fix/poplin-refuses.md) has each code.
 
-A release that changes the database is taken when you start it, never by itself. Once it ran, an older poplin cannot read the database.
+A release that changes the database is taken when you start it, never by itself. Once it ran, an older poplin cannot read the database, so the install cannot [go back](#go-back) from it.
 
 [The kept key](../about/security.md#the-kept-key) says what the key can reach, and [Hardening](../about/security.md#hardening) what an update still trusts.
+
+## Go back
+
+For an install that updated itself, to the version it ran before that update.
+
+```text
+0.3.1 runs, by its own update from 0.3.0
+        |
+Go back to 0.3.0, or poplin update --to 0.3.0
+        |
+the same four steps, for release 0.3.0     fetched, checked, one upload with the kept key
+```
+
+| After an update that                              | Going back                                                                              |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| did not change the database                       | you start it: the button, or the command                                                |
+| could not change the database: its step failed    | the install does it by itself, at the new version's first request                       |
+| changed the database                              | refused: `release_refused`, about `database`. The older code cannot read that database  |
+| left code too broken to answer                    | by hand, at Cloudflare: [Roll back at Cloudflare](#roll-back-at-cloudflare)             |
+
+| Where          | Do                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| the dashboard  | press Go back to 0.3.0, at the foot of the side, under `Running poplin 0.3.1, since ...`    |
+| a terminal     | `npx poplin update --to 0.3.0`; `npx poplin update --check` names the version to go back to |
+
+```text
+$ npx poplin update --check
+no newer version is known; the install runs 0.3.1
+the install holds its key
+the install can go back to 0.3.0: poplin update --to 0.3.0
+nothing was started
+
+$ npx poplin update --to 0.3.0
+the install now runs 0.3.0; it ran 0.3.1
+```
+
+The upload of an update writes one variable onto the Worker, `LAST_UPDATE`: the version it came from, the version it took, the schema of the database, and when.
+
+The button is there while that variable names the running version and the database is as that update found it. A deploy of another version, made any other way, takes the button away. `--to` still takes any published version, and is refused the same way when the database changed.
+
+### When a database step fails
+
+```text
+update to 0.3.1 is in  ->  first request starts 0.3.1  ->  its database step fails, nothing of it kept
+        |
+the install asks Cloudflare, with its key, to run the version before again
+        |
+503  The update to 0.3.1 could not change the database. poplin went back to 0.3.0. Reload in a minute.
+```
+
+| Question            | Answer                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------- |
+| How long            | Cloudflare runs the version before about ten seconds after it is asked                                  |
+| What is lost        | nothing: a step is kept whole or not at all, so the database is as 0.3.0 left it                        |
+| Where it shows      | Activity: `Went back to 0.3.0: the update to 0.3.1 could not change the database`; the problem `update_went_back` |
+| When it stays put   | the install holds no key, the code was deployed another way, or an earlier step of the same release was kept |
+| What to do          | report it, and update again once a later release is out                                                 |
+
+Where the install stays put, it answers `This install's database could not be brought up to date. Try again.` until the step runs, or until you roll back at Cloudflare.
+
+### Roll back at Cloudflare
+
+For code that cannot answer at all. Cloudflare's documentation gives these steps:
+
+| Step | In Cloudflare's dashboard                                                        |
+| ---- | -------------------------------------------------------------------------------- |
+| 1    | go to Workers & Pages and select your Worker, `poplin`                           |
+| 2    | select Deployments                                                               |
+| 3    | open the menu of the version to go back to, then select Rollback                 |
+
+After a rollback there, press Check on the Domain screen: it says whether every piece of the install is as it should be.
 
 ## Build again
 
@@ -176,6 +247,7 @@ npx poplin config auto_update on
 | An upload with no answer from Cloudflare | not started again by itself, since it may be in: run `poplin update`                   |
 | Which version            | the version that waited its 3 days, and no other                                                       |
 | Where it shows           | under Activity in the dashboard: `Started an update to 0.2.0 by itself`, by `sweep@poplin.invalid`    |
+| Going back               | an update it started is one the database did not change, so [Go back](#go-back) is offered after it   |
 | Switching it off         | `poplin config auto_update off`                                                                        |
 
 ## Choose the version

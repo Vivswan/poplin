@@ -154,7 +154,7 @@ describe("a schema step that fails at the start", () => {
     const printed = error.mock.calls.map((line) => line.map(printedOf).join(" "));
     error.mockRestore();
 
-    expect(started).toEqual({ ok: false, failure: { kind: "failed" } });
+    expect(started).toEqual({ ok: false, failure: { kind: "failed", back: expect.any(Function) } });
     expect(printed.map((line) => line.split("\n")[0])).toEqual(["Error: poplin: step 1 of the database's schema failed and nothing of it was kept (RangeError)"]);
     expect(printed.filter((line) => line.includes(stored) || line.includes("UNIQUE"))).toEqual([]);
   });

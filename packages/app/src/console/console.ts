@@ -12,6 +12,7 @@
 
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
+import { wayBack } from "@poplin/core/src/actions/go-back";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
@@ -217,7 +218,7 @@ export function createConsole(parts: ConsoleParts): Console {
   app.get("*", async (context) => {
     const { install, actor } = context.get("asker");
     await parts.entered({ email: context.get("email"), since: context.get("since") });
-    const asked = { version: parts.version, domain: parts.domain?.words.thing, selfCarried: parts.follow?.holdsKey() === true, keyed: parts.update.holdsKey() };
+    const asked = { version: parts.version, domain: parts.domain?.words.thing, selfCarried: parts.follow?.holdsKey() === true, keyed: parts.update.holdsKey(), back: wayBack(parts.update.last, parts.version) };
     const frame = await frameOf(install, actor, asked);
 
     const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };

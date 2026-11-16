@@ -128,6 +128,7 @@ describe("the page", () => {
       version: "",
       update: null,
       starts: false,
+      back: null,
       demo: null,
       domain: false,
       domainNote: null,

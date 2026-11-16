@@ -22,6 +22,7 @@
     "./src/actions/export": "./src/actions/export.ts",
     "./src/actions/files": "./src/actions/files.ts",
     "./src/actions/finish-publish": "./src/actions/finish-publish.ts",
+    "./src/actions/go-back": "./src/actions/go-back.ts",
     "./src/actions/import-settings": "./src/actions/import-settings.ts",
     "./src/actions/issue-tickets": "./src/actions/issue-tickets.ts",
     "./src/actions/list": "./src/actions/list.ts",

@@ -1,17 +1,18 @@
 // The data routes of the frame around every screen: the newer release the install knows of, what its domain needs, what went wrong within a day, and the start of an update.
 //
-//   GET  /frame    the newer release or `null`, whether an update can be started from here, the note on the domain or `null`, and the problems with the mark of each screen
-//   POST /update   start the update: the host takes the newest release and puts it in place
+//   GET  /frame    the newer release or `null`, whether an update can be started from here, the version to go back to or `null`, the note on the domain or `null`, and the problems with the mark of each screen
+//   POST /update   start the update: the host takes the newest release, or the one version the body names, and puts it in place
 
 import { vValidator } from "@hono/valibot-validator";
 import { domainSentence, domainStateOf } from "@poplin/core/src/actions/domain-state";
 import type { Install } from "@poplin/core/src/actions/records";
-import { startUpdate } from "@poplin/core/src/actions/start-update";
+import { type WayBack, wayBack } from "@poplin/core/src/actions/go-back";
+import { startUpdate, UPDATE_REQUEST } from "@poplin/core/src/actions/start-update";
 import { type Update, updateIn } from "@poplin/core/src/actions/update";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono } from "hono";
 
-import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
+import { refused, refuseInvalid, type Shared } from "./data";
 import { type Marked, markedIn, NOTHING_MARKED } from "./problems-routes";
 
 /** What the side says in a few words when a piece of the domain needs work, when the users changed since the last repair, and when the last check is only old. */
@@ -37,6 +38,9 @@ interface Frame extends Marked {
   /** Whether an update can be started from the frame: the host holds the key an update is sent with. */
   readonly starts: boolean;
 
+  /** The version the install can go back to and since when it runs the one it would leave, or `null` where there is no way back. */
+  readonly back: WayBack | null;
+
   /** What the domain needs, or `null`: nothing is wrong, nothing was ever checked, or the console has no Domain screen to act on it. */
   readonly domainNote: DomainNote | null;
 }
@@ -54,10 +58,13 @@ interface Asked {
 
   /** Whether the host holds the key an update is sent with. */
   readonly keyed: boolean;
+
+  /** The version the install can go back to, or `undefined` where there is no way back. */
+  readonly back: WayBack | undefined;
 }
 
 /** A frame that shows nothing of the install. */
-const NO_FRAME: Frame = { update: null, starts: false, domainNote: null, ...NOTHING_MARKED };
+const NO_FRAME: Frame = { update: null, starts: false, back: null, domainNote: null, ...NOTHING_MARKED };
 
 /** Word the note on the domain from what the install remembers of its last check. */
 function domainNoteOf(state: ReturnType<typeof domainStateOf>, thing: string): DomainNote | null {
@@ -88,7 +95,7 @@ export async function frameOf(install: Install, actor: Actor, asked: Asked): Pro
   // What the domain needs marks its screen as a problem there does. A check that is only old is a reminder, and marks nothing.
   const marked = markedIn(read.problems, install.now(), { screen: asked.domain !== undefined, says: domainNote === null || domainNote.quiet ? null : domainNote.sentence });
 
-  return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: asked.keyed, domainNote, ...marked };
+  return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: asked.keyed, back: asked.back ?? null, domainNote, ...marked };
 }
 
 /** The frame's data routes. */
@@ -97,14 +104,14 @@ export const frameRoutes = new Hono<Shared>()
     const { install, actor } = context.get("asker");
 
     const { version, updating } = context.get("host");
-    const asked = { version, domain: context.get("domain")?.words.thing, selfCarried: context.get("follow")?.holdsKey() === true, keyed: updating.self.holdsKey() };
+    const asked = { version, domain: context.get("domain")?.words.thing, selfCarried: context.get("follow")?.holdsKey() === true, keyed: updating.self.holdsKey(), back: wayBack(updating.self.last, version) };
 
     return context.json({ ok: true as const, ...(await frameOf(install, actor, asked)) });
   })
-  .post("/update", vValidator("json", NOTHING, refuseInvalid), async (context) => {
+  .post("/update", vValidator("json", UPDATE_REQUEST, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
     const { version, updating } = context.get("host");
-    const started = await startUpdate(install, actor, { version }, updating);
+    const started = await startUpdate(install, actor, { version, to: context.req.valid("json").to }, updating);
 
     return started.ok ? context.json({ ok: true as const, to: started.to }) : refused(context, started);
   });

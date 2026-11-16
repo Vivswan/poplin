@@ -47,6 +47,9 @@ export const UPDATE_NEWS = v.strictObject({
 /** What the install keeps of the updates it starts by itself: the version and the moment of its last try, and the newest version the provider took a start for, `null` while it took none. */
 export const AUTO_START = v.strictObject({ version: UPDATE_NEWS.entries.version, at: MOMENT, taken: v.nullable(UPDATE_NEWS.entries.version) });
 
+/** The update an install last took by itself, as its host keeps it beside the code that update put in place: the version it ran before, the version it took, the schema its database was at, and when. */
+export const LAST_UPDATE = v.object({ from: UPDATE_NEWS.entries.version, to: UPDATE_NEWS.entries.version, schema: POSITIVE, at: MOMENT });
+
 /** What the install knows of the newest release, as one row keeps it. */
 export const UPDATE_CHECK = v.strictObject({
   /** When the install last asked for the newest release. */
@@ -87,6 +90,9 @@ export type UpdateCheck = v.InferOutput<typeof UPDATE_CHECK>;
 
 /** What the install keeps of the updates it starts by itself. */
 export type AutoStart = v.InferOutput<typeof AUTO_START>;
+
+/** The update an install last took by itself. */
+export type LastUpdate = Readonly<v.InferOutput<typeof LAST_UPDATE>>;
 
 /**
  * Read the text of the website's `latest.json` as the newest release.

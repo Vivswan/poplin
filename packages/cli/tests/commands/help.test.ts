@@ -20,7 +20,7 @@ const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
 /** The table, read as plain specs. */
 const SPECS: readonly (CommandSpec & { readonly name: CommandName })[] = COMMANDS;
 
-/** A value each flag takes, so a flag can be tried on its command. A new flag with a value fails here until it has one. */
+/** A value each flag takes, so a flag can be tried on its command: by its name, or by its command and its name where the command takes another value than the rest. A new flag with a value fails here until it has one. */
 const FLAG_VALUES: Readonly<Record<string, string>> = {
   "--site": LABEL,
   "--name": "docs",
@@ -30,6 +30,7 @@ const FLAG_VALUES: Readonly<Record<string, string>> = {
   "--embeddable": "off",
   "--expires": "7d",
   "--to": "4",
+  "update --to": "0.2.0",
   "--server": "poplin.example.com",
   "--out": "backup.zip",
 };
@@ -61,7 +62,7 @@ const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
 
 function lineWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string[] {
   const required = spec.arguments.filter((argument) => argument.required).map((argument) => ARGUMENTS[argument.name] ?? "");
-  const value = flag.value === undefined ? [] : [FLAG_VALUES[flag.name] ?? ""];
+  const value = flag.value === undefined ? [] : [FLAG_VALUES[`${spec.name} ${flag.name}`] ?? FLAG_VALUES[flag.name] ?? ""];
 
   return [spec.name, ...required, flag.name, ...value, ...(COMPANIONS[`${spec.name} ${flag.name}`] ?? [])];
 }

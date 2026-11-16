@@ -384,7 +384,7 @@ describe("createApi", () => {
     const restored = part(await done((api) => api.import.sites.$post({ json: { format: 1, site: backup as never, files }, query: {} })), "upload").id as string;
     for (const [path, text] of Object.entries(PAGES)) await sendFile(restored, `v1/${path}`, text);
     expect(part(await finish(restored), "site")).toMatchObject({ id: first.id, label, created: true, live_version: 1 });
-    expect((await done((api) => api.update.$get({ query: {} }))).body).toEqual({ version: INSTALL_VERSION, update: null, key: true });
+    expect((await done((api) => api.update.$get({ query: {} }))).body).toEqual({ version: INSTALL_VERSION, update: null, key: true, back: null });
     expect([(await done((api) => api.update.$post({ query: {} }))).body, install.host.put]).toEqual([{ started: true, from: INSTALL_VERSION, to: "7.9.0" }, ["7.9.0"]]);
     await done((api) => api.token.$delete({ query: {} }), install.as(install.tokens.stranger));
 
@@ -411,15 +411,27 @@ describe("createApi", () => {
   });
 
   // Drift: `poplin update --check` says what a start would come to from this one read. An answer that left the key out, or named a release the install does not know of, would promise an update that is then refused.
-  test("the read before a start says the version, the newer release, and whether the key is held, and starts nothing", async () => {
+  test("the read before a start says the version, the newer release, whether the key is held, and the version to go back to, and starts nothing", async () => {
     const install = await openApi();
     install.host.key = false;
     await install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", schema: OWN_SCHEMA } });
+    const before = (await answered(install.routes.update.$get({ query: {} }))).body;
+    install.host.last = { from: "7.7.0", to: INSTALL_VERSION, schema: OWN_SCHEMA, at: NOW };
 
-    expect([(await answered(install.routes.update.$get({ query: {} }))).body, install.host.put]).toEqual([
-      { version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false }, key: false },
+    expect([before, (await answered(install.routes.update.$get({ query: {} }))).body.back, install.host.put]).toEqual([
+      { version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false }, key: false, back: null },
+      { to: "7.7.0", since: NOW },
       [],
     ]);
+  });
+
+  // Drift: `poplin update --to` is the one way a terminal goes back. A `to` the route dropped would take the newest release in its place, and one that is no version must reach no host.
+  test("a start that names a version takes that one, and a `to` that is no version is refused before the host is asked", async () => {
+    const install = await openApi();
+    const named = await answered(install.routes.update.$post({ query: { to: "7.7.0" } }));
+    const bad = await answered(install.routes.update.$post({ query: { to: "latest" } }));
+
+    expect<unknown>([named.body, [bad.status, part(bad, "error").code, part(bad, "error").about], install.host.put]).toEqual([{ started: true, from: INSTALL_VERSION, to: "7.7.0" }, [400, "bad_argument", "to"], ["7.7.0"]]);
   });
 
   // Drift: the cursor of a listing crosses the wire as two query keys; a key renamed on one side alone would hand every page the first sites again.

@@ -54,7 +54,7 @@ describe("the shell page", () => {
   test("writes a start value that holds markup so that a browser reads it back whole and runs nothing of it", async () => {
     const hostile = "</script><script>alert(1)</script><!-- & &amp; -->";
     const marked = { recent: [], marks: { usage: { count: 1, says: hostile }, domain: null, settings: null } };
-    const boot = { base: "", email: hostile, title: hostile, version: "1.0.0", update: null, starts: false, demo: null, domain: true, domainNote: { label: hostile, sentence: hostile, quiet: false }, ...marked };
+    const boot = { base: "", email: hostile, title: hostile, version: "1.0.0", update: null, starts: false, back: null, demo: null, domain: true, domainNote: { label: hostile, sentence: hostile, quiet: false }, ...marked };
     const shell = readShell(String(await shellPage(boot, { script: "app-4f1c.js", style: "app-9d2e.css" })));
 
     expect([shell.boot, shell.runs, shell.scripts]).toEqual([boot, 0, ["/assets/app-4f1c.js"]]);

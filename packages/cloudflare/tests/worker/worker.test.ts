@@ -22,13 +22,14 @@ import { readShell } from "../../../app/tests/console/support/shell";
 import { meterRows } from "../../scripts/live/rows";
 import { roundStep } from "../../src/jobs/workflow";
 import type { Bindings } from "../../src/worker/bindings";
+import { createWorker } from "../../src/worker/worker";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { signer } from "../login/support/access";
 import { idleWorkflow } from "./support/budget-rows-jobs";
 import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
 import {
   ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
-  PATHS, type Published, page, publish, send, sendFile, spentDatabase, tokenOf, type World, under, wait, world,
+  PATHS, type Published, page, publish, send, sendFile, spentDatabase, sweep, tokenOf, type World, under, wait, world,
 } from "./support/install";
 import { OWN_KEY, ownRelease } from "./support/own-release";
 
@@ -336,6 +337,39 @@ describe("an instance's first request", () => {
     expect(text).toContain(says);
     expect(text).not.toContain(hides);
     expect(recovered.status).toBe(401);
+  });
+
+  // Drift: after an update whose step failed, every request and every scheduled run meets the same failed start. Asked each time, the install would deploy the code before on every one of them.
+  // The answer is the one place a person reads at once which version runs again.
+  // An instance that went back tries its step no more: a step that ran on a later try would leave the code before a database it cannot read. One that stays starts again on every request, as before.
+  test.each([
+    { name: "went back", back: async () => ({ from: "0.3.0", to: "0.2.0" }), starts: 1, says: "The update to 0.3.0 could not change the database. poplin went back to 0.2.0. Reload in a minute." },
+    { name: "may not go back", back: async () => undefined, starts: 3, says: "This install's database could not be brought up to date. Try again." },
+    { name: "could not ask to go back", back: async () => Promise.reject(new Error("no answer")), starts: 3, says: "This install's database could not be brought up to date. Try again." },
+  ])("an install whose schema step failed and that $name is asked to go back once for the instance, starts $starts times over three runs, and every answer says what came of it", async ({ back, starts, says }) => {
+    let asked = 0;
+    let started = 0;
+    const once = (): ReturnType<typeof back> => {
+      asked += 1;
+
+      return back();
+    };
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const worker = createWorker({ now: () => w.clock.now }, async () => {
+      started += 1;
+
+      return { ok: false, failure: { kind: "failed", back: once } };
+    });
+    const answers = [await ask(worker, "https://docs-page.example.com/"), await ask(worker, `${ADMIN}/`)];
+    const swept = await sweep(worker, w).then(
+      () => "ran",
+      () => "thrown",
+    );
+    error.mockRestore();
+
+    const said = await Promise.all(answers.map(async (answer) => [answer.status, await answer.text()]));
+
+    expect({ asked, started, swept, said }).toEqual({ asked: 1, started: starts, swept: "thrown", said: [[503, `${says}\n`], [503, `${says}\n`]] });
   });
 
   // Drift: a database written by a newer poplin would be read with this code's idea of its tables.

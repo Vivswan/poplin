@@ -154,7 +154,7 @@ Cloudflare limits the key to the account and the domain, not to poplin's own obj
 
 The [Domain](../dashboard/domain.md#check-needs-no-token) screen reads every piece with the key, so its Check asks for no token. Repair still takes a pasted account token.
 
-**The key can replace any Worker of the account.** poplin uses that right on its own Worker alone, to update itself. Cloudflare gives the right for a whole account or not at all: a key limited to one Worker is refused on every call.
+**The key can replace any Worker of the account.** poplin uses that right on its own Worker alone: to update itself, and to put the version before back after an update whose database step failed. Cloudflare gives the right for a whole account or not at all: a key limited to one Worker is refused on every call.
 
 So a bug or a bad release of poplin could reach every other Worker the account holds. poplin is best in an account that holds only poplin.
 

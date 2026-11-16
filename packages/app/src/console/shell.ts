@@ -1,5 +1,6 @@
 // The console's one page: it links poplin's icon and the client's stylesheet and script, and carries what the client starts from. Beside it, how a host hands the client's built files out.
 
+import type { WayBack } from "@poplin/core/src/actions/go-back";
 import type { Update } from "@poplin/core/src/actions/update";
 import { html, raw } from "hono/html";
 
@@ -55,6 +56,9 @@ export interface Boot {
 
   /** Whether an update can be started from the frame. */
   readonly starts: boolean;
+
+  /** The version the install can go back to and since when it runs the one it would leave, or `null`. */
+  readonly back: WayBack | null;
 
   /** Set when the data is a sample that a POST to `reset` starts over. */
   readonly demo: { readonly reset: string } | null;

@@ -9,8 +9,11 @@ import { SqlDatabase } from "./sql-database";
 /** The schema this code keeps a database at: the number of its steps. A release states its own, and an install compares the two. */
 export const OWN_SCHEMA = STEPS.length;
 
+/** A step that could not run. `behind` is the database as it stands, at the schema before that step: a note of what was done about it is tried there, and a write the step would have changed may fail. */
+type Failed = Extract<Migrated, { kind: "failed" }> & { readonly behind: Database };
+
 /** The answer to `openDatabase`: the database ready for use with the steps this call applied, or why it cannot be used. */
-export type Opened = { readonly kind: "open"; readonly database: Database; readonly applied: readonly string[] } | Exclude<Migrated, { kind: "current" }>;
+export type Opened = { readonly kind: "open"; readonly database: Database; readonly applied: readonly string[] } | Extract<Migrated, { kind: "newer" | "differs" }> | Failed;
 
 /**
  * Read whether `openDatabase` would open the database. Nothing is written.
@@ -31,6 +34,8 @@ export function readOpening(driver: SqlDriver): ReturnType<typeof readStanding> 
  */
 export async function openDatabase(driver: SqlDriver, now: number): Promise<Opened> {
   const migrated = await migrate(driver, STEPS, now);
+  if (migrated.kind === "failed") return { ...migrated, behind: new SqlDatabase(driver) };
+
   if (migrated.kind !== "current") return migrated;
 
   return { kind: "open", database: new SqlDatabase(driver), applied: migrated.applied };
