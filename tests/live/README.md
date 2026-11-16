@@ -63,7 +63,7 @@ On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
 
 The run removes the Worker and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
 
-On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Worker, the database, every file in the bucket, and the key. A Worker of a forwarder's name without poplin's tag stays.
+On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Workflow, the Worker, the database, every file in the bucket, and the key. A Worker of a forwarder's name without poplin's tag stays.
 
 A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
 
@@ -149,6 +149,7 @@ A second install, on the test account that holds no domain. It answers on the ac
 | the Worker              | `wrangler deploy`, with `ZONE` set to the account's name and the free address on | `Worker: deployed`                                  |
 | the two forwarders      | `syncForwarders`                                                         | `Forwarders: created 0, changed 0, left 2, not poplin's 0`  |
 | the key                 | `mintKey` and `syncVariables`, where the Worker holds no active key      | `Key: present`                                              |
+| the Workflow            | `syncJobs`, where the deploy left none                                   | `Workflow: present`                                         |
 
 A step Cloudflare refuses prints the step, the status, and the error codes, and nothing else Cloudflare said:
 

@@ -15,6 +15,7 @@ export const INSTALL_PIECES = {
     "Rate rule": ["cloudflare_ruleset.rate"],
     "Bot settings": ["cloudflare_bot_management.zone"],
     "D1 database": ["cloudflare_d1_database.records"],
+    Workflow: ["cloudflare_workflow.jobs"],
   },
   deploy: {
     Worker: ["cloudflare_workers_script.poplin"],
@@ -36,6 +37,7 @@ export const INSTALL_PIECES = {
     "Access open paths": [],
     "Worker variable": [],
     "D1 database": [],
+    Workflow: [],
     Key: [],
   },
 } as const;

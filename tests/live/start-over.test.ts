@@ -22,6 +22,7 @@ const THEIRS = {
   policy: { id: "their-policy", name: "wiki readers", decision: "allow" },
   alert: { id: "their-alert", name: "my budget", alert_type: "billing_budget_alert", enabled: true },
   token: { id: "their-token", name: "deploys", status: "active" },
+  workflow: { name: "poplin-jobs-of-the-shop", script_name: "shop", class_name: "Orders" },
 };
 
 /** The phase the owner's rule sits in, beside two of poplin's. */
@@ -33,6 +34,7 @@ const REMOVED = [
   "DNS records: removed 2",
   "Rules: removed 4",
   "Access applications and policies: removed 4",
+  "Workflow: removed 1",
   "Worker: removed 1",
   "Database: removed 1",
   "Bucket objects: removed 2",
@@ -142,6 +144,7 @@ async function installed(): Promise<World> {
   world.account.policies.push({ ...THEIRS.policy });
   world.account.alerts.push({ ...THEIRS.alert });
   world.account.tokens.push({ ...THEIRS.token });
+  world.account.workflows.push({ ...THEIRS.workflow });
 
   return world;
 }
@@ -165,10 +168,10 @@ async function run(world: World, asking = "true", kind = "domain"): Promise<Told
 
 /** What the account still holds: everything of the kinds a start-over removes. */
 function heldBy(world: World): unknown {
-  const { records, routes, rulesets, applications, policies, databases, alerts, tokens } = world.account;
+  const { records, routes, rulesets, applications, policies, databases, alerts, tokens, workflows } = world.account;
   const rules = Object.values(rulesets).flatMap((ruleset) => ruleset?.rules ?? []);
 
-  return { records, routes, rules, applications: applications.map(({ aud: _aud, ...application }) => application), policies, databases, alerts, tokens, objects: world.objects, worker: world.worker };
+  return { records, routes, rules, applications: applications.map(({ aud: _aud, ...application }) => application), policies, databases, alerts, tokens, workflows, objects: world.objects, worker: world.worker };
 }
 
 /** What stays after a start-over: the owner's own things, and nothing of poplin's. */
@@ -181,12 +184,13 @@ const ONLY_THEIRS = {
   databases: [],
   alerts: [THEIRS.alert],
   tokens: [THEIRS.token],
+  workflows: [THEIRS.workflow],
   objects: [],
   worker: false,
 };
 
 describe("the start-over of the test install, against a local fake account", () => {
-  test("everything poplin made is removed and counted, the owner's record, route, rule, application, policy, and alert stay, and a second run removes nothing", async () => {
+  test("everything poplin made is removed and counted, the owner's record, route, rule, application, policy, alert, and Workflow stay, and a second run removes nothing", async () => {
     const world = await installed();
     const first = await run(world);
     const held = heldBy(world);
@@ -194,6 +198,16 @@ describe("the start-over of the test install, against a local fake account", () 
 
     expect([first, held]).toEqual([{ code: 0, lines: REMOVED }, ONLY_THEIRS]);
     expect([second, heldBy(world)]).toEqual([{ code: 0, lines: NOTHING }, ONLY_THEIRS]);
+  });
+
+  // Drift: an account names each Workflow once, so the name alone does not say whose it is. A start-over that went by the name would take the jobs of another Worker of the account.
+  test("a Workflow of the Worker's name that runs another Worker's code stays", async () => {
+    const world = await installed();
+    const theirs = { name: "poplin-jobs", script_name: "shop", class_name: "Orders" };
+    world.account.workflows = [theirs];
+    const told = await run(world);
+
+    expect([told.code, told.lines.filter((line) => line.startsWith("Workflow")), world.account.workflows]).toEqual([0, ["Workflow: removed 0"], [theirs]]);
   });
 
   // Drift: a run that stopped half-way and could not be run again would leave the test account with half an install nothing can remove.
@@ -205,8 +219,8 @@ describe("the start-over of the test install, against a local fake account", () 
     world.account.refuse = [];
     const finished = await run(world);
 
-    expect([stopped.code, stopped.lines, left]).toEqual([1, [...REMOVED.slice(0, 5), "Database: removed 0", "::error::The test install was not started over: it needs the token permission D1: Edit."], 1]);
-    expect([finished, heldBy(world)]).toEqual([{ code: 0, lines: [...NOTHING.slice(0, 5), ...REMOVED.slice(5)] }, ONLY_THEIRS]);
+    expect([stopped.code, stopped.lines, left]).toEqual([1, [...REMOVED.slice(0, 6), "Database: removed 0", "::error::The test install was not started over: it needs the token permission D1: Edit."], 1]);
+    expect([finished, heldBy(world)]).toEqual([{ code: 0, lines: [...NOTHING.slice(0, 6), ...REMOVED.slice(6)] }, ONLY_THEIRS]);
   });
 
   // Drift: the token of the install page's link has no right to the zone's rules, so a start-over that stopped there could never run with it; one that went on in silence would call the install gone.
@@ -237,20 +251,22 @@ describe("the start-over of the test install, against a local fake account", () 
   });
 
   // Drift: a forwarder is bound to the one Worker, and the second test account holds no zone. A start-over that removed the Worker first, or asked for a zone, would stop on that account alone.
-  test("without a domain, the forwarder goes before the Worker it is bound to, a Worker of a forwarder's name without poplin's tag stays, and no kind of a zone is asked for", async () => {
+  // Cloudflare keeps a Workflow whose Worker was deleted: one left on that account would stay there for good.
+  test("without a domain, the forwarder and the Workflow go before the Worker, a Worker of a forwarder's name without poplin's tag stays, and no kind of a zone is asked for", async () => {
     const theirs = { id: "poplin-private", tags: ["somebody-s-own"] };
     const world: World = { account: emptyAccount(), bucket: true, objects: ["sites/a/1/index.html"], worker: true, beside: [{ id: "poplin-sites", tags: ["poplin-forwarder"] }, theirs], gone: [] };
     world.account.databases.push({ uuid: "database-1", name: "poplin" });
     world.account.tokens.push({ id: "key-0", name: "poplin kept key", status: "active" }, { ...THEIRS.token });
+    world.account.workflows.push({ name: "poplin-jobs", script_name: "poplin", class_name: "PoplinJobs" }, { ...THEIRS.workflow });
     const first = await run(world, "true", "account address");
-    const left = [[...(world.gone ?? [])], world.beside, world.account.tokens, world.account.databases, world.objects, world.zoneCalls];
+    const left = [[...(world.gone ?? [])], world.beside, world.account.tokens, world.account.databases, world.objects, world.zoneCalls, world.account.workflows];
     const second = await run(world, "true", "account address");
 
     expect(first).toEqual({
       code: 0,
-      lines: ["Forwarders: removed 1", "Access applications and policies: removed 0", "Worker: removed 1", "Database: removed 1", "Bucket objects: removed 1", "Key: removed 1"],
+      lines: ["Forwarders: removed 1", "Access applications and policies: removed 0", "Workflow: removed 1", "Worker: removed 1", "Database: removed 1", "Bucket objects: removed 1", "Key: removed 1"],
     });
-    expect(left).toEqual([["poplin-sites", "poplin"], [theirs], [THEIRS.token], [], [], undefined]);
+    expect(left).toEqual([["poplin-sites", "poplin"], [theirs], [THEIRS.token], [], [], undefined, [THEIRS.workflow]]);
     expect(second.lines).toEqual(first.lines.map((line) => line.replace(/\d+$/, "0")));
   });
 });

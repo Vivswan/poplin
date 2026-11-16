@@ -43,6 +43,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key")} | poplin kept key`,
     `D1 database | ${state("database")} | poplin`,
+    `Workflow | ${state("jobs")} | poplin-jobs`,
   ];
 }
 
@@ -65,7 +66,7 @@ async function withAccount(account: Account, run: (plug: ReturnType<typeof creat
 }
 
 // Drift: an install on the free address has no zone. A row of a record, a route, or a rule there would be one no repair can ever make, and a call under a zone would be refused for a right the token is never asked for.
-test("a check of an account with nothing in it names the two forwarders, the login, the variable, the key, and the database as missing, no piece of a zone, and sends no change and no call under a zone", async () => {
+test("a check of an account with nothing in it names the two forwarders, the login, the variable, the key, the database, and the Workflow as missing, no piece of a zone, and sends no change and no call under a zone", async () => {
   const account = deployed();
   const before = structuredClone(account);
 
@@ -78,12 +79,12 @@ test("a check of an account with nothing in it names the two forwarders, the log
 });
 
 // Drift: the count is what one request of a Worker spends on a repair: past 50 the setup page's one press could not finish on the free plan.
-test("a repair makes every object in 24 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
+test("a repair makes every object in 26 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
   const account = deployed();
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created" }));
-    expect(asked).toHaveLength(24);
+    expect(asked).toHaveLength(26);
     expect(account.workers).toEqual(
       ["poplin-sites", "poplin-private"].map((id) => ({ id, tags: ["poplin-forwarder"], bindings: [{ type: "service", name: "POPLIN", service: "poplin" }], enabled: true, previews_enabled: false })),
     );

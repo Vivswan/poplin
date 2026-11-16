@@ -42,6 +42,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | Rate rule, if it is there             | `poplin: 300 requests per 10 seconds per address`                                                     | the domain's rate limiting rules                    |
 | the login application                 | `poplin`                                                                                              | Zero Trust, under Access, the applications          |
 | the login's policy                    | "poplin logins"                                                                                       | Zero Trust, under Access, the policies              |
+| the Workflow                          | `poplin-jobs`                                                                                         | Workflows, under Workers & Pages                    |
 | the Worker                            | `poplin`                                                                                              | Workers & Pages                                     |
 | the database                          | `poplin`                                                                                              | the account's D1 databases                          |
 | the bucket                            | `poplin-sites`                                                                                        | the account's R2 buckets                            |
@@ -51,6 +52,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 - **A rule set** can stay behind, empty, where the domain had none before: "poplin redirect rule", "poplin guard rules", "poplin rate rule". An empty set stops nothing.
 - **The wildcard record** `*` is there only when the domain had none of its own. A `*` record with no `poplin: ` comment is yours: leave it.
 - **The policy** goes after the application that uses it.
+- **The Workflow** stays when the Worker is deleted, so it is a row of its own. It runs the copy of a large site, and holds no site's files.
 - **The Worker** takes its values, its 15-minute timer, and its `workers.dev` address with it.
 - **The bucket** holds every site's files. If Cloudflare asks for an empty bucket, empty it there, then delete it.
 

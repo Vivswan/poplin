@@ -33,7 +33,8 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | R2 bucket lifecycle | ends an upload in parts nobody finished after a day. It deletes no stored file, unless `test_install_file_days` is set |
 | Usage alerts | none by default. With `usage_alert_percents` set, one notification policy per R2 meter and share: Cloudflare emails the `logins` when the account's R2 bytes stored, write operations, or read operations pass that share of the free monthly allowance. The product names are unconfirmed |
 | D1 database | holds every record: the sites, the tokens, the settings, the audit log. The module applies no schema: the Worker does when it opens the database |
-| Worker script | serves the sites, the dashboard, the login, and the API; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, the account's id, and the Worker's own name bound to it |
+| Worker script | serves the sites, the dashboard, the login, and the API; uploaded from the bundle with the bucket, the database, the minute limiter, the zone values, the first settings, the Access application, the account's id, the Worker's own name, and the Workflow bound to it |
+| Workflow | runs the copy of a site too large for one request, a round a step, with nobody asking; named after the Worker, `poplin-jobs` |
 | Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
 | Worker routes | send the install's hostnames, and no other hostname of the zone, to the Worker |
 | DNS records | proxied, each with a comment starting `poplin: ` |
@@ -85,6 +86,7 @@ The setup page's Repair and this module make the same objects with the same valu
 | D1 database | Repair, or the deploy | `cloudflare_d1_database.records` | nowhere |
 | R2 bucket, public access off | the deploy; a new bucket has no public address | `cloudflare_r2_bucket.sites`, `cloudflare_r2_managed_domain.sites` | Repair does not read the bucket |
 | Worker and its sweep trigger | the deploy | `cloudflare_workers_script.poplin`, `cloudflare_workers_cron_trigger.sweep` | nowhere |
+| Workflow | the deploy; Repair makes it again where it is gone | `cloudflare_workflow.jobs`, and the binding `JOBS` of `cloudflare_workers_script.poplin` | Repair leaves a Workflow of the name that runs another Worker's code; here an apply points it at this Worker |
 | Budget alert | Repair, with the right Notifications: Edit | not made: the provider's `cloudflare_notification_policy` takes neither the alert type `billing_budget_alert` nor its filter `total_spend_dollars` | only Repair makes it. On an install this module made, add the right to an account token and press Repair on the Domain screen |
 | Key | Repair, with the right Account API Tokens: Edit | not made: the module declares no API token and binds no secret | only Repair makes it. On an install this module made, press Repair on the Domain screen with an account token that holds the right |
 | R2 bucket lifecycle | not made: its token has no R2 permission. A new bucket has Cloudflare's own rule, which ends an unfinished upload after seven days | `cloudflare_r2_bucket_lifecycle.sites` | one day here, seven there |
@@ -103,6 +105,7 @@ Each object carries a fixed name or mark, the same one poplin's own setup code w
 | Access application | the name `poplin` |
 | Access open paths | the application's name `poplin open paths` and the policy's name `poplin open paths policy` |
 | D1 database | the name `poplin` |
+| Workflow | the Worker's name, then `-jobs` |
 | Rate rule | the ref `poplin_rate`, in a ruleset named `poplin rate rule` |
 | Guard rules | the refs `poplin_outside_pages` and `poplin_bots`, in a ruleset named `poplin guard rules` |
 | Redirect rule | the ref `poplin_https`, in a ruleset named `poplin redirect rule` |
@@ -116,6 +119,8 @@ The Worker reads three of its bindings as JSON:
 | `ACCESS` | `team_domain`, the input `access_team_domain`, and `audience`, the audience tag of the Access application the module creates |
 
 `MINUTE_LIMITS` is a rate limiting binding with the limit 1000000 per 60 seconds, the one the Worker's per-minute counters are written for.
+
+`JOBS` binds the Workflow, which runs the Worker's class `PoplinJobs`. Its name is the Worker's, cut to 59 characters, then `-jobs`.
 
 ## What is stopped before the Worker
 

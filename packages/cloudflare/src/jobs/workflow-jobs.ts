@@ -3,7 +3,7 @@
 //   JOBS bound     a started job is run by Cloudflare, a round a step, with nobody asking
 //   JOBS absent    nothing is started: each ask after a job runs one round, as on a host with no background work
 //
-// A Worker deployed by the OpenTofu module, or by a build from before the binding, has none until its next deploy.
+// A deploy and the OpenTofu module both bind the Workflow. A Worker uploaded with no such binding has none until its next deploy.
 
 import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
 import type { Job, Jobs } from "@poplin/core/src/jobs/jobs";

@@ -1,6 +1,6 @@
 // The dashboard's zone plug for Cloudflare: every object of an install with a domain read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its key, https redirect, guard rules, rate rule, bot switches, database, budget alert
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its key, https redirect, guard rules, rate rule, bot switches, database, budget alert, Workflow
 //
 // The key is the one thing an install keeps of Cloudflare's: a repair makes it with the token where the install has none that works, and writes it onto the Worker in the same change as the variables.
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
@@ -19,6 +19,7 @@ import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
 import { INSTALL_PIECES } from "./install-pieces";
+import { syncJobs } from "./jobs/jobs";
 import { HTTPS_SWITCH, syncHttps } from "./https/https";
 import { type HeldKey, readKeyState } from "./key/key-state";
 import { mintKey, removeKeys } from "./key/mint";
@@ -129,6 +130,7 @@ const RIGHTS = {
   "Rate rule": [RIGHT.waf],
   "Bot settings": [RIGHT.bots],
   "D1 database": [RIGHT.database],
+  Workflow: [RIGHT.scripts],
   "Budget alert": [RIGHT.notifications],
   Key: [RIGHT.tokens, RIGHT.scripts],
   Forwarder: [RIGHT.scripts],
@@ -148,6 +150,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Rate rule": "rest",
   "Bot settings": "rest",
   "D1 database": "rest",
+  Workflow: "rest",
   "Budget alert": "rest",
   Key: "rest",
   Forwarder: "reach",
@@ -657,6 +660,13 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => syncDatabase(connection, placed.accountId, mode),
   );
   await alertPiece(progress, mode, placed, connection, logins);
+  // The Workflow comes last: nothing else of the install waits for it. Only a copy too large for one request needs it.
+  await piece(
+    progress,
+    mode,
+    () => "Workflow",
+    () => syncJobs(connection, placed, mode),
+  );
 
   return readingOf(progress);
 }
