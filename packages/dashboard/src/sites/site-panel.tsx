@@ -109,7 +109,7 @@ function FactsBlock({ site }: { readonly site: Site }): ReactNode {
   return (
     <PanelBlock>
       <PanelFacts>
-        <PanelFact name="Views">
+        <PanelFact name="Visits">
           {site.views === null ? "Not known" : `about ${showCount(site.views.today)} today, about ${showCount(site.views.week)} in 7 days`}
         </PanelFact>
         <PanelFact name="Size">

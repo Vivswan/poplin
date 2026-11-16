@@ -246,7 +246,7 @@ export function siteColumns(
     { id: "by", header: "Published by", hidden: true, cell: (site) => <PublishedBy site={site} logins={logins} /> },
     {
       id: "views",
-      header: "Views, 7 days",
+      header: "Visits, 7 days",
       hidden: true,
       numeric: true,
       cell: (site) => <span className="text-muted-foreground">{site.views === null ? "Not known" : showCount(site.views.week)}</span>,
