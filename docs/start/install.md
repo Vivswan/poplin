@@ -148,6 +148,8 @@ Log this computer in now?
 
 **It worked when** it says that the address `answers`, and then `poplin 0.1.0 is installed.`, with the version of the day. The sample shows a few of the rows. A new address can take a few minutes: the command waits up to five.
 
+**Where the address does not answer in that time**, the run says `poplin 0.1.0 is made, and its address does not answer yet.` and exits with 1. Under it are two lines: the login to run once the address answers, and `npx poplin doctor --repair` for an address that still does not.
+
 | A row starts with | Means                                                                   |
 | ----------------- | ----------------------------------------------------------------------- |
 | `made`, `changed` | the thing was not there, or differed, and now is as it should be        |
@@ -169,16 +171,23 @@ Log this computer in now?
 
 Under a domain, the command adds records, routes, and rules of its own. A website or a mailbox on the domain stays as it is.
 
-**Where an install already is**, the command says so, changes nothing, and names the command for each thing you may want:
+**Where an install already is**, the command changes nothing. It reads whether the install needs mending, says the way on, and names the command for each thing you may want:
 
 ```text
 looking for an install ... found
-This account already holds poplin 0.1.0, at https://poplin.example.com. nothing was changed. The way on is npx poplin doctor --repair.
+This account already holds poplin 0.1.0, at https://poplin.example.com, and it is as it should be. nothing was changed.
+The way on: npx poplin login --server https://poplin.example.com
   to check it   npx poplin doctor
   to mend it    npx poplin doctor --repair
   to update it  npx poplin update
   to remove it  npx poplin uninstall cloudflare
 ```
+
+| The first line says            | The way on                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `it is as it should be`        | log in: the line under it has the address                                     |
+| `it is not as it should be`    | `npx poplin doctor --repair`                                                  |
+| neither                        | the line under it says why that was not read, and names the repair's dry run  |
 
 An install that works needs none of them: log this computer in, as step 5 shows.
 
@@ -277,6 +286,8 @@ ready: a run would make 26 and change 1. nothing was changed
 | `ready:`                  | nothing that a read can see blocks a run. A write is proven only by the run itself | 0         |
 | `not ready:`              | you must act first, and the lines above it say where to click; or a row `failed`, and says why | 1 |
 
+A dry run exits as the run after it would: 0 when a run would go through, and 1 when something stops it first. The same holds for the dry run of `poplin doctor --repair` and of `poplin uninstall`.
+
 The rows are the ones the run then prints, in the same order: `would make` becomes `made`.
 
 ## Every answer as an option
@@ -315,6 +326,16 @@ npx poplin install cloudflare --no-domain --login you@example.com --yes
 | `--no-wait`   | does not wait for the new install to answer                                              |
 
 A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line.
+
+With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave.
+
+| `next.step` | Run next                                                                    |
+| ----------- | --------------------------------------------------------------------------- |
+| `install`   | `npx poplin install cloudflare`, with the same answers                      |
+| `repair`    | the repair, as `command` writes it: `npx poplin doctor --repair`, or the newest poplin's |
+| `login`     | `npx poplin login`, with `--server` and the install's address               |
+| `uninstall` | `npx poplin uninstall cloudflare`: a removal's dry run, or one that left a kind |
+| `none`      | nothing                                                                     |
 
 | Exit code | Means                                                                              |
 | --------- | ---------------------------------------------------------------------------------- |

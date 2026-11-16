@@ -159,8 +159,19 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. It pr
 ```json
 { "ok": true, "run": "dry-run", "ready": true, "address": "https://poplin.example.com",
   "rows": [{ "object": "R2 bucket", "will": "make", "detail": "poplin-sites" }],
-  "blocked": [], "steps": [] }
+  "blocked": [], "steps": [],
+  "next": { "step": "install", "command": "npx poplin install cloudflare" } }
 ```
+
+Every value of a run of this command, of the repair, and of the removal names what to run next in `next`, and so does a run that stopped. Its `command` has none of the answers your line gave: add them.
+
+| `next.step` | Run next                                                        |
+| ----------- | --------------------------------------------------------------- |
+| `install`   | the line of part e                                              |
+| `repair`    | the repair of part f, with `npx poplin@latest` where `command` has it |
+| `login`     | step 4, with the address in `command`                           |
+| `uninstall` | a removal's own line again: the user's to run                   |
+| `none`      | nothing                                                         |
 
 | The value says                                         | Exit code | Means                                          | Next                                                  |
 | ------------------------------------------------------ | --------- | ---------------------------------------------- | ----------------------------------------------------- |
@@ -168,7 +179,7 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. It pr
 | `ready` is true                                        | 0         | no read found anything that blocks a run       | part e                                                |
 | `ready` is false, and `blocked` has entries            | 1         | the user must act first                        | the table of blocks below, then this part again       |
 | `ready` is false, `blocked` is empty, and no `problem` | 1         | a read failed, and its row says why            | run it again in a minute                              |
-| `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`, and go to step 4. After a run of part e that left something undone: part f |
+| `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`. `next.step` is `login` for an install that is as it should be: step 4. It is `repair` for the rest: part f, as `next.command` writes it |
 | `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt` |
 | any other `problem`                                    | 1, 2, 5   | a stop                                         | [`refusals.md`](refusals.md)                          |
 
@@ -210,7 +221,7 @@ npx poplin install cloudflare --domain example.com --login you@example.com --yes
 | --------------------------------------- | --------- | ---------------------------------------------------------------------- |
 | a `problem`                             | 1, 2, 5   | a stop, with no rows: the table of part d, then [`refusals.md`](refusals.md) |
 | `ok` is true                            | 0         | the install is made: keep `address`, the dashboard's, and go to step 4 |
-| `ready` is true, and `answers` is false | 1         | the install is made, and its new address does not answer yet: wait a few minutes, then step 4 |
+| `ready` is true, and `answers` is false | 1         | the install is made, and its new address does not answer yet: wait a few minutes, then step 4. If it still does not answer: the repair of part f |
 | `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows. Then part f |
 
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
@@ -229,12 +240,12 @@ The command stores the token nowhere. Afterwards the user either keeps it where 
 
 ### f. When a run left something undone
 
-The user first does what `blocked` and `steps` name, such as switching Zero Trust on. Then run the dry run of part d again: its value says which command goes on from what stands.
+The user first does what `blocked` and `steps` name, such as switching Zero Trust on. The value of the run that left something undone says which command goes on from what stands, in `next`.
 
-| The dry run says                            | The install is                          | Run next                                    |
+| `next.step` of that run                     | The install is                          | Run next                                    |
 | ------------------------------------------- | --------------------------------------- | ------------------------------------------- |
-| rows, as the first time                     | started, and not set yet                | the line of part e again                    |
-| `already_installed`                         | set, with pieces missing: often the login, made with Zero Trust off | the repair below    |
+| `install`                                   | started, and not set yet                | the line of part e again                    |
+| `repair`                                    | set, with pieces missing: often the login, made with Zero Trust off | the repair below    |
 
 A run without `--json`, as the user's is, names the same in its last line: it ends `Run this command again`, or names the repair.
 
@@ -252,7 +263,7 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. When 
 | `ok` is true                                | 0         | nothing is left undone: keep `address` under `found`, and go to step 4 |
 | `ready` is false, and no `problem`          | 1         | tell the user each row that did not come to make, change, or leave, and each entry of `blocked` and `steps`; then this line again |
 
-With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits with 1 while `changes` is above 0: that is no failure.
+With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits as the run after it would: with 0 where a run would go through, also while `changes` is above 0. `next.step` is `repair` then, and `login` once nothing is left to mend.
 
 ## 4. Log this computer in
 

@@ -33,10 +33,10 @@ Five rows read otherwise in a check made with the key:
 
 | Row                                  | It says                                                                                                         |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| a piece the key has no right to read | `failed`, with the right and `Press Repair.` The other pieces are still read, and Repair makes a key with every right |
-| `D1 database`                        | `present`, with `the install is running on it`. The key holds no right to a database, so Cloudflare is not asked |
+| a piece the key has no permission to read | `failed`, with the permission and `Press Repair.` The other pieces are still read, and Repair makes a key with every permission |
+| `D1 database`                        | `present`, with `the install is running on it`. The key holds no permission for a database, so Cloudflare is not asked |
 | an optional piece that is not set up | `optional`, with the permission that switches it on                                                             |
-| `Key`                                | `present` while Cloudflare takes the key, and `differs` once Cloudflare refused it or a piece lacked a right     |
+| `Key`                                | `present` while Cloudflare takes the key, and `differs` once Cloudflare refused it or a piece lacked a permission    |
 | `Upload key`                         | `present` where the install holds one, and `missing` where it holds none. The key reads no token of the account, so Cloudflare is not asked |
 
 An install that holds no key says `Not checked yet` before any run, and its Check opens the same dialog as Repair. It holds a key after a Repair on this screen.
@@ -103,7 +103,7 @@ ok  domain    The login for private sites is missing or changed, so private site
 | What the row says | the most serious thing to act on: the login, then records and routes, changed users, any other piece     |
 | When there is one | only when that run left something to act on, and only for an admin; `domain` under `--json` has the same |
 | After 30 days     | the row only asks for a new Check, or a Repair after changed users: no look at the domain between runs   |
-| Optional pieces   | a rule that was left out, or that only lacks an optional right, raises no row                            |
+| Optional pieces   | a rule that was left out, or that only lacks an optional permission, raises no row                            |
 
 ## Optional: block junk traffic and crawlers
 
@@ -132,7 +132,7 @@ A bot the rule lets through reaches the Worker as any visitor does: a private si
 
 A rule the domain lacks is made, and one its plan has no room for is left out. No permission is added for it, and no Repair is pressed.
 
-An install holds its key from the run that made it: Account API Tokens: Edit is one of the ten permissions, and the key holds the right to write WAF rules whatever else the token held.
+An install holds its key from the run that made it: Account API Tokens: Edit is one of the ten permissions, and the key holds the permission to write WAF rules whatever else the token held.
 
 An install [without a domain](../start/without-a-domain.md) has none of the five rules: no Repair and no saved setting makes one.
 
@@ -178,7 +178,7 @@ One more permission on the account token lets Repair make the alert at once. Add
 
 The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what can cost money.
 
-A key that may not make the alert shows in a check: the row `Budget alert` says `failed`, with the right and `Press Repair.`
+A key that may not make the alert shows in a check: the row `Budget alert` says `failed`, with the permission and `Press Repair.`
 
 ## An email about certificates
 

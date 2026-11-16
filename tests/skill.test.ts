@@ -31,7 +31,7 @@ const READ_ON = Date.UTC(2026, 0, 1);
 const INPUTS: readonly string[] = Object.values(TOOL_INPUTS).flatMap((input) => Object.keys(input.entries));
 
 /** The words in code font that are no tool, input, or code: what an answer and `whoami` name, the three values of `access`, the two words of the server's entry, a folder that is never uploaded, and the keys of the value an install and a repair print. */
-const OTHER_WORDS: readonly string[] = ["url", "code", "install", "role", "token", "expires", "private", "unlisted", "public", "poplin", "npx", "node_modules", "ok", "ready", "answers", "address", "found", "steps", "problem", "changes"];
+const OTHER_WORDS: readonly string[] = ["url", "code", "install", "role", "token", "expires", "private", "unlisted", "public", "poplin", "npx", "node_modules", "ok", "ready", "answers", "address", "found", "steps", "problem", "changes", "next", "command"];
 
 /** One lowercase word, or several joined by underscores: the way tools, their inputs, and refusal codes are written. */
 const WORD = /^[a-z]+(?:_[a-z]+)*$/;
@@ -42,8 +42,8 @@ const REFUSALS_PAGE = "references/refusals.md";
 /** What a cell of that table holds beside its codes when it holds codes alone: the commas between them. */
 const BETWEEN_CODES = /^[\s,]*$/;
 
-/** A command line of the CLI as the pages write it, from `poplin` up to the end of its line, its code span, or a pipe. */
-const COMMAND_LINE = /npx (poplin [^`|\n]*)/g;
+/** A command line of the CLI as the pages write it, from `poplin` up to the end of its line, its code span, a pipe, or the JSON string that holds it. */
+const COMMAND_LINE = /npx (poplin [^`|\n"]*)/g;
 
 /** A flag, wherever it is written. A site's label holds two dashes too, after a letter. */
 const FLAG = /(?<![\w-])--[a-z][a-z-]*/g;

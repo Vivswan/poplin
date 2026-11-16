@@ -46,12 +46,14 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 
 Three commands work at Cloudflare with an account token: `poplin install`, `poplin doctor --repair`, and `poplin uninstall`. With `--json` each prints one object. A run that stopped before its work names why in `problem`, where the other commands write `code`.
 
+A run's object, and a stopped run's, names what to run next in `next`: [Install](../start/install.md#every-answer-as-an-option) has its words.
+
 | Problem             | Means                                                              | What to do                                                      |
 | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
 | `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, login, token, account, provider, confirm | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
 | `usage`             | the line is written wrong; `words` says how                        | the command's own help: `npx poplin install --help`             |
-| `already_installed` | the account holds an install; `found` has its version and address  | nothing was changed: `npx poplin login --server https://poplin.example.com`; to mend it, `npx poplin doctor --repair` |
-| `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or rename or delete it at `address` |
+| `already_installed` | the account holds an install; `found` has its version, its address, and in `mend` whether it needs mending | nothing was changed: run what `next` names, the login for `mend` nothing, and for the rest the repair as `next.command` writes it |
+| `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or delete it at `address`    |
 | `name_held`         | a Worker named poplin that is not poplin's                         | rename or delete it at `address`                                |
 | `blocked`           | a person must act first; `blocked` lists what, with the address to open | the table below                                            |
 | `token_refused`     | Cloudflare refused the token, or it shows no such account          | make the token again, for the account the install goes to       |
@@ -71,7 +73,7 @@ Three commands work at Cloudflare with an account token: `poplin install`, `popl
 | `another_version` | the repair         | the install's records are of another version than this command           | `npx poplin@latest doctor --repair`                               |
 | `not_confirmed`   | the removal        | the address typed, or given with `--confirm`, is not the install's own; nothing was removed | give the address a run with `--dry-run` prints |
 
-A repair or a removal that worked through its rows prints them, with `ready` false where a row is left undone.
+A repair or a removal that worked through its rows prints them, with `ready` false where a row is left undone. A removal lists in `unlooked` each kind its token could not look for.
 
 Each entry of `blocked` names what blocks in `what`:
 

@@ -49,7 +49,7 @@ npx poplin logout
 
 It prints `logged out of` and the install's address. On the computer of step 1, run it after the export.
 
-**On a computer you reach only after the removal**, the same line says `the install could not be reached`, and its hint says `the saved login was removed from this machine`. That is enough where the database went too: the tokens were in it. A database kept with `--keep-data` still holds them, so log out before such a removal.
+**On a computer you reach only after the removal**, the same line says `the install could not be reached`, and its hint says `the saved login was removed from this machine`. The removal's own last lines say the same. That is enough where the database went too: the tokens were in it. A database kept with `--keep-data` still holds them, so log out before such a removal.
 
 | Piece                                 | It is there                                           | Remove it                                                                   |
 | ------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -71,7 +71,7 @@ npx poplin uninstall cloudflare --no-domain --dry-run
 
 It prints the token's permissions and a link, then asks for the token without showing what you paste. The form is filled as [without a domain](../start/without-a-domain.md#the-account-token) or [under a domain](../start/install.md#3-make-the-account-token) shows.
 
-Then it lists, and removes nothing. Without a domain, for an install that has the budget alert:
+Then it lists, and removes nothing. With `--keep-data` on the line too, it lists the data as `would keep`. Without a domain, for an install that has the budget alert:
 
 ```text
 looking for an install ... found: poplin 0.1.0, at https://poplin.your-name.workers.dev
@@ -88,6 +88,7 @@ would remove  Database              poplin (sites: 3)
 stays         Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 A run asks you to type this, or takes it with --confirm: poplin.your-name.workers.dev
 The sites' files and the database go last: --keep-data leaves them.
+A removal logs no computer out: run npx poplin logout on each one first.
 ready: a run would remove 10 kinds. nothing was removed
 ```
 
@@ -103,7 +104,7 @@ A rule set is Cloudflare's holder for rules of one kind. One that poplin made go
 | ---------------------------- | ---------------------------------------------------------------------- |
 | `would remove`, `removed`    | pieces that carry poplin's name, or the comment or tag poplin put on them |
 | `stays`                      | not removed by the command: the row says why, or where it is           |
-| `kept`                       | the sites' files and the database, with `--keep-data`. The list before the question still says `would remove` for them |
+| `would keep`, `kept`         | the sites' files and the database, with `--keep-data`                  |
 | `already gone`               | it went between the list and the removal                               |
 | `would skip`, `skipped`      | a thing of poplin's name that is not this install's: it stays          |
 | `blocked`, `stopped`         | the token lacks the permission the row names                           |
@@ -133,13 +134,15 @@ would remove  Sites' files          poplin-sites (files: 2, 15 B)
 would remove  Database              poplin (sites: 3)
 stays         Bot switches          the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set
 stays         Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
-This removes everything listed above. It cannot be undone.
+This removes every row above that says would remove. It cannot be undone.
+It logs no computer out. Run npx poplin logout on each one first: after the removal a logout cannot reach the install.
 Type poplin.example.com to go on: poplin.example.com
 removed       Worker route          *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*
 ...
 removed       Database              poplin (sites: 3)
-the install is removed. 18 kinds removed, 0 left.
-On each computer that was logged in: npx poplin logout
+the install is removed. 18 kinds removed, 0 left, 2 stay.
+Each row that says stays names what is yours to do by hand.
+On each computer that is still logged in: npx poplin logout. It forgets the login there, and says the install could not be reached.
 The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
 ```
 
@@ -147,7 +150,15 @@ Nothing is removed before you type the address. Another text than the install's 
 
 ## What stays, and what to do
 
-`the install is removed` counts the rows that say `removed` or `already gone`. Read the rows that say `stays` too:
+The last lines count the rows that say `removed` or `already gone`, and the rows that say `stays`. Where the token lacks an optional permission, they name each kind it could not look for:
+
+```text
+the install is removed, but for what the token could not look for. 16 kinds removed, 0 left, 4 stay.
+Each row that says stays names what is yours to do by hand.
+2 kinds were not looked for, since the token lacks an optional permission: Budget alert and Certificate alert. If the install made one, it is still there: delete it by hand, or add the permission and run this command again.
+```
+
+Read the rows that say `stays`:
 
 | Stays                                   | When                                                         | Do                                                                    |
 | --------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
@@ -176,14 +187,14 @@ The link the command prints makes a token without the optional permissions. [The
 npx poplin uninstall cloudflare --no-domain --keep-data
 ```
 
-The line above the question says `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
+The list before the question says `would keep` for both, the line above the question says `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
 
 | Then                                   | Do                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------- |
 | take the data up in a new install      | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |
 | remove the data too                    | the same `uninstall` line without `--keep-data`: it asks you to type `poplin-sites` |
 
-A dry run's list is the same either way. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
+A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 
 ## When it stops
 
@@ -196,7 +207,7 @@ A dry run's list is the same either way. The kept bucket and database stay in yo
 | a number, then `not done`, and `Run this command again`  | a row says `stopped`, `failed`, or `not run`         | fix what the row names, then run the same line again: it removes what is left |
 | a row `stopped`, ending `Add this one:` and a name       | the token lacks the permission of that name          | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |
 | `The account changed since it was looked at.`            | something changed at Cloudflare during the run       | run it again                                                                  |
-| `--dry-run removes nothing: leave out --keep-data`       | the two options were on one line                     | take one of them off                                                          |
+| `--dry-run removes nothing: leave out --confirm`         | the two options were on one line                     | take one of them off                                                          |
 
 ## From a script
 
