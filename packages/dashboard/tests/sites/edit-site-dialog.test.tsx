@@ -1,4 +1,4 @@
-// The dialog that changes how a site is named, where the source cannot say it alone: what an opening starts from after one that was left.
+// The dialog that changes how a site is named, where the source cannot say it alone: what an opening starts from after one that was left, and what a site read again leaves of what is typed.
 
 import { clearPage } from "../lib/support/page";
 
@@ -54,5 +54,19 @@ describe("the dialog that edits a site", () => {
       [DRAFT.title, DRAFT.name, true],
       ["Trip notes", "trip-notes", false],
     ]);
+  });
+
+  // Drift: the lists are read again in the background, which hands the open dialog the same site as a new object. Taken for an opening, that read would wipe what a person is typing.
+  test("the same site read again while the dialog is open keeps what was typed, and a field left alone is still not sent", async () => {
+    const sent: unknown[] = [];
+    const editing = (site: Site): ReactNode => <EditSiteDialog site={site} onClose={() => undefined} onSave={async (_site, changes) => void sent.push(changes)} />;
+    const { rerender } = render(editing(SITE));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: DRAFT.title } });
+    rerender(editing({ ...SITE, name: "renamed-elsewhere" } as unknown as Site));
+    const after = held();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+
+    expect([after, sent]).toEqual([[DRAFT.title, "trip-notes", true], [{ title: DRAFT.title }]]);
   });
 });

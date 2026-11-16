@@ -7,7 +7,10 @@ import { arrive, SECTIONS_BUTTON, test, toSection } from "./visit";
 /** The least a control measures on a phone, each way, in pixels. */
 const FINGER = 40;
 
-/** The screens, each with the controls that were smaller: a button that opens a sheet, a menu, a dialog, or a hint, a link drawn as a button, and a tab. */
+/** How far from a control's middle a finger still lands on it, in pixels: a pixel inside half a finger. */
+const REACH = FINGER / 2 - 1;
+
+/** The screens, each with the controls that were smaller: a button that opens a sheet, a menu, a dialog, or a hint, a link drawn as a button, a tab, and a field that sits in a group. */
 const SCREENS: readonly { readonly section: string; readonly controls: (page: Page) => readonly Locator[] }[] = [
   {
     section: "Sites",
@@ -17,15 +20,23 @@ const SCREENS: readonly { readonly section: string; readonly controls: (page: Pa
       page.getByRole("button", { name: /^Show link of / }),
       page.getByRole("button", { name: /^Copy the link of / }),
       page.getByRole("button", { name: /^Open the site / }),
+      page.getByRole("searchbox", { name: "Find a site", exact: true }),
     ],
   },
-  { section: "Activity", controls: (page) => [page.getByRole("button", { name: /^Only / }), page.getByRole("button", { name: "Download", exact: true })] },
-  { section: "Usage", controls: (page) => [page.getByRole("button", { name: /^Change the limit of / }), page.getByRole("button", { name: "Refresh the graph", exact: true })] },
+  {
+    section: "Activity",
+    controls: (page) => [page.getByRole("button", { name: /^Only / }), page.getByRole("button", { name: "Download", exact: true }), page.getByRole("searchbox", { name: /^Find activity / })],
+  },
+  {
+    section: "Usage",
+    controls: (page) => [page.getByRole("button", { name: /^Change the limit of / }), page.getByRole("button", { name: "Refresh the graph", exact: true }), page.getByRole("button", { name: /: see it at / })],
+  },
   {
     section: "Access",
     controls: (page) => [page.getByRole("tab", { name: "Users", exact: true }), page.getByRole("tab", { name: "Tokens", exact: true }), page.getByRole("button", { name: /^More for / })],
   },
   { section: "Domain", controls: (page) => [page.getByRole("button", { name: "Check", exact: true }), page.getByRole("button", { name: "Repair", exact: true })] },
+  { section: "Settings", controls: (page) => [page.getByRole("textbox", { name: "Requests per day", exact: true })] },
 ];
 
 /** What a control is called and how wide and high it is drawn, in whole pixels. */
@@ -64,6 +75,22 @@ test.describe("on a phone, with a pointer that is not a finger", () => {
     // What says it grows into place as it opens: the link is measured until it has its whole size.
     const reset = page.getByRole("button", { name: "Reset Requests per day", exact: true }).filter({ visible: true }).first();
     await expect.poll(async () => (await measured(reset))[2]).toBeGreaterThanOrEqual(FINGER);
+  });
+
+  // Drift: a switch is drawn 18 px high and takes a press in an area around it, which the library makes 34 px high: under a finger its top and bottom would miss.
+  test("a switch of Settings takes a press as far above, below and beside its middle as half a finger", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Settings");
+
+    const taken = await page.getByRole("switch").first().evaluate((drawn, reach) => {
+      const box = drawn.getBoundingClientRect();
+      const [across, down] = [box.left + box.width / 2, box.top + box.height / 2];
+      const lands = (x: number, y: number): boolean => drawn.contains(document.elementFromPoint(x, y));
+
+      return [lands(across, down - reach), lands(across, down + reach), lands(across - reach, down), lands(across + reach, down)];
+    }, REACH);
+
+    expect(taken, "whether a press above, below, left and right of the switch lands on it").toEqual([true, true, true, true]);
   });
 
   // Drift: the mark that narrows Activity to one site would stay lower than the button inside it, and cut the button's top and bottom off.

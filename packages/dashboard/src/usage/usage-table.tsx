@@ -11,6 +11,7 @@ import { cn } from "cn";
 import { ArrowUpRightIcon, ExternalLinkIcon, TriangleAlertIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { httpsLink } from "@/lib/https-link";
 import { showCount } from "@/lib/sites";
@@ -223,16 +224,15 @@ function HostLink({ line, name, host }: Hosted): ReactNode {
   if (link === undefined) return null;
 
   return (
-    <a
-      href={link}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={hostLinkName(name, host)}
-      className="inline-flex items-center gap-1 self-start text-[13px] whitespace-nowrap text-link underline-offset-2 hover:underline"
+    <Button
+      variant="link"
+      nativeButton={false}
+      render={<a href={link} target="_blank" rel="noreferrer" aria-label={hostLinkName(name, host)} />}
+      className="h-auto gap-1 self-start border-0 px-0 text-[13px] font-normal text-link underline-offset-2"
     >
       See it at {host}
       <ExternalLinkIcon aria-hidden className="size-3.5" />
-    </a>
+    </Button>
   );
 }
 
@@ -282,9 +282,11 @@ function behindWords(behind: number | null): string {
 
 /** What the line over the table says: when the host's own figures were read, or why the kept key gave none. */
 function officialWords(official: NonNullable<Usage["official"]>, host: string): string {
-  if ("at" in official) return `${host}'s own figures, as of ${momentIn(official.at)}.${behindWords(official.behind)}`;
+  // A host may be named by a plain word, which starts both sentences.
+  const first = `${host.slice(0, 1).toUpperCase()}${host.slice(1)}`;
+  if ("at" in official) return `${first}'s own figures, as of ${momentIn(official.at)}.${behindWords(official.behind)}`;
 
-  if (official.refusal === "unreachable") return `${host} did not answer. ${OWN_COUNT}`;
+  if (official.refusal === "unreachable") return `${first} did not answer. ${OWN_COUNT}`;
 
   if (official.refusal === "key_refused") return `The kept key no longer works. ${NEW_KEY} ${OWN_COUNT}`;
 

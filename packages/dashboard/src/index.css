@@ -198,6 +198,7 @@
   [data-slot="tabs-trigger"],
   [data-slot="input"],
   [data-slot="input-group"],
+  [data-slot="input-group-control"],
   [data-slot="select-trigger"] {
     min-height: 2.5rem;
   }
@@ -212,6 +213,10 @@
   }
   [data-slot="tabs-list"] {
     height: auto;
+  }
+  /* A switch keeps its drawn size: the area around it that takes a press grows to a finger's height. */
+  [data-slot="switch"]::after {
+    inset-block: -0.75rem;
   }
 }
 
