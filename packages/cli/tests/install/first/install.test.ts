@@ -163,7 +163,7 @@ describe("--json", () => {
     const ran = await runLine("install stand-in --yes --json", account);
 
     expect(ran.code).toBe(2);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", next: { step: "install", command: "npx poplin install" }, missing: ["where", "login", "token"] });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", next: { step: "install", command: "npx poplin install stand-in" }, missing: ["where", "login", "token"] });
     expect(ran.err).toEqual([
       "poplin install: an answer is missing: where it answers. Give --place <name> or --no-place (or POPLIN_PLACE).",
       "poplin install: an answer is missing: the first login. Give --login <email> (or POPLIN_LOGIN).",
@@ -176,7 +176,7 @@ describe("--json", () => {
     const ran = await runLine("install stand-in --place example.com --no-place --json", emptyAccount());
 
     expect(ran.code).toBe(2);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "usage", next: { step: "install", command: "npx poplin install" }, words: ["poplin install: give one of --place <name> and --no-place"] });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "usage", next: { step: "install", command: "npx poplin install stand-in" }, words: ["poplin install: give one of --place <name> and --no-place"] });
   });
 
   test("the list of providers is one value: without this an agent cannot learn what it may install at", async () => {
