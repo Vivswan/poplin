@@ -24,7 +24,7 @@ import { planDatabase } from "../pieces/database/database";
 import { INSTALL_OBJECTS } from "../install-objects";
 import type { DomainLayout } from "../../../with-domain/layout";
 import { type ListedBinding, readWorker } from "../pieces/variables/variables";
-import { readInstallBinding } from "../kind/zone-binding";
+import { type BoundInstall, readInstallBinding } from "../kind/zone-binding";
 
 /** The name of the install's Worker. */
 const SCRIPT = INSTALL_OBJECTS.worker;
@@ -173,8 +173,13 @@ export function isOwn(bindings: readonly ListedBinding[]): boolean {
   return named && bound(INSTALL_OBJECTS.bucketBinding, "r2_bucket") && bound(INSTALL_OBJECTS.databaseBinding, "d1") && bound(INSTALL_OBJECTS.jobsBinding, "workflow");
 }
 
-/** The value of a JSON variable, which Cloudflare lists as text or already read. */
-function readJson(json: unknown): unknown {
+/**
+ * Read a JSON variable of a Worker, which Cloudflare lists as text or already read.
+ *
+ * @returns its value; `undefined` for a Worker with no such variable, and for text that is no JSON
+ */
+export function jsonOf(bindings: readonly ListedBinding[], name: string): unknown {
+  const json = bindings.find((binding) => binding.name === name && binding.type === "json")?.json;
   if (typeof json !== "string") return json;
 
   try {
@@ -184,13 +189,24 @@ function readJson(json: unknown): unknown {
   }
 }
 
-/** Where a set install's dashboard is; `undefined` for a Worker that is not set: one with no place it answers at, or no account. */
-function dashboardOf(bindings: readonly ListedBinding[]): string | undefined {
-  const zone = bindings.find((binding) => binding.name === INSTALL_OBJECTS.zoneBinding && binding.type === "json");
-  const install = readInstallBinding(zone === undefined ? undefined : readJson(zone.json), SCRIPT);
+/**
+ * Read which install a Worker's bindings name.
+ *
+ * @returns its kind with its layout; `undefined` for a Worker that is not set: one with no place it answers at, or no account
+ */
+export function boundInstall(bindings: readonly ListedBinding[]): BoundInstall | undefined {
+  const install = readInstallBinding(jsonOf(bindings, INSTALL_OBJECTS.zoneBinding), SCRIPT);
   if (!install.ok || !bindings.some((binding) => binding.name === INSTALL_OBJECTS.accountBinding && binding.type === "plain_text")) return undefined;
 
-  return `https://${install.value.kind === "domain" ? install.value.layout.adminHostname : install.value.layout.adminHost}`;
+  return install.value;
+}
+
+/** Where a set install's dashboard is; `undefined` for a Worker that is not set. */
+function dashboardOf(bindings: readonly ListedBinding[]): string | undefined {
+  const install = boundInstall(bindings);
+  if (install === undefined) return undefined;
+
+  return `https://${install.kind === "domain" ? install.layout.adminHostname : install.layout.adminHost}`;
 }
 
 /** The release a Worker runs, from the tag of its latest version; `undefined` where none can be read. */

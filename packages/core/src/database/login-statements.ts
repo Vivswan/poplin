@@ -65,7 +65,7 @@ function tokenStands(id: TokenId): SQL {
 
 /**
  * Whether who signs may still write, for the statement that writes: a token as `tokenStands` has it, and a person while their email is a stored login.
- * The first login and the sweeper hold nothing that can be taken away, so they always stand.
+ * The first login, the sweeper, and a repair hold nothing that can be taken away, so they always stand.
  */
 export function signerStands(signed: Signed): SQL {
   switch (signed.as) {
@@ -75,6 +75,7 @@ export function signerStands(signed: Signed): SQL {
       return isUser(fragment`${signed.by}`);
     case "first_login":
     case "sweeper":
+    case "repair":
       return fragment`1`;
   }
 }

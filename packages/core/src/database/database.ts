@@ -45,10 +45,11 @@ export interface SiteNow extends SiteNamed {
 /**
  * Who makes a change and when, in milliseconds since the epoch.
  *
- * `as` says what signs: a `token`, a `person` who came in by email, the `first_login` that is the email of an install nobody has logged in to and is no stored login yet, or the `sweeper` that is the install's own scheduled work.
+ * `as` says what signs: a `token`, a `person` who came in by email, the `first_login` that is the email of an install nobody has logged in to and is no stored login yet, the `sweeper` that is the install's own scheduled work,
+ * or a `repair` made from outside the install with a key of its provider, by nobody who is a login.
  * A token and a person change the settings, the logins, and the tokens only while they stand: see `changeSettings` and `addToken`.
  */
-export type Signed = { readonly at: number } & ({ readonly as: "token"; readonly by: TokenId } | { readonly as: "person" | "first_login" | "sweeper"; readonly by: Login });
+export type Signed = { readonly at: number } & ({ readonly as: "token"; readonly by: TokenId } | { readonly as: "person" | "first_login" | "sweeper" | "repair"; readonly by: Login });
 
 /**
  * What a new site is made from.

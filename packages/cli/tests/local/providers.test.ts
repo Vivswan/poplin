@@ -23,7 +23,7 @@ const BUILD_TIMEOUT_MS = 60_000;
 /** A provider's file as it is built: one module that exports `installer` under the given id. */
 function providerFile(id: string): string {
   const words = `id: ${JSON.stringify(id)}, name: "Host", about: "a host", usage: "", options: [], tokenHelp: []`;
-  const calls = "token: () => undefined, read: () => ({ ok: false, why: 'open', open: [] }), facts: () => ({}), find: async () => ({}), install: async () => ({}), remove: async () => ({})";
+  const calls = "token: () => undefined, read: () => ({ ok: false, why: 'open', open: [] }), facts: () => ({}), find: async () => ({}), install: async () => ({}), remove: async () => ({}), repair: async () => ({})";
 
   return `export const installer = { ${words}, ${calls} };\n`;
 }

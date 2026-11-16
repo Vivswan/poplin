@@ -25,12 +25,11 @@ import type { Asking } from "@poplin/core/src/actions/check-update";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import type { Updating } from "@poplin/core/src/actions/start-update";
-import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
 import type { PublicName } from "@poplin/core/src/names/names";
 import { openDatabase } from "@poplin/core/src/database/open";
-import { defaultSettings, SETTING_VALUES, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
+import { SETTING_VALUES } from "@poplin/core/src/records/settings";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import type { Tickets } from "@poplin/core/src/storage/tickets";
 import * as v from "valibot";
@@ -56,6 +55,7 @@ import { readAccessBinding } from "../login/access-binding";
 import type { Connection } from "../install/client";
 import { INSTALL_OBJECTS } from "../install/install-objects";
 import { createFirstRun } from "../install/kind/first-run";
+import { readFirstSettings } from "../install/kind/first-settings";
 import type { Bindings } from "./bindings";
 import { logFault } from "./fault";
 import { derivedSecret, type Held } from "./held";
@@ -67,9 +67,6 @@ const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000
 
 /** The bytes of a new visitor key. */
 const KEY_BYTES = 32;
-
-/** The text form of every setting, as the binding holds it. */
-const SETTING_TEXTS = v.record(v.string(), v.string());
 
 /** Every setting this build reads, by its key. */
 const SETTING_KEYS = Object.keys(SETTING_VALUES.entries);
@@ -226,21 +223,8 @@ function badBinding(binding: RefusedBinding["binding"], refusal: string): Starte
  * The binding must name the logins; every setting it leaves out starts at its default.
  */
 async function ensureSettings(database: Database, binding: unknown, now: number): Promise<Started | undefined> {
-  if (binding === undefined) return badBinding("FIRST_SETTINGS", "absent");
-
-  const texts = v.safeParse(SETTING_TEXTS, binding);
-  if (!texts.success) return badBinding("FIRST_SETTINGS", "bad-shape");
-
-  const emails = (texts.output.logins ?? "").split(",").map((email) => email.trim());
-  const stated = parseLogins(emails.filter((email) => email !== ""));
-  const [firstLogin] = stated.ok ? stated.value : [];
-  if (firstLogin === undefined) return badBinding("FIRST_SETTINGS", stated.ok || stated.refusal === "no-logins" ? "missing at logins" : "bad-form at logins");
-
-  const first = settingsFromText({ ...settingsToText(defaultSettings({ installer: firstLogin })), ...texts.output });
-  // A key that is no setting is text of the binding's own, so it is not repeated.
-  if (!first.ok && first.refusal === "unknown-key") return badBinding("FIRST_SETTINGS", first.refusal);
-
-  if (!first.ok) return badBinding("FIRST_SETTINGS", `${first.refusal} at ${first.key}`);
+  const first = readFirstSettings(binding);
+  if (!first.ok) return badBinding("FIRST_SETTINGS", first.refusal);
 
   const [installer] = first.values.logins;
   if (installer === undefined) return badBinding("FIRST_SETTINGS", "missing at logins");

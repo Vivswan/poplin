@@ -11,6 +11,7 @@ import { VERSION } from "../poplin";
 import { processEnds } from "../install/ends";
 import { runInstall } from "../install/first/install";
 import { runUninstall } from "../install/remove/uninstall";
+import { runRepair } from "../install/repair/repair";
 import { TOKEN_VARIABLE } from "../install/ask";
 import type { InstallEnds } from "../install/records";
 import { exitCode } from "./exit-codes";
@@ -37,7 +38,7 @@ export const AFTER_STOP_TIMEOUT_MS = 4000;
 const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
 
 /** What runs each command that works at a provider, from the words after it. */
-const PROVIDER_RUNS: Readonly<Record<ProviderCommand, (words: readonly string[], io: Io, ends: InstallEnds) => Promise<number>>> = { install: runInstall, uninstall: runUninstall };
+const PROVIDER_RUNS: Readonly<Record<ProviderCommand, (words: readonly string[], io: Io, ends: InstallEnds) => Promise<number>>> = { install: runInstall, uninstall: runUninstall, repair: runRepair };
 
 /** The commands about sites, but for `publish`. */
 const SITE_COMMANDS = ["set", "show", "list", "rollback", "new-link", "duplicate", "delete", "restore"] as const;
@@ -285,7 +286,7 @@ function mcpHost(io: Io): Host {
  *
  * @param io - the machine's ends: where to print, how to send, where the login is, and whether a person is there to ask
  * @param pipes - the two ends `poplin mcp` speaks its protocol on, which no other command touches; this process's stdin and stdout unless given
- * @param installEnds - what `poplin install` and `poplin uninstall` reach beside `io`, made when one of them runs; this process's own unless given
+ * @param installEnds - what `poplin install`, `poplin uninstall`, and `poplin doctor --repair` reach beside `io`, made when one of them runs; this process's own unless given
  * @returns the exit code. Nothing throws: a failure nothing foresaw is printed as one line, without its stack
  */
 export async function run(

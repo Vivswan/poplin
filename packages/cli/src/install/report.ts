@@ -54,6 +54,12 @@ export interface StateWords {
   readonly tone: Tone;
 }
 
+/** How the last lines of a run are worded: what a run that left nothing undone is called, and the command that goes on from what stands after one that did not, as a sentence names it. */
+export interface Ending {
+  readonly done: string;
+  readonly next: string;
+}
+
 /** One line as it is shown: its text, and what kind of line it is. */
 export interface Line {
   readonly tone: Tone;
@@ -113,11 +119,22 @@ export function rowLine(row: Row, run: Run): Line {
 }
 
 /**
+ * The rows of a run, as its JSON value holds them.
+ *
+ * @returns each object with its detail, its state under `will` in a dry run and under `did` in a run, and the permission it lacks where it names one
+ */
+export function rowValues(rows: readonly Row[], run: Run): Readonly<Record<string, unknown>>[] {
+  const key = run === "dry-run" ? "will" : "did";
+
+  return rows.map((row) => ({ object: row.object, [key]: row.state, detail: row.detail, ...(row.right === undefined ? {} : { right: row.right }) }));
+}
+
+/**
  * Word what a dry run came to.
  *
  * @returns the last lines: whether a run would go through, with what it would do counted, and what stops it when something does
  */
-export function dryRunLines(installed: Extract<Installed, { readonly ok: true }>): Line[] {
+export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "blocked" | "ready">): Line[] {
   const count = (state: RowState): number => installed.rows.filter((row) => row.state === state).length;
   const proof = "the token's permissions: each read was allowed, and a write is proven by the run";
 
@@ -137,22 +154,23 @@ export function dryRunLines(installed: Extract<Installed, { readonly ok: true }>
  *
  * @param provider - the provider, whose name says where the token can be deleted
  * @param answers - whether the install answered at its address once it was made; `null` for a run that did not wait
- * @returns the last lines: the version and the dashboard's address of an install that is whole, or what is not done and what only a person can do. A run that never learned its address names none
+ * @param ending - what a run that left nothing undone is called, and what to run after one that did
+ * @returns the last lines: what the run is called and the dashboard's address, or what is not done and what only a person can do. A run that never learned its address names none
  */
-export function runLines(installed: Extract<Installed, { readonly ok: true }>, provider: Provider, answers: boolean | null): Line[] {
+export function runLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "steps" | "blocked" | "address" | "ready">, provider: Provider, answers: boolean | null, ending: Ending): Line[] {
   const { address } = installed;
   const silent: Line = { tone: "warning", text: `no answer yet at ${address}: it can take a few more minutes` };
   const answer = answers === null ? [] : [answers ? plain(`${address} answers`) : silent];
   const dashboard = address === undefined ? [] : [plain(`Your dashboard: ${address}`)];
   const stored = plain(`The token was used for this run and is stored nowhere. You can delete it at ${provider.name}.`);
 
-  if (installed.ready) return [...answer, { tone: "done", text: `poplin${installed.release === undefined ? "" : ` ${installed.release}`} is installed.` }, ...dashboard, stored];
+  if (installed.ready) return [...answer, { tone: "done", text: ending.done }, ...dashboard, stored];
 
   const undone = installed.rows.filter((row) => UNDONE.has(row.state)).length;
   const steps = installed.steps.flatMap((step) => [`${INDENT}${step.text}`, `${INDENT}${step.address}`]);
-  const byHand = steps.length === 0 ? [] : ["Do this in your browser, then run this command again:", ...steps];
+  const byHand = steps.length === 0 ? [] : [`Do this in your browser, then run ${ending.next}:`, ...steps];
 
-  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `${undone} not done. Run this command again: it goes on from what stands.` }, stored];
+  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `${undone} not done. Run ${ending.next}: it goes on from what stands.` }, stored];
 }
 
 /**
@@ -233,9 +251,6 @@ export function stopValue(stop: Stop): Readonly<Record<string, unknown>> {
  * @returns the same value for both, but for `run` and the key of each row's state: `will` in a dry run, `did` in a run. `ok` is whether the command exits with 0
  */
 export function runValue(installed: Extract<Installed, { readonly ok: true }>, run: Run, found: string, answers: boolean | null): Readonly<Record<string, unknown>> {
-  const key = run === "dry-run" ? "will" : "did";
-  const rows = installed.rows.map((row) => ({ object: row.object, [key]: row.state, detail: row.detail, ...(row.right === undefined ? {} : { right: row.right }) }));
-
   return {
     ok: installed.ready && answers !== false,
     run,
@@ -245,7 +260,7 @@ export function runValue(installed: Extract<Installed, { readonly ok: true }>, r
     address: installed.address ?? null,
     answers,
     token: { proof: installed.proof },
-    rows,
+    rows: rowValues(installed.rows, run),
     blocked: installed.blocked,
     steps: installed.steps,
   };

@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { type Command, CommanderError } from "commander";
 
-import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, PROVIDER_COMMANDS, VERSION_FLAG } from "./command-table";
+import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, PROVIDER_COMMANDS, REPAIR_FLAG, VERSION_FLAG } from "./command-table";
 import { argumentsOf, buildProgram } from "./program";
 import { buildRequest, type TypedRequest } from "./requests";
 import { type Flags, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
@@ -54,7 +54,7 @@ interface TypedWords {
 /**
  * What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets.
  *
- * `install` and `uninstall` are the commands whose words are not read here: their options are their providers', which only the built package knows. `words` are the ones after the command's own.
+ * `install`, `uninstall`, and `doctor` with `--repair` are the commands whose words are not read here: their options are their providers', which only the built package knows. `words` are the ones after the command's own.
  */
 export type Parsed =
   | TypedRequest
@@ -63,8 +63,8 @@ export type Parsed =
   | { readonly kind: "version" }
   | UsageError;
 
-/** A command that works at a provider, by the word that runs it. */
-export type ProviderCommand = (typeof PROVIDER_COMMANDS)[number]["name"];
+/** A command that works at a provider, by the word that runs it; `repair` is `doctor` with `--repair`. */
+export type ProviderCommand = (typeof PROVIDER_COMMANDS)[number]["name"] | "repair";
 
 /** What ends the reading of a line before commander is through with it: the answer is known. */
 class Answered extends Error {
@@ -97,7 +97,7 @@ function unknownFlag(typed: string, known: readonly string[], listedBy: string):
 }
 
 /** The command that works at a provider a word names, if it names one. */
-function providerCommand(word: string): ProviderCommand | undefined {
+function providerCommand(word: string): (typeof PROVIDER_COMMANDS)[number]["name"] | undefined {
   return PROVIDER_COMMANDS.find((command) => command.name === word)?.name;
 }
 
@@ -184,6 +184,19 @@ function readFlags(typed: readonly TypedFlag[], spec: CommandSpec): Flags | Usag
   return flags;
 }
 
+/**
+ * Hand the words of a line on unread, where the command works at a provider and its own parser reads them: `install`, `uninstall`, and `doctor` with `--repair`.
+ *
+ * @param first - where the command's word stands on the line: it is taken out, and the rest handed on as typed
+ * @returns `undefined` for a command whose words are read here
+ */
+function handedOn(name: string, argv: readonly string[], first: number | undefined): Parsed | undefined {
+  const command: ProviderCommand | undefined = name === "doctor" && asks(argv, REPAIR_FLAG) ? "repair" : providerCommand(name);
+  if (command === undefined || first === undefined) return undefined;
+
+  return { kind: "provider", command, words: [...argv.slice(0, first), ...argv.slice(first + 1)] };
+}
+
 function helpOf(topic: string | undefined): Parsed {
   if (topic === undefined) return { kind: "help", asked: true };
 
@@ -215,7 +228,7 @@ function refusalOf(refused: CommanderError, spec: CommandSpec, given: readonly s
  *
  * @param argv - the words after `poplin`, as the shell split them
  * @param now - the time `--expires` must lie after, in milliseconds since the epoch; the clock's when absent
- * @returns one command's request, a help topic, the version, or what was written wrong. A first word that is neither a command nor a path is refused, never published. The words of `install` and of `uninstall` are handed on unread
+ * @returns one command's request, a help topic, the version, or what was written wrong. A first word that is neither a command nor a path is refused, never published. The words of a command that works at a provider are handed on unread
  */
 export function parseCommand(argv: readonly string[], now: number = Date.now()): Parsed {
   const typed = splitWords(argv);
@@ -225,9 +238,8 @@ export function parseCommand(argv: readonly string[], now: number = Date.now()):
 
   /** Go into a command: its help and the version are answered whatever else is on the line, and then every flag must be one of its own. */
   const enter = (command: Command): void => {
-    // The words of a command that works at a provider are read by its own parser: here the command's word is taken out, and the rest handed on as typed.
-    const provider = providerCommand(command.name());
-    if (provider !== undefined && typed.first !== undefined) throw new Answered({ kind: "provider", command: provider, words: [...argv.slice(0, typed.first), ...argv.slice(typed.first + 1)] });
+    const own = handedOn(command.name(), argv, typed.first);
+    if (own !== undefined) throw new Answered(own);
 
     const spec = SPECS.get(command.name());
     if (spec === undefined) return;

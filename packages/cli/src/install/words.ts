@@ -38,6 +38,9 @@ export interface CommandWords {
 
   /** The options a person may reach for that belong elsewhere, each with the line that says where. */
   readonly elsewhere: Readonly<Record<string, string>>;
+
+  /** Set on a command whose line may leave the provider out where the package carries one: that provider's options are then the line's own. */
+  readonly loneProvider?: true;
 }
 
 /** The environment the variables are read from. */
@@ -142,13 +145,14 @@ function refusalOf(refused: CommanderError, root: Command, command: CommandWords
   return new Refused(`no provider ${JSON.stringify(word)}`, meant === undefined ? `poplin ${command.name} lists the providers` : `did you mean: poplin ${command.name} ${meant}?`);
 }
 
-/** Split the words with commander: the command's own options wherever they stand, the provider, and its own options after it. */
-function readWords(words: readonly string[], command: CommandWords, providers: readonly Provider[]): Read | Stop {
+/** Split the words with commander: the command's own options wherever they stand, the provider, and its own options after it. The options of `lone`, the one provider a line may leave out, are taken with no provider named too. */
+function readWords(words: readonly string[], command: CommandWords, providers: readonly Provider[], lone: Provider | undefined): Read | Stop {
   const shared: Typed = new Map();
   const own: Typed = new Map();
   let provider: Provider | undefined;
   const root = quiet(new Command(command.name)).action(() => undefined);
   addOptions(root, command.options, shared);
+  addOptions(root, lone?.options ?? [], own);
 
   // The provider is known once commander goes into its subcommand: a refusal before that names none.
   root.hook("preSubcommand", (_root, subcommand) => {
@@ -228,7 +232,9 @@ export function parseWords<Plan extends object>(
 
   if (asks(words, VERSION_FLAG)) return { kind: "version" };
 
-  const read = readWords(words, command, providers);
+  const [only, ...others] = providers;
+  const lone = command.loneProvider === true && others.length === 0 ? only : undefined;
+  const read = readWords(words, command, providers, lone);
   const json = asks(words, "--json");
   if ("problem" in read) return { kind: "stop", stop: read, json };
 
@@ -239,5 +245,7 @@ export function parseWords<Plan extends object>(
     return "problem" in plan ? { kind: "stop", stop: plan, json } : { kind: "plan", plan };
   };
 
-  return read.provider === undefined ? withoutProvider(read, canAsk, command, named) : named(read.provider);
+  const provider = read.provider ?? lone;
+
+  return provider === undefined ? withoutProvider(read, canAsk, command, named) : named(provider);
 }
