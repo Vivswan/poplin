@@ -138,6 +138,16 @@ describe("the local preview", () => {
     expect([printed.includes(realId), printed.includes(real.code), printed.includes("a real terminal")]).toEqual([false, false, false]);
   });
 
+  // Drift: the page of the terminals, asked before any page of the dashboard, says no login waits: only a page of the dashboard began the sample logins.
+  test("the page of what the waiting computers print, as the first thing asked of a preview, holds the sample logins the dashboard then lists", async () => {
+    const preview = await openPreview(false);
+    const ask = (path: string): Promise<Response> => preview.fetch(new Request(`${ORIGIN}${path}`));
+    const printed = await (await ask("/state/allow/waiting")).text();
+    const { logins } = (await (await ask("/data/logins")).json()) as { readonly logins: readonly { readonly id: string }[] };
+
+    expect([logins.length, logins.map((login) => printed.includes(`/tokens/review/${login.id}`))]).toEqual([2, [true, true]]);
+  });
+
   // Drift: a restart leaves a stray server behind, or the command serves a page with no script.
   test("two previews run side by side on two ports, each serves the dashboard's built client, a second start on a port replaces the first, and a stop leaves no server and no pid file", async () => {
     const [one, other] = [freePort(), freePort()];
