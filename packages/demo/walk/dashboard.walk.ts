@@ -164,7 +164,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "how a new site is made",
     open: (page) => page.getByRole("button", { name: "New site", exact: true }).click(),
-    shows: (page) => [page.getByText("Publish a folder", { exact: true })],
+    shows: (page) => [page.getByRole("dialog", { name: "New site", exact: true })],
     close: pressEscape,
   },
   {

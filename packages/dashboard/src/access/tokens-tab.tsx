@@ -17,7 +17,6 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { expiryOf, shortMoment, wholeMoment } from "@/lib/sites";
 import { Confirm, type Question } from "@/shared/confirm";
-import { IconButton } from "@/shared/icon-button";
 import type { Fitted } from "@/table/column-widths";
 import { type ColumnSpec, DataTable, type Sort } from "@/table/data-table";
 
@@ -116,7 +115,11 @@ function Allowed({ token }: { readonly token: Token }): ReactNode {
   );
 }
 
-/** The command that logs a computer in at this dashboard, with the way to copy it. The address is the one this page was answered from. The space between its two parts is text, so a selection copies the command whole. */
+/**
+ * The command that logs a computer in at this dashboard, with the way to copy it: a button with its word, since the box opens with the focus on it and a hint shown there would lie over the words above.
+ *
+ * The address is the one this page was answered from. The space between its two parts is text, so a selection copies the command whole.
+ */
 function LoginCommand({ onCopy }: { readonly onCopy: AccessActions["copyCommand"] }): ReactNode {
   const [run, server] = ["npx poplin login", `--server ${window.location.origin}`];
   const command = `${run} ${server}`;
@@ -127,9 +130,10 @@ function LoginCommand({ onCopy }: { readonly onCopy: AccessActions["copyCommand"
         <span className="whitespace-pre">{run} </span>
         <span className="min-w-0 wrap-anywhere">{server}</span>
       </code>
-      <IconButton label="Copy the command" onClick={() => void onCopy(command)} className="shrink-0">
-        <CopyIcon />
-      </IconButton>
+      <Button variant="ghost" size="sm" aria-label="Copy the command" className="shrink-0 pointer-coarse:min-h-10" onClick={() => void onCopy(command)}>
+        <CopyIcon data-icon="inline-start" />
+        Copy
+      </Button>
     </span>
   );
 }
