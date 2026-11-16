@@ -46,7 +46,7 @@ function actionLook(question: Question | undefined): "destructive" | "outline" |
  * Ask a question.
  *
  * @param question - the question to show; `undefined` shows none
- * @param onAnswer - called once: `true` when the change is to be done. Escape and a press outside answer `false`. Once it has closed, a focus the change left on nothing goes home
+ * @param onAnswer - called once: `true` when the change is to be done. Cancel and Escape answer `false`. A press outside answers nothing: a question stays until it is answered. Once it has closed, a focus the change left on nothing goes home
  */
 export function Confirm({ question, onAnswer }: { readonly question: Question | undefined; readonly onAnswer: (yes: boolean) => void }): ReactNode {
   // The words stay while the dialog closes, so it does not empty as it fades.

@@ -64,7 +64,7 @@ function Reset({ name, onReset }: { readonly name: string; readonly onReset: () 
       type="button"
       variant="link"
       size="xs"
-      className="h-auto min-h-0! border-0 p-0 align-baseline text-[13px] leading-[inherit] font-normal text-muted-foreground underline hover:text-foreground"
+      className="border-0 p-0 align-baseline text-[13px] leading-[inherit] font-normal text-muted-foreground underline hover:text-foreground md:h-auto md:min-h-0!"
       aria-label={`Reset ${name}`}
       onClick={onReset}
     >

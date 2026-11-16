@@ -53,6 +53,18 @@ test.describe("on a phone, with a pointer that is not a finger", () => {
     });
   }
 
+  // Drift: the way back to a setting's default, a link inside the words about the setting, would stay as low as its line of text under a finger.
+  test("the Reset of a changed setting, in what a phone says about the setting, is at least a finger high", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Settings");
+    await page.getByRole("textbox", { name: "Requests per day", exact: true }).fill("1000");
+    await page.getByRole("button", { name: "About Requests per day", exact: true }).click();
+
+    // What says it grows into place as it opens: the link is measured until it has its whole size.
+    const reset = page.getByRole("button", { name: "Reset Requests per day", exact: true }).filter({ visible: true }).first();
+    await expect.poll(async () => (await measured(reset))[2]).toBeGreaterThanOrEqual(FINGER);
+  });
+
   // Drift: the mark that narrows Activity to one site would stay lower than the button inside it, and cut the button's top and bottom off.
   test("the mark of the one site Activity shows holds its button whole", async ({ page }) => {
     await arrive(page);

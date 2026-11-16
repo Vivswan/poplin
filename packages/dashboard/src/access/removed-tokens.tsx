@@ -1,5 +1,6 @@
 // The removed tokens of the Tokens tab: the tokens that work no more, folded away under the list until a person opens them. Each says when it ended and how; none can be used again, and none has an action.
-// Their table stands in the columns of the list above it, one for one, so the edges of the two line up.
+// Their table has the columns of the list above it, one for one, none narrower than the list's. One that needs more room is wider, and the columns after it start further right.
+// The list keeps its own widths, and does not move when they are opened.
 
 import { ChevronRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -54,9 +55,6 @@ interface RemovedTokensProps {
 
   /** The width the rows of the list above end with their actions in, in pixels: the same room is left empty here, so both tables have the same room for their columns. Left out where no list is above. */
   readonly endWidth?: number;
-
-  /** Told what this list measured of its columns, for the list above. */
-  readonly onFitted?: (fitted: Fitted | undefined) => void;
 }
 
 /** Say how a token ended: that it ran out, that its user was removed, that it gave itself back, or who removed it, written as on every screen. The remover's name gives where the row is narrow. */
@@ -106,7 +104,7 @@ function End({ row }: { readonly row: Row }): ReactNode {
 }
 
 /** Draw the removed tokens under the list of the ones that work: closed until a person opens them, which the browser keeps. Nothing at all is drawn where no token ended. */
-export function RemovedTokens({ ended, names, alongside, endWidth, onFitted }: RemovedTokensProps): ReactNode {
+export function RemovedTokens({ ended, names, alongside, endWidth }: RemovedTokensProps): ReactNode {
   const [kept, keep] = useLocalStorageState<unknown>(OPEN_KEY);
   if (ended.tokens.length === 0) return null;
 
@@ -133,7 +131,6 @@ export function RemovedTokens({ ended, names, alongside, endWidth, onFitted }: R
             rowId={({ token }) => token.id}
             sort={ORDER}
             alongside={alongside}
-            onFitted={onFitted}
             actions={endWidth === undefined ? undefined : NO_ACTION}
             actionsWidth={endWidth}
           />
