@@ -39,9 +39,11 @@ async function openEveryScreen(page: Page): Promise<(number | undefined)[]> {
   return statuses;
 }
 
-/** Choose the dark theme with the switch at the top. */
+/** Choose the dark theme with the button at the top: from the system's look it is two presses on. */
 async function chooseDark(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Switch to dark", exact: true }).click();
+  await page.getByRole("button", { name: "Theme: System", exact: true }).click();
+  await page.getByRole("button", { name: "Theme: Light", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Theme: Dark", exact: true })).toBeVisible();
 }
 
 test("the first visit lands on the dashboard with sample sites", async ({ page, baseURL }) => {
@@ -188,7 +190,7 @@ test("a page outside the demo's folder stays the host's own", async ({ page, con
 test.describe("a browser that asks for the light scheme", () => {
   test.use({ colorScheme: "light" });
 
-  test("the theme chosen with the switch at the top holds on the next page", async ({ page }) => {
+  test("the theme chosen with the button at the top holds on the next page", async ({ page }) => {
     await arrive(page);
     await chooseDark(page);
     await page.goto("tokens");

@@ -1,4 +1,4 @@
-// The frame around every screen: what it says of the domain at the side, and the switch of the look at the top.
+// The frame around every screen: what it says of the domain at the side, and the way past the sections.
 
 import { clearPage } from "../lib/support/page";
 
@@ -113,21 +113,5 @@ describe("the screen's title", () => {
     fireEvent.click(skip);
 
     expect([skip.textContent, document.activeElement?.tagName, document.activeElement?.textContent]).toEqual(["Skip to the content", "H1", "Sites"]);
-  });
-});
-
-describe("the switch of the look at the top", () => {
-  // Drift: the look would be chosen only in a menu again, a press would not change it, or the button would name the look it already shows.
-  test("turns the page dark on a press and then offers the way back, kept in the browser", async () => {
-    await drawWith(null);
-    const before = document.documentElement.classList.contains("dark");
-    fireEvent.click(screen.getByRole("button", { name: "Switch to dark" }));
-
-    expect([before, document.documentElement.classList.contains("dark"), localStorage.getItem(THEME_KEY), screen.getByRole("button", { name: "Switch to light" }) !== null]).toEqual([
-      false,
-      true,
-      "dark",
-      true,
-    ]);
   });
 });

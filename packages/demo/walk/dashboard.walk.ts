@@ -24,7 +24,7 @@ const SMALL_PHONES = [
   { width: 390, height: 667 },
 ] as const;
 
-/** The schemes a browser asks for. The dashboard follows the browser until a theme is chosen with the switch at the top. */
+/** The schemes a browser asks for. The dashboard follows the browser while its System theme is chosen, which is where it starts. */
 const SCHEMES = ["light", "dark"] as const;
 
 /** What the sample data holds that the walk opens: an unlisted site by its title, a site by its title for the graph, a person who is not the visitor, a token, and a login that waits. */
@@ -215,12 +215,6 @@ const STOPS: readonly Stop[] = [
         .getByRole("button", { name: /^Close/ })
         .click(),
     shows: (page) => [screenHeading(page, "Sites"), siteName(page, SAMPLE.site)],
-  },
-  {
-    name: "the account's menu",
-    open: (page) => page.getByRole("button", { name: /^Account/ }).click(),
-    shows: (page) => [page.getByRole("menuitem", { name: "Use system theme", exact: true })],
-    close: pressEscape,
   },
   {
     name: "the question before an update, from the side",
@@ -769,6 +763,29 @@ test.describe("on a screen 1440 px wide, where a site's panel lies over more tha
     await tool.focus();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(tool).toBeFocused();
+  });
+});
+
+test.describe("on a phone, at the button of the look", () => {
+  test.use({ viewport: PHONE, colorScheme: "light" });
+
+  // Drift: the look would have no way back to the device's again, the button would not say which look is chosen, or the system's look would be read once and stand still while the device changes.
+  test("each press moves on from System to Light, to Dark, and to System again, which follows the device as it changes", async ({ page }) => {
+    await arrive(page);
+    const root = page.locator("html");
+    const button = (look: string): Locator => page.getByRole("button", { name: `Theme: ${look}`, exact: true });
+
+    await button("System").click();
+    await button("Light").click();
+    await expect(button("Dark")).toBeVisible();
+    await expect(root).toHaveClass(/(^| )dark( |$)/);
+    await page.emulateMedia({ colorScheme: "dark" });
+
+    await button("Dark").click();
+    await expect(button("System")).toBeVisible();
+    await expect(root).toHaveClass(/(^| )dark( |$)/);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(root).toHaveClass(/(^| )light( |$)/);
   });
 });
 

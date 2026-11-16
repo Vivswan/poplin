@@ -95,4 +95,4 @@ For a site in the trash, the panel has Restore and Delete for good. Its row has 
 
 [Who can open a site](who-can-open.md) says what a public name is. Let search engines in is in [Settings](../run/settings.md#change-a-setting), under Visitors.
 
-The sun or moon in the header switches between the light and the dark look, and the browser keeps the choice.
+The theme button in the header moves to the next look at each press: System, Light, Dark. System follows your device. The browser keeps the choice.
