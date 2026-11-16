@@ -18,7 +18,7 @@ import { type Asked, bodyOf, page, refusal, reply } from "../../packages/cloudfl
 import { catchStep } from "./support/step";
 
 /** The workflow that runs the live scripts. */
-const WORKFLOW = join(import.meta.dir, "..", "..", ".github", "workflows", "live-checks.yml");
+const WORKFLOW = join(import.meta.dir, "..", "..", ".github", "workflows", "live-install.yml");
 
 /** A step's output as a workflow expression names it: the step's id, then the output's name. */
 const OUTPUT_READ = /steps\.([\w-]+)\.outputs\.([\w-]+)/g;
