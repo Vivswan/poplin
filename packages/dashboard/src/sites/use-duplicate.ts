@@ -1,4 +1,7 @@
 // A copy of a site. The dialog sends the first request, which refuses a name or copies a small site whole; the requests after it are background work of the client, so they go on while a person moves between screens.
+//
+//   an install that copies by itself   each later request only asks whether the copy is a site yet, a pause between two; the copy goes on with the page closed
+//   any other install                  each later request copies the next files, one after another
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -15,6 +18,9 @@ const COPY_KEY = [...SITES_KEY, "duplicate"] as const;
 
 /** What is said of a copy whose request copied no file more: asking again would never end. */
 const STUCK = "The copy stopped. Duplicate the site again.";
+
+/** How long the client waits between two asks after a copy the install makes by itself, in milliseconds. */
+const WATCH_MS = 2000;
 
 /** What one request of a copy answers. */
 type Round = InferResponseType<(typeof api.sites)[":site"]["duplicate"]["$post"], 200>;
@@ -50,8 +56,24 @@ function ask(source: Site, json: { readonly name: string } | { readonly upload: 
   return answerOf(api.sites[":site"].duplicate.$post({ param: { site: source.id }, json }));
 }
 
+/** Wait so long, or until a person stops the copy. */
+function pause(ms: number, stopped: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    // A signal aborted already tells no one again.
+    if (stopped.aborted) return resolve();
+
+    const done = (): void => {
+      window.clearTimeout(timer);
+      stopped.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = window.setTimeout(done, ms);
+    stopped.addEventListener("abort", done);
+  });
+}
+
 /**
- * Ask for the files after the first request's, one request after another.
+ * Ask after the copy until it is a site, one request after another. An answer that counts no file is of an install that copies by itself: the next ask waits.
  *
  * @returns the copy as a site, or nothing once a person stopped it
  * @throws {Refused} a request was refused, or copied nothing more
@@ -61,9 +83,10 @@ async function copyOn({ source, copy, stopped }: Run): Promise<Site | undefined>
     const round = await ask(source, { upload: copy.upload });
     if (round.site !== null) return round.site;
 
-    if (round.copy.copied <= copied) throw new Refused({ code: "stuck", about: null, sentence: STUCK });
-
-    copied = round.copy.copied;
+    const now = round.copy.copied;
+    if (now === null) await pause(WATCH_MS, stopped);
+    else if (copied !== null && now <= copied) throw new Refused({ code: "stuck", about: null, sentence: STUCK });
+    else copied = now;
   }
 
   return undefined;

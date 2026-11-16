@@ -9,6 +9,7 @@ import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { sweepExpired } from "../../src/actions/sweep";
 import { uploadFile } from "../../src/actions/upload-file";
+import { inlineJobs } from "../../src/jobs/inline-jobs";
 import { dayOf } from "../../src/records/views";
 import { ADMIN, DAY, file, made, makeWorld, OWNER, PAGE_SHA256, STRANGER, type World } from "./support/actions-fixture";
 
@@ -84,7 +85,7 @@ describe("finishPublish", () => {
   });
 
   // Drift: an abandon reads the upload before it marks it; a finish that lands between the two has made the files live, and removing them then would break the site it just made.
-  test("an abandon that finds its upload finished in the meantime removes no file of the live site", async () => {
+  test("an abandon that finds its upload finished in the meantime is refused as finished, and removes no file of the live site", async () => {
     const world = await makeWorld();
     const upload = await staged(world, { name: "report" }, ["index.html", "about.html"]);
     const abandon = world.install.database.abandonUpload.bind(world.install.database);
@@ -94,7 +95,7 @@ describe("finishPublish", () => {
       return abandon(id);
     });
 
-    expect(await abandonPublish(world.install, OWNER, upload)).toEqual({ ok: true, left: [] });
+    expect(await abandonPublish(world.install, OWNER, upload)).toEqual({ ok: false, code: "upload_finished", about: "upload" });
     expect([(await world.keys()).length, await finishPublish(world.install, OWNER, upload)]).toMatchObject([2, { ok: true, site: { created: true } }]);
   });
 
@@ -123,11 +124,11 @@ describe("finishPublish", () => {
     const report = await finishPublish(world.install, OWNER, await staged(world, { name: "report" }, ["index.html", "about.html"]));
     if (!report.ok) throw new Error(`the fixture publish was refused: ${report.code}`);
 
-    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
+    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1, inlineJobs);
     const over = await beginPublish(world.install, OWNER, { name: "two", files: pages(["index.html", "about.html"]) });
     const early = await world.install.database.listProblems(dayOf(world.clock.now));
     const last = await beginPublish(world.install, OWNER, { name: "two", files: [PAGE] });
-    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
+    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1, inlineJobs);
     world.clock.now += DAY;
     const tomorrow = await beginPublish(world.install, OWNER, { name: "three", files: pages(["index.html", "about.html"]) });
 
@@ -150,9 +151,9 @@ describe("finishPublish", () => {
     const report = await finishPublish(world.install, OWNER, await staged(world, { name: "report" }, ["index.html", "about.html"]));
     if (!report.ok) throw new Error(`the fixture publish was refused: ${report.code}`);
 
-    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
+    const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1, inlineJobs);
     const four = await beginPublish(world.install, OWNER, { name: "four", files: pages(4) });
-    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
+    const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1, inlineJobs);
     const early = await world.install.database.listProblems(day);
     const three = await beginPublish(world.install, OWNER, { name: "three", files: pages(3) });
     const one = await beginPublish(world.install, OWNER, { name: "one", files: pages(1) });

@@ -5,7 +5,10 @@
 //   r2_buckets[].bucket_name, .jurisdiction        the copy, for the binding of the same name
 //   d1_databases[].database_name, .database_id     the copy, for the binding of the same name
 //   vars.WORKER_NAME                               the copy's `name`: the Worker reads its own name there
+//   workflows[].name                               the copy's `name` and `-jobs`: an account names each Workflow once
 //   everything else, and which bindings there are  the release
+
+import { workflowNameOf } from "../jobs/workflow-name";
 
 /** The fields at the top of the configuration that name the install in its account. */
 const KEPT_FIELDS: readonly string[] = ["name", "account_id"];
@@ -50,6 +53,11 @@ export function keepCopyConfig(release: DeployConfig, copy: DeployConfig): Deplo
   }
 
   if (isRecord(release.vars) && NAME_VARIABLE in release.vars) merged.vars = { ...release.vars, [NAME_VARIABLE]: merged.name };
+
+  if ("workflows" in release && typeof merged.name === "string") {
+    const name = workflowNameOf(merged.name);
+    merged.workflows = bindingsOf(release.workflows).map((entry) => ({ ...entry, name }));
+  }
 
   return merged;
 }

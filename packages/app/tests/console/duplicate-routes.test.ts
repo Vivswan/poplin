@@ -2,6 +2,8 @@
 
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { deleteSite } from "@poplin/core/src/actions/delete";
+import type { Job, Jobs } from "@poplin/core/src/jobs/jobs";
+import { runJob } from "@poplin/core/src/jobs/run-job";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { MemoryStore } from "@poplin/core/src/storage/memory";
 import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-driver";
@@ -28,7 +30,7 @@ type Opened = Awaited<ReturnType<typeof openConsole>>;
 interface Answer {
   readonly status: number;
   readonly site: { readonly id: string; readonly name: string; readonly access: string } | null;
-  readonly copy: { readonly upload: string; readonly copied: number; readonly files: number };
+  readonly copy: { readonly upload: string; readonly copied: number | null; readonly files: number };
   readonly code: string;
   readonly about: string | null;
   readonly sentence: string;
@@ -166,6 +168,33 @@ describe("a copy of a site", () => {
     const next = await ask(opened, `/sites/${source}/duplicate`, { upload: begun.copy.upload });
 
     expect([next.status, next.code, await listed(opened)]).toEqual([404, "not_found", []]);
+  });
+});
+
+describe("a copy on a host that runs jobs", () => {
+  // Drift: the routes hand the host's jobs to the action; a console built with them that still copied in each request would copy every file twice, beside the job, and one that never started the job would wait for ever.
+  test("of 300 files starts one job at the first request, is asked after without a call to the store while the job runs, is a site once the job's rounds are done, and a Cancel stops the job", async () => {
+    const started: Job[] = [];
+    const stopped: Job[] = [];
+    const jobs: Jobs = { background: true, start: async (job) => void started.push(job), stop: async (job) => void stopped.push(job) };
+    const opened = await openConsole("", undefined, undefined, undefined, undefined, jobs);
+    const source = await publish(opened, "report", 300);
+
+    const begun = await ask(opened, `/sites/${source}/duplicate`, { name: "report-two" });
+    const spent = countCalls();
+    const waiting = await ask(opened, `/sites/${source}/duplicate`, { upload: begun.copy.upload });
+    const cost = spent();
+    const [job] = started;
+    if (job === undefined) throw new Error("no job was started");
+
+    const rounds = [await runJob(opened.base.install, job), await runJob(opened.base.install, job)];
+    const made = await ask(opened, `/sites/${source}/duplicate`, { upload: begun.copy.upload });
+    const second = await ask(opened, `/sites/${source}/duplicate`, { name: "report-three" });
+    const cancelled = await ask(opened, `/copies/${second.copy.upload}/cancel`);
+
+    expect([started.map((one) => String(one.upload)), begun.copy.copied, waiting.site, waiting.copy.copied, cost.store]).toEqual([[begun.copy.upload, second.copy.upload], 112, null, null, 0]);
+    expect([rounds, made.site?.name, made.copy.copied, cancelled.status, stopped.map((one) => String(one.upload))]).toEqual([["more", "done"], "report-two", 300, 200, [second.copy.upload]]);
+    expect(await listed(opened)).toEqual(["report unlisted", "report-two private"]);
   });
 });
 

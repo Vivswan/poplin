@@ -25,6 +25,7 @@ import type { Database } from "@poplin/core/src/database/database";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { clientAddress } from "../limits/client-address";
 import { FREE_LIMITS } from "../limits/free-limits";
+import { jobsEntrypoint } from "../jobs/workflow";
 import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { Bindings } from "./bindings";
 import { CLIENT_FILES } from "./client-files";
@@ -70,6 +71,9 @@ interface Ways {
   readonly siteHeld: SiteHeld;
   readonly setupOpen: () => Promise<boolean>;
 }
+
+/** What one Worker instance answers through: its two handlers, and `starting`, which answers the instance those two run on, for the steps of a job. */
+type Handlers = Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> & { readonly starting: (env: Bindings) => Promise<Started> };
 
 /** A start that failed, as apart from a Worker with nothing set, which is no failure. */
 type Stopped = Exclude<Failure, { readonly kind: "unset" }>;
@@ -129,6 +133,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held,
     freeLimits: FREE_LIMITS,
     usage: instance.usage,
     update: instance.updating.self,
+    jobs: instance.jobs,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
   });
@@ -219,7 +224,7 @@ function outsideOf(given: Partial<Outside>): Outside {
  * @param given - the clock, the fetch of the Access keys, the fetch of setup's calls to Cloudflare, the asking for the newest version, and the fetch that starts a build; the runtime's own when absent
  * @returns `fetch`, which never throws, and `scheduled`, which throws in fixed words when the sweep could not run. A request or a sweep that failed is noted as a problem of the install, where its database still takes a note
  */
-export function createWorker(given: Partial<Outside> = {}): Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">> {
+export function createWorker(given: Partial<Outside> = {}): Handlers {
   const outside = outsideOf(given);
   let starting: Promise<Started> | undefined;
   let loggedInOnce = false;
@@ -295,7 +300,15 @@ export function createWorker(given: Partial<Outside> = {}): Required<Pick<Export
     async scheduled(_controller, env) {
       await scheduledRun(() => start(env), outside.latest);
     },
+
+    starting: start,
   };
 }
 
-export default createWorker();
+/** The one Worker of this module: its requests, its scheduled runs, and the steps of its jobs share one started instance. */
+const WORKER = createWorker();
+
+/** The Workflow of the install's jobs, under the class name wrangler.jsonc binds as `JOBS`. */
+export const PoplinJobs = jobsEntrypoint(WORKER.starting);
+
+export default { fetch: WORKER.fetch, scheduled: WORKER.scheduled } satisfies ExportedHandler<Bindings>;

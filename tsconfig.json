@@ -18,10 +18,13 @@
     "packages/cloudflare/src/storage",
     "packages/cloudflare/src/database",
     "packages/cloudflare/src/limits",
+    "packages/cloudflare/src/jobs/workflow.ts",
+    "packages/cloudflare/src/jobs/workflow-jobs.ts",
     "packages/cloudflare/tests/worker",
     "packages/cloudflare/tests/storage",
     "packages/cloudflare/tests/database",
     "packages/cloudflare/tests/limits",
+    "packages/cloudflare/tests/jobs",
     "packages/demo/src/browser/worker.ts",
     "packages/dashboard"
   ]

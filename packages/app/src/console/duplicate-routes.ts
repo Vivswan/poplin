@@ -1,11 +1,10 @@
-// The data of a copy of a site, which the install makes a few files a request: the client asks again until the copy is a site.
+// The data of a copy of a site. The first request refuses a name, copies a small site whole, or starts the copy of a bigger one; the client asks after that copy until it is a site.
 //
-//   POST /sites/<label>/duplicate   { name } begins a copy; { upload } goes on with the one an earlier answer named
-//   POST /copies/<upload>/cancel    gives an unfinished copy up, with its files
+//   POST /sites/<label>/duplicate   { name } begins a copy; { upload } asks after the one an earlier answer named
+//   POST /copies/<upload>/cancel    gives an unfinished copy up, with its files, and stops its job
 
 import { vValidator } from "@hono/valibot-validator";
-import { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
-import { DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
+import { cancelCopy, DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
 import { Hono } from "hono";
 import * as v from "valibot";
 
@@ -24,14 +23,14 @@ const ONE_COPY = v.object({ upload: v.string() });
 export const duplicateRoutes = new Hono<Shared>()
   .post("/sites/:site/duplicate", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", DUPLICATE_REQUEST, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
-    const copied = await duplicateSite(install, actor, { ...context.req.valid("json"), site: context.req.valid("param").site }, ADMIT_CALLS);
+    const copied = await duplicateSite(install, actor, { ...context.req.valid("json"), site: context.req.valid("param").site }, ADMIT_CALLS, context.get("host").jobs);
 
     // `site` is `null` while files are still to copy: the client then asks again with `copy.upload`.
     return copied.ok ? context.json({ ok: true as const, site: copied.site, copy: copied.copy }) : refused(context, copied);
   })
   .post("/copies/:upload/cancel", vValidator("param", ONE_COPY, refuseInvalid), vValidator("json", NOTHING, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
-    const abandoned = await abandonPublish(install, actor, context.req.valid("param").upload);
+    const abandoned = await cancelCopy(install, actor, context.req.valid("param").upload, context.get("host").jobs);
 
     return abandoned.ok ? context.json({ ok: true as const, left: abandoned.left }) : refused(context, abandoned);
   });

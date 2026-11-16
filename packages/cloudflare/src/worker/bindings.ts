@@ -1,4 +1,6 @@
-// The Worker's environment. The first three names are the `binding` names of wrangler.jsonc; the rest are variables set on the Worker, and one secret.
+// The Worker's environment. The first four names are the `binding` names of wrangler.jsonc; the rest are variables set on the Worker, and one secret.
+
+import type { Job } from "@poplin/core/src/jobs/jobs";
 
 /** What Cloudflare hands the Worker on every request. */
 export interface Bindings {
@@ -10,6 +12,9 @@ export interface Bindings {
 
   /** The one-minute request counts of every visitor and every site. */
   readonly MINUTE_LIMITS: RateLimit;
+
+  /** The Workflow that runs the install's jobs. A Worker deployed without it has none, and runs each round of a job in the request that asks after it. */
+  readonly JOBS?: Workflow<Job>;
 
   /** The install's zone values, unchecked: the domain, and the public word when the install chose one. Setup or the OpenTofu module writes it; a Worker without it answers setup alone. */
   readonly ZONE: unknown;

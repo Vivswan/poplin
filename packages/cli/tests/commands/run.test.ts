@@ -291,6 +291,35 @@ describe("run", () => {
     expect(await stateOf(bench)).toEqual(before);
   });
 
+  // Drift: an install that copies by itself answers no count of files; read as a copy that did not move on, it would be given up while its job runs, and asked after with no wait it would send a call as fast as the last is answered.
+  test.each<[string, "interrupted" | undefined, number, number[]]>([
+    ["waits between two calls and prints the copy once a call answers the site", undefined, 0, [2000]],
+    ["is given up when the person stops the command during the wait", "interrupted", 1, [2000]],
+  ])("a duplicate the install makes by itself %s", async (_name, stop, code, waits) => {
+    const bench = await openBench();
+    const pages = Object.fromEntries(Array.from({ length: 129 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`]));
+    const made = jsonOf(await bench.run(`${folderOf("report", { "index.html": "<title>Report</title>", ...pages })} --json`));
+    const { label } = made.site as { label: string };
+    bench.sent.length = 0;
+    bench.paused = async () => stop;
+    bench.hook = async (request) => {
+      if (bench.sent.length !== 2 || !request.url.endsWith("/duplicate")) return undefined;
+
+      const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+      const copy = uploads.find((upload) => upload.plan.kind === "duplicate");
+
+      return answer(200, { before: null, site: null, copy: { upload: copy?.id, copied: null, files: 130 } });
+    };
+
+    const copied = await bench.run(`duplicate ${label} --name report-draft`);
+    const sent = bench.sent.map((line) => line.replace(/[0-9a-z]{16}$/, ":upload"));
+
+    expect([copied.code, copied.waits, copied.out[0]?.replace(/--[0-9a-z]{12}/, "--:id"), copied.err.join(" ").includes("the copy was given up and no site was made")]).toEqual(
+      stop === undefined ? [code, waits, "copied  report-draft--:id  private  130 files", false] : [code, waits, undefined, true],
+    );
+    expect(sent).toEqual([...Array.from({ length: stop === undefined ? 3 : 2 }, () => `POST /api/sites/${label}/duplicate`), ...(stop === undefined ? [] : ["DELETE /api/uploads/:upload"])]);
+  });
+
   test("a duplicate whose last call went through with its answer lost is reported as done: without this a copy that is a site is reported as a failure", async () => {
     const bench = await openBench();
     const pages = Object.fromEntries(Array.from({ length: 129 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`]));

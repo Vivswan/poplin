@@ -16,6 +16,7 @@ const RELEASE: DeployConfig = {
     { binding: "ARCHIVE", bucket_name: "poplin-archive" },
   ],
   d1_databases: [{ binding: "DB", database_name: "poplin", migrations_dir: "steps" }],
+  workflows: [{ name: "poplin-jobs", binding: "JOBS", class_name: "PoplinJobs" }],
   vars: { WORKER_NAME: "poplin" },
 };
 
@@ -36,6 +37,7 @@ describe("keepCopyConfig", () => {
           { binding: "GONE", bucket_name: "a-bucket-the-release-dropped" },
         ],
         d1_databases: [{ binding: "DB", database_name: "my-database", database_id: "11111111-2222-3333-4444-555555555555", preview_database_id: "local" }],
+        workflows: [{ name: "a-name-of-the-copy", binding: "JOBS", class_name: "Old" }],
         vars: { WORKER_NAME: "stale", EXTRA: "1" },
       },
       merged: {
@@ -47,6 +49,7 @@ describe("keepCopyConfig", () => {
           { binding: "ARCHIVE", bucket_name: "poplin-archive" },
         ],
         d1_databases: [{ binding: "DB", database_name: "my-database", database_id: "11111111-2222-3333-4444-555555555555", migrations_dir: "steps" }],
+        workflows: [{ name: "my-sites-jobs", binding: "JOBS", class_name: "PoplinJobs" }],
         vars: { WORKER_NAME: "my-sites" },
       },
     },
@@ -63,7 +66,7 @@ describe("keepCopyConfig", () => {
   ];
 
   // Drift: a deploy that loses the copy's database id or name makes a new empty database or a second Worker; one that keeps the copy's old date or entry point deploys the release wrongly.
-  test.each(merges)("$name: the copy wins its name, in both places it is written, its account, and which bucket and database, and the release wins everything else", ({ copy, merged }) => {
+  test.each(merges)("$name: the copy wins its name, in every place it is written, the Workflow's included, its account, and which bucket and database, and the release wins everything else", ({ copy, merged }) => {
     expect(keepCopyConfig(RELEASE, copy)).toEqual(merged);
   });
 
@@ -71,5 +74,12 @@ describe("keepCopyConfig", () => {
     const release = { name: "poplin", r2_buckets: RELEASE.r2_buckets };
 
     expect(keepCopyConfig(release, { d1_databases: [{ binding: "DB", database_id: "11111111-2222-3333-4444-555555555555" }] })).toEqual(release);
+  });
+
+  // Drift: an account names each Workflow once, in 64 characters; a second install under the release's own name, or a name past the length, would fail its deploy at the last step.
+  test("a Worker with the longest name a Worker may have gets a Workflow whose name is cut to fit and still ends in -jobs", () => {
+    const name = "w".repeat(63);
+
+    expect(keepCopyConfig(RELEASE, { name }).workflows).toEqual([{ name: `${"w".repeat(59)}-jobs`, binding: "JOBS", class_name: "PoplinJobs" }]);
   });
 });

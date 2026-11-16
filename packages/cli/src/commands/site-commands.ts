@@ -1,4 +1,4 @@
-// The commands about sites: set, show, list, rollback, new-link, duplicate, delete, and restore. Each is one call to the install, but for duplicate, which calls until the copy is whole, and prints what the install answered.
+// The commands about sites: set, show, list, rollback, new-link, duplicate, delete, and restore. Each is one call to the install, but for duplicate, which calls until the copy is a site, and prints what the install answered.
 
 import type * as v from "valibot";
 
@@ -23,6 +23,9 @@ const MAX_PAGES = 10;
 
 /** The status of an answer the install gave. */
 const OK = 200;
+
+/** How long the command waits between two asks after a copy the install makes by itself, in milliseconds. */
+const WATCH_MS = 2000;
 
 /** What became of a copy that was not finished, in words. */
 const AFTERMATH = {
@@ -196,7 +199,32 @@ function copyOn({ client, io }: Session, site: string, first: v.InferInput<typeo
   return callUnhurried(io, () => client.call(DUPLICATED_SITE, (api) => api.sites[":site"].duplicate.$post({ param: { site }, json })));
 }
 
-/** Copy a site: the install copies a few files a call, so the call is sent again with the upload it answered until it answers the new site. A copy that cannot be finished, or that the person stops, is given up, as a publish is. */
+/**
+ * Say how far a copy that is no site yet is, and wait where the install copies by itself.
+ *
+ * @param done - how many files the call before this one's had counted
+ * @returns nothing when the call is to be made again, or the failure the copy is given up with: the person stopped the command during the wait, or the call copied nothing more
+ */
+async function beforeNextCall(io: Session["io"], copy: v.InferOutput<typeof DUPLICATED_SITE>["copy"], done: number): Promise<Failure | undefined> {
+  if (copy.copied === null) {
+    if (io.terminal.progress) io.status(`copying ${countText(copy.files, "file")} in the background (Ctrl-C stops)`);
+
+    return (await io.pause(WATCH_MS)) === "interrupted" ? { kind: "stopped" } : undefined;
+  }
+
+  // A call that copied nothing more would be sent for ever.
+  if (copy.copied <= done) return { kind: "unexpected", status: OK };
+
+  if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
+
+  return undefined;
+}
+
+/**
+ * Copy a site: the call is sent again with the upload it answered until it answers the new site. A copy that cannot be finished, or that the person stops, is given up, as a publish is.
+ *
+ * An install that copies by itself answers no count of files: the command then waits between two calls. Any other install copies a few files with each call.
+ */
 async function duplicate(request: Asked<"duplicate">, session: Session): Promise<Outcome> {
   const { client, io } = session;
   const site = siteWord(request.site);
@@ -212,12 +240,10 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
       if (called.value.site !== null) return { ok: true, value: called.value, lines: copied(called.value.site) };
 
       upload = copy.upload;
+      const failure = await beforeNextCall(io, copy, done);
+      if (failure !== undefined) return await stopCopy(session, upload, failure);
 
-      // A call that copied nothing more would be sent for ever.
-      if (copy.copied <= done) return await stopCopy(session, upload, { kind: "unexpected", status: OK });
-
-      done = copy.copied;
-      if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
+      done = copy.copied ?? done;
     }
   } catch (error) {
     if (upload !== undefined) await abandonUpload(client, upload);

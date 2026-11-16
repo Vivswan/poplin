@@ -21,6 +21,8 @@
   "d1_databases": [{ "binding": "DB", "database_name": "poplin" }],
   // The limit is a fixed ceiling: each request weighs the ceiling divided by the per-minute setting in force, so a setting changes with no deploy.
   "ratelimits": [{ "name": "MINUTE_LIMITS", "namespace_id": "1001", "simple": { "limit": 1000000, "period": 60 } }],
+  // The background work: the rounds of a copy too large for one request, one a step. Its name holds the Worker's, since an account names each Workflow once.
+  "workflows": [{ "name": "poplin-jobs", "binding": "JOBS", "class_name": "PoplinJobs" }],
   // The Worker's own name, which its routes name. It is the `name` above.
   "vars": { "WORKER_NAME": "poplin" }
 }

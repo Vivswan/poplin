@@ -55,6 +55,11 @@ function partly(copied: number): Response {
   return Response.json({ ok: true, site: null, copy: { upload: UPLOAD, copied, files: 40 } });
 }
 
+/** A request that only asked after the copy, of an install that copies by itself: it counts no file. */
+function watched(): Response {
+  return Response.json({ ok: true, site: null, copy: { upload: UPLOAD, copied: null, files: 40 } });
+}
+
 /** The request that copied the last file. */
 function whole(): Response {
   return Response.json({ ok: true, site: COPY, copy: { upload: UPLOAD, copied: 40, files: 40 } });
@@ -290,6 +295,29 @@ describe("a copy that takes more requests", () => {
     await waitFor(() => expect(lines()).toEqual(["Duplicated.|"]));
 
     expect(sent.slice(2)).toEqual([`/copies/${UPLOAD}/cancel {}`, `/sites/${SOURCE.id}/duplicate {"upload":"${UPLOAD}"}`]);
+  });
+
+  // Drift: an install that copies by itself answers no count; read as a copy that did not move on, it would be given up while its job runs, and asked after with no pause it would send a request as fast as the last is answered.
+  test("that the install makes by itself is asked after with a pause between two asks, is not given up while no file is counted, and is said as duplicated once an ask answers the site", async () => {
+    serve([() => partly(15), watched, whole], undefined, 3);
+    await duplicate();
+    await waitFor(() => expect(sent.length).toBe(2));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 500)));
+    const meanwhile = [sent.length, lines()];
+    await waitFor(() => expect(lines()).toEqual(["Duplicated.|Open"]), { timeout: 4000 });
+
+    expect([meanwhile, sent.slice(1)]).toEqual([[2, ["Duplicating. Ready in a few seconds.|Cancel"]], [`/sites/${SOURCE.id}/duplicate {"upload":"${UPLOAD}"}`, `/sites/${SOURCE.id}/duplicate {"upload":"${UPLOAD}"}`]]);
+  }, 10_000);
+
+  // Drift: Cancel pressed during the pause would wait the pause out, or the copy would be given up in the page alone while the install goes on making it.
+  test("that the install makes by itself is given up at Cancel without the pause being waited out", async () => {
+    serve([() => partly(15), watched, whole], undefined, 3);
+    const { page } = await duplicate();
+    await waitFor(() => expect(sent.length).toBe(2));
+    await press(page.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(lines()).toEqual(["Cancelled. No copy was made.|"]), { timeout: 1000 });
+
+    expect(sent.slice(2)).toEqual([`/copies/${UPLOAD}/cancel {}`]);
   });
 
   // Drift: a request that copies nothing more would be sent again for ever, a request a second, with a line that never leaves.

@@ -24,6 +24,7 @@ const CONFIG = {
   r2_buckets: [{ binding: "SITES", bucket_name: "example-sites" }],
   d1_databases: [{ binding: "DB", database_name: "example" }],
   ratelimits: [{ name: "MINUTE_LIMITS", namespace_id: "1001", simple: { limit: 1000, period: 60 } }],
+  workflows: [{ name: "example-jobs", binding: "JOBS", class_name: "ExampleJobs" }],
   vars: { WORKER_NAME: "example" },
 };
 
@@ -32,7 +33,7 @@ const FILES = { [MODULE_FILE]: ENCODER.encode("export default {};\n//# sourceMap
 
 describe("bundleManifest", () => {
   // Drift: an install that takes the built files states these beside them. A binding written as the wrong kind would hand an install the release's bucket name, or drop its rate limit.
-  test("the manifest states the version, the schema, each file's digest and size, and what an upload states beside the files: the account's own things as kept, the rate limit by value", async () => {
+  test("the manifest states the version, the schema, each file's digest and size, and what an upload states beside the files: the account's own things as kept, the rate limit by value, and the Workflow by its class with no name", async () => {
     const manifest: unknown = JSON.parse(await bundleManifest({ version: "0.2.0", schema: 3, config: { ...CONFIG, compatibility_flags: ["nodejs_compat"], observability: { enabled: true } }, files: FILES }));
 
     expect(manifest).toEqual({
@@ -51,6 +52,7 @@ describe("bundleManifest", () => {
           { name: "DB", kind: "kept" },
           { name: "WORKER_NAME", kind: "kept" },
           { name: "MINUTE_LIMITS", kind: "stated", binding: { type: "ratelimit", namespace_id: "1001", simple: { limit: 1000, period: 60 } } },
+          { name: "JOBS", kind: "stated", binding: { type: "workflow", class_name: "ExampleJobs" } },
         ],
         crons: ["*/15 * * * *"],
         observability: { enabled: true },

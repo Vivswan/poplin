@@ -13,6 +13,8 @@
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
+import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
+import type { Jobs } from "@poplin/core/src/jobs/jobs";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -110,6 +112,8 @@ interface ConsoleParts extends CodeTries {
 
   /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair on the Domain screen. */
   readonly rules?: RulesFollow;
+  /** The host's background work, which runs the rounds of a copy after its first request's. Without it the client's own requests run them, one each. */
+  readonly jobs?: Jobs;
 }
 
 /** Something that answers a request, as a Worker's `fetch` does. */
@@ -130,7 +134,7 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("endLogins", parts.endLogins);
       context.set("rules", parts.rules);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
-      context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, version: parts.version, usage: parts.usage });
+      context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, version: parts.version, usage: parts.usage, jobs: parts.jobs ?? inlineJobs });
 
       return next();
     }
