@@ -37,6 +37,7 @@ import { HTTPException } from "hono/http-exception";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import * as v from "valibot";
 
+import { followUsers, type UsersFollow } from "../console/access/users-follow";
 import { carries, counted, type Gate, metered, namesSite, sent } from "./asked";
 import { authenticate, type ReadToken } from "./authenticate";
 import { answerWhoami, beginWithAddress, checked, FILE_QUERY, saveAddress, storeBody } from "./handlers";
@@ -83,6 +84,9 @@ export interface ApiDeps extends Install, Gate {
 
   /** How the provider starts a rebuild of the install: which addresses it takes, and what sends the one request. The starts are counted in `counters`. */
   readonly rebuild: Omit<Rebuilding, "counters">;
+
+  /** The provider's side of the users: a change of the logins is carried there by itself. Without it a change waits for a repair. */
+  readonly follow?: UsersFollow;
 }
 
 /** Declare every route of one install. The type of what it returns is what a client is typed from, so it is inferred, never written. */
@@ -92,6 +96,13 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
   const noQuery = queried(NO_QUERY);
   const site = namesSite();
   const rebuilding = { ...deps.rebuild, counters: deps.counters };
+
+  // The answer is the action's own, whatever the provider said: a change that did not reach it waits, and the dashboard says so.
+  const carried = async <Answer extends { readonly ok: boolean }>(answer: Answer, logins: boolean): Promise<Answer> => {
+    if (deps.follow !== undefined && logins && answer.ok) await followUsers(deps, deps.follow);
+
+    return answer;
+  };
 
   return new Hono()
     .basePath("/api")
@@ -152,14 +163,18 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
       return respondFile(await exportFile(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
     })
     .post("/import/settings", token, install, json, noQuery, sent<v.InferInput<typeof SETTINGS_IMPORT>>(SETTINGS_BYTES), async (context) => {
-      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), (request) => importSettings(context.var.install, context.var.actor, request)));
+      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(await importSettings(context.var.install, context.var.actor, request), request.logins === true)));
     })
     .post("/import/sites", token, install, json, noQuery, sent<ImportRequest>(deps.limits.manifestBytes), async (context) => {
       return respond(await beginImport(context.var.install, context.var.actor, context.req.valid("json"), deps.limits), deps.now());
     })
 
     .get("/config", token, install, noQuery, async (context) => respond(await readConfig(context.var.install, context.var.actor)))
-    .patch("/config", token, install, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => respond(await changeConfig(context.var.install, context.var.actor, context.req.valid("json"))))
+    .patch("/config", token, install, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => {
+      const changes = context.req.valid("json");
+
+      return respond(await carried(await changeConfig(context.var.install, context.var.actor, changes), typeof changes === "object" && changes !== null && "logins" in changes));
+    })
     .delete("/sessions", token, install, noQuery, async (context) => respond(await signEveryoneOut(context.var.install, context.var.actor)))
     .get("/audit", token, install, queried(AUDIT_QUERY), async (context) => respond(await listAudit(context.var.install, context.var.actor, context.req.valid("query"))))
     .get("/domain", token, install, noQuery, async (context) => respond(await domainState(context.var.install, context.var.actor)))

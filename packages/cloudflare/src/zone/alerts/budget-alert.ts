@@ -4,7 +4,7 @@
 
 import { BasePolicies, type PolicyCreateParams } from "cloudflare/resources/alerting/policies";
 import * as v from "valibot";
-import { type Connection, callCloudflare } from "../client";
+import { type CloudflareResult, type Connection, callCloudflare } from "../client";
 import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
 /** The name of poplin's policy, which is also what its row names. */
@@ -62,6 +62,33 @@ export function planBudgetAlert(policies: readonly AccountPolicy[], email: strin
   return [matches(own, email) ? { kind: "leave", subject: BUDGET_ALERT } : { kind: "change", subject: BUDGET_ALERT, id: own.id }];
 }
 
+/** The alert as Cloudflare is sent it, for one address. */
+function alertBody(accountId: string, email: string): PolicyCreateParams {
+  // @ts-expect-error The SDK's types lack the alert type `billing_budget_alert` and the filter `total_spend_dollars`.
+  const policy: PolicyCreateParams = { account_id: accountId, name: BUDGET_ALERT, description: DESCRIPTION, alert_type: ALERT_TYPE, enabled: true, filters: { total_spend_dollars: [DOLLARS] }, mechanisms: { email: [{ id: email }] } };
+
+  return policy;
+}
+
+/**
+ * Send poplin's budget alert to one address, on an account that has the alert: none is made here.
+ *
+ * @returns `true` once the alert goes to that address alone, which it may have done already, and `false` on an account with no such alert, where nothing is written
+ */
+export async function sendBudgetAlertTo(connection: Connection, accountId: string, email: string): Promise<CloudflareResult<boolean>> {
+  const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
+  if (!listed.ok) return listed;
+
+  const [step] = planBudgetAlert(listed.value, email);
+  if (step === undefined || step.kind === "create") return { ok: true, value: false };
+
+  if (step.kind === "leave") return { ok: true, value: true };
+
+  const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(step.id, alertBody(accountId, email)));
+
+  return written.ok ? { ok: true, value: true } : written;
+}
+
 /**
  * Make sure the account has poplin's budget alert, sent to one address.
  *
@@ -72,8 +99,7 @@ export async function syncBudgetAlert(connection: Connection, accountId: string,
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
   if (!listed.ok) return { ...listed, report: reportOf([]) };
 
-  // @ts-expect-error The SDK's types lack the alert type `billing_budget_alert` and the filter `total_spend_dollars`.
-  const policy: PolicyCreateParams = { account_id: accountId, name: BUDGET_ALERT, description: DESCRIPTION, alert_type: ALERT_TYPE, enabled: true, filters: { total_spend_dollars: [DOLLARS] }, mechanisms: { email: [{ id: email }] } };
+  const policy = alertBody(accountId, email);
 
   return applySteps(
     planBudgetAlert(listed.value, email),

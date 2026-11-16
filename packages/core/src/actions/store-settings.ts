@@ -1,7 +1,7 @@
 // The one way an action changes the stored settings: a change of the logins is stored only while it leaves somebody able to log in.
 //
-// The login page in front of an install keeps a list of its own, which follows the stored logins only when an admin repairs it from the dashboard.
-// So an email that was just stored gets nobody in yet, and a list made of such emails alone shuts the dashboard on everyone, the way back included.
+// The login page in front of an install keeps a list of its own, which follows the stored logins when the install carries them there or an admin repairs it from the dashboard.
+// So an email that was just stored may get nobody in yet, and a list made of such emails alone shuts the dashboard on everyone, the way back included.
 //
 // One change is made by nobody who is a login: while nobody has ever logged in, no login is known to work, and the first one may have been mistyped.
 // `storeFirstLogin` replaces it, for a caller that has proven it may change the install's side at the provider, and for no longer than that.

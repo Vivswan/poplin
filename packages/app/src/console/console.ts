@@ -27,6 +27,7 @@ import { frameOf } from "./frame-routes";
 import { dataRoutes } from "./routes";
 import { assetOf, type ClientFiles, ICON, KEPT_A_DAY, KEPT_FOR_GOOD, shellPage } from "./shell";
 import { isSpent, spentAnswer } from "./spent";
+import type { UsersFollow } from "./access/users-follow";
 
 /** The title of every page of the dashboard, the same on every install. */
 const TITLE = "poplin";
@@ -84,6 +85,9 @@ interface ConsoleParts extends CodeTries {
 
   /** The provider's side of the install, which the Domain screen checks and repairs through; without it the console has no such screen. */
   readonly domain?: DomainPlug;
+
+  /** The provider's side of the users: a change of them is carried there by itself. Without it a change waits for a repair on the Domain screen. */
+  readonly follow?: UsersFollow;
 }
 
 /** Something that answers a request, as a Worker's `fetch` does. */
@@ -101,6 +105,7 @@ function sessionCheck(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("asker", { install: parts.install, actor: { scope: "admin", holder: who.value } });
       context.set("email", who.value);
       context.set("domain", parts.domain);
+      context.set("follow", parts.follow);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
       context.set("host", { freeLimits: parts.freeLimits, rebuilding: { ...parts.rebuild, counters: parts.counters }, version: parts.version, usage: parts.usage });
 
@@ -171,7 +176,7 @@ export function createConsole(parts: ConsoleParts): Console {
 
   app.get("*", async (context) => {
     const { install, actor } = context.get("asker");
-    const frame = await frameOf(install, actor, { version: parts.version, domain: parts.domain !== undefined });
+    const frame = await frameOf(install, actor, { version: parts.version, domain: parts.domain !== undefined, selfCarried: parts.follow?.holdsKey() === true });
 
     const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };
 

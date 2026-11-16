@@ -285,8 +285,8 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
-    // Drift: the domain's login lets in the users of the last repair. A change that no row remembered, or that a check or an earlier repair cleared, would leave Domain saying nothing is left to do while a new user cannot log in.
-    test("a user added or removed waits until a repair that began no earlier settles it, and a login left as it was changes nothing", async () => {
+    // Drift: the domain's login lets in the users of the last repair. A change that no row remembered, or that a check or a repair of other users cleared, would leave Domain saying nothing is left to do while a new user cannot log in.
+    test("a user added or removed waits until a repair that carried the stored logins, and began no earlier than the change, settles it; a login left as it was changes nothing", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
       const run = (kind: DomainCheck["run"]): DomainCheck => ({ ran_at: NOW + 9, by: ADMIN, run: kind, pieces: [] });
@@ -302,15 +302,22 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const afterAdd = await waits();
       await database.keepDomainCheck(run("check"), {});
       await database.keepDomainCheck(run("repair"), {});
-      await database.keepDomainCheck(run("repair"), {}, NOW);
-      const afterRunsThatSettleNothing = await waits();
-      await database.keepDomainCheck(run("repair"), {}, NOW + 1);
+      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo], since: NOW + 9 });
+      const afterRepairOfOtherUsers = await waits();
+      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo, cy], since: NOW });
+      const afterRepairBegunBeforeTheChange = await waits();
+      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo, cy], since: NOW + 10 });
       const afterRepair = await waits();
+      await database.keepDomainCheck(run("repair"), {}, { logins: null, since: NOW + 10 });
+      const afterRepairThatStoppedShort = await waits();
+      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo, cy], since: NOW + 9 });
       await database.removeLogin(cy, { by: ADMIN, at: NOW + 3 });
       await database.removeLogin(cy, { by: ADMIN, at: NOW + 4 });
       await database.removeLogin(ADMIN, { by: ADMIN, at: NOW + 5 });
 
-      expect([beforeAnyRun, afterFirstRun, afterAdd, afterRunsThatSettleNothing, afterRepair, await waits()]).toEqual([undefined, null, NOW + 1, NOW + 1, null, NOW + 3]);
+      // Each run that settles nothing sets a mark later than the one before, so a try that began under an earlier one can tell.
+      expect([beforeAnyRun, afterFirstRun, afterAdd, afterRepairOfOtherUsers, afterRepairBegunBeforeTheChange]).toEqual([undefined, null, NOW + 1, NOW + 9, NOW + 10]);
+      expect([afterRepair, afterRepairThatStoppedShort, await waits()]).toEqual([null, NOW + 9, NOW + 3]);
     });
 
     // Drift: the logins are also replaced as a setting, by `poplin config logins` and by an import with its users. A list that marked nothing would let Domain say all is well while the user it added cannot log in.
@@ -339,6 +346,38 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       expect([beforeAnyRun, otherSetting, sameUser, added, otherOrderBehind, otherFirst, dropped, swapped]).toEqual([undefined, null, null, NOW + 4, NOW + 4, NOW + 6, NOW + 7, NOW + 8]);
       expect((await database.readSettings())?.logins).toEqual([cy]);
+    });
+
+    // Drift: a list is carried to the domain while the users may change again, and while another try may write the domain.
+    // Settled on the stored logins alone, a try that an older list overtook at the domain would end the waiting, and the domain would keep users the install no longer has.
+    test("a change of the users is settled only by the very list that is stored and only while no mark was set since the try began; every other try leaves a later mark", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
+      const stored = [ADMIN, bo, cy];
+      await database.initSettings(SETTINGS, BY_ADA);
+      const beforeAnyRun = await database.claimUsers(NOW);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
+      await database.addLogin(bo, { by: ADMIN, at: NOW + 1 });
+      await database.addLogin(cy, { by: ADMIN, at: NOW + 2 });
+      const settled = async (logins: Login[] | null, since: number, at: number): Promise<unknown> => {
+        const { waits } = await database.settleUsers({ logins, since }, at);
+
+        return [waits, (await database.readDomainCheck())?.users_changed_at];
+      };
+
+      const claimed = await database.claimUsers(NOW + 3);
+      const stale = await settled([ADMIN, bo], NOW + 3, NOW + 4);
+      const otherOrder = await settled([ADMIN, cy, bo], NOW + 4, NOW + 4);
+      const overtaken = await settled(stored, NOW + 4, NOW + 4);
+      const exact = await settled(stored, NOW + 6, NOW + 7);
+      const again = await settled(stored, NOW + 6, NOW + 7);
+      const unknown = await settled(null, NOW + 6, NOW + 8);
+      const clockBehind = await database.claimUsers(NOW);
+
+      // Before any run is kept nothing holds a mark, which the answer says, so whoever carries the users can say that nothing remembers them.
+      expect([beforeAnyRun, claimed, clockBehind]).toEqual([{ logins: SETTINGS.logins, mark: undefined }, { logins: stored, mark: NOW + 3 }, { logins: stored, mark: NOW + 9 }]);
+      expect([stale, otherOrder, overtaken]).toEqual([[true, NOW + 4], [true, NOW + 5], [true, NOW + 6]]);
+      expect([exact, again, unknown]).toEqual([[false, null], [false, null], [true, NOW + 8]]);
     });
   });
 }

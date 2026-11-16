@@ -92,7 +92,7 @@ describe("domainState", () => {
     await world.install.database.keepDomainCheck(check, {});
     await world.install.database.addLogin("bo@example.com" as Login, { by: ADMIN.holder, at: NOW });
     const waiting = await domainState(world.install, ADMIN);
-    await world.install.database.keepDomainCheck(check, {}, NOW);
+    await world.install.database.keepDomainCheck(check, {}, { logins: (await world.install.database.readSettings())?.logins ?? [], since: NOW });
 
     expect<unknown>([waiting, await domainState(world.install, ADMIN)]).toMatchObject([
       { check, waits: true, note },

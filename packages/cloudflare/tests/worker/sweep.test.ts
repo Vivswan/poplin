@@ -7,7 +7,11 @@ import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { ADMIN, api, ask, BINDINGS, countedBindings, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf, publish, refusingDatabase, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
+import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
+import { ACCOUNT, emptyAccount, TOKEN } from "../zone/support/fake-install";
+import type { Asked } from "../zone/support/replies";
+import { accessHeaders, ADMIN, api, ask, BINDINGS, cloudflareOf, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf } from "./support/install";
+import { publish, refusingDatabase, send, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
@@ -43,6 +47,34 @@ beforeEach(async () => {
 });
 
 describe("the scheduled run", () => {
+  // Drift: a user added while Cloudflare refused the list can log in only once the list is carried. Without the run nothing carries it but a person's repair, and a run that carried with nothing waiting would call Cloudflare every 15 minutes for nothing.
+  test("a change of the users that Cloudflare did not take is carried by the next run, which settles it, and a run with nothing waiting asks Cloudflare nothing", async () => {
+    const account = emptyAccount();
+    account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
+    const asked: Asked[] = [];
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    const worker = instance(w, cloudflareOf(account, asked));
+    const session = { Cookie: cookieOf(await ask(worker, `${ADMIN}/login`, { headers: await accessHeaders(w) }, keyed)) };
+    const { database } = await installOf(w);
+    await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+    const waits = async (): Promise<boolean | undefined> => database.readDomainCheck().then((kept) => (kept === undefined ? undefined : kept.users_changed_at !== null));
+    const emails = (): unknown => account.policies.map((policy) => (policy.include as { email: { email: string } }[]).map((rule) => rule.email.email));
+
+    account.refuse = `GET /accounts/${ACCOUNT}/access/policies`;
+    account.refuseAs = { status: 401, code: 10_000 };
+    const added = await (await send(worker, `${ADMIN}/data/people/add`, { login: "bo@example.com" }, session, keyed)).json<{ note: string }>();
+    const refused = [added.note, await waits(), emails(), await problemsOf(w)];
+    account.refuse = [];
+    await sweep(worker, w, keyed);
+    const carried = [await waits(), emails()];
+    const calls = asked.length;
+    await sweep(worker, w, keyed);
+
+    expect(refused).toEqual(["Cloudflare refused poplin's key, so the login list there is as it was. Open Domain and press Repair.", true, [[OWNER]], [["users_not_carried", 1, null]]]);
+    expect([carried, asked.length - calls]).toEqual([[false, [["bo@example.com", OWNER]]], 0]);
+    expect(JSON.stringify(added)).not.toContain(TOKEN);
+  });
+
   // Drift: without the handler, or with one that never reaches the later parts of the walk, expired sites stay live in the listing and the bucket fills with files nothing serves.
   test("an expired site reaches the trash, then leaves it with its files after trash_days, and an upload nobody finished is removed with its files", async () => {
     const worker = instance(w);

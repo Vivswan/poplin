@@ -1,6 +1,6 @@
 // Run the live suite against the standing test install: make this run's token, run the tests as a child, and remove the token.
 //
-// The child gets the install's domain, the poplin token, and the login in its environment, and none of the Cloudflare values. Every line it prints passes through here with the hidden values taken out.
+// The child gets the install's domain, the poplin token, and the login in its environment, and the Cloudflare key and account, with which one check reads the login list. Every line it prints passes through here with the hidden values taken out.
 // Argument: the JSON object of what the install lacks, as the converge step answered it.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -42,6 +42,9 @@ async function runTests(run: Run, found: Found, token: string, missing: string):
         POPLIN_LIVE_RUN: run.id,
         POPLIN_LIVE_MISSING: missing,
         POPLIN_LIVE_REPORT: report,
+        // The check of the users reads Cloudflare's login list itself. Every line the child prints passes `relay`, which takes the key out.
+        CLOUDFLARE_API_TOKEN: run.connection.key,
+        CLOUDFLARE_ACCOUNT_ID: run.accountId,
       },
       stdout: "pipe",
       stderr: "pipe",

@@ -47,6 +47,7 @@ failed  problems  2 kinds today: request_failed, sweep_failed
 | `login_unwritten`        | A login was not written to Activity             | nothing: the login itself worked                    |
 | `login_unchecked`        | The login could not be checked                  | open Domain and press Check                         |
 | `update_failed`          | The update did not start                        | check the update link in Settings, under Updates    |
+| `users_not_carried`      | A change of the users did not reach the login of the domain | open Domain and press Repair            |
 | `files_limit_reached`    | The daily limit of files was reached            | wait for midnight UTC, or raise `max_files_per_day` |
 | `writes_limit_reached`   | The daily limit of storage writes was reached   | wait for midnight UTC, or raise `max_storage_writes_per_day` |
 | `requests_limit_reached` | The daily limit of requests was reached         | wait for midnight UTC, or raise `requests_per_day`  |

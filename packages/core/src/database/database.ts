@@ -10,7 +10,7 @@ import type { Login } from "../auth/logins";
 import type { EndedToken, TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
-import type { DomainCheck, RememberedCheck } from "../records/domain-check";
+import type { CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
 import type { Holder } from "../records/fields";
 import type { Problem } from "../records/problem";
 import type { SiteId } from "../sites/ids";
@@ -907,10 +907,25 @@ export interface Database {
    *
    * @param check - the run; its `by` and `ran_at` sign the audit entry
    * @param detail - what the audit entry says of the run
-   * @param settled - for a repair that left the domain's login standing, the moment it began: a change of the users up to then waits for a repair no more. Left out, a change that waits keeps waiting
+   * @param carried - for a repair that wrote the users to the domain: what it came to, with the moment it began. The change of the users is settled as `settleUsers` settles it, in the same step. Left out, a change that waits keeps waiting
    * @throws {Error} a value breaks its rule
    */
-  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, settled?: number): Promise<void>;
+  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, carried?: CarriedUsers): Promise<void>;
+
+  /**
+   * Begin a try to carry the users to the domain: mark them as waiting, with a mark later than every one before it, and read the logins to carry, in one step.
+   *
+   * @returns the logins stored now, `undefined` before setup stored any; and the mark, `undefined` on an install that keeps no run of its domain, where nothing remembers that a change waits
+   */
+  claimUsers(at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly mark: number | undefined }>;
+
+  /**
+   * Settle a change of the users after a try to carry them to the domain, in one step with the comparison.
+   * The change waits no more only while the stored logins are exactly the list the domain took and no mark was set since the try began. Otherwise it waits under a later mark.
+   *
+   * @returns the logins stored now, `undefined` before setup stored any; and whether a change of the users waits after it
+   */
+  settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly waits: boolean }>;
 
   /** The install's settings, `undefined` before setup stored them. */
   readSettings(): Promise<SettingValues | undefined>;

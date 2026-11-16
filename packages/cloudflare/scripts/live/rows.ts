@@ -7,7 +7,7 @@
 //   PATCH  /api/sites/:site                who may open it 3, any other setting 2, both 5, and 1 where it is told an expiry
 //   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 6    POST /api/sites/:site/rollback 2
 //   POST   /api/sites/:site/duplicate      the request that begins a copy 21, each one that goes on with it 16
-//   PATCH  /api/config 3                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
+//   PATCH  /api/config 5                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
 //
@@ -84,7 +84,7 @@ const PRICES = [
   { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },
   { method: "POST", path: "/api/sites/:site/rollback", rows: () => 2 },
   { method: "POST", path: "/api/sites/:site/duplicate", rows: (asked) => (asked.body.upload === undefined ? COPIED.begun : COPIED.goneOn) },
-  { method: "PATCH", path: "/api/config", rows: () => 3 },
+  { method: "PATCH", path: "/api/config", rows: () => 5 },
   { method: "POST", path: "/api/logins", rows: () => 3 },
   { method: "GET", path: "/api/export/sites/:site/files", rows: () => 1 },
 ] as const satisfies readonly (Declared & { readonly rows: (asked: Asked) => number })[];

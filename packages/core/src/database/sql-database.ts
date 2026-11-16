@@ -12,7 +12,7 @@ import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
-import type { DomainCheck, RememberedCheck } from "../records/domain-check";
+import type { CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
 import type { Problem } from "../records/problem";
 import { LOGIN, SITE_ID } from "../records/fields";
@@ -80,7 +80,7 @@ import type {
   UploadRoom,
   UploadsPage,
 } from "./database";
-import { domainCheckAsked, domainCheckIn, domainCheckKept, usersChanged, usersReplaced } from "./domain-check";
+import { domainCheckAsked, domainCheckIn, domainCheckKept, usersCarried, usersChanged, usersClaimed, usersReplaced } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { type ProblemNote, problemNoted, problemsAsked, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
@@ -1140,8 +1140,22 @@ export class SqlDatabase implements Database {
     return domainCheckIn(read);
   }
 
-  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, settled?: number): Promise<void> {
-    await this.#driver.batch([domainCheckKept(check, settled), auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail)]);
+  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>>, carried?: CarriedUsers): Promise<void> {
+    const settling = carried === undefined ? [] : [usersCarried(carried, check.ran_at)];
+    await this.#driver.batch([domainCheckKept(check), auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail), ...settling]);
+  }
+
+  async claimUsers(at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly mark: number | undefined }> {
+    const [, read, kept] = await this.#driver.batch([usersClaimed(at), READ_SETTINGS, domainCheckAsked()]);
+    const mark = kept?.rows[0]?.users_changed_at;
+
+    return { logins: settingsIn(read)?.logins, mark: typeof mark === "number" ? mark : undefined };
+  }
+
+  async settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly waits: boolean }> {
+    const [, read, kept] = await this.#driver.batch([usersCarried(carried, at), READ_SETTINGS, domainCheckAsked()]);
+
+    return { logins: settingsIn(read)?.logins, waits: typeof kept?.rows[0]?.users_changed_at === "number" };
   }
 
   async readStorageWrites(day: string): Promise<{ readonly writes: number; readonly most: number } | undefined> {

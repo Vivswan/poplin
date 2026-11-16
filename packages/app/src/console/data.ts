@@ -11,6 +11,7 @@ import type { DomainPlug } from "./domain/records";
 import type { UsageHost } from "./usage/records";
 import { refusalSentence } from "./notices";
 import type { FreeLimits } from "./settings/free-limits";
+import type { UsersFollow } from "./access/users-follow";
 
 /** The status of the refusals only the console answers. Every other code goes out with the status the API gives it. */
 const OWN_STATUSES: Readonly<Record<string, 404 | 415 | 429>> = {
@@ -57,6 +58,9 @@ export interface Shared {
 
     /** The email the session names. */
     email: string;
+
+    /** The provider's side of the users, where the console was built with one: a change of them is carried there by itself. */
+    follow: UsersFollow | undefined;
 
     /** The host's part. */
     host: Host;

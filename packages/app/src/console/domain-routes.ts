@@ -1,6 +1,6 @@
 // The data of the Domain screen: what a token must hold, the last run the install remembers, and the two runs themselves.
 //
-//   GET  /domain             the token form's facts, the remembered run, and whether the users changed since the last repair
+//   GET  /domain             the token form's facts, the remembered run, and whether the users changed since the last repair, on an install that does not carry them by itself
 //   POST /domain/check       read every piece with the token in the body; changes nothing at the provider
 //   POST /domain/repair      make every piece match, with the stored settings a repair carries to the domain
 //
@@ -20,6 +20,11 @@ import { keptAnswer, runDone, runRefusal } from "./domain-answers";
 /** What a run carries: the token, as it was pasted. */
 const RUN = v.object({ token: v.string() });
 
+/** Whether a change of the users is carried to the domain with no person: one that waits is then nothing the screen asks a repair for. */
+function selfCarried(context: Context<Shared>): boolean {
+  return context.get("follow")?.holdsKey() === true;
+}
+
 /** Run the plug once for the token a request carries, and answer the rows or the refusal. */
 async function ran(context: Context<Shared, string, { out: { json: v.InferOutput<typeof RUN> } }>, run: DomainRun) {
   const plug = context.get("domain");
@@ -36,7 +41,7 @@ async function ran(context: Context<Shared, string, { out: { json: v.InferOutput
 
     const kept = await domainState(install, actor);
 
-    return context.json(runDone(run, reading, kept.ok && kept.waits));
+    return context.json(runDone(run, reading, kept.ok && kept.waits && !selfCarried(context)));
   } catch (error) {
     // The run is kept after the plug has answered: a database that takes no more today refuses it, whatever the plug did.
     if (!(error instanceof AllowanceSpent)) throw error;
@@ -57,7 +62,7 @@ export const domainRoutes = new Hono<Shared>()
 
     const { tokenRights, tokenLink, tokenOptional, tokenNote } = plug;
 
-    return context.json({ ok: true as const, form: { tokenRights, tokenLink, tokenOptional, tokenNote }, last: keptAnswer(kept) });
+    return context.json({ ok: true as const, form: { tokenRights, tokenLink, tokenOptional, tokenNote }, last: keptAnswer({ ...kept, waits: kept.waits && !selfCarried(context) }) });
   })
   .post("/domain/check", vValidator("json", RUN, refuseInvalid), (context) => ran(context, "check"))
   .post("/domain/repair", vValidator("json", RUN, refuseInvalid), (context) => ran(context, "repair"));

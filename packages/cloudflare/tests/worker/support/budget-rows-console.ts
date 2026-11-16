@@ -3,6 +3,7 @@
 import type { DataRoutes } from "@poplin/app/src/console/routes";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import type { hc, InferRequestType } from "hono/client";
+import { INSTALL_OBJECTS } from "../../../src/zone/install-objects";
 import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";
 import { type Budget, type BudgetRow, get, type Measured, post, sessionOf, sql, type Stage, unmeasured } from "./budget-stage";
@@ -10,6 +11,14 @@ import { endedTokens, manyEntries, manyProblems, manySites, manyTokens, newLinks
 
 /** The group of every row here. */
 const group = "Each dashboard screen";
+
+/** Give the measured install a key, and an account that holds the policy of its logins, so a change of the users is carried there. */
+function carriesUsers(stage: Stage): void {
+  const account = emptyAccount();
+  account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
+  stage.outside.cloudflare = cloudflareOf(account, []);
+  stage.keptKey = TOKEN;
+}
 
 /** A release newer than any build, as the install keeps it once it has learned of one. */
 const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA + 1 };
@@ -341,6 +350,35 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
+    name: "Access screen: add a person, carried to Cloudflare",
+    route: "POST /data/people/add",
+    // On an install that holds its key the users are then written into Cloudflare's policy, between two statements more: the users read under a mark, and the change settled.
+    arrange: async (stage) => {
+      const session = await sessionOf(stage);
+      carriesUsers(stage);
+
+      return (measured) => post(measured, "/data/people/add", { login: "second@example.com" }, session);
+    },
+    status: 200,
+    budget: { queries: 4, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "Access screen: remove a person, carried to Cloudflare",
+    route: "POST /data/people/remove",
+    // As above: the removal, then the two statements around the write to Cloudflare.
+    arrange: async (stage) => {
+      const session = await sessionOf(stage);
+      await done(await post(unmeasured(stage), "/data/people/add", { login: "second@example.com" }, session));
+      carriesUsers(stage);
+
+      return (measured) => post(measured, "/data/people/remove", { login: "second@example.com" }, session);
+    },
+    status: 200,
+    budget: { queries: 4, reads: 0, writes: 0 },
+  },
+  {
+    group,
     name: "Access screen: the tokens",
     guide: "Open the Access screen",
     route: "GET /data/tokens",
@@ -473,7 +511,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/problems?days=30");
     },
     status: 200,
-    budget: { queries: 2, read: 302, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 332, reads: 0, writes: 0 },
   },
   {
     group,

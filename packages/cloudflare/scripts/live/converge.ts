@@ -68,6 +68,7 @@ const CAPABILITIES: Readonly<Record<string, string>> = {
   "Access application": "access",
   "Access policy": "access",
   "Access open paths": "access",
+  Key: "kept-key",
 };
 
 /** An error code of Cloudflare's, as wrangler prints it. */

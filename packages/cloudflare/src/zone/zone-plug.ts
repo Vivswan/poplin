@@ -145,6 +145,9 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Public word": "rest",
 };
 
+/** The objects that hold the install's users: the policy lists every one of them, and the alert is mailed to the first. */
+const HOLDS_USERS: readonly (Piece | "Public word")[] = ["Access policy", "Budget alert"];
+
 /** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
 const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
 
@@ -581,7 +584,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
   );
   await alertPiece(progress, mode, placed, connection, logins);
 
-  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object] })), steps: progress.steps };
+  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object], ...(HOLDS_USERS.includes(row.object) ? { users: true as const } : {}) })), steps: progress.steps };
 }
 
 // The form reads the permissions as a JSON list of `{ key, type }`.
