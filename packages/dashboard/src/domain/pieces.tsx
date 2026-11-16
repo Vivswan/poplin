@@ -1,4 +1,4 @@
-// The pieces the install needs on the domain, as a run or the install's memory of one left them: one row per piece, in the table every list is shown in.
+// The pieces the install needs on the domain, as a run or the install's memory of one left them: one row per piece, in the table every list is shown in. The table is as tall as its rows: the screen's page scrolls, and the table has no bar of its own.
 
 import { cn } from "cn";
 import { type ReactNode, useMemo } from "react";
@@ -58,10 +58,10 @@ export function Pieces({ rows }: { readonly rows: Ran["rows"] }): ReactNode {
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col max-md:hidden">
+      <div className="shrink-0 max-md:hidden">
         <DataTable label="Pieces" columns={columns} rows={placed} rowId={(piece) => String(piece.place)} sort={AS_RUN} />
       </div>
-      <ul aria-label="Pieces" className="line-room min-h-0 flex-1 overflow-y-auto border-t md:hidden">
+      <ul aria-label="Pieces" className="border-t md:hidden">
         {placed.map((piece) => (
           <li key={piece.place} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">
             <span className={cn("leading-5", piece.tone === "bad" && "font-medium")}>{piece.piece}</span>

@@ -269,7 +269,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
 
     if (tokens !== undefined && rows.length === 0) {
       return (
-        <div className="line-room min-h-0 flex-1 overflow-y-auto">
+        <div>
           <Empty className="flex-none py-16">
             <EmptyHeader>
               <EmptyTitle>{removed === undefined ? "No tokens yet" : "No tokens"}</EmptyTitle>
@@ -287,7 +287,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
 
     return (
       <>
-        <div className="flex min-h-0 flex-1 flex-col max-md:hidden">
+        <div className="shrink-0 max-md:hidden">
           <DataTable
             label="Tokens"
             columns={COLUMNS}
@@ -302,7 +302,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
             onFitted={setFitted}
           />
         </div>
-        <div className="line-room min-h-0 flex-1 overflow-y-auto md:hidden">
+        <div className="md:hidden">
           <ul aria-label="Tokens" className="border-t">
             {rows.map((row) => (
               <li key={row.key} className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2">
@@ -326,7 +326,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
   };
 
   return (
-    <section aria-label="Tokens" className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <section aria-label="Tokens" className="flex min-w-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 py-3 max-md:px-4">
         <p className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground max-md:basis-full max-md:whitespace-normal">
           A token lets a computer or an agent publish.
