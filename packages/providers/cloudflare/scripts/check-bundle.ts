@@ -1,6 +1,6 @@
 // Names a release from a folder of its files, as the website's build names one from its page: `bun run --cwd packages/providers/cloudflare check-bundle <folder>`.
 //
-// The folder holds what a release's page holds: the source archive and the three files `bundle` writes. Every rule of the website's build runs on them but one:
+// The folder holds what a release's page holds: the three files `bundle` writes. Every rule of the website's build runs on them but one:
 // no attestation exists outside a release's own run, so GitHub's command line is not asked. It ends with the entry the website would publish, or with the rule that refused.
 
 import { mkdtempDisposableSync } from "node:fs";
@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
 import { version } from "../../../cli/package.json";
-import { pinReleases } from "../src/shared/release/deploy/pin-releases";
+import { pinReleases } from "../src/shared/release/publish/pin-releases";
 
 const [folder] = process.argv.slice(2);
 if (folder === undefined) throw new Error("usage: check-bundle.ts <folder of a release's files>");

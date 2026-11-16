@@ -46,7 +46,7 @@ const FRESH = 0;
 const TRY_AGAIN = "Something went wrong. Try again.";
 
 /** The answer of an install whose database another build of poplin made: by a schema step that was not this code's, or with settings this code does not read. */
-const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Roll the Worker back to that build, or run `npx poplin uninstall` and install anew.";
 
 /** What a request waits for after the install went back by itself: Cloudflare serves the code before some ten seconds after it is asked to. */
 const SOON = "Reload in a minute.";
@@ -224,7 +224,7 @@ function outsideOf(given: Partial<Outside>): Outside {
 /**
  * Make the handlers of one Worker instance.
  *
- * @param given - the clock, the fetch of the Access keys, the fetch of a repair's calls to Cloudflare, the asking for the newest version, and the fetch that starts a build; the runtime's own when absent
+ * @param given - the clock, the fetch of the Access keys, the fetch of a repair's calls to Cloudflare, and the asking for the newest version; the runtime's own when absent
  * @param starting - makes an instance ready from the Worker's bindings; the Worker's own way when absent
  * @returns `fetch`, which never throws, and `scheduled`, which throws in fixed words when the sweep could not run. A request or a sweep that failed is noted as a problem of the install, where its database still takes a note
  */

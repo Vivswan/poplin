@@ -1,83 +1,10 @@
-// This pins what an install takes as a release: a rule dropped here lets files nobody published, or an older version, become the code that runs.
+// This pins what an install reads as the published releases: a rule dropped here lets a digest no file can match, or a release with no built files, be taken for one that is out.
 
 import { describe, expect, test } from "bun:test";
 
-import { checkedRelease, newestPinned, publishedPins, type ReleasePins, releaseDigest } from "../../src/records/release";
+import { newestPinned, publishedPins, releaseDigest } from "../../src/records/release";
 
 const ENCODER = new TextEncoder();
-
-/** The files of a release, as bytes that say their own version in the open; `none` makes files that say no version. */
-function filesOf(version: string): Uint8Array<ArrayBuffer> {
-  return ENCODER.encode(version === "none" ? "files that say no version" : `the files of poplin ${version}`);
-}
-
-/** The version a run of bytes made by `filesOf` says it is. */
-function versionOf(bytes: Uint8Array<ArrayBuffer>): Promise<string | undefined> {
-  return Promise.resolve(/ (\d+\.\d+\.\d+)$/.exec(new TextDecoder().decode(bytes))?.[1]);
-}
-
-/** A website that published these versions, each with the digest of the files given for it. The files are taken by that digest alone, so the other two are any that pass. */
-async function pinsOf(published: Readonly<Record<string, Uint8Array<ArrayBuffer>>>): Promise<ReleasePins> {
-  const entries = await Promise.all(Object.entries(published).map(async ([version, bytes]) => [version, { source: await releaseDigest(bytes), bundle: "0".repeat(64), schema: 1 }] as const));
-
-  return Object.fromEntries(entries);
-}
-
-describe("checkedRelease", () => {
-  const two = { "0.2.0": "0.2.0", "0.3.0": "0.3.0" };
-  const taken = (version: string): unknown => ({ ok: true, bytes: filesOf(version) });
-  const refused = (refusal: string, says?: string): unknown => ({ ok: false, refusal, ...(says === undefined ? {} : { says }) });
-
-  /** A release that is wanted, the versions the website published with the version each digest's files say, the version the served files say, and what comes of it. */
-  const cases: readonly {
-    readonly name: string;
-    readonly wanted: { readonly version: string; readonly running?: string };
-    readonly published: Readonly<Record<string, string>>;
-    readonly served: string | undefined;
-    readonly changed?: true;
-    readonly outcome: unknown;
-    readonly fetched: boolean;
-    readonly opened: boolean;
-  }[] = [
-    { name: "the files the website published", wanted: { version: "0.3.0" }, published: two, served: "0.3.0", outcome: taken("0.3.0"), fetched: true, opened: true },
-    { name: "the same files, for a taker that runs an older version", wanted: { version: "0.3.0", running: "0.2.0" }, published: two, served: "0.3.0", outcome: taken("0.3.0"), fetched: true, opened: true },
-    { name: "the same files, for a taker that runs that version", wanted: { version: "0.3.0", running: "0.3.0" }, published: two, served: "0.3.0", outcome: taken("0.3.0"), fetched: true, opened: true },
-    { name: "an older version a person named, with no running version given", wanted: { version: "0.2.0" }, published: two, served: "0.2.0", outcome: taken("0.2.0"), fetched: true, opened: true },
-    { name: "files with one bit changed", wanted: { version: "0.3.0" }, published: two, served: "0.3.0", changed: true, outcome: refused("digest_differs"), fetched: true, opened: false },
-    { name: "the files of another release, served under this version", wanted: { version: "0.3.0" }, published: two, served: "0.2.0", outcome: refused("digest_differs"), fetched: true, opened: false },
-    { name: "a version with no digest published", wanted: { version: "0.4.0" }, published: two, served: "0.4.0", outcome: refused("no_digest"), fetched: false, opened: false },
-    { name: "a version named like a member every object has", wanted: { version: "constructor" }, published: two, served: "0.2.0", outcome: refused("no_digest"), fetched: false, opened: false },
-    { name: "a digest published for files that say another version", wanted: { version: "0.3.0" }, published: { "0.3.0": "0.2.0" }, served: "0.2.0", outcome: refused("other_version", "0.2.0"), fetched: true, opened: true },
-    { name: "a digest published for files that say no version", wanted: { version: "0.3.0" }, published: { "0.3.0": "none" }, served: "none", outcome: refused("other_version"), fetched: true, opened: true },
-    { name: "a version older than the one that runs", wanted: { version: "0.2.0", running: "0.3.0" }, published: two, served: "0.2.0", outcome: refused("older"), fetched: false, opened: false },
-    { name: "files that cannot be fetched", wanted: { version: "0.3.0" }, published: two, served: undefined, outcome: refused("unreachable"), fetched: true, opened: false },
-  ];
-
-  // Drift: files whose digest differs must never be opened, so what reads a version out of them is handed only bytes the website published.
-  test.each(cases)("$name: taken or refused as $outcome, with the files fetched ($fetched) and opened ($opened) only then", async ({ wanted, published, served, changed, outcome, fetched, opened }) => {
-    const asked: string[] = [];
-    const read: Uint8Array[] = [];
-    const files = {
-      fetch: (version: string): Promise<Uint8Array<ArrayBuffer> | undefined> => {
-        asked.push(version);
-        if (served === undefined) return Promise.resolve(undefined);
-
-        const bytes = filesOf(served);
-        if (changed === true) bytes[0] = (bytes[0] ?? 0) ^ 1;
-
-        return Promise.resolve(bytes);
-      },
-      versionOf: (bytes: Uint8Array<ArrayBuffer>): Promise<string | undefined> => {
-        read.push(bytes);
-
-        return versionOf(bytes);
-      },
-    };
-    const pins = await pinsOf(Object.fromEntries(Object.entries(published).map(([version, says]) => [version, filesOf(says)])));
-
-    expect<unknown>([await checkedRelease(wanted, pins, files), asked, read.length]).toEqual([outcome, fetched ? [wanted.version] : [], opened ? 1 : 0]);
-  });
-});
 
 describe("releaseDigest", () => {
   // Drift: every other test here makes its digests with this function, so only a value from outside says the published digest is SHA-256.
@@ -88,25 +15,22 @@ describe("releaseDigest", () => {
 
 describe("publishedPins", () => {
   const digest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
-  const pin = { source: digest, bundle: digest.replace("9", "a"), schema: 2 };
+  const pin = { bundle: digest, schema: 2 };
 
   const files: readonly { readonly name: string; readonly text: string; readonly read: unknown; readonly newest: string | undefined }[] = [
     { name: "no release yet", text: "{}", read: {}, newest: undefined },
     { name: "two releases, the lower version written last", text: JSON.stringify({ "0.10.0": pin, "0.9.0": pin }), read: { "0.10.0": pin, "0.9.0": pin }, newest: "0.10.0" },
     { name: "a release with a field a later poplin added", text: JSON.stringify({ "0.2.0": { ...pin, pulled: false } }), read: { "0.2.0": pin }, newest: "0.2.0" },
-    { name: "a source digest in capitals", text: JSON.stringify({ "0.2.0": { ...pin, source: digest.toUpperCase() } }), read: undefined, newest: undefined },
-    { name: "a source digest one character short", text: JSON.stringify({ "0.2.0": { ...pin, source: digest.slice(1) } }), read: undefined, newest: undefined },
     { name: "a release with no digest", text: JSON.stringify({ "0.2.0": {} }), read: undefined, newest: undefined },
-    { name: "a release with no source digest", text: JSON.stringify({ "0.2.0": { bundle: digest, schema: 2 } }), read: undefined, newest: undefined },
-    { name: "a release with no digest of its built files", text: JSON.stringify({ "0.2.0": { source: digest, schema: 2 } }), read: undefined, newest: undefined },
+    { name: "a release with no digest of its built files", text: JSON.stringify({ "0.2.0": { schema: 2 } }), read: undefined, newest: undefined },
     { name: "a digest of the built files in capitals", text: JSON.stringify({ "0.2.0": { ...pin, bundle: digest.toUpperCase() } }), read: undefined, newest: undefined },
     { name: "a digest of the built files one character long", text: JSON.stringify({ "0.2.0": { ...pin, bundle: "9" } }), read: undefined, newest: undefined },
-    { name: "a release with no schema", text: JSON.stringify({ "0.2.0": { source: digest, bundle: digest } }), read: undefined, newest: undefined },
+    { name: "a release with no schema", text: JSON.stringify({ "0.2.0": { bundle: digest } }), read: undefined, newest: undefined },
     { name: "a schema of zero", text: JSON.stringify({ "0.2.0": { ...pin, schema: 0 } }), read: undefined, newest: undefined },
     { name: "a schema below zero", text: JSON.stringify({ "0.2.0": { ...pin, schema: -1 } }), read: undefined, newest: undefined },
     { name: "a schema that is no whole number", text: JSON.stringify({ "0.2.0": { ...pin, schema: 1.5 } }), read: undefined, newest: undefined },
     { name: "a schema written as text", text: JSON.stringify({ "0.2.0": { ...pin, schema: "2" } }), read: undefined, newest: undefined },
-    { name: "one good release beside one with no digest of its built files", text: JSON.stringify({ "0.2.0": pin, "0.1.0": { source: digest, schema: 1 } }), read: undefined, newest: undefined },
+    { name: "one good release beside one with no digest of its built files", text: JSON.stringify({ "0.2.0": pin, "0.1.0": { schema: 1 } }), read: undefined, newest: undefined },
     { name: "a version with a `v` in front", text: JSON.stringify({ "v0.2.0": pin }), read: undefined, newest: undefined },
     { name: "a version before its release", text: JSON.stringify({ "0.2.0-rc.1": pin }), read: undefined, newest: undefined },
     { name: "a list", text: "[]", read: undefined, newest: undefined },
@@ -115,7 +39,7 @@ describe("publishedPins", () => {
     { name: "a page that is no JSON", text: "<!doctype html>", read: undefined, newest: undefined },
   ];
 
-  // Drift: a file read loosely would hand the deploy a version that is compared with nothing, a digest no file can match, or a release with no built files to take.
+  // Drift: a file read loosely would hand an update a version that is compared with nothing, a digest no file can match, or a release with no built files to take.
   // A key this version does not know is passed over, never refused: installs of every older version read the file, and the website only ever adds a key.
   test.each(files)("$name is read as $read, and its newest version is $newest", ({ text, read, newest }) => {
     const pins = publishedPins(text);

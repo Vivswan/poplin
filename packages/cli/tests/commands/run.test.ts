@@ -194,7 +194,7 @@ describe("run", () => {
   // Drift: an install that cannot start says why in plain text on every path. Printed as `not_json` with the hint about the address, the sentence is lost and the person checks an address that is right.
   test("an install that cannot start is quoted: its sentence is printed with the status, and no hint puts the address in doubt", async () => {
     const bench = await openBench();
-    const sentence = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
+    const sentence = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Roll the Worker back to that build, or run `npx poplin uninstall` and install anew.";
     bench.hook = () => new Response(`${sentence}\n`, { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
     const listed = await bench.run("list");

@@ -4,8 +4,8 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { releaseDigest } from "@poplin/core/src/records/release";
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/deploy/bundle-manifest";
-import { bundleAddress, MANIFEST_FILE } from "../../../../src/shared/release/deploy/release-source";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/publish/bundle-manifest";
+import { bundleAddress, MANIFEST_FILE } from "../../../../src/shared/release/publish/release-source";
 import { checkedBundle } from "../../../../src/shared/release/update/bundle-files";
 
 /** Turns a text into the bytes of a file. */
@@ -33,7 +33,7 @@ function pageOf(files: Readonly<Record<string, Uint8Array<ArrayBuffer>>>, asked:
 async function checked(manifest: string): Promise<{ readonly answer: Awaited<ReturnType<typeof checkedBundle>>; readonly asked: string[] }> {
   const asked: string[] = [];
   const page = pageOf({ [MANIFEST_FILE]: ENCODER.encode(manifest), [MODULE_FILE]: MODULE, [MAP_FILE]: MAP }, asked);
-  const answer = await checkedBundle(page, "0.3.0", { source: "0".repeat(64), bundle: await releaseDigest(ENCODER.encode(manifest)), schema: 2 });
+  const answer = await checkedBundle(page, "0.3.0", { bundle: await releaseDigest(ENCODER.encode(manifest)), schema: 2 });
 
   return { answer, asked: asked.map((url) => url.slice(url.lastIndexOf("/") + 1)) };
 }

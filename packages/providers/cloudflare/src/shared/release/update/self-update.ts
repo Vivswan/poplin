@@ -16,7 +16,7 @@ import { pickRelease } from "@poplin/core/src/actions/pick-release";
 import { type Refused, refuse } from "@poplin/core/src/actions/records";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
-import { projectReleases, type ReleaseSource } from "../deploy/release-source";
+import { projectReleases, type ReleaseSource } from "../publish/release-source";
 import type { KeptKey } from "../../install/key/kept-key";
 import { checkedBundle, type Reach } from "./bundle-files";
 import { openUpload, readLastUpdate, type Upload } from "./upload";

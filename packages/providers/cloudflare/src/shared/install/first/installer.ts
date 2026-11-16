@@ -18,7 +18,7 @@ import { defaultSettings } from "@poplin/core/src/records/settings";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import { homepage } from "../../../../../../cli/package.json";
-import { projectReleases } from "../../release/deploy/release-source";
+import { projectReleases } from "../../release/publish/release-source";
 import { type CheckedBundle, checkedBundle } from "../../release/update/bundle-files";
 import { putCrons, putFirst, readCrons } from "../../release/update/upload";
 import { type AccountAddresses, parseAccountAddresses } from "../../../without-domain/address-layout";

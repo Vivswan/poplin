@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import type { Reach } from "@poplin/core/src/install/installer";
 import { releaseDigest } from "@poplin/core/src/records/release";
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/deploy/bundle-manifest";
-import { bundleAsset, MANIFEST_FILE } from "../../../../src/shared/release/deploy/release-source";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/publish/bundle-manifest";
+import { bundleAsset, MANIFEST_FILE } from "../../../../src/shared/release/publish/release-source";
 import { type Account, answer, answerQuery } from "./fake-install";
 import { type Asked, bodyOf } from "./replies";
 
@@ -42,7 +42,7 @@ interface World {
 /** The files of the release, by the last part of the address each is fetched at. */
 async function published(): Promise<Readonly<Record<string, string | Uint8Array<ArrayBuffer>>>> {
   const manifest = await bundleManifest({ version: RELEASE, schema: OWN_SCHEMA, config: CONFIG, files: BUILT });
-  const pins = { [RELEASE]: { source: "0".repeat(64), bundle: await releaseDigest(new TextEncoder().encode(manifest)), schema: OWN_SCHEMA } };
+  const pins = { [RELEASE]: { bundle: await releaseDigest(new TextEncoder().encode(manifest)), schema: OWN_SCHEMA } };
 
   return {
     "releases.json": JSON.stringify(pins),

@@ -5,17 +5,16 @@ order: 10
 
 # Update the install
 
-How each kind of install updates, and the notice of a newer version; the steps it names are those of [Install](../start/install.md).
+How an install updates, and the notice of a newer version.
 
-Nothing updates on its own while the setting `auto_update` is off, as it is in a new install. An install says when a newer version is out, and how it updates depends on how it was made.
+Nothing updates on its own while the setting `auto_update` is off, as it is in a new install. An install says when a newer version is out, and updates itself with the key it keeps.
 
-| The install               | It updates by                                                       |
-| ------------------------- | ------------------------------------------------------------------- |
-| holds its key             | one press, or one command: [With the kept key](#with-the-kept-key)  |
-| was made with the button of step 2 | three clicks at Cloudflare: [Build again](#build-again)    |
-| was made from a terminal  | two commands in its folder: [From a terminal](#from-a-terminal)     |
+| The install   | It updates by                                                                          |
+| ------------- | -------------------------------------------------------------------------------------- |
+| holds its key | one press, or one command: [With the kept key](#with-the-kept-key)                     |
+| holds no key  | a repair first, which gives it one: Repair on the Domain screen, or `npx poplin doctor --repair` |
 
-The row `Key` of the Domain screen says whether the install holds its key. An install that holds none cannot update itself: `poplin update` answers `no_key`. Press Repair on the Domain screen to give it one, or update it the way it was made.
+The row `Key` of the Domain screen says whether the install holds its key. An install that holds none cannot update itself: `poplin update` answers `no_key`.
 
 ## With the kept key
 
@@ -113,7 +112,7 @@ the install now runs 0.3.0; it ran 0.3.1
 
 The upload of an update writes one variable onto the Worker, `LAST_UPDATE`: the version it came from, the version it took, the schema of the database, and when.
 
-The button is there while that variable names the running version as one taken from a lower version, and the database is as that update found it. Going back takes the button away, and so does a deploy of another version made any other way.
+The button is there while that variable names the running version as one taken from a lower version, and the database is as that update found it. Going back takes the button away, and so does another version put in place any other way.
 
 `--to` goes below the running version only where the button is: to the version before, and no further. Any other lower version, and the running one, is answered `no_update`. A published version above the running one is taken.
 
@@ -132,7 +131,7 @@ the install asks Cloudflare, with its key, to run the version before again
 | How long            | Cloudflare runs the version before about ten seconds after it is asked                                  |
 | What is lost        | nothing: a step is kept whole or not at all, so the database is as 0.3.0 left it                        |
 | Where it shows      | Activity: `Went back to 0.3.0: the update to 0.3.1 could not change the database`; the problem `update_went_back` |
-| When it stays put   | the install holds no key, the code was deployed another way, or an earlier step of the same release was kept |
+| When it stays put   | the install holds no key, the code was put in place another way, or an earlier step of the same release was kept |
 | What to do          | report it, and update again once a later release is out                                                 |
 
 Where the install stays put, it answers `This install's database could not be brought up to date. Try again.` until the step runs, or until you roll back at Cloudflare.
@@ -149,67 +148,27 @@ For code that cannot answer at all. Cloudflare's documentation gives these steps
 
 After a rollback there, press Check on the Domain screen: it says whether every piece of the install is as it should be.
 
-## Build again
+A release refuses a database whose schema a newer release changed. After a rollback to such a release the install answers `This install's database is newer than its code: update poplin.` until a release that knows that schema runs again.
 
-For an install made with the button. Cloudflare's documentation gives these steps for building again:
-
-| Step | In Cloudflare's dashboard                                              |
-| ---- | ---------------------------------------------------------------------- |
-| 1    | go to Workers & Pages and select your Worker, `poplin`                 |
-| 2    | select Deployments, then View build history at the bottom of the page  |
-| 3    | select the ellipses next to the newest build, then select Retry build  |
-
-**It worked when** the `version` row of `npx poplin doctor` names the new version. Your sites, settings, and logins stay: the build deploys under the name, the bucket, and the database your copy's `wrangler.jsonc` names.
-
-Run in Cloudflare's build, poplin's deploy fetches a release of poplin from GitHub, checks it, and deploys that. Your copy on GitHub stays as it is.
-
-```text
-in the build's log:   poplin: deploying 0.3.1 (was asked for latest)
-```
-
-### What a build checks
-
-A release is named by its version and taken by its content. The build runs no file of a release before every row below passed.
-
-| Step | The build                                                                 | From                                   |
-| ---- | ------------------------------------------------------------------------- | -------------------------------------- |
-| 1    | reads which releases are published, each with a SHA-256 digest            | `releases.json` on poplin's website    |
-| 2    | fetches the release's source files, one archive                           | the release's page on GitHub           |
-| 3    | computes the archive's SHA-256 digest and compares it with the published  | the build itself                       |
-| 4    | reads the version the files say they are                                  | the archive                            |
-
-| What the build finds                                        | It prints, after `poplin:`                                           | Deployed |
-| ----------------------------------------------------------- | -------------------------------------------------------------------- | -------- |
-| the website does not answer with the file                   | `poplin's website did not say which releases are published.`         | nothing  |
-| no digest published for the version                         | `no digest is published for release 0.9.9, so its files cannot be checked.` | nothing |
-| the archive cannot be fetched                               | `release 0.3.1 could not be fetched from github.com.`                | nothing  |
-| a digest that differs, by one byte or by all                | `the files fetched for release 0.3.1 are not the files poplin published: their SHA-256 digest differs.` | nothing |
-| files that say another version than the one asked for       | `the files published as release 0.3.1 say they are version "0.2.0".` | nothing  |
-| `latest`, and a website that names no release               | `poplin's website names no release yet`                              | your copy's own files |
-| `latest`, and a newest release older than your copy         | `the newest published release, 0.3.1, is older than your copy (0.4.0)` | your copy's own files |
-
-Every line that deploys nothing holds `Nothing was deployed.` and says what to do. A build that deploys nothing leaves the running install as it was.
-
-### What a release publishes
+## What a release publishes
 
 | On the release's page            | Holds                                                                         | Its SHA-256 digest is in      |
 | -------------------------------- | ----------------------------------------------------------------------------- | ----------------------------- |
-| `poplin-<version>.tar.gz`        | the source files, which a build fetches                                       | `releases.json`, as `source`  |
 | `poplin-<version>-worker.json`   | a manifest: the version, the schema, and the digest and size of each built file | `releases.json`, as `bundle`  |
-| `poplin-<version>-worker.js`     | the built Worker: the one file a deploy of that release uploads               | the manifest                  |
+| `poplin-<version>-worker.js`     | the built Worker: the one file an install or an update uploads                | the manifest                  |
 | `poplin-<version>-worker.js.map` | the built Worker's source map                                                 | the manifest                  |
 
 ```json
-{ "0.3.1": { "source": "<64 hex>", "bundle": "<64 hex>", "schema": 1 } }
+{ "0.3.1": { "bundle": "<64 hex>", "schema": 1 } }
 ```
 
-- **Attested.** GitHub attests each of the four files as made by the project's release workflow, in a run of its main branch. The website names a release only when all four pass, and the built files are the ones the manifest states.
+- **Attested.** GitHub attests each of the three files as made by the project's release workflow, in a run of its main branch. The website names a release only when all three pass, and the built files are the ones the manifest states.
 - **Built twice.** The release workflow builds the Worker two times from the release's commit. A release whose two builds differ by one byte is not made.
 - **Schema.** `schema` counts the steps the release's database has been through. A release whose number differs from the running install's changes the database. `latest.json` carries the number too.
 
 The website is built after a release is out, so a new release is named there, and in the notice of [A newer version](#a-newer-version), within a day of its release.
 
-A deploy from Cloudflare's build or from a terminal uploads the Worker's source map with it, so an error in Cloudflare's log of the Worker names a source file and its line. No address serves the map.
+An install and an update upload the Worker's source map with the Worker, so an error in Cloudflare's log of the Worker names a source file and its line. A map of more than 16 MiB is left out. No address serves the map.
 
 ## The command on your computer
 
@@ -251,27 +210,6 @@ npx poplin config auto_update on
 | Going back               | an update it started is one the database did not change, so [Go back](#go-back) is offered after it   |
 | Switching it off         | `poplin config auto_update off`                                                                        |
 
-## Choose the version
-
-The build reads one build variable, `POPLIN_VERSION`. Cloudflare's documentation puts build variables in your Worker's Settings, under Build, in Build variables and secrets.
-
-| `POPLIN_VERSION`     | The build deploys                                                            |
-| -------------------- | ---------------------------------------------------------------------------- |
-| not set, or `latest` | the newest release, never one older than your copy. While the website names no release, the files of your copy |
-| a version: `0.2.0`   | that release, checked the same way. This keeps an install on one version, or takes it back to one |
-| `this`               | the files of your copy as they are, for changing poplin in your own copy     |
-
-A release refuses a database whose schema a newer release changed. The install then answers `This install's database is newer than its code: update poplin.` until a release that knows that schema is deployed again.
-
-## From a terminal
-
-An install made from a terminal updates with the two commands below. They deploy the files in that folder: nothing is fetched, and `POPLIN_VERSION` is not read. What step 4 gave the Worker stays.
-
-```sh
-git -C poplin pull
-bun run --cwd poplin deploy
-```
-
 ## A newer version
 
 While the setting `update_check` is on, the install says when a newer version is out. `poplin update --dry-run` says the same on every kind of install.
@@ -290,11 +228,11 @@ nothing was changed
 
 | Question             | Answer                                                                                             |
 | -------------------- | -------------------------------------------------------------------------------------------------- |
-| What is checked      | one file on the project's website, `latest.json`, which names the newest release a build can take  |
+| What is checked      | one file on the project's website, `latest.json`, which names the newest release an install can take  |
 | How often            | once a UTC day, by the install itself; a day with no answer is tried again the next day            |
 | What is sent         | a plain request for the file: no version, no id, and no address of the install is put in it        |
 | What Cloudflare adds | a `CF-Worker` header on every request a Worker sends. It names where the Worker runs: the account's `workers.dev` name, or the install's domain |
 | Where it shows       | the foot of the dashboard's side, on every page: `0.2.0 is out` and a link, What changed           |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
-| Updating to it       | `poplin update`, on an install that holds its key; [Update the install](#update-the-install) has the way of every kind of install |
+| Updating to it       | `poplin update`, on an install that holds its key; [Update the install](#update-the-install) says what one without a key does first |

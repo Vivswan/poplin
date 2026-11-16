@@ -7,7 +7,7 @@ import { basename, join } from "node:path";
 
 import { releaseDigest } from "@poplin/core/src/records/release";
 
-import { pinReleases } from "../../../../src/shared/release/deploy/pin-releases";
+import { pinReleases } from "../../../../src/shared/release/publish/pin-releases";
 
 /** Turns a text into the bytes of a file. */
 const ENCODER = new TextEncoder();
@@ -33,7 +33,6 @@ type Page = Readonly<Record<string, Uint8Array<ArrayBuffer> | string | number>>;
 /** The page of a release that is out whole, with any file replaced. */
 async function pageOf(version: string, replaced: Page = {}): Promise<Page> {
   return {
-    [`poplin-${version}.tar.gz`]: bytesOf(version, "the archive"),
     [`poplin-${version}-worker.json`]: await manifestOf(version),
     [`poplin-${version}-worker.js`]: bytesOf(version, "worker.js"),
     [`poplin-${version}-worker.js.map`]: bytesOf(version, "worker.js.map"),
@@ -82,17 +81,16 @@ async function pinned(versions: readonly string[], hub: Hub): Promise<{ readonly
 
 describe("pinReleases", () => {
   // Drift: this is the whole of what the website trusts a file for; a flag dropped from the check names a file attested by any workflow, or in a run of any branch, and a file left unchecked is one anybody may have put on the page.
-  test("a release is named with the digests of its archive and of its manifest, and the manifest's schema, only after GitHub's command line checked each of its four files, on the fetched bytes", async () => {
+  test("a release is named with the digest of its manifest, and the manifest's schema, only after GitHub's command line checked each of its three files, on the fetched bytes", async () => {
     const page = await pageOf("0.2.0");
-    const source = await releaseDigest(bytesOf("0.2.0", "the archive"));
     const bundle = await releaseDigest(ENCODER.encode(await manifestOf("0.2.0")));
-    const names = ["poplin-0.2.0.tar.gz", "poplin-0.2.0-worker.json", "poplin-0.2.0-worker.js", "poplin-0.2.0-worker.js.map"];
+    const names = ["poplin-0.2.0-worker.json", "poplin-0.2.0-worker.js", "poplin-0.2.0-worker.js.map"];
 
     expect(await pinned(["0.2.0"], { pages: { "0.2.0": page } })).toEqual({
-      pins: { "0.2.0": { source, bundle, schema: 2 } },
+      pins: { "0.2.0": { bundle, schema: 2 } },
       asked: names.map((name) => `https://github.com/Vivswan/poplin/releases/download/v0.2.0/${name}`),
       verified: names.map((name) => ["gh", "attestation", "verify", name, ...POLICY]),
-      said: [`release 0.2.0: named, with the digests ${source} of its source and ${bundle} of its built files, and schema 2`],
+      said: [`release 0.2.0: named, with the digest ${bundle} of its built files, and schema 2`],
     });
   });
 
@@ -106,33 +104,23 @@ describe("pinReleases", () => {
     expect(Object.keys(made.pins as object)).toEqual(["0.2.0", "0.1.0"]);
   });
 
-  test("a newest release whose page has no archive yet, as while it is a draft, is left out with a line, and no other file of it is asked for", async () => {
+  test("a newest release whose page has no manifest yet, as while it is a draft, is left out with a line, and no other file of it is asked for", async () => {
     const made = await pinned(["0.2.0", "0.1.0"], { pages: { "0.1.0": await pageOf("0.1.0") } });
 
-    expect([Object.keys(made.pins as object), made.said[0], made.asked.filter((url) => url.includes("/v0.2.0/")).length]).toEqual([["0.1.0"], "release 0.2.0: no source archive is published, so it is not named", 1]);
+    expect([Object.keys(made.pins as object), made.said[0], made.asked.filter((url) => url.includes("/v0.2.0/")).length]).toEqual([["0.1.0"], "release 0.2.0: no manifest of built files is published, so it is not named", 1]);
   });
 
-  // Drift: a release that was out and lost its archive would be dropped from the file with one line, and every install would refuse it as one that was never published. The site deployed before names it still.
+  // Drift: a release that was out and lost its manifest would be dropped from the file with one line, and every install would refuse it as one that was never published. The site deployed before names it still.
   test.each([
     { name: "between two releases that are out", versions: ["0.3.0", "0.2.0", "0.1.0"], out: ["0.3.0", "0.1.0"] },
     { name: "behind a newest release that is not out yet", versions: ["0.3.0", "0.2.0"], out: [] },
-  ])("an older release whose page has no archive, $name, stops the run", async ({ versions, out }) => {
+  ])("an older release whose page has no manifest, $name, stops the run", async ({ versions, out }) => {
     const pages = Object.fromEntries(await Promise.all(out.map(async (version) => [version, await pageOf(version)] as const)));
 
-    await expect(pinned(versions, { pages })).rejects.toThrow("release 0.2.0: no source archive is published, and a newer version is named");
+    await expect(pinned(versions, { pages })).rejects.toThrow("release 0.2.0: no manifest of built files is published, and a newer version is named");
   });
 
   const refused: readonly { readonly name: string; readonly hub: (version: string) => Promise<Hub>; readonly thrown: string }[] = [
-    {
-      name: "an archive put on the page by hand, which no run of the release workflow attested",
-      hub: async (version) => ({ pages: { [version]: await pageOf(version) }, unattested: [`poplin-${version}.tar.gz`] }),
-      thrown: "release 0.2.0: its source archive did not pass as attested by the release workflow in a run of main",
-    },
-    {
-      name: "an attested archive on a page with no manifest",
-      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.json`]: 404 }) } }),
-      thrown: "release 0.2.0: its page holds a source archive and no manifest of built files",
-    },
     {
       name: "a manifest nobody attested",
       hub: async (version) => ({ pages: { [version]: await pageOf(version) }, unattested: [`poplin-${version}-worker.json`] }),
@@ -141,7 +129,7 @@ describe("pinReleases", () => {
     {
       name: "an attested manifest that names a module the page lacks",
       hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.js`]: 404 }) } }),
-      thrown: "release 0.2.0: its page holds a source archive and no built file worker.js",
+      thrown: "release 0.2.0: its page holds a manifest of built files and no built file worker.js",
     },
     {
       name: "a module swapped for one nobody attested, beside an attested manifest",
@@ -185,8 +173,8 @@ describe("pinReleases", () => {
     },
   ];
 
-  // Drift: a file that did not pass is never named, and its release must not be dropped either: the command line fails the same way while GitHub's service is down, and a file that lost every release sends each build back to its copy's own files.
-  // A release named with its source alone would be one no install can take by its built files, and one named over an unchecked file would publish a digest anybody could have made.
+  // Drift: a file that did not pass is never named, and its release must not be dropped either: the command line fails the same way while GitHub's service is down, and a file that lost every release leaves no install one to update to.
+  // A release named over an unchecked file would publish a digest anybody could have made.
   test.each(refused)("$name stops the run, and names nothing", async ({ hub, thrown }) => {
     const pages = { ...(await hub("0.2.0")).pages, "0.1.0": await pageOf("0.1.0") };
 
@@ -195,9 +183,9 @@ describe("pinReleases", () => {
 
   // Drift: a site built with a release missing only because GitHub was down would have every install refuse that release for a day; the site deployed before names it still.
   test.each([
-    ["poplin-0.2.0.tar.gz", 500, "source archive"],
-    ["poplin-0.2.0.tar.gz", 429, "source archive"],
-    ["poplin-0.2.0.tar.gz", 302, "source archive"],
+    ["poplin-0.2.0-worker.json", 500, "manifest of built files"],
+    ["poplin-0.2.0-worker.json", 429, "manifest of built files"],
+    ["poplin-0.2.0-worker.json", 302, "manifest of built files"],
     ["poplin-0.2.0-worker.json", 503, "manifest of built files"],
     ["poplin-0.2.0-worker.js", 500, "built file worker.js"],
     ["poplin-0.2.0-worker.js.map", 403, "built file worker.js.map"],

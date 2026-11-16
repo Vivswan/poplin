@@ -24,7 +24,7 @@ import { LAST_UPDATE, type LastUpdate } from "@poplin/core/src/records/update";
 import { BaseSchedules } from "cloudflare/resources/workers/scripts/schedules";
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
-import { MAP_FILE, MODULE_FILE } from "../deploy/bundle-manifest";
+import { MAP_FILE, MODULE_FILE } from "../publish/bundle-manifest";
 import { type KeptKey, keyed } from "../../install/key/kept-key";
 import { type CloudflareResult, type Connection, callCloudflare } from "../../install/client";
 import { INSTALL_OBJECTS } from "../../install/install-objects";

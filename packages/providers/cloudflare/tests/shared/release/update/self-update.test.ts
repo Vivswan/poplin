@@ -5,8 +5,8 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { releaseDigest } from "@poplin/core/src/records/release";
 import { homepage } from "../../../../../../cli/package.json";
-import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/deploy/bundle-manifest";
-import { bundleAddress, MANIFEST_FILE } from "../../../../src/shared/release/deploy/release-source";
+import { bundleManifest, MAP_FILE, MODULE_FILE } from "../../../../src/shared/release/publish/bundle-manifest";
+import { bundleAddress, MANIFEST_FILE } from "../../../../src/shared/release/publish/release-source";
 import { readKeptKey } from "../../../../src/shared/install/key/kept-key";
 import { createSelfUpdate } from "../../../../src/shared/release/update/self-update";
 import { refusal, reply } from "../../install/support/replies";
@@ -50,7 +50,6 @@ const CONFIG = {
   upload_source_maps: true,
   observability: OBSERVABILITY,
   build: { command: "bun run built-client" },
-  keep_vars: true,
   triggers: { crons: ["*/15 * * * *"] },
   r2_buckets: [{ binding: "SITES", bucket_name: "poplin-sites" }],
   d1_databases: [{ binding: "DB", database_name: "poplin" }],
@@ -134,7 +133,7 @@ interface Outcome {
 async function release(version: string, schema: number, config: object = CONFIG, files = { [MODULE_FILE]: MODULE, [MAP_FILE]: MAP }): Promise<{ readonly manifest: string; readonly pin: object }> {
   const manifest = await bundleManifest({ version, schema, config, files });
 
-  return { manifest, pin: { source: "0".repeat(64), bundle: await releaseDigest(ENCODER.encode(manifest)), schema } };
+  return { manifest, pin: { bundle: await releaseDigest(ENCODER.encode(manifest)), schema } };
 }
 
 /** An install that takes release 0.3.0 while it runs 0.2.0, with every file where it belongs. */

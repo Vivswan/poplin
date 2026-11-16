@@ -11,7 +11,7 @@ import { MemoryStore } from "../../../../../core/src/storage/memory";
 import { publish, reachOf } from "../../../scripts/live/commands";
 import type { World } from "../../../scripts/live/converge";
 import { type Found, openRun, type Run, TEST_MARK } from "../../../scripts/live/util";
-import { MAP_FILE, MODULE_FILE } from "../../../src/shared/release/deploy/bundle-manifest";
+import { MAP_FILE, MODULE_FILE } from "../../../src/shared/release/publish/bundle-manifest";
 import { ACCOUNT, type Account, emptyAccount, TOKEN } from "../../shared/install/support/fake-install";
 import { worldOf } from "../../shared/install/support/fake-reach";
 import { storeOf } from "../../shared/install/support/fake-store";

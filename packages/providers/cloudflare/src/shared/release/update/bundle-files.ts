@@ -12,8 +12,8 @@ import { bundleFileProblem, readBundle } from "@poplin/core/src/records/release-
 import { type ReleasePins, releaseDigest } from "@poplin/core/src/records/release";
 import { concatUint8Arrays } from "uint8array-extras";
 import * as v from "valibot";
-import { MAP_FILE, MODULE_FILE } from "../deploy/bundle-manifest";
-import { bundleAddress, MANIFEST_FILE } from "../deploy/release-source";
+import { MAP_FILE, MODULE_FILE } from "../publish/bundle-manifest";
+import { bundleAddress, MANIFEST_FILE } from "../publish/release-source";
 
 /** The most bytes of a manifest that are read. */
 const MOST_MANIFEST_BYTES = 65_536;
