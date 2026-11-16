@@ -1,5 +1,5 @@
 // The panel of one thing, opened from a list. It lies over the end of the list, which keeps its width; on a phone it takes the list's place until it is closed.
-// Escape and a press beside it close it either way, and the focus goes into it when it opens and back to where it came from when it closes.
+// Escape and a press beside it close it either way, Tab goes round inside it, and the focus goes into it when it opens and back to where it came from when it closes.
 
 import { Dialog } from "@base-ui/react/dialog";
 import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
@@ -17,7 +17,7 @@ import { IconButton } from "@/shared/icon-button";
 /** A row of the list that opens a panel, and everything in it. */
 const ROWS = "[data-opens]";
 
-/** The places beside a panel that close nothing when pressed or given the focus: a row of the list opens, changes, or closes the panel itself, a result's button acts on the panel's thing, and a question or a menu the panel opened lies over the page. */
+/** The places beside a panel that close nothing when pressed: a row of the list opens, changes, or closes the panel itself, a result's button acts on the panel's thing, and a question or a menu the panel opened lies over the page. */
 const OWN_PLACES = `${ROWS}, [data-sonner-toaster], [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox']`;
 
 /** What a panel is drawn from. */
@@ -170,36 +170,47 @@ function covers(place: HTMLElement, control: Element): boolean {
   return place.contains(document.elementFromPoint((left + right) / 2, (top + bottom) / 2));
 }
 
-/**
- * Whether what the library says closed the panel closes it: Escape does, and so does a focus that left it or a press beside it, unless it went to a place of the panel's own.
- *
- * A focus that left for nothing was taken away with its control, and stays the panel's. So does one the list itself took as a press began on it: the press, once it ends, says what the panel does.
- */
+/** Whether what the library says closed the panel closes it: Escape does, and so does a press beside it, unless it went to a place of the panel's own. */
 function closes({ reason, event }: Dialog.Root.ChangeEventDetails): boolean {
-  if (reason !== "outside-press" && reason !== "focus-out") return true;
+  if (reason !== "outside-press") return true;
 
-  const went = reason === "focus-out" ? (event as FocusEvent).relatedTarget : event.target;
-  if (!(went instanceof Element) || went.closest(OWN_PLACES) !== null) return false;
-
-  return reason === "outside-press" || went.querySelector(ROWS) === null;
+  return event.target instanceof Element && event.target.closest(OWN_PLACES) === null;
 }
 
 /**
- * Close the panel, or refuse the close the library's way. A refused close leaves the library's reading of the press as it was, so the end of a press that began on the list still closes the panel.
+ * Give the focus to the panel's opener once a press beside the panel has ended, where the press left it on nothing.
+ *
+ * The panel closes as the press goes down, and the browser then takes the focus for the place that was pressed: the page itself, or the list as a whole.
+ */
+function backAfterPress(place: HTMLElement, opener: () => HTMLElement | undefined): void {
+  const back = (): void => {
+    if (leftBy(place)) opener()?.focus({ preventScroll: true });
+  };
+  document.addEventListener("click", back, { once: true, capture: true });
+}
+
+/**
+ * Close the panel, or refuse the close the library's way.
  *
  * An Escape pressed while a question lies over the page is the question's alone, also where the focus is on neither.
  */
-function leave(open: boolean, details: Dialog.Root.ChangeEventDetails, place: HTMLElement, onClose: () => void): void {
+function leave(open: boolean, details: Dialog.Root.ChangeEventDetails, { place, onClose, opener }: Pick<SidePanelProps, "onClose" | "opener"> & { readonly place: HTMLElement }): void {
   if (open) return;
 
-  if (liesUnder(place) || !closes(details)) details.cancel();
-  else onClose();
+  if (liesUnder(place) || !closes(details)) {
+    details.cancel();
+
+    return;
+  }
+
+  onClose();
+  if (details.reason === "outside-press") backAfterPress(place, opener);
 }
 
 /**
  * Close a panel when the focus reaches a control that lies under it, so the focus is never out of sight: the list keeps its width under the panel, which covers the end of its rows, of its headings, and of its tools.
  *
- * The library tells of a focus that leaves the panel only, and a covered control is reached from a row as well.
+ * Tab stays in the panel while the focus is in it. A press on a row's control puts the focus beside the panel, and the keys go on from there to a covered one.
  */
 function useNoFocusUnder(place: HTMLElement | null, onClose: () => void): void {
   useEffect(() => {
@@ -215,9 +226,9 @@ function useNoFocusUnder(place: HTMLElement | null, onClose: () => void): void {
 }
 
 /**
- * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page, so nothing is dimmed and the rest of the page stays in use.
+ * Draw a panel: the library's dialog that keeps Tab inside it, without its modal layer, drawn into its own place in the page, so nothing is dimmed and a pointer still reaches the rest of the page.
  *
- * It moves the focus to the heading, closes on Escape and when Tab leaves it, and gives the focus back to its opener, though not after a close it was refused: the screen then finds the focus its place.
+ * It moves the focus to the heading, closes on Escape, and gives the focus back to its opener, though not after a close it was refused: the screen then finds the focus its place.
  * A press beside it closes it. Over the end of its list it is set off by a hairline and a soft shadow; where it has the row to itself it lies in the list's place.
  */
 export function SidePanel({ title, closeLink, onClose, opener, back, beside, children }: SidePanelProps): ReactNode {
@@ -235,7 +246,7 @@ export function SidePanel({ title, closeLink, onClose, opener, back, beside, chi
       className={cn("flex min-h-0 min-w-0 flex-col bg-background", liesOver ? "absolute inset-y-0 right-0 z-40 w-[440px] border-l shadow-[-12px_0_24px_-16px_rgb(0_0_0/0.25)]" : "col-start-1 row-start-1")}
     >
       {place === null ? null : (
-        <Dialog.Root open modal={false} onOpenChange={(open, details) => leave(open, details, place, onClose)}>
+        <Dialog.Root open modal="trap-focus" onOpenChange={(open, details) => leave(open, details, { place, onClose, opener })}>
           <Dialog.Portal container={place} className="flex min-h-0 flex-1 flex-col">
             <Dialog.Popup
               initialFocus={heading}
