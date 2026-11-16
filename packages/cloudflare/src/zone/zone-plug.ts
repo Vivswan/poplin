@@ -8,7 +8,6 @@
 // The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
-import type { InstallKey } from "@poplin/app/src/console/key/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncBudgetAlert } from "./alerts/budget-alert";
@@ -19,8 +18,8 @@ import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
 import type { INSTALL_PIECES } from "./install-pieces";
 import { HTTPS_SWITCH, syncHttps } from "./https/https";
-import { readKeyState } from "./key/key-state";
-import { mintKey } from "./key/mint";
+import { type HeldKey, readKeyState } from "./key/key-state";
+import { mintKey, removeKeys } from "./key/mint";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
@@ -84,6 +83,12 @@ const KEY = INSTALL_OBJECTS.keyName;
 
 /** What the key's row says of a key a repair replaces: one Cloudflare takes no more, and one that works and was made before a right the install uses now. */
 const KEY_DIFFERS = { refused: "Cloudflare no longer takes the key the install holds", lacking: "the key the install holds lacks a right the install uses now" } as const;
+
+/** What the key's row says of a key of the name that the install does not hold, such as a new key whose write failed: as a check finds it, and once a repair deleted it. */
+const KEY_SPARE = { left: "a key of its name that the install does not hold is at Cloudflare", removed: "a key of its name that the install does not hold was deleted" } as const;
+
+/** What a repair that could not delete such a key tells the person to do: by its name alone it cannot be told from the key the install holds. */
+const SPARE_KEY = `A key named ${KEY} that the install does not hold could not be deleted at Cloudflare. Press Repair again. The keys are listed there:`;
 
 /** What the key's row says of a new key whose write onto the Worker failed, by whether it could be deleted again. */
 const KEY_UNWRITTEN = { deleted: "made, and deleted again when its write onto the Worker failed", left: "made, and left at Cloudflare for you to delete when its write onto the Worker failed" } as const;
@@ -170,10 +175,7 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
  * One with nothing set has `first`, its first login: its account is the one the token shows the domain in, and a repair also writes the domain, this login, and that account onto the Worker.
  * `key` is the install's key as its own Worker holds it. Without one, how the key stands is read at Cloudflare with the token.
  */
-type Known = { readonly accountId: string; readonly first?: undefined; readonly key?: Held } | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined };
-
-/** The install's key as the Worker that holds it sees it. */
-type Held = Pick<InstallKey, "has" | "verify">;
+type Known = { readonly accountId: string; readonly first?: undefined; readonly key?: HeldKey } | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined };
 
 /** What the plug is built from. */
 type PlugParts = Known & {
@@ -404,6 +406,8 @@ function keyRead(state: Awaited<ReturnType<typeof readKeyState>>, variables: boo
 
   if (state.value === "refused" || state.value === "lacking") return { object: "Key", state: "differs", detail: `${KEY}: ${KEY_DIFFERS[state.value]}` };
 
+  if (state.spare.length > 0) return { object: "Key", state: "differs", detail: `${KEY}: ${KEY_SPARE.left}` };
+
   return { object: "Key", state: state.value, detail: KEY };
 }
 
@@ -427,11 +431,24 @@ async function mintInto(connection: Connection, placed: Placed, wanted: Wanted, 
   return { row: keyFailed(`, ${minted.left ? KEY_UNWRITTEN.left : KEY_UNWRITTEN.deleted}`, minted.kept, RIGHT.scripts), steps: [], written: minted.kept };
 }
 
+/** What a repair does about the key it read: a new one where none works and carries every right, and beside one that does, every key of the name that the install does not hold deleted. Nothing to do is `undefined`. */
+async function mendKey(connection: Connection, placed: Placed, wanted: Wanted, state: Awaited<ReturnType<typeof readKeyState>>): Promise<Awaited<ReturnType<typeof mintInto>> | undefined> {
+  if (!state.ok) return undefined;
+
+  if (state.value !== "present") return mintInto(connection, placed, wanted, state.value !== "missing");
+
+  if (state.spare.length === 0) return undefined;
+
+  if (await removeKeys(connection, placed.accountId, state.spare)) return { row: { object: "Key", state: "changed", detail: `${KEY}: ${KEY_SPARE.removed}` }, steps: [], written: undefined };
+
+  return { row: { object: "Key", state: "present", detail: KEY }, steps: [{ text: SPARE_KEY, address: `https://dash.cloudflare.com/${placed.accountId}/api-tokens` }], written: undefined };
+}
+
 // The key and the variables are one piece of work on the Worker: a key is made only where a repair finds none that works and carries every right, and then both go in one change.
 async function workerPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, wanted: Wanted): Promise<Synced | undefined> {
   const object = (): Piece => "Worker variable";
   const state = await readKeyState(placed.key, connection, placed);
-  const made = mode === "apply" && state.ok && state.value !== "present" ? await mintInto(connection, placed, wanted, state.value !== "missing") : undefined;
+  const made = mode === "apply" ? await mendKey(connection, placed, wanted, state) : undefined;
   const written = made?.written;
   const run = written === undefined ? (): Promise<Synced> => syncVariables(connection, placed, wanted, mode) : async (): Promise<Synced> => written;
   // With no variable to write, the key's own row says everything the change came to.

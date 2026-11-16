@@ -358,7 +358,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
   const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
   const placed = { ...own.value, layout, fetch: outside.cloudflare };
-  const key: InstallKey = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
+  const key: ReturnType<typeof createInstallKey> = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
   const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules: createRulesFollow(kept, { accountId: own.value.accountId, layout }) };
   const api = createApi({
     ...install,

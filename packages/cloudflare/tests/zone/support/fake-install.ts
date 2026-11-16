@@ -208,9 +208,12 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
   return reply({ bindings: account.bindings });
 }
 
-/** The API tokens the account owns. A new one is active, and its value is answered this once and kept nowhere. No two tokens of a test run share an id. */
+/** The API tokens the account owns. A new one is active, and its value is answered this once and kept nowhere. No two tokens of a test run share an id. An expired one is listed only when the expired are asked for, as at Cloudflare. */
 function tokens(account: Account, asked: Asked, id: string | undefined): Response {
   if (id === "permission_groups") return reply(account.groups);
+
+  const every = id !== undefined || asked.method !== "GET" || asked.path.includes("include_expired=true");
+  if (!every) return stored(account.tokens.filter((token) => token.status !== "expired"), asked, id);
 
   if (asked.method !== "POST") return stored(account.tokens, asked, id);
 

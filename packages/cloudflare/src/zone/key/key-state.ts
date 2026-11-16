@@ -1,19 +1,20 @@
 // How the key of an install stands, read before a check says so or a repair makes a new one.
 //
-//   on the Worker, which holds the key      the key itself is asked: Cloudflare takes it, or refuses it
+//   on the Worker, which holds the key      the key itself is asked: Cloudflare takes it and names its token by id, or refuses it
 //   anywhere else, with a person's token    the Worker has the secret, and Cloudflare lists an active token of the key's name
 //   a key that stands, either way           its rights are read from the account's tokens, with the person's token: one made before a right was added lacks it
 //
-// The second reading cannot tell a key whose value was rolled at Cloudflare from the one the Worker holds. The first can, so the Worker's own word is taken wherever there is one.
-// A key answers nothing about its own rights, so they are read from the active tokens of the key's name: the key stands when one of them carries every right.
+// A key answers nothing about its own rights, so they are read from the account's tokens: on the Worker, from the one token whose id the key answered.
+// Every other token of the key's name is then one the Worker does not hold, such as a new key whose write failed: `spare` names them.
+// Without the Worker the token it holds cannot be told from another of the name, so the key stands only when every active one carries every right.
 
-import type { InstallKey } from "@poplin/app/src/console/key/records";
+import type { Keyed } from "@poplin/app/src/console/key/records";
 import { BasePermissionGroups } from "cloudflare/resources/accounts/tokens/permission-groups";
 import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import { type CloudflareFailure, type Connection, callCloudflare } from "../client";
 import { INSTALL_OBJECTS } from "../install-objects";
-import { type KeyPlace, keyPolicies, noGroup } from "./rights";
+import { carriesRights, type KeyPlace, keyPolicies, noGroup } from "./rights";
 
 /** What the Worker's own key is said to have failed with when Cloudflare gave no usable answer about it. */
 const NO_ANSWER: Unread = { ok: false, failure: "network", message: "no answer about the key", read: "tokens" };
@@ -24,18 +25,33 @@ type KeyState = "present" | "missing" | "refused" | "lacking";
 /** A reading that failed, with which of the two it was: the Worker's bindings or the account's tokens. A right Cloudflare lists no group for leaves the tokens unread: no key can be compared with it. */
 type Unread = (CloudflareFailure | ReturnType<typeof noGroup>) & { readonly read: "bindings" | "tokens" };
 
-/** What a reading answers. */
-type KeyRead = { readonly ok: true; readonly value: KeyState } | Unread;
+/** What a reading answers. `spare` is the id of every token of the key's name that the Worker is known not to hold. */
+type KeyRead = { readonly ok: true; readonly value: KeyState; readonly spare: readonly string[] } | Unread;
+
+/** Whether the install has a key that works, before its rights are read; `id` is Cloudflare's id of the token, where the key itself answered it. */
+type Stands = { readonly ok: true; readonly value: Exclude<KeyState, "lacking">; readonly id?: string } | Unread;
+
+/** A key whose rights are read: the name its tokens have at Cloudflare, and what writes its policies for an install. */
+interface Sort {
+  readonly name: string;
+  readonly policies: typeof keyPolicies;
+}
 
 /** The Worker whose key is read, and where the key acts. */
 type OwnWorker = KeyPlace & { readonly script: string };
 
+/** A key as the Worker that holds it asks about it. A key that works answers Cloudflare's id of its token, and never its value. */
+export interface HeldKey {
+  has(): boolean;
+  verify(): Promise<Keyed<{ readonly id: string }>>;
+}
+
 /** The key's state as the Worker that holds it knows it. */
-async function heldState(held: Pick<InstallKey, "has" | "verify">): Promise<KeyRead> {
+async function heldState(held: HeldKey): Promise<Stands> {
   if (!held.has()) return { ok: true, value: "missing" };
 
   const verified = await held.verify();
-  if (verified.ok) return { ok: true, value: "present" };
+  if (verified.ok) return { ok: true, value: "present", id: verified.value.id };
 
   if (verified.refusal === "no_key") return { ok: true, value: "missing" };
 
@@ -43,7 +59,7 @@ async function heldState(held: Pick<InstallKey, "has" | "verify">): Promise<KeyR
 }
 
 /** Whether the Worker has the key's secret, as a person's token reads its bindings. */
-async function boundState(connection: Connection, worker: OwnWorker): Promise<KeyRead> {
+async function boundState(connection: Connection, worker: OwnWorker): Promise<Stands> {
   const settings = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).get(worker.script, { account_id: worker.accountId }));
   if (!settings.ok) return { ...settings, read: "bindings" };
 
@@ -53,31 +69,29 @@ async function boundState(connection: Connection, worker: OwnWorker): Promise<Ke
 }
 
 /**
- * Read how a key that stands is listed at Cloudflare: whether an active token of its name carries every right of a key.
+ * Read how a key that stands is listed at Cloudflare: whether the token the Worker holds carries every right of the key where the install is.
  *
- * @param vouched - whether the Worker's own key answered for itself, so that no token of the name being listed leaves it standing
+ * @param heldId - the id the Worker's own key answered; absent where the reader is not the Worker, and then every active token of the name is judged
+ * @returns a held key that is not listed stands: its rights cannot be read. With no `heldId`, no active token of the name is a key Cloudflare takes no more
  */
-async function listedState(connection: Connection, worker: OwnWorker, vouched: boolean): Promise<KeyRead> {
-  const tokens = await callCloudflare(connection, (api) => Array.fromAsync(new BaseTokens(api).list({ account_id: worker.accountId })));
+async function listedState(connection: Connection, place: KeyPlace, sort: Sort, heldId: string | undefined): Promise<KeyRead> {
+  const tokens = await callCloudflare(connection, (api) => Array.fromAsync(new BaseTokens(api).list({ account_id: place.accountId, include_expired: true })));
   if (!tokens.ok) return { ...tokens, read: "tokens" };
 
-  const active = tokens.value.filter((token) => token.name === INSTALL_OBJECTS.keyName && token.status === "active");
-  if (active.length === 0) return { ok: true, value: vouched ? "present" : "refused" };
+  const named = tokens.value.filter((token) => token.name === sort.name);
+  const judged = heldId === undefined ? named.filter((token) => token.status === "active") : tokens.value.filter((token) => token.id === heldId);
+  const spare = heldId === undefined ? [] : named.flatMap((token) => (token.id === undefined || token.id === heldId ? [] : [token.id]));
+  if (judged.length === 0) return { ok: true, value: heldId === undefined ? "refused" : "present", spare };
 
-  const groups = await callCloudflare(connection, (api) => Array.fromAsync(new BasePermissionGroups(api).list({ account_id: worker.accountId })));
+  const groups = await callCloudflare(connection, (api) => Array.fromAsync(new BasePermissionGroups(api).list({ account_id: place.accountId })));
   if (!groups.ok) return { ...groups, read: "tokens" };
 
-  const wanted = keyPolicies(worker, groups.value);
+  const wanted = sort.policies(place, groups.value);
   if (!wanted.ok) return { ...noGroup(wanted.missing), read: "tokens" };
 
-  const needed = wanted.policies.flatMap((policy) => policy.permission_groups.map((group) => group.id));
-  const whole = active.some((token) => {
-    const carried = new Set((token.policies ?? []).flatMap((policy) => policy.permission_groups.map((group) => group.id)));
+  const whole = judged.every((token) => carriesRights(place, wanted.policies, token.policies ?? []));
 
-    return needed.every((id) => carried.has(id));
-  });
-
-  return { ok: true, value: whole ? "present" : "lacking" };
+  return { ok: true, value: whole ? "present" : "lacking", spare };
 }
 
 /**
@@ -85,11 +99,13 @@ async function listedState(connection: Connection, worker: OwnWorker, vouched: b
  *
  * @param held - the key as the Worker holds it; absent where the reader is not the install's Worker
  * @param connection - a person's token: it reads the account's tokens for the rights of a key that stands, and the Worker's bindings where `held` is absent
- * @returns the state; or the call Cloudflare refused the person's token or did not answer. Nothing is changed
+ * @returns the state, and every token of the key's name the Worker does not hold; or the call Cloudflare refused the person's token or did not answer. Nothing is changed
  */
-export async function readKeyState(held: Pick<InstallKey, "has" | "verify"> | undefined, connection: Connection, worker: OwnWorker): Promise<KeyRead> {
+export async function readKeyState(held: HeldKey | undefined, connection: Connection, worker: OwnWorker): Promise<KeyRead> {
   const stands = held === undefined ? await boundState(connection, worker) : await heldState(held);
-  if (!stands.ok || stands.value !== "present") return stands;
+  if (!stands.ok) return stands;
 
-  return listedState(connection, worker, held !== undefined);
+  if (stands.value !== "present") return { ok: true, value: stands.value, spare: [] };
+
+  return listedState(connection, worker, { name: INSTALL_OBJECTS.keyName, policies: keyPolicies }, stands.id);
 }
