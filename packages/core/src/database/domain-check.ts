@@ -51,8 +51,8 @@ export function usersChanged(at: number): Statement {
 }
 
 /**
- * Build the statement that remembers the users changed when the stored logins are replaced by a list, for a batch where it comes before that replacement: it compares the list with the logins still stored.
- * It writes only for a list that adds or drops a login, and only on an install that keeps a run. The same logins in another order are no change.
+ * Build the statement that remembers the users changed when a list replaces the stored logins. It goes before that replacement in a batch, since it compares the list with the logins still stored.
+ * It writes only on an install that keeps a run, for a list that adds a login, drops one, or has another first login. Another order behind the same first login is no change.
  *
  * @param logins - the logins that replace the stored ones
  * @param at - the moment of the change
@@ -62,7 +62,8 @@ export function usersReplaced(logins: readonly string[], at: number): Statement 
   const given = fragment`json_each(${JSON.stringify(logins)})`;
   const dropped = fragment`EXISTS (SELECT 1 FROM ${stored} AS was WHERE was.value NOT IN (SELECT value FROM ${given}))`;
   const added = fragment`EXISTS (SELECT 1 FROM ${given} AS now WHERE now.value NOT IN (SELECT value FROM ${stored}))`;
-  const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added}))`;
+  const moved = fragment`json_extract(${settings.value}, '$.logins[0]') IS NOT ${logins[0] ?? null}`;
+  const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added} OR ${moved}))`;
 
   return built(BUILD.update(domainCheck).set({ users_changed_at: at }).where(and(eq(domainCheck.id, 1), differs)));
 }

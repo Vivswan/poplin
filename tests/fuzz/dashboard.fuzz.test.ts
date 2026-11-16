@@ -1,6 +1,6 @@
-// Anyone can send the admin hostname any method, path, headers, and body: the dashboard must answer each without throwing or failing, show nothing of the install without a session, and change nothing unless a logged-in request sent the change as JSON.
+// Anyone can send the admin hostname any method, path, headers, and body: the dashboard must answer each without throwing or failing, show nothing of the install without a session, and change nothing unless a logged-in page of its own sent JSON.
 //
-// JSON is the whole guard of a change: a page of another origin cannot make a browser send JSON with the session unless this origin lets it, which it never does. So the property holds whatever `Origin` a request names.
+// A change has two guards: its `Origin` and `Sec-Fetch-Site` name the dashboard's own page, and it is JSON. A browser counts every site of the install as the same site as the dashboard, so the session alone tells nothing of the page that sent it.
 // The paths that would do a change name their site by its public name: that stays a reference through a new link, so they keep working for the whole run.
 // A published answer is a page, a redirect to the login, the answer of a session that ended, or a refusal under a status the console's own table gives: never a failure of the server, 500 and up.
 
@@ -93,9 +93,11 @@ function requestOf(asked: Asked): Request {
   return new Request(`${ORIGIN}${asked.path}`, { method: asked.method, headers, body });
 }
 
-/** Whether a request is one the dashboard may change the install for: a POST whose media type is JSON, whatever parameters follow it. */
-function isChange(asked: Pick<Asked, "method" | "type">): boolean {
-  return asked.method === "POST" && asked.type.split(";")[0]?.trim().toLowerCase() === JSON_TYPE;
+/** Whether a request is one the dashboard may change the install for: a POST whose two headers both name the dashboard's own page and whose media type is JSON, whatever parameters follow it. */
+function isChange(asked: Pick<Asked, "method" | "type" | "origin" | "fetchSite">): boolean {
+  const ownPage = asked.origin === ORIGIN && asked.fetchSite === "same-origin";
+
+  return asked.method === "POST" && ownPage && asked.type.split(";")[0]?.trim().toLowerCase() === JSON_TYPE;
 }
 
 /** Whether an answer shows nothing of the install: the way to the login, a data route's refusal of a request without a session, or a file of the client, which holds nothing of it. */
@@ -151,7 +153,7 @@ async function factsOf(asked: Asked): Promise<Readonly<Record<string, boolean>>>
 }
 
 property(
-  "any request gets a published answer, a page only with a session, and a change only from a logged-in request sent as JSON",
+  "any request gets a published answer, a page only with a session, and a change only from a logged-in page of the dashboard that sent it as JSON",
   fc.asyncProperty(requests, async (asked) => {
     const address = `${ORIGIN}${asked.path}`;
     fc.pre(URL.canParse(address) && new URL(address).origin === ORIGIN);

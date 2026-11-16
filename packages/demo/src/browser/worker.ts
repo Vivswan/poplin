@@ -2,6 +2,7 @@
 //
 //   a navigation while no demo page is open     a new visit: the demo starts over from the seed
 //   any other request, the demo not running     the browser stopped the worker: the demo goes on from what was saved
+//   that request, and nothing was saved         a new build took the page over: the demo starts from the seed, and the open pages load anew
 //
 // A browser stops an idle worker after about half a minute, so after every answer the whole demo is written to IndexedDB.
 // The dashboard's client is no part of this script: its files sit beside it on the host, and each is read from there the first time a page asks for it.
@@ -72,6 +73,12 @@ let written: Promise<unknown> = Promise.resolve();
 
 /** Whether a write waits its turn: it takes the demo as it is when it starts, so one write covers every answer before it. */
 let waiting = false;
+
+/** The pages that were open when the demo last started from the seed, by the id of each: what such a page shows names the sites of the data before. */
+const stale = new Set<string>();
+
+/** The loading anew of those pages, which a request of one waits for. */
+let reloaded: Promise<unknown> = Promise.resolve();
 
 /** A browser may shut IndexedDB to a worker. The demo then runs without it, and starts over when the browser stops the worker. */
 function unkept(error: unknown): undefined {
@@ -175,12 +182,44 @@ async function start(saved: SavedDemo | undefined): ReturnType<typeof openKeptDe
   return demo;
 }
 
+/** Whether a request comes from a page drawn before the demo last started from the seed. A page that asks for itself is drawn anew, whatever page it takes the place of. */
+function isStale(event: FetchEvent): boolean {
+  return event.request.mode !== "navigate" && stale.has(event.clientId);
+}
+
+/**
+ * Load every open page anew: the seed gave every site another id than the one the page's rows name. A page that cannot be loaded anew is answered as it is.
+ *
+ * The page that asked is loaded at the address it shows now, which its request names as its referrer: a browser may tell a worker only the address a page was first loaded at.
+ */
+async function reloadPages(asked: FetchEvent): Promise<void> {
+  const pages = await self.clients.matchAll({ type: "window" });
+  stale.clear();
+  for (const page of pages) stale.add(page.id);
+
+  // Only a request a script made names the page as its referrer: a font names the stylesheet that asked for it.
+  const { referrer, destination } = asked.request;
+  const named = destination === "" && referrer.startsWith(self.registration.scope);
+  const shown = (page: WindowClient): string => (page.id === asked.clientId && named ? referrer : page.url);
+  const loading = pages.filter((page) => page.frameType === "top-level").map((page) => page.navigate(shown(page)).catch(() => stale.delete(page.id)));
+  reloaded = Promise.all(loading);
+}
+
+/** Start the demo for a request. One that starts from the seed for a page that asks for anything but itself, as after a new build took an open page over, has every open page loaded anew. */
+async function startFor(event: FetchEvent, opensVisit: boolean): ReturnType<typeof openKeptDemo> {
+  const saved = opensVisit ? undefined : await readSaved();
+  const demo = await start(saved);
+  if (saved === undefined && event.request.mode !== "navigate") await reloadPages(event);
+
+  return demo;
+}
+
 /** The demo this request is answered by: the running one, the saved one, or a new one when the request opens a visit. */
-async function demoFor(request: Request): ReturnType<typeof openKeptDemo> {
-  const opensVisit = request.mode === "navigate" && (await self.clients.matchAll({ type: "window" })).length === 0;
+async function demoFor(event: FetchEvent): ReturnType<typeof openKeptDemo> {
+  const opensVisit = event.request.mode === "navigate" && (await self.clients.matchAll({ type: "window" })).length === 0;
 
   if (opensVisit || running === undefined) {
-    const starting = (async () => start(opensVisit ? undefined : await readSaved()))();
+    const starting = startFor(event, opensVisit);
     running = starting;
     starting.catch(() => {
       if (running === starting) running = undefined;
@@ -191,7 +230,11 @@ async function demoFor(request: Request): ReturnType<typeof openKeptDemo> {
 }
 
 async function answer(event: FetchEvent): Promise<Response> {
-  const demo = await demoFor(event.request);
+  const demo = await demoFor(event);
+  // A page drawn from the data before is loaded anew; what it asked meanwhile is never done to the new data.
+  if (isStale(event)) await reloaded;
+  if (isStale(event)) return new Response("The demo started over. This page loads again by itself.\n", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+
   const response = await demo.fetch(event.request);
   event.waitUntil(save(demo));
 

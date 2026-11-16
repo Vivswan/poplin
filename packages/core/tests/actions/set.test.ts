@@ -114,11 +114,13 @@ describe("updateSite", () => {
     const set = await updateSite(world.install, OWNER, { site: id, search_engines: true, embeddable: false, expires: "7d" });
     const cleared = await updateSite(world.install, OWNER, { site: id, title: "", expires: "2030-01-01" });
     const again = await updateSite(world.install, OWNER, { site: id, title: null });
+    const exact = await updateSite(world.install, OWNER, { site: id, expires: "2030-01-01T08:30:00.250Z" });
 
     expect(set).toMatchObject({ ok: true, site: { title: "First", search_engines: true, embeddable: false, expires: NOW + 8 * DAY, access: "private" } });
     expect(cleared).toMatchObject({ ok: true, site: { title: null, search_engines: true, embeddable: false, expires: Date.UTC(2030, 0, 1) } });
     expect(again).toMatchObject({ ok: true, before: { title: null }, site: { title: null, expires: Date.UTC(2030, 0, 1) } });
-    expect(await world.audit()).toEqual(["create", "details", "details"]);
+    expect(exact).toMatchObject({ ok: true, before: { expires: Date.UTC(2030, 0, 1) }, site: { expires: Date.UTC(2030, 0, 1, 8, 30, 0, 250) } });
+    expect(await world.audit()).toEqual(["create", "details", "details", "details"]);
   });
 
   // Drift: each row is a change that must not happen; one that was applied half would leave a site in a state nobody asked for.
@@ -131,6 +133,11 @@ describe("updateSite", () => {
     ["a title that is no text", { title: 3 }, { code: "bad_argument", about: "title" }],
     ["an expiry that has passed", { title: "kept out", expires: "2020-01-01" }, { code: "bad_argument", about: "expires" }],
     ["a day no month has", { expires: "2030-02-31" }, { code: "bad_argument", about: "expires" }],
+    ["a moment that has passed", { expires: "2020-01-01T00:00:00.000Z" }, { code: "bad_argument", about: "expires" }],
+    ["a moment written to the second", { expires: "2030-01-01T08:30:00Z" }, { code: "bad_argument", about: "expires" }],
+    ["a moment in a time zone of its own", { expires: "2030-01-01T08:30:00.000+02:00" }, { code: "bad_argument", about: "expires" }],
+    ["a moment no day has", { expires: "2030-02-31T08:30:00.000Z" }, { code: "bad_argument", about: "expires" }],
+    ["a moment as a count", { expires: "1893486600250" }, { code: "bad_argument", about: "expires" }],
     ["a span of nothing", { expires: "0d" }, { code: "bad_argument", about: "expires" }],
     ["a span that ends past the last moment a date holds", { expires: "100000000d" }, { code: "bad_argument", about: "expires" }],
     ["a title with a line break", { title: "two\nlines" }, { code: "bad_argument", about: "title" }],

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomUtils, parseDocument } from "htmlparser2";
 
+import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
+import { readFiles } from "../../../cli/src/files/read";
 import { buildDemo } from "../../scripts/build";
 
 /** The most the worker's script may weigh as a host sends it, in bytes: it holds the product's code and the sample sites, and nothing of the dashboard's client, which the host serves beside it. */
@@ -13,7 +15,7 @@ const SCRIPT_BUDGET = 220_000;
 const TOTAL_BUDGET = 1_100_000;
 
 /** A file of the dashboard's client as the build names it: the name holds a hash of the file's content. */
-const CLIENT_FILE = /^assets\/[\w-]+-[\w-]{8}\.(?:js|css|woff2)$/;
+const CLIENT_FILE = /^assets\/[\w-]+-[\w-]{8}\.(?:js|css|woff2|svg)$/;
 
 /** A module of one runtime, as a bundle names it: an import a browser cannot resolve. */
 const RUNTIME_MODULE = /["'`](?:node|bun):[a-z_/]+["'`]|\brequire\(/g;
@@ -22,7 +24,8 @@ const RUNTIME_MODULE = /["'`](?:node|bun):[a-z_/]+["'`]|\brequire\(/g;
 const BUILD_MS = 60_000;
 
 // Drift: a dependency's server branch rides along unseen, the dashboard's client rides inside the worker's script, or every publish of the demo starts each visitor over.
-test("the built demo stays inside its budget, ships the dashboard's client as files beside its worker, names no module a browser lacks, and builds the same bytes twice", async () => {
+// Drift: the first page links an icon the build no longer writes under that name, so a browser's tab shows none; or the file goes out as no picture, from this machine's host or as a published site.
+test("the built demo stays inside its budget, ships the dashboard's client and the icon its first page links as files beside its worker, names no module a browser lacks, and builds the same bytes twice", async () => {
   using first = mkdtempDisposableSync(join(tmpdir(), "poplin-demo-"));
   using second = mkdtempDisposableSync(join(tmpdir(), "poplin-demo-"));
   const built = await buildDemo({ out: first.path });
@@ -30,6 +33,12 @@ test("the built demo stays inside its budget, ships the dashboard's client as fi
   const weights = Object.fromEntries(built.map((file) => [file.name, file.gzipped]));
   const script = readFileSync(join(first.path, "sw.js"), "utf8");
   const client = Object.keys(weights).filter((name) => name.startsWith("assets/"));
+  const links = DomUtils.getElementsByTagName("link", parseDocument(readFileSync(join(first.path, "index.html"), "utf8")));
+  const icon = links.find((link) => link.attribs.rel === "icon")?.attribs.href ?? "";
+  const published = await readFiles(first.path);
+
+  expect([Bun.file(join(first.path, icon)).type, published.ok ? published.files.find((file) => file.path === icon)?.contentType : published.reason]).toEqual(["image/svg+xml", "image/svg+xml"]);
+  expect(readFileSync(join(first.path, icon), "utf8")).toBe(DEFAULT_ICON);
 
   expect(Object.keys(weights).filter((name) => !client.includes(name))).toEqual(["index.html", "sw.js", "sql-wasm.wasm", "404.html"]);
   expect([client.filter((name) => !CLIENT_FILE.test(name)), client.filter((name) => name.endsWith(".css")).length]).toEqual([[], 1]);

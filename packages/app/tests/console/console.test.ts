@@ -3,10 +3,16 @@
 import { describe, expect, test } from "bun:test";
 import { html } from "hono/html";
 
-import { ICON_FILE } from "../../src/console/shell";
+import { ICON_FILE, shellPage } from "../../src/console/shell";
 import { DEFAULT_ICON } from "../../src/sites/default-icon";
 import { openConsole } from "./support/console";
+import { ORIGIN } from "./support/install";
 import { readShell } from "./support/shell";
+
+const DASHBOARD = ORIGIN;
+const SIBLING = "https://notes--abcdefghijkl-u-poplin.example.com";
+const JSON_TYPE = { "Content-Type": "application/json" };
+const FORM_TYPE = { "Content-Type": "application/x-www-form-urlencoded" };
 
 /** What a site's data route answers. */
 interface Listed {
@@ -42,6 +48,15 @@ describe("the shell page", () => {
     const page = await (await opened.get("/")).text();
 
     expect((await readShell(page)).boot).toMatchObject({ base: "/next", email: opened.base.owner, version: "1.0.0", demo: { reset: "/reset" } });
+  });
+
+  // Drift: a start value that holds markup would end the data block and run in the dashboard's page: a browser ends a script block at `</script>` whatever JSON says.
+  test("writes a start value that holds markup so that a browser reads it back whole and runs nothing of it", async () => {
+    const hostile = "</script><script>alert(1)</script><!-- & &amp; -->";
+    const boot = { base: "", email: hostile, title: hostile, version: "1.0.0", update: null, starts: false, demo: null, domain: true, domainNote: { label: hostile, sentence: hostile, quiet: false } };
+    const shell = readShell(String(await shellPage(boot, { script: "app-4f1c.js", style: "app-9d2e.css" })));
+
+    expect([shell.boot, shell.runs, shell.scripts]).toEqual([boot, 0, ["/assets/app-4f1c.js"]]);
   });
 
   // Drift: a page asked for without a session would be drawn, or the login would lose the address to come back to.
@@ -201,10 +216,39 @@ describe("a change", () => {
     expect(response.status).toBe(404);
   });
 
-  // Drift: a page of another origin could change a site with the owner's session: a form is all it can send without this origin's leave.
+  // Drift: a page of a site of the same install, which a browser counts as the same site as the dashboard and sends the session along for, could change a site as the owner; so could a page of any other origin.
   test.each([
-    ["a form from another site", { "Content-Type": "application/x-www-form-urlencoded", Origin: "https://evil.example", "Sec-Fetch-Site": "cross-site" }, 403],
-    ["plain text from another site", { "Content-Type": "text/plain", Origin: "https://evil.example", "Sec-Fetch-Site": "cross-site" }, 403],
+    ["JSON from the dashboard's own page", { ...JSON_TYPE, Origin: DASHBOARD, "Sec-Fetch-Site": "same-origin" }, 200],
+    ["JSON that names the dashboard in `Origin` alone", { ...JSON_TYPE, Origin: DASHBOARD }, 200],
+    ["JSON that says `same-origin` and sends no `Origin`", { ...JSON_TYPE, "Sec-Fetch-Site": "same-origin" }, 200],
+    ["JSON with neither header, as a host hands it over that takes a page's request before the browser wrote them", JSON_TYPE, 200],
+    ["JSON from a site of the same install", { ...JSON_TYPE, Origin: SIBLING, "Sec-Fetch-Site": "same-site" }, 403],
+    ["JSON from a site of the same install, by `Origin` alone", { ...JSON_TYPE, Origin: SIBLING }, 403],
+    ["JSON from a site of the same install, by `Sec-Fetch-Site` alone", { ...JSON_TYPE, "Sec-Fetch-Site": "same-site" }, 403],
+    ["JSON from another domain", { ...JSON_TYPE, Origin: "https://elsewhere.example.net", "Sec-Fetch-Site": "cross-site" }, 403],
+    ["JSON from a page with no origin of its own", { ...JSON_TYPE, Origin: "null" }, 403],
+    ["JSON from the dashboard's hostname over plain http", { ...JSON_TYPE, Origin: DASHBOARD.replace("https:", "http:") }, 403],
+    ["JSON from the dashboard's hostname on another port", { ...JSON_TYPE, Origin: `${DASHBOARD}:8443` }, 403],
+    ["JSON that names the dashboard but says `same-site`", { ...JSON_TYPE, Origin: DASHBOARD, "Sec-Fetch-Site": "same-site" }, 403],
+    ["JSON that says `same-origin` but names a site", { ...JSON_TYPE, Origin: SIBLING, "Sec-Fetch-Site": "same-origin" }, 403],
+    ["JSON that no page sent, by `Sec-Fetch-Site: none`", { ...JSON_TYPE, "Sec-Fetch-Site": "none" }, 403],
+    ["a form from a site of the same install", { ...FORM_TYPE, Origin: SIBLING, "Sec-Fetch-Site": "same-site" }, 403],
+    ["a form from another domain", { ...FORM_TYPE, Origin: "https://elsewhere.example.net", "Sec-Fetch-Site": "cross-site" }, 403],
+    ["plain text from a site of the same install", { "Content-Type": "text/plain", Origin: SIBLING, "Sec-Fetch-Site": "same-site" }, 403],
+    ["a form with neither header", FORM_TYPE, 415],
+  ])("sent as %s: only a request that names no page but the dashboard's own changes anything", async (_case, headers, status) => {
+    const opened = await openConsole();
+    const site = await opened.base.publish("first-name", "private");
+    const body = headers["Content-Type"] === "application/json" ? JSON.stringify({ name: "second-name" }) : "name=second-name";
+    const address = `${DASHBOARD}/data/sites/${site.name}--${site.id}/naming`;
+    const response = await opened.fetch(new Request(address, { method: "POST", headers: { ...headers, Cookie: opened.base.cookie }, body }));
+    const listed = (await (await opened.get("/data/sites")).json()) as Listed;
+
+    expect([response.status, listed.sites.map((entry) => entry.name)]).toEqual([status, [status === 200 ? "second-name" : "first-name"]]);
+  });
+
+  // Drift: a change that is no JSON, or is too large, would be read.
+  test.each([
     ["a form from this origin", { "Content-Type": "application/x-www-form-urlencoded" }, 415],
     ["a type that only starts like JSON", { "Content-Type": "application/json-not-real" }, 415],
     ["a body that declares two megabytes", { "Content-Length": "2000000" }, 413],

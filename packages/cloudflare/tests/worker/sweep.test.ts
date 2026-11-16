@@ -6,7 +6,7 @@ import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { dayOf } from "@poplin/core/src/records/views";
 import { beforeEach, describe, expect, test } from "vitest";
-import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, publish, sendFile, sweep, tokenOf, type World, wait, world } from "./support/install";
+import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, publish, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
 
 /** The most database and bucket calls one scheduled invocation may make, the start of its instance included: 50 to the database, which is all D1 answers on the Free plan, and 250 to the bucket. */
 const INVOCATION_CALLS = 300;
@@ -24,17 +24,6 @@ const MOST_STEP_CALLS = 168;
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
 
 let w: World;
-
-/** The bucket with every list page cut to one object, so one removal, which walks 15 pages, takes 15 files. */
-function shortPages(bucket: R2Bucket): R2Bucket {
-  return new Proxy(bucket, {
-    get(inner, name) {
-      if (name !== "list") return Reflect.get(inner, name, inner);
-
-      return (options: R2ListOptions): Promise<R2Objects> => inner.list({ ...options, limit: 1 });
-    },
-  });
-}
 
 async function keysUnder(prefix: string): Promise<string[]> {
   return (await BINDINGS.SITES.list({ prefix })).objects.map((object) => object.key);

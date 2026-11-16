@@ -116,9 +116,9 @@ async function start(port: number, before?: number): Promise<number> {
   throw new Error(`no preview answered on port ${port}`);
 }
 
-/** Open the demo as the command does: over bun's SQLite and the real sample sites. */
-async function openPreview(gallery: boolean): Promise<Preview> {
-  return createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, gallery, client: CLIENT });
+/** Open the demo as the command does: over bun's SQLite and the real sample sites. `real` is what a host's file of real addresses holds, for a demo that has one. */
+async function openPreview(gallery: boolean, real?: Parameters<typeof createPreview>[0]["real"]): Promise<Preview> {
+  return createPreview({ openDriver: () => new BunSqliteDriver(), samples: await readSamples(), version: VERSION, gallery, client: CLIENT, real });
 }
 
 describe("the local preview", () => {
@@ -267,6 +267,23 @@ describe("the local preview", () => {
     expect(panel).toContain(`"${real["sales-report"]}"`);
     expect([sent.status, renamed.status]).toEqual([200, 200]);
     expect([after["sales-report"]?.startsWith(`${ORIGIN}${base}/served/sales-report--`), Object.values(after).filter((url) => url.startsWith("https://"))]).toEqual([true, []]);
+  });
+
+  // Drift: a stage of the gallery ends a sample site here alone, and the real install still serves it. A link to the real one would open a live site from a panel that says its link has stopped working; a site moved to the trash here is the same case.
+  test("a sample site that ran out here, or is in the trash here, leads to the demo's own serving of it, where it is gone, and no longer to its real address", async () => {
+    const real = { "winter-offer": "https://winter-offer--p1a2b3.example.org/", "sales-report": "https://sales-report--p1a2b3.example.org/" };
+    const preview = await openPreview(true, readRealSites(real));
+    const urls = async (view: string): Promise<Record<string, string>> => Object.fromEntries((await data<Listed>(preview, `/data/sites${view}`)).sites.map((site) => [site.name, site.url]));
+    const before = await urls("");
+    const ended = await open(preview, "/state/expired/panel");
+    const { sites } = await data<Listed>(preview, "/data/sites?q=sales-report");
+    const trashed = await change(preview, `/data/sites/${sites[0]?.label}/delete`);
+    const after = { ...(await urls("")), ...(await urls("?view=trash")) };
+    const own = (name: string): boolean => after[name]?.startsWith(`${ORIGIN}/served/${name}--`) === true;
+
+    expect([before["winter-offer"], before["sales-report"]]).toEqual([real["winter-offer"], real["sales-report"]]);
+    expect([ended.status, trashed.status]).toEqual([200, 200]);
+    expect([own("winter-offer"), own("sales-report"), (await open(preview, new URL(after["winter-offer"] ?? ORIGIN).pathname)).status]).toEqual([true, true, 404]);
   });
 
   // Drift: the Activity screen shows the log as it is stored, newest first. A seed that wrote its history out of order would show days that jump back and forth.

@@ -193,13 +193,13 @@ async function ask(desk: Desk, login: Known, presented: string | undefined): Pro
   expect(answered.body.record).toMatchObject({ scope: login.scope });
 }
 
-/** The status the dashboard's guard refuses a decision with before it is read, `undefined` for one it lets through: no session, then a form of another origin, then any form. */
+/** The status the dashboard's guard refuses a decision with before it is read, `undefined` for one it lets through: no session, then anything a page of another origin sent, then any form. */
 function guarded(step: Extract<Step, { kind: "decide" }>): number | undefined {
   if (!step.session) return 401;
 
-  if (step.json) return undefined;
+  if (step.origin !== ORIGIN) return 403;
 
-  return step.origin === ORIGIN ? 415 : 403;
+  return step.json ? undefined : 415;
 }
 
 async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "decide" }>): Promise<void> {
@@ -215,7 +215,7 @@ async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "dec
   const refusal = guarded(step);
   if (refusal !== undefined) expect(answer.status).toBe(refusal);
 
-  // A page of another origin cannot send JSON with the session, as this origin never lets it: the session and the media type are the whole guard, and the box is the admin's word that the codes match.
+  // A page of another origin is refused whatever it sends, and a page with no origin of its own, which sends `null`, is one. The session, the dashboard's own page, and the media type are the whole guard; the box is the admin's word that the codes match.
   const taken = refusal === undefined && (step.ticked || !step.allow);
   if (taken && login.state === "pending" && desk.install.clock.now < login.expiresAt) login.state = step.allow ? "allowed" : "denied";
 }

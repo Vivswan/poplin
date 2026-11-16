@@ -35,6 +35,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Rate rule | ${state("rate", usual)} | rate rule`,
     `Bot settings | ${state("bots", usual)} | zone bot switches`,
     `D1 database | ${state("database", usual)} | poplin`,
+    `Budget alert | ${state("alert", usual)} | poplin: usage charges reached 1 dollar`,
   ];
 }
 
@@ -91,7 +92,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(13);
+    expect(writes(asked)).toHaveLength(14);
 
     const sent = asked.length;
 
@@ -165,6 +166,7 @@ const RIGHT_OF: readonly (readonly [path: RegExp, right: string])[] = [
   [/^\/zones\/[^/]+\/rulesets/, "Zone WAF: Edit"],
   [/^\/zones\/[^/]+\/bot_management/, "Bot Management: Edit"],
   [/^\/accounts\/[^/]+\/d1\/database/, "D1: Edit"],
+  [/^\/accounts\/[^/]+\/alerting\/v3\/policies/, "Notifications: Edit"],
 ];
 
 test("the rights the page names, needed and optional, are the rights a repair's calls use, no more and no fewer: a call added without its right is refused on every real install", async () => {
@@ -201,16 +203,17 @@ const SCOPE_OF: Readonly<Record<string, "Account" | "Zone">> = {
   "Zone WAF: Edit": "Zone",
   "Bot Management: Edit": "Zone",
   "D1: Edit": "Account",
+  "Notifications: Edit": "Account",
 };
 
 // Drift: the form drops a key it does not know without a word, so a needed right the link does not carry is a token that fails at a repair with nothing on the page having asked for it.
-test("every right an install needs is in the link to the token form under Cloudflare's own key for it, and the three the link cannot carry are optional, each with what it adds", () => {
+test("every right an install needs is in the link to the token form under Cloudflare's own key for it, and the four the link cannot carry are optional, each with what it adds", () => {
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
   const link = new URL(plug.tokenLink);
   const chosen = JSON.parse(link.searchParams.get("permissionGroupKeys") ?? "[]") as { key: string; type: string }[];
 
   expect<unknown>(chosen.map(({ key, type }) => [key, type])).toEqual(plug.tokenRights.map((right) => KEY_OF[right] ?? [`no key is documented for ${right}`]));
-  expect(plug.tokenOptional.map((entry) => entry.right).sort()).toEqual(["Bot Management: Edit", "Single Redirect: Edit", "Zone WAF: Edit"]);
+  expect(plug.tokenOptional.map((entry) => entry.right).sort()).toEqual(["Bot Management: Edit", "Notifications: Edit", "Single Redirect: Edit", "Zone WAF: Edit"]);
   expect([`${link.origin}${link.pathname}`, link.searchParams.get("accountId"), link.searchParams.get("zoneId"), plug.tokenLink.includes(ACCOUNT)]).toEqual(["https://dash.cloudflare.com/profile/api-tokens", "*", "all", false]);
 });
 
@@ -316,23 +319,25 @@ test("a repair that fails half way, for another reason than a permission, stops:
       "Rate rule | not-run | ",
       "Bot settings | not-run | ",
       "D1 database | not-run | ",
+      "Budget alert | not-run | ",
     ]);
     expect(account.records.map((record) => record.name)).toEqual(["*.example.com", "poplin.example.com"]);
     expect([account.routes, account.policies, account.applications, account.databases, account.rulesets]).toEqual([[], [], [], [], {}]);
   });
 });
 
-/** The calls Cloudflare refuses a token without each of the three optional permissions, and the rows those calls belong to. */
+/** The calls Cloudflare refuses a token without each of the four optional permissions, and the rows those calls belong to. */
 const OPTIONAL = {
   "Single Redirect: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint"], rows: ["Redirect rule"] },
   "Zone WAF: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint", "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint"], rows: ["WAF rule", "Rate rule"] },
   "Bot Management: Edit": { calls: ["GET /zones/zone-1/bot_management"], rows: ["Bot settings"] },
+  "Notifications: Edit": { calls: [`GET /accounts/${ACCOUNT}/alerting/v3/policies`], rows: ["Budget alert"] },
 } as const;
 
-/** Each of those three permissions alone, and all three, which is the token the link alone makes. */
+/** Each of those four permissions alone, and all four, which is the token the link alone makes. */
 const lacking: readonly { readonly name: string; readonly rights: readonly (keyof typeof OPTIONAL)[] }[] = [
   ...Object.keys(OPTIONAL).map((right) => ({ name: right, rights: [right as keyof typeof OPTIONAL] })),
-  { name: "all three", rights: ["Single Redirect: Edit", "Zone WAF: Edit", "Bot Management: Edit"] },
+  { name: "all four", rights: ["Single Redirect: Edit", "Zone WAF: Edit", "Bot Management: Edit", "Notifications: Edit"] },
 ];
 
 // Drift: the install page tells a person the link's eight rights are enough, so a piece that fails without an optional right, or stops the run, makes that page false for every reader who followed it.
@@ -374,7 +379,7 @@ test("a token that may read the guard rules and not make them leaves both rules 
 
     expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional"]);
     expect(guards.filter((row) => !row.includes("add this right to the account token and press Repair: "))).toEqual([]);
-    expect(rows.at(-1)).toBe("D1 database | created | poplin");
+    expect(rows.slice(-2)).toEqual(["D1 database | created | poplin", "Budget alert | created | poplin: usage charges reached 1 dollar"]);
   });
 });
 
@@ -395,13 +400,13 @@ test.each([
 /** The pieces others build on, by the call a token without their permission is refused, and what a repair still makes after each. */
 const built: readonly { readonly name: string; readonly call: string; readonly failed: string; readonly made: readonly string[] }[] = [
   { name: "the records", call: "GET /zones/zone-1/dns_records", failed: "DNS record", made: [] },
-  { name: "the login", call: `GET /accounts/${ACCOUNT}/access/policies`, failed: "Access application", made: ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database"] },
+  { name: "the login", call: `GET /accounts/${ACCOUNT}/access/policies`, failed: "Access application", made: ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert"] },
 ];
 
 // Drift: the records say whether a hostname is somebody else's, so nothing may follow a zone that was not read, and a Worker given its domain with no login behind it is half an install.
 test.each(built)("a repair with a token that may not read $name makes nothing that builds on them: the row names the right, and every piece that needs them is not run", async ({ call, failed, made }) => {
   const account = { ...emptyAccount(), refuse: call };
-  const pieces = ["DNS record", "Worker route", "Access application", "Worker variable", "Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database"];
+  const pieces = ["DNS record", "Worker route", "Access application", "Worker variable", "Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert"];
 
   await withAccount(account, async (plug, asked) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
@@ -427,6 +432,7 @@ const NEEDS: readonly (readonly [right: string, call: string])[] = [
   ["Zone WAF: Edit", "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint"],
   ["Bot Management: Edit", "GET /zones/zone-1/bot_management"],
   ["D1: Edit", `GET /accounts/${ACCOUNT}/d1/database`],
+  ["Notifications: Edit", `GET /accounts/${ACCOUNT}/alerting/v3/policies`],
 ];
 
 // Drift: a refused row used to quote Cloudflare's status alone, and the person had to guess which of eleven rows their token lacked.

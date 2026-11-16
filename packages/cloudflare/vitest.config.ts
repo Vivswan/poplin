@@ -3,6 +3,7 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import { EXAMPLE_BINDINGS } from "./tests/worker/support/example-bindings";
+import { BudgetReport } from "./tests/worker/support/budget-report";
 import { RuntimeLog } from "./tests/worker/support/runtime-log";
 
 export default defineConfig({
@@ -14,7 +15,7 @@ export default defineConfig({
   test: {
     include: ["tests/{worker,storage,database,limits}/**/*.test.ts"],
     testTimeout: 30_000,
-    reporters: ["default", new RuntimeLog()],
+    reporters: ["default", new RuntimeLog(), new BudgetReport()],
     // The pool sends a file's cached imports as one message, and the Cloudflare SDK takes that past workerd's 32 MiB limit.
     fsModuleCache: false,
   },
