@@ -111,10 +111,25 @@ describe("an install that goes back by itself", () => {
 
     expect<unknown>(outcome).toEqual({
       went: { from: "0.3.0", to: "0.2.0" },
-      calls: [`GET ${DEPLOYMENTS}`, `GET ${VERSIONS}/${NEW}`, `POST ${DEPLOYMENTS}`],
+      calls: [`GET ${DEPLOYMENTS}`, `GET ${VERSIONS}/${NEW}`, `GET ${VERSIONS}/${OLD}`, `POST ${DEPLOYMENTS}`],
       posted: [{ strategy: "percentage", versions: [{ version_id: OLD, percentage: 100 }], annotations: { "workers/message": "poplin 0.2.0 again: 0.3.0 could not change the database" } }],
       notes: [["update_went_back", { from: "0.3.0", to: "0.2.0" }, "sweep@poplin.invalid"], ["update_went_back"]],
       keys: [`Bearer ${KEY}`],
+    });
+  });
+
+  // Drift: an upload that was sent twice leaves two versions of the failing release, one under the other. Picked by "another version than the one that runs", the older of the two would be deployed: the same failing code, told as gone back.
+  test("the version deployed is the newest earlier one tagged as the version before, past another upload of the failing release", async () => {
+    const held = account();
+    const again = "second-version-of-0.3.0";
+    held.deployments = [whole(again), whole(NEW), whole(OLD)];
+    held.tags[again] = "0.3.0";
+    const outcome = await gone(held, start());
+
+    expect<unknown>({ went: outcome.went, calls: outcome.calls, deployed: outcome.posted.map((body) => (body as { versions: unknown }).versions) }).toEqual({
+      went: { from: "0.3.0", to: "0.2.0" },
+      calls: [`GET ${DEPLOYMENTS}`, `GET ${VERSIONS}/${again}`, `GET ${VERSIONS}/${NEW}`, `GET ${VERSIONS}/${OLD}`, `POST ${DEPLOYMENTS}`],
+      deployed: [[{ version_id: OLD, percentage: 100 }]],
     });
   });
 
@@ -142,6 +157,8 @@ describe("an install that goes back by itself", () => {
     { name: "a running version no update tagged", held: (held) => { held.tags[NEW] = undefined; }, calls: READ },
     { name: "an update that was the Worker's first deployment", held: (held) => { held.deployments = [whole(NEW)]; }, calls: READ },
     { name: "deployments that all run the same version", held: (held) => { held.deployments = [whole(NEW), whole(NEW)]; }, calls: READ },
+    { name: "an earlier version that no update tagged as the version before", held: (held) => { held.tags[OLD] = undefined; }, calls: [...READ, `GET ${VERSIONS}/${OLD}`] },
+    { name: "an earlier version of another release than the version before", held: (held) => { held.tags[OLD] = "0.1.0"; }, calls: [...READ, `GET ${VERSIONS}/${OLD}`] },
   ];
 
   // Drift: each row is a start where older code must not be put in place: it would meet a database it cannot read, undo a person's deploy, or flap between two versions.
@@ -160,6 +177,6 @@ describe("an install that goes back by itself", () => {
     held.instead[`POST ${DEPLOYMENTS}`] = () => refusal(500, 10_100, `no deployment for ${KEY}`);
     const outcome = await gone(held, start());
 
-    expect<unknown>({ went: outcome.went, calls: outcome.calls, notes: outcome.notes }).toEqual({ went: undefined, calls: [`GET ${DEPLOYMENTS}`, `GET ${VERSIONS}/${NEW}`, `POST ${DEPLOYMENTS}`], notes: [] });
+    expect<unknown>({ went: outcome.went, calls: outcome.calls, notes: outcome.notes }).toEqual({ went: undefined, calls: [`GET ${DEPLOYMENTS}`, `GET ${VERSIONS}/${NEW}`, `GET ${VERSIONS}/${OLD}`, `POST ${DEPLOYMENTS}`], notes: [] });
   });
 });
