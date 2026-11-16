@@ -1,10 +1,25 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { BaseZones } from "cloudflare/resources/zones/zones";
 import { callCloudflare, findZones, listZones } from "../../../src/shared/install/client";
 import { withFake } from "./support/fake-cloudflare";
 import { type Asked, page, refusal, reply } from "./support/replies";
 
+// The account whose zones the lists are asked for.
 const ACCOUNT = "account-a";
+
+// Every variable the SDK's client reads by itself, each with a value that would show in the request.
+const SHELL: readonly (readonly [string, string])[] = [
+  ["CLOUDFLARE_BASE_URL", "https://other.example.com/client/v4"],
+  ["CLOUDFLARE_API_TOKEN", "token-of-the-shell"],
+  ["CLOUDFLARE_API_KEY", "key-of-the-shell"],
+  ["CLOUDFLARE_EMAIL", "shell@example.com"],
+  ["CLOUDFLARE_API_USER_SERVICE_KEY", "service-key-of-the-shell"],
+  ["CLOUDFLARE_CUSTOM_HEADERS", "X-Added: by the shell\nAuthorization: Bearer token-of-the-shell"],
+  ["CLOUDFLARE_LOG", "debug"],
+];
+
+// The ways the SDK writes a line of its own.
+const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 
 function zone(id: string, name: string, account: string, plan: string): unknown {
   return { id, name, account: { id: account, name: "an account" }, plan: { id: "plan-1", name: plan } };
@@ -25,6 +40,38 @@ describe("callCloudflare", () => {
         expect(asked.map((entry) => entry.key)).toEqual(["Bearer key-of-this-call"]);
       },
     );
+  });
+
+  // Drift: the SDK fills every option left out from a variable of the shell, so one set there sends the key to another host or adds a credential the caller never chose.
+  test("the shell's variables change nothing: the call goes to Cloudflare's API with the passed key as its one credential", async () => {
+    const kept = SHELL.map(([name]) => [name, process.env[name]] as const);
+    const sent: { host: string; headers: Record<string, string> }[] = [];
+    const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init);
+      sent.push({ host: new URL(request.url).host, headers: Object.fromEntries(request.headers) });
+
+      return Response.json({ success: true, errors: [], messages: [], result: { id: "zone-1" } });
+    };
+
+    let lines = 0;
+    const logged = LOG_LEVELS.map((level) => spyOn(console, level).mockImplementation(() => undefined));
+    for (const [name, value] of SHELL) process.env[name] = value;
+    try {
+      const result = await callCloudflare({ key: "key-of-this-call", fetch }, (api) => new BaseZones(api).get({ zone_id: "zone-1" }));
+
+      lines = logged.reduce((count, spied) => count + spied.mock.calls.length, 0);
+      expect(result.ok).toBe(true);
+    } finally {
+      for (const [name, value] of kept) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      for (const spied of logged) spied.mockRestore();
+    }
+
+    const [call] = sent;
+    const credentials = Object.entries(call?.headers ?? {}).filter(([name]) => name === "authorization" || name.startsWith("x-auth-") || name === "x-added");
+    expect([sent.length, call?.host, credentials, lines]).toEqual([1, "api.cloudflare.com", [["authorization", "Bearer key-of-this-call"]], 0]);
   });
 
   test("Cloudflare's error envelope comes back as a refusal value with its status and errors, never as an exception", async () => {

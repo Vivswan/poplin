@@ -4,7 +4,13 @@ import { BaseCloudflare } from "cloudflare/client";
 import { APIConnectionError, APIError } from "cloudflare/error";
 import { BaseZones } from "cloudflare/resources/zones/zones";
 
+// Where every call goes, unless a test names another place.
+const API = "https://api.cloudflare.com/client/v4";
+
+// The status of an answer that asks to wait.
 const RATE_LIMITED_STATUS = 429;
+
+// The plans a zone can be on, as the first word of Cloudflare's name for one.
 const ZONE_PLANS: ReadonlySet<string> = new Set(["free", "pro", "business", "enterprise"]);
 
 /** Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. */
@@ -65,6 +71,23 @@ function planOf(name: string | undefined): ZonePlan {
   return tier as ZonePlan;
 }
 
+// The SDK fills each option left out from a variable of the environment (CLOUDFLARE_BASE_URL, _API_TOKEN, _API_KEY, _EMAIL, _API_USER_SERVICE_KEY, _LOG), so each one is stated; CLOUDFLARE_CUSTOM_HEADERS has no option, so its headers are dropped.
+function clientOf(connection: Connection): BaseCloudflare {
+  const api = new BaseCloudflare({
+    apiToken: connection.key,
+    apiKey: null,
+    apiEmail: null,
+    userServiceKey: null,
+    baseURL: connection.baseUrl ?? API,
+    fetch: connection.fetch,
+    logLevel: "off",
+  });
+  // biome-ignore lint/complexity/useLiteralKeys: the SDK's types keep these options private, and this form reaches them with the name still checked.
+  api["_options"].defaultHeaders = undefined;
+
+  return api;
+}
+
 /**
  * Make one call to the Cloudflare API with the key the caller holds.
  *
@@ -74,7 +97,7 @@ function planOf(name: string | undefined): ZonePlan {
  * @returns the reply's `result`, or the failure of the last try; a refusal by Cloudflare is a value, never an exception
  */
 export async function callCloudflare<Value>(connection: Connection, call: (api: BaseCloudflare) => Promise<Value>): Promise<CloudflareResult<Value>> {
-  const api = new BaseCloudflare({ apiToken: connection.key, baseURL: connection.baseUrl, fetch: connection.fetch, logLevel: "off" });
+  const api = clientOf(connection);
 
   try {
     return { ok: true, value: await call(api) };
