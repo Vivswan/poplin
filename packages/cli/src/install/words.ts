@@ -145,8 +145,14 @@ function refusalOf(refused: CommanderError, root: Command, command: CommandWords
   return new Refused(`no provider ${JSON.stringify(word)}`, meant === undefined ? `poplin ${command.name} lists the providers` : `did you mean: poplin ${command.name} ${meant}?`);
 }
 
+/** A line commander refused: why, and the provider it had gone into by then. */
+interface Unread {
+  readonly refused: Stop;
+  readonly provider: Provider | undefined;
+}
+
 /** Split the words with commander: the command's own options wherever they stand, the provider, and its own options after it. The options of `lone`, the one provider a line may leave out, are taken with no provider named too. */
-function readWords(words: readonly string[], command: CommandWords, providers: readonly Provider[], lone: Provider | undefined): Read | Stop {
+function readWords(words: readonly string[], command: CommandWords, providers: readonly Provider[], lone: Provider | undefined): Read | Unread {
   const shared: Typed = new Map();
   const own: Typed = new Map();
   let provider: Provider | undefined;
@@ -165,7 +171,7 @@ function readWords(words: readonly string[], command: CommandWords, providers: r
     root.parse([...words], { from: "user" });
   } catch (error) {
     const refused = error instanceof CommanderError ? refusalOf(error, root, command, provider, providers) : error;
-    if (refused instanceof Refused) return usage(command, ...refused.lines);
+    if (refused instanceof Refused) return { refused: usage(command, ...refused.lines), provider };
 
     throw error;
   }
@@ -197,8 +203,12 @@ export function heldToken(read: Named, env: Variables, command: CommandWords): T
   return read.provider.token(held) ?? usage(command, `${TOKEN_VARIABLE} does not hold an account token of ${read.provider.name}`);
 }
 
-/** Answer for a line that names no provider: the list, the question which, or the refusal of a run that asks nothing. */
-function withoutProvider<Plan extends object>(read: Read, canAsk: boolean, command: CommandWords, named: (provider: Provider) => Parsed<Plan>): Parsed<Plan> {
+/**
+ * Answer for a line that names no provider: the list, the question which, or the refusal of a run that asks nothing.
+ *
+ * @param sole - the only provider the package carries, which the line that goes on from the refusal names; `undefined` where it carries more
+ */
+function withoutProvider<Plan extends object>(read: Read, canAsk: boolean, command: CommandWords, named: (provider: Provider) => Parsed<Plan>, sole: Provider | undefined): Parsed<Plan> {
   const { shared } = read;
   const json = shared.has("json");
   const bare = [...shared.keys()].every((name) => name === "json");
@@ -206,7 +216,7 @@ function withoutProvider<Plan extends object>(read: Read, canAsk: boolean, comma
 
   if (bare) return { kind: "list", json };
 
-  return { kind: "stop", json, stop: lacking([{ key: "provider", name: "the provider", give: `Name it after ${command.name}: poplin ${command.name} <provider>.` }]) };
+  return { kind: "stop", json, provider: sole, stop: lacking([{ key: "provider", name: "the provider", give: `Name it after ${command.name}: poplin ${command.name} <provider>.` }]) };
 }
 
 /**
@@ -233,19 +243,20 @@ export function parseWords<Plan extends object>(
   if (asks(words, VERSION_FLAG)) return { kind: "version" };
 
   const [only, ...others] = providers;
-  const lone = command.loneProvider === true && others.length === 0 ? only : undefined;
+  const sole = others.length === 0 ? only : undefined;
+  const lone = command.loneProvider === true ? sole : undefined;
   const read = readWords(words, command, providers, lone);
   const json = asks(words, "--json");
-  if ("problem" in read) return { kind: "stop", stop: read, json };
+  if ("refused" in read) return { kind: "stop", stop: read.refused, json, provider: read.provider ?? sole };
 
   const named = (provider: Provider): Parsed<Plan> => {
     const line = { ...read, provider };
     const plan = planned(line, canAsk && !ASK_NOTHING.some((name) => line.shared.has(name)), json);
 
-    return "problem" in plan ? { kind: "stop", stop: plan, json } : { kind: "plan", plan };
+    return "problem" in plan ? { kind: "stop", stop: plan, json, provider } : { kind: "plan", plan };
   };
 
   const provider = read.provider ?? lone;
 
-  return provider === undefined ? withoutProvider(read, canAsk, command, named) : named(provider);
+  return provider === undefined ? withoutProvider(read, canAsk, command, named, sole) : named(provider);
 }
