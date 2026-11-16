@@ -41,7 +41,7 @@ jobs:
   # The product's tests and the three tree guards on every OS a user publishes from. The runtime is the bun that
   # .bun-version pins: the tests import bun:test, which no other runtime provides. The fuzz tests run in `check` alone.
   # The Worker's tests run in `check` alone too: they need the Workers runtime, and the root `test` script this job
-  # calls leaves the Workers-runtime tests of `packages/cloudflare` out.
+  # calls leaves the Workers-runtime tests of `packages/providers/cloudflare` out.
   matrix:
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -128,15 +128,15 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - name: Build the Worker and write its manifest
-        run: bun run --cwd packages/cloudflare bundle "$RUNNER_TEMP/bundle/first"
+        run: bun run --cwd packages/providers/cloudflare bundle "$RUNNER_TEMP/bundle/first"
       - name: Build it again
-        run: bun run --cwd packages/cloudflare bundle "$RUNNER_TEMP/bundle/second"
+        run: bun run --cwd packages/providers/cloudflare bundle "$RUNNER_TEMP/bundle/second"
       - name: Refuse built files that a second build of the same commit does not give
         run: diff -r "$RUNNER_TEMP/bundle/first" "$RUNNER_TEMP/bundle/second"
       - name: Pack the source files as a release does
         run: git archive --format=tar.gz --prefix=poplin/ --output="$RUNNER_TEMP/bundle/first/poplin-$(jq -r .version packages/cli/package.json).tar.gz" HEAD
       - name: Name the release from its four files as the website's build does
-        run: bun run --cwd packages/cloudflare check-bundle "$RUNNER_TEMP/bundle/first"
+        run: bun run --cwd packages/providers/cloudflare check-bundle "$RUNNER_TEMP/bundle/first"
 
   # The dashboard demo as a visitor meets it: built as static files, served under a path of a static host, and walked
   # in a real browser, one job per engine. Each job builds the demo itself: the build takes about a second. The test

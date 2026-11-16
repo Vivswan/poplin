@@ -1,0 +1,22 @@
+// Runs the tests inside workerd, with the bindings of the repository's wrangler.jsonc simulated locally and the variables of an install that is set up.
+
+import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import { defineConfig } from "vitest/config";
+import { EXAMPLE_BINDINGS } from "./tests/shared/worker/support/example-bindings";
+import { BudgetReport } from "./tests/shared/worker/support/budget-report";
+import { RuntimeLog } from "./tests/shared/worker/support/runtime-log";
+
+export default defineConfig({
+  plugins: [cloudflareTest({ wrangler: { configPath: "../../../wrangler.jsonc" }, miniflare: { bindings: EXAMPLE_BINDINGS } })],
+
+  // Core's contract suite takes its test functions from bun; the two runners share their shape, so the same cases run here.
+  resolve: { alias: { "bun:test": "vitest" } },
+
+  test: {
+    include: ["tests/shared/{worker,storage,database,limits,jobs}/**/*.test.ts"],
+    testTimeout: 30_000,
+    reporters: ["default", new RuntimeLog(), new BudgetReport()],
+    // The pool sends a file's cached imports as one message, and the Cloudflare SDK takes that past workerd's 32 MiB limit.
+    fsModuleCache: false,
+  },
+});

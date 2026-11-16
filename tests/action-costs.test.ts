@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { costsComment } from "../packages/cloudflare/scripts/action-costs";
+import { costsComment } from "../packages/providers/cloudflare/scripts/action-costs";
 
 /** The address of the run a comment links. */
 const RUN = "https://example.com/owner/name/actions/runs/7";

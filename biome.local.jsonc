@@ -62,7 +62,7 @@
         }
       }
     },
-    // The portable packages hold no provider: its modules, types, and globals stay in packages/cloudflare. tests/portable.test.ts plants each leak.
+    // The portable packages hold no provider: its modules, types, and globals stay in packages/providers/cloudflare. tests/portable.test.ts plants each leak.
     {
       "includes": ["packages/core/**", "packages/app/**", "packages/cli/**", "packages/demo/**", "packages/dashboard/**"],
       "linter": {
@@ -88,7 +88,7 @@
                       "@poplin/cloudflare",
                       "**/cloudflare/**"
                     ],
-                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                    "message": "Portable code has no provider module: packages/providers/cloudflare owns it."
                   }
                 ]
               }
@@ -97,11 +97,11 @@
               "level": "error",
               "options": {
                 "types": {
-                  "Bindings": "Portable code has no provider type: packages/cloudflare owns it.",
-                  "CloudflareBindings": "Portable code has no provider type: packages/cloudflare owns it.",
-                  "Env": "Portable code has no provider type: packages/cloudflare owns it.",
-                  "ExecutionContext": "Portable code has no provider type: packages/cloudflare owns it.",
-                  "ExportedHandler": "Portable code has no provider type: packages/cloudflare owns it."
+                  "Bindings": "Portable code has no provider type: packages/providers/cloudflare owns it.",
+                  "CloudflareBindings": "Portable code has no provider type: packages/providers/cloudflare owns it.",
+                  "Env": "Portable code has no provider type: packages/providers/cloudflare owns it.",
+                  "ExecutionContext": "Portable code has no provider type: packages/providers/cloudflare owns it.",
+                  "ExportedHandler": "Portable code has no provider type: packages/providers/cloudflare owns it."
                 }
               }
             },
@@ -109,9 +109,9 @@
               "level": "error",
               "options": {
                 "deniedGlobals": {
-                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
-                  "HTMLRewriter": "Portable code names no provider global: packages/cloudflare owns it.",
-                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it."
+                  "FixedLengthStream": "Portable code names no provider global: packages/providers/cloudflare owns it.",
+                  "HTMLRewriter": "Portable code names no provider global: packages/providers/cloudflare owns it.",
+                  "WebSocketPair": "Portable code names no provider global: packages/providers/cloudflare owns it."
                 }
               }
             }
@@ -145,7 +145,7 @@
                       "@poplin/cloudflare",
                       "**/cloudflare/**"
                     ],
-                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                    "message": "Portable code has no provider module: packages/providers/cloudflare owns it."
                   },
                   { "group": ["**/migrations", "**/migrations/**"], "message": "Only a migrations folder and the doorway that runs its steps import one." }
                 ]
@@ -178,7 +178,7 @@
                       "@poplin/cloudflare",
                       "**/cloudflare/**"
                     ],
-                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                    "message": "Portable code has no provider module: packages/providers/cloudflare owns it."
                   },
                   { "group": ["hono", "hono/**"], "message": "Core has no HTTP framework: the app package owns it." },
                   { "group": ["bun", "bun:*"], "message": "Core has no runtime module: it runs in a Worker." },
@@ -212,7 +212,7 @@
                       "@poplin/cloudflare",
                       "**/cloudflare/**"
                     ],
-                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                    "message": "Portable code has no provider module: packages/providers/cloudflare owns it."
                   },
                   { "group": ["hono", "hono/**"], "message": "Core has no HTTP framework: the app package owns it." },
                   { "group": ["bun", "bun:*"], "message": "Core has no runtime module: it runs in a Worker." }
@@ -246,7 +246,7 @@
                       "@poplin/cloudflare",
                       "**/cloudflare/**"
                     ],
-                    "message": "Portable code has no provider module: packages/cloudflare owns it."
+                    "message": "Portable code has no provider module: packages/providers/cloudflare owns it."
                   },
                   { "group": ["bun", "bun:*"], "message": "The dashboard has no runtime module: it runs in a browser." },
                   { "group": ["**/migrations", "**/migrations/**"], "message": "Only a migrations folder and the doorway that runs its steps import one." }
@@ -259,9 +259,9 @@
                 "deniedGlobals": {
                   "Buffer": "The dashboard names no runtime global: it runs in a browser.",
                   "Bun": "The dashboard names no runtime global: it runs in a browser.",
-                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
-                  "HTMLRewriter": "Portable code names no provider global: packages/cloudflare owns it.",
-                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "FixedLengthStream": "Portable code names no provider global: packages/providers/cloudflare owns it.",
+                  "HTMLRewriter": "Portable code names no provider global: packages/providers/cloudflare owns it.",
+                  "WebSocketPair": "Portable code names no provider global: packages/providers/cloudflare owns it.",
                   "process": "The dashboard names no runtime global: it runs in a browser."
                 }
               }
@@ -310,9 +310,9 @@
                 "deniedGlobals": {
                   "Buffer": "The demo names no runtime global: it runs in a browser.",
                   "Bun": "The demo names no runtime global: it runs in a browser.",
-                  "FixedLengthStream": "Portable code names no provider global: packages/cloudflare owns it.",
-                  "HTMLRewriter": "Portable code names no provider global: packages/cloudflare owns it.",
-                  "WebSocketPair": "Portable code names no provider global: packages/cloudflare owns it.",
+                  "FixedLengthStream": "Portable code names no provider global: packages/providers/cloudflare owns it.",
+                  "HTMLRewriter": "Portable code names no provider global: packages/providers/cloudflare owns it.",
+                  "WebSocketPair": "Portable code names no provider global: packages/providers/cloudflare owns it.",
                   "process": "The demo names no runtime global: it runs in a browser."
                 }
               }

@@ -45,4 +45,4 @@ Poplin publishes a static site to the user's own Cloudflare account with one cal
 - Click through an install without a domain: `bun run preview --no-domain`, then open `http://poplin.localhost:4400/`
 - Stop it: `bun run preview:stop`; `--port` runs a second one beside it, `--watch` restarts it when its source changes, and `--gallery` lists every state at `/gallery`
 - Backwards-compatible code lives only in `migrations/`. Everywhere else an old shape is deleted outright.
-- Provider-specific code lives only in `packages/cloudflare/`; `tests/portable.test.ts` holds the line.
+- Provider-specific code lives only in `packages/providers/`; `tests/portable.test.ts` holds the line.

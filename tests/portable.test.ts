@@ -31,8 +31,11 @@ import { plantedRepository, repositoryFiles } from "./support/repository-files";
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
 
-/** The folders that hold no provider: another provider is added without touching them. Every other folder of `packages` is one provider's own. */
+/** The folders that hold no provider: another provider is added without touching them. */
 const PORTABLE: readonly string[] = ["packages/core", "packages/app", "packages/cli", "packages/dashboard", "packages/demo"];
+
+/** The folder the providers sit in: each folder of it is one provider's own. */
+const PROVIDERS = "packages/providers";
 
 /** The part of a portable package whose code is read for the provider's words. */
 const WORD_PLACE = /^packages\/[^/]+\/src\//;
@@ -90,8 +93,8 @@ const SOURCE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 /** The source files that hold JSX, by the loader that compiles each. */
 const JSX_FILE = /\.([jt]sx)$/;
 
-/** A folder of `packages`, at the start of the path of a file in it. */
-const PACKAGE_FOLDER = /^packages\/[^/]+(?=\/)/;
+/** A package's folder, at the start of the path of a file in it: a folder of `packages`, or a provider's folder of `packages/providers`. */
+const PACKAGE_FOLDER = /^packages\/(?:providers\/[^/]+|[^/]+)(?=\/)/;
 
 /** The folders whose files are never read: installed and built code. */
 const SKIPPED_FOLDERS: readonly string[] = ["node_modules", "dist"];
@@ -128,8 +131,11 @@ interface Tree {
   /** The workspace's packages: the name a manifest gives, to its folder from the root. */
   readonly packages: ReadonlyMap<string, string>;
 
-  /** The folders of `packages` that are not portable, each one provider's own. */
+  /** The folders of `packages/providers`, each one provider's own. */
   readonly providers: readonly string[];
+
+  /** The other folders of `packages` that are not portable. None may be there: no rule here reads one. */
+  readonly strays: readonly string[];
 }
 
 function isUnder(path: string, place: string): boolean {
@@ -147,7 +153,7 @@ function filesUnder(root: string, places: readonly string[], kind: RegExp = SOUR
   return files.filter((path) => kind.test(posix.basename(path)) && !path.split("/").some((part) => SKIPPED_FOLDERS.includes(part)));
 }
 
-/** Read a repository's `packages` folder: which folders are a provider's, and what each manifest names its package. */
+/** Read a repository's `packages` folder: which folders are a provider's, which are neither portable nor a provider's, and what each manifest names its package. */
 function readTree(root: string): Tree {
   const packages = new Map<string, string>();
   const files = repositoryFiles(root);
@@ -157,7 +163,10 @@ function readTree(root: string): Tree {
     packages.set(JSON.parse(readFileSync(join(root, folder, "package.json"), "utf8")).name, folder);
   }
 
-  return { root, packages, providers: folders.filter((folder) => !PORTABLE.includes(folder)).sort() };
+  const providers = folders.filter((folder) => posix.dirname(folder) === PROVIDERS).sort();
+  const strays = folders.filter((folder) => folder !== PROVIDERS && !PORTABLE.includes(folder) && !providers.includes(folder)).sort();
+
+  return { root, packages, providers, strays };
 }
 
 /** The text of every token of a source file that is not a comment, as `[start, text]`. A template and a regular expression are each read whole, so a `//` inside one opens no comment. */
@@ -284,7 +293,7 @@ function openImports({ packages, providers }: Tree): string[] {
   const pairs = [...PORTABLE, ...providers].flatMap((from) => providers.filter((provider) => provider !== from).map((provider) => ({ from, provider })));
   const probes = pairs.flatMap(({ from, provider }, pair) => {
     const name = [...packages].find(([, folder]) => folder === provider)?.[0];
-    const ways = [`../../${posix.basename(provider)}/src/storage/store`, ...(name === undefined ? [] : [name, `${name}/src/storage/store`])];
+    const ways = [posix.relative(`${from}/tests`, `${provider}/src/storage/store`), ...(name === undefined ? [] : [name, `${name}/src/storage/store`])];
 
     return ways.map((way, index) => ({ from, provider, file: `${from}/tests/probe-${pair}-${index}.ts`, text: `import "${way}";\n` }));
   });
@@ -307,6 +316,19 @@ describe("provider code stays out of the portable packages", () => {
     expect(openImports(readTree(ROOT))).toEqual([]);
     expect(filesUnder(ROOT, PORTABLE).length).toBeGreaterThan(0);
     expect(readTree(ROOT).providers.length).toBeGreaterThan(0);
+    expect(readTree(ROOT).strays).toEqual([]);
+  });
+
+  test("drift: a folder of `packages` that is neither portable nor inside `packages/providers` is under no rule here, so it is named: a provider added beside the portable packages would read as one of them to nobody", () => {
+    using tree = plantedRepository({
+      "packages/core/package.json": '{ "name": "@poplin/core" }',
+      "packages/providers/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
+      "packages/providers/notes.md": "",
+      "packages/other/package.json": '{ "name": "@poplin/other" }',
+      "packages/cloudflare/src/planted.ts": "",
+    });
+
+    expect(readTree(tree.path)).toMatchObject({ providers: ["packages/providers/cloudflare"], strays: ["packages/cloudflare", "packages/other"] });
   });
 
   test("drift: a lint rule that matches nothing passes forever; each row is a leak planted in a throwaway tree that the rule must name, beside code that only looks like one", () => {
@@ -318,29 +340,29 @@ describe("provider code stays out of the portable packages", () => {
       ["the deploy tool", 'const { unstable_dev } = await import("wrangler");', "noRestrictedImports", "wrangler"],
       ["the local runtime", 'import { Miniflare } from "miniflare";', "noRestrictedImports", "miniflare"],
       ["a require", 'const sdk = require("cloudflare");', "noCommonJs", "require"],
-      ["a path written as a template", "const tool = await import(`../../../cloudflare/src/worker/worker`);", "noUnusedTemplateLiteral", "`../../../cloudflare"],
+      ["a path written as a template", "const tool = await import(`../../../providers/cloudflare/src/shared/worker/worker`);", "noUnusedTemplateLiteral", "`../../../providers/cloudflare"],
       ["a require made for the file", 'import { createRequire } from "node:module";', "noRestrictedImports", "node:module"],
-      ["a re-export", 'export { buildClient } from "../../../cloudflare/src/zone/client";', "noRestrictedImports", "../../../cloudflare/src/zone/client"],
+      ["a re-export", 'export { buildClient } from "../../../providers/cloudflare/src/shared/install/client";', "noRestrictedImports", "../../../providers/cloudflare/src/shared/install/client"],
       ["the Cloudflare package whole", 'import * as provider from "@poplin/cloudflare";', "noRestrictedImports", "@poplin/cloudflare"],
       [
         "the Cloudflare package by name",
-        'import { r2Storage } from "@poplin/cloudflare/src/storage/r2";',
+        'import { r2Storage } from "@poplin/cloudflare/src/shared/storage/r2";',
         "noRestrictedImports",
-        "@poplin/cloudflare/src/storage/r2",
+        "@poplin/cloudflare/src/shared/storage/r2",
       ],
       [
         "the Cloudflare package by path",
-        'import { r2Storage } from "../../../cloudflare/src/storage/r2.ts";',
+        'import { r2Storage } from "../../../providers/cloudflare/src/shared/storage/r2.ts";',
         "noRestrictedImports",
-        "../../../cloudflare/src/storage/r2.ts",
+        "../../../providers/cloudflare/src/shared/storage/r2.ts",
       ],
       [
         "an import in single quotes",
-        "import { open } from '../../../cloudflare/src/database/d1';",
+        "import { open } from '../../../providers/cloudflare/src/shared/database/d1';",
         "noRestrictedImports",
-        "../../../cloudflare/src/database/d1",
+        "../../../providers/cloudflare/src/shared/database/d1",
       ],
-      ["an import for its effect", 'import "../../../cloudflare/src/worker/worker";', "noRestrictedImports", "../../../cloudflare/src/worker/worker"],
+      ["an import for its effect", 'import "../../../providers/cloudflare/src/shared/worker/worker";', "noRestrictedImports", "../../../providers/cloudflare/src/shared/worker/worker"],
       ["an import broken over lines", 'import {\n  buildClient,\n} from\n  "cloudflare";', "noRestrictedImports", "cloudflare"],
       ["an import with a comment line inside it", 'import { buildClient } from\n// The client.\n"cloudflare";', "noRestrictedImports", "cloudflare"],
       [
@@ -370,7 +392,7 @@ describe("provider code stays out of the portable packages", () => {
       "// Bindings of keys to actions, one Env per test.",
       'const label = "Env";',
       'const letters = Array.from("wrangler");',
-      '// import { r2Storage } from "@poplin/cloudflare/src/storage/r2";',
+      '// import { r2Storage } from "@poplin/cloudflare/src/shared/storage/r2";',
       '/* const sdk = require("cloudflare"); */',
       'import { parseHostname } from "@poplin/app/src/names/hostname";',
       'import { open } from "../database/open";',
@@ -390,8 +412,8 @@ describe("provider code stays out of the portable packages", () => {
   test("drift: every portable place is under the rules, the dashboard's two among them, and the provider's own folders and the rest of the tree are not: a rule on the wrong places is switched off the day it fires", () => {
     const leak = 'import Cloudflare from "cloudflare";\nexport const page = new HTMLRewriter();\nexport type Context = ExecutionContext;\n';
     const outside = [
-      "packages/cloudflare/src/storage/r2.ts",
-      "packages/cloudflare/tests/storage/r2.test.ts",
+      "packages/providers/cloudflare/src/shared/storage/r2.ts",
+      "packages/providers/cloudflare/tests/shared/storage/r2.test.ts",
       "tests/planted.test.ts",
       "website/src/planted.ts",
       ".github/scripts/planted.ts",
@@ -430,18 +452,18 @@ describe("provider code stays out of the portable packages", () => {
   test("drift: the lint rule names the one provider there is, so a second provider's folder is open to every package, and the first to it, until the settings name both", () => {
     using tree = plantedRepository({
       "packages/core/package.json": '{ "name": "@poplin/core" }',
-      "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
-      "packages/other/package.json": '{ "name": "@poplin/other" }',
+      "packages/providers/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
+      "packages/providers/other/package.json": '{ "name": "@poplin/other" }',
     });
 
     expect(openImports(readTree(tree.path))).toEqual([
-      "packages/app may import packages/other",
-      "packages/cli may import packages/other",
-      "packages/cloudflare may import packages/other",
-      "packages/core may import packages/other",
-      "packages/dashboard may import packages/other",
-      "packages/demo may import packages/other",
-      "packages/other may import packages/cloudflare",
+      "packages/app may import packages/providers/other",
+      "packages/cli may import packages/providers/other",
+      "packages/core may import packages/providers/other",
+      "packages/dashboard may import packages/providers/other",
+      "packages/demo may import packages/providers/other",
+      "packages/providers/cloudflare may import packages/providers/other",
+      "packages/providers/other may import packages/providers/cloudflare",
     ]);
   });
 
@@ -458,9 +480,9 @@ describe("provider code stays out of the portable packages", () => {
     ["a types reference", '/// <reference types="@cloudflare/workers-types" />', "provider types", "@cloudflare/workers-types"],
     [
       "a reference into the provider's folder",
-      '/// <reference path="../../../cloudflare/worker-configuration.d.ts" />',
+      '/// <reference path="../../../providers/cloudflare/worker-configuration.d.ts" />',
       "provider types",
-      "../../../cloudflare/worker-configuration.d.ts",
+      "../../../providers/cloudflare/worker-configuration.d.ts",
     ],
     ["the edge cache", "const cached = await caches.default.match(request);", "provider global", "caches.default"],
     ["work kept going after the answer", "context.waitUntil (sweep(install));", "provider global", ".waitUntil"],
@@ -477,7 +499,7 @@ describe("provider code stays out of the portable packages", () => {
     ["the Access team's host", 'const keys = await fetch("https://team.cloudflareaccess.com/cdn-cgi/access/certs");', "provider host", "cloudflareaccess.com"],
   ])("names %s", (_, line, rule, what) => {
     using tree = plantedRepository({
-      "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
+      "packages/providers/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
       "packages/cli/tests/sites/planted.ts": `// A planted file.\n${line}\n`,
     });
     const at = 1 + lineOf(line, line.indexOf(what));
@@ -537,7 +559,7 @@ describe("provider code stays out of the portable packages", () => {
 
   test("drift: a portable package whose manifest or TypeScript settings name the provider takes it in with no import to give it away", () => {
     using tree = plantedRepository({
-      "packages/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
+      "packages/providers/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
       "packages/core/package.json":
         '{\n  "name": "@poplin/core",\n  "dependencies": { "valibot": "1.5.0" },\n  "devDependencies": {\n    "wrangler": "4.0.0",\n    "@poplin/cloudflare": "workspace:*"\n  }\n}\n',
       "packages/cli/tsconfig.json": '{\n  "extends": "../../tsconfig.json",\n  "compilerOptions": { "types": ["bun", "@cloudflare/workers-types"] }\n}\n',
@@ -592,12 +614,12 @@ describe("provider code stays out of the portable packages", () => {
     const namedOutsideSource = 'const label = "A Cloudflare Worker reads R2 and D1 in the zone.";\n';
     using tree = plantedRepository({
       "packages/app/package.json": '{ "name": "@poplin/app" }',
-      "packages/cloudflare/package.json":
+      "packages/providers/cloudflare/package.json":
         '{ "name": "@poplin/cloudflare", "dependencies": { "cloudflare": "7.3.0" }, "devDependencies": { "wrangler": "4.0.0" } }',
-      "packages/cloudflare/src/storage/r2.ts": providerCode,
-      "packages/cloudflare/src/zone/client.ts": providerCode,
-      "packages/cloudflare/src/login/access-token.ts": providerCode,
-      "packages/cloudflare/src/login/keys.ts": providerCode,
+      "packages/providers/cloudflare/src/shared/storage/r2.ts": providerCode,
+      "packages/providers/cloudflare/src/shared/install/client.ts": providerCode,
+      "packages/providers/cloudflare/src/shared/login/access-token.ts": providerCode,
+      "packages/providers/cloudflare/src/shared/login/keys.ts": providerCode,
       "packages/cli/node_modules/wrangler/index.js": providerCode,
       "packages/cli/dist/bin.mjs": providerCode,
       "packages/cli/README.md": providerCode,
@@ -619,12 +641,12 @@ describe("provider code stays out of the portable packages", () => {
         "packages/core/src/storage/scratch.ts": leak,
         "packages/core/built/bundle.js": leak,
         "packages/core/built/page.tsx": leak,
-        "packages/other/package.json": '{ "name": "@poplin/other" }',
-        "packages/local/package.json": '{ "name": "@poplin/local" }',
+        "packages/providers/other/package.json": '{ "name": "@poplin/other" }',
+        "packages/providers/local/package.json": '{ "name": "@poplin/local" }',
         "packages/core/package.json":
           '{\n  "name": "@poplin/core",\n  "dependencies": {\n    "@poplin/other": "workspace:*",\n    "@poplin/local": "workspace:*"\n  }\n}\n',
       },
-      { excluded: ["scratch.ts", "/packages/local/"], ignored: ["built/"] },
+      { excluded: ["scratch.ts", "/packages/providers/local/"], ignored: ["built/"] },
     );
 
     expect(violations(tree.path)).toEqual([

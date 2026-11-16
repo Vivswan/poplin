@@ -12,7 +12,7 @@ name: Live Checks
 on:
   # A push to this repository's main. A pull request and a fork's branch start nothing here.
   # A file in no line below starts a run: the list opens with every file, and each `!` line takes files out.
-  # The last lines take out the files of the other kind of install alone. tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
+  # The last lines take out the files of the other kind of install alone. packages/providers/cloudflare/tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
   push:
     branches: [main]
     paths:
@@ -41,10 +41,10 @@ on:
       - "!lefthook.yml"
       - "!.release-please-manifest.json"
       - "!release-please-config.json"
-      - "!packages/cloudflare/src/zone/forwarders/**"
-      - "!packages/cloudflare/tests/zone/forwarders/**"
-      - "!packages/cloudflare/src/zone/path-plug.ts"
-      - "!packages/cloudflare/tests/zone/path-plug.test.ts"
+      - "!packages/providers/cloudflare/src/without-domain/pieces/forwarders/**"
+      - "!packages/providers/cloudflare/tests/without-domain/pieces/forwarders/**"
+      - "!packages/providers/cloudflare/src/without-domain/path-plug.ts"
+      - "!packages/providers/cloudflare/tests/without-domain/path-plug.test.ts"
   # Midnight UTC. A schedule runs the default branch's own file and nothing a pull request or a fork wrote; a fork's
   # schedule has none of this repository's secrets.
   schedule:

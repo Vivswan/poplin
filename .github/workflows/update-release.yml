@@ -52,7 +52,7 @@ jobs:
         run: test "v$(jq -r .version packages/cli/package.json)" = "$RELEASE_TAG"
       - uses: ./.github/actions/setup
       - name: Build the Worker and write its manifest
-        run: bun run --cwd packages/cloudflare bundle "$RUNNER_TEMP/bundle"
+        run: bun run --cwd packages/providers/cloudflare bundle "$RUNNER_TEMP/bundle"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: worker-bundle-${{ matrix.build }}

@@ -1,0 +1,394 @@
+// The Worker's entry on the simulated bindings: instances with a clock the test moves, a faked team's Access, and the product's steps as requests.
+
+import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import type { Api } from "@poplin/app/src/api/api";
+import type { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
+import { issueToken } from "@poplin/core/src/actions/manage-tokens";
+import type { Install } from "@poplin/core/src/actions/records";
+import type { Login } from "@poplin/core/src/auth/logins";
+import { openDatabase } from "@poplin/core/src/database/open";
+import { dayOf } from "@poplin/core/src/records/views";
+import { sha256Of } from "@poplin/core/src/storage/storage";
+import { hc } from "hono/client";
+import type * as v from "valibot";
+import { D1Driver } from "../../../../src/shared/database/d1";
+import { R2Store } from "../../../../src/shared/storage/r2";
+import type { Bindings } from "../../../../src/shared/worker/bindings";
+import type { Outside } from "../../../../src/shared/worker/start";
+import { createWorker } from "../../../../src/shared/worker/worker";
+import { type Certs, certs, NOW, type Signer, sign, signer } from "../../login/support/access";
+import { type Account, answer } from "../../install/support/fake-install";
+import { type Asked, bodyOf } from "../../install/support/replies";
+
+/** The bindings of wrangler.jsonc, simulated, but for the Workflow: a test that gives an instance none measures an install that runs each round of a job in a request. A test of the jobs binds one itself. */
+export const BINDINGS: Bindings = { ...env, JOBS: undefined };
+
+/** Where the dashboard, the login, and the API answer in wrangler.jsonc's example values. */
+export const ADMIN = "https://poplin.example.com";
+
+/** The one login of the example first settings. */
+export const OWNER = "owner@example.com" as Login;
+
+/** Every route of the API for its address alone: `$path()` builds one and sends nothing. */
+export const PATHS: ApiCalls = hc<Api>(ADMIN).api;
+
+/** The milliseconds of one hour. */
+const HOUR_MS = 3_600_000;
+
+/** How long a login at Access lasts, in seconds: 720 hours, as the install's Access application is made. */
+const ACCESS_SESSION_SECONDS = 2_592_000;
+
+/** The milliseconds of one minute, which is how long the rate limiting binding counts for. */
+const MINUTE_MS = 60_000;
+
+/** The end of a minute, in milliseconds: too little of it for a test that counts requests within one. */
+const MINUTE_END_MS = 2000;
+
+/** The queries D1 answers one invocation on Cloudflare's Free plan. */
+const FREE_QUERIES = 50;
+
+/** A statement that changes a row. */
+const CHANGES = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
+
+/** Any statement at all. */
+const EVERY_STATEMENT = /^/;
+
+/** What D1 rejects a query with once a day's free allowance is used up, as its error reference prints the first sentence of each. */
+const SPENT = {
+  read: "D1_ERROR: Your account has exceeded D1's free tier daily row read limit.",
+  write: "D1_ERROR: Your account has exceeded D1's free tier daily row write limit.",
+} as const;
+
+/** The project's website with no file that names the newest version, so no test asks the real one. */
+const NO_WEBSITE: Outside["latest"] = { fetch: async () => new Response("Not found\n", { status: 404 }) };
+
+/** One Worker instance. */
+export type Worker = ReturnType<typeof createWorker>;
+
+/** What a test reads of an answer of the API, however the request was sent. */
+export interface Answer {
+  readonly status: number;
+  readonly headers: Headers;
+  readonly text: () => Promise<string>;
+  readonly json: () => Promise<unknown>;
+}
+
+/** Every route of the API as a request to send, typed from the routes the app declares. */
+export type ApiCalls = ReturnType<typeof hc<Api>>["api"];
+
+/** A test's world: the clock every instance reads, the team that signs Access tokens, and the keys address the instances fetch. */
+export interface World {
+  readonly clock: { now: number };
+  readonly team: Signer;
+  readonly certs: Certs;
+}
+
+/** What a site answered through the API, as far as the tests read it. */
+export interface Published {
+  readonly id: string;
+  readonly label: string;
+  readonly state: string;
+  readonly addresses: { readonly site: string; readonly public: string | null };
+}
+
+/** One file of a test site. */
+export interface TestFile {
+  readonly path: string;
+  readonly body: Uint8Array<ArrayBuffer>;
+  readonly type: string;
+}
+
+/** Every call made to the database and the bucket through counted bindings. */
+export interface Tally {
+  calls: number;
+}
+
+export async function world(): Promise<World> {
+  const team = await signer("team-key");
+
+  return { clock: { now: NOW }, team, certs: certs(team) };
+}
+
+/** Where the Cloudflare API is, as the setup client's calls name it. */
+const CLOUDFLARE_API = "/client/v4";
+
+/**
+ * Stand in for the Cloudflare API with an account kept in memory.
+ *
+ * @param asked - takes every call, in order
+ */
+export function cloudflareOf(account: Account, asked: Asked[]): NonNullable<Outside["cloudflare"]> {
+  return async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const entry = { method: request.method, path: `${url.pathname.slice(CLOUDFLARE_API.length)}${url.search}`, key: request.headers.get("authorization"), body: await bodyOf(request) };
+    asked.push(entry);
+
+    return answer(account, entry);
+  };
+}
+
+/**
+ * Make one Worker instance of a world.
+ *
+ * @param cloudflare - what answers the setup client's calls; left out, a call to Cloudflare fails the test
+ * @param latest - what answers the day's question about the newest version; left out, a website that has no such file
+ */
+export function instance(from: World, cloudflare?: Outside["cloudflare"], latest: Outside["latest"] = NO_WEBSITE): Worker {
+  const unasked: NonNullable<Outside["cloudflare"]> = async () => Promise.reject(new Error("the test asked Cloudflare and gave it no stand-in"));
+
+  return createWorker({ now: () => from.clock.now, fetch: from.certs.fetch, cloudflare: cloudflare ?? unasked, latest });
+}
+
+export async function ask(worker: Worker, url: string, init: RequestInit = {}, bindings: Bindings = BINDINGS): Promise<Response> {
+  const context = createExecutionContext();
+  const response = await worker.fetch(new Request(url, init) as Parameters<Worker["fetch"]>[0], bindings, context);
+  await waitOnExecutionContext(context);
+
+  return response;
+}
+
+/** One scheduled run at the clock's time. */
+export async function sweep(worker: Worker, from: World, bindings: Bindings = BINDINGS): Promise<void> {
+  const context = createExecutionContext();
+  await worker.scheduled(createScheduledController({ scheduledTime: from.clock.now, cron: "*/15 * * * *" }), bindings, context);
+  await waitOnExecutionContext(context);
+}
+
+/** The install as the rule book takes it, on the same bindings: for what a test sets up or reads beside the entry. */
+export async function installOf(from: World): Promise<Install> {
+  const opened = await openDatabase(new D1Driver(BINDINGS.DB), from.clock.now);
+  if (opened.kind !== "open") throw new Error(`the test's database did not open: ${opened.message}`);
+
+  return {
+    database: opened.database,
+    store: new R2Store(BINDINGS.SITES),
+    now: () => from.clock.now,
+    addressOf: (label, access) => `https://${label}-${access === "private" ? "p" : "u"}-poplin.example.com`,
+    publicAddressOf: (name) => `https://${name}-page.example.com`,
+    reservedNames: new Set(["docs-p"]),
+  };
+}
+
+/** A whole token of the given scope, issued by the owner through the rule book. */
+export async function tokenOf(from: World, scope: "admin" | "publisher"): Promise<string> {
+  const issued = await issueToken(await installOf(from), { scope: "admin", holder: OWNER }, { scope, note: "a test" });
+  if (!issued.ok) throw new Error(`the test's token was refused: ${issued.code}`);
+
+  return issued.token;
+}
+
+/**
+ * The API as one caller asks it: with the token, or with no `Authorization` header for `null`.
+ *
+ * @param send - what sends each request; left out, the Worker is asked on the simulated bindings
+ * @param admin - the origin the API answers at; left out, the example domain's admin hostname
+ */
+export function api(worker: Worker, token: string | null, send: (input: string, init: RequestInit) => Promise<Response> = (input, init) => ask(worker, input, init), admin: string = ADMIN): ApiCalls {
+  const headers: Record<string, string> = token === null ? {} : { Authorization: `Bearer ${token}` };
+
+  // The client names every address as text.
+  return hc<Api>(admin, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => send(String(input), init ?? {}) }).api;
+}
+
+/** Send the bytes of one file of an upload. */
+export function sendFile(calls: ApiCalls, upload: string, file: Pick<TestFile, "path" | "body">): Promise<Answer> {
+  return calls.uploads[":upload"].file.$put({ param: { upload }, query: { path: file.path } }, { headers: { "Content-Type": "application/octet-stream" }, init: { body: file.body } });
+}
+
+/** The JSON of a done request. */
+export async function done<Body>(response: Answer): Promise<Body> {
+  if (response.status !== 200) throw new Error(`the API answered ${response.status}: ${await response.text()}`);
+
+  return (await response.json()) as Body;
+}
+
+/**
+ * Publish files through the API's three steps: begin, one put per file, finish.
+ *
+ * @param calls - the API as the publisher asks it; left out, at the example domain's admin hostname on the simulated bindings
+ */
+export async function publish(worker: Worker, token: string, asked: Omit<v.InferInput<typeof PUBLISH_REQUEST>, "files">, files: readonly TestFile[], calls: ApiCalls = api(worker, token)): Promise<Published> {
+  const manifest = await Promise.all(files.map(async (file) => ({ path: file.path, size: file.body.byteLength, content_type: file.type, sha256: await sha256Of(file.body) })));
+  const begun = await done<{ upload: { id: string } }>(await calls.uploads.$post({ query: {}, json: { ...asked, files: manifest } }));
+
+  for (const file of files) await done(await sendFile(calls, begun.upload.id, file));
+
+  return (await done<{ site: Published }>(await calls.uploads[":upload"].finish.$post({ param: { upload: begun.upload.id }, query: {} }))).site;
+}
+
+export function page(text: string): TestFile {
+  return { path: "index.html", body: new TextEncoder().encode(text), type: "text/html" };
+}
+
+/**
+ * Write the headers Access puts on a request it let through: the team's token, live at the clock's time.
+ *
+ * @param changes - claims that replace the owner's own, such as another `email`; `undefined` drops one
+ * @param by - who signs the token; the world's team when left out
+ */
+export async function accessHeaders(from: World, changes: Record<string, unknown> = {}, by: Signer = from.team): Promise<Record<string, string>> {
+  const seconds = Math.floor(from.clock.now / 1000);
+
+  return { "Cf-Access-Jwt-Assertion": await sign(by, { email: OWNER, iat: seconds - 10, nbf: seconds - 10, exp: seconds + 3600, ...changes }, from.team.kid) };
+}
+
+/**
+ * Log the owner in as a person does: Access issues its token, and the first page of the dashboard is opened with it, which writes the login's Activity line and shuts the setup page.
+ *
+ * @param bindings - the bindings that page is asked on; the simulated ones when left out
+ * @returns the headers Access puts on every request of that login, live for the 30 days an Access session lasts
+ * @throws {Error} the page was not answered
+ */
+export async function logIn(worker: Worker, from: World, bindings: Bindings = BINDINGS): Promise<Record<string, string>> {
+  const headers = await accessHeaders(from, { exp: Math.floor(from.clock.now / 1000) + ACCESS_SESSION_SECONDS });
+  const opened = await ask(worker, `${ADMIN}/`, { headers }, bindings);
+  if (opened.status !== 200) throw new Error(`the dashboard answered the login's first page ${opened.status}: ${await opened.text()}`);
+
+  return headers;
+}
+
+/** Write a site's label address under a letter: `p` is the address behind Access, `u` the open one. */
+export function under(site: Pick<Published, "label">, letter: "p" | "u"): string {
+  return `https://${site.label}-${letter}-poplin.example.com`;
+}
+
+/**
+ * Send a change as the dashboard's client and the setup page's client send it: a POST of JSON from a page of the same origin.
+ *
+ * @param headers - laid over the client's own, such as the token Access puts on a user's request
+ */
+export function send(worker: Worker, url: string, body: unknown, headers: Record<string, string> = {}, bindings: Bindings = BINDINGS): Promise<Response> {
+  const client = { "Content-Type": "application/json", Origin: new URL(url).origin, "Sec-Fetch-Site": "same-origin" };
+
+  return ask(worker, url, { method: "POST", headers: { ...client, ...headers }, body: JSON.stringify(body) }, bindings);
+}
+
+/** The bindings with every call to the database and the bucket counted. Preparing a statement calls nothing. */
+export function countedBindings(tally: Tally): Bindings {
+  const counting = <Target extends object>(target: Target): Target =>
+    new Proxy(target, {
+      get(inner, name) {
+        const member: unknown = Reflect.get(inner, name, inner);
+        if (typeof member !== "function") return member;
+
+        return (...given: unknown[]): unknown => {
+          if (name !== "prepare") tally.calls += 1;
+
+          return Reflect.apply(member, inner, given);
+        };
+      },
+    });
+
+  return { ...BINDINGS, DB: counting(BINDINGS.DB), SITES: counting(BINDINGS.SITES) };
+}
+
+/**
+ * The bindings of one invocation on Cloudflare's Free plan: every call counted as `countedBindings` counts it, and the database refusing its fifty-first query, as D1 does there. A batch is one query.
+ *
+ * @returns bindings for one invocation; the next one takes its own
+ */
+export function freePlanBindings(tally: Tally): Bindings {
+  const counted = countedBindings(tally);
+  let queries = 0;
+  const capped = new Proxy(counted.DB, {
+    get(inner, name) {
+      const member: unknown = Reflect.get(inner, name, inner);
+      if (typeof member !== "function" || name === "prepare") return member;
+
+      return (...given: unknown[]): unknown => {
+        queries += 1;
+        if (queries > FREE_QUERIES) throw new Error(`D1 refused query ${queries} of one invocation: the Free plan gives ${FREE_QUERIES}`);
+
+        return Reflect.apply(member, inner, given);
+      };
+    },
+  });
+
+  return { ...counted, DB: capped };
+}
+
+/**
+ * The database binding with the batches that hold a matching statement failing, and every other batch answered.
+ *
+ * @param fails - what the text of a statement whose batch fails matches
+ * @param failure - what such a batch is rejected with
+ */
+function failingBatches(fails: RegExp, failure: string): D1Database {
+  const failing = new WeakSet<D1PreparedStatement>();
+  const binding: Pick<D1Database, "prepare" | "batch"> = {
+    prepare: (query) => {
+      const prepared: Pick<D1PreparedStatement, "bind"> = {
+        bind: (...values) => {
+          const bound = BINDINGS.DB.prepare(query).bind(...values);
+          if (fails.test(query)) failing.add(bound);
+
+          return bound;
+        },
+      };
+
+      return prepared as D1PreparedStatement;
+    },
+    batch: async <Row>(statements: D1PreparedStatement[]) => {
+      if (statements.some((statement) => failing.has(statement))) throw new Error(failure);
+
+      return BINDINGS.DB.batch<Row>(statements);
+    },
+  };
+
+  return binding as D1Database;
+}
+
+/**
+ * The database binding as D1 is once a day's free allowance is used up.
+ *
+ * @param spent - `read` refuses every batch; `write` refuses the batches that hold a statement that changes a row, and answers the rest
+ */
+export function spentDatabase(spent: keyof typeof SPENT): D1Database {
+  return failingBatches(spent === "read" ? EVERY_STATEMENT : CHANGES, SPENT[spent]);
+}
+
+/**
+ * The database binding with some statements failing, and every other one answered: a database that works but for one table.
+ *
+ * @param refused - what the text of a statement that fails matches
+ */
+export function refusingDatabase(refused: RegExp): D1Database {
+  return failingBatches(refused, "the table is locked");
+}
+
+/**
+ * What the install has noted on the day of the world's clock: the kind, the count, and the message of each problem, the newest first.
+ */
+export async function problemsOf(from: World): Promise<unknown[]> {
+  const { database } = await installOf(from);
+
+  return (await database.listProblems(dayOf(from.clock.now))).map(({ kind, count, message }) => [kind, count, message]);
+}
+
+/**
+ * Wait for the next minute when this one is about to end, before a run that counts requests within a minute.
+ *
+ * The binding's minute is the wall clock's, not the test's: a run that crossed one would begin its count anew.
+ */
+export async function awayFromMinuteEnd(): Promise<void> {
+  const left = MINUTE_MS - (Date.now() % MINUTE_MS);
+  if (left < MINUTE_END_MS) await scheduler.wait(left);
+}
+
+/** The bucket with every list page cut to one object, so one removal, which walks 15 pages, takes 15 files. */
+export function shortPages(bucket: R2Bucket): R2Bucket {
+  return new Proxy(bucket, {
+    get(inner, name) {
+      if (name !== "list") return Reflect.get(inner, name, inner);
+
+      return (options: R2ListOptions): Promise<R2Objects> => inner.list({ ...options, limit: 1 });
+    },
+  });
+}
+
+/** Move the clock forward. */
+export function wait(from: World, hours: number): void {
+  from.clock.now += hours * HOUR_MS;
+}

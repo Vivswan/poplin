@@ -25,7 +25,7 @@ const GUIDE_PAGES: readonly string[] = [...new Bun.Glob(`${GUIDE_PLACE}**/*.md`)
 const PAGES: readonly string[] = ["README.md", ...GUIDE_PAGES, "packages/cli/README.md"];
 
 /** The pages outside the guide that link into it. */
-const LINKING_PAGES: readonly string[] = ["README.md", "packages/cloudflare/README.md", "skills/poplin/references/setup.md"];
+const LINKING_PAGES: readonly string[] = ["README.md", "packages/providers/cloudflare/README.md", "skills/poplin/references/setup.md"];
 
 /** How a page that is read outside the repository writes the address of a guide page: the page on GitHub. */
 const GUIDE_ON_GITHUB = "https://github.com/Vivswan/poplin/blob/main/";

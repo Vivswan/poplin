@@ -5,7 +5,7 @@
 #   live-checks-account-address.yml    kind `account address`    environment without-domain-ci-tests
 #
 #   a push -> wait for that commit's `all-green` check -> build the Worker bundle
-#     -> make the standing test install match the commit -> run tests/live against it -> put the install back
+#     -> make the standing test install match the commit -> run packages/providers/cloudflare/live against it -> put the install back
 #   a run by hand with `start_over` ticked -> everything poplin made on the test account removed -> the same steps, from nothing
 #   midnight UTC -> the same steps for main as it is, with one check more: a copy too large for one request, which the install's job finishes
 #
@@ -84,9 +84,9 @@ jobs:
         timeout-minutes: 32
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bun packages/cloudflare/scripts/live/gate.ts
+        run: bun packages/providers/cloudflare/scripts/live/gate.ts
       - name: Build the Worker bundle
-        run: bun run --cwd packages/cloudflare build
+        run: bun run --cwd packages/providers/cloudflare build
       # Only a run started by hand with the box ticked: a push and the midnight run have no such input.
       - name: Start the test install over
         if: inputs.start_over
@@ -95,7 +95,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           POPLIN_LIVE_START_OVER: ${{ inputs.start_over }}
-        run: bun run --silent --cwd packages/cloudflare live:start-over
+        run: bun run --silent --cwd packages/providers/cloudflare live:start-over
       - name: Make the test install match the commit
         id: converge
         timeout-minutes: 12
@@ -103,7 +103,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
-        run: bun run --silent --cwd packages/cloudflare live:converge
+        run: bun run --silent --cwd packages/providers/cloudflare live:converge
       - name: Run the live checks
         timeout-minutes: 25
         env:
@@ -112,7 +112,7 @@ jobs:
           POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
           POPLIN_LIVE_MANY_FILES: ${{ inputs.many_files && '1' || '0' }}
           MISSING: ${{ steps.converge.outputs.missing }}
-        run: bun run --silent --cwd packages/cloudflare live:suite "$MISSING"
+        run: bun run --silent --cwd packages/providers/cloudflare live:suite "$MISSING"
       # Whatever the checks came to, so the owner finds the samples and the demo. It removes every token, and with them
       # the row of a suite step that was killed before it could remove its own.
       - name: Put the test install back
@@ -121,7 +121,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bun run --silent --cwd packages/cloudflare live:reset
+        run: bun run --silent --cwd packages/providers/cloudflare live:reset
 
   # The midnight reset, beside the checks of that night. It shares their lane, so it never touches an install while they
   # do, and it puts an install back when they stopped before their own reset. On an account that holds no test install it
@@ -147,4 +147,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bun run --silent --cwd packages/cloudflare live:reset
+        run: bun run --silent --cwd packages/providers/cloudflare live:reset

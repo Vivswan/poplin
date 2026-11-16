@@ -12,7 +12,7 @@ name: Live Checks (account address)
 on:
   # A push to this repository's main. A pull request and a fork's branch start nothing here.
   # A file in no line below starts a run: the list opens with every file, and each `!` line takes files out.
-  # The last lines take out the files of the other kind of install alone. tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
+  # The last lines take out the files of the other kind of install alone. packages/providers/cloudflare/tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
   push:
     branches: [main]
     paths:
@@ -41,14 +41,17 @@ on:
       - "!lefthook.yml"
       - "!.release-please-manifest.json"
       - "!release-please-config.json"
-      - "!packages/cloudflare/src/zone/bots/**"
-      - "!packages/cloudflare/src/zone/dns/**"
-      - "!packages/cloudflare/src/zone/routes/**"
-      - "!packages/cloudflare/src/zone/rules/**"
-      - "!packages/cloudflare/tests/zone/bots/**"
-      - "!packages/cloudflare/tests/zone/dns/**"
-      - "!packages/cloudflare/tests/zone/routes/**"
-      - "!packages/cloudflare/tests/zone/rules/**"
+      - "!packages/providers/cloudflare/src/with-domain/pieces/bots/**"
+      - "!packages/providers/cloudflare/src/with-domain/pieces/dns/**"
+      - "!packages/providers/cloudflare/src/with-domain/pieces/routes/**"
+      - "!packages/providers/cloudflare/src/with-domain/pieces/rules/guards.ts"
+      - "!packages/providers/cloudflare/src/with-domain/pieces/rules/rules.ts"
+      - "!packages/providers/cloudflare/src/with-domain/pieces/rules/waf.ts"
+      - "!packages/providers/cloudflare/tests/with-domain/pieces/bots/**"
+      - "!packages/providers/cloudflare/tests/with-domain/pieces/dns/**"
+      - "!packages/providers/cloudflare/tests/with-domain/pieces/routes/**"
+      - "!packages/providers/cloudflare/tests/with-domain/pieces/rules/guards.test.ts"
+      - "!packages/providers/cloudflare/tests/with-domain/pieces/rules/waf.test.ts"
   # Midnight UTC. A schedule runs the default branch's own file and nothing a pull request or a fork wrote; a fork's
   # schedule has none of this repository's secrets.
   schedule:

@@ -1,0 +1,44 @@
+{
+  "name": "@poplin/cloudflare",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./src/shared/worker/bindings": "./src/shared/worker/bindings.ts",
+    "./src/shared/database/d1": "./src/shared/database/d1.ts",
+    "./src/shared/storage/r2": "./src/shared/storage/r2.ts",
+    "./src/shared/install/kind/zone-binding": "./src/shared/install/kind/zone-binding.ts"
+  },
+  "scripts": {
+    "typecheck": "wrangler types ./worker-configuration.d.ts --config ../../../wrangler.jsonc && tsc -p .",
+    "built-client": "bun scripts/built-client.ts",
+    "build": "wrangler deploy --dry-run --outdir packages/providers/cloudflare/dist --config ../../../wrangler.jsonc",
+    "bundle": "bun scripts/bundle.ts",
+    "check-bundle": "bun scripts/check-bundle.ts",
+    "deploy": "bun scripts/deploy.ts",
+    "pin-releases": "bun scripts/pin-releases.ts",
+    "test": "bun run build && vitest run",
+    "costs": "bun run build && vitest run tests/shared/worker/request-budget.test.ts",
+    "costs:compare": "bun scripts/action-costs.ts",
+    "live:start-over": "bun scripts/live/start-over.ts",
+    "live:converge": "bun scripts/live/converge.ts",
+    "live:suite": "bun scripts/live/suite.ts",
+    "live:reset": "bun scripts/live/reset.ts"
+  },
+  "dependencies": {
+    "@poplin/app": "workspace:*",
+    "@poplin/core": "workspace:*",
+    "aws4fetch": "1.0.20",
+    "cloudflare": "7.3.0",
+    "jose": "6.2.17",
+    "uint8array-extras": "1.6.0",
+    "valibot": "1.5.0"
+  },
+  "devDependencies": {
+    "@actions/core": "3.0.1",
+    "@cloudflare/vitest-plugin": "1.8.2",
+    "es-module-lexer": "2.3.2",
+    "hono": "4.13.18",
+    "vitest": "5.1.0",
+    "wrangler": "4.162.0"
+  }
+}
