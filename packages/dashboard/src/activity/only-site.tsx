@@ -41,7 +41,7 @@ export function OnlySite({ of, page, current, onShowEvery }: OnlySiteProps): Rea
   return (
     // Beside the search where the toolbar has the room, and on a line of its own where it has none: under the toolbar, and on a phone under the search.
     <div className="flex min-w-0 max-xl:order-5 max-xl:basis-full max-md:order-3">
-      <Badge variant="secondary" className="h-8 max-w-64 min-w-0 shrink gap-0.5 pr-0.5 pl-3 text-sm font-normal max-md:max-w-full" title={`Only ${called}`}>
+      <Badge variant="secondary" className="h-8 max-w-64 min-w-0 shrink gap-0.5 pr-0.5 pl-3 text-sm font-normal max-md:h-10 max-md:max-w-full" title={`Only ${called}`}>
         <span className="truncate">Only {called}</span>
         {/* The row's button that put the mark here left with the press: this one takes the focus from it. */}
         <IconButton label="Show every site" onClick={onShowEvery} className="size-7 rounded-full pointer-coarse:size-8" home>
