@@ -9,6 +9,7 @@ import { publishSite } from "../../src/actions/publish";
 import { getSite } from "../../src/actions/show";
 import { uploadFile } from "../../src/actions/upload-file";
 import { uploadKey } from "../../src/actions/uploads";
+import { inlineJobs } from "../../src/jobs/inline-jobs";
 import { dayOf } from "../../src/records/views";
 import type { ObjectKey } from "../../src/storage/storage";
 import { BunSqliteDriver } from "../database/support/bun-sqlite-driver";
@@ -61,8 +62,8 @@ describe("duplicateSite", () => {
     await publishSite(world.install, OWNER, { site: source, files: FIVE });
     const before = await getSite(world.install, OWNER, source);
 
-    const copied = await duplicateSite(world.install, OWNER, { site: "report" }, ASKING);
-    const named = await duplicateSite(world.install, ADMIN, { site: source, name: "report-draft" }, ASKING);
+    const copied = await duplicateSite(world.install, OWNER, { site: "report" }, ASKING, inlineJobs);
+    const named = await duplicateSite(world.install, ADMIN, { site: source, name: "report-draft" }, ASKING, inlineJobs);
     if (!copied.ok || copied.site === null || !named.ok || named.site === null) throw new Error("a copy was refused");
 
     expect(copied).toMatchObject({
@@ -86,7 +87,7 @@ describe("duplicateSite", () => {
     let upload: string | undefined;
 
     for (let calls = 0; calls < 3; calls += 1) {
-      const step = await duplicateSite(world.install, OWNER, upload === undefined ? { site: source } : { site: source, upload }, ASKING);
+      const step = await duplicateSite(world.install, OWNER, upload === undefined ? { site: source } : { site: source, upload }, ASKING, inlineJobs);
       if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
 
       const listed = await listSites(world.install, ADMIN);
@@ -95,7 +96,7 @@ describe("duplicateSite", () => {
     }
 
     expect(seen).toEqual([[null, 112, 1], [null, 224, 1], [1, 300, 2]]);
-    expect(await duplicateSite(world.install, OWNER, { site: source, upload }, ASKING)).toMatchObject({ ok: true, site: { live_version: 1 }, copy: { copied: 300, files: 300 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source, upload }, ASKING, inlineJobs)).toMatchObject({ ok: true, site: { live_version: 1 }, copy: { copied: 300, files: 300 } });
     expect(await world.audit()).toEqual(["create", "publish", "create", "duplicate"]);
   });
 
@@ -121,7 +122,7 @@ describe("duplicateSite", () => {
     const source = await finishPublish(world.install, OWNER, begun.upload.id);
     if (!source.ok) throw new Error(`the source was refused: ${source.code}`);
 
-    expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, ASKING)).toMatchObject({ ok: true, site: null, copy: { copied: 113, files: 1_601 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source.site.id }, ASKING, inlineJobs)).toMatchObject({ ok: true, site: null, copy: { copied: 113, files: 1_601 } });
   });
 
   // Drift: a host ends a request past 50 calls to the database, some spent before the action, and bounds the store apart. A call that copies more than fits either is never finished; one that counts both as one copies a tenth of what fits.
@@ -164,7 +165,7 @@ describe("duplicateSite", () => {
     try {
       for (let site: unknown = null; site === null; made += 1) {
         Object.assign(left, { database: OWN_DATABASE_CALLS, store: STORE_CALLS });
-        const step = await duplicateSite({ ...world.install, store }, OWNER, upload === undefined ? { site: source.site.id } : { site: source.site.id, upload }, ASKING);
+        const step = await duplicateSite({ ...world.install, store }, OWNER, upload === undefined ? { site: source.site.id } : { site: source.site.id, upload }, ASKING, inlineJobs);
         if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
 
         upload = step.copy.upload;
@@ -184,9 +185,9 @@ describe("duplicateSite", () => {
     using batches = spyOn(BunSqliteDriver.prototype, "batch");
     using reads = spyOn(world.install.store, "list");
 
-    await expect(duplicateSite(world.install, OWNER, { site: source }, 27)).rejects.toThrow(RangeError);
+    await expect(duplicateSite(world.install, OWNER, { site: source }, 27, inlineJobs)).rejects.toThrow(RangeError);
     expect([batches.mock.calls.length, reads.mock.calls.length]).toEqual([0, 0]);
-    expect(await duplicateSite(world.install, OWNER, { site: source }, 26)).toMatchObject({ ok: true, site: { live_version: 1 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source }, 26, inlineJobs)).toMatchObject({ ok: true, site: { live_version: 1 } });
   });
 
   // Drift: a duplicate is a new site made from another's files, so it must pass every door a publish and a read pass: ownership, the trash, and the install's limits.
@@ -202,7 +203,7 @@ describe("duplicateSite", () => {
     const source = await made(world, OWNER, "report");
     const keys = await world.keys();
 
-    expect(await duplicateSite(world.install, actor, { site: source, ...asked }, ASKING)).toEqual(refusal as never);
+    expect(await duplicateSite(world.install, actor, { site: source, ...asked }, ASKING, inlineJobs)).toEqual(refusal as never);
     expect([await world.keys(), await world.audit()]).toEqual([keys, ["create"]]);
   });
 
@@ -222,9 +223,9 @@ describe("duplicateSite", () => {
     const keys = await world.keys();
     breakStore(world);
 
-    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING)).rejects.toThrow("the store is down");
+    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs)).rejects.toThrow("the store is down");
     expect(await world.keys()).toEqual(keys);
-    expect(await duplicateSite(world.install, OWNER, { site: source }, ASKING)).toMatchObject({ ok: true, site: { live_version: 1 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs)).toMatchObject({ ok: true, site: { live_version: 1 } });
   });
 
   // Drift: a host bills a write it did not keep, and a copy counts its writes once, when it begins. A later call whose write failed uncounted could be sent again without end, each time one more billed write the day's bound never saw.
@@ -233,17 +234,17 @@ describe("duplicateSite", () => {
     const source = await made(world, OWNER, "report");
     await publishSite(world.install, OWNER, { site: source, files: MANY });
     const sources = (await world.keys()).length;
-    const begun = await duplicateSite(world.install, OWNER, { site: source }, ASKING);
+    const begun = await duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs);
     if (!begun.ok) throw new Error("the copy was refused");
 
     const day = dayOf(world.clock.now);
     const before = (await world.install.database.readStorageWrites(day))?.writes ?? 0;
     spyOn(world.install.store, "write").mockRejectedValueOnce(new Error("the store is down"));
 
-    await expect(duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING)).rejects.toThrow("the store is down");
+    await expect(duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING, inlineJobs)).rejects.toThrow("the store is down");
     const counted = (await world.install.database.readStorageWrites(day))?.writes;
     const held = (await world.keys()).length - sources;
-    const next = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING);
+    const next = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING, inlineJobs);
 
     // The files that were on their way beside the one that failed are kept, five at most, and no further one was begun.
     expect([counted, held >= 112 && held <= 117, next]).toMatchObject([before + 1, true, { ok: true, copy: { copied: held + 112, files: 300 } }]);
@@ -257,7 +258,7 @@ describe("duplicateSite", () => {
     spyOn(world.install.store, "write").mockRejectedValueOnce(new Error("the store is down"));
     using reads = spyOn(world.install.store, "read");
 
-    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING)).rejects.toThrow("the store is down");
+    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs)).rejects.toThrow("the store is down");
 
     expect(reads.mock.calls.length).toBeLessThanOrEqual(6);
   });
@@ -286,7 +287,7 @@ describe("duplicateSite", () => {
     });
     using batches = spyOn(BunSqliteDriver.prototype, "batch");
 
-    await expect(duplicateSite({ ...world.install, store }, OWNER, { site: source }, EDGE_ASKING)).rejects.toThrow("the store is down");
+    await expect(duplicateSite({ ...world.install, store }, OWNER, { site: source }, EDGE_ASKING, inlineJobs)).rejects.toThrow("the store is down");
     const calls = batches.mock.calls.length;
     const [counted, problems] = [await world.install.database.readStorageWrites(day), await world.install.database.listProblems(day)];
 
@@ -300,7 +301,7 @@ describe("duplicateSite", () => {
     spyOn(world.install.store, "write").mockRejectedValueOnce(new Error("the store is down"));
     spyOn(world.install.database, "addStorageWrites").mockRejectedValueOnce(new Error("the database is down"));
 
-    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING)).rejects.toThrow("the database is down");
+    await expect(duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs)).rejects.toThrow("the database is down");
   });
 
   // Drift: copied one after another, the files of one call are 224 waits in a row; copied all at once, they pass the connections a host lets one request hold open.
@@ -332,7 +333,7 @@ describe("duplicateSite", () => {
       },
     });
 
-    const begun = await duplicateSite({ ...world.install, store }, OWNER, { site: source }, ASKING);
+    const begun = await duplicateSite({ ...world.install, store }, OWNER, { site: source }, ASKING, inlineJobs);
 
     expect([begun.ok && begun.copy.copied, onTheirWay]).toEqual([112, { now: 0, most: 6 }]);
   });
@@ -345,7 +346,7 @@ describe("duplicateSite", () => {
     await world.install.store.delete(gone as ObjectKey);
     const keys = await world.keys();
 
-    expect(await duplicateSite(world.install, OWNER, { site: source }, ASKING)).toEqual({ ok: false, code: "no_such_version" });
+    expect(await duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs)).toEqual({ ok: false, code: "no_such_version" });
     expect([await world.keys(), (await world.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 })).uploads.map((upload) => upload.plan.kind)]).toEqual([keys, ["create"]]);
   });
 
@@ -355,15 +356,15 @@ describe("duplicateSite", () => {
     const source = await made(world, OWNER, "report");
     await publishSite(world.install, OWNER, { site: source, files: MANY });
     const keys = await world.keys();
-    const begun = await duplicateSite(world.install, OWNER, { site: source }, ASKING);
+    const begun = await duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs);
     if (!begun.ok) throw new Error("the copy was refused");
 
     const sent = await uploadFile(world.install, OWNER, { upload: begun.copy.upload, path: "docs/a.css", body: new Blob([".a{}"]).stream() });
     await publishSite(world.install, OWNER, { site: source, files: [file("index.html", "<p>new</p>")] });
-    const lost = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING);
+    const lost = await duplicateSite(world.install, OWNER, { site: source, upload: begun.copy.upload }, ASKING, inlineJobs);
     await deleteSite(world.install, OWNER, { site: source });
 
-    expect([sent, lost, await duplicateSite(world.install, OWNER, { site: source }, ASKING)]).toEqual([
+    expect([sent, lost, await duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs)]).toEqual([
       { ok: false, code: "not_found", about: "upload" },
       { ok: false, code: "no_such_version" },
       { ok: false, code: "in_trash" },

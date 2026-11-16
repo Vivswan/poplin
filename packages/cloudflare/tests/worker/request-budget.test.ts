@@ -11,12 +11,13 @@ import guide from "../../../../docs/upkeep/cost/what-one-action-costs.md?raw";
 import { API_ROWS } from "./support/budget-rows-api";
 import { CONSOLE_ROWS } from "./support/budget-rows-console";
 import { ENTRY_ROWS } from "./support/budget-rows-entry";
+import { JOBS_ROWS } from "./support/budget-rows-jobs";
 import { PUBLISH_ROWS } from "./support/budget-rows-publish";
 import { ACTION_COUNTS, type ActionCost, actionCosts } from "./support/budget-guide";
 import { type Budget, type BudgetRow, type CostLine, costOf } from "./support/budget-stage";
 
 /** One row per thing the product does. */
-const ROWS: readonly BudgetRow[] = [...ENTRY_ROWS, ...CONSOLE_ROWS, ...PUBLISH_ROWS, ...API_ROWS];
+const ROWS: readonly BudgetRow[] = [...ENTRY_ROWS, ...CONSOLE_ROWS, ...PUBLISH_ROWS, ...JOBS_ROWS, ...API_ROWS];
 
 /** The most queries a row may budget: D1 answers one invocation 50 on the Free plan, and 10 are left for a start of the instance and for what a change adds before anyone looks. */
 const MOST_QUERIES = 40;

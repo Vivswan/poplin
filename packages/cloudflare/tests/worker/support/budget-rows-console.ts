@@ -243,9 +243,9 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
-    name: "Sites screen: duplicate a site of 1,001 files: a later request",
+    name: "Sites screen: duplicate a site of 1,001 files: a later request, on an install with no Workflow",
     route: "POST /data/sites/:site/duplicate",
-    // Worst of a later request: the copy is listed for what it lacks, and as many more files are copied.
+    // Worst of a later request where the request itself copies: the copy is listed for what it lacks, and as many more files are copied.
     arrange: async (stage) => {
       const begun = await begunCopy(stage);
 

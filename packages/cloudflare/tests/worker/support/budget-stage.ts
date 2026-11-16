@@ -2,6 +2,7 @@
 
 import type { Api } from "@poplin/app/src/api/api";
 import type { Install } from "@poplin/core/src/actions/records";
+import type { Job } from "@poplin/core/src/jobs/jobs";
 import { hc } from "hono/client";
 import type { Bindings } from "../../../src/worker/bindings";
 import type { Outside } from "../../../src/worker/start";
@@ -29,6 +30,9 @@ export interface Stage {
 
   /** The key the measured instance keeps for Cloudflare. A row sets it to measure an install that holds one; left alone, the install holds none. */
   keptKey?: string;
+
+  /** The Workflow the measured instance is bound to. A row sets it to measure an install that has one; left alone, the install has none. */
+  jobs?: Workflow<Job>;
 }
 
 /** The instance a row's request is sent to, and the counted bindings every request to it carries. */
@@ -211,7 +215,8 @@ export async function costOf(row: BudgetRow): Promise<Cost> {
   const stage = await stageOf();
   const step = await row.arrange(stage);
   const tally = emptyTally();
-  const measured: Measured = { worker: instance(stage.w, stage.outside.cloudflare, stage.outside.latest), bindings: { ...talliedBindings(tally), ...(stage.keptKey === undefined ? {} : { KEPT_KEY: stage.keptKey }) }, w: stage.w };
+  const bindings = { ...talliedBindings(tally), ...(stage.keptKey === undefined ? {} : { KEPT_KEY: stage.keptKey }), ...(stage.jobs === undefined ? {} : { JOBS: stage.jobs }) };
+  const measured: Measured = { worker: instance(stage.w, stage.outside.cloudflare, stage.outside.latest), bindings, w: stage.w };
 
   if (row.start !== "new") {
     await get(measured, `${ADMIN}/api/whoami`);

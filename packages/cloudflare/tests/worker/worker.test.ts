@@ -1460,10 +1460,11 @@ describe("the built bundle", () => {
   const modules = (JSON.parse(bundleMap) as { sources: string[] }).sources;
 
   // Drift: the file the OpenTofu module uploads is built from the entry's imports, so one import of a test helper or a whole library would ship to every install.
-  test("is one module of the entry and what it imports, under the size caps as it is and gzipped, with no test or fixture file in it", async () => {
+  test("is one module of the entry and what it imports, but for the two modules Cloudflare's runtime holds, under the size caps as it is and gzipped, with no test or fixture file in it", async () => {
     expect(modules).toContain("../src/worker/worker.ts");
     expect(modules.filter((path) => /(^|\/)tests\/|\.test\.|\/support\/|vitest|fixtures/.test(path))).toEqual([]);
-    expect(parse(bundle)[0].map((left) => left.n)).toEqual([]);
+    // The Workflow's class and its error are the runtime's own: no upload carries them.
+    expect(parse(bundle)[0].map((left) => left.n)).toEqual(["cloudflare:workers", "cloudflare:workflows"]);
     expect(new TextEncoder().encode(bundle).byteLength).toBeLessThan(MOST_BUNDLE_BYTES);
     expect(await gzippedBytes(bundle)).toBeLessThan(MOST_BUNDLE_GZIP_BYTES);
   });

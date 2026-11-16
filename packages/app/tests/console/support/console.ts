@@ -2,6 +2,7 @@
 
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import { parseLogin, parseLogins } from "@poplin/core/src/auth/logins";
+import type { Jobs } from "@poplin/core/src/jobs/jobs";
 
 import { createConsole } from "../../../src/console/console";
 import type { DomainPlug } from "../../../src/console/domain/records";
@@ -76,8 +77,9 @@ const identify: Identify<string> = async (headers, now) => {
  * @param usage - the host's side of the Usage screen; left out, a host that reads no figures of its own
  * @param follow - the provider's side of the users; left out, the console carries no change of them
  * @param rules - the provider's side of the domain's rules; left out, the console carries no setting to them
+ * @param jobs - the host's background work; left out, a host that has none
  */
-export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST, follow?: UsersFollow, rules?: RulesFollow): Promise<Opened> {
+export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST, follow?: UsersFollow, rules?: RulesFollow, jobs?: Jobs): Promise<Opened> {
   const opened = await openOwned();
   const { database } = opened.install;
 
@@ -112,6 +114,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
       return logins.answer;
     },
     ...(rules === undefined ? {} : { rules }),
+    ...(jobs === undefined ? {} : { jobs }),
     ...codeCounts(opened.counters),
   });
   const client = { ...opened.proof, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };

@@ -25,6 +25,7 @@ import type { EndLogins } from "@poplin/core/src/actions/sign-out";
 import type { Updating } from "@poplin/core/src/actions/start-update";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
+import type { Jobs } from "@poplin/core/src/jobs/jobs";
 import type { PublicName } from "@poplin/core/src/names/names";
 import { openDatabase } from "@poplin/core/src/database/open";
 import { defaultSettings, SETTING_VALUES, settingsFromText, settingsToText } from "@poplin/core/src/records/settings";
@@ -32,6 +33,7 @@ import type { SiteId } from "@poplin/core/src/sites/ids";
 import * as v from "valibot";
 import { version } from "../../../cli/package.json";
 import { D1Driver } from "../database/d1";
+import { workflowJobs } from "../jobs/workflow-jobs";
 import { readKeptKey } from "../key/kept-key";
 import { createEndLogins } from "../key/logins-end";
 import { createUsersFollow } from "../key/users-follow";
@@ -139,6 +141,9 @@ export interface Instance {
 
   /** The version of poplin the install runs. */
   readonly version: string;
+
+  /** What runs the rounds of a job after the request that started it. */
+  readonly jobs: Jobs;
 
   /** What updates the install: the release is taken with the kept key, and the starts are counted in `counters`. */
   readonly updating: Updating;
@@ -364,6 +369,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     visitorOf: (request) => visitorOf(request, database),
     update,
     ...carried,
+    jobs: workflowJobs(env.JOBS),
   });
 
   const instance: Instance = {
@@ -380,6 +386,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     ...carried,
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), key: kept }),
     version: VERSION,
+    jobs: workflowJobs(env.JOBS),
     updating: { self: update, counters },
   };
 

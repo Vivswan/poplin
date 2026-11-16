@@ -21,8 +21,8 @@ import { type Certs, certs, NOW, type Signer, sign, signer } from "../../login/s
 import { type Account, answer } from "../../zone/support/fake-install";
 import { type Asked, bodyOf } from "../../zone/support/replies";
 
-/** The bindings of wrangler.jsonc, simulated. */
-export const BINDINGS: Bindings = env;
+/** The bindings of wrangler.jsonc, simulated, but for the Workflow: a test that gives an instance none measures an install that runs each round of a job in a request. A test of the jobs binds one itself. */
+export const BINDINGS: Bindings = { ...env, JOBS: undefined };
 
 /** Where the dashboard, the login, and the API answer in wrangler.jsonc's example values. */
 export const ADMIN = "https://poplin.example.com";

@@ -22,11 +22,17 @@ const KNOWN: readonly Known[] = [
       "The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.",
     most: 13,
   },
+
+  // A job that is stopped is terminated in the middle of a step, which the Workflow's local simulation logs as its engine aborting: up to twice for the one test of tests/jobs/workflow.test.ts that cancels a copy.
+  { line: /^uncaught exception; exception = workerd\/api\/actor-state\.c\+\+:\d+: failed: broken\.outputGateBroken; jsg\.Error: Aborting engine: User called terminate/, most: 2 },
+
+  // A job whose round fails for good ends by throwing, so that Cloudflare shows the instance as errored: once from the simulation's stand-in for the step and once from the job's own `run`, in the one test of tests/jobs/workflow.test.ts that fails a round.
+  { line: /^uncaught exception; source = Uncaught \(in promise\); stack = Error: the bucket is away\n/, most: 2 },
 ];
 
-/** A line the runtime may print, and the most times one run may print it. */
+/** A line the runtime may print, whole or by how it begins where the rest names a place in the runtime, and the most times one run may print it. */
 interface Known {
-  readonly line: string;
+  readonly line: string | RegExp;
   readonly most: number;
 }
 
@@ -42,7 +48,8 @@ export class RuntimeLog implements Reporter {
   #passes(vitest: Vitest, message: string): boolean {
     if (!FAULT.test(message)) return true;
 
-    const known = KNOWN.find((entry) => entry.line === message.replace(BOUNDARY, ""));
+    const printed = message.replace(BOUNDARY, "");
+    const known = KNOWN.find((entry) => (typeof entry.line === "string" ? entry.line === printed : entry.line.test(printed)));
     const count = known === undefined ? 0 : (this.#seen.get(known) ?? 0) + 1;
     if (known !== undefined) this.#seen.set(known, count);
     if (known !== undefined && count <= known.most) return false;

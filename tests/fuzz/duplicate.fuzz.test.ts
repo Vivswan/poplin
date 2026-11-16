@@ -6,6 +6,7 @@ import fc from "fast-check";
 import { duplicateSite } from "../../packages/core/src/actions/duplicate";
 import { checkFilePath } from "../../packages/core/src/actions/files";
 import { publishSite } from "../../packages/core/src/actions/publish";
+import { inlineJobs } from "../../packages/core/src/jobs/inline-jobs";
 import { parseUploadId } from "../../packages/core/src/records/upload";
 import { isContentType } from "../../packages/core/src/storage/storage";
 import { ADMIN, file, makeWorld, OWNER, type World } from "../../packages/core/tests/actions/support/actions-fixture";
@@ -55,7 +56,7 @@ property(
     let upload: string | undefined;
 
     for (let call = 0; call < calls; call += 1) {
-      const step = await duplicateSite(world.install, ADMIN, upload === undefined ? { site: made.site.id } : { site: made.site.id, upload }, 1);
+      const step = await duplicateSite(world.install, ADMIN, upload === undefined ? { site: made.site.id } : { site: made.site.id, upload }, 1, inlineJobs);
       if (!step.ok) throw new Error(`a step was refused: ${step.code}`);
 
       upload = step.copy.upload;
@@ -84,7 +85,7 @@ property(
     const made = await publishSite(world.install, OWNER, { name: "report", files });
     if (!made.ok) throw new Error(`the source was refused: ${made.code}`);
 
-    const begun = await duplicateSite(world.install, OWNER, { site: made.site.id }, 1);
+    const begun = await duplicateSite(world.install, OWNER, { site: made.site.id }, 1, inlineJobs);
     const upload = begun.ok ? parseUploadId(begun.copy.upload) : undefined;
     if (upload === undefined) throw new Error("the copy was refused");
 
