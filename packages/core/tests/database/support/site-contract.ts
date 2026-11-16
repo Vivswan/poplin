@@ -109,6 +109,31 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect((await database.createSite(squatter, BY_ADA)).kind).toBe("done");
     });
 
+    // Drift: an import asks once whether its id and its public name are free, before a file of it is sent. A holder it missed would take every file of a backup and refuse it at the end; a free name told as held would refuse a backup the install can take.
+    test("what a site from elsewhere would take is told in one read: an id held as an id or as a public name, a public name held as a public name or as an id, by a site in the trash too, and neither where no site has it", async () => {
+      const database = await opened(makeDatabase);
+      const named = "abcdefghijkl";
+      const holder = await made(database, draft(REPORT, "public", named as PublicName));
+      await database.trashSite(holder.id, BY_ADA);
+      const asName = holder.id as string as PublicName;
+
+      expect([
+        await database.findTaken(holder.id),
+        await database.findTaken(named as SiteId),
+        await database.findTaken(NO_SITE, named as PublicName),
+        await database.findTaken(NO_SITE, asName),
+        await database.findTaken(NO_SITE, "free" as PublicName),
+        await database.findTaken(NO_SITE),
+      ]).toEqual([
+        { id: true, publicName: false },
+        { id: true, publicName: false },
+        { id: false, publicName: true },
+        { id: false, publicName: true },
+        { id: false, publicName: false },
+        { id: false, publicName: false },
+      ]);
+    });
+
     // Drift: an id that is taken, as an id or as a public name, must cost a second draw and never a failed publish or a shadowed address.
     test("a candidate id that is a site's id or a site's public name is drawn again, for a new site and for a new id", async () => {
       const database = await opened(

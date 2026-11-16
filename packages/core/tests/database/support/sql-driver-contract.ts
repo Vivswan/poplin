@@ -492,6 +492,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.getSiteWithSettings(site.id);
       await database.getShownSite(site.id, { day: "2026-11-13", publishers: true });
       await database.getSiteByPublicName(DOCS);
+      await database.findTaken(site.id, DOCS);
       await database.findServed({ id: site.id }, NOW);
       await database.findServed({ public_name: DOCS }, NOW);
       await database.findServedWith({ public_name: DOCS }, NOW, { counts: { day: "2026-11-13", site: site.id }, settingsAndKey: true });

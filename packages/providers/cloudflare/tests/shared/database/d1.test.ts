@@ -137,6 +137,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "getShownSite, with the views and the publishers": [15, 0],
   "getSiteNames": [10, 0],
   "getSiteByPublicName": [2, 0],
+  "findTaken, the id and the public name held": [2, 0],
   "getSiteByFolder": [3, 0],
   "findServed, by id": [2, 0],
   "findServed, by public name": [2, 0],
@@ -231,6 +232,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "countAudit, one kind, the sites named with a text": [61, 0],
   "countAudit, no further back than five entries, and where the log starts": [6, 0],
   "no site: getSiteByPublicName": [0, 0],
+  "no site: findTaken": [0, 0],
   "no site: giveNewId": [2, 0],
   "no site: reserveVersion": [0, 0],
   "no site: addVersion": [2, 0],
@@ -762,6 +764,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getShownSite, with the views and the publishers", () => database.getShownSite(first.id, { day: DAY, publishers: true }));
     await cost("getSiteNames", () => database.getSiteNames(sites.slice(0, 5).map((made) => made.id)));
     await cost("getSiteByPublicName", () => database.getSiteByPublicName("open" as PublicName));
+    await cost("findTaken, the id and the public name held", () => database.findTaken(first.id, "open" as PublicName));
     await cost("getSiteByFolder", () => database.getSiteByFolder(first.folder));
     await cost("findServed, by id", () => database.findServed({ id: first.id }, NOW));
     await cost("findServed, by public name", () => database.findServed({ public_name: "open" as PublicName }, NOW));
@@ -875,6 +878,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await database.trashSite(sixth.id, BY_ADA);
     const version: Parameters<typeof database.publishUploadAsVersion>[1] = { keep: 2, details: {} };
     await cost("no site: getSiteByPublicName", () => database.getSiteByPublicName("nobody" as PublicName));
+    await cost("no site: findTaken", () => database.findTaken(NOBODY, "nobody" as PublicName));
     await cost("no site: giveNewId", () => database.giveNewId(NOBODY, BY_ADA));
     await cost("no site: reserveVersion", () => database.reserveVersion(NOBODY));
     await cost("no site: addVersion", () => database.addVersion(NOBODY, publish(2, 2), BY_ADA));

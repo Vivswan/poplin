@@ -75,6 +75,7 @@ import type {
   SitesQuery,
   SitesShown,
   SweepStart,
+  Taken,
   TokenStates,
   Unchanged,
   UploadedVersion,
@@ -476,6 +477,14 @@ export class SqlDatabase implements Database {
     const [found] = await this.#driver.batch([sitesWhere(eq(sites.public_name, name))]);
 
     return siteIn(found);
+  }
+
+  async findTaken(id: SiteId, publicName?: PublicName): Promise<Taken> {
+    // A name left out is no site's.
+    const nameHeld = publicName === undefined ? fragment`0` : fragment`NOT (${isFree(publicName)})`;
+    const [found] = await this.#driver.batch([written(fragment`SELECT NOT (${isFree(id)}) AS id_held, ${nameHeld} AS name_held`)]);
+
+    return { id: found?.rows[0]?.id_held === 1, publicName: found?.rows[0]?.name_held === 1 };
   }
 
   async getSiteByFolder(folder: Site["folder"]): Promise<Site | undefined> {

@@ -245,6 +245,15 @@ export interface SettingsAndUpdateCheck {
   readonly updateCheck: UpdateCheck | undefined;
 }
 
+/** What an install holds of an id and a public name a site would take. */
+export interface Taken {
+  /** A site has the id as its id or as its public name. */
+  readonly id: boolean;
+
+  /** A site has the public name as its public name or as its id. */
+  readonly publicName: boolean;
+}
+
 /** The settings and one site as one read gave them: the settings are `undefined` before setup stored them, the site when no site has the id. */
 export interface SettingsAndSite {
   readonly settings: SettingValues | undefined;
@@ -573,6 +582,13 @@ export interface Database {
 
   /** The site holding this public name, in the trash or not. */
   getSiteByPublicName(name: PublicName): Promise<Site | undefined>;
+
+  /**
+   * Whether the install holds what a site from elsewhere would take, read in one step: its id, and its public name when it has one. A site in the trash holds its own too.
+   *
+   * @param publicName - the public name the site would take; left out for a site that is not public, and `publicName` is then `false`
+   */
+  findTaken(id: SiteId, publicName?: PublicName): Promise<Taken>;
 
   /**
    * The site an address serves at `now`.
