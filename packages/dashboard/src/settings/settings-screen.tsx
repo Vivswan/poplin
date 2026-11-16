@@ -15,7 +15,7 @@ import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
 import { controlId, SettingRow } from "@/settings/setting-row";
 import { useDraft } from "@/settings/settings-draft";
 import { type Settings, useSettings } from "@/settings/settings-queries";
-import { blocksOf, UPDATES } from "@/settings/settings-words";
+import { type Block, blocksOf, UPDATES, wordsOf } from "@/settings/settings-words";
 import { ADDRESS_FIELD, UpdateAddressRow } from "@/settings/update-address";
 import { AppShell } from "@/shell/app-shell";
 
@@ -34,11 +34,19 @@ const MARKED_FOR = 2000;
 /** The waiting changes of the settings, as the blocks need them. */
 type Draft = ReturnType<typeof useDraft>;
 
-/** The line under the heading of the settings that also change the domain's rules: those follow at the next repair. */
-function RepairNote(): ReactNode {
+/** What the line says changes after a repair: the rules, where every setting of the block waits for one, and else the waiting settings by their names. The others reach the domain by themselves. */
+function waitingWords(block: Block): string {
+  const waiting = block.rows.filter((row) => row.repair).map((row) => wordsOf(row.key).label);
+  if (waiting.length === block.rows.length) return "The rules on your domain change";
+
+  return `${new Intl.ListFormat("en").format(waiting)} ${waiting.length === 1 ? "changes" : "change"} on your domain`;
+}
+
+/** The line under the heading of a block with settings whose half on the domain waits for the next repair. */
+function RepairNote({ block }: { readonly block: Block }): ReactNode {
   return (
     <p className="mb-1 text-muted-foreground">
-      The rules on your domain change after Repair in{" "}
+      {waitingWords(block)} after Repair in{" "}
       <Link to="/domain" className="text-link underline-offset-2 hover:underline">
         Domain
       </Link>
@@ -64,7 +72,7 @@ function Groups({
       {blocksOf(settings.rows).map((block) => (
         <section key={block.id} aria-label={block.heading} className={GROUP}>
           <h2 className={HEADING}>{block.heading}</h2>
-          {block.rows.some((row) => row.repair) ? <RepairNote /> : null}
+          {block.rows.some((row) => row.repair) ? <RepairNote block={block} /> : null}
           {block.id === UPDATES ? <HomeProblems home="settings" className="flex flex-col gap-2 pb-2" /> : null}
           {block.rows.map((row) => (
             <SettingRow

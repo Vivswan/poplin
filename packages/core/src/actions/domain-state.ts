@@ -79,7 +79,9 @@ function noteOf(pieces: readonly CheckedPiece[]): "none" | Extract<DomainNote, {
 export function domainStateOf(remembered: RememberedCheck | undefined, now: number): DomainState {
   if (remembered === undefined) return { ok: true, check: null, age: null, stale: false, waits: false, note: "none" };
 
-  const { users_changed_at: changedAt, ...check } = remembered;
+  // A change of the settings of the domain's rules that waits is carried by the install or noted as a problem of its own: it raises no note here.
+  const { ran_at, by, run, pieces, users_changed_at: changedAt } = remembered;
+  const check = { ran_at, by, run, pieces };
   const age = Math.max(0, now - check.ran_at);
   const stale = age > STALE_AFTER_MS;
   const waits = changedAt !== null;

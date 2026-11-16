@@ -4,7 +4,9 @@ import { parseLogin, parseLogins } from "@poplin/core/src/auth/logins";
 
 import { createConsole } from "../../../src/console/console";
 import type { DomainPlug } from "../../../src/console/domain/records";
+import type { Later } from "../../../src/console/later";
 import type { UsersFollow } from "../../../src/console/access/users-follow";
+import type { RulesFollow } from "../../../src/console/settings/rules-follow";
 import type { UsageHost } from "../../../src/console/usage/records";
 import { admit, type Identify } from "../../../src/login/admit";
 import { createEntries } from "../../../src/login/entries";
@@ -42,8 +44,8 @@ interface Opened {
   /** Every address the provider was asked to start a rebuild at, in order. */
   readonly rebuilds: readonly string[];
 
-  /** Ask anything at all, as it is: no login, origin, or type is added. */
-  readonly fetch: (request: Request) => Promise<Response>;
+  /** Ask anything at all, as it is: no login, origin, or type is added. `later` is what a host holds the request open with after its answer. */
+  readonly fetch: (request: Request, later?: Later) => Promise<Response>;
 
   /** Ask as the owner. */
   readonly get: (path: string) => Promise<Response>;
@@ -71,8 +73,9 @@ const identify: Identify<string> = async (headers, now) => {
  * @param domain - the provider's side of the install; left out, the console has no Domain screen
  * @param usage - the host's side of the Usage screen; left out, a host that reads no figures of its own
  * @param follow - the provider's side of the users; left out, the console carries no change of them
+ * @param rules - the provider's side of the domain's rules; left out, the console carries no setting to them
  */
-export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST, follow?: UsersFollow): Promise<Opened> {
+export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST, follow?: UsersFollow, rules?: RulesFollow): Promise<Opened> {
   const opened = await openOwned();
   const { database } = opened.install;
 
@@ -105,6 +108,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
     demo: { reset: "/reset" },
     domain,
     ...(follow === undefined ? {} : { follow }),
+    ...(rules === undefined ? {} : { rules }),
     ...codeCounts(opened.counters),
   });
   const client = { ...opened.proof, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };
@@ -112,7 +116,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
   return {
     base: opened,
     rebuilds,
-    fetch: (request) => built.fetch(request),
+    fetch: (request, later) => built.fetch(request, later),
     get: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`, { headers: opened.proof })),
     getLoggedOut: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`)),
     change: (path, body, headers = {}) =>

@@ -75,6 +75,34 @@ describe("the scheduled run", () => {
     expect(JSON.stringify(added)).not.toContain(TOKEN);
   });
 
+  // Drift: a saved setting whose rule Cloudflare did not take is in force at the edge only once the rule is written. Without the run nothing writes it but a person's repair, and the save itself must be answered as saved whatever Cloudflare said.
+  test("a changed setting of the guard rules that Cloudflare did not take is carried by the next run, which settles it, and a run with nothing waiting asks Cloudflare nothing", async () => {
+    const account = emptyAccount();
+    const asked: Asked[] = [];
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    const worker = instance(w, cloudflareOf(account, asked));
+    const session = await logIn(worker, w, keyed);
+    const { database } = await installOf(w);
+    await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+    const waits = async (): Promise<boolean | undefined> => database.readDomainCheck().then((kept) => (kept === undefined ? undefined : kept.rules_changed_at !== null));
+    const refs = (): unknown => (account.rulesets.http_request_firewall_custom?.rules ?? []).map((rule) => rule.ref);
+
+    account.refuse = "GET /zones/zone-1/rulesets/*";
+    account.refuseAs = { status: 401, code: 10_000 };
+    const other = await send(worker, `${ADMIN}/data/settings`, { texts: { trash_days: "9", block_bots: "on" } }, session, keyed);
+    const unasked = asked.length;
+    const saved = await send(worker, `${ADMIN}/data/settings`, { texts: { outside_pages: "allowed" } }, session, keyed);
+    const refused = [other.status, unasked, saved.status, await saved.json(), await waits(), refs(), await problemsOf(w)];
+    account.refuse = [];
+    await sweep(worker, w, keyed);
+    const carried = [await waits(), refs()];
+    const calls = asked.length;
+    await sweep(worker, w, keyed);
+
+    expect(refused).toEqual([200, 0, 200, { ok: true }, true, [], [["rules_not_carried", 1, null]]]);
+    expect([carried, asked.length - calls]).toEqual([[false, [INSTALL_OBJECTS.botsRef]], 0]);
+  });
+
   // Drift: without the handler, or with one that never reaches the later parts of the walk, expired sites stay live in the listing and the bucket fills with files nothing serves.
   test("an expired site reaches the trash, then leaves it with its files after trash_days, and an upload nobody finished is removed with its files", async () => {
     const worker = instance(w);

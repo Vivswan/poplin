@@ -7,6 +7,7 @@ import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenRecord } from "../../../src/auth/tokens";
 import type { ProblemNote } from "../../../src/database/problems";
 import type { DomainCheck } from "../../../src/records/domain-check";
+import type { SettingValues } from "../../../src/records/settings";
 import { dayOf } from "../../../src/records/views";
 import { mintSiteFolder } from "../../../src/records/site";
 import type { SiteId } from "../../../src/sites/ids";
@@ -35,6 +36,9 @@ import {
 import { computerLogins, loginRoom, visitorKey, tokensAndSettings } from "./login-contract";
 import { backups, sites, sizes, versionContents, versions } from "./site-contract";
 import { declaredFiles, storageWrites, uploadFiles, uploads } from "./upload-contract";
+
+/** The marks of a kept run with no change waiting. */
+const NOTHING_WAITS = { users_changed_at: null, rules_changed_at: null };
 
 /** The milliseconds of one hour and of one day. */
 const [HOUR_MS, DAY_MS] = [3_600_000, 86_400_000];
@@ -277,8 +281,8 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const kept = await database.readDomainCheck();
       await database.keepDomainCheck(second, { run: "repair", from: "setup" });
 
-      expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, { ...first, users_changed_at: null }, { ...second, users_changed_at: null }]);
-      expect(await database.readFrame(NOW)).toEqual({ settings: undefined, updateAddress: undefined, domainCheck: { ...second, users_changed_at: null }, updateCheck: undefined, problems: [] });
+      expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, { ...first, ...NOTHING_WAITS }, { ...second, ...NOTHING_WAITS }]);
+      expect(await database.readFrame(NOW)).toEqual({ settings: undefined, updateAddress: undefined, domainCheck: { ...second, ...NOTHING_WAITS }, updateCheck: undefined, problems: [] });
       expect((await auditTrail(database)).map(({ action, by, at, detail }) => ({ action, by, at, detail }))).toEqual([
         { action: "domain_synced", by: ADA, at: NOW, detail: { run: "check", from: "dashboard" } },
         { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "setup" } },
@@ -398,6 +402,61 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       expect([beforeAnyRun, claimed, clockBehind]).toEqual([{ logins: SETTINGS.logins, mark: undefined }, { logins: stored, mark: NOW + 3 }, { logins: stored, mark: NOW + 9 }]);
       expect([stale, otherOrder, overtaken]).toEqual([[true, NOW + 4], [true, NOW + 5], [true, NOW + 6]]);
       expect([exact, again, unknown]).toEqual([[false, null], [false, null], [true, NOW + 8]]);
+    });
+
+    // Drift: the same three tries inside one moment of the clock, for the settings of the domain's rules. The second settles the change; the first, whose older values landed after it, sets the mark anew; the third, under way all along, then settles.
+    // A mark that began again from the clock once it was settled would be no later than the third try's own, which would end the waiting over rules written from the older values.
+    test("a mark of the rules set after a settled one is later than every try that began before it, so such a try settles nothing", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
+      await database.changeSettings({ outside_pages: "allowed" }, { by: ADMIN, at: NOW });
+      const rules = { outside_pages: "allowed", search_engines_allowed: SETTINGS.search_engines_allowed } as const;
+
+      const first = await database.claimRules(NOW);
+      const third = await database.claimRules(NOW);
+      const second = await database.claimRules(NOW);
+      const settledBySecond = await database.settleRules({ rules, since: second.mark ?? 0 }, NOW);
+      await database.settleRules({ rules: { ...rules, outside_pages: "blocked" }, since: first.mark ?? 0 }, NOW);
+      const settledByThird = await database.settleRules({ rules, since: third.mark ?? 0 }, NOW);
+
+      expect([first.mark, third.mark, second.mark]).toEqual([NOW + 1, NOW + 2, NOW + 3]);
+      expect([settledBySecond.waits, settledByThird.waits, (await database.readDomainCheck())?.rules_changed_at]).toEqual([false, true, NOW + 5]);
+    });
+
+    // Drift: the domain's rules stand as they were last written. A change of a setting they are written from that no row remembered would never reach them.
+    // One settled by other values, or by a try a later change overtook, would leave rules the settings no longer ask for.
+    test("a changed setting of the domain's rules waits until a try that carried the stored values, under no later mark, settles it; any other setting, and a value left as it was, marks nothing", async () => {
+      const database = await opened(makeDatabase);
+      const waits = async (): Promise<number | null | undefined> => (await database.readDomainCheck())?.rules_changed_at;
+      const changed = async (changes: Partial<SettingValues>, at: number): Promise<number | null | undefined> => {
+        await database.changeSettings(changes, { by: ADMIN, at: NOW + at });
+
+        return waits();
+      };
+      await database.initSettings(SETTINGS, BY_ADA);
+
+      const beforeAnyRun = [await changed({ outside_pages: "allowed" }, 1), (await database.claimRules(NOW + 1)).mark];
+      await database.keepDomainCheck({ ran_at: NOW + 1, by: ADMIN, run: "repair", pieces: [] }, {});
+      const otherSetting = await changed({ trash_days: 30, block_bots: "on" }, 2);
+      const sameValue = await changed({ outside_pages: "allowed", search_engines_allowed: SETTINGS.search_engines_allowed }, 3);
+      const nothingWaits = [(await database.claimRules(NOW + 3)).mark, await waits()];
+      const oneDiffers = await changed({ outside_pages: "allowed", search_engines_allowed: !SETTINGS.search_engines_allowed }, 4);
+      const claimed = await database.claimRules(NOW + 5);
+      const rules = { outside_pages: "allowed", search_engines_allowed: !SETTINGS.search_engines_allowed } as const;
+      const stale = [await database.settleRules({ rules: { ...rules, outside_pages: "blocked" }, since: NOW + 5 }, NOW + 6), await waits()];
+      const overtaken = [await database.settleRules({ rules, since: NOW + 5 }, NOW + 6), await waits()];
+      const exact = [await database.settleRules({ rules, since: NOW + 7 }, NOW + 8), await waits()];
+      // An older try whose write landed after a newer one settled: the rules hold its values, so the change waits again.
+      const landedLate = [await database.settleRules({ rules: { ...rules, outside_pages: "blocked" }, since: NOW + 5 }, NOW + 9), await waits()];
+
+      expect([beforeAnyRun, otherSetting, sameValue, oneDiffers]).toEqual([[undefined, undefined], null, null, NOW + 4]);
+      // A try begun while nothing waits sets no mark, so one the domain refuses leaves nothing waiting.
+      expect(nothingWaits).toEqual([null, null]);
+      expect([claimed.settings?.outside_pages, claimed.settings?.search_engines_allowed, claimed.mark]).toEqual(["allowed", rules.search_engines_allowed, NOW + 5]);
+      expect([stale, overtaken, exact, landedLate]).toEqual([[{ waits: true }, NOW + 6], [{ waits: true }, NOW + 7], [{ waits: false }, null], [{ waits: true }, NOW + 9]]);
+      // The mark of the users is another one, and is left alone.
+      expect((await database.readDomainCheck())?.users_changed_at).toBeNull();
     });
   });
 }
