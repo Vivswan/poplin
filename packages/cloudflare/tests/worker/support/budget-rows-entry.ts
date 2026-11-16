@@ -346,6 +346,6 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
       return run(true);
     },
     status: undefined,
-    budget: { queries: 36, reads: 0, writes: 75 },
+    budget: { queries: 36, reads: 0, writes: 75, deletes: 75 },
   },
 ];
