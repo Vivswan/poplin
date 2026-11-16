@@ -519,6 +519,16 @@ describe("run", () => {
     expect(refusalSentence("release_refused", reason) !== refusalSentence("release_refused")).toBe(known);
   });
 
+  // Drift: one command takes a release the install cannot take by itself. A hint that named another, or other words than the dashboard's, would send a person to a command that takes no such release.
+  test("a release the install cannot take by itself is told with the repair that takes it, in the words the dashboard says", async () => {
+    const bench = await openBench();
+    bench.hook = () => answer(409, { error: { code: "release_refused", message: "the install's own words", about: "needs_hand" } });
+
+    const [, hint = "no hint"] = (await bench.run("update")).err;
+
+    expect([hint.endsWith("To take it, run: npx poplin doctor --repair"), refusalSentence("release_refused", "needs_hand").endsWith(hint)]).toEqual([true, true]);
+  });
+
   test.each([
     ["a code the table does not hold keeps the install's sentence", () => answer(418, { error: { code: "teapot", message: "the install is a teapot" } }), "the install is a teapot", 1],
     ["an install that cannot be reached", () => Promise.reject(new Error("no route to host")), `the install could not be reached: ${ORIGIN}`, 5],
