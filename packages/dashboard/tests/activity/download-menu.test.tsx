@@ -14,8 +14,11 @@ import { BOOT } from "@/lib/boot";
 /** The runtime's own `fetch` and the way a link is pressed, put back after each test. */
 const OWN = { fetch: globalThis.fetch, click: HTMLAnchorElement.prototype.click };
 
-/** How long a result whose button was pressed takes to leave the page, with room to spare, in milliseconds. */
-const LEFT_MS = 500;
+/** The longest a result may take to leave the page, in milliseconds: it leaves on a timer, which a busy machine runs late. */
+const LEAVES_WITHIN = { timeout: 5000 };
+
+/** How long a result that is on its way out stays at the most on an idle machine, with room to spare, in milliseconds: one still there after it has not been taken away. */
+const STAYED_MS = 500;
 
 /** What a menu did: the questions it asked of the server, and the addresses it had the browser save. */
 interface Done {
@@ -122,29 +125,27 @@ describe("the Download menu", () => {
   ])("with the second file asked for from %s, keeps one result with a way to the next file at a time, none once the last file is saved, and then gives the focus to Download", async (_from, second) => {
     const menu = drawn(false, ["150", "300", null], "after=40");
     const ways = (): number => within(document.body).queryAllByRole("button", { name: "Download the next 2,000" }).length;
-    const press = async (name: string, settleMs: number): Promise<void> => {
+    const settle = (ms: number): Promise<void> => act(async () => void (await new Promise((resolve) => setTimeout(resolve, ms))));
+    const press = async (name: string): Promise<void> => {
       const button = within(document.body).getByRole("button", { name });
       button.focus();
-      await act(async () => {
-        fireEvent.click(button);
-        await new Promise((resolve) => setTimeout(resolve, settleMs));
-      });
+      fireEvent.click(button);
+      await settle(0);
     };
     await choose("CSV");
     await said("Downloaded 2,000.");
 
-    // A result that was pressed leaves a moment after the press: the count is taken once it has left.
-    await press(second, LEFT_MS);
-    const afterSecond = [menu.saved.length, ways()];
-    await press("Next 2,000", 0);
+    // A result that was pressed leaves a moment after the press, at no fixed time: the count is waited for, and one that stayed at two would never come.
+    await press(second);
+    await waitFor(() => expect([menu.saved.length, ways()]).toEqual([2, 1]), LEAVES_WITHIN);
+    // The one result left is the newer one, which stays: it is still there once a result on its way out would be gone.
+    await settle(STAYED_MS);
+    const stayed = ways();
+    await press("Next 2,000");
     await said("Downloaded the last part.");
-    await waitFor(() => expect(ways()).toBe(0));
+    await waitFor(() => expect(ways()).toBe(0), LEAVES_WITHIN);
 
-    expect([afterSecond, menu.saved.map((address) => new URL(address, window.location.href).searchParams.get("part")), document.activeElement?.getAttribute("aria-label")]).toEqual([
-      [2, 1],
-      ["1", "2", "3"],
-      "Download",
-    ]);
+    expect([stayed, menu.saved.map((address) => new URL(address, window.location.href).searchParams.get("part")), document.activeElement?.getAttribute("aria-label")]).toEqual([1, ["1", "2", "3"], "Download"]);
   });
 
   // Drift: a result would outlive the screen it was said on, and a download begun after coming back would stand beside it, two ways to a next file at once.
