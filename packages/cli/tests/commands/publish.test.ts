@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
-import type { LayoutInput } from "../../../app/tests/api/support/install";
+import { answered, type LayoutInput } from "../../../app/tests/api/support/install";
 import { planPublish } from "../../src/commands/publish";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
@@ -338,6 +338,30 @@ describe("publish", () => {
 
     expect({ code: made.code, begins: bench.sent.filter((sent) => sent === "POST /api/uploads").length, stored: (await bench.install.keys()).length }).toEqual(expected);
     expect(made.err.filter((line) => line.includes("sending the request again"))).toEqual(["the connection to the install was cut before any answer: sending the request again"]);
+  });
+
+  // Drift: a request whose name lookup fails never left, so its finish, which no cut connection may send twice, is safe to try again. Without this a publish in the minute after an install's records are made fails in milliseconds.
+  test.each<[string, number, { readonly code: number; readonly finishes: number; readonly waits: number[]; readonly told: number; readonly sites: number }]>([
+    ["once goes through after one pause, and the site is made", 1, { code: 0, finishes: 2, waits: [1000], told: 1, sites: 1 }],
+    ["twice is given up as unreachable, after one pause and no more, and no site is made", 2, { code: 5, finishes: 2, waits: [1000], told: 1, sites: 0 }],
+  ])("a publish whose finish never left %s, and says in a line on stderr that it is tried once more", async (_name, failures, expected) => {
+    const bench = await openBench();
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });
+    let left = failures;
+
+    bench.hook = (request) => {
+      if (request.method !== "POST" || !request.url.endsWith("/finish") || left === 0) return undefined;
+
+      left -= 1;
+      throw Object.assign(new TypeError("getaddrinfo ENOTFOUND poplin.example.com"), { code: "ENOTFOUND" });
+    };
+
+    const made = await bench.run(folder);
+    const told = made.err.filter((line) => line === "no connection to the install: trying once more in 1 s").length;
+
+    const sites = ((await answered(bench.install.routes.sites.$get())).body.sites as unknown[]).length;
+
+    expect({ code: made.code, finishes: bench.sent.filter((sent) => sent.endsWith("/finish")).length, waits: made.waits, told, sites }).toEqual(expected);
   });
 
   // Drift: four files are on their way at once; a rest of each lane's own would tell one refusal four times, and send three more requests into a full count.

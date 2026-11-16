@@ -116,6 +116,29 @@ describe("the MCP server", () => {
     expect([bench.logged, bench.written.some((written) => written.includes(line))]).toEqual([[line], false]);
   });
 
+  // Drift: a tool call goes through the client every command uses. A server with a client of its own would fail an agent's first call in the minute after an install's records are made, where the command goes through.
+  test("a tool call whose first request never left is tried once more, with one line in the server's log, and makes its site", async () => {
+    const bench = await open();
+    const folder = folderOf("report", { "index.html": "<title>Report</title>" });
+    let met = false;
+    bench.hook = (request) => {
+      if (met || request.method !== "POST") return undefined;
+
+      met = true;
+      throw Object.assign(new TypeError("getaddrinfo ENOTFOUND poplin.example.com"), { code: "ENOTFOUND" });
+    };
+
+    const made = await bench.call("publish_site", { path: folder });
+    const sites = ((await answered(bench.install.routes.sites.$get())).body.sites as unknown[]).length;
+
+    expect({ error: made.error, begins: bench.sent.filter((sent) => sent === "POST /api/uploads").length, logged: bench.logged, sites }).toEqual({
+      error: false,
+      begins: 2,
+      logged: ["no connection to the install: trying once more in 1 s"],
+      sites: 1,
+    });
+  });
+
   test("a publish without site makes a new private site, and with the label it answered updates that site: an agent that cannot tell the two apart makes a new site on every change", async () => {
     const bench = await open();
     const folder = folderOf("report", { "index.html": "<title>Report</title>", ".env": "SECRET=1", "node_modules/pkg/index.js": "x", "notes/a.html": "a" });

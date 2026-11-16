@@ -34,6 +34,9 @@ const NOT_THERE = { kind: "refused", status: 404, code: "not_found", message: "t
 /** The line a request that is sent once more is told with. */
 const SENT_AGAIN = "the connection to the install was cut before any answer: sending the request again";
 
+/** The line a request that never left is told with when it is tried once more. */
+const TRIED_AGAIN = "no connection to the install: trying once more in 1 s";
+
 /** One request of each kind a cut may meet: a read, the begin of an upload, a change, a file, and a download. */
 const ASKS = {
   read: (client: Client) => client.call(LISTED_SITES, (api) => api.sites.$get()),
@@ -172,29 +175,41 @@ describe("client", () => {
     }
   });
 
-  // Drift: what a cut connection throws is each runtime's own and no code of this repository's: Bun names the code on the error, Node on its cause. The tests run in Bun alone, so these rows hold Node's shapes.
-  test.each<[string, TypeError, (boolean | undefined)[]]>([
-    ["Bun's closed socket", thrownBy("bun", "ECONNRESET"), [undefined, false]],
-    ["Node's reset socket", thrownBy("node", "ECONNRESET"), [undefined, false]],
-    ["Node's socket the other side closed", thrownBy("node", "UND_ERR_SOCKET"), [undefined, false]],
-    ["Bun's refused connection", thrownBy("bun", "ConnectionRefused"), [undefined]],
-    ["Node's refused connection", thrownBy("node", "ECONNREFUSED"), [undefined]],
-    ["Bun's name no DNS knows", thrownBy("bun", "ENOTFOUND"), [undefined]],
-    ["Node's name no DNS knows", thrownBy("node", "ENOTFOUND"), [undefined]],
-    ["Bun's TLS failure", thrownBy("bun", "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR"), [undefined]],
-    ["Node's TLS failure", thrownBy("node", "ERR_SSL_WRONG_VERSION_NUMBER"), [undefined]],
-  ])("a begin that meets %s is sent as often as a cut connection alone allows, the second time on a connection that is not kept", async (_name, error, sendings) => {
+  // Drift: what a failed request throws is each runtime's own: Bun names the code on the error, Node on its cause. The tests run in Bun alone, so these rows hold Node's shapes.
+  test.each<[string, TypeError, { readonly ask: keyof typeof ASKS; readonly fails?: number }, { readonly sendings: (boolean | undefined)[]; readonly told: string[]; readonly paused?: number[] }]>([
+    ["Bun's closed socket", thrownBy("bun", "ECONNRESET"), { ask: "begin" }, { sendings: [undefined, false], told: [SENT_AGAIN] }],
+    ["Node's reset socket", thrownBy("node", "ECONNRESET"), { ask: "begin" }, { sendings: [undefined, false], told: [SENT_AGAIN] }],
+    ["Node's socket the other side closed", thrownBy("node", "UND_ERR_SOCKET"), { ask: "begin" }, { sendings: [undefined, false], told: [SENT_AGAIN] }],
+    ["Bun's closed socket, which a change may have left by", thrownBy("bun", "ECONNRESET"), { ask: "change" }, { sendings: [undefined], told: [] }],
+    ["Bun's refused connection", thrownBy("bun", "ConnectionRefused"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
+    ["Node's refused connection", thrownBy("node", "ECONNREFUSED"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
+    ["Bun's name no DNS knows", thrownBy("bun", "ENOTFOUND"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
+    ["Node's name no DNS knows", thrownBy("node", "ENOTFOUND"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
+    ["Node's name no DNS answers for now", thrownBy("node", "EAI_AGAIN"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
+    ["Bun's name no DNS knows, at the begin of an upload", thrownBy("bun", "ENOTFOUND"), { ask: "begin" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
+    ["Bun's name no DNS knows, twice", thrownBy("bun", "ENOTFOUND"), { ask: "change", fails: 2 }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
+    ["Bun's name no DNS knows, at a file, which its upload sends again by its own count", thrownBy("bun", "ENOTFOUND"), { ask: "file" }, { sendings: [undefined], told: [] }],
+    ["Bun's TLS failure", thrownBy("bun", "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR"), { ask: "change" }, { sendings: [undefined], told: [] }],
+    ["Node's TLS failure", thrownBy("node", "ERR_SSL_WRONG_VERSION_NUMBER"), { ask: "begin" }, { sendings: [undefined], told: [] }],
+  ])("a call that meets %s is sent as often as it may, the second time on a connection that is not kept, after the pause it is told", async (_name, error, { ask, fails = 1 }, expected) => {
     const kept: (boolean | undefined)[] = [];
-    const cutOnce: Fetch = async (_input, init) => {
+    const told: string[] = [];
+    const paused: number[] = [];
+    const failing: Fetch = async (_input, init) => {
       kept.push(init.keepalive);
-      if (kept.length === 1) throw error;
+      if (kept.length <= fails) throw error;
 
       return answer(404, { error: { code: NOT_THERE.code, message: NOT_THERE.message } });
     };
 
-    const called = await ASKS.begin(createClient({ server: ORIGIN, token: TOKEN, fetch: cutOnce }));
+    const called = await ASKS[ask](createClient({ server: ORIGIN, token: TOKEN, fetch: failing, told: (line) => told.push(line), pause: async (ms) => void paused.push(ms) }));
 
-    expect<unknown>([kept, called]).toEqual([sendings, { ok: false, failure: sendings.length === 2 ? NOT_THERE : { kind: "unreachable" } }]);
+    expect<unknown>({ kept, told, paused, called }).toEqual({
+      kept: expected.sendings,
+      told: expected.told,
+      paused: expected.paused ?? [],
+      called: { ok: false, failure: expected.sendings.length > fails ? NOT_THERE : { kind: "unreachable" } },
+    });
   });
 
   // Drift: an install that cannot start answers every path, the API's too, with one sentence in plain text. A client that dropped it would leave the person with a status and a hint about the address, which is right.
