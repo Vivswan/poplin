@@ -53,7 +53,7 @@ const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: stri
   ["packages/app/src/console", 28, "the console: its frame and the routes of every screen"],
   ["packages/app/src/sites", 9, "serving a site: its addresses, its headers, and its files"],
   ["packages/app/tests/console", 20, "the tests of src/console/, file for file"],
-  ["packages/cli/src", 9, "the CLI's entries and one folder for each concept"],
+  ["packages/cli/src", 10, "the CLI's entries and one folder for each concept"],
   ["packages/cli/src/commands", 24, "one file for each command, and the reading of the command line"],
   ["packages/cli/tests/commands", 12, "the tests of src/commands/, file for file"],
   ["packages/core/src", 12, "the package's entry and one folder for each concept"],

@@ -8,6 +8,10 @@ import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
 import { VERSION } from "../poplin";
+import { processEnds } from "../install/ends";
+import { runInstall } from "../install/install";
+import { TOKEN_VARIABLE } from "../install/parse";
+import type { InstallEnds } from "../install/records";
 import { exitCode } from "./exit-codes";
 import { runExport } from "./export";
 import { helpText } from "./help";
@@ -22,13 +26,11 @@ import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request, TypedRequest } from "./requests";
 import { runSiteCommand } from "./site-commands";
 import { runUpdate } from "./update";
+import { hide, written } from "./util";
 import { readByInstall } from "./wire";
 
 /** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
 export const AFTER_STOP_TIMEOUT_MS = 4000;
-
-/** What stands where a token would have been printed. */
-const HIDDEN = "[token]";
 
 /** The commands about the login and the install that this build runs. */
 const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
@@ -49,35 +51,19 @@ function refused(said: Problem): Outcome {
   return { ok: false, problem: said };
 }
 
-/** Take every token out of a text: a token reaches the install and nothing else. */
-function hide(text: string, tokens: ReadonlySet<string>): string {
-  return [...tokens].reduce((safe, token) => safe.replaceAll(token, HIDDEN), text);
-}
-
-/** Write a value as JSON with every token taken out of its texts and its keys as they are written, so that what is written stays JSON however deep the value goes. */
-function written(value: unknown, tokens: ReadonlySet<string>): string {
-  return JSON.stringify(value, (_key, item: unknown) => {
-    if (typeof item === "string") return hide(item, tokens);
-
-    if (typeof item !== "object" || item === null || Array.isArray(item)) return item;
-
-    return Object.fromEntries(Object.entries(item).map(([key, held]) => [hide(key, tokens), held]));
-  });
-}
-
 /** The same ends, with every token taken out of what a command writes while it runs: a line on stderr, the progress line, and a question. */
 function guarded(io: Io, tokens: ReadonlySet<string>): Io {
   return { ...io, err: (line) => io.err(hide(line, tokens)), status: (text) => io.status(hide(text, tokens)), ask: (question) => io.ask(hide(question, tokens)) };
 }
 
 /**
- * The tokens this machine holds: the two the environment may hold, the login's and the one `poplin setup` sends, and the one of the saved login, whichever the command uses.
+ * The tokens this machine holds: the ones the environment may hold, the login's and the two account tokens `poplin setup` and `poplin install` take, and the one of the saved login, whichever the command uses.
  *
  * A login that cannot be read gives no token here, and is refused where the command looks for it.
  */
 async function knownTokens(io: Io): Promise<ReadonlySet<string>> {
   const tokens = new Set<string>();
-  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN"]) {
+  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN", TOKEN_VARIABLE]) {
     const inEnvironment = io.machine.env[variable];
     if (inEnvironment !== undefined && inEnvironment !== "") tokens.add(inEnvironment);
   }
@@ -295,10 +281,18 @@ function mcpHost(io: Io): Host {
  *
  * @param io - the machine's ends: where to print, how to send, where the login is, and whether a person is there to ask
  * @param pipes - the two ends `poplin mcp` speaks its protocol on, which no other command touches; this process's stdin and stdout unless given
+ * @param installEnds - what `poplin install` reaches beside `io`, made when that command runs; this process's own unless given
  * @returns the exit code. Nothing throws: a failure nothing foresaw is printed as one line, without its stack
  */
-export async function run(argv: readonly string[], io: Io, pipes: Pipes = { input: process.stdin, output: process.stdout }): Promise<number> {
+export async function run(
+  argv: readonly string[],
+  io: Io,
+  pipes: Pipes = { input: process.stdin, output: process.stdout },
+  installEnds: (io: Io) => InstallEnds = processEnds,
+): Promise<number> {
   const parsed = parseCommand(argv);
+
+  if (parsed.kind === "install") return runInstall(parsed.words, io, installEnds(io));
 
   if (parsed.kind === "version") {
     io.out(VERSION);

@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { type Command, CommanderError } from "commander";
 
-import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, VERSION_FLAG } from "./command-table";
+import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, INSTALL_COMMAND, VERSION_FLAG } from "./command-table";
 import { argumentsOf, buildProgram } from "./program";
 import { buildRequest, type TypedRequest } from "./requests";
 import { type Flags, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
@@ -44,14 +44,24 @@ interface TypedFlag {
   readonly joined: boolean;
 }
 
-/** The words of a command line, split into the flags and the rest in the order typed. */
+/** The words of a command line, split into the flags and the rest in the order typed. `first` is where the first word that is no flag stands on the line. */
 interface TypedWords {
   readonly flags: readonly TypedFlag[];
   readonly positionals: readonly string[];
+  readonly first: number | undefined;
 }
 
-/** What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets. */
-export type Parsed = TypedRequest | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean } | { readonly kind: "version" } | UsageError;
+/**
+ * What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets.
+ *
+ * `install` is the one command whose words are not read here: its options are its providers', which only the built package knows. `words` are the ones after the command's own.
+ */
+export type Parsed =
+  | TypedRequest
+  | { readonly kind: "install"; readonly words: readonly string[] }
+  | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean }
+  | { readonly kind: "version" }
+  | UsageError;
 
 /** What ends the reading of a line before commander is through with it: the answer is known. */
 class Answered extends Error {
@@ -74,7 +84,7 @@ function splitWords(argv: readonly string[]): TypedWords {
     if (token.kind === "option") flags.push({ name: token.rawName, value: token.value, joined: token.inlineValue === true });
   }
 
-  return { flags, positionals };
+  return { flags, positionals, first: tokens.find((token) => token.kind === "positional")?.index };
 }
 
 function unknownFlag(typed: string, known: readonly string[], listedBy: string): UsageError {
@@ -84,7 +94,7 @@ function unknownFlag(typed: string, known: readonly string[], listedBy: string):
 }
 
 function unknownCommand(word: string, publishHint: boolean): UsageError {
-  const meant = nearest(word, [...SPECS.keys()]);
+  const meant = nearest(word, [...SPECS.keys(), INSTALL_COMMAND.name]);
   const hints: string[] = [];
 
   if (meant !== undefined) hints.push(`Did you mean: poplin ${meant}?`);
@@ -169,6 +179,8 @@ function readFlags(typed: readonly TypedFlag[], spec: CommandSpec): Flags | Usag
 function helpOf(topic: string | undefined): Parsed {
   if (topic === undefined) return { kind: "help", asked: true };
 
+  if (topic === INSTALL_COMMAND.name) return { kind: "install", words: [HELP_FLAG] };
+
   const spec = SPECS.get(topic);
   if (spec === undefined) return unknownCommand(topic, false);
 
@@ -194,7 +206,7 @@ function refusalOf(refused: CommanderError, spec: CommandSpec, given: readonly s
  *
  * @param argv - the words after `poplin`, as the shell split them
  * @param now - the time `--expires` must lie after, in milliseconds since the epoch; the clock's when absent
- * @returns one command's request, a help topic, the version, or what was written wrong. A first word that is neither a command nor a path is refused, never published
+ * @returns one command's request, a help topic, the version, or what was written wrong. A first word that is neither a command nor a path is refused, never published. The words of `install` are handed on unread
  */
 export function parseCommand(argv: readonly string[], now: number = Date.now()): Parsed {
   const typed = splitWords(argv);
@@ -204,6 +216,9 @@ export function parseCommand(argv: readonly string[], now: number = Date.now()):
 
   /** Go into a command: its help and the version are answered whatever else is on the line, and then every flag must be one of its own. */
   const enter = (command: Command): void => {
+    // The words of `install` are read by its own parser: here the command's word is taken out, and the rest handed on as typed.
+    if (command.name() === INSTALL_COMMAND.name && typed.first !== undefined) throw new Answered({ kind: "install", words: [...argv.slice(0, typed.first), ...argv.slice(typed.first + 1)] });
+
     const spec = SPECS.get(command.name());
     if (spec === undefined) return;
 

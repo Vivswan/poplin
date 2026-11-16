@@ -1,4 +1,4 @@
-// What the command modules share: the refusal of a command line, the flags as typed, and how a typed word is read.
+// What the command modules share: the refusal of a command line, the flags as typed, how a typed word is read, and how a token is kept out of what is printed.
 
 import { posix, win32 } from "node:path";
 
@@ -12,6 +12,9 @@ const PATH_STARTS = [".", "~"];
 
 /** What parts the folders of a path, on POSIX and on Windows. */
 const SEPARATORS = [posix.sep, win32.sep];
+
+/** What stands where a token would have been printed. */
+const HIDDEN = "[token]";
 
 /** A command line that was written wrong: what is wrong, and when there is one, what to type instead. */
 export interface UsageError {
@@ -73,4 +76,28 @@ export function looksLikePath(word: string): boolean {
 export function nearest(typed: string, known: readonly string[]): string | undefined {
   // The length check keeps a very long typed word from costing a table per known word.
   return known.find((word) => Math.abs(word.length - typed.length) <= MAX_EDITS && editDistance(typed, word).steps <= MAX_EDITS);
+}
+
+/**
+ * Take every token out of a text.
+ *
+ * @param tokens - the tokens this machine holds; each is replaced wherever it stands
+ */
+export function hide(text: string, tokens: ReadonlySet<string>): string {
+  return [...tokens].reduce((safe, token) => safe.replaceAll(token, HIDDEN), text);
+}
+
+/**
+ * Write a value as JSON with every token taken out of its texts and its keys.
+ *
+ * @returns one line that stays JSON however deep the value goes, and whatever a token holds
+ */
+export function written(value: unknown, tokens: ReadonlySet<string>): string {
+  return JSON.stringify(value, (_key, item: unknown) => {
+    if (typeof item === "string") return hide(item, tokens);
+
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return item;
+
+    return Object.fromEntries(Object.entries(item).map(([key, held]) => [hide(key, tokens), held]));
+  });
 }
