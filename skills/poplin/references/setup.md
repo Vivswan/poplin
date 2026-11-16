@@ -83,7 +83,7 @@ Before part a, ask what the user has. Say which of these is missing, and stop un
 | a payment method on the account                   | part a asks for one, at a price of 0      |
 | a GitHub account, or git and bun on this computer | part b                                    |
 
-Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/cost/limits.md#what-can-cost-money).
+Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/cost/what-can-cost-money.md).
 
 **Never take the Cloudflare API token in the chat.** The token of parts c and d changes the user's Cloudflare account. The user pastes it into the setup page in their own browser, where it goes to the install and nowhere else.
 
