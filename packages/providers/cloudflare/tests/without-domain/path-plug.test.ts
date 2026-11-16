@@ -32,7 +32,7 @@ function deployed(): Account {
 const OPTIONAL = {
   right: "Notifications: Edit",
   adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.",
-  how: "To switch this on, add this right to the account token and press Repair: Notifications: Edit",
+  how: "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair: Notifications: Edit",
 } as const;
 
 /** The budget alert's row where a token lacks the right, which may not read the alert's name, and where a check by the key finds none set up. */

@@ -1,14 +1,21 @@
 // The Activity log in its room: what the table's columns show whole and where the room they leave over goes, and what a phone's row shows whole.
+// And the screen at rest: which entries it shows stands in sight over the list, with the row of tools whole beside it.
 
 import { expect } from "@playwright/test";
 
-import { arrive, screenHeading, test } from "./visit";
+import { arrive, screenHeading, test, toSection } from "./visit";
 
 /** The screens the walk is taken on: the widest, with room to spare beside the columns, and the narrowest the table fits. */
 const SCREENS = [
   { width: 1440, height: 900 },
   { width: 1024, height: 768 },
 ] as const;
+
+/** How long a press that is only tried waits for a tool to be in reach, in milliseconds: a tool under another one never is. */
+const REACH_MS = 3000;
+
+/** The screens the words over the list are looked for on: those of the table, and a phone. */
+const AT_REST = [...SCREENS, { width: 390, height: 844 }] as const;
 
 for (const size of SCREENS) {
   test.describe(`on a screen ${size.width} px wide, in the Activity table`, () => {
@@ -57,3 +64,25 @@ test.describe("on a phone, in the Activity list", () => {
     expect(site?.y ?? 0).toBeGreaterThan((what?.y ?? Number.NaN) + (what?.height ?? Number.NaN) / 2);
   });
 });
+
+for (const size of AT_REST) {
+  test.describe(`on a screen ${size.width} px wide, Activity at rest`, () => {
+    test.use({ viewport: size });
+
+    // Drift: the words stood only after the last row, where no screen shows them at rest. Put into the row of tools on a screen with no room for them, they pushed the time zone's buttons under Download.
+    test("says which entries it shows before any scroll, with the search, the time zone and Download whole and in reach", async ({ page }) => {
+      await arrive(page);
+      await toSection(page, "Activity");
+      const log = page.getByRole("region", { name: "Activity", exact: true });
+      const shown = log.getByText(/^1 to 50 of [0-9,]+$/).filter({ visible: true }).first();
+      await expect(shown).toBeInViewport({ ratio: 1 });
+
+      const tools = [log.getByRole("searchbox", { name: /^Find activity / }), log.getByRole("button", { name: "UTC", exact: true }), log.getByRole("button", { name: "Download", exact: true })];
+      // Whole: all of it inside the window. In reach: a press on it would land on it, which a press that is only tried says without pressing.
+      for (const tool of tools) {
+        await expect(tool).toBeInViewport({ ratio: 1 });
+        await tool.click({ trial: true, timeout: REACH_MS });
+      }
+    });
+  });
+}

@@ -20,15 +20,15 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | one site's and one visitor's requests in a minute | the settings `site_requests_per_minute` and `visitor_requests_per_minute` | status 429, with the seconds to wait |
 | the versions a publish leaves a site, and the days in the trash | the settings `versions_kept` and `trash_days` | a publish that goes live deletes the versions past the count, and the Worker's sweep deletes a site past its days in the trash, each with its files |
 | one address at one Cloudflare location: 300 requests in 10 seconds, [counted in each data center](#where-a-limit-is-counted) | Repair: Rate rule, skipped on a Free plan domain with other hostnames and where the plan has no room for it. | Cloudflare blocks the address for 10 seconds, before the Worker runs |
-| verified bots, methods other than GET and HEAD, and scanner paths, on site addresses. An assistant that opens one page for a person passes, and search engines pass while `search_engines_allowed` is on | Repair: WAF rule, skipped where the plan has no room for it. | Cloudflare blocks the request before the Worker runs |
+| verified bots, methods other than GET and HEAD, and scanner paths, on site addresses. An assistant that opens one page for a person and a chat app's fetch for a link preview pass, and search engines pass while `search_engines_allowed` is on | Repair: WAF rule, skipped where the plan has no room for it. | Cloudflare blocks the request before the Worker runs |
 | AI crawlers: while `block_bots` is `auto`, on a domain with no other hostnames; while it is `on`, on any domain | Repair: Bot settings | Cloudflare blocks them on the whole domain |
 | plain http | Repair: Redirect rule. The Worker does the same | the request is sent to https |
 | the dashboard and private sites | Repair: Access application and Access policy | Cloudflare's login, for the `logins` alone |
 | the bucket's public address | the bucket [step 2](../../start/by-hand.md#the-steps) makes has none | files are read through the Worker alone |
 | uploads in parts that nobody finished | Cloudflare's own rule on the bucket, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
-| the account's usage charges of a billing period: 1 US dollar | Repair: Budget alert, with the optional permission Notifications: Edit, under a domain or without one | Cloudflare emails the first user. Nothing is stopped |
+| the account's usage charges of a billing period: 1 US dollar | the install's key, within a day of the first Repair; or Repair: Budget alert, with the optional permission Notifications: Edit. Under a domain or without one | Cloudflare emails the first user. Nothing is stopped |
 
-Repair is the button on the setup page and the Domain screen. The budget alert exists only where Repair made it.
+Repair is the button on the setup page and the Domain screen. The budget alert exists where the install's key or a Repair made it.
 
 **What no setting bounds.** Every request the Worker answers spends the Workers plan's requests of the day: a 404, a redirect to the login, a call of the API, and a request a limit refused with 429 too. `requests_per_day` counts the requests at the address of a live site alone.
 

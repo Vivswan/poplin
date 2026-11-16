@@ -89,7 +89,7 @@ const NOT_PERMITTED = { status: 403, code: 10000 } as const;
 /** What a row says after a refusal for a missing permission, before the permission's name. */
 const ADD_RIGHT = "Add this right to the account token";
 
-/** What the row of a piece that needs an optional permission says before the permission's name, after what the piece adds. */
+/** What the row of a piece that needs an optional permission says before the permission's name, after what the piece adds; a piece that is made without the permission too says its own. */
 const SWITCH_ON = "To switch this on, add this right to the account token and press Repair";
 
 /** What a repair that wrote the variable tells the person to do next. */
@@ -146,7 +146,11 @@ const RIGHT = {
   bots: { name: "Bot Management: Edit", adds: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says." },
   database: { name: "D1: Edit", key: "d1", type: "edit" },
   bucket: { name: "Workers R2 Storage: Edit", chosen: "by hand" },
-  notifications: { name: "Notifications: Edit", adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar." },
+  notifications: {
+    name: "Notifications: Edit",
+    adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.",
+    how: "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair",
+  },
   tokens: { name: "Account API Tokens: Edit", key: "account_api_tokens", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
@@ -257,7 +261,7 @@ const TOKEN_FORMS = {
 } as const satisfies Readonly<Record<string, { readonly pieces: readonly Piece[]; readonly zones: string; readonly note: string; readonly for: string }>>;
 
 /** The name the form suggests for the token. */
-const TOKEN_NAME = "poplin setup";
+const TOKEN_NAME = "poplin install";
 
 /** What the form's note says before each permission the link cannot choose. */
 const BY_HAND = "The link does not choose this permission, so choose it on the form yourself";
@@ -300,7 +304,13 @@ type PlugParts = Known & {
 };
 
 /** One permission of a token: one an install needs, with its key and level in a link to the form, or one the link cannot choose, which the person chooses on the form; or an optional one, with what it adds. */
-type Right = { readonly name: string; readonly key: string; readonly type: "read" | "edit" } | { readonly name: string; readonly chosen: "by hand" } | { readonly name: string; readonly adds: string };
+type Right =
+  | { readonly name: string; readonly key: string; readonly type: "read" | "edit" }
+  | { readonly name: string; readonly chosen: "by hand" }
+  | { readonly name: string; readonly adds: string; readonly how?: string };
+
+/** An optional permission. `how` is what its piece's row says in place of the usual words, where the piece is made without the permission too. */
+type Optional = Extract<Right, { readonly adds: string }>;
 
 /** An install once the token has shown its account: what the pieces both kinds of install share are made from. */
 export interface Placed {
@@ -430,6 +440,11 @@ function failedDetail(stopped: Stopped, object: Piece): string {
   return lacksRight(stopped) ? `${why}. ${ADD_RIGHT}: ${lackedRight(object, failed).name}` : why;
 }
 
+/** What the row of an optional piece that is not set up says: what the piece adds, then how a person gets it, with the permission's name. */
+function switchOn(right: Optional): string {
+  return `${right.adds} ${right.how ?? SWITCH_ON}: ${right.name}`;
+}
+
 /** The rows of a piece that stopped. One that changed nothing for want of an optional permission is not set up, the steps it never reached with it, which is no failure. */
 function stoppedRows(stopped: Stopped, objectOf: (subject: string) => Piece): Found[] {
   const failed = stopped.failed ?? "";
@@ -437,7 +452,7 @@ function stoppedRows(stopped: Stopped, objectOf: (subject: string) => Piece): Fo
   const unrun = stopped.unrun ?? [];
   const right = lackedRight(object, failed);
   if ("adds" in right && lacksRight(stopped) && stopped.report.changedNothing) {
-    const how = `${right.adds} ${SWITCH_ON}: ${right.name}`;
+    const how = switchOn(right);
     const named = [failed, ...unrun].filter((subject) => subject !== "");
     if (named.length === 0) return [{ object, state: "optional", detail: how }];
 
@@ -480,7 +495,7 @@ function asOptional(row: Found): Found {
   const right = row.object === "Public word" ? undefined : RIGHTS[row.object][0];
   if (right === undefined || !("adds" in right) || (row.state !== "missing" && row.state !== "differs")) return row;
 
-  return { object: row.object, state: "optional", detail: `${row.detail}: ${right.adds} ${SWITCH_ON}: ${right.name}` };
+  return { object: row.object, state: "optional", detail: `${row.detail}: ${switchOn(right)}` };
 }
 
 /** A piece Cloudflare stopped, as the one call the key's answers are read from; `undefined` for a piece that stopped itself, such as one that found a record in its way: Cloudflare answered it, and its own words say why. */
@@ -979,6 +994,24 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], 
   return `${TOKEN_FORM}?permissionGroupKeys=${encodeURIComponent(JSON.stringify(chosen))}&accountId=%2A${zones}&name=${encodeURIComponent(TOKEN_NAME)}`;
 }
 
+/** Every permission the objects of a kind's token form use, and those of the objects named beside them, each once, in the order of the table of rights. */
+function usedRights(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[]): Right[] {
+  const asked: readonly Piece[] = TOKEN_FORMS[kind].pieces;
+  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object) || also.includes(object));
+
+  return [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
+}
+
+/**
+ * Name the permissions a token needs that no link to the form can choose, so a person chooses each on the form.
+ *
+ * @param kind - the kind of install the token is for
+ * @param also - the objects the token is to make beside the ones a repair of that kind makes
+ */
+export function rightsByHand(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): string[] {
+  return usedRights(kind, also).flatMap((right) => ("chosen" in right ? [right.name] : []));
+}
+
 /**
  * Say what Cloudflare's form for a new token is and asks for.
  *
@@ -988,12 +1021,10 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], 
  */
 export function tokenFacts(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): TokenFacts {
   const form = TOKEN_FORMS[kind];
-  const asked: readonly Piece[] = form.pieces;
-  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object) || also.includes(object));
-  const used = [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
+  const used = usedRights(kind, also);
   const needed = used.filter((right) => !("adds" in right));
   const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));
-  const byHand = needed.flatMap((right) => ("chosen" in right ? [right.name] : []));
+  const byHand = rightsByHand(kind, also);
 
   return {
     tokenRights: needed.map((right) => right.name),

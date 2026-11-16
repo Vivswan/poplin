@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { thenHome } from "@/lib/focus";
-import { LONGEST_NAME, type Site } from "@/lib/sites";
+import type { Site } from "@/lib/sites";
 
 /** What is said under each field while nothing is refused there. */
 const HINTS = {
@@ -58,7 +58,6 @@ function NamingField({
   refusal,
   hint,
   placeholder,
-  maxLength,
   required = false,
   first = false,
   field,
@@ -69,7 +68,6 @@ function NamingField({
   readonly refusal: string | undefined;
   readonly hint: string;
   readonly placeholder?: string;
-  readonly maxLength?: number;
   readonly required?: boolean;
   readonly first?: boolean;
   readonly field?: Ref<HTMLInputElement>;
@@ -84,7 +82,6 @@ function NamingField({
         placeholder={placeholder}
         autoComplete="off"
         spellCheck={false}
-        maxLength={maxLength}
         aria-required={required}
         autoFocus={first}
       />
@@ -158,7 +155,7 @@ export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDial
             first
             field={fields.title}
           />
-          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={refusalAt("name")} hint={HINTS.name} maxLength={LONGEST_NAME} required field={fields.name} />
+          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={refusalAt("name")} hint={HINTS.name} required field={fields.name} />
           {refusal?.about === null ? (
             <Field invalid>
               <FieldError>{refusal.sentence}</FieldError>

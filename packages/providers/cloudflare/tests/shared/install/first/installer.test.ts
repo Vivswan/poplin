@@ -339,6 +339,12 @@ describe("the provider's own answers", () => {
     expect([domain.tokenRights.includes("Workers R2 Storage: Edit"), none.tokenRights.includes("Workers R2 Storage: Edit"), none.tokenRights.some((right) => right.startsWith("Zone") || right.startsWith("DNS"))]).toEqual([true, true, false]);
     expect([domain.tokenNote.endsWith("choose it on the form yourself: Workers R2 Storage: Edit."), decodeURIComponent(domain.tokenLink).includes("r2")]).toEqual([true, false]);
     expect(installer.tokenHelp.filter((line) => line.includes("permissions:")).map((line) => line.trim().split(":")[0])).toEqual(["with a domain 10 permissions", "without       6 permissions"]);
+    // The link chooses one permission fewer than the token needs, and the line under it must say so: a reader who trusts "chosen" makes a token that fails at the bucket.
+    expect(installer.tokenHelp.filter((line) => line.includes("the link chooses")).map((line) => line.trim())).toEqual([
+      "the link chooses 9 of them: choose Workers R2 Storage: Edit on the form yourself",
+      "the link chooses 5 of them: choose Workers R2 Storage: Edit on the form yourself",
+    ]);
+    expect([domain, none].map((facts) => new URL(facts.tokenLink).searchParams.get("name"))).toEqual(["poplin install", "poplin install"]);
     expect([installer.token("short"), installer.token("has a space in it, so it is none"), installer.token(TOKEN)]).toEqual([undefined, undefined, KEY]);
   });
 });

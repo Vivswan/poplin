@@ -254,7 +254,7 @@ Each account has its own allowances, and every ceiling below holds for each inst
 | Guard                                                                                  | Where                                         | At the limit                                                  |
 | -------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
 | the zone's plan is Free, where the account holds a zone, and every subscription of the account that has not ended is at a price of 0 | `plan.ts`, before anything is made | the run stops red |
-| a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit | Cloudflare emails the login. Nothing is stopped |
+| a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit; without it, the install's own key within a day | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
 | bucket writes and lists: 150 by the checks, 300 by the midnight run's, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | bucket lists and deletes: 300 together by the removal of the files no record names | `orphans.ts`, around every call to Cloudflare for the bucket | the removal stops, and the next run goes on |

@@ -1,5 +1,5 @@
 // The users carried to Cloudflare with the kept key, against the answers Cloudflare documents for its Access policies and its notification policies.
-// Without these a change of the users could rewrite an application, leave the alert mailing a person who was removed, read as carried when Cloudflare refused it, or give the key away in an answer.
+// Without these a change of the users could rewrite an application, leave the alert mailing a person who was removed, leave an account with no alert, read as carried when Cloudflare refused it, or give the key away in an answer.
 
 import { describe, expect, test } from "bun:test";
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
@@ -37,13 +37,14 @@ interface Account {
   readonly alertWrite?: () => Response;
 }
 
-/** Answer as the account does: the two lists, and a write of the one policy or the one alert it holds. */
+/** Answer as the account does: the two lists, a write of the one policy or the one alert it holds, and the making of an alert. */
 function account(answers: Account): (asked: Asked) => Response | undefined {
   const calls: Readonly<Record<string, (asked: Asked) => Response>> = {
     [`GET ${PATHS.policies}`]: answers.policies ?? ((asked) => page(asked, [HELD_POLICY])),
     [`GET ${PATHS.alerts}`]: answers.alerts ?? ((asked) => page(asked, [HELD_ALERT])),
     [`PUT ${PATHS.policies}/${HELD_POLICY.id}`]: answers.policyWrite ?? (() => reply({ ...HELD_POLICY })),
     [`PUT ${PATHS.alerts}/${HELD_ALERT.id}`]: answers.alertWrite ?? (() => reply({ id: HELD_ALERT.id })),
+    [`POST ${PATHS.alerts}`]: answers.alertWrite ?? (() => reply({ id: HELD_ALERT.id })),
   };
 
   return (asked) => calls[`${asked.method} ${asked.path.split("?")[0]}`]?.(asked);
@@ -76,14 +77,26 @@ describe("createUsersFollow", () => {
     });
   });
 
-  // Drift: a list Cloudflare already holds is written again by nothing, and an account with no alert gets none from a change of the users: the alert is made by a repair alone.
-  test("users Cloudflare already holds are written nowhere, and an account with no alert is left with none", async () => {
+  // Drift: a list and an alert Cloudflare already holds are written again by nothing: a carry that wrote what stands would spend two writes on every change of a later user.
+  test("users Cloudflare already holds, and an alert that goes to the first of them, are written nowhere", async () => {
     const same = { ...HELD_POLICY, include: [{ email: { email: "zoe@example.com" } }, { email: { email: "ada@example.com" } }] };
+    const sent = { ...HELD_ALERT, mechanisms: { email: [{ id: "zoe@example.com" }] } };
 
-    await withFake(account({ policies: (asked) => page(asked, [same]), alerts: (asked) => page(asked, []) }), async (connection, asked) => {
+    await withFake(account({ policies: (asked) => page(asked, [same]), alerts: (asked) => page(asked, [sent]) }), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT);
 
       expect([await follow.push(USERS), writes(asked)]).toEqual([{ ok: true }, []]);
+    });
+  });
+
+  // Drift: the key holds the right to make the alert, and no token is pasted after install. An account left without one here would have no alert until a person added a right to a token and pressed Repair.
+  test("an account with no alert gets one from a change of the users, mailed to the first of them, with the key and no token", async () => {
+    await withFake(account({ alerts: (asked) => page(asked, []) }), async (connection, asked) => {
+      const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT);
+
+      expect(await follow.push(USERS)).toEqual({ ok: true });
+      expect(writes(asked).at(-1)).toEqual(["POST", PATHS.alerts, expect.objectContaining({ name: BUDGET_ALERT, alert_type: "billing_budget_alert", mechanisms: { email: [{ id: "zoe@example.com" }] } })]);
+      expect(new Set(asked.map((entry) => entry.key))).toEqual(new Set([`Bearer ${KEY}`]));
     });
   });
 

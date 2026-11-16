@@ -68,7 +68,7 @@ What a private site costs:
 | Switch for search engines | Set on | Off, the default | On |
 | --- | --- | --- | --- |
 | `search_engines` | one public site | its files carry `X-Robots-Tag: noindex` | they do not |
-| `search_engines_allowed` | the install | every site's files carry `X-Robots-Tag: noindex`; the bots rule at Cloudflare's edge stops the crawlers Cloudflare has verified, and lets through an assistant that opens one page for a person | the rule lets the crawlers of search engines pass |
+| `search_engines_allowed` | the install | every site's files carry `X-Robots-Tag: noindex`; the bots rule at Cloudflare's edge stops the crawlers Cloudflare has verified, and lets through an assistant that opens one page for a person and a chat app that fetches a shared link for its preview | the rule lets the crawlers of search engines pass |
 
 A public site is without `noindex` only when both are on. The bots rule is one of the [optional edge rules](#optional-edge-rules).
 
@@ -146,7 +146,7 @@ you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  -
 | Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
 | What it reaches | your one account and your one domain; the account alone on an install without a domain |
 | What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
-| What it does by itself | once a day it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. Activity says what it wrote |
+| What it does by itself | once a day it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. Activity says what it wrote. It also makes the [budget alert](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) where the account has none |
 | What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
 | How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
 | How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
@@ -267,7 +267,7 @@ Two of the rules need no added permission. On an install with a domain that hold
 
 | Rule | After the save |
 | --- | --- |
-| the bots rule | there; an assistant that opens one page for a person passes it, and the crawlers of search engines pass it while `search_engines_allowed` is on |
+| the bots rule | there; an assistant that opens one page for a person and a chat app's fetch for a link preview pass it, and the crawlers of search engines pass it while `search_engines_allowed` is on |
 | the outside pages rule | there while `outside_pages` is `blocked`, and removed while it is `allowed` |
 
 A rule the domain lacks is made, and one its plan has no room for is left out. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says which install holds a key.

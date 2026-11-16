@@ -6,7 +6,7 @@ import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { activityColumns, SiteThen, When } from "@/activity/activity-columns";
-import { ActivityFoot, nothingSoFarWords } from "@/activity/activity-foot";
+import { ActivityFoot, nothingSoFarWords, ShownEntries } from "@/activity/activity-foot";
 import { type Entry, type Page, useActivityPage, useActivityTotal } from "@/activity/activity-queries";
 import { emptyWords, KINDS, type Kind, kindOf, logQuery, siteIn, sortedQuery, sortOf } from "@/activity/activity-words";
 import { DownloadMenu } from "@/activity/download-menu";
@@ -244,6 +244,11 @@ function insteadOfRows(failure: string | undefined, page: Page | undefined, kind
   );
 }
 
+/** The page whose rows are drawn: none while a refusal, the rows being read, or the words of an empty page stand in their place. */
+function drawnPage(page: Page | undefined, instead: ReactNode): Page | undefined {
+  return instead === undefined ? page : undefined;
+}
+
 /** Draw the Activity screen for the address: the log narrowed, ordered, and paged as its query says. */
 export function ActivityScreen(): ReactNode {
   const navigate = useNavigate();
@@ -316,6 +321,8 @@ export function ActivityScreen(): ReactNode {
               maxLength={MAX_SEARCH}
             />
           </div>
+          {/* Which entries are shown, in sight before the foot is: beside the search, and on a line of its own over the list where the row of tools has no room for it. Nothing where no row is drawn. */}
+          <ShownEntries query={query} page={drawnPage(page, instead)} total={total} size={size} busy={isPlaceholderData} className="whitespace-nowrap max-xl:order-5 max-xl:basis-full" />
           <LogSaid read={{ page, there, failure: error, query }} narrowed={{ kind, site }} />
           {site.of === "" ? null : <OnlySite of={site.of} page={page} current={!isPlaceholderData} onShowEvery={() => move({ of: "" })} />}
           <div className="flex min-w-0 flex-1 items-center gap-2 max-md:order-4 max-md:basis-full">
