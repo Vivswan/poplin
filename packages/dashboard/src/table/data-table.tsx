@@ -91,9 +91,9 @@ const CELL_LOOK = "h-11 px-3 py-0";
 /** The look of a heading while it is dragged to another place. */
 const DRAGGED_LOOK = "flex h-9 w-fit cursor-grabbing items-center rounded-md border bg-popover px-3 text-xs text-foreground shadow-md";
 
-/** The look of a column's edge: 24 px to press, under the buttons of the headings it reaches over, and a hairline that shows under the pointer, with the focus, and while it is dragged. */
+/** The look of a column's edge: 24 px to press, under the buttons of the headings it reaches over, and a hairline that shows under the pointer, with the focus, and while it is dragged. With the focus of the keys it also has the ring every stop has. */
 const EDGE_LOOK = cn(
-  "absolute top-0 z-10 flex h-full w-6 cursor-col-resize touch-none outline-none",
+  "absolute top-0 z-10 flex h-full w-6 cursor-col-resize touch-none rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
   "after:h-full after:w-px after:bg-transparent hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring",
 );
 
