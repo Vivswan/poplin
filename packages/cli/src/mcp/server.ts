@@ -11,6 +11,7 @@ import type { Outcome } from "../commands/records";
 import { VERSION } from "../poplin";
 import type { Host } from "./records";
 import { TOOLS, type ToolName } from "./tools";
+import { toolWords } from "./words";
 
 /** The name the server gives itself. */
 const NAME = "poplin";
@@ -70,19 +71,23 @@ function refusalOf(issues: readonly v.BaseIssue<unknown>[]): Outcome {
   return { ok: false, problem: problem("bad_argument", about) };
 }
 
-/** What a tool call answers: the lines a command would print as text, and the install's own answer as the structured content; a problem as a tool error with its code. */
+/**
+ * What a tool call answers: the command's lines as text and the install's answer as the structured content, or a problem as a tool error with its code.
+ * A hint, a step, and a note name the tool where they name a command; a line of the result holds a site's own words, and stays as it is.
+ */
 function resultOf(outcome: Outcome): CallToolResult {
   if (!outcome.ok) {
-    const { code, message, about, hint } = outcome.problem;
+    const said = outcome.problem.hint === undefined ? outcome.problem : { ...outcome.problem, hint: toolWords(outcome.problem.hint) };
+    const { code, message, about, hint } = said;
 
     return {
       isError: true,
-      content: [{ type: "text", text: `${code}: ${problemLines(outcome.problem).join("\n")}` }],
+      content: [{ type: "text", text: `${code}: ${problemLines(said).join("\n")}` }],
       structuredContent: { error: { code, message, about, hint } },
     };
   }
 
-  const lines = [...outcome.lines, ...(outcome.notes ?? [])];
+  const lines = [...outcome.lines, ...[...(outcome.steps ?? []), ...(outcome.notes ?? [])].map(toolWords)];
 
   return { content: [{ type: "text", text: lines.length === 0 ? DONE : lines.join("\n") }], structuredContent: record(outcome.value) };
 }

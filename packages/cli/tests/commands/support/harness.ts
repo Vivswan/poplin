@@ -24,8 +24,8 @@ interface Options {
   /** Whether a terminal is there to ask on and to show progress on; neither unless said. */
   readonly terminal?: Io["terminal"];
 
-  /** What the person types when asked. */
-  readonly typed?: string;
+  /** What the person types when asked; `stop` for a person who stops the question, as Ctrl-C at it does. */
+  readonly typed?: string | { readonly stop: true };
 }
 
 /** What one command printed, and how it exited. `asked` holds the questions it put, `opened` the addresses it handed to a browser, and `waits` how long each of its waits was, in milliseconds. */
@@ -161,7 +161,7 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
         ask: async (question) => {
           ran.asked.push(question);
 
-          return options.typed ?? "";
+          return typeof options.typed === "object" ? undefined : (options.typed ?? "");
         },
         timeoutMs: 2000,
         computer: "test-computer",

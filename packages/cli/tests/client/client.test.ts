@@ -132,10 +132,10 @@ describe("client", () => {
   });
 
   test.each<[string, Fetch, unknown]>([
-    ["a fetch that throws", () => Promise.reject(new Error(`could not send Bearer ${TOKEN}`)), { kind: "unreachable" }],
-    ["a fetch that throws something that is no error", () => Promise.reject(TOKEN), { kind: "unreachable" }],
+    ["a fetch that throws", () => Promise.reject(new Error(`could not send Bearer ${TOKEN}`)), { kind: "unreachable", address: ORIGIN, left: true }],
+    ["a fetch that throws something that is no error", () => Promise.reject(TOKEN), { kind: "unreachable", address: ORIGIN, left: true }],
     ["an answer that never comes", hangs, { kind: "timeout", seconds: 0 }],
-    ["a body that breaks off", async () => new Response(new ReadableStream({ pull: (controller) => controller.error(new Error("reset")) })), { kind: "unreachable" }],
+    ["a body that breaks off", async () => new Response(new ReadableStream({ pull: (controller) => controller.error(new Error("reset")) })), { kind: "unreachable", address: ORIGIN, left: true }],
     ["JSON of another form under 200", async () => answer(200, { token: TOKEN }), { kind: "unexpected", status: 200 }],
     ["JSON that is no refusal under 500", async () => answer(500, { message: "oops" }), { kind: "unexpected", status: 500 }],
     ["a refusal under a status that is no error", async () => answer(201, { error: { code: "internal", message: "no" } }), { kind: "unexpected", status: 201 }],
@@ -155,10 +155,10 @@ describe("client", () => {
     ["the begin of an upload whose socket is ended", ["ended"], 404, "begin", { requests: 2, told: 1, failure: NOT_THERE }],
     ["the begin of an upload whose socket is reset", ["reset"], 404, "begin", { requests: 2, told: 1, failure: NOT_THERE }],
     ["a download whose socket is reset", ["reset"], 404, "download", { requests: 2, told: 1, failure: NOT_THERE }],
-    ["a read cut twice", ["reset", "ended"], 404, "read", { requests: 2, told: 1, failure: { kind: "unreachable" } }],
-    ["the begin of an upload cut twice", ["ended", "reset"], 404, "begin", { requests: 2, told: 1, failure: { kind: "unreachable" } }],
-    ["a change, which is no request to send twice", ["reset"], 404, "change", { requests: 1, told: 0, failure: { kind: "unreachable" } }],
-    ["a file, which its upload sends again by its own count", ["reset"], 404, "file", { requests: 1, told: 0, failure: { kind: "unreachable" } }],
+    ["a read cut twice", ["reset", "ended"], 404, "read", { requests: 2, told: 1, failure: "unreachable" }],
+    ["the begin of an upload cut twice", ["ended", "reset"], 404, "begin", { requests: 2, told: 1, failure: "unreachable" }],
+    ["a change, which is no request to send twice", ["reset"], 404, "change", { requests: 1, told: 0, failure: "unreachable" }],
+    ["a file, which its upload sends again by its own count", ["reset"], 404, "file", { requests: 1, told: 0, failure: "unreachable" }],
     ["a read answered 404", [], 404, "read", { requests: 1, told: 0, failure: NOT_THERE }],
     ["the begin of an upload answered 503", [], 503, "begin", { requests: 1, told: 0, failure: { ...NOT_THERE, status: 503 } }],
   ])("%s reaches the install as often as it may, and is told each time it is sent again", async (_name, cuts, status, ask, expected) => {
@@ -169,29 +169,31 @@ describe("client", () => {
     try {
       const called = await ASKS[ask](client);
 
-      expect<unknown>({ requests: install.requests(), told, called }).toEqual({ requests: expected.requests, told: Array(expected.told).fill(SENT_AGAIN), called: { ok: false, failure: expected.failure } });
+      const failure = expected.failure === "unreachable" ? { kind: "unreachable", address: install.origin, left: true } : expected.failure;
+
+      expect<unknown>({ requests: install.requests(), told, called }).toEqual({ requests: expected.requests, told: Array(expected.told).fill(SENT_AGAIN), called: { ok: false, failure } });
     } finally {
       await install.close();
     }
   });
 
   // Drift: what a failed request throws is each runtime's own: Bun names the code on the error, Node on its cause. The tests run in Bun alone, so these rows hold Node's shapes.
-  test.each<[string, TypeError, { readonly ask: keyof typeof ASKS; readonly fails?: number }, { readonly sendings: (boolean | undefined)[]; readonly told: string[]; readonly paused?: number[] }]>([
+  test.each<[string, TypeError, { readonly ask: keyof typeof ASKS; readonly fails?: number }, { readonly sendings: (boolean | undefined)[]; readonly told: string[]; readonly paused?: number[]; readonly left?: boolean }]>([
     ["Bun's closed socket", thrownBy("bun", "ECONNRESET"), { ask: "begin" }, { sendings: [undefined, false], told: [SENT_AGAIN] }],
     ["Node's reset socket", thrownBy("node", "ECONNRESET"), { ask: "begin" }, { sendings: [undefined, false], told: [SENT_AGAIN] }],
     ["Node's socket the other side closed", thrownBy("node", "UND_ERR_SOCKET"), { ask: "begin" }, { sendings: [undefined, false], told: [SENT_AGAIN] }],
-    ["Bun's closed socket, which a change may have left by", thrownBy("bun", "ECONNRESET"), { ask: "change" }, { sendings: [undefined], told: [] }],
+    ["Bun's closed socket, which a change may have left by", thrownBy("bun", "ECONNRESET"), { ask: "change" }, { sendings: [undefined], told: [], left: true }],
     ["Bun's refused connection", thrownBy("bun", "ConnectionRefused"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
     ["Node's refused connection", thrownBy("node", "ECONNREFUSED"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
     ["Bun's name no DNS knows", thrownBy("bun", "ENOTFOUND"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
     ["Node's name no DNS knows", thrownBy("node", "ENOTFOUND"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
     ["Node's name no DNS answers for now", thrownBy("node", "EAI_AGAIN"), { ask: "change" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
     ["Bun's name no DNS knows, at the begin of an upload", thrownBy("bun", "ENOTFOUND"), { ask: "begin" }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
-    ["Bun's name no DNS knows, twice", thrownBy("bun", "ENOTFOUND"), { ask: "change", fails: 2 }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000] }],
-    ["Bun's name no DNS knows, at a file, which its upload sends again by its own count", thrownBy("bun", "ENOTFOUND"), { ask: "file" }, { sendings: [undefined], told: [] }],
-    ["Bun's TLS failure", thrownBy("bun", "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR"), { ask: "change" }, { sendings: [undefined], told: [] }],
-    ["Node's TLS failure", thrownBy("node", "ERR_SSL_WRONG_VERSION_NUMBER"), { ask: "begin" }, { sendings: [undefined], told: [] }],
-  ])("a call that meets %s is sent as often as it may, the second time on a connection that is not kept, after the pause it is told", async (_name, error, { ask, fails = 1 }, expected) => {
+    ["Bun's name no DNS knows, twice", thrownBy("bun", "ENOTFOUND"), { ask: "change", fails: 2 }, { sendings: [undefined, false], told: [TRIED_AGAIN], paused: [1000], left: false }],
+    ["Bun's name no DNS knows, at a file, which its upload sends again by its own count", thrownBy("bun", "ENOTFOUND"), { ask: "file" }, { sendings: [undefined], told: [], left: false }],
+    ["Bun's TLS failure", thrownBy("bun", "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR"), { ask: "change" }, { sendings: [undefined], told: [], left: true }],
+    ["Node's TLS failure", thrownBy("node", "ERR_SSL_WRONG_VERSION_NUMBER"), { ask: "begin" }, { sendings: [undefined], told: [], left: true }],
+  ])("a call that meets %s is sent as often as it may, the second time on a connection that is not kept, after the pause it is told, and one that fails says whether it left", async (_name, error, { ask, fails = 1 }, expected) => {
     const kept: (boolean | undefined)[] = [];
     const told: string[] = [];
     const paused: number[] = [];
@@ -208,7 +210,8 @@ describe("client", () => {
       kept: expected.sendings,
       told: expected.told,
       paused: expected.paused ?? [],
-      called: { ok: false, failure: expected.sendings.length > fails ? NOT_THERE : { kind: "unreachable" } },
+      // A request that never left changed nothing, and its failure says so: a change is then worded as not made.
+      called: { ok: false, failure: expected.left === undefined ? NOT_THERE : { kind: "unreachable", address: ORIGIN, left: expected.left } },
     });
   });
 
@@ -218,12 +221,12 @@ describe("client", () => {
       "the sentence of an install that cannot start",
       "text/plain; charset=utf-8",
       "This install's database is newer than its code: update poplin.\nmore",
-      { kind: "not-json", status: 503, said: "This install's database is newer than its code: update poplin." },
+      { kind: "not-json", address: ORIGIN, status: 503, said: "This install's database is newer than its code: update poplin." },
     ],
-    ["a line with control characters, cut at 200", "TEXT/PLAIN", `\u001b[31m${"a".repeat(300)}\r\n`, { kind: "not-json", status: 503, said: `[31m${"a".repeat(196)}` }],
-    ["plain text that starts with an empty line", "text/plain", "\nlater", { kind: "not-json", status: 503 }],
-    ["a page", "text/html", "<html>This install cannot start.</html>", { kind: "not-json", status: 503 }],
-    ["text of another type", "text/plain+json", "other format", { kind: "not-json", status: 503 }],
+    ["a line with control characters, cut at 200", "TEXT/PLAIN", `\u001b[31m${"a".repeat(300)}\r\n`, { kind: "not-json", address: ORIGIN, status: 503, said: `[31m${"a".repeat(196)}` }],
+    ["plain text that starts with an empty line", "text/plain", "\nlater", { kind: "not-json", address: ORIGIN, status: 503 }],
+    ["a page", "text/html", "<html>This install cannot start.</html>", { kind: "not-json", address: ORIGIN, status: 503 }],
+    ["text of another type", "text/plain+json", "other format", { kind: "not-json", address: ORIGIN, status: 503 }],
   ])("a call answered with %s keeps the first line of plain text and of nothing else", async (_name, type, body, failure) => {
     const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => new Response(body, { status: 503, headers: { "Content-Type": type } }) });
 
@@ -262,7 +265,7 @@ describe("client", () => {
     ["no stored type", new Response("hello", { headers: { "Content-Length": "5" } }), { kind: "unexpected", status: 200 }],
     ["a stored type that is not percent-encoded text", new Response("hello", { headers: { "Content-Length": "5", "Poplin-Content-Type": "%E0%A4%A" } }), { kind: "unexpected", status: 200 }],
     ["JSON under a status that is no refusal", answer(201, { ok: true }), { kind: "unexpected", status: 201 }],
-    ["a page that is no JSON", answer(502, "<html>bad gateway</html>"), { kind: "not-json", status: 502 }],
+    ["a page that is no JSON", answer(502, "<html>bad gateway</html>"), { kind: "not-json", address: ORIGIN, status: 502 }],
   ])("a download answered with %s is a failure and no file: without this a proxy's page could be written into a backup as a site's file", async (_name, response, failure) => {
     const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => response });
 
@@ -271,13 +274,13 @@ describe("client", () => {
 
   // Drift: `Retry-After` is set by whatever answers, the install or the zone in front of it, and HTTP lets it be a date; only whole seconds are a wait a caller can count.
   test.each<[string, Response, unknown]>([
-    ["a zone's page that names whole seconds", new Response("<html>too many</html>", { status: 429, headers: { "Retry-After": "10" } }), { kind: "not-json", status: 429, retryAfter: 10 }],
+    ["a zone's page that names whole seconds", new Response("<html>too many</html>", { status: 429, headers: { "Retry-After": "10" } }), { kind: "not-json", address: ORIGIN, status: 429, retryAfter: 10 }],
     [
       "the install's refusal that names whole seconds",
       new Response(JSON.stringify({ error: { code: "too_many_requests", message: "no" } }), { status: 429, headers: { "Retry-After": "30" } }),
       { kind: "refused", status: 429, code: "too_many_requests", message: "no", retryAfter: 30 },
     ],
-    ["a page that names a date", new Response("<html>too many</html>", { status: 429, headers: { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" } }), { kind: "not-json", status: 429 }],
+    ["a page that names a date", new Response("<html>too many</html>", { status: 429, headers: { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" } }), { kind: "not-json", address: ORIGIN, status: 429 }],
   ])("a call answered with %s keeps the wait with the failure, or none", async (_name, response, failure) => {
     const client = createClient({ server: ORIGIN, token: TOKEN, fetch: async () => response });
 

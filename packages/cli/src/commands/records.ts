@@ -32,8 +32,8 @@ export interface Io {
   /** Whether a person can be asked a question, and whether a progress line would be seen. */
   readonly terminal: { readonly asks: boolean; readonly progress: boolean };
 
-  /** Asks one question on the terminal and answers the line typed. */
-  readonly ask: (question: string) => Promise<string>;
+  /** Asks one question on the terminal and answers the line typed, or `undefined` once the person stopped the question. */
+  readonly ask: (question: string) => Promise<string | undefined>;
 
   /** How long one call may take, in milliseconds, in place of the client's defaults. */
   readonly timeoutMs?: number;
@@ -75,8 +75,9 @@ export interface Session {
 /**
  * What a command came to.
  *
- * `value` is what `--json` prints, `lines` what a person reads on stdout, and `notes` go to stderr either way. `found` is set by a command that did its work and found something wrong, and exits as a failure.
+ * `value` is what `--json` prints, `lines` what a person reads on stdout, and `notes` go to stderr either way.
+ * `steps` follow the lines and say what to type next: they hold nothing of a site but its label. `found` is set by a command that did its work and found something wrong, and exits as a failure.
  */
 export type Outcome =
-  | { readonly ok: true; readonly value: unknown; readonly lines: readonly string[]; readonly notes?: readonly string[]; readonly found?: "failed" }
+  | { readonly ok: true; readonly value: unknown; readonly lines: readonly string[]; readonly steps?: readonly string[]; readonly notes?: readonly string[]; readonly found?: "failed" }
   | { readonly ok: false; readonly problem: Problem };
