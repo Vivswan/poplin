@@ -60,6 +60,7 @@ export type InstallRequest = { readonly provider: Provider; readonly json: boole
  * What to run after a command ended: the step as one word for a program, and its command line.
  *
  * The line holds none of the answers the line before it gave: no token, no place, no proof, no consent. It keeps each careful choice of that line where the same command goes on.
+ * An option the stop's own sentence names as the way on is on the line too, as `--adopt` is after a repair that found data left behind: the sentence and the line are one.
  * `install`, `repair`, and `uninstall` are the three commands; `login` logs a computer in to an install that is whole; `none` is an end with nothing left to run.
  */
 export type Next = { readonly step: "install" | "repair" | "uninstall" | "login"; readonly command: string } | { readonly step: "none"; readonly command: null };
