@@ -108,6 +108,18 @@ describe("a row under the trash's filter", () => {
   test("has no Restore while it shows a site that is not in the trash", async () => {
     await draw("/?view=trash");
 
-    expect(within(document.body).queryAllByRole("button", { name: "Restore" }).length).toBe(0);
+    expect(within(document.body).queryAllByRole("button", { name: /^Restore/ }).length).toBe(0);
+  });
+});
+
+describe("the buttons after a site's link", () => {
+  // Drift: every row would hold buttons of one name again, and a screen reader's list of buttons would not say which site each one is for.
+  test("are named with the row's site, in the table and in a phone's list", async () => {
+    await draw("/");
+    const names = within(document.body)
+      .getAllByRole("button", { name: /^(Copy the link|Open the site)/ })
+      .map((button) => button.getAttribute("aria-label"));
+
+    expect(names.toSorted()).toEqual(["Copy the link of Trip notes", "Copy the link of Trip notes", "Open the site Trip notes", "Open the site Trip notes"]);
   });
 });

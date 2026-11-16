@@ -50,14 +50,15 @@ interface SettingFrameProps {
   readonly beside?: boolean;
 }
 
-/** The way back to the default. */
-function Reset({ onReset }: { readonly onReset: () => void }): ReactNode {
+/** The way back to the default, named for its setting: every changed row has one. */
+function Reset({ name, onReset }: { readonly name: string; readonly onReset: () => void }): ReactNode {
   return (
     <Button
       type="button"
       variant="link"
       size="xs"
       className="h-auto min-h-0! border-0 p-0 align-baseline text-[13px] leading-[inherit] font-normal text-muted-foreground underline hover:text-foreground"
+      aria-label={`Reset ${name}`}
       onClick={onReset}
     >
       Reset
@@ -83,7 +84,7 @@ function About({ name, says, fallback, onReset }: Pick<SettingFrameProps, "name"
           {fallback === undefined ? null : (
             <p className="flex items-center gap-2 text-muted-foreground">
               Default: {fallback}
-              {onReset === undefined ? null : <Reset onReset={onReset} />}
+              {onReset === undefined ? null : <Reset name={name} onReset={onReset} />}
             </p>
           )}
         </PopoverDescription>
@@ -160,7 +161,7 @@ export function SettingFrame({
           {onReset === undefined ? null : (
             <>
               {" "}
-              <Reset onReset={onReset} />
+              <Reset name={name} onReset={onReset} />
             </>
           )}
         </p>

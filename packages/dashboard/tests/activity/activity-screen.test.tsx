@@ -149,12 +149,12 @@ describe("the order of the log", () => {
 
 describe("the log of one site", () => {
   // Drift: the row's filter would search for the name the site had then, which finds other sites and misses a renamed one, or keep a text beside the id, which the server refuses.
-  test("Only this site asks for the entries of the id the row holds and drops the text; the mark names the site, and its button shows every site again", async () => {
+  test("a row's button, named Only with the row's site, asks for the entries of the id the row holds and drops the text; the mark names the site, and its button shows every site again", async () => {
     answered.page = SITE_PAGE;
     await draw("/activity?kind=sites&site=notes&after=40");
 
-    await press("Only this site");
-    const only = [window.location.search, asked.at(-1), within(document.body).getByText("Only Field notes").textContent, within(document.body).queryAllByRole("button", { name: "Only this site" }).length];
+    await press("Only Field notes");
+    const only = [window.location.search, asked.at(-1), within(document.body).getByText("Only Field notes").textContent, within(document.body).queryAllByRole("button", { name: /^Only / }).length];
 
     await press("Show every site");
     const every = [window.location.search, asked.at(-1), within(document.body).queryAllByText("Only Field notes").length];
@@ -174,7 +174,7 @@ describe("the log of one site", () => {
     await draw("/activity");
     const before = asked.length;
 
-    fireEvent.click(within(document.querySelector('ul[aria-label="Activity"]') as HTMLElement).getByRole("button", { name: "Only this site" }));
+    fireEvent.click(within(document.querySelector('ul[aria-label="Activity"]') as HTMLElement).getByRole("button", { name: "Only Field notes" }));
     await readAfter(before);
 
     expect([none, window.location.search, asked.at(-1)]).toEqual([0, "?of=abcdefghijkl", "?of=abcdefghijkl"]);

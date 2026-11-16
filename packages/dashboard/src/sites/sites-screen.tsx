@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, linkOptions, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
-import { CopyIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
+import { CopyIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import { openerOf, useKeptFocus, useLiesOver } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
 import { siteActions } from "@/sites/site-actions";
-import { AccessMark, type Reveal, RevealButton, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
+import { AccessMark, LinkButtons, type Reveal, RevealButton, SiteLink, siteColumns, trashColumns } from "@/sites/site-columns";
 import { SitePanel } from "@/sites/site-panel";
 import { SITES_KEY, useSitesPage } from "@/sites/site-queries";
 import { type Ask, type Asked, SiteQuestions } from "@/sites/site-questions";
@@ -128,7 +128,7 @@ function RestoreButton({ site, onRestore }: { readonly site: Site; readonly onRe
   if (site.state !== "trash") return null;
 
   return (
-    <Button variant="outline" size="sm" onClick={onRestore}>
+    <Button variant="outline" size="sm" aria-label={`Restore ${shownName(site)}`} onClick={onRestore}>
       Restore
     </Button>
   );
@@ -183,15 +183,8 @@ function PhoneList({
               </span>
               <span className="flex min-w-0 items-center">
                 <SiteLink site={site} whole={reveal.shows(site)} wraps={reveal.shows(site)} gives={!reveal.shows(site)} className="mr-1 text-muted-foreground" />
-                {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} className="relative -my-2 shrink-0" />}
-                <IconButton label="Copy the link" onClick={() => onCopy(site)} className="relative -my-2 shrink-0">
-                  <CopyIcon />
-                </IconButton>
-                {site.state === "trash" ? null : (
-                  <IconButton label="Open the site" link={<a href={site.url} target="_blank" rel="noreferrer" />} className="relative -my-2 shrink-0">
-                    <ExternalLinkIcon />
-                  </IconButton>
-                )}
+                {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} inList className="relative -my-2 shrink-0" />}
+                <LinkButtons site={site} onCopy={onCopy} className="relative -my-2 shrink-0" />
               </span>
             </div>
             {restore === undefined ? null : <span className="relative">{restore(site)}</span>}
