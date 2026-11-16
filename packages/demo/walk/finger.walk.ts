@@ -39,6 +39,14 @@ const SCREENS: readonly { readonly section: string; readonly controls: (page: Pa
   { section: "Settings", controls: (page) => [page.getByRole("textbox", { name: "Requests per day", exact: true })] },
 ];
 
+/** The menus and lists a phone opens, each by its screen, the control that opens it, and the role of its lines: a list to choose one of, a list to tick in, and a menu of things to do. */
+const MENUS: readonly { readonly section: string; readonly name: string; readonly opener: (page: Page) => Locator; readonly lines: "option" | "menuitem" }[] = [
+  { section: "Sites", name: "Which sites", opener: (page) => page.getByRole("combobox", { name: "Which sites", exact: true }), lines: "option" },
+  { section: "Activity", name: "Download", opener: (page) => page.getByRole("button", { name: "Download", exact: true }), lines: "menuitem" },
+  { section: "Usage", name: "Compare sites", opener: (page) => page.getByRole("combobox", { name: "Compare sites", exact: true }), lines: "option" },
+  { section: "Access", name: "More", opener: (page) => page.getByRole("button", { name: /^More for / }), lines: "menuitem" },
+];
+
 /** What a control is called and how wide and high it is drawn, in whole pixels. */
 async function measured(control: Locator): Promise<readonly [string, number, number]> {
   const box = await control.boundingBox();
@@ -62,6 +70,22 @@ test.describe("on a phone, with a pointer that is not a finger", () => {
       const sizes = await Promise.all(controls.map(measured));
 
       expect(sizes.filter(([, width, height]) => width < FINGER || height < FINGER), "the controls under a finger's size").toEqual([]);
+    });
+  }
+
+  for (const menu of MENUS) {
+    // Drift: the rule for a phone's sizes would reach the button that opens a menu and miss the menu's own lines, which the library draws 28 px high.
+    test(`every line of ${menu.name}, opened on ${menu.section}, is at least ${FINGER} px high`, async ({ page }) => {
+      await arrive(page);
+      if (menu.section !== "Sites") await toSection(page, menu.section);
+      await menu.opener(page).filter({ visible: true }).first().click();
+
+      const lines = page.getByRole(menu.lines);
+      await expect(lines.first()).toBeVisible();
+      // A menu grows into place as it opens: its lines are measured until they have their whole size.
+      const small = (): Promise<number[]> => lines.evaluateAll((all, finger) => all.map((line) => line.getBoundingClientRect().height).filter((height) => height < finger), FINGER);
+
+      await expect.poll(small, "the heights of the lines under a finger's height").toEqual([]);
     });
   }
 

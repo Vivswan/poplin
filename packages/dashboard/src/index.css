@@ -188,6 +188,7 @@
 
 /* On a phone every control is tall enough for a finger. The rule sits outside the layers, so it holds whatever size a screen gave the control. */
 /* A button that opens a menu, a dialog, a sheet, or a hint carries that part's slot name in place of its own, so a button is found by the class every button has. */
+/* A line of an opened menu or list is a control too. */
 @media (max-width: 767.98px) {
   .group\/button,
   [data-slot="popover-trigger"],
@@ -199,7 +200,13 @@
   [data-slot="input"],
   [data-slot="input-group"],
   [data-slot="input-group-control"],
-  [data-slot="select-trigger"] {
+  [data-slot="select-trigger"],
+  [data-slot="select-item"],
+  [data-slot="combobox-item"],
+  [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-checkbox-item"],
+  [data-slot="dropdown-menu-radio-item"],
+  [data-slot="dropdown-menu-sub-trigger"] {
     min-height: 2.5rem;
   }
   .group\/button,
