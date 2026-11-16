@@ -1,6 +1,7 @@
-// Run the live suite against the standing test install: make this run's token, run the tests as a child, and remove the token.
+// Run the live suite against the standing test install of the run's account: make this run's token, run the tests as a child, and remove the token.
 //
-// The child gets the install's domain, the poplin token, and the login in its environment, and the Cloudflare key and account, with which one check reads the login list. Every line it prints passes through here with the hidden values taken out.
+// The child gets the install's domain, or the account's name in its free address for an install without a domain, the poplin token, and the login in its environment,
+// and the Cloudflare key and account, with which one check reads the login list. Every line it prints passes through here with the hidden values taken out.
 // Argument: the JSON object of what the install lacks, as the converge step answered it.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -36,7 +37,8 @@ async function runTests(run: Run, found: Found, token: string, missing: string):
       env: {
         ...kept,
         POPLIN_LIVE: "1",
-        POPLIN_LIVE_DOMAIN: found.layout.domain,
+        // The suite writes every address of the install from the one name its kind has: the domain, or the account's name in its free address.
+        ...(found.kind === "domain" ? { POPLIN_LIVE_DOMAIN: found.layout.domain } : { POPLIN_LIVE_ACCOUNT_ADDRESS: found.layout.account }),
         POPLIN_LIVE_TOKEN: token,
         ...(login === undefined ? {} : { POPLIN_LIVE_LOGIN: login }),
         POPLIN_LIVE_RUN: run.id,

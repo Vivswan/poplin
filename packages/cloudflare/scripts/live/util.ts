@@ -1,12 +1,18 @@
-// What the live scripts share: the account a run acts on, the one way a line leaves the process, and the zone the install lives on.
+// What the live scripts share: the account a run acts on, the one way a line leaves the process, and where the install of that account answers.
 //
-// Every value that names the account, the zone, or a login is hidden before anything is printed: the runner masks it, and each line is rewritten here as well.
+//   POPLIN_LIVE_INSTALL   domain, or absent   the install of the account that holds a domain: its zone is found, and every hostname sits under it
+//                         account address     the install of the account that holds none: the account's free address is read, and its three hosts sit under that
+//
+// Every value that names the account, the zone, the free address, or a login is hidden before anything is printed: the runner masks it, and each line is rewritten here as well.
 
 import { appendFileSync } from "node:fs";
 import * as core from "@actions/core";
+import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 
-import { type CloudflareFailure, type Connection, listZones, type Zone } from "../../src/zone/client";
+import { type AccountAddresses, parseAccountAddresses } from "../../src/zone/address-layout";
+import { type CloudflareFailure, type Connection, callCloudflare, listZones, type Zone } from "../../src/zone/client";
 import { type DomainLayout, parseDomainLayout } from "../../src/zone/layout";
+import type { BoundInstall } from "../../src/zone/zone-binding";
 
 /** The Worker's name on the test account. */
 export const SCRIPT = "poplin";
@@ -22,6 +28,12 @@ const ANNOTATE = { error: core.error, warning: core.warning, notice: core.notice
 
 /** The statuses Cloudflare refuses a token with that lacks a permission. */
 const NOT_PERMITTED: ReadonlySet<number> = new Set([401, 403]);
+
+/** The variable that says which kind of install the run's account holds. */
+const KIND_VARIABLE = "POPLIN_LIVE_INSTALL";
+
+/** Every kind of install a run can be told. */
+const KINDS: ReadonlySet<string> = new Set<BoundInstall["kind"]>(["domain", "account address"]);
 
 /** One run of a live script: the account, the token for the one call, and the ways out of the process. */
 export interface Run {
@@ -56,11 +68,10 @@ export interface Run {
 /** A step that cannot go on: `skipped` for something the account or the token lacks, `failed` for anything else. Neither text quotes Cloudflare. */
 export type Stop = { readonly kind: "skipped"; readonly needs: string } | { readonly kind: "failed"; readonly what: string };
 
-/** The zone an install lives on and its checked layout. */
-export interface Found {
-  readonly zone: Zone;
-  readonly layout: DomainLayout;
-}
+/** The test install of a run's account, by its kind: its checked layout, the hostname its dashboard and its API answer on, and its zone, which an install on the account's free address has none of. */
+export type Found =
+  | { readonly kind: "domain"; readonly zone: Zone; readonly layout: DomainLayout; readonly adminHost: string }
+  | { readonly kind: "account address"; readonly zone: undefined; readonly layout: AccountAddresses; readonly adminHost: string };
 
 /** Tell a stop from what a step answers when it went on. */
 export function isStop(value: object): value is Stop {
@@ -162,12 +173,8 @@ export function reportStop(run: Run, stop: Stop, what: string): number {
   return 1;
 }
 
-/**
- * Find the zone of the install: the one `CLOUDFLARE_ZONE_NAME` names, or the account's only zone.
- *
- * @returns the zone with its name and id hidden, or why there is none
- */
-export async function findInstall(run: Run, env: Readonly<Record<string, string | undefined>> = process.env): Promise<Found | Stop> {
+/** Find the zone of an install with a domain: the one `CLOUDFLARE_ZONE_NAME` names, or the account's only zone. */
+async function findZone(run: Run, env: Readonly<Record<string, string | undefined>>): Promise<Found | Stop> {
   const zones = await listZones(run.connection, run.accountId);
   if (!zones.ok) return stopOf(zones, "Zone: Read");
 
@@ -183,5 +190,30 @@ export async function findInstall(run: Run, env: Readonly<Record<string, string 
   const layout = parseDomainLayout({ domain: zone.name });
   if (!layout.ok) return { kind: "failed", what: `the zone's name is no domain an install can use (${layout.refusal})` };
 
-  return { zone, layout: layout.value };
+  return { kind: "domain", zone, layout: layout.value, adminHost: layout.value.adminHostname };
+}
+
+/** Read the account's free address, under which an install without a domain answers on three hosts. */
+async function findFreeAddress(run: Run): Promise<Found | Stop> {
+  const read = await callCloudflare(run.connection, (api) => new BaseSubdomains(api).get({ account_id: run.accountId }));
+  if (!read.ok) return stopOf(read, "Workers Scripts: Edit");
+
+  // Hidden as the end of a hostname, which is how every line would hold it: the bare name may be a common word, and hiding that would rewrite other text.
+  run.hide(`${read.value.subdomain}.workers.dev`);
+  const layout = parseAccountAddresses({ account_address: read.value.subdomain }, SCRIPT);
+  if (!layout.ok) return { kind: "failed", what: `the account's free address is none an install can use (${layout.refusal})` };
+
+  return { kind: "account address", zone: undefined, layout: layout.value, adminHost: layout.value.adminHost };
+}
+
+/**
+ * Find the test install of the run's account, of the kind `POPLIN_LIVE_INSTALL` names.
+ *
+ * @returns where the install answers, with every name of the zone or of the free address hidden, or why there is none
+ */
+export async function findInstall(run: Run, env: Readonly<Record<string, string | undefined>> = process.env): Promise<Found | Stop> {
+  const kind = env[KIND_VARIABLE] ?? "";
+  if (kind !== "" && !KINDS.has(kind)) return { kind: "failed", what: `${KIND_VARIABLE} names no kind of install` };
+
+  return kind === "account address" ? findFreeAddress(run) : findZone(run, env);
 }

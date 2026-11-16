@@ -1,5 +1,7 @@
 // What the live checks share: a check, what an install may lack, and what a check came to.
 
+import type { LiveAddresses } from "./addresses";
+
 /** Something a check needs that an install, its account, or a run may lack. `person` is always lacking: such a check is done by hand. */
 type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "kept-key" | "person";
 
@@ -30,16 +32,17 @@ export interface Draft {
   readonly text: string;
 }
 
-/** A site of the run that checks only read, with its page's whole body. */
+/** A site of the run that checks only read, with its page's whole body, and the one file it holds beside the page: its path from the page, and its whole text. */
 export interface Shared {
   readonly site: LiveSite;
   readonly text: string;
+  readonly beside: { readonly path: string; readonly text: string };
 }
 
 /** An install as an outsider and a token holder reach it. */
 export interface Bench {
-  /** The domain every hostname of the install sits under. */
-  readonly domain: string;
+  /** Every address of the install as a stranger types it, in the layout the install has. */
+  readonly addresses: LiveAddresses;
 
   /** Where the dashboard, the login, and the API answer. */
   readonly admin: string;

@@ -5,7 +5,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { type Bench, type Check, type LiveSite, Skip } from "../records";
-import { expectRefused, GHOST_ID, labelAddress, siteOf } from "../util";
+import { expectRefused, GHOST_ID, siteOf, under } from "../util";
 
 /** The content type of a page as the install stores it. */
 const HTML = /^text\/html\b/;
@@ -55,15 +55,15 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
     needs: ["token"],
     run: async (bench) => {
       const { site, text } = await bench.shared("private");
-      expect(site).toMatchObject({ access: "private", state: "live", live_version: 1, url: labelAddress(bench.domain, site.label, "p").slice(0, -1) });
+      expect(site).toMatchObject({ access: "private", state: "live", live_version: 1, url: bench.addresses.answered(site.label, "p") });
 
-      await expectRefused(bench.domain, await bench.visit(site.url), text);
+      await expectRefused(bench.addresses, await bench.visit(site.url), text);
 
-      const real = await bench.visit(labelAddress(bench.domain, site.id, "u"));
-      const ghost = await bench.visit(labelAddress(bench.domain, GHOST_ID, "u"));
+      const real = await bench.visit(bench.addresses.site(site.id, "u"));
+      const ghost = await bench.visit(bench.addresses.site(GHOST_ID, "u"));
       expect(real.status).toBe(ghost.status);
       expect(real.headers.get("Location")?.replaceAll(site.id, GHOST_ID)).toBe(ghost.headers.get("Location") ?? undefined);
-      await expectRefused(bench.domain, real, text);
+      await expectRefused(bench.addresses, real, text);
     },
   },
   {
@@ -72,7 +72,8 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
     needs: ["token"],
     run: async (bench) => {
       const { site, text } = await bench.shared("unlisted");
-      expect(site).toMatchObject({ access: "unlisted", url: labelAddress(bench.domain, site.label, "u").slice(0, -1) });
+      const { addresses } = bench;
+      expect(site).toMatchObject({ access: "unlisted", url: addresses.answered(site.label, "u") });
 
       const response = await expectOpens(bench, site.url, text);
       expect(response.headers.get("Content-Type")).toMatch(HTML);
@@ -80,12 +81,33 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
       expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
       expect(response.headers.get("X-Robots-Tag")).toBe("noindex");
-      expect(response.headers.get("Content-Security-Policy")).toBe(`frame-ancestors https://*.${bench.domain}`);
+      expect(response.headers.get("Content-Security-Policy")).toBe(`frame-ancestors ${addresses.frameSources}`);
       expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
 
-      await expectOpens(bench, labelAddress(bench.domain, site.id, "u"), text);
-      await expectOpens(bench, labelAddress(bench.domain, `another-name--${site.id}`, "u"), text);
-      await expectOpens(bench, labelAddress(bench.domain, site.label, undefined), text);
+      await expectOpens(bench, addresses.site(site.id, "u"), text);
+      await expectOpens(bench, addresses.site(`another-name--${site.id}`, "u"), text);
+      // A layout whose host says the side of a site has no address without a letter.
+      const bare = addresses.letterless(site.label);
+      if (bare !== undefined) await expectOpens(bench, bare, text);
+    },
+  },
+  {
+    id: "relative-file",
+    name: "a file beside a site's page opens at the address a relative link of the page leads to, and an address without its last slash moves to the one with it",
+    needs: ["token"],
+    run: async (bench) => {
+      const { site, beside } = await bench.shared("unlisted");
+      const page = bench.addresses.site(site.label, "u");
+
+      // Only a layout where a site is a path has such an address: under it a browser would resolve the page's links against the host's root.
+      const unslashed = bench.addresses.unslashed(site.label, "u");
+      if (unslashed !== undefined) {
+        const moved = await bench.visit(`${unslashed}?from=link`);
+        // Compared here and told as one word: a failure prints no address.
+        expect([moved.status, moved.headers.get("Location") === `${page}?from=link`]).toEqual([302, true]);
+      }
+
+      await expectOpens(bench, new URL(beside.path, page).href, beside.text);
     },
   },
   {
@@ -120,7 +142,7 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       siteOf(await bench.cli("set", site.label, "--unlisted"));
       const after = await bench.visit(address);
       expect(after.status).toBe(404);
-      await expectRefused(bench.domain, after, text);
+      await expectRefused(bench.addresses, after, text);
     },
   },
   {
@@ -138,7 +160,7 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       expect({ status: first.status, type: first.headers.get("Content-Type") }).toEqual({ status: 200, type: expect.stringMatching(HTML) });
 
       // A browser registers a worker only from a script's media type: the install sends `nosniff` with every file.
-      const worker = await bench.visit(`${address}/sw.js`);
+      const worker = await bench.visit(under(address, "sw.js"));
       expect({ status: worker.status, type: worker.headers.get("Content-Type") }).toEqual({ status: 200, type: expect.stringMatching(SCRIPT) });
     },
   },
@@ -167,7 +189,7 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       const name = `${site.name}-new`;
 
       const renamed = siteOf(await bench.cli("set", site.label, "--name", name));
-      expect(renamed).toMatchObject({ id: site.id, name, url: labelAddress(bench.domain, `${name}--${site.id}`, "u").slice(0, -1) });
+      expect(renamed).toMatchObject({ id: site.id, name, url: bench.addresses.answered(`${name}--${site.id}`, "u") });
       await expectOpens(bench, renamed.url, text);
       await expectOpens(bench, site.url, text);
     },
@@ -183,7 +205,7 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       const linked = siteOf(await bench.cli("new-link", site.label));
       expect(linked.id).not.toBe(site.id);
       await expectOpens(bench, linked.url, text);
-      await expectRefused(bench.domain, await bench.visit(site.url), text);
+      await expectRefused(bench.addresses, await bench.visit(site.url), text);
     },
   },
   {
@@ -195,8 +217,8 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       const site = await bench.publish({ access: "unlisted", text });
 
       const hidden = siteOf(await bench.cli("set", site.label, "--private"));
-      expect(hidden).toMatchObject({ id: site.id, access: "private", url: labelAddress(bench.domain, site.label, "p").slice(0, -1) });
-      await expectRefused(bench.domain, await bench.visit(site.url), text);
+      expect(hidden).toMatchObject({ id: site.id, access: "private", url: bench.addresses.answered(site.label, "p") });
+      await expectRefused(bench.addresses, await bench.visit(site.url), text);
 
       expect(siteOf(await bench.cli("set", site.label, "--unlisted")).url).toBe(site.url);
       await expectOpens(bench, site.url, text);
@@ -211,7 +233,7 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
       const site = await bench.publish({ access: "unlisted", text });
 
       expect(siteOf(await bench.cli("delete", site.label)).state).toBe("trash");
-      await expectRefused(bench.domain, await bench.visit(site.url), text);
+      await expectRefused(bench.addresses, await bench.visit(site.url), text);
 
       const trash = await bench.cli("list", "--trash");
       expect((trash.value.sites as readonly LiveSite[]).map((listed) => listed.id)).toContain(site.id);
@@ -249,13 +271,13 @@ export const LIFECYCLE_CHECKS: readonly Check[] = [
         stored: COPIED_FILES,
         files: COPIED_FILES,
       });
-      await expectRefused(bench.domain, await bench.visit(copy.url), text);
+      await expectRefused(bench.addresses, await bench.visit(copy.url), text);
 
       // The copy's files are read as a stranger reads them, once the copy is unlisted: its first page, and the first and the last of the others.
       const opened = siteOf(await bench.cli("set", copy.label, "--unlisted"));
       expect(opened.id === copy.id).toBe(true);
       await expectOpens(bench, opened.url, text);
-      for (const at of [0, pages.length - 1]) await expectOpens(bench, `${opened.url}/page-${at}.html`, pages[at] ?? "");
+      for (const at of [0, pages.length - 1]) await expectOpens(bench, under(opened.url, `page-${at}.html`), pages[at] ?? "");
 
       const bytes = [text, ...pages].reduce((sum, page) => sum + page.length, 0);
       bench.say(`duplicate: ${COPIED_FILES} files, ${bytes} bytes, ${rounds} rounds, ${took} ms`);

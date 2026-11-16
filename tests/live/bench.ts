@@ -12,6 +12,7 @@ import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings"
 import { parseLogins } from "../../packages/core/src/auth/logins";
 import { run } from "../../packages/cli/src/commands/run";
 import { openSession } from "../../packages/cli/tests/mcp/support/session";
+import type { LiveAddresses } from "./addresses";
 import type { Bench, Draft, LiveSite, Missing, Ran, Shared } from "./records";
 
 /** What every site name a live run makes starts with, whatever the run: the sweep removes each such site. */
@@ -38,13 +39,16 @@ const SETTINGS = { trash_days: 1, visitor_requests_per_minute: 120 };
 /** When every site of a run moves to the trash by itself, so a run that was killed leaves nothing for good. */
 const EXPIRES = "1d";
 
+/** The file a site the checks only read holds beside its page, in a folder of its own: a page's relative link to it stays inside the site only where the site's address ends in a slash. */
+const BESIDE = { folder: "notes", file: "note.txt", text: "a file beside the page\n" } as const;
+
 /** Where a listing goes on, as an address holds it: the `next` of the page before a key a part, and no key for the first page. */
 type Cursor = Readonly<Partial<Record<"after_updated_at" | "after_id" | "after_name" | "after_access", string>>>;
 
 /** What a bench is opened with. */
 interface BenchParts {
-  /** The domain every hostname of the install sits under. */
-  readonly domain: string;
+  /** Every address of the install as a stranger types it. */
+  readonly addresses: LiveAddresses;
 
   /** The token the CLI and the MCP server present; absent, every command answers that there is no login. */
   readonly token: string | undefined;
@@ -120,7 +124,7 @@ function isRepeatable(address: string, init: RequestInit): boolean {
  * @returns the bench, its sweep, and its close; nothing is sent until a check asks
  */
 export function openBench(parts: BenchParts): OpenBench {
-  const admin = `https://poplin.${parts.domain}`;
+  const { admin } = parts.addresses;
   const scratch = mkdtempSync(join(tmpdir(), "poplin-live-"));
   const prefix = `${SWEPT_PREFIX}${parts.run}`;
   let made = 0;
@@ -189,13 +193,15 @@ export function openBench(parts: BenchParts): OpenBench {
     return path;
   };
 
-  const publish = async (draft: Draft): Promise<LiveSite> => {
-    const name = `${prefix}-${made + 1}`;
-    const ran = await cli("publish", folder(draft.text), "--name", name, `--${draft.access}`, "--expires", EXPIRES);
-    if (ran.code !== 0 || !isRecord(ran.value.site)) throw new Error(`publishing a ${draft.access} site exited ${ran.code}`);
+  const publishFolder = async (path: string, access: Draft["access"]): Promise<LiveSite> => {
+    const name = `${prefix}-${made}`;
+    const ran = await cli("publish", path, "--name", name, `--${access}`, "--expires", EXPIRES);
+    if (ran.code !== 0 || !isRecord(ran.value.site)) throw new Error(`publishing a ${access} site exited ${ran.code}`);
 
     return ran.value.site as unknown as LiveSite;
   };
+
+  const publish = (draft: Draft): Promise<LiveSite> => publishFolder(folder(draft.text), draft.access);
 
   // Each publish and its removal writes some 35 rows to the install's database, so the checks that change nothing read one site between them.
   const read = new Map<Draft["access"], Shared>();
@@ -204,7 +210,10 @@ export function openBench(parts: BenchParts): OpenBench {
     if (held !== undefined) return held;
 
     const text = `<p>a ${access} page the checks read</p>`;
-    const made = { site: await publish({ access, text }), text };
+    const path = folder(text);
+    mkdirSync(join(path, BESIDE.folder));
+    writeFileSync(join(path, BESIDE.folder, BESIDE.file), BESIDE.text);
+    const made = { site: await publishFolder(path, access), text, beside: { path: `${BESIDE.folder}/${BESIDE.file}`, text: BESIDE.text } };
     read.set(access, made);
 
     return made;
@@ -270,7 +279,7 @@ export function openBench(parts: BenchParts): OpenBench {
 
   return {
     bench: {
-      domain: parts.domain,
+      addresses: parts.addresses,
       admin,
       prefix,
       missing: parts.missing,

@@ -1,4 +1,4 @@
-// Whether the test account pays for anything: the plan of the install's zone, and every subscription of the account.
+// Whether the test account pays for anything: the plan of the install's zone, where it has one, and every subscription of the account.
 //
 //   GET /zones/{id}                      needs Zone: Read       a plan with a price, or one named as a paid plan, stops the run
 //   GET /accounts/{id}/subscriptions     needs Billing: Read    a subscription whose price is not 0 stops the run
@@ -30,20 +30,26 @@ interface FreePlans {
   readonly ended: number;
 }
 
-/**
- * Check that the test account pays for nothing.
- *
- * @param zone - the install's zone, with the plan Cloudflare listed it under
- * @returns the counts of the subscriptions read; `failed` for a zone on a paid plan, or a subscription that has not ended and whose price is not 0, naming each rate plan's id and price; `skipped` for a token without the permission of a reading
- */
-export async function readFreePlans(run: Run, zone: Zone): Promise<FreePlans | Stop> {
+/** Say why a zone is not on the Free plan; `undefined` for one that is. */
+async function paidZone(run: Run, zone: Zone): Promise<Stop | undefined> {
   if (zone.plan !== "free") return { kind: "failed", what: `the zone is on the ${zone.plan} plan, not the Free plan` };
 
   // A plan Cloudflare names in no known way reads as Free above, so its price is asked for as well.
   const read = await callCloudflare(run.connection, (api) => new BaseZones(api).get({ zone_id: zone.id }));
   if (!read.ok) return stopOf(read, PERMISSIONS.zone);
 
-  if ((read.value.plan?.price ?? 0) > 0) return { kind: "failed", what: "the zone's plan has a price, so it is not the Free plan" };
+  return (read.value.plan?.price ?? 0) > 0 ? { kind: "failed", what: "the zone's plan has a price, so it is not the Free plan" } : undefined;
+}
+
+/**
+ * Check that the test account pays for nothing.
+ *
+ * @param zone - the install's zone, with the plan Cloudflare listed it under; `undefined` for an install without a domain, of which the subscriptions alone are read
+ * @returns the counts of the subscriptions read; `failed` for a zone on a paid plan, or a subscription that has not ended and whose price is not 0, naming each rate plan's id and price; `skipped` for a token without the permission of a reading
+ */
+export async function readFreePlans(run: Run, zone: Zone | undefined): Promise<FreePlans | Stop> {
+  const paid = zone === undefined ? undefined : await paidZone(run, zone);
+  if (paid !== undefined) return paid;
 
   const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseSubscriptions(api).get({ account_id: run.accountId })));
   if (!listed.ok) return stopOf(listed, PERMISSIONS.subscriptions);

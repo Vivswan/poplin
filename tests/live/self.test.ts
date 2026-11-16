@@ -14,7 +14,7 @@ import { CHECKS } from "./checks";
 import { DRILL_COST } from "./checks/backup";
 import type { Bench, Missing, Outcome } from "./records";
 import { runCheck } from "./report";
-import { FAKE_DOMAIN, type FakeSwitches, openFake } from "./support/fake-install";
+import { type FakeSwitches, openFake } from "./support/fake-install";
 
 /** Every check a person makes. */
 const BY_HAND = ["L2", "L3", "L4-in", "L5b", "L6", "L7", "L9"];
@@ -37,6 +37,8 @@ const WITH_TOKEN = [
   "backup-drill",
   "users-follow",
   "outside-page",
+  "relative-file",
+  "hosts-apart",
   "L4",
   "L5",
   "L10",
@@ -49,7 +51,7 @@ const MANY_FILES = 7;
 const RUN_MS = 30_000;
 
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
-const CHECKS_ROWS = 864;
+const CHECKS_ROWS = 866;
 
 /** What a run says when it sends a stranger's request a second time. */
 const SENT_AGAIN = "a stranger's request was cut off before any answer, and was sent once more";
@@ -59,6 +61,9 @@ const OPENED: (() => void)[] = [];
 
 /** The checks skipped on an install with no login in front. */
 const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "users-follow": "skipped" } as const;
+
+/** The checks a run on an install without a domain skips: each needs a rule or a switch of a zone. */
+const ZONE_CHECKS = { crawler: "skipped", "burst-rate-rule": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
 
 /** One fake install, what the run knows of it, and the checks that do not pass on it, by id. `L1` and `dashboard-login` are skipped unless the login is in front, and `demo` unless the install holds the demo's site: whole, or without its worker. */
 type Case = readonly [
@@ -72,8 +77,20 @@ type Case = readonly [
 const CASES: readonly Case[] = [
   ["an install with no login in front passes every check but the login's and a person's", {}, {}, NO_LOGIN],
   ["an install behind a login passes the login's checks too", { access: true }, {}, {}],
+  ["an install without a domain, behind a login, passes every check at the addresses of its layout, and skips the checks of a zone's rules", { noDomain: true, access: true }, {}, ZONE_CHECKS],
+  ["an install without a domain and with no login in front skips the login's checks too", { noDomain: true }, {}, { ...NO_LOGIN, ...ZONE_CHECKS }],
+  ["an install without a domain that holds the demo's site passes the demo's check at the site's path", { noDomain: true, demoSite: "whole" }, {}, { ...NO_LOGIN, ...ZONE_CHECKS }],
+  [
+    "an install without a domain that opens a private site's address with no login behind the request fails the checks of a private site",
+    { noDomain: true, leaksPrivate: true },
+    {},
+    { ...NO_LOGIN, ...ZONE_CHECKS, private: "failed", duplicate: "failed", L5: "failed" },
+  ],
   ["an install whose login stands in front of the login path alone fails the check of the whole dashboard", { access: true, loginPathOnly: true }, {}, { "dashboard-login": "failed" }],
   ["an install whose login stands in front of its setup page too fails the check of that open path", { access: true, setupBehindLogin: true }, {}, { "setup-open": "failed" }],
+  ["an install whose dashboard lets a site's origin read its answers fails the check of the dashboard's data asked for by a site", { grantsOrigin: true }, {}, { ...NO_LOGIN, "data-cross-origin": "failed" }],
+  ["an install whose site hostnames answer the API fails the check that keeps the hosts apart, with a domain and without", { apiOnSiteHosts: true }, {}, { ...NO_LOGIN, "hosts-apart": "failed" }],
+  ["an install without a domain whose site hosts answer the API fails the same check", { noDomain: true, apiOnSiteHosts: true }, {}, { ...NO_LOGIN, ...ZONE_CHECKS, "hosts-apart": "failed" }],
   ["an install that holds the demo's site passes the demo's check", { demoSite: "whole" }, {}, NO_LOGIN],
   ["a demo's site that lost its worker fails the demo's check", { demoSite: "no-worker" }, {}, { ...NO_LOGIN, demo: "failed" }],
   ["an install whose routes miss the public word skips the public name's address", { noPublicRoute: true }, {}, { ...NO_LOGIN, "public-name": "skipped" }],
@@ -190,7 +207,7 @@ async function drillOn(refusal: Refusal | undefined): Promise<{ readonly result:
 
     return meter.fetch(input, init);
   };
-  const parts = { domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing: {}, fetch: counted, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES };
+  const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: counted, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES };
   const { bench, close } = openBench({ ...parts, say: (text) => said.push(text) });
   OPENED.push(close);
 
@@ -231,7 +248,7 @@ describe("the live checks, against a local fake", () => {
     const rows = meterRows(watched, ROW_CEILINGS.checks);
     const missing: Missing = {};
     const { bench, settle, sweep, close } = openBench({
-      domain: FAKE_DOMAIN,
+      addresses: fake.addresses,
       token: switches.noToken === true ? undefined : fake.token,
       run: "selftest",
       missing,
@@ -269,7 +286,7 @@ describe("the live checks, against a local fake", () => {
     const fake = await openFake({ access: true });
     const rows = meterRows(fake.fetch, ROW_CEILINGS.checks);
     const missing: Missing = {};
-    const { bench, settle, sweep, close } = openBench({ domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, say: () => undefined, manyFiles: MANY_FILES, loginList: fake.loginList });
+    const { bench, settle, sweep, close } = openBench({ addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, say: () => undefined, manyFiles: MANY_FILES, loginList: fake.loginList });
     OPENED.push(close);
     await settle();
     Object.assign(missing, await probeMissing(bench, { "many-files": "asked" }));
@@ -316,7 +333,7 @@ describe("the live checks, against a local fake", () => {
       cut += 1;
       throw Object.assign(new TypeError("The socket connection was closed unexpectedly"), { code: "ECONNRESET" });
     };
-    const { bench, close } = openBench({ domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing: {}, fetch: cutting, pause: fake.pause, now: fake.now, say: (text) => said.push(text), manyFiles: MANY_FILES });
+    const { bench, close } = openBench({ addresses: fake.addresses, token: fake.token, run: "selftest", missing: {}, fetch: cutting, pause: fake.pause, now: fake.now, say: (text) => said.push(text), manyFiles: MANY_FILES });
     OPENED.push(close);
 
     const check = CHECKS.find((one) => one.id === id);
@@ -330,7 +347,7 @@ describe("the live checks, against a local fake", () => {
     const fake = await openFake(switches);
     const said: string[] = [];
     const { bench, close } = openBench({
-      domain: FAKE_DOMAIN,
+      addresses: fake.addresses,
       token: fake.token,
       run: "selftest",
       missing: {},
