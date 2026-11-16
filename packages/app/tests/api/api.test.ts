@@ -240,13 +240,6 @@ function installOf(install: ApiInstall): Install {
 }
 
 describe("createApi", () => {
-  // Drift: a client reads a public site's address with the word the install answers here; an answer without it, or with another install's, would name the wrong site or none.
-  test.each(["page", "site"])("whoami carries the word the install's public addresses end in: %j", async (publicWord) => {
-    const install = await openApi({}, LIMITS, publicWord);
-
-    expect((await answered(install.routes.whoami.$get({ query: {} }))).body.public_word).toBe(publicWord);
-  });
-
   // Drift: `whoami` is where the CLI and an agent learn that a newer version is out. An answer without the release, or with one on an install that knows none, would leave `poplin doctor` silent or wrong.
   test("whoami carries the newer release once the install has learned of one, and no such key before", async () => {
     const install = await openApi();

@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { type ApiInstall, answered, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
+import { type ApiInstall, type LayoutInput, answered, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
 import { words } from "./command-line";
@@ -124,10 +124,10 @@ function assertNoToken(ran: Ran, tokens: readonly string[]): void {
  *
  * Every run is checked for a printed token before it is handed back.
  *
- * @param publicWord - the word the install's public addresses end in, in place of `page`
+ * @param layout - how the install says its site addresses are laid out, in place of hostnames that end in `page`
  */
-export async function openBench(publicWord?: string): Promise<Bench> {
-  const install = await openApi(undefined, undefined, publicWord);
+export async function openBench(layout?: LayoutInput): Promise<Bench> {
+  const install = await openApi(undefined, undefined, layout);
   const home = scratch();
   const sent: string[] = [];
   let stopping = new AbortController();

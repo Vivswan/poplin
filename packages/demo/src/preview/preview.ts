@@ -228,7 +228,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
 
 function apiMount(world: World, version: string): Mount {
   const { database } = world.install;
-  const said = { version, publicWord: DEFAULT_PUBLIC_WORD, report: (error: unknown) => console.error("preview: an API request failed", error) };
+  const said = { version, layout: { kind: "hostname" as const, public_word: DEFAULT_PUBLIC_WORD }, report: (error: unknown) => console.error("preview: an API request failed", error) };
   const api = createApi({ ...world.install, ...said, readToken: (id) => database.getToken(id), limits: API_LIMITS, rebuild: REBUILD, ...countsOf(world) });
 
   return { prefix: "/api", origin: ADMIN_ORIGIN, base: "/api", holds: "json", answer: api.fetch };

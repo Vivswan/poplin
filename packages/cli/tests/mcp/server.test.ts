@@ -15,6 +15,15 @@ const LISTING_BUDGET = 7000;
 /** An id in the form of a site id that no site has. */
 const NO_SITE = "zzzzzzzzzzzz";
 
+/** The layout of an install whose public addresses end in `page`. */
+const PAGE = { kind: "hostname", public_word: "page" } as const;
+
+/** The layout of an install whose public addresses end in `site`. */
+const SITE = { kind: "hostname", public_word: "site" } as const;
+
+/** The layout of an install that keeps its sites at paths on two hosts. */
+const PATHS = { kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" } as const;
+
 /** The benches a test opened, closed after it. */
 const OPEN: McpBench[] = [];
 
@@ -29,8 +38,8 @@ interface Site {
   readonly addresses: { readonly site: string; readonly public: string | null };
 }
 
-async function open(env?: Readonly<Record<string, string | undefined>>, publicWord?: string): Promise<McpBench> {
-  const bench = await openMcp(folderOf("home", {}), env, publicWord);
+async function open(env?: Readonly<Record<string, string | undefined>>, layout?: Parameters<typeof openMcp>[2]): Promise<McpBench> {
+  const bench = await openMcp(folderOf("home", {}), env, layout);
   OPEN.push(bench);
 
   return bench;
@@ -204,20 +213,25 @@ describe("the MCP server", () => {
     expect([answer.error, answer.text]).toEqual([true, `not_json: the answer is plain text, status 503: ${sentence}`]);
   });
 
-  // Drift: a tool reads a site as its command does. A public site's address ends in a word only the install knows; a tool that guessed it would update or delete the site of another public name.
+  // Drift: a tool reads a site as its command does. Only the install knows how its addresses are laid out; a tool that guessed would update or delete the site of another public name, or of another install.
   test.each([
-    ["page", "https://LABEL-p-poplin.example.com/", ["GET /api/sites/LABEL"]],
-    ["page", "https://LABEL-u-poplin.example.com/", ["GET /api/sites/LABEL"]],
-    ["page", "https://notes-page.example.com/", ["GET /api/whoami", "GET /api/sites/notes"]],
-    ["site", "https://notes-site.example.com/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
-    ["site", "ID", ["GET /api/sites/ID"]],
-    ["site", "LABEL", ["GET /api/sites/LABEL"]],
-    ["site", "notes", ["GET /api/sites/notes"]],
-    ["page", "https://notes-site.example.com/", ["GET /api/whoami"]],
-    ["site", "https://notes-page.example.com/", ["GET /api/whoami"]],
-    ["page", "https://notes-page.example.org/", []],
-  ] as const)("on an install whose public word is %j, the site %s is asked for as the command asks: %j", async (publicWord, form, requests) => {
-    const bench = await open(undefined, publicWord);
+    [PAGE, "https://LABEL-p-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    [PAGE, "https://LABEL-u-poplin.example.com/", ["GET /api/sites/LABEL"]],
+    [PAGE, "https://notes-page.example.com/", ["GET /api/whoami", "GET /api/sites/notes"]],
+    [SITE, "https://notes-site.example.com/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
+    [SITE, "ID", ["GET /api/sites/ID"]],
+    [SITE, "LABEL", ["GET /api/sites/LABEL"]],
+    [SITE, "notes", ["GET /api/sites/notes"]],
+    [PATHS, "https://private.example.net/LABEL/", ["GET /api/whoami", "GET /api/sites/LABEL"]],
+    [PATHS, "https://sites.example.net/notes/guide", ["GET /api/whoami", "GET /api/sites/notes"]],
+    [PAGE, "https://notes-site.example.com/", ["GET /api/whoami"]],
+    [SITE, "https://notes-page.example.com/", ["GET /api/whoami"]],
+    [PAGE, "https://notes-page.example.org/", []],
+    [PAGE, "https://sites.example.net/LABEL/", ["GET /api/whoami"]],
+    [PATHS, "https://sites.example.org/LABEL/", ["GET /api/whoami"]],
+    [PATHS, "https://private.example.net/notes/", ["GET /api/whoami"]],
+  ] as const)("on an install laid out as %j, the site %s is asked for as the command asks: %j", async (layout, form, requests) => {
+    const bench = await open(undefined, layout);
     const folder = folderOf("report", { "index.html": "<title>Report</title>" });
     const site = siteOf(await bench.call("publish_site", { path: folder, access: "public", public_name: "notes" }));
     const typed = form.replace("LABEL", site.label).replace("ID", site.id);
