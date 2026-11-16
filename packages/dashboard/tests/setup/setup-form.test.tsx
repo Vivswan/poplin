@@ -85,6 +85,21 @@ describe("a refusal", () => {
     expect(refused.closest('[data-slot="field"]')?.textContent).toContain(sentence);
   });
 
+  // Drift: the UI library would check a box by a rule of the browser's, an email's form or a box that must be filled, and mark it as refused at Enter with no sentence under it, while the server's refusal stands at another box.
+  test("marks no box the server did not refuse: an email typed wrong and a token typed and emptied stay unmarked at Enter", async () => {
+    const page = drawn("login", new Refused({ code: "refused", about: "token", sentence: "Paste an account token first." }));
+    fireEvent.change(box(page, "Account token"), { target: { value: "one" } });
+    fireEvent.change(box(page, "Account token"), { target: { value: "" } });
+    fireEvent.keyDown(box(page, "Account token"), { key: "Enter" });
+    fireEvent.change(box(page, "Your email"), { target: { value: "wrong" } });
+    fireEvent.keyDown(box(page, "Your email"), { key: "Enter" });
+    await act(async () => {
+      fireEvent.click(page.getByRole("button", { name: "Repair" }));
+    });
+
+    expect([box(page, "Account token").getAttribute("aria-invalid"), box(page, "Your email").getAttribute("aria-invalid"), page.getAllByRole("alert").length]).toEqual(["true", null, 1]);
+  });
+
   // Drift: a refusal about no box, such as too many tries, would not be said at all, or the token would stay in its box after it was sent.
   test("about no box is said over the button; the typed domain and email stay and the token is gone", async () => {
     const page = drawn("first", new Refused({ code: "too_many_tries", about: null, sentence: "Too many tries. Wait a minute." }));

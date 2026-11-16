@@ -1,6 +1,6 @@
 // The dialog that changes how a site is named: its title, which the dashboard shows first, and its name, which its link is written with. Each field says its own refusal, with what was typed kept.
 
-import { type FormEvent, type ReactNode, type Ref, type RefObject, useId, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, type Ref, type RefObject, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -59,6 +59,7 @@ function NamingField({
   hint,
   placeholder,
   maxLength,
+  required = false,
   first = false,
   field,
 }: {
@@ -69,29 +70,25 @@ function NamingField({
   readonly hint: string;
   readonly placeholder?: string;
   readonly maxLength?: number;
+  readonly required?: boolean;
   readonly first?: boolean;
   readonly field?: Ref<HTMLInputElement>;
 }): ReactNode {
-  const id = useId();
-  const saysId = `${id}-says`;
-
   return (
-    <Field data-invalid={refusal !== undefined}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    <Field invalid={refusal !== undefined}>
+      <FieldLabel>{label}</FieldLabel>
       <Input
         ref={field}
-        id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        aria-invalid={refusal !== undefined}
-        aria-describedby={saysId}
         placeholder={placeholder}
         autoComplete="off"
         spellCheck={false}
         maxLength={maxLength}
+        aria-required={required}
         autoFocus={first}
       />
-      {refusal === undefined ? <FieldDescription id={saysId}>{hint}</FieldDescription> : <FieldError id={saysId}>{refusal}</FieldError>}
+      {refusal === undefined ? <FieldDescription>{hint}</FieldDescription> : <FieldError>{refusal}</FieldError>}
     </Field>
   );
 }
@@ -155,8 +152,12 @@ export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDial
             first
             field={fields.title}
           />
-          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={refusalAt("name")} hint={HINTS.name} maxLength={LONGEST_NAME} field={fields.name} />
-          {refusal?.about === null ? <FieldError>{refusal.sentence}</FieldError> : null}
+          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={refusalAt("name")} hint={HINTS.name} maxLength={LONGEST_NAME} required field={fields.name} />
+          {refusal?.about === null ? (
+            <Field invalid>
+              <FieldError>{refusal.sentence}</FieldError>
+            </Field>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel

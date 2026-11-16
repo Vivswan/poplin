@@ -1,9 +1,10 @@
 // One setting of the Settings screen as a row. A wide column has the name at the left, with one short sentence and the default under it, and the control at the right.
 // A narrow column keeps the sentence and the default behind a "?" beside the name. The narrowest one, a phone's, has a field under its name and a switch beside it.
 
+import { Field } from "@base-ui/react/field";
 import { cn } from "cn";
 import { CircleHelpIcon, TriangleAlertIcon } from "lucide-react";
-import { type ReactNode, useLayoutEffect } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
@@ -43,8 +44,11 @@ interface SettingFrameProps {
   /** The control, at its own width. */
   readonly children: ReactNode;
 
-  /** The line under the control, drawn only while it has something to say: a refusal. The control is described by it, whatever kind of control it is. */
+  /** The line under the control, drawn only while it has something to say: a refusal, or a plain line. */
   readonly under?: ReactNode;
+
+  /** `true` while the value is refused: the control is marked so. */
+  readonly refused?: boolean;
 
   /** `true` for a switch: on a phone it stays beside its name, where a field goes under it. */
   readonly beside?: boolean;
@@ -94,15 +98,16 @@ function About({ name, says, fallback, onReset }: Pick<SettingFrameProps, "name"
 }
 
 /** The mark after a control the host warns about: pointing at it or pressing it opens what the host says. */
-function Warnings({ warnings }: { readonly warnings: readonly string[] }): ReactNode {
+function Warnings({ name, warnings }: { readonly name: string; readonly warnings: readonly string[] }): ReactNode {
   return (
     <Popover>
       <PopoverTrigger
         openOnHover
-        render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Warning" className="shrink-0 text-warn hover:text-warn" />}
+        render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Warning for ${name}`} className="shrink-0 text-warn hover:text-warn" />}
       >
         <TriangleAlertIcon />
       </PopoverTrigger>
+      <Field.Description className="sr-only">{warnings.join(" ")}</Field.Description>
       <PopoverContent align="end" className="gap-1.5">
         <PopoverTitle>Warning</PopoverTitle>
         <PopoverDescription render={<div />} className="flex flex-col gap-1.5 text-popover-foreground">
@@ -127,20 +132,16 @@ export function SettingFrame({
   warnings = [],
   children,
   under,
+  refused = false,
   beside = false,
 }: SettingFrameProps): ReactNode {
   const sentences = says.filter((sentence) => sentence !== "");
-  const underId = `${controlId}-under`;
-  // The control is drawn by the caller, in one of many kinds: the line under it is named at whatever holds the control's id once both are drawn.
-  useLayoutEffect(() => {
-    const control = document.getElementById(controlId);
-    if (under === undefined) control?.removeAttribute("aria-describedby");
-    else control?.setAttribute("aria-describedby", underId);
-  });
+  const about = `${sentences.join(" ")}${fallback === undefined ? "" : ` (Default: ${fallback})`}`;
 
   return (
-    <div
+    <Field.Root
       id={anchor}
+      invalid={refused}
       className={cn(
         "-mx-3 flex gap-x-6 gap-y-2 rounded-lg px-3 py-2.5 motion-safe:transition-colors",
         beside ? "items-center justify-between" : "flex-col",
@@ -150,14 +151,13 @@ export function SettingFrame({
     >
       <div className="min-w-0">
         <div className="flex items-center gap-1">
-          <h3 id={`${controlId}-label`} className="leading-6 font-semibold">
+          <Field.Label nativeLabel={false} render={(props) => <h3 {...props} />} id={`${controlId}-label`} className="leading-6 font-semibold">
             {name}
-          </h3>
+          </Field.Label>
           {sentences.length === 0 && fallback === undefined ? null : <About name={name} says={sentences} fallback={fallback} onReset={onReset} />}
         </div>
         <p className={cn("text-muted-foreground", WIDE_ONLY)}>
-          {sentences.join(" ")}
-          {fallback === undefined ? null : ` (Default: ${fallback})`}
+          {about === "" ? null : <Field.Description render={<span />}>{about}</Field.Description>}
           {onReset === undefined ? null : (
             <>
               {" "}
@@ -169,14 +169,10 @@ export function SettingFrame({
       <div className="flex max-w-full min-w-0 flex-col gap-1.5">
         <div className="flex min-h-8 max-w-full items-center gap-2">
           {children}
-          {warnings.length === 0 ? null : <Warnings warnings={warnings} />}
+          {warnings.length === 0 ? null : <Warnings name={name} warnings={warnings} />}
         </div>
-        {under === undefined ? null : (
-          <div id={underId} className="text-[13px] leading-5 empty:hidden">
-            {under}
-          </div>
-        )}
+        {under === undefined ? null : <div className="text-[13px] leading-5 empty:hidden">{under}</div>}
       </div>
-    </div>
+    </Field.Root>
   );
 }

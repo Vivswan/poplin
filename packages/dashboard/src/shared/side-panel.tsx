@@ -6,6 +6,7 @@ import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
 
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { FOCUS_HOME, useFocusHome } from "@/lib/focus";
@@ -94,11 +95,13 @@ export function PanelSwitch({
   label,
   on,
   onChange,
+  note,
 }: {
   readonly id: string;
   readonly label: string;
   readonly on: boolean;
   readonly onChange: (on: boolean) => unknown;
+  readonly note?: ReactNode;
 }): ReactNode {
   const [asked, setAsked] = useState<boolean>();
   const [saving, setSaving] = useState(false);
@@ -120,10 +123,13 @@ export function PanelSwitch({
   };
 
   return (
-    <div className="flex min-h-7 items-center justify-between gap-3">
-      <label htmlFor={id}>{label}</label>
-      <Switch id={id} checked={asked ?? on} disabled={saving} onCheckedChange={(next) => void change(next)} />
-    </div>
+    <Field className="gap-1">
+      <div className="flex min-h-7 items-center justify-between gap-3">
+        <FieldLabel className="text-[length:inherit] leading-[inherit] font-normal select-auto">{label}</FieldLabel>
+        <Switch id={id} checked={asked ?? on} disabled={saving} onCheckedChange={(next) => void change(next)} />
+      </div>
+      {note === undefined ? null : <FieldDescription className="text-[13px] leading-5">{note}</FieldDescription>}
+    </Field>
   );
 }
 

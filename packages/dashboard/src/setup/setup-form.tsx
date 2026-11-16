@@ -1,6 +1,6 @@
 // The form of the setup screen, one column read top to bottom: make a token, fill in the boxes, press Repair. An install with nothing set is asked its domain and first login; one nobody has logged in to takes an email that corrects the first login.
 
-import { type FormEvent, type ReactNode, useId } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,13 +16,13 @@ import type { Refused } from "@/lib/api";
 import { useUnsavedTyping } from "@/lib/unsaved";
 
 /** The box an install with nothing set is asked its domain in. */
-const DOMAIN = { name: "domain", label: "Domain", hint: "Your sites live under it: example.com", type: "text", autoComplete: "off", empty: "Type the domain first." } as const;
+const DOMAIN = { name: "domain", label: "Domain", hint: "Your sites live under it: example.com", inputMode: "text", autoComplete: "off", empty: "Type the domain first." } as const;
 
 /** The box of the first login, which must be filled. */
-const FIRST_LOGIN = { name: "login", label: "Your email", hint: "Your login code is sent here.", type: "email", autoComplete: "email", empty: "Type your email first." } as const;
+const FIRST_LOGIN = { name: "login", label: "Your email", hint: "Your login code is sent here.", inputMode: "email", autoComplete: "email", empty: "Type your email first." } as const;
 
 /** The box of an email that corrects the first login, which may stay empty. */
-const OTHER_LOGIN = { name: "login", label: "Your email", hint: "Leave empty to keep the first login.", type: "email", autoComplete: "email" } as const;
+const OTHER_LOGIN = { name: "login", label: "Your email", hint: "Leave empty to keep the first login.", inputMode: "email", autoComplete: "email" } as const;
 
 /** The form of each install: what its second step is called, and its boxes before and after the token's. Where the email only corrects a login the token's box comes first. */
 const FORMS = {
@@ -45,14 +45,12 @@ interface SetupFormProps {
   readonly onRepair: (sent: Sent) => Promise<Refused | undefined>;
 }
 
-/** One box with its note, or the refusal said in the note's place. */
+/** One box with its note, or the refusal said in the note's place. The box holds no rule the browser checks: the server alone refuses, in a sentence the box shows. */
 function TypedBox({ box, refusal }: { readonly box: Box; readonly refusal: string | undefined }): ReactNode {
-  const id = useId();
-
   return (
-    <Field data-invalid={refusal !== undefined}>
-      <FieldLabel htmlFor={id}>{box.label}</FieldLabel>
-      <Input id={id} name={box.name} type={box.type} autoComplete={box.autoComplete} spellCheck={false} required={"empty" in box} aria-invalid={refusal !== undefined} />
+    <Field invalid={refusal !== undefined}>
+      <FieldLabel>{box.label}</FieldLabel>
+      <Input name={box.name} inputMode={box.inputMode} autoComplete={box.autoComplete} spellCheck={false} aria-required={"empty" in box} />
       {refusal === undefined ? <FieldDescription>{box.hint}</FieldDescription> : <FieldError className="text-pretty">{refusal}</FieldError>}
     </Field>
   );

@@ -7,7 +7,6 @@ import { type ReactElement, type ReactNode, useEffect, useId } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FieldDescription } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ACCESSES, type Access, addressParts, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
 import { settingAddress } from "@/settings/setting-address";
@@ -157,23 +156,19 @@ function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly 
 }
 
 /** What stands under the switch for search engines while it changes nothing: the install keeps search engines out of every site, which is said with the way to that setting, or the site is not public. Where both hold, the install's is said alone. */
-function SearchNote({ open, allowed }: { readonly open: boolean; readonly allowed: boolean }): ReactNode {
-  if (open && allowed) return null;
+function searchNote({ open, allowed }: { readonly open: boolean; readonly allowed: boolean }): ReactNode | undefined {
+  if (open && allowed) return undefined;
+
+  if (allowed) return "Only a public site is listed.";
 
   return (
-    <FieldDescription className="-mt-1 text-[13px] leading-5">
-      {allowed ? (
-        "Only a public site is listed."
-      ) : (
-        <>
-          Off for every site in{" "}
-          <Link {...settingAddress("search_engines_allowed")} className="text-link underline-offset-2 hover:underline">
-            Settings
-          </Link>
-          .
-        </>
-      )}
-    </FieldDescription>
+    <>
+      Off for every site in{" "}
+      <Link {...settingAddress("search_engines_allowed")} className="text-link underline-offset-2 hover:underline">
+        Settings
+      </Link>
+      .
+    </>
   );
 }
 
@@ -249,10 +244,15 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
           label="Show in search engines"
           on={site.search_engines}
           onChange={(on) => actions.setSetting(site, "search_engines", on)}
+          note={searchNote({ open: site.access === "public", allowed: data.search_engines_allowed })}
         />
-        <SearchNote open={site.access === "public"} allowed={data.search_engines_allowed} />
-        <PanelSwitch id="site-embeddable" label="Allow embedding" on={site.embeddable} onChange={(on) => actions.setSetting(site, "embeddable", on)} />
-        <FieldDescription className="-mt-1 text-[13px] leading-5">{EMBEDDING_NOTE}</FieldDescription>
+        <PanelSwitch
+          id="site-embeddable"
+          label="Allow embedding"
+          on={site.embeddable}
+          onChange={(on) => actions.setSetting(site, "embeddable", on)}
+          note={EMBEDDING_NOTE}
+        />
       </PanelBlock>
       <PanelBlock>
         <div className="flex items-center gap-2">

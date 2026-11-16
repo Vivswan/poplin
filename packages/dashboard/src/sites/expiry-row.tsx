@@ -5,7 +5,7 @@ import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { FieldError } from "@/components/ui/field";
+import { Field, FieldError } from "@/components/ui/field";
 import { answerOf, api, Refused } from "@/lib/api";
 import { sayDone } from "@/lib/notify";
 import type { Site } from "@/lib/sites";
@@ -103,7 +103,11 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
           </DropdownMenu>
         </div>
         {note === undefined ? null : <p className="text-muted-foreground">{note}</p>}
-        {refusal === undefined ? null : <FieldError>{refusal}</FieldError>}
+        {refusal === undefined ? null : (
+          <Field invalid>
+            <FieldError>{refusal}</FieldError>
+          </Field>
+        )}
       </div>
       {picks ? (
         <Suspense fallback={null}>

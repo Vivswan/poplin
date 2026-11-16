@@ -1,5 +1,6 @@
 // The control a setting is changed with, by the kind the server read from the setting's type: a switch, a choice, a number with its unit beside it, or text. Every control holds the setting's text, the one form the server shows and takes.
 
+import { Field } from "@base-ui/react/field";
 import { NumberField } from "@base-ui/react/number-field";
 import type { ReactNode } from "react";
 
@@ -38,7 +39,7 @@ interface ControlProps {
   /** The setting. */
   readonly row: Row;
 
-  /** The id the row's name points at; the name itself has this id with `-label` after it. */
+  /** The id of the control, where the focus finds it. */
   readonly id: string;
 
   /** The setting's text as the control shows it: the stored one, or the one a change waits with. */
@@ -51,18 +52,17 @@ interface ControlProps {
   readonly refused: boolean;
 }
 
-function SwitchControl({ row, id, text, onChange, refused }: ControlProps): ReactNode {
-  return <Switch id={id} aria-labelledby={`${id}-label`} checked={isOn(row, text)} onCheckedChange={(checked) => onChange(switchText(row, checked))} aria-invalid={refused} />;
+function SwitchControl({ row, id, text, onChange }: ControlProps): ReactNode {
+  return <Switch id={id} checked={isOn(row, text)} onCheckedChange={(checked) => onChange(switchText(row, checked))} />;
 }
 
-/** A choice among a few named values. */
+/** A choice among a few named values. The row's name is given to its trigger by id. */
 function Choice({
   id,
   labelledBy,
   items,
   value,
   onChoose,
-  refused,
   className,
 }: {
   readonly id: string;
@@ -70,12 +70,11 @@ function Choice({
   readonly items: readonly { readonly value: string; readonly label: string }[];
   readonly value: string;
   readonly onChoose: (value: string) => void;
-  readonly refused: boolean;
   readonly className: string;
 }): ReactNode {
   return (
     <Select items={items} value={value} onValueChange={(chosen) => onChoose(String(chosen))}>
-      <SelectTrigger id={id} aria-labelledby={labelledBy} aria-invalid={refused} className={className}>
+      <SelectTrigger id={id} aria-labelledby={labelledBy} className={className}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="start">
@@ -92,17 +91,17 @@ function Choice({
 }
 
 function ChoiceControl(props: ControlProps): ReactNode {
-  const { row, id, text, onChange, refused } = props;
+  const { row, id, text, onChange } = props;
   if (isSwitch(row)) return <SwitchControl {...props} />;
 
   const options = row.control.kind === "choice" ? row.control.options : [];
   const items = options.map((option) => ({ value: option, label: choiceLabel(row, option) }));
 
-  return <Choice id={id} labelledBy={`${id}-label`} items={items} value={text} onChoose={onChange} refused={refused} className={WIDE} />;
+  return <Choice id={id} labelledBy={`${id}-label`} items={items} value={text} onChoose={onChange} className={WIDE} />;
 }
 
 /** The field of a number, with its unit fixed at its right. It takes a count from 0 up: a minus or a letter is not let in. Whether the count is one the setting takes is the server's to say, a fraction too. */
-function CountField({ row, id, text, onChange, refused, className }: ControlProps & { readonly className: string }): ReactNode {
+function CountField({ row, id, text, onChange, className }: ControlProps & { readonly className: string }): ReactNode {
   const parts = partsOf(row, text);
   const unit = unitWord(row.key, parts.unit);
 
@@ -118,12 +117,12 @@ function CountField({ row, id, text, onChange, refused, className }: ControlProp
     >
       <InputGroup>
         <NumberField.Input
-          render={<InputGroupInput aria-labelledby={`${id}-label`} aria-invalid={refused} autoComplete="off" className="tabular-nums" />}
+          render={<InputGroupInput id={id} autoComplete="off" className="tabular-nums" />}
           placeholder={wordsOf(row.key).empty}
         />
         {unit === "" ? null : (
           <InputGroupAddon align="inline-end" className="self-stretch border-l py-0 pl-2.5">
-            <InputGroupText>{unit}</InputGroupText>
+            <Field.Description render={<InputGroupText />}>{unit}</Field.Description>
           </InputGroupAddon>
         )}
       </InputGroup>
@@ -132,12 +131,13 @@ function CountField({ row, id, text, onChange, refused, className }: ControlProp
 }
 
 function NumberControl(props: ControlProps): ReactNode {
-  const { row, id, text, onChange } = props;
+  const { row, id, text, onChange, refused } = props;
   const { wordLabels, start } = wordsOf(row.key);
   const word = row.control.kind === "number" ? row.control.word : null;
   if (word === null || wordLabels === undefined) return <CountField {...props} className={WIDE} />;
 
   // A number that can also be a word is a choice between the two, and the field only while the number is chosen. The row's id is the field's while it is there, so a refusal's focus lands in it.
+  // A field ties its name and its lines to one control, the count's: the choice is a field of its own, named by the row's name, and marked as refused only while it stands alone.
   const items = [
     { value: WORD_CHOICE.word, label: wordLabels.word },
     { value: WORD_CHOICE.number, label: wordLabels.number },
@@ -146,38 +146,38 @@ function NumberControl(props: ControlProps): ReactNode {
 
   return (
     <span className="flex items-center gap-2">
-      <Choice
-        id={text === word ? id : `${id}-choice`}
-        labelledBy={`${id}-label`}
-        items={items}
-        value={text === word ? WORD_CHOICE.word : WORD_CHOICE.number}
-        onChoose={choose}
-        refused={false}
-        className="w-28 shrink-0"
-      />
+      <Field.Root invalid={refused && text === word} className="shrink-0">
+        <Choice
+          id={text === word ? id : `${id}-choice`}
+          labelledBy={`${id}-label`}
+          items={items}
+          value={text === word ? WORD_CHOICE.word : WORD_CHOICE.number}
+          onChoose={choose}
+          className="w-28"
+        />
+      </Field.Root>
       {text === word ? null : <CountField {...props} className="w-36" />}
     </span>
   );
 }
 
-function LinesControl({ id, text, onChange, refused }: ControlProps): ReactNode {
+function LinesControl({ id, text, onChange }: ControlProps): ReactNode {
   const lines = text.split(",");
 
   return (
-    <Textarea
+    <Field.Control
+      render={<Textarea rows={Math.max(LEAST_LINES, lines.length)} />}
       id={id}
       value={lines.join("\n")}
-      onChange={(event) => onChange(event.target.value.split("\n").join(","))}
-      rows={Math.max(LEAST_LINES, lines.length)}
+      onValueChange={(typed) => onChange(typed.split("\n").join(","))}
       autoComplete="off"
       spellCheck={false}
-      aria-invalid={refused}
     />
   );
 }
 
-function TextControl({ id, text, onChange, refused }: ControlProps): ReactNode {
-  return <Input id={id} value={text} onChange={(event) => onChange(event.target.value)} autoComplete="off" spellCheck={false} aria-invalid={refused} />;
+function TextControl({ id, text, onChange }: ControlProps): ReactNode {
+  return <Input id={id} value={text} onChange={(event) => onChange(event.target.value)} autoComplete="off" spellCheck={false} />;
 }
 
 /** Draw the control of a setting. */

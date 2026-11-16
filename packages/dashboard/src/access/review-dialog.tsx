@@ -3,7 +3,7 @@
 // Anyone can begin a login, so nothing the login says of itself is the page's own words: its name is a quoted fact, and what it may change starts at the least, whatever it asked for.
 
 import { useMutation } from "@tanstack/react-query";
-import { type ReactNode, type RefObject, useId, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
 import type { Review } from "@/access/access-queries";
@@ -115,19 +115,16 @@ function TypedCode({
   readonly field: RefObject<HTMLInputElement | null>;
   readonly onType: (typed: string) => void;
 }): ReactNode {
-  const id = useId();
-
   return (
-    <Field data-invalid={refusal !== undefined} className="gap-1.5 border-t pt-4">
-      <FieldLabel htmlFor={id} className="font-normal">
+    <Field invalid={refusal !== undefined} className="gap-1.5 border-t pt-4">
+      <FieldLabel className="font-normal">
         Last {TYPED_LETTERS} letters of the code in your terminal
       </FieldLabel>
       <div>
         <Input
-          id={id}
           ref={field}
           value={typed}
-          aria-invalid={refusal !== undefined}
+          aria-required
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}

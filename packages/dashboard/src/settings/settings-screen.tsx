@@ -100,8 +100,8 @@ function Waiting(): ReactNode {
 }
 
 /** Give a control the focus once the page has drawn what a save's answer changed; the page scrolls to it. */
-function focus(id: string): void {
-  window.requestAnimationFrame(() => document.getElementById(id)?.focus());
+function focus(id: string, options?: FocusOptions): void {
+  window.requestAnimationFrame(() => document.getElementById(id)?.focus(options));
 }
 
 /**
@@ -119,7 +119,7 @@ function useNamedSetting(drawn: boolean): string | undefined {
     if (named === undefined || block === null) return undefined;
 
     block.scrollIntoView({ block: "center" });
-    document.getElementById(controlId(named))?.focus({ preventScroll: true });
+    focus(controlId(named), { preventScroll: true });
     setMarked(named);
     const done = window.setTimeout(() => setMarked(undefined), MARKED_FOR);
 

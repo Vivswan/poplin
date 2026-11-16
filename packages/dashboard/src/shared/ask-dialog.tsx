@@ -1,6 +1,6 @@
 // A question with one field: a dialog that asks for a value, and says a refusal at the field with the typed value kept.
 
-import { type FormEvent, type ReactNode, type RefObject, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -52,8 +52,6 @@ interface AskDialogProps {
 
 /** Ask for one value in a dialog. The button stays off while the value is empty, and while it is unchanged unless the value it opened with is an answer. */
 export function AskDialog({ open, onOpenChange, title, says, label, hint, under, initial, maxLength, takesInitial = false, returnTo, submit, onSubmit }: AskDialogProps): ReactNode {
-  const id = useId();
-  const saysId = `${id}-says`;
   const [value, setValue] = useState(initial);
   const [refusal, setRefusal] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -85,11 +83,10 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, under,
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{says}</DialogDescription>
           </DialogHeader>
-          <Field data-invalid={refusal !== undefined}>
-            <FieldLabel htmlFor={id}>{label}</FieldLabel>
+          <Field invalid={refusal !== undefined}>
+            <FieldLabel>{label}</FieldLabel>
             <Input
               ref={field}
-              id={id}
               value={value}
               onChange={(event) => {
                 setValue(event.target.value);
@@ -97,17 +94,16 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, under,
                 setRefusal(undefined);
               }}
               onFocus={(event) => event.currentTarget.select()}
-              aria-invalid={refusal !== undefined}
-              aria-describedby={saysId}
               autoComplete="off"
               spellCheck={false}
               maxLength={maxLength}
+              aria-required
               autoFocus
             />
             {refusal === undefined ? (
-              <FieldDescription id={saysId}>{under === undefined ? hint : under(value.trim())}</FieldDescription>
+              <FieldDescription>{under === undefined ? hint : under(value.trim())}</FieldDescription>
             ) : (
-              <FieldError id={saysId}>{refusal}</FieldError>
+              <FieldError>{refusal}</FieldError>
             )}
           </Field>
           <DialogFooter>

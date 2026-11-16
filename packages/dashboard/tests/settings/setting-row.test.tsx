@@ -77,6 +77,13 @@ function drawn(row: Row, text = row.text): { readonly page: Within; readonly sen
 afterEach(cleanup);
 afterAll(clearPage);
 
+/** What a screen reader says after the name of a setting's control: every line the control is described by, in their order. */
+function describedBy(key: string): (string | null)[] {
+  const lines = document.getElementById(`setting-${key}-control`)?.getAttribute("aria-describedby")?.split(" ") ?? [];
+
+  return lines.map((id) => document.getElementById(id)?.textContent ?? null);
+}
+
 /** The paragraphs of the popover that is open, found by the name a screen reader reads it under. */
 function opened(name: string): (string | null)[] {
   return [...within(document.body).getByRole("dialog", { name }).querySelectorAll("p")].map((line) => line.textContent);
@@ -93,7 +100,7 @@ describe("the row of a setting", () => {
   // Drift: a changed value would have no way back, Reset would put back something other than the default or be one of many buttons of one name, or the focus would leave with Reset for whatever the page gives it, far from the setting.
   test("offers Reset beside the default of a value that differs from it, which puts the default back and leaves the focus in the setting's control", () => {
     const { page, sent } = drawn(SIZE, "12000MB");
-    const line = page.getByText(/Default:/).textContent;
+    const line = page.getByText(/Default:/).closest("p")?.textContent;
     fireEvent.click(page.getByRole("button", { name: "Reset All sites together" }));
 
     expect([line, sent, document.activeElement?.id]).toEqual(["The most all sites hold, the trash included. (Default: 9,000 MB) Reset", ["9000MB"], "setting-max_total_size-control"]);
@@ -120,23 +127,22 @@ describe("the row of a setting", () => {
   // Drift: a refusal would stand under a control that does not name it, so a screen reader would never read why the value was refused; or one kind of control would be left out.
   test.each(KINDS)("names the refusal under it at its control, which is %s", (_what, row, text) => {
     render(<SettingRow row={row} text={text} refusal="Use another value." onChange={() => undefined} marked={false} />);
-    const named = document.getElementById(`setting-${row.key}-control`)?.getAttribute("aria-describedby");
 
-    expect(document.getElementById(named ?? "none")?.textContent).toBe("Use another value.");
+    expect(describedBy(row.key).at(-1)).toBe("Use another value.");
   });
 
-  // Drift: a control would go on naming a line that is gone once its value is taken.
-  test("names nothing at a control with no line under it", () => {
-    const { rerender } = render(<SettingRow row={SIZE} text="0MB" refusal="Use another value." onChange={() => undefined} marked={false} />);
-    rerender(<SettingRow row={SIZE} text="1MB" refusal={undefined} onChange={() => undefined} marked={false} />);
+  // Drift: a control would go on naming a refusal that is gone once its value is taken; or its sentence, its default, its unit, and the host's warning would stand loose on the page, so tabbing from field to field would say a name and a number only.
+  test("describes its control by its sentence with the default, its unit, and the host's warning, and by a refusal only while there is one", () => {
+    const { rerender } = render(<SettingRow row={BOUNDED} text="10001MB" refusal="Use another value." onChange={() => undefined} marked={false} />);
+    rerender(<SettingRow row={BOUNDED} text="10002MB" refusal={undefined} onChange={() => undefined} marked={false} />);
 
-    expect(document.getElementById("setting-max_total_size-control")?.getAttribute("aria-describedby")).toBeNull();
+    expect(describedBy("max_total_size")).toEqual(["The most all sites hold, the trash included. (Default: 9,000 MB)", "MB", WARNINGS[0]]);
   });
 
   // Drift: a warning would have no mark after the control, or two warnings would run together as one paragraph.
   test("holds the host's warnings behind the mark after the control, each sentence a line of its own", () => {
     const { page } = drawn(BOUNDED, "20001MB");
-    fireEvent.click(page.getByRole("button", { name: "Warning" }));
+    fireEvent.click(page.getByRole("button", { name: "Warning for All sites together" }));
 
     expect(opened("Warning")).toEqual(WARNINGS);
   });
@@ -151,7 +157,7 @@ describe("the row of a setting", () => {
     ["in another unit, above its own mark", "10000001KB", [WARNINGS[0]]],
   ])("marks the text its control holds, saved or not: %s", (_what, text, warnings) => {
     const { page } = drawn(BOUNDED, text);
-    const mark = page.queryByRole("button", { name: "Warning" });
+    const mark = page.queryByRole("button", { name: "Warning for All sites together" });
     if (mark !== null) fireEvent.click(mark);
 
     expect(mark === null ? null : opened("Warning")).toEqual(warnings);
