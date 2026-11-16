@@ -3,26 +3,51 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { releaseDigest } from "@poplin/core/src/records/release";
 
 import { pinReleases } from "../../src/deploy/pin-releases";
 
+/** Turns a text into the bytes of a file. */
 const ENCODER = new TextEncoder();
 
-/** The archive of a version, as bytes that differ by version. */
-function archiveOf(version: string): Uint8Array<ArrayBuffer> {
-  return ENCODER.encode(`the archive of poplin ${version}`);
+/** The flags every check of an attestation carries. */
+const POLICY = ["--repo", "Vivswan/poplin", "--signer-workflow", "Vivswan/poplin/.github/workflows/update-release.yml", "--source-ref", "refs/heads/main", "--deny-self-hosted-runners"];
+
+/** One file of a release's page, as bytes that differ by release and by file. */
+function bytesOf(version: string, file: string): Uint8Array<ArrayBuffer> {
+  return ENCODER.encode(`${file} of poplin ${version}`);
 }
 
-/** What GitHub holds: the status it answers for each version's archive, and which archives carry the release workflow's attestation. */
+/** The manifest of a version's two built files as the release run writes it, with any part replaced. */
+async function manifestOf(version: string, replaced: Readonly<Record<string, unknown>> = {}): Promise<string> {
+  const stated = async (file: string): Promise<object> => ({ sha256: await releaseDigest(bytesOf(version, file)), bytes: bytesOf(version, file).byteLength });
+
+  return JSON.stringify({ version, schema: 2, files: { "worker.js": await stated("worker.js"), "worker.js.map": await stated("worker.js.map") }, deploy: { main_module: "worker.js" }, ...replaced });
+}
+
+/** A release's page as GitHub answers for it: each file by its name, as bytes or as a status that is not 200. A file left out is a 404. */
+type Page = Readonly<Record<string, Uint8Array<ArrayBuffer> | string | number>>;
+
+/** The page of a release that is out whole, with any file replaced. */
+async function pageOf(version: string, replaced: Page = {}): Promise<Page> {
+  return {
+    [`poplin-${version}.tar.gz`]: bytesOf(version, "the archive"),
+    [`poplin-${version}-worker.json`]: await manifestOf(version),
+    [`poplin-${version}-worker.js`]: bytesOf(version, "worker.js"),
+    [`poplin-${version}-worker.js.map`]: bytesOf(version, "worker.js.map"),
+    ...replaced,
+  };
+}
+
+/** What GitHub holds: every release's page under its version, and the names of the files that carry no attestation of the release workflow. */
 interface Hub {
-  readonly status: Readonly<Record<string, number>>;
-  readonly attested: readonly string[];
+  readonly pages: Readonly<Record<string, Page>>;
+  readonly unattested?: readonly string[];
 }
 
-/** Pin the given versions against a GitHub stand-in. Answers the pins, what was asked, each attestation check with the bytes its file held, and what was said. */
+/** Pin the given versions against a GitHub stand-in. Answers the pins, what was asked, each attestation check with the name of its file, and what was said. */
 async function pinned(versions: readonly string[], hub: Hub): Promise<{ readonly pins: unknown; readonly asked: readonly string[]; readonly verified: readonly (readonly string[])[]; readonly said: readonly string[] }> {
   using scratch = mkdtempDisposableSync(join(tmpdir(), "poplin-pins-test-"));
   const asked: string[] = [];
@@ -34,16 +59,21 @@ async function pinned(versions: readonly string[], hub: Hub): Promise<{ readonly
     say: (line) => said.push(line),
     fetch: (url) => {
       asked.push(url);
-      const version = /\/v([^/]+)\//.exec(url)?.[1] ?? "";
-      const status = hub.status[version] ?? 404;
+      const [, version = "", name = ""] = /\/download\/v([^/]+)\/([^/]+)$/.exec(url) ?? [];
+      const held = hub.pages[version]?.[name] ?? 404;
 
-      return Promise.resolve(new Response(status === 200 ? archiveOf(version) : "", { status }));
+      return Promise.resolve(typeof held === "number" ? new Response("", { status: held }) : new Response(held));
     },
     run: (command) => {
-      const held = new TextDecoder().decode(readFileSync(command[3] ?? ""));
-      verified.push([...command.slice(0, 3), held, ...command.slice(4)]);
+      const file = command[3] ?? "";
+      const name = basename(file);
+      const version = /^poplin-(\d+\.\d+\.\d+)/.exec(name)?.[1] ?? "";
+      const held = hub.pages[version]?.[name];
+      const onDisk = readFileSync(file);
+      const same = typeof held !== "number" && held !== undefined && Buffer.from(held).equals(onDisk);
+      verified.push([...command.slice(0, 3), same ? name : `other bytes than ${name}`, ...command.slice(4)]);
 
-      return Promise.resolve(hub.attested.some((version) => held === `the archive of poplin ${version}`) ? 0 : 1);
+      return Promise.resolve(hub.unattested?.includes(name) === true ? 1 : 0);
     },
   });
 
@@ -51,46 +81,119 @@ async function pinned(versions: readonly string[], hub: Hub): Promise<{ readonly
 }
 
 describe("pinReleases", () => {
-  // Drift: this is the whole of what the website trusts a file for; a flag dropped from the check names a file attested by any workflow, or in a run of any branch.
-  test("a published archive is named with the digest of its bytes only after GitHub's command line checked, on those bytes, that the release workflow attested them in a run of main", async () => {
-    const policy = ["--repo", "Vivswan/poplin", "--signer-workflow", "Vivswan/poplin/.github/workflows/update-release.yml", "--source-ref", "refs/heads/main", "--deny-self-hosted-runners"];
+  // Drift: this is the whole of what the website trusts a file for; a flag dropped from the check names a file attested by any workflow, or in a run of any branch, and a file left unchecked is one anybody may have put on the page.
+  test("a release is named with the digests of its archive and of its manifest, and the manifest's schema, only after GitHub's command line checked each of its four files, on the fetched bytes", async () => {
+    const page = await pageOf("0.2.0");
+    const source = await releaseDigest(bytesOf("0.2.0", "the archive"));
+    const bundle = await releaseDigest(ENCODER.encode(await manifestOf("0.2.0")));
+    const names = ["poplin-0.2.0.tar.gz", "poplin-0.2.0-worker.json", "poplin-0.2.0-worker.js", "poplin-0.2.0-worker.js.map"];
 
-    expect(await pinned(["0.2.0"], { status: { "0.2.0": 200 }, attested: ["0.2.0"] })).toEqual({
-      pins: { "0.2.0": { source: await releaseDigest(archiveOf("0.2.0")) } },
-      asked: ["https://github.com/Vivswan/poplin/releases/download/v0.2.0/poplin-0.2.0.tar.gz"],
-      verified: [["gh", "attestation", "verify", "the archive of poplin 0.2.0", ...policy]],
-      said: [`release 0.2.0: named, with the digest ${await releaseDigest(archiveOf("0.2.0"))}`],
+    expect(await pinned(["0.2.0"], { pages: { "0.2.0": page } })).toEqual({
+      pins: { "0.2.0": { source, bundle, schema: 2 } },
+      asked: names.map((name) => `https://github.com/Vivswan/poplin/releases/download/v0.2.0/${name}`),
+      verified: names.map((name) => ["gh", "attestation", "verify", name, ...POLICY]),
+      said: [`release 0.2.0: named, with the digests ${source} of its source and ${bundle} of its built files, and schema 2`],
     });
   });
 
-  const cases: readonly { readonly name: string; readonly versions: readonly string[]; readonly hub: Hub; readonly named: readonly string[]; readonly said: readonly string[] }[] = [
-    { name: "no version released", versions: [], hub: { status: {}, attested: [] }, named: [], said: [] },
-    { name: "two releases, both attested", versions: ["0.2.0", "0.1.0"], hub: { status: { "0.1.0": 200, "0.2.0": 200 }, attested: ["0.1.0", "0.2.0"] }, named: ["0.2.0", "0.1.0"], said: [] },
-    {
-      name: "a newest release whose page has no archive yet, as while it is a draft",
-      versions: ["0.2.0", "0.1.0"],
-      hub: { status: { "0.1.0": 200 }, attested: ["0.1.0"] },
-      named: ["0.1.0"],
-      said: ["release 0.2.0: no source archive is published, so it is not named"],
-    },
-    { name: "a version before its release", versions: ["0.2.0-rc.1"], hub: { status: { "0.2.0-rc.1": 200 }, attested: ["0.2.0-rc.1"] }, named: [], said: [] },
-  ];
-
-  test.each(cases)("with $name, exactly $named are named", async ({ versions, hub, named, said }) => {
-    const made = await pinned(versions, hub);
-
-    expect([Object.keys(made.pins as object), made.said.filter((line) => !line.includes(": named, "))]).toEqual([[...named], [...said]]);
+  test("with no version released, none is named", async () => {
+    expect(await pinned([], { pages: {} })).toEqual({ pins: {}, asked: [], verified: [], said: [] });
   });
 
-  // Drift: an archive that did not pass is never named, and it must not be dropped either: the command line fails the same way while GitHub's service is down, and a file that lost every release sends each build back to its copy's own files.
-  test("an archive put on a release's page by hand, which no run of the release workflow attested, stops the run", async () => {
-    const hub = { status: { "0.1.0": 200, "0.2.0": 200 }, attested: ["0.1.0"] };
+  test("with two releases out whole, both are named, and a version before its release is not", async () => {
+    const made = await pinned(["0.2.0", "0.2.0-rc.1", "0.1.0"], { pages: { "0.1.0": await pageOf("0.1.0"), "0.2.0": await pageOf("0.2.0"), "0.2.0-rc.1": await pageOf("0.2.0-rc.1") } });
 
-    await expect(pinned(["0.2.0", "0.1.0"], hub)).rejects.toThrow("release 0.2.0: its source archive did not pass as attested by the release workflow in a run of main");
+    expect(Object.keys(made.pins as object)).toEqual(["0.2.0", "0.1.0"]);
+  });
+
+  test("a newest release whose page has no archive yet, as while it is a draft, is left out with a line, and no other file of it is asked for", async () => {
+    const made = await pinned(["0.2.0", "0.1.0"], { pages: { "0.1.0": await pageOf("0.1.0") } });
+
+    expect([Object.keys(made.pins as object), made.said[0], made.asked.filter((url) => url.includes("/v0.2.0/")).length]).toEqual([["0.1.0"], "release 0.2.0: no source archive is published, so it is not named", 1]);
+  });
+
+  const refused: readonly { readonly name: string; readonly hub: (version: string) => Promise<Hub>; readonly thrown: string }[] = [
+    {
+      name: "an archive put on the page by hand, which no run of the release workflow attested",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version) }, unattested: [`poplin-${version}.tar.gz`] }),
+      thrown: "release 0.2.0: its source archive did not pass as attested by the release workflow in a run of main",
+    },
+    {
+      name: "an attested archive on a page with no manifest",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.json`]: 404 }) } }),
+      thrown: "release 0.2.0: its page holds a source archive and no manifest of built files",
+    },
+    {
+      name: "a manifest nobody attested",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version) }, unattested: [`poplin-${version}-worker.json`] }),
+      thrown: "release 0.2.0: its manifest of built files did not pass as attested by the release workflow in a run of main",
+    },
+    {
+      name: "an attested manifest that names a module the page lacks",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.js`]: 404 }) } }),
+      thrown: "release 0.2.0: its page holds a source archive and no built file worker.js",
+    },
+    {
+      name: "a module swapped for one nobody attested, beside an attested manifest",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version) }, unattested: [`poplin-${version}-worker.js`] }),
+      thrown: "release 0.2.0: its built file worker.js did not pass as attested by the release workflow in a run of main",
+    },
+    {
+      name: "a source map nobody attested",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version) }, unattested: [`poplin-${version}-worker.js.map`] }),
+      thrown: "release 0.2.0: its built file worker.js.map did not pass as attested by the release workflow in a run of main",
+    },
+    {
+      name: "an attested module of another release, which is not the one the manifest states",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.js`]: bytesOf("0.1.0", "worker.js") }) } }),
+      thrown: "release 0.2.0: its built file worker.js has another SHA-256 digest than the manifest says",
+    },
+    {
+      name: "an attested module longer than the manifest states",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.js`]: bytesOf(version, "worker.js and more") }) } }),
+      thrown: "release 0.2.0: its built file worker.js holds 34 bytes, and the manifest says 25",
+    },
+    {
+      name: "an attested manifest of another release",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.json`]: await manifestOf("0.1.0") }) } }),
+      thrown: "release 0.2.0: its manifest of built files says it is of 0.1.0",
+    },
+    {
+      name: "an attested manifest with no schema",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.json`]: await manifestOf(version, { schema: undefined }) }) } }),
+      thrown: "release 0.2.0: its manifest of built files gives a schema that is not a whole number from 1 up",
+    },
+    {
+      name: "an attested manifest that names no file",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.json`]: await manifestOf(version, { files: {} }) }) } }),
+      thrown: "release 0.2.0: its manifest of built files names no file",
+    },
+    {
+      name: "an attested file that is no manifest",
+      hub: async (version) => ({ pages: { [version]: await pageOf(version, { [`poplin-${version}-worker.json`]: "<!doctype html>" }) } }),
+      thrown: "release 0.2.0: its manifest of built files is not a manifest",
+    },
+  ];
+
+  // Drift: a file that did not pass is never named, and its release must not be dropped either: the command line fails the same way while GitHub's service is down, and a file that lost every release sends each build back to its copy's own files.
+  // A release named with its source alone would be one no install can take by its built files, and one named over an unchecked file would publish a digest anybody could have made.
+  test.each(refused)("$name stops the run, and names nothing", async ({ hub, thrown }) => {
+    const pages = { ...(await hub("0.2.0")).pages, "0.1.0": await pageOf("0.1.0") };
+
+    await expect(pinned(["0.2.0", "0.1.0"], { ...(await hub("0.2.0")), pages })).rejects.toThrow(thrown);
   });
 
   // Drift: a site built with a release missing only because GitHub was down would have every install refuse that release for a day; the site deployed before names it still.
-  test.each([500, 503, 429, 302])("GitHub's %i for an archive stops the run, so no site is built from half an answer", async (status) => {
-    await expect(pinned(["0.2.0", "0.1.0"], { status: { "0.1.0": 200, "0.2.0": status }, attested: ["0.1.0", "0.2.0"] })).rejects.toThrow(`release 0.2.0: GitHub answered ${status} for its source archive`);
+  test.each([
+    ["poplin-0.2.0.tar.gz", 500, "source archive"],
+    ["poplin-0.2.0.tar.gz", 429, "source archive"],
+    ["poplin-0.2.0.tar.gz", 302, "source archive"],
+    ["poplin-0.2.0-worker.json", 503, "manifest of built files"],
+    ["poplin-0.2.0-worker.js", 500, "built file worker.js"],
+    ["poplin-0.2.0-worker.js.map", 403, "built file worker.js.map"],
+  ] as const)("GitHub's answer for %s of %i stops the run, so no site is built from half an answer", async (name, status, what) => {
+    const hub = { pages: { "0.1.0": await pageOf("0.1.0"), "0.2.0": await pageOf("0.2.0", { [name]: status }) } };
+
+    await expect(pinned(["0.2.0", "0.1.0"], hub)).rejects.toThrow(`release 0.2.0: GitHub answered ${status} for its ${what}`);
   });
 });

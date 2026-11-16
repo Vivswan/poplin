@@ -16,9 +16,9 @@ function versionOf(bytes: Uint8Array<ArrayBuffer>): Promise<string | undefined> 
   return Promise.resolve(/ (\d+\.\d+\.\d+)$/.exec(new TextDecoder().decode(bytes))?.[1]);
 }
 
-/** A website that published these versions, each with the digest of the files given for it. */
+/** A website that published these versions, each with the digest of the files given for it. The files are taken by that digest alone, so the other two are any that pass. */
 async function pinsOf(published: Readonly<Record<string, Uint8Array<ArrayBuffer>>>): Promise<ReleasePins> {
-  const entries = await Promise.all(Object.entries(published).map(async ([version, bytes]) => [version, { source: await releaseDigest(bytes) }] as const));
+  const entries = await Promise.all(Object.entries(published).map(async ([version, bytes]) => [version, { source: await releaseDigest(bytes), bundle: "0".repeat(64), schema: 1 }] as const));
 
   return Object.fromEntries(entries);
 }
@@ -88,23 +88,35 @@ describe("releaseDigest", () => {
 
 describe("publishedPins", () => {
   const digest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+  const pin = { source: digest, bundle: digest.replace("9", "a"), schema: 2 };
 
   const files: readonly { readonly name: string; readonly text: string; readonly read: unknown; readonly newest: string | undefined }[] = [
     { name: "no release yet", text: "{}", read: {}, newest: undefined },
-    { name: "two releases, the lower version written last", text: JSON.stringify({ "0.10.0": { source: digest }, "0.9.0": { source: digest } }), read: { "0.10.0": { source: digest }, "0.9.0": { source: digest } }, newest: "0.10.0" },
-    { name: "a release with a field a later poplin added", text: JSON.stringify({ "0.2.0": { source: digest, bundle: digest } }), read: { "0.2.0": { source: digest } }, newest: "0.2.0" },
-    { name: "a digest in capitals", text: JSON.stringify({ "0.2.0": { source: digest.toUpperCase() } }), read: undefined, newest: undefined },
-    { name: "a digest one character short", text: JSON.stringify({ "0.2.0": { source: digest.slice(1) } }), read: undefined, newest: undefined },
+    { name: "two releases, the lower version written last", text: JSON.stringify({ "0.10.0": pin, "0.9.0": pin }), read: { "0.10.0": pin, "0.9.0": pin }, newest: "0.10.0" },
+    { name: "a release with a field a later poplin added", text: JSON.stringify({ "0.2.0": { ...pin, pulled: false } }), read: { "0.2.0": pin }, newest: "0.2.0" },
+    { name: "a source digest in capitals", text: JSON.stringify({ "0.2.0": { ...pin, source: digest.toUpperCase() } }), read: undefined, newest: undefined },
+    { name: "a source digest one character short", text: JSON.stringify({ "0.2.0": { ...pin, source: digest.slice(1) } }), read: undefined, newest: undefined },
     { name: "a release with no digest", text: JSON.stringify({ "0.2.0": {} }), read: undefined, newest: undefined },
-    { name: "a version with a `v` in front", text: JSON.stringify({ "v0.2.0": { source: digest } }), read: undefined, newest: undefined },
-    { name: "a version before its release", text: JSON.stringify({ "0.2.0-rc.1": { source: digest } }), read: undefined, newest: undefined },
+    { name: "a release with no source digest", text: JSON.stringify({ "0.2.0": { bundle: digest, schema: 2 } }), read: undefined, newest: undefined },
+    { name: "a release with no digest of its built files", text: JSON.stringify({ "0.2.0": { source: digest, schema: 2 } }), read: undefined, newest: undefined },
+    { name: "a digest of the built files in capitals", text: JSON.stringify({ "0.2.0": { ...pin, bundle: digest.toUpperCase() } }), read: undefined, newest: undefined },
+    { name: "a digest of the built files one character long", text: JSON.stringify({ "0.2.0": { ...pin, bundle: "9" } }), read: undefined, newest: undefined },
+    { name: "a release with no schema", text: JSON.stringify({ "0.2.0": { source: digest, bundle: digest } }), read: undefined, newest: undefined },
+    { name: "a schema of zero", text: JSON.stringify({ "0.2.0": { ...pin, schema: 0 } }), read: undefined, newest: undefined },
+    { name: "a schema below zero", text: JSON.stringify({ "0.2.0": { ...pin, schema: -1 } }), read: undefined, newest: undefined },
+    { name: "a schema that is no whole number", text: JSON.stringify({ "0.2.0": { ...pin, schema: 1.5 } }), read: undefined, newest: undefined },
+    { name: "a schema written as text", text: JSON.stringify({ "0.2.0": { ...pin, schema: "2" } }), read: undefined, newest: undefined },
+    { name: "one good release beside one with no digest of its built files", text: JSON.stringify({ "0.2.0": pin, "0.1.0": { source: digest, schema: 1 } }), read: undefined, newest: undefined },
+    { name: "a version with a `v` in front", text: JSON.stringify({ "v0.2.0": pin }), read: undefined, newest: undefined },
+    { name: "a version before its release", text: JSON.stringify({ "0.2.0-rc.1": pin }), read: undefined, newest: undefined },
     { name: "a list", text: "[]", read: undefined, newest: undefined },
     { name: "a member every object has, as its one key", text: '{"constructor":123}', read: undefined, newest: undefined },
     { name: "a prototype, as its one key", text: '{"__proto__":null}', read: undefined, newest: undefined },
     { name: "a page that is no JSON", text: "<!doctype html>", read: undefined, newest: undefined },
   ];
 
-  // Drift: a file read loosely would hand the deploy a version that is compared with nothing, or a digest no file can match.
+  // Drift: a file read loosely would hand the deploy a version that is compared with nothing, a digest no file can match, or a release with no built files to take.
+  // A key this version does not know is passed over, never refused: installs of every older version read the file, and the website only ever adds a key.
   test.each(files)("$name is read as $read, and its newest version is $newest", ({ text, read, newest }) => {
     const pins = publishedPins(text);
 

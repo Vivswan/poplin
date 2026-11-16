@@ -91,9 +91,9 @@ async function archiveOf(says: string): Promise<Uint8Array<ArrayBuffer>> {
   return (await packed).slice();
 }
 
-/** The website's file for a scene: each version with the digest of the archive that says the version given for it. */
+/** The website's file for a scene: each version with the digest of the archive that says the version given for it. A hosted build reads the digest of the source alone, so the other two are any that pass. */
 async function pinsOf(published: Readonly<Record<string, string>>): Promise<ReleasePins> {
-  const entries = await Promise.all(Object.entries(published).map(async ([version, says]) => [version, { source: await releaseDigest(await archiveOf(says)) }] as const));
+  const entries = await Promise.all(Object.entries(published).map(async ([version, says]) => [version, { source: await releaseDigest(await archiveOf(says)), bundle: "0".repeat(64), schema: 1 }] as const));
 
   return Object.fromEntries(entries);
 }

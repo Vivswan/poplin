@@ -2,12 +2,13 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { TOKEN, usualPlug } from "./support/fake-plug";
 import { openConsole, REBUILD_HOST } from "./support/console";
 import { readShell } from "./support/shell";
 
 /** A release newer than the test console's version. */
-const NEWER = { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", database: false };
+const NEWER = { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", schema: OWN_SCHEMA };
 
 /** What the frame holds of the problems of an install where nothing went wrong. */
 const NOTHING_MARKED = { recent: [], marks: { usage: null, domain: null, settings: null } };

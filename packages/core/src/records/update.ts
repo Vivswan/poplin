@@ -4,7 +4,7 @@ import prerelease from "semver/functions/prerelease";
 import valid from "semver/functions/valid";
 import * as v from "valibot";
 
-import { MOMENT } from "./fields";
+import { MOMENT, POSITIVE } from "./fields";
 
 /** The longest address of release notes that is kept. */
 const MOST_NOTES_LENGTH = 300;
@@ -35,12 +35,12 @@ function isNotesAddress(text: string): boolean {
   return address.protocol === "https:" && address.username === "" && address.password === "";
 }
 
-/** A release: its version, the UTC date it came out, the address of its notes, and whether updating to it changes the database. */
+/** A release: its version, the UTC date it came out, the address of its notes, and its schema: how many steps its database has been through, which an install compares with its own. */
 export const UPDATE_NEWS = v.strictObject({
   version: v.pipe(v.string(), v.check(isPlainVersion)),
   released: v.pipe(v.string(), v.isoDate()),
   notes: v.pipe(v.string(), v.maxLength(MOST_NOTES_LENGTH), v.check(isNotesAddress)),
-  database: v.boolean(),
+  schema: POSITIVE,
 });
 
 /** What the install keeps of the updates it starts by itself: the version and the moment of its last try, and the newest version the provider took a start for, `null` while it took none. */
@@ -61,11 +61,11 @@ export const UPDATE_CHECK = v.strictObject({
   auto: v.nullable(AUTO_START),
 });
 
-/** The file the website publishes, as JSON text: a release, or a `version` of `null` before the first one. `database: true` says updating to the release changes the database, and a file without the key says it does not. */
+/** The file the website publishes, as JSON text: a release, or a `version` of `null` before the first one. A key a later poplin added is passed over. */
 const LATEST_FILE = v.pipe(
   v.string(),
   v.parseJson(),
-  v.union([v.object({ version: v.null() }), v.object({ ...UPDATE_NEWS.entries, database: v.optional(UPDATE_NEWS.entries.database, false) })]),
+  v.union([v.object({ version: v.null() }), v.object(UPDATE_NEWS.entries)]),
 );
 
 /** A release, as the install keeps it. */

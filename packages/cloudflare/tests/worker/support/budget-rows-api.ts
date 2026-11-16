@@ -1,6 +1,7 @@
 // What each route of the API may cost: one row a route, seeded for the worst the product's own limits let it meet.
 
 import { decideLogin } from "@poplin/core/src/actions/computer-logins";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { ADMIN, done, OWNER } from "./install";
 import { adminToken, apiOf, type BudgetRow, get, sql, type Stage, unmeasured } from "./budget-stage";
 import { manyEntries, manyProblems, manySites, manyTokens, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
@@ -9,7 +10,7 @@ import { manyEntries, manyProblems, manySites, manyTokens, siteId, siteWithFiles
 const group = "CLI / agent actions";
 
 /** A release newer than any build, as the install keeps it once it has learned of one. */
-const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", database: true };
+const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA + 1 };
 
 /** An address the provider starts a rebuild at, in the form Cloudflare gives a Deploy Hook. */
 const HOOK = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";

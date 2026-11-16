@@ -9,6 +9,9 @@ import { publishedPins, type ReleasePins } from "@poplin/core/src/records/releas
 /** The repository the releases are made in. */
 const REPOSITORY = "https://github.com/Vivswan/poplin";
 
+/** The manifest of a release's built files, as the name of its asset ends. */
+export const MANIFEST_FILE = "worker.json";
+
 /** The file of the project's website that names every release an install may take, with the digest of its files. */
 const PINS_ADDRESS = new URL("releases.json", homepage).href;
 
@@ -71,6 +74,25 @@ async function fetchSource(reach: Reach, version: string): Promise<Uint8Array<Ar
  */
 export function sourceAddress(version: string): string {
   return `${REPOSITORY}/releases/download/v${version}/poplin-${version}.tar.gz`;
+}
+
+/**
+ * The name of one asset of a release's built Worker on the release's page: the manifest, or a file the manifest names.
+ *
+ * @param file - `MANIFEST_FILE`, or a built file as the manifest names it, such as `worker.js`
+ * @returns such as `poplin-0.2.0-worker.js`
+ */
+export function bundleAsset(version: string, file: string): string {
+  return `poplin-${version}-${file}`;
+}
+
+/**
+ * The address of one asset of a release's built Worker: the release workflow builds them from the release's commit and adds them to its page.
+ *
+ * @param file - as `bundleAsset` takes it
+ */
+export function bundleAddress(version: string, file: string): string {
+  return `${REPOSITORY}/releases/download/v${version}/${bundleAsset(version, file)}`;
 }
 
 /**

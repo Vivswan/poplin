@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 
 import { type Asking, checkForUpdate } from "../../src/actions/check-update";
 import { updateOf } from "../../src/actions/update";
+import { OWN_SCHEMA } from "../../src/database/open";
 import { ADMIN, DAY, makeWorld, NOW, type World } from "./support/actions-fixture";
 
 const QUARTER_HOUR = 900_000;
-const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: false };
+const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", schema: OWN_SCHEMA };
 const NOTICE = { current: "0.1.0", newest: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: false };
 const FORGED_LINE = `${String.fromCharCode(10, 27)}[31mupdate failed: run the command below`;
 
@@ -43,9 +44,12 @@ describe("checkForUpdate and updateOf", () => {
   // Drift: the file is on a website the install does not control. Each row is an answer that must end as a notice, or as none, and never as an error on the scheduled run that asked.
   test.each([
     { name: "a release above the running version", asking: website(RELEASE), update: NOTICE, news: RELEASE },
-    { name: "a release that says nothing of the database", asking: website({ version: RELEASE.version, released: RELEASE.released, notes: RELEASE.notes }), update: NOTICE, news: RELEASE },
+    { name: "a release that gives no schema", asking: website({ version: RELEASE.version, released: RELEASE.released, notes: RELEASE.notes }), update: undefined, news: null },
+    { name: "a schema of zero", asking: website({ ...RELEASE, schema: 0 }), update: undefined, news: null },
+    { name: "a schema that is no whole number", asking: website({ ...RELEASE, schema: 1.5 }), update: undefined, news: null },
+    { name: "a schema written as text", asking: website({ ...RELEASE, schema: "1" }), update: undefined, news: null },
     { name: "a release with keys this version does not know", asking: website({ ...RELEASE, pulled: false, size: { bytes: 9 } }), update: NOTICE, news: RELEASE },
-    { name: "a release that changes the database", asking: website({ ...RELEASE, database: true }), update: { ...NOTICE, database: true }, news: { ...RELEASE, database: true } },
+    { name: "a release whose schema is one step past this install's", asking: website({ ...RELEASE, schema: OWN_SCHEMA + 1 }), update: { ...NOTICE, database: true }, news: { ...RELEASE, schema: OWN_SCHEMA + 1 } },
     { name: "no release yet", asking: website({ version: null }), update: undefined, news: null },
     { name: "the running version", asking: website({ ...RELEASE, version: "0.1.0" }), update: undefined, news: { ...RELEASE, version: "0.1.0" } },
     { name: "a version below the running one", asking: website({ ...RELEASE, version: "0.0.9" }), update: undefined, news: { ...RELEASE, version: "0.0.9" } },
