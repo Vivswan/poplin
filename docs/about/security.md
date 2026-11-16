@@ -48,7 +48,7 @@ The id alone finds the site. The letter never opens anything: the stored site de
 | unlisted | `report--k3f9x2ab71qz-u-poplin.example.com` | anyone who has the address | the address alone |
 | public | the unlisted address, and a name the site claims: `report-page.example.com` | everyone | nothing |
 
-A public name ends in the install's public word: `page`, or the word the installer chose once at install. A public name belongs to one site at a time, and stays with that site through `poplin new-link`.
+A public name ends in the install's public word, `page`. A public name belongs to one site at a time, and stays with that site through `poplin new-link`.
 
 A state changes in place: the site, its files, its id, and its label stay.
 
@@ -76,7 +76,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 
 | Who | Credential | Where it comes from |
 | --- | --- | --- |
-| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by email code or Google; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time. poplin sets no cookie of its own |
+| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by a code Cloudflare sends to the email; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time. poplin sets no cookie of its own |
 | a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
@@ -91,7 +91,7 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 
 | Scope | Given to | May |
 | --- | --- | --- |
-| publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
+| publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login` and leaves Can change at Own sites only on the page that allows it. `poplin login --publisher` saves no other kind, whatever that page chose | publish, and manage its own sites |
 | admin | a user, whose email is on the list of allowed logins; a user's login at the dashboard carries the same rights | everything: every site, the settings, the tokens |
 
 The page that allows a computer's login treats what the login says of itself as a stranger's words, since anyone can begin one:
@@ -257,11 +257,11 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
 | a release an update deploys | an install that updates with its key uploads a release's built Worker only when the manifest's SHA-256 digest is the one poplin's website publishes for that version, and each built file's digest and size are the manifest's; any other file changes nothing. [Update](../upkeep/update.md#with-the-kept-key) has each refusal |
 | what a release rests on | a release publishes its built Worker, and the website publishes the manifest's digest only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins: [what a release publishes](../upkeep/update.md#what-a-release-publishes) |
-| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../upkeep/cost/limits.md#where-a-limit-is-counted). Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own |
+| junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../upkeep/cost/limits.md#where-a-limit-is-counted). The install and a Repair skip it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own |
 
 ## Optional edge rules
 
-The account token of an install under a domain needs ten permissions to install, and nine to repair. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and with one it makes the budget alert and the certificate alert at once. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The account token of an install under a domain needs ten permissions to install, and nine to repair. Four more are optional: with three, the install or a Repair makes rules at Cloudflare's edge, and with one it makes the budget alert and the certificate alert at once. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | With it, Repair makes | Without it |
 | --- | --- | --- |
