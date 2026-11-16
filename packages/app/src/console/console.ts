@@ -18,6 +18,7 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 
 import type { DomainPlug } from "./domain/records";
+import type { UsageHost } from "./usage/records";
 import type { FreeLimits } from "./settings/free-limits";
 import { hasContentType } from "../api/body";
 import { type CodeTries, takesCode } from "../limits/code-tries";
@@ -72,6 +73,9 @@ interface ConsoleParts extends CodeTries {
   /** The free plan's limits of whoever hosts the install: a setting above one is shown with its warning. */
   readonly freeLimits: FreeLimits;
 
+  /** The host's side of the Usage screen: the free plan's limits no setting holds, the host's own pages of figures, and those figures where the host reads them. */
+  readonly usage: UsageHost;
+
   /** How the provider starts a rebuild of the install: which addresses it takes, and what sends the one request. The starts are counted in `counters`. */
   readonly rebuild: Omit<Rebuilding, "counters">;
 
@@ -98,7 +102,7 @@ function sessionCheck(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("email", who.value);
       context.set("domain", parts.domain);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
-      context.set("host", { freeLimits: parts.freeLimits, rebuilding: { ...parts.rebuild, counters: parts.counters }, version: parts.version });
+      context.set("host", { freeLimits: parts.freeLimits, rebuilding: { ...parts.rebuild, counters: parts.counters }, version: parts.version, usage: parts.usage });
 
       return next();
     }

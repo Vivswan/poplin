@@ -8,6 +8,7 @@ import * as v from "valibot";
 
 import { REFUSAL_STATUSES, statusOf } from "../api/respond";
 import type { DomainPlug } from "./domain/records";
+import type { UsageHost } from "./usage/records";
 import { refusalSentence } from "./notices";
 import type { FreeLimits } from "./settings/free-limits";
 
@@ -40,6 +41,9 @@ interface Host {
 
   /** The version of poplin the install runs. */
   readonly version: string;
+
+  /** The host's side of the Usage screen. */
+  readonly usage: UsageHost;
 }
 
 /** What the handlers of one request share. */

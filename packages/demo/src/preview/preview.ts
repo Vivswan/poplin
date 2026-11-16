@@ -50,6 +50,13 @@ const FREE_LIMITS = {
   logins: { most: 50, warning: "Past 50 users, the host bills each login." },
 } as const;
 
+/** The invented host's side of the Usage screen: sample limits, and pages nothing answers at. It reads no figures of its own. */
+const USAGE_HOST = {
+  name: "the host",
+  limits: { requestsPerDay: 100_000, rowsReadPerDay: 5_000_000, rowsWrittenPerDay: 100_000, storedBytes: 10_000_000_000, storageWritesPerMonth: 1_000_000, storageReadsPerMonth: 10_000_000 },
+  links: { requests: "https://provider.example/usage/requests", database: "https://provider.example/usage/database", storage: "https://provider.example/usage/storage" },
+} as const;
+
 /** When the sample release the seeded install knows of came out, and where its notes are: the page of the project's releases. No such release exists. */
 const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", database: false } as const;
 
@@ -207,6 +214,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
     base,
     client: host.client,
     freeLimits: FREE_LIMITS,
+    usage: USAGE_HOST,
     rebuild: REBUILD,
     demo: { reset: `${base}${RESET_PATH}` },
     domain: changingPlug(),

@@ -357,6 +357,25 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       expect(await auditTrail(database)).toEqual([]);
     });
 
+    // Drift: the rows the database used ride in the write of the day's requests; a write that set them where it must add, or a day that kept yesterday's, would show an allowance that is not the day's.
+    test("the rows the writes of a day name add up in that day, whichever site a write is for, a write that names none adds none, and a new day starts from nothing", async () => {
+      const database = await opened(makeDatabase);
+      const before = await database.readDayUse(TODAY);
+      await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50, rows: { read: 400, written: 6 } });
+      await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 1 });
+      await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 2, rows: { read: 30, written: 0 } });
+
+      expect([before, await database.readDayUse(TODAY), await database.readDayUse(TOMORROW)]).toEqual([
+        { requests: 0, rows: { read: 0, written: 0 } },
+        { requests: 53, rows: { read: 430, written: 6 } },
+        { requests: 0, rows: { read: 0, written: 0 } },
+      ]);
+      expect(await database.readRequests(TODAY, OTHER_SITE)).toEqual({ site: 3, all: 53 });
+      await expect(database.addRequests({ day: TODAY, site: NO_SITE, requests: 1, rows: { read: -1, written: 0 } })).rejects.toThrow(RangeError);
+      await expect(database.addRequests({ day: TODAY, site: NO_SITE, requests: 1, rows: { read: 0, written: 0.5 } })).rejects.toThrow(RangeError);
+      await expect(database.readDayUse("today")).rejects.toThrow(RangeError);
+    });
+
     // Drift: a site's views are a sum over seven UTC days read by day and site; a day too many, a day of another month sorted wrongly, or another site's rows would show opens that never were.
     test("views add up per site over the day and the six before it, across a month's end, apart from the requests, and a count is dropped with the first addition a year after its day", async () => {
       const database = await opened(makeDatabase);
