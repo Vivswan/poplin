@@ -42,6 +42,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Bot settings | ${state("bots", usual)} | zone bot switches`,
     `D1 database | ${state("database", usual)} | poplin`,
     `Budget alert | ${state("alert", usual)} | poplin: usage charges reached 1 dollar`,
+    `Certificate alert | ${state("alert", usual)} | poplin: certificates of every domain of the account`,
     `Workflow | ${state("jobs", usual)} | poplin-jobs`,
   ];
 }
@@ -99,7 +100,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(19);
+    expect(writes(asked)).toHaveLength(20);
 
     const sent = asked.length;
 
@@ -364,6 +365,7 @@ test("a repair that fails half way, for another reason than a permission, stops:
       "Bot settings | not-run | ",
       "D1 database | not-run | ",
       "Budget alert | not-run | ",
+      "Certificate alert | not-run | ",
       "Workflow | not-run | ",
     ]);
     expect(account.records.map((record) => record.name)).toEqual(["*.example.com", "poplin.example.com"]);
@@ -376,7 +378,7 @@ const OPTIONAL = {
   "Single Redirect: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint"], rows: ["Redirect rule"] },
   "Zone WAF: Edit": { calls: ["GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint", "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint"], rows: ["WAF rule", "Rate rule"] },
   "Bot Management: Edit": { calls: ["GET /zones/zone-1/bot_management"], rows: ["Bot settings"] },
-  "Notifications: Edit": { calls: [`GET /accounts/${ACCOUNT}/alerting/v3/policies`], rows: ["Budget alert"] },
+  "Notifications: Edit": { calls: [`GET /accounts/${ACCOUNT}/alerting/v3/policies`], rows: ["Budget alert", "Certificate alert"] },
 } as const;
 
 /** Each of those four permissions alone, and all four, which is the token the link alone makes. */
@@ -424,7 +426,12 @@ test("a token that may read the guard rules and not make them leaves both rules 
 
     expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional"]);
     expect(guards.filter((row) => !row.includes("add this right to the account token and press Repair: "))).toEqual([]);
-    expect(rows.slice(-3)).toEqual(["D1 database | created | poplin", "Budget alert | created | poplin: usage charges reached 1 dollar", "Workflow | created | poplin-jobs"]);
+    expect(rows.slice(-4)).toEqual([
+      "D1 database | created | poplin",
+      "Budget alert | created | poplin: usage charges reached 1 dollar",
+      "Certificate alert | created | poplin: certificates of every domain of the account",
+      "Workflow | created | poplin-jobs",
+    ]);
   });
 });
 
@@ -445,13 +452,13 @@ test.each([
 /** The pieces others build on, by the call a token without their permission is refused, and what a repair still makes after each. */
 const built: readonly { readonly name: string; readonly call: string; readonly failed: string; readonly made: readonly string[] }[] = [
   { name: "the records", call: "GET /zones/zone-1/dns_records", failed: "DNS record", made: [] },
-  { name: "the login", call: `GET /accounts/${ACCOUNT}/access/policies`, failed: "Access application", made: ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert", "Workflow"] },
+  { name: "the login", call: `GET /accounts/${ACCOUNT}/access/policies`, failed: "Access application", made: ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert", "Certificate alert", "Workflow"] },
 ];
 
 // Drift: the records say whether a hostname is somebody else's, so nothing may follow a zone that was not read, and a Worker given its domain with no login behind it is half an install.
 test.each(built)("a repair with a token that may not read $name makes nothing that builds on them: the row names the right, and every piece that needs them is not run", async ({ call, failed, made }) => {
   const account = { ...emptyAccount(), refuse: call };
-  const pieces = ["DNS record", "Worker route", "Access application", "Worker variable", "Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert", "Workflow"];
+  const pieces = ["DNS record", "Worker route", "Access application", "Worker variable", "Redirect rule", "WAF rule", "Rate rule", "Bot settings", "D1 database", "Budget alert", "Certificate alert", "Workflow"];
 
   await withAccount(account, async (plug, asked) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
@@ -491,7 +498,8 @@ test.each(NEEDS)("a token without %s gets a row that names that right in the wor
     account.refuse = call;
     const naming = shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes("dd this right"));
     const needed = plug.tokenRights.includes(right);
-    const rows = right === "Account API Tokens: Edit" ? 2 : 1;
+    // Two rows are read under one right: the two keys under the tokens', the two alerts under the notifications'.
+    const rows = right === "Account API Tokens: Edit" || right === "Notifications: Edit" ? 2 : 1;
 
     expect(naming.map((row) => row.split(" | ")[1])).toEqual(Array.from({ length: rows }, () => (needed ? "failed" : "optional")));
     expect([...new Set(naming.map((row) => row.slice(row.indexOf("dd this right"))))]).toEqual([needed ? `dd this right to the account token: ${right}` : `dd this right to the account token and press Repair: ${right}`]);
@@ -1191,6 +1199,9 @@ describe("a check the install makes with the key it holds", () => {
     alert:
       "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. " +
       "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair: Notifications: Edit",
+    certificates:
+      "Cloudflare emails your first user when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone. " +
+      "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair: Notifications: Edit",
   } as const;
 
   /** The database's row in such a check, which no call reads. */
@@ -1244,6 +1255,7 @@ describe("a check the install makes with the key it holds", () => {
         `Bot settings | optional | zone bot switches: ${OPTIONAL.bots}`,
         DATABASE,
         `Budget alert | optional | poplin: usage charges reached 1 dollar: ${OPTIONAL.alert}`,
+        `Certificate alert | optional | poplin: certificates of every domain of the account: ${OPTIONAL.certificates}`,
         "Workflow | missing | poplin-jobs",
       ]);
       expect([writes(asked), account]).toEqual([[], before]);
@@ -1261,7 +1273,13 @@ describe("a check the install makes with the key it holds", () => {
       unread: [],
     },
     { name: "the bot switches", refuse: "/zones/zone-1/bot_management", row: "Bot settings | failed | the key the install holds lacks this right: Bot Management Read. Press Repair.", right: "Bot Management Read", unread: [] },
-    { name: "the budget alert", refuse: `/accounts/${ACCOUNT}/alerting/v3/policies`, row: "Budget alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair.", right: "Notifications Write", unread: [] },
+    {
+      name: "the two alerts",
+      refuse: `/accounts/${ACCOUNT}/alerting/v3/policies`,
+      row: "Budget alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair.",
+      right: "Notifications Write",
+      unread: ["Certificate alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair."],
+    },
   ];
 
   // Drift: a key made before a right was added lacks it. A check that stopped there, or said nothing of the key, would hide every other piece behind one row and leave the person with no word that a repair makes a new key.
@@ -1277,7 +1295,7 @@ describe("a check the install makes with the key it holds", () => {
       const expected = [...table({}).filter((line) => !changed.includes(kindOf(line))), DATABASE, "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now", row, ...unread];
 
       expect(shown(reading).sort()).toEqual(expected.sort());
-      expect(reading.ok ? reading.rows.flatMap((found) => (found.right === undefined ? [] : [found.right])) : []).toEqual([right]);
+      expect(reading.ok ? [...new Set(reading.rows.flatMap((found) => (found.right === undefined ? [] : [found.right])))] : []).toEqual([right]);
     });
   });
 

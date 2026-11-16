@@ -20,6 +20,9 @@ import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
 import { createInstallKey } from "../install/key/install-key";
 import type { KeptKey } from "../install/key/kept-key";
 import type { UploadKey } from "../install/key/upload-key";
+import type { AccountAlert } from "../install/pieces/alerts/account-alert";
+import { BUDGET_ALERT } from "../install/pieces/alerts/budget-alert";
+import { CERTIFICATE_ALERT } from "../../with-domain/pieces/alerts/certificate-alert";
 import { createRulesFollow } from "../../with-domain/pieces/rules/rules-follow";
 import type { AccountAddresses } from "../../without-domain/address-layout";
 import type { Connection } from "../install/client";
@@ -55,11 +58,12 @@ interface Own {
   readonly now: () => number;
 }
 
-/** The install's side at Cloudflare: the key it keeps, the plug of its kind, which the Domain screen runs, and `rules`, which carries a changed setting to the zone's guard rules. */
+/** The install's side at Cloudflare: the key it keeps, the plug of its kind, which the Domain screen runs, `rules`, which carries a changed setting to the zone's guard rules, and the alerts of its kind, which the key keeps. */
 interface Side {
   readonly key: InstallKey;
   readonly domain: DomainPlug;
   readonly rules: RulesFollow;
+  readonly alerts: readonly AccountAlert[];
 }
 
 /** Where one install answers, and everything that follows from its kind. */
@@ -101,7 +105,7 @@ function domainHosts(layout: DomainLayout): InstallHosts {
     const placed = { ...placedOf(own), layout };
     const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
 
-    return { key, domain: createDomainPlug({ ...placed, key, kept: own.kept }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
+    return { key, domain: createDomainPlug({ ...placed, key, kept: own.kept }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }), alerts: [BUDGET_ALERT, CERTIFICATE_ALERT] };
   }
 
   return {
@@ -120,7 +124,7 @@ function accountHosts(layout: AccountAddresses): InstallHosts {
     const placed = { ...placedOf(own), layout };
     const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => givePathKey({ ...placed, key }, authorisation));
 
-    return { key, domain: createPathPlug({ ...placed, key, kept: own.kept }), rules: NO_RULES };
+    return { key, domain: createPathPlug({ ...placed, key, kept: own.kept }), rules: NO_RULES, alerts: [BUDGET_ALERT] };
   }
 
   return {

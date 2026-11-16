@@ -28,6 +28,7 @@ import { BaseWorkflows } from "cloudflare/resources/workflows/workflows";
 import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 import { lacksRight, rightFor } from "../../../../with-domain/zone-plug";
+import { CERTIFICATE_ALERT } from "../../../../with-domain/pieces/alerts/certificate-alert";
 import { NEW_RULESET_NAMES, type NamedPhaseRules, type RuleStep, removeOwnRule, syncPhase } from "../../../../with-domain/pieces/rules/rules";
 import { addressesAt, forwarderNames } from "../../../../without-domain/address-layout";
 import { removeForwarders } from "../../../../without-domain/pieces/forwarders/forwarders";
@@ -62,8 +63,11 @@ const OWN_ACCESS = {
   policies: [INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessOpenPolicy] as readonly string[],
 };
 
-/** The notification policies an install makes, in the order of their rows, each with the name its policy has. */
-const OWN_ALERTS = [{ object: "Budget alert", name: BUDGET_ALERT }] as const;
+/** The notification policies an install makes, in the order of their rows, each with the name its policy has. The certificate alert is of an install under a domain alone. */
+const OWN_ALERTS = [
+  { object: "Budget alert", name: BUDGET_ALERT.name, domain: false },
+  { object: "Certificate alert", name: CERTIFICATE_ALERT.name, domain: true },
+] as const;
 
 /** The two keys of an install, in the order of their rows, each with the name every key of its kind has. */
 const OWN_KEYS = [
@@ -316,13 +320,13 @@ async function removeAccess(work: Work): Promise<void> {
   settled(work, "Access policy", policies);
 }
 
-/** Every notification policy of one of poplin's names, on an install of either kind. The permission to list them is an optional one of the token, so a list the token may not read leaves its row as one that stays. */
+/** Every notification policy of one of poplin's names that an install of the kind makes. A Repair makes each only with an optional permission, so a list the token may not read leaves its row as one that stays. */
 async function removeAlerts(work: Work): Promise<void> {
   const { connection, accountId } = work.place;
   const account = { account_id: accountId };
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BaseAlerts(api).list(account)));
 
-  for (const { object, name } of OWN_ALERTS) {
+  for (const { object, name } of OWN_ALERTS.filter((alert) => !alert.domain || work.kind === "domain")) {
     const taken = await removeOwn(
       work,
       listed,

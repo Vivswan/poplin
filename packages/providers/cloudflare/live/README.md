@@ -83,7 +83,7 @@ One job touches a test install at a time, of either kind. The checks and the mid
 
 On GitHub: Actions, the workflow of the install (`Live Checks`, or `Live Checks (account address)`), Run workflow, tick `start_over`, Run workflow.
 
-The run removes the Worker, its Workflow, and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
+The run removes the Worker, its Workflow, and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, the certificate alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
 
 On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Workflow, the Worker, the database, every file in the bucket, the budget alert, and the key. A Worker of a forwarder's name without poplin's tag stays.
 
@@ -171,7 +171,7 @@ A second install, on the test account that holds no domain. It answers on the ac
 | the Worker              | `wrangler deploy`, with `ZONE` set to the account's name and the free address on | `Worker: deployed`                                  |
 | the two forwarders      | `syncForwarders`                                                         | `Forwarders: created 0, changed 0, left 2, not poplin's 0`  |
 | the key                 | `mintKey` and `syncVariables`, where the Worker holds no active key      | `Key: present`                                              |
-| the budget alert        | `syncBudgetAlert`, mailed to the run's login                             | `Budget alert: present`                                     |
+| the budget alert        | `syncAlert`, mailed to the run's login                                   | `Budget alert: present`                                     |
 | the Workflow            | `syncJobs`, where the deploy left none                                   | `Workflow: present`                                         |
 | the new deployment      | `awaitNewDeployment`, as on the other account                            | `New deployment: answered the run's token`                  |
 
@@ -493,7 +493,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Access: Apps and Policies: Edit                             | the account | the login                                         |
 | Access: Organizations, Identity Providers, and Groups: Read | the account | the team domain the Worker checks a login against |
 | Billing: Read                                               | the account | reading that every subscription is at a price of 0 |
-| Notifications: Edit                                         | the account | the budget alert                                  |
+| Notifications: Edit                                         | the account | the budget alert, and the certificate alert       |
 | Account API Tokens: Edit                                    | the account | the two keys the install keeps                    |
 
 The token of the account without a domain needs the rows whose scope is the account, and none of the zone. Workers Scripts: Edit also reads the account's free address and makes the two forwarders.
@@ -533,6 +533,6 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | `update` | With a release of poplin published, follow "Update the install" in `docs/upkeep/update.md` on the install of `setup`. Read the new build's log. | The log holds `poplin: deploying`, the release's version, and `(was asked for latest)`. The dashboard, its sites, and its settings are as before, and the account holds no second bucket or database. |
 | `self-update` | With two releases of poplin published, deploy the older one on an install that holds its key, and publish a private and a public site. Press Update now on the dashboard. Then open the Worker's settings and its Deployments in the Cloudflare dashboard. | The foot of the side names the newer version, and Activity says `Started an update`. Both sites answer as before. The Worker has every variable it had, its secret `KEPT_KEY`, the same cron trigger, and its logs switched on. The newest deployment's message is `poplin <version>, by its own update`. A run of the workflow cannot prove this: the test install runs the main branch, never a release. |
 | `pin`   | Set the build variable `POPLIN_VERSION` to an older release's version and build again. Then set it to `v1` and build again. | The first log names the older version. The second build fails with one line that starts with `poplin:` and holds `Nothing was deployed`, and the install still answers. |
-| `alerts` | With a token that also holds Notifications: Edit, run the workflow. Then open Notifications in the Cloudflare dashboard. | The list holds `poplin: usage charges reached 1 dollar`, sent to the login. |
+| `alerts` | With a token that also holds Notifications: Edit, run the workflow. Then open Notifications in the Cloudflare dashboard. | The list holds `poplin: usage charges reached 1 dollar`, sent to the login, and on the account with a domain `poplin: certificates of every domain of the account` too. |
 
 Delete the sites you published when you are done: `poplin delete <label> --no-trash`.

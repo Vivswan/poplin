@@ -705,6 +705,7 @@ describe("the zone's repair with the nine rights of the token link alone, agains
       ["Rate rule", "optional", "the token permission for the Rate rule"],
       ["Bot settings", "optional", "the token permission for the Bot settings"],
       ["Budget alert", "optional", "the token permission for the Budget alert"],
+      ["Certificate alert", "optional", "the token permission for the Certificate alert"],
     ]);
     expect([...new Set(rows.filter((row) => row.state === "created").map((row) => row.object))]).toEqual([
       "DNS record",

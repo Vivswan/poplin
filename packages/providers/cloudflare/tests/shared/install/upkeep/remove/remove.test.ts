@@ -46,7 +46,9 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     "WAF ruleset | remove | poplin guard rules",
     "Rate rule | remove | poplin_rate",
     "Rate ruleset | remove | poplin rate rule",
-    ...SHARED.slice(0, -1),
+    ...SHARED.slice(0, 3),
+    "Certificate alert | remove | poplin: certificates of every domain of the account",
+    ...SHARED.slice(3, -1),
     "Bot switches | stay | the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
     ...SHARED.slice(-1),
   ],
@@ -55,7 +57,7 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
 
 /** The calls each kind sends, pinned: for a dry run, and for a run, with how many of the run's remove something. */
 const CALLS: Readonly<Record<Kind, { readonly dry: number; readonly run: number; readonly removals: number }>> = {
-  domain: { dry: 23, run: 48, removals: 25 },
+  domain: { dry: 23, run: 49, removals: 26 },
   "no-domain": { dry: 16, run: 31, removals: 15 },
 };
 
@@ -314,13 +316,15 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     expect([shown(run.done).filter((line) => line.startsWith(row.slice(0, row.indexOf(" | ")))).map((line) => line.split(" | ").slice(0, 3).join(" | ")), run.done.ok && run.done.ready, left(account)]).toEqual([[row], true, { ...NOTHING, ...stays }]);
   });
 
-  // Drift: the alert is made only by a token with an optional permission, on an install of either kind, so a token without it can neither list nor remove it: that is no failure of the removal.
-  test("a token without the alert's optional permission leaves the alert as a row that stays, names the permission, and the run is done", async () => {
+  // Drift: a Repair makes an alert only with an optional permission, so a token without it can neither list nor remove one: that is no failure of the removal. An install under a domain has two alerts, and one without has one.
+  test("a token without the alerts' optional permission leaves each alert of the kind as a row that stays, names the permission, and the run is done", async () => {
     const account = await installedAccount(kind, { refuse: `GET /accounts/${ACCOUNT}/alerting/v3/policies` });
     const run = await removed(account, kind, applyOf(KINDS[kind].confirm));
     const stays = run.done.ok ? run.done.rows.filter((row) => row.right !== undefined).map((row) => `${row.object} | ${row.state} | ${row.right}`) : [];
 
-    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["Budget alert | stay | Notifications: Edit"], true, [], { ...NOTHING, alerts: 1 }]);
+    const alerts = kind === "domain" ? ["Budget alert", "Certificate alert"] : ["Budget alert"];
+
+    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([alerts.map((alert) => `${alert} | stay | Notifications: Edit`), true, [], { ...NOTHING, alerts: alerts.length }]);
   });
 });
 

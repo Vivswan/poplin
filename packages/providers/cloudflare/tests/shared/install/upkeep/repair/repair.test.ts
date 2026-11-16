@@ -29,6 +29,15 @@ const [DRY, APPLY]: readonly [Run, Run] = ["dry-run", "apply"];
 /** The calls a repair that changes nothing sends, pinned for each kind: all of them read. */
 const CALLS: Readonly<Record<keyof typeof KINDS, number>> = { domain: 30, "no-domain": 26 };
 
+/** The alerts of each kind that are mailed to the first user, each with the call that changes it once that user is another: a row, then a call. */
+const FOLLOWS: Readonly<Record<keyof typeof KINDS, readonly (readonly [string, string])[]>> = {
+  domain: [
+    ["Budget alert | change | poplin: usage charges reached 1 dollar", `PUT /accounts/${ACCOUNT}/alerting/v3/policies/made-0`],
+    ["Certificate alert | change | poplin: certificates of every domain of the account", `PUT /accounts/${ACCOUNT}/alerting/v3/policies/made-1`],
+  ],
+  "no-domain": [["Budget alert | change | poplin: usage charges reached 1 dollar", `PUT /accounts/${ACCOUNT}/alerting/v3/policies/made-0`]],
+};
+
 /** The calls that add one user, in order: the policy is found, written, and only then is the user stored. */
 const ADD_CALLS = [`GET /accounts/${ACCOUNT}/access/policies`, `PUT /accounts/${ACCOUNT}/access/policies/made-1`, `POST /accounts/${ACCOUNT}/d1/database/made-0/query`];
 
@@ -188,10 +197,10 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     const account = await wholeInstall(kind, {}, loginOf("adopted@example.com"));
     const { done, changes } = await repaired(account, kind);
 
-    // The budget alert is mailed to the first user, so it follows.
+    // Every alert of the kind is mailed to the first user, so each follows.
     expect([shown(done).filter((row) => !row.includes(" | leave | ")), changes, letThrough(account)]).toEqual([
-      ["Access policy | change | poplin logins", "Budget alert | change | poplin: usage charges reached 1 dollar"],
-      [`PUT /accounts/${ACCOUNT}/access/policies/made-1`, `PUT /accounts/${ACCOUNT}/alerting/v3/policies/made-0`],
+      ["Access policy | change | poplin logins", ...FOLLOWS[kind].map(([row]) => row)],
+      [`PUT /accounts/${ACCOUNT}/access/policies/made-1`, ...FOLLOWS[kind].map(([, call]) => call)],
       ["adopted@example.com"],
     ]);
   });

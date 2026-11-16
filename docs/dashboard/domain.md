@@ -179,3 +179,17 @@ One more permission on the account token lets Repair make the alert at once. Add
 The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what can cost money.
 
 A key that may not make the alert shows in a check: the row `Budget alert` says `failed`, with the right and `Press Repair.`
+
+## An email about certificates
+
+Under a domain the install keeps a second alert: Cloudflare emails your first user when a certificate it issues for a domain fails to validate, is issued, is renewed, or runs out.
+
+| Question               | Answer                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| What it covers         | every domain of the account, not this install's alone: Cloudflare takes no narrower choice for this alert |
+| Who makes it           | the install's key, when and as it makes the budget alert; or a Repair at once, with Notifications: Edit   |
+| Its row                | `Certificate alert`: `optional` until the key or a Repair made it                                         |
+| Its name at Cloudflare | `poplin: certificates of every domain of the account`, under Notifications                                |
+| Without a domain       | there is none: the address is Cloudflare's own, and so is its certificate                                 |
+
+An account that holds other domains gets their certificate emails too. poplin is best in an account that holds only poplin, as [the key's page](../about/security.md#the-kept-key) says.

@@ -12,6 +12,7 @@ import { sha256Of } from "@poplin/core/src/storage/storage";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { INSTALL_OBJECTS } from "../../../src/shared/install/install-objects";
 import { BUDGET_ALERT } from "../../../src/shared/install/pieces/alerts/budget-alert";
+import { CERTIFICATE_ALERT } from "../../../src/with-domain/pieces/alerts/certificate-alert";
 import { runSweep } from "../../../src/shared/worker/sweep";
 import { ACCOUNT, emptyAccount, TEAM, TOKEN } from "../install/support/fake-install";
 import type { Asked } from "../install/support/replies";
@@ -31,8 +32,11 @@ const WHOLE_REMOVAL = 15;
 /** What a step over five sat-out sites costs when each takes a whole removal: the listing of the due ones, the day's count of writes to the bucket, and per site a change, 30 bucket calls, and the leftover forgotten. */
 const MOST_STEP_CALLS = 162;
 
-/** The requests the run's table says a repair of the login sends at the most with the budget alert kept and the carry of the users after it, where each list of the account fits one page. */
-const MOST_REPAIR_CALLS = 26;
+/** The requests the run's table says a repair of the login sends at the most with the two alerts kept and the carry of the users after it, where each list of the account fits one page. */
+const MOST_REPAIR_CALLS = 29;
+
+/** The names of the two alerts an install with a domain keeps, in the order they are kept. */
+const ALERTS = [BUDGET_ALERT.name, CERTIFICATE_ALERT.name];
 
 /** The one file of a site made only to be swept. */
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
@@ -88,23 +92,23 @@ describe("the scheduled run", () => {
       users: [[{ email: { email: OWNER } }]],
       variable: { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === INSTALL_OBJECTS.accessApplication)?.aud } },
     });
-    // The sixth write is the budget alert, made for the first user before the users are carried.
-    expect([first.calls <= MOST_REPAIR_CALLS, first.writes, sameDay, nextDay.calls > 0, nextDay.writes]).toEqual([true, 6, 0, true, 0]);
-    expect(account.alerts.map((alert) => [alert.name, alert.mechanisms])).toEqual([[BUDGET_ALERT, { email: [{ id: OWNER }] }]]);
+    // The sixth and the seventh write are the two alerts, made for the first user before the users are carried.
+    expect([first.calls <= MOST_REPAIR_CALLS, first.writes, sameDay, nextDay.calls > 0, nextDay.writes]).toEqual([true, 7, 0, true, 0]);
+    expect(account.alerts.map((alert) => [alert.name, alert.mechanisms])).toEqual(ALERTS.map((name) => [name, { email: [{ id: OWNER }] }]));
     expect(said).toEqual([
       {
         by: "sweep@poplin.invalid",
-        detail: { run: "repair", from: "sweep", changed: [INSTALL_OBJECTS.accessOpenPolicy, INSTALL_OBJECTS.accessOpenApplication, INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessApplication, "ACCESS", BUDGET_ALERT] },
+        detail: { run: "repair", from: "sweep", changed: [INSTALL_OBJECTS.accessOpenPolicy, INSTALL_OBJECTS.accessOpenApplication, INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessApplication, "ACCESS", ...ALERTS] },
       },
     ]);
     expect(JSON.stringify([said, await problemsOf(w)])).not.toContain(TOKEN);
   });
 
   // Drift: a repair that failed and said nothing leaves the owner to learn of a broken login by being shut out; one that threw would stop the run before it removes a single expired site.
-  // A key that lacks the login's right may hold the alert's: the alert is still kept. A key Cloudflare refuses, or no answer, is not asked a second time.
+  // A key that lacks the login's right may hold the alerts': both are still kept. A key Cloudflare refuses, or no answer, is not asked a second time.
   test.each([
     ["a key Cloudflare no longer takes", { status: 401, code: 10_000 }, [["login_not_repaired", 1, "key_refused"]], []],
-    ["a key that lacks the right", { status: 403, code: 10_000 }, [["login_not_repaired", 1, "lacks_right"]], [`POST /accounts/${ACCOUNT}/alerting/v3/policies`]],
+    ["a key that lacks the right", { status: 403, code: 10_000 }, [["login_not_repaired", 1, "lacks_right"]], [`POST /accounts/${ACCOUNT}/alerting/v3/policies`, `POST /accounts/${ACCOUNT}/alerting/v3/policies`]],
     ["a Cloudflare that gives no usable answer", { status: 503, code: 0 }, [], []],
   ] as const)("the run that begins a day, with %s, notes what a person must repair, writes nothing of the login, and still moves an expired site to the trash", async (_name, refuseAs, problems, writes) => {
     const account = emptyAccount();
@@ -152,8 +156,8 @@ describe("the scheduled run", () => {
     const keyless = { holdsKey: () => false, push: async () => ({ ok: false as const, refusal: "no_key" as const }) };
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
     const login = { holdsKey: () => true, repair: async () => ({ wrote: [], users: false, calls: 0, refusal: undefined }) };
-    const keepAlert = async (): Promise<{ readonly ok: true; readonly value: readonly string[] }> => ({ ok: true, value: [] });
-    const running = { version: "0.1.0", updating, login, keepAlert, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
+    const keepAlerts = async (): Promise<{ readonly wrote: readonly string[] }> => ({ wrote: [] });
+    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
     const kinds = async (): Promise<string[]> => (await install.database.listProblems(dayOf(w.clock.now))).map((problem) => problem.kind);
     await noteProblem(install, "login_unchecked");
     const noted = await kinds();
@@ -168,7 +172,7 @@ describe("the scheduled run", () => {
 
   // Drift: the key holds the right to make the alert, and no token is pasted after install. With no run that makes it, an install set up with the needed rights alone would have no alert until a user changed.
   // An alert the key may not make is the Domain screen's to say: a problem noted here would stand beside a row that already names the right.
-  test("the run that begins a day makes the budget alert an account lacks, with the key and for the first user, and Activity says so; an alert that stands is read alone; and a key that may not make it notes no problem", async () => {
+  test("the run that begins a day makes the alerts an account lacks, with the key and for the first user, and Activity says so; alerts that stand are read alone; and a key that may not make them is asked once and notes no problem", async () => {
     const account = emptyAccount();
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
@@ -193,9 +197,9 @@ describe("the scheduled run", () => {
     await sweep(worker, w, keyed);
     const said = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "domain_synced").map((entry) => entry.detail.changed);
 
-    expect([alertCalls(second, third), alertCalls(third, fourth), alertCalls(fourth), account.alerts]).toEqual([["GET", "POST"], ["GET"], ["GET"], []]);
-    // Newest first: the day the alert alone was made names it alone, and the first day names it after the login it put back.
-    expect(said.map((changed) => (Array.isArray(changed) ? changed.slice(-2) : changed))).toEqual([[BUDGET_ALERT], ["ACCESS", BUDGET_ALERT]]);
+    expect([alertCalls(second, third), alertCalls(third, fourth), alertCalls(fourth), account.alerts]).toEqual([["GET", "POST", "POST"], ["GET"], ["GET"], []]);
+    // Newest first: the day the alerts alone were made names them alone, and the first day names them after the login it put back.
+    expect(said.map((changed) => (Array.isArray(changed) ? changed.slice(-3) : changed))).toEqual([ALERTS, ["ACCESS", ...ALERTS]]);
     expect(await problemsOf(w)).toEqual([]);
   });
 
@@ -223,7 +227,7 @@ describe("the scheduled run", () => {
     await sweep(worker, w, keyed);
     const said = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "domain_synced" && entry.detail.from === "sweep").map((entry) => entry.detail.changed);
 
-    expect(said).toEqual([[INSTALL_OBJECTS.accessOpenPolicy, INSTALL_OBJECTS.accessOpenApplication, INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessApplication, BUDGET_ALERT]]);
+    expect(said).toEqual([[INSTALL_OBJECTS.accessOpenPolicy, INSTALL_OBJECTS.accessOpenApplication, INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessApplication, ...ALERTS]]);
     expect(await problemsOf(w)).toEqual([["login_not_repaired", 1, "lacks_right"]]);
     expect([await database.readDomainCheck(), logins()]).toEqual([undefined, [[{ email: { email: "bo@example.com" } }, { email: { email: OWNER } }]]]);
   });

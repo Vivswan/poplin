@@ -147,7 +147,7 @@ you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  -
 | Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
 | What it reaches | your one account and your one domain; the account alone on an install without a domain |
 | What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
-| What it does by itself | once a day it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. Activity says what it wrote. It also makes the [budget alert](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) where the account has none |
+| What it does by itself | once a day it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. Activity says what it wrote. It also makes the [budget alert](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar), and under a domain the [certificate alert](../dashboard/domain.md#an-email-about-certificates), where the account has none |
 | What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
 | How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
 | How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
@@ -256,7 +256,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 ## Optional edge rules
 
-The account token of an install under a domain needs ten permissions to install, and nine to repair. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The account token of an install under a domain needs ten permissions to install, and nine to repair. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and with one it makes the budget alert and the certificate alert at once. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | With it, Repair makes | Without it |
 | --- | --- | --- |
