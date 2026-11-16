@@ -109,7 +109,8 @@ async function rewriteBody(text: string, body: Body, here: Mount, look: Look, st
   const real = look.real ?? NO_REAL;
   if (body === "json") return look.kind.localText(text, look.origin, real);
 
-  if (body === "plain") return look.framed(text, status);
+  // A refusal may name an address of the console itself, as the page of an email that is no user does: it is named where the preview answers it.
+  if (body === "plain") return look.framed(text.replaceAll(`${here.origin}${here.base}`, `${look.origin}${here.prefix}`), status);
 
   const linked = withAddresses(text, (address) => localAddress(address, { here, kind: look.kind, real }));
 

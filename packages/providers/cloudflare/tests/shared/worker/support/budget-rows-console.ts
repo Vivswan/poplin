@@ -118,6 +118,18 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
+    name: "log out: the way on to where the login ends",
+    // The way out asks nobody who they are and reads nothing itself: the one query is the settings the Worker reads before any request of the dashboard.
+    arrange: async (stage) => {
+      const session = await sessionOf(stage);
+
+      return (measured) => get(measured, `${ADMIN}/out`, session);
+    },
+    status: 302,
+    budget: { queries: 1, read: 2, reads: 0, writes: 0 },
+  },
+  {
+    group,
     name: "the frame around every screen",
     route: "GET /data/frame",
     // Worst: the frame has a newer release and a note on the domain to read.

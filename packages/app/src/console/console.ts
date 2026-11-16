@@ -2,11 +2,12 @@
 //
 //   GET  <base>/assets/<file>   the console's icon and the client's script, stylesheet, and fonts, each under a name that holds a hash of its content; a browser keeps them for good
 //   GET  <base>/favicon.ico      the same icon under the name a browser asks for unbidden
+//   GET  <base>/out             the way out: the browser is sent on to where the provider ends its login
 //   GET  <base>/data/...        what a screen shows, as JSON; each screen's routes are in its own `*-routes.ts`, chained on in `routes.ts`
 //   POST <base>/data/...        one change, as JSON
 //   GET  <base>/...             the shell page, whatever the path: the client draws the screen the path names
 //
-// Every request is asked who it is from, a file of the client included, and the console keeps no answer: the next request is asked again.
+// Every request but the way out is asked who it is from, a file of the client included, and the console keeps no answer: the next request is asked again.
 // A change, and a read of the data too, is also refused when its headers name any page but this origin's own: a browser counts every site of the install as the same site as the dashboard and sends the login along.
 // A change is JSON and nothing else, which a page of another origin cannot send unless this origin lets it, and it never does.
 
@@ -48,6 +49,12 @@ const REFUSALS = {
   "not-set-up": { data: 503, page: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first." },
 } as const;
 
+/** What the page of an email that is no user says before the address that ends this browser's login. */
+const OTHER_EMAIL = "To log in with another email, open";
+
+/** The console's path that sends a browser on to where the provider ends its login. The dashboard's Log out leads here. */
+const OUT_PATH = "/out";
+
 /** How long a client waits before it asks again after a login that could not be checked, in seconds. */
 const CHECK_AGAIN_SECONDS = "60";
 
@@ -75,7 +82,7 @@ interface ConsoleParts extends CodeTries {
   /** The install the actions work on. */
   readonly install: Install;
 
-  /** Decides who a request is from, by the login it carries and the install's users as they are now. It is asked on every request. */
+  /** Decides who a request is from, by the login it carries and the install's users as they are now. It is asked on every request but the way out. */
   readonly admit: (headers: Headers) => Promise<Admitted>;
 
   /** Told of every page an admitted person opens, with the moment the provider's login began: one Activity line per login is written from it. */
@@ -111,6 +118,9 @@ interface ConsoleParts extends CodeTries {
   /** Ends every login of the dashboard at the provider. Without it nobody can be signed out here. */
   readonly endLogins?: EndLogins;
 
+  /** The address where the provider ends this browser's login: the console's way out sends a browser on to it. Without it no login is here to end, and the way out answers as a request with no login behind it. */
+  readonly signOut?: string;
+
   /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair on the Domain screen. */
   readonly rules?: RulesFollow;
 
@@ -123,7 +133,7 @@ interface Console {
   readonly fetch: (request: Request, later?: Later) => Promise<Response>;
 }
 
-/** Ask every request who it is from. One that is not admitted reads nothing of the install: a data route answers the refusal as JSON, and any other path as one plain sentence. */
+/** Ask every request that reaches it who it is from. One that is not admitted reads nothing of the install: a data route answers the refusal as JSON, and any other path as plain text: one sentence, and under it the way out for an email that is no user. */
 function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
   return async (context, next) => {
     const who = await parts.admit(context.req.raw.headers);
@@ -142,12 +152,16 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
     }
 
     const { data, page, code, sentence } = REFUSALS[who.refusal];
+    const asked = new URL(context.req.url);
     context.header("Cache-Control", "no-store");
     if (who.refusal === "unchecked") context.header("Retry-After", CHECK_AGAIN_SECONDS);
 
-    if (new URL(context.req.url).pathname.startsWith(`${parts.base}/data/`)) return context.json({ ok: false, code, about: null, sentence }, data);
+    if (asked.pathname.startsWith(`${parts.base}/data/`)) return context.json({ ok: false, code, about: null, sentence }, data);
 
-    return context.text(`${sentence}\n`, page);
+    // A person the login let through under an email that is no user stays that email until this browser's login ends: the page names the way out.
+    const out = who.refusal === "not-a-user" ? `${OTHER_EMAIL} ${asked.origin}${parts.base}${OUT_PATH}\n` : "";
+
+    return context.text(`${sentence}\n${out}`, page);
   };
 }
 
@@ -193,6 +207,14 @@ export function createConsole(parts: ConsoleParts): Console {
   };
 
   app.use(secureHeaders({ contentSecurityPolicy: POLICY, xFrameOptions: "DENY", referrerPolicy: "same-origin" }));
+
+  // The way out asks nobody who they are and reads nothing: an email that is no user must reach it too, and the provider ends the login, not the console.
+  app.get(OUT_PATH, (context) => {
+    context.header("Cache-Control", "no-store");
+    if (parts.signOut !== undefined) return context.redirect(parts.signOut, 302);
+
+    return context.text(`${REFUSALS["no-proof"].sentence}\n`, REFUSALS["no-proof"].page);
+  });
 
   app.use(admitted(parts));
 
