@@ -14,7 +14,7 @@ import { searchOf, useAddressQuery } from "@/lib/address";
 import { copy } from "@/lib/notify";
 import { addressParts, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
-import { IconButton } from "@/shared/icon-button";
+import { IconButton, RefreshButton } from "@/shared/icon-button";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { ResultLine, rowsSaid } from "@/shared/result-line";
 import { SearchBox } from "@/shared/search-box";
@@ -74,7 +74,7 @@ function SortSelect({ query, onChoose }: { readonly query: URLSearchParams; read
 
   return (
     <Select items={items} value={sortOf(query).key} onValueChange={(value) => onChoose(String(value))}>
-      <SelectTrigger aria-label="Order" className="w-40 md:hidden">
+      <SelectTrigger aria-label="Order" className="min-w-0 flex-1 md:hidden">
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} align="end">
@@ -280,18 +280,20 @@ function NoRows(props: NoRowsProps): ReactNode {
   );
 }
 
-/** What sits above the table: the search, the filter, the order on a phone, the columns' menu, and how a new site is made. */
+/** What sits above the table: the search, the filter, the order on a phone, the button that reads the list again, the columns' menu, and how a new site is made. */
 function Toolbar({
   query,
   filter,
   search,
   columns,
+  refresh,
   onStay,
 }: {
   readonly query: URLSearchParams;
   readonly filter: Filter;
   readonly search: string;
   readonly columns: ReactNode;
+  readonly refresh: ReactNode;
   readonly onStay: (query: URLSearchParams, replace?: boolean) => void;
 }): ReactNode {
   const navigate = useNavigate();
@@ -310,6 +312,7 @@ function Toolbar({
       <FilterSelect filter={filter} onChoose={(chosen) => void navigate({ to: "/", search: searchOf(filteredQuery(query, chosen)) })} />
       <SortSelect query={query} onChoose={(key) => onStay(sortedQuery(query, key))} />
       <div className="ml-auto flex items-center gap-2">
+        {refresh}
         <div className="max-md:hidden">{columns}</div>
         <NewSite />
       </div>
@@ -456,7 +459,8 @@ export function SitesScreen(): ReactNode {
   const filter = filterOf(query);
   const search = query.get("q") ?? "";
   const over = useLiesOver();
-  const { data: page, error, isPending, isPlaceholderData, refetch, place } = useShownSites(query);
+  const shownSites = useShownSites(query);
+  const { data: page, error, isPending, isPlaceholderData, refetch, place } = shownSites;
 
   const { toTable, toSite, stay } = useSitePlaces(query);
   const follow = useCallback((site: Pick<Site, "label">): void => void navigate({ ...toSite(site), replace: true }), [navigate, toSite]);
@@ -492,7 +496,7 @@ export function SitesScreen(): ReactNode {
           className={cn("@container col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", opened !== undefined && !over && "invisible")}
           {...firstRow}
         >
-          <Toolbar query={query} filter={filter} search={search} columns={<ColumnsMenu columns={columns} layout={layout} />} onStay={stay} />
+          <Toolbar query={query} filter={filter} search={search} columns={<ColumnsMenu columns={columns} layout={layout} />} refresh={<RefreshButton label="Refresh the list" read={shownSites} />} onStay={stay} />
           {nothing ? (
             <NoRows
               failure={error?.message}

@@ -13,6 +13,7 @@ const SCREENS: readonly { readonly section: string; readonly controls: (page: Pa
     section: "Sites",
     controls: (page) => [
       page.getByRole("button", { name: SECTIONS_BUTTON }),
+      page.getByRole("button", { name: "Refresh the list", exact: true }),
       page.getByRole("button", { name: /^Show link of / }),
       page.getByRole("button", { name: /^Copy the link of / }),
       page.getByRole("button", { name: /^Open the site / }),

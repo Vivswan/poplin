@@ -103,6 +103,19 @@ describe("the pages of the sites", () => {
   });
 });
 
+describe("the button that reads the list again", () => {
+  // Drift: the button would read nothing, or read the list for another address than the one shown.
+  test("reads the page of sites the address asks for once more", async () => {
+    await draw("/?sort=title");
+    const before = [...asked];
+
+    fireEvent.click(within(document.body).getByRole("button", { name: "Refresh the list" }));
+    await readAfter(1);
+
+    expect([before, asked]).toEqual([["?sort=title&dir=asc"], ["?sort=title&dir=asc", "?sort=title&dir=asc"]]);
+  });
+});
+
 describe("a row under the trash's filter", () => {
   // Drift: while the trash is read the rows of the list before still show, and each would offer Restore for a site that is not in the trash, which the server refuses.
   test("has no Restore while it shows a site that is not in the trash", async () => {
