@@ -6,6 +6,7 @@ import type { Code } from "../../../app/src/api/respond";
 import type { Login as Email } from "../../../core/src/auth/logins";
 import { OWN_SCHEMA } from "../../../core/src/database/open";
 import { answered, INSTALL_VERSION, NOW, ORIGIN } from "../../../app/tests/api/support/install";
+import { refusalSentence } from "../../../app/src/console/notices";
 import { saveLogin } from "../../src/local/login-file";
 import type { Login } from "../../src/local/login";
 import { VERSION } from "../../src/poplin";
@@ -52,6 +53,20 @@ const CODES: Readonly<Record<Code, true>> = {
   internal: true,
   allowance_spent: true,
 };
+
+/** Every reason an install refuses a release for, and whether asking again can end otherwise: a release that is not published, changes the database, or needs a new part is refused the same way each time. */
+const RELEASE_REASONS = [
+  ["no_digest", "stays"],
+  ["unreachable", "passes"],
+  ["digest_differs", "passes"],
+  ["other_version", "stays"],
+  ["database", "stays"],
+  ["needs_hand", "stays"],
+  ["host", "passes"],
+] as const;
+
+/** The hint of a refused release whose reason the table does not hold. */
+const NO_REASON_HINT = "poplin update --dry-run says which version the install runs";
 
 /** An id in the form of a site id that no site has. */
 const NO_SITE = "zzzzzzzzzzzz";
@@ -484,6 +499,19 @@ describe("run", () => {
     expect(human.err[0]).toBe(`${error.message}: max_site_size`);
     expect([error.code, error.about, error.message === "the install's own words"]).toEqual([code, "max_site_size", false]);
     expect(json.err).toEqual(human.err);
+  });
+
+  // Drift: the reasons are worded twice, here and on the dashboard. A reason one of them lacks is a bare word in a terminal, or a hint to try again where trying again never helps.
+  test.each([...RELEASE_REASONS, ["moon_phase", "unknown"] as const])("a release refused for %s is told with its reason, and with a hint of its own that says try again only where that helps", async (reason, again) => {
+    const bench = await openBench();
+    bench.hook = () => answer(409, { error: { code: "release_refused", message: "the install's own words", about: reason } });
+
+    const [sentence, hint, ...rest] = (await bench.run("update")).err;
+    const known = again !== "unknown";
+
+    expect([sentence, rest]).toEqual([`the release cannot be taken, and nothing was changed, for this reason: ${reason}`, []]);
+    expect([hint !== NO_REASON_HINT, hint?.includes("try again") === true]).toEqual([known, again === "passes"]);
+    expect(refusalSentence("release_refused", reason) !== refusalSentence("release_refused")).toBe(known);
   });
 
   test.each([
