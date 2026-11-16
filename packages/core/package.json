@@ -61,6 +61,7 @@
     "./src/names/hostname": "./src/names/hostname.ts",
     "./src/names/names": "./src/names/names.ts",
     "./src/names/marker": "./src/names/marker.ts",
+    "./src/names/segment": "./src/names/segment.ts",
     "./src/records/audit": "./src/records/audit.ts",
     "./src/records/domain-check": "./src/records/domain-check.ts",
     "./src/records/domain-states": "./src/records/domain-states.ts",
