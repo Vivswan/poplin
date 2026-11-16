@@ -13,4 +13,4 @@ npx poplin ./report --site report--k3f9x2ab71qz        # the same site, new cont
 npx poplin set report--k3f9x2ab71qz --unlisted         # anyone who has the link
 ```
 
-`https://poplin.example.com` stands for the address of your own install. The [repository](https://github.com/Vivswan/poplin#readme) shows how to get one, and lists every command.
+`https://poplin.example.com` stands for the address of your own install: under your own domain, or, without a domain, the `workers.dev` address Cloudflare gives its Worker. The [repository](https://github.com/Vivswan/poplin#readme) shows how to get one, and lists every command.

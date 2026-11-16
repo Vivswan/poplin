@@ -38,7 +38,7 @@ https://docs-page.example.com
 - **A public site keeps its unlisted address too.**
 - **Leaving public gives the public name up.** That address stops working.
 - **A public name** follows [the rules of a name](publish.md#publish). One that another site holds is refused with `name_taken`.
-- **Every public name's address ends in the install's public word**, `-page` here. No command changes it: [Security](../about/security.md#the-three-access-states) says where it comes from.
+- **Under a domain, every public name's address ends in the install's public word**, `-page` here. No command changes it: [Security](../about/security.md#the-three-access-states) says where it comes from.
 
 **The address:**
 
@@ -62,6 +62,16 @@ the public name: a name one public site claims
 | unlisted to public, or back            | nothing; a public site also answers at its public name |
 | a rename                               | the `-poplin` address carries the new name; every older address still opens the site, and a public name stays |
 | new content, a rollback                | nothing                                               |
+
+**Without a domain** the same three kinds answer at paths, on the two hostnames of [an install without a domain](../start/without-a-domain.md):
+
+| Access   | Address                                                      |
+| -------- | ------------------------------------------------------------ |
+| private  | `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/` |
+| unlisted | `poplin-sites.your-name.workers.dev/report--k3f9x2ab71qz/`   |
+| public   | the unlisted one, and `poplin-sites.your-name.workers.dev/docs/` |
+
+To or from private, the hostname changes in place of the letter, and the old address sends visitors on.
 
 Only the id finds a site. Any name before it, or none, opens the same site: `k3f9x2ab71qz-u-poplin.example.com` works too. Commands take the label without the letter: `report--k3f9x2ab71qz`.
 

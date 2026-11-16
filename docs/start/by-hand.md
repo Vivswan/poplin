@@ -5,7 +5,7 @@ order: 20
 
 # Install poplin by hand
 
-The six steps to an install, done by hand; [your agent can lead them](with-an-agent.md) instead, and [When a step fails](../fix/an-install-step-fails.md) has each failure.
+The six steps to an install under a domain of your own, done by hand; [your agent can lead them](with-an-agent.md) instead, and [When a step fails](../fix/an-install-step-fails.md) has each failure. With no domain, start at [Without a domain](without-a-domain.md).
 
 An install is your own copy of poplin, in your own Cloudflare account. You make it once. After that, your agent and your computers publish to it.
 
@@ -27,7 +27,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 | Thing                           | Why                                                                                                      |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | a Cloudflare account            | the Free plan is enough                                                                                  |
-| a domain on that account        | every site gets an address under it. It is on the account when Cloudflare's home page lists it as Active |
+| a domain on that account        | every site gets an address under it. It is on the account when Cloudflare's home page lists it as Active. With none, install [without a domain](without-a-domain.md) |
 | an email inbox you can read     | Cloudflare's login sends its code there in step 5                                                        |
 | a payment method on the account | step 1 asks for one. [What can cost money](../upkeep/cost/what-can-cost-money.md) says when it is charged      |
 | a GitHub account                | free. Step 2 puts a copy of poplin's code there                                                          |
@@ -98,7 +98,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    **If the form opens empty**, [When a step fails](../fix/an-install-step-fails.md#step-3-the-form-opens-empty) has the rows to add by hand.
 
-4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`: it shows the setup page. Under Fill in three boxes, fill each box and press Repair (the first time it also makes everything).
+4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`: it shows the setup page. Leave its choice at Your domain. Under Fill in three boxes, fill each box and press Repair (the first time it also makes everything).
 
    | Box           | Put in                                                            |
    | ------------- | ----------------------------------------------------------------- |

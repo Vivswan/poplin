@@ -12,6 +12,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 | `no_name`                                         | the path gives the site no name                  | pass `name` (`--name`)                                               |
 | `bad_name`                                        | a name or a public name breaks the rules         | lowercase letters, digits, single dashes, 3 to 40 characters         |
 | `bad_path`                                        | a file's path cannot be served                   | rename or leave out that file, and say which                         |
+| `root_links`                                      | the install has no domain, and a page links with a path that starts with `/`; nothing was sent | write the link from its own page, `css/site.css` for `/css/site.css`, and publish again |
 | `name_taken`, `reserved_name`                     | the public name is held                          | ask the user for another public name                                 |
 | `no_such_version`                                 | the install keeps no such version                | `get_site` lists the kept versions                                   |
 | `too_large`, `too_many_sites`                     | a limit of the install                           | tell the user the limit; do not delete sites to make room unasked    |

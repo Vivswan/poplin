@@ -5,7 +5,7 @@ order: 25
 
 # Install poplin without a domain
 
-An install at the address Cloudflare gives a Worker, for an account with no domain on it; [By hand](by-hand.md) is the install under a domain of your own.
+An install at the address Cloudflare gives a Worker, which needs no domain; [By hand](by-hand.md) is the install under a domain of your own. [Your agent can lead these steps](with-an-agent.md) too.
 
 ```text
 before:  a Cloudflare account
@@ -17,7 +17,7 @@ after:   https://poplin.your-name.workers.dev                               your
 
 `your-name` stands for the word of your own account in the address Cloudflare gives its Workers.
 
-**The open sites share one browser origin, and so do the private sites: publish only pages you trust, or add a domain.** [Between sites](../about/between-sites.md#without-a-domain) says what a page of one site can do to another.
+**The open sites share one browser origin, and so do the private sites: publish only pages you trust.** [Between sites](../about/between-sites.md#without-a-domain) says what a page of one site can do to another.
 
 ## What differs from an install under a domain
 

@@ -54,6 +54,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 - **The policy** goes after the application that uses it.
 - **The Workflow** stays when the Worker is deleted, so it is a row of its own. It runs the copy of a large site, and holds no site's files.
 - **The Worker** takes its values, its 15-minute timer, and its `workers.dev` address with it.
+- **Without a domain** the first five rows do not exist. Two more Workers do, `poplin-sites` and `poplin-private`: delete them under Workers & Pages, before the Worker `poplin`.
 - **The bucket** holds every site's files. If Cloudflare asks for an empty bucket, empty it there, then delete it.
 
 **Two bot switches** belong to the whole domain and carry no name. Repair can switch them on, with a token that held Bot Management: Edit. Repair never switches one off, and removing the rest leaves them on: switch them off in the domain's bot settings.

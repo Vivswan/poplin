@@ -15,7 +15,7 @@ Poplin publishes a static site (a folder, or one HTML file) to an install: the u
 | 5    | Add the MCP server to your own configuration          | you                                         |
 | 6    | Confirm that it works, and tell the user              | you                                         |
 
-`example.com` stands for the user's own domain, and `https://poplin.example.com` for the address of their dashboard, here and below. The poplin repository and the place you read this page from are neither. `npx` may ask to download the `poplin` package the first time it runs: answer yes.
+`example.com` stands for the user's own domain, and `https://poplin.example.com` for the address of their dashboard, here and below. On an install without a domain the dashboard is at the Worker's own address, `https://poplin.your-name.workers.dev`. The poplin repository and the place you read this page from are neither. `npx` may ask to download the `poplin` package the first time it runs: answer yes.
 
 ## 1. Say what is about to happen, and ask
 
@@ -78,10 +78,22 @@ Before part a, ask what the user has. Say which of these is missing, and stop un
 | The user needs                                    | For                                       |
 | ------------------------------------------------- | ----------------------------------------- |
 | a Cloudflare account                              | the Free plan is enough                   |
-| a domain on that account                          | Cloudflare's home page lists it as Active |
 | an email inbox they can read                      | the login's code goes there               |
 | a payment method on the account                   | part a asks for one, at a price of 0      |
 | a GitHub account, or git and bun on this computer | part b                                    |
+
+Then ask which of the two ways the user wants, and keep the answer: parts c, d, and e differ by it. Show the table, and say the last row in a sentence of your own.
+
+| Thing                    | Under the user's domain                                 | Without a domain                                             |
+| ------------------------ | ------------------------------------------------------- | ------------------------------------------------------------ |
+| the user needs           | a domain that Cloudflare's home page lists as Active    | nothing more                                                 |
+| the dashboard            | `https://poplin.example.com`                            | `https://poplin.your-name.workers.dev`                       |
+| a site's address         | a hostname: `report--k3f9x2ab71qz-p-poplin.example.com` | a path: `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/` |
+| a link that starts with `/` | works                                                | the publish is refused: links are written from their own page |
+| blocking AI crawlers     | a setting of the install                                | that one setting does nothing                                |
+| two sites in one browser | kept apart                                              | sites of a kind share one browser origin: a script of one can read another, so only trusted pages belong there |
+
+The way is chosen once. Poplin has no command and no screen that changes it on an install that is made.
 
 Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/cost/what-can-cost-money.md).
 
@@ -138,28 +150,28 @@ The last command opens Cloudflare in the user's browser to ask for access, then 
 
 ### c. Make a Cloudflare API token
 
-On the Setup page, under Make an account token, the user presses Open the account token form. Cloudflare's form opens in a new tab with nine permissions already chosen.
+On the Setup page the user first chooses the way, at the top of the form: Your domain, or No domain. Then, under Make an account token, they press Open the account token form. Cloudflare's form opens in a new tab with the permissions already chosen: nine under a domain, five without one.
 
 | On the form       | The user                                               |
 | ----------------- | ------------------------------------------------------ |
-| the nine rows     | leaves them                                            |
+| the rows          | leaves them                                            |
 | Account Resources | chooses Include, then their account                    |
-| Zone Resources    | chooses Include, then Specific zone, then their domain |
+| Zone Resources    | under a domain alone: chooses Include, then Specific zone, then their domain |
 | every other field | leaves it as it is                                     |
 | the bottom        | presses Continue to summary, then Create Token         |
 | the next page     | copies the token: it is shown once                     |
 
 The install never stores the token. After part e the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working. Only Check and Repair on the dashboard's Domain screen ask for a token again, and the same form makes a new one.
 
-If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the nine permissions by hand.
+If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the permissions by hand.
 
 ### d. Finish on the setup page
 
-Back on the Setup page, under Fill in three boxes, the user fills each box and presses Repair.
+Back on the Setup page, the user fills each box and presses Repair. The boxes are under Fill in three boxes, or under Fill in two boxes without a domain, where there is no Domain box.
 
 | Box           | Holds                                                     |
 | ------------- | --------------------------------------------------------- |
-| Domain        | their domain alone, with nothing before it: `example.com` |
+| Domain        | under a domain alone: their domain, with nothing before it: `example.com` |
 | Your email    | an email whose inbox they can read: the first login       |
 | Account token | the token of part c                                       |
 
@@ -182,7 +194,7 @@ export POPLIN_SETUP_TOKEN="paste the account token here"
 npx poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com
 ```
 
-In PowerShell the first line is `$env:POPLIN_SETUP_TOKEN = "paste the account token here"`.
+In PowerShell the first line is `$env:POPLIN_SETUP_TOKEN = "paste the account token here"`. Without a domain, the second line has no `--domain`, and its `--server` must be the Worker's own `workers.dev` address.
 
 Ask the user to copy you what the second line printed: the token is not in it.
 
@@ -194,7 +206,7 @@ Ask the user to copy you what the second line printed: the token is not in it.
 
 ### e. Log in to the dashboard
 
-The user opens the dashboard's address, `https://poplin.example.com` with their own domain. Cloudflare's login asks for their email and sends a code to its inbox.
+The user opens the dashboard's address: `https://poplin.example.com` with their own domain, or without a domain the Worker's address of part b. The lines of part d name it. Cloudflare's login asks for their email and sends a code to its inbox.
 
 | The user sees                       | Do                                                                                  |
 | ----------------------------------- | ----------------------------------------------------------------------------------- |

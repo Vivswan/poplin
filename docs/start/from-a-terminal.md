@@ -27,3 +27,5 @@ In PowerShell on Windows the first line is this one, and the second is the same:
 ```powershell
 $env:POPLIN_SETUP_TOKEN = "paste the account token here"
 ```
+
+**Without a domain**, the second line has no `--domain`: [step 4 of Without a domain](without-a-domain.md#the-steps) shows it.

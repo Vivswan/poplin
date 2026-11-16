@@ -15,3 +15,5 @@ What an install puts in your Cloudflare account; the steps it names are those of
 | an Access application      | the login screen in front of the dashboard and private sites   | step 4            |
 | DNS records and routes     | send your sites' addresses, and the dashboard's, to the Worker | step 4            |
 | rules on the domain        | slow down and stop unwanted traffic before the Worker          | the optional part |
+
+An install [without a domain](../start/without-a-domain.md) has no DNS record, no route, and no rule. Its step 4 makes two small Workers in their place, the forwarders: each gives the sites of one kind a hostname and hands every request to the Worker.

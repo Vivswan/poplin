@@ -5,7 +5,7 @@ order: 10
 
 # Security
 
-This page says what poplin protects against and what it does not.
+This page says what poplin protects against and what it does not. Its addresses and rows are those of an install under a domain; [Without a domain](#without-a-domain) says what differs on an install that has none.
 
 ## What unlisted covers
 
@@ -114,7 +114,7 @@ you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  -
 | Question | Answer |
 | --- | --- |
 | Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
-| What it reaches | your one account and your one domain |
+| What it reaches | your one account and your one domain; the account alone on an install without a domain |
 | What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
 | What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
 | How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
@@ -135,7 +135,7 @@ What guards each address:
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 | the setup page, `/setup`, until the first login | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it answers 404 for good |
-| the Worker's own `workers.dev` address | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
+| the Worker's own `workers.dev` address, on an install under a domain | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
 Two Access applications do this, made once at install, never per site:
 
@@ -149,6 +149,29 @@ One weakness is known. A page of a site of the same install can set a cookie for
 Nothing leaks. On an install whose dashboard matters, publish only pages you trust.
 
 Every site hostname answers GET and HEAD only. The Worker refuses every other method, and the optional bots rule at Cloudflare's edge blocks it before the Worker.
+
+## Without a domain
+
+```text
+https://poplin.your-name.workers.dev                                 the dashboard, the API, the setup page
+https://poplin-sites.your-name.workers.dev/report--k3f9x2ab71qz/     every unlisted and public site, a path each
+https://poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/   every private site, a path each
+```
+
+An install [without a domain](../start/without-a-domain.md) answers at three hostnames of the address Cloudflare gives the account. What differs on this page:
+
+| Here | Without a domain |
+| --- | --- |
+| sites in one browser | the open sites are one origin, and so are the private sites: a script of one reads another of its kind. [Between sites](between-sites.md#without-a-domain) has the rows |
+| the login | covers the dashboard's hostname and the whole hostname of the private sites. One login opens every private site |
+| a private site's address | a path on the hostname of the private sites. The hostname of the open sites sends a private or unknown label there, as a `-u-` address does |
+| a public name | a path on the hostname of the open sites: `poplin-sites.your-name.workers.dev/docs/` |
+| DNS and certificates | hold hostnames alone. A site's name and id are in the path, which neither holds |
+| the `workers.dev` address | is the dashboard's own. No hostname answers the setup page alone |
+| the setup token | five permissions, all of the account |
+| the kept key | the account's rights alone: it reads and writes nothing of a domain |
+| rules at Cloudflare's edge | none. Every request reaches the Worker, and its limits per visitor and per site count it |
+| `block_bots` | does nothing. `search_engines_allowed` and `outside_pages` work through the Worker |
 
 ## No enumeration
 
@@ -199,7 +222,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 ## Optional edge rules
 
-The install's setup token needs nine permissions. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The setup token of an install under a domain needs nine permissions. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | With it, Repair makes | Without it |
 | --- | --- | --- |
