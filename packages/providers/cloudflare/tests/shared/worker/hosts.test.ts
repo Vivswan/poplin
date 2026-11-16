@@ -1,12 +1,18 @@
 // The one Worker started as each kind of install: with a domain, and on the account's free address with no domain.
-// Without these the kind could be read in one place and forgotten in another: a site answered on the dashboard's hostname, the API on a site's, or every hostname of the free address still answered as a setup page.
+// Without these the kind could be read in one place and forgotten in another: a site answered on the dashboard's hostname, or the API on a site's.
 
 import { reset } from "cloudflare:test";
 import { sha256Of } from "@poplin/core/src/storage/storage";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { readShell } from "../../../../../app/tests/console/support/shell";
 import type { Bindings } from "../../../src/shared/worker/bindings";
+import { emptyAccount, TOKEN } from "../install/support/fake-install";
+import type { Asked } from "../install/support/replies";
 import { signer } from "../login/support/access";
-import { ADMIN, type ApiCalls, accessHeaders, ask, api, BINDINGS, countedBindings, done, installOf, instance, OWNER, problemsOf, type Published, page, publish, send, spentDatabase, tokenOf, type Worker, type World, world } from "./support/install";
+import {
+  ADMIN, type ApiCalls, accessHeaders, ask, api, BINDINGS, cloudflareOf, countedBindings, done, installOf, instance, logIn, OWNER, problemsOf,
+  type Published, page, publish, send, spentDatabase, tokenOf, under, type Worker, type World, world,
+} from "./support/install";
 
 /** The admin host of the install without a domain: the Worker's own free address under the account `example`. */
 const FREE_ADMIN = "https://poplin.example.workers.dev";
@@ -32,6 +38,23 @@ const KINDS = {
   domain: { kind: "a domain", bindings: BINDINGS, admin: ADMIN },
   account: { kind: "an account address", bindings: { ...BINDINGS, ZONE: { account_address: "example" } } as Bindings, admin: FREE_ADMIN },
 } as const satisfies Record<string, Kind>;
+
+/** The bindings of an install whose `ACCESS` is not written yet. */
+const UNFINISHED = { ...BINDINGS, ACCESS: undefined } as Bindings;
+
+/** A run that read its table, as the Domain screen is answered it. */
+interface Ran {
+  readonly ok: true;
+  readonly summary: { readonly line: string; readonly tone: string };
+}
+
+/** Every row of every table of the database, as one text. */
+async function stored(): Promise<string> {
+  const tables = await BINDINGS.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '\\_cf%' ESCAPE '\\' AND name NOT LIKE 'sqlite%'").all<{ name: string }>();
+  const rows = await Promise.all(tables.results.map(async ({ name }) => (await BINDINGS.DB.prepare(`SELECT * FROM "${name}"`).all()).results));
+
+  return JSON.stringify(rows);
+}
 
 let w: World;
 
@@ -95,9 +118,9 @@ describe("a ZONE binding that names no install", () => {
 });
 
 describe("the hosts of each kind of install, kept apart", () => {
-  // Drift: a hostname of the free address answered by the other kind's rule. An install with a domain would serve its dashboard there before its login exists, and one without would answer every host as a setup page.
+  // Drift: a hostname of the free address answered by the other kind's rule. An install with a domain would serve its dashboard there, where no login stands in front, and one without would answer nothing at its own address.
   test.each([
-    { ...KINDS.domain, answers: [[302, "/setup", ""], [302, "/setup", ""], [302, "/setup", ""], [302, "/setup", ""]] },
+    { ...KINDS.domain, answers: [[404, null, "Not found\n"], [404, null, "Not found\n"], [404, null, "Not found\n"], [404, null, "Not found\n"]] },
     { ...KINDS.account, answers: [[401, null, null], [403, null, null], [404, null, "Not found\n"], [404, null, "Not found\n"]] },
   ])("on an install with $kind, the Worker's free address, the dashboard on it, and the two site hosts beside it answer by that kind's rule", async ({ bindings, answers }) => {
     const worker = instance(w);
@@ -122,12 +145,11 @@ describe("the hosts of each kind of install, kept apart", () => {
     const whoami = await calls.whoami.$get({ query: {} });
     const shell = await askFree(worker, `${FREE_ADMIN}/`, { headers: owner });
     const data = await askFree(worker, `${FREE_ADMIN}/data/sites`, { headers: owner });
-    const setup = await askFree(worker, `${FREE_ADMIN}/setup`);
     const onAdmin = [await askFree(worker, `${FREE_ADMIN}/${open.label}/`), await askFree(worker, `${FREE_ADMIN}/manual/`), await askFree(worker, `${FREE_ADMIN}/${hidden.label}/`, { headers: owner })];
     const adminTexts = await Promise.all(onAdmin.map((answer) => answer.text()));
     const kept: (readonly [number, string | null, string])[] = [];
     for (const host of [SITES, PRIVATE]) {
-      for (const path of ["/api/whoami", "/api/sites", "/data/sites", "/data/frame", "/login/", "/setup/", "/setup/api/check", "/"]) kept.push(await told(await askFree(worker, `${host}${path}`, { headers: both })));
+      for (const path of ["/api/whoami", "/api/sites", "/data/sites", "/data/frame", "/login/", "/"]) kept.push(await told(await askFree(worker, `${host}${path}`, { headers: both })));
     }
     // A first segment with no slash after it is sent to itself with one, as a site's is, and names no site there.
     const bare = [await told(await askFree(worker, `${SITES}/login`)), await told(await askFree(worker, `${PRIVATE}/login`))];
@@ -140,7 +162,7 @@ describe("the hosts of each kind of install, kept apart", () => {
     ]);
     expect({ status: whoami.status, body: await whoami.json() }).toMatchObject({ status: 200, body: { layout: { kind: "path", sites_host: "poplin-sites.example.workers.dev", private_host: "poplin-private.example.workers.dev" } } });
     expect([shell.status, shell.headers.get("Set-Cookie"), data.status, (await data.json<{ sites: Published[] }>()).sites.map((site) => site.label).sort()]).toEqual([200, null, 200, [open.label, named.label, hidden.label].sort()]);
-    expect([setup.status, onAdmin.map((answer) => answer.status), adminTexts.filter((text) => /notes|docs|report<\/h1>/.test(text))]).toEqual([200, [403, 403, 200], []]);
+    expect([onAdmin.map((answer) => answer.status), adminTexts.filter((text) => /notes|docs|report<\/h1>/.test(text))]).toEqual([[403, 403, 200], []]);
     expect(kept).toEqual(kept.map(() => [404, null, "Not found\n"]));
     expect(bare).toEqual([[302, `${SITES}/login/`, ""], [404, null, "Not found\n"]]);
     expect(await Promise.all(served.map(told))).toEqual([[200, null, "<p>notes</p>"], [200, null, "<p>docs</p>"], [200, null, "<p>docs</p>"], [200, null, "<h1>report</h1>"]]);
@@ -289,7 +311,7 @@ describe("a changed setting of the guard rules, by the kind of install", () => {
 
 describe("a database whose allowance for the day is used up, on an install without a domain", () => {
   // Drift: the paused answer is chosen by the admin host before any instance has started. Read by the other kind's rule, the API and the dashboard of this install would answer a site's paused page, which a cache may keep.
-  test("the API answers its code, the dashboard its refusal, both site hosts the paused page, a site's file under /setup/api/ included, and the admin host's setup run its own refusal", async () => {
+  test("the API answers its code, the dashboard its refusal, and both site hosts the paused page", async () => {
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const token = await tokenOf(w, "admin");
     const spent = { ...KINDS.account.bindings, DB: spentDatabase("read") } as Bindings;
@@ -299,8 +321,6 @@ describe("a database whose allowance for the day is used up, on an install witho
       await send(worker, `${FREE_ADMIN}/data/settings/sign-everyone-out`, {}, await accessHeaders(w), spent),
       await ask(worker, `${SITES}/manual/`, {}, spent),
       await ask(worker, `${PRIVATE}/report--${NO_SITE}/`, {}, spent),
-      await ask(worker, `${SITES}/setup/api/check.html`, {}, spent),
-      await ask(instance(w), `${FREE_ADMIN}/setup/api/check`, { method: "POST" }, spent),
     ];
     const whole = await Promise.all(answers.map(async (answer) => [answer.status, answer.headers.get("Cache-Control"), (await answer.text()).replace(/^\{.*"code":"(\w+)".*$/, "$1")]));
 
@@ -309,10 +329,59 @@ describe("a database whose allowance for the day is used up, on an install witho
       [503, "no-store", "allowance_spent"],
       [503, "public, max-age=60", "This site is paused until midnight UTC.\n"],
       [503, "public, max-age=60", "This site is paused until midnight UTC.\n"],
-      [503, "public, max-age=60", "This site is paused until midnight UTC.\n"],
-      [503, "no-store", '{"ok":false,"refusal":"allowance_spent"}'],
     ]);
     // Each failure the entry answers is written twice: a line of text, then the error.
-    expect(failed).toHaveBeenCalledTimes(12);
+    expect(failed).toHaveBeenCalledTimes(8);
+  });
+});
+
+describe("an install whose ACCESS is not written yet", () => {
+  // Drift: an install whose login service was off when it was made runs without the variable until a repair writes it. One that started and admitted a token it has nothing to check with would let anyone in.
+  test("keeps the dashboard and every private address shut, names the repair command, and lets the owner in once the variable is there", async () => {
+    const unfinished = instance(w, cloudflareOf(emptyAccount(), []));
+    const headers = await accessHeaders(w);
+    const login = await ask(unfinished, `${ADMIN}/`, { headers }, UNFINISHED);
+    const data = await ask(unfinished, `${ADMIN}/data/frame`, { headers }, UNFINISHED);
+
+    const site = await publish(instance(w), await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
+    const shut = await ask(unfinished, `${under(site, "p")}/`, { headers }, UNFINISHED);
+    const opened = await ask(instance(w), `${under(site, "p")}/`, { headers });
+    // The helper throws unless the owner's first page is answered.
+    await logIn(instance(w), w);
+
+    expect([login.status, await login.text(), login.headers.get("Set-Cookie")]).toEqual([503, "The login is not set up yet. Run: npx poplin doctor --repair\n", null]);
+    expect([data.status, ((await data.json()) as { code: string }).code]).toEqual([503, "login_not_set_up"]);
+    expect([shut.status, (await shut.text()).includes("report"), opened.status, await opened.text()]).toEqual([404, false, 200, "<h1>report</h1>"]);
+  });
+});
+
+describe("the Domain screen", () => {
+  /** What the screen opens with, as far as these tests read it. */
+  interface Opened {
+    readonly form: { readonly tokenRights: readonly string[]; readonly tokenOptional: readonly { readonly right: string; readonly adds: string }[] };
+  }
+
+  // Drift: the screen is the only place a login added in Settings reaches Cloudflare's login from, and it was built and never mounted once before.
+  test("is there for a logged-in admin with the token's rights, checks without a change, repairs with the pasted token, and is refused to anyone else", async () => {
+    const account = emptyAccount();
+    const asked: Asked[] = [];
+    const writes = (): string[] => asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path.split("?")[0]}`);
+    const worker = instance(w, cloudflareOf(account, asked));
+    const session = await logIn(worker, w);
+    const strangers = [await ask(worker, `${ADMIN}/domain`), await ask(worker, `${ADMIN}/data/domain`), await send(worker, `${ADMIN}/data/domain/repair`, { token: TOKEN })];
+    const shell = await ask(worker, `${ADMIN}/domain`, { headers: session });
+    const opened = await ask(worker, `${ADMIN}/data/domain`, { headers: session });
+    const text = await opened.text();
+    const { form } = JSON.parse(text) as Opened;
+    const checked = await send(worker, `${ADMIN}/data/domain/check`, { token: TOKEN }, session);
+    const none = writes();
+    const repaired = await send(worker, `${ADMIN}/data/domain/repair`, { token: TOKEN }, session);
+
+    expect(strangers.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[403, null], [401, null], [401, null]]);
+    expect([asked.length > 0, shell.status, ((await readShell(await shell.text())).boot as { domain: boolean }).domain]).toEqual([true, 200, true]);
+    expect([form.tokenRights.includes("Workers Scripts: Edit"), form.tokenRights.includes("Zone Settings: Read")]).toEqual([true, true]);
+    // Drift: the link carries nine rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.
+    expect([form.tokenRights.includes("Zone WAF: Edit"), form.tokenOptional.find((optional) => optional.right === "Zone WAF: Edit")?.adds.startsWith("Cloudflare stops"), text.includes("by hand")]).toEqual([false, true, false]);
+    expect([checked.status, (await checked.json<Ran>()).ok, none, repaired.status, (await repaired.json<Ran>()).summary.tone, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, true, [], 200, "good", 2, false]);
   });
 });

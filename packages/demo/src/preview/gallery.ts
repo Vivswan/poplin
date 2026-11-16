@@ -8,13 +8,12 @@ import type { SiteObject } from "../../../core/src/actions/site-object";
 import { REVIEW_PAGE } from "../../../core/src/api/routes";
 import { showUserCode } from "../../../core/src/auth/computer-logins";
 import { AUDIT_WINDOW } from "../../../core/src/database/database";
-import { PLUG_STATES, type PlugState } from "./domain-plug";
 import { parsePublicName } from "../../../core/src/names/names";
 import { localAddress } from "./mount";
 import type { World } from "./world";
 
 /** The groups of the index, in the order shown. */
-export const GROUPS = ["Dashboard", "Dashboard of an install that holds nothing", "One site in the dashboard", "Access: allow this computer", "Setup page", "The login", "Served sites", "API"] as const;
+export const GROUPS = ["Dashboard", "Dashboard of an install that holds nothing", "One site in the dashboard", "Access: allow this computer", "The login", "Served sites", "API"] as const;
 
 /** The panel of a site that is not there, in the dashboard. */
 const NO_PANEL = "/sites/nothing--000000000000";
@@ -24,16 +23,6 @@ const NOBODY = "nobody";
 
 /** An id no login waits under. */
 const NO_LOGIN = "0000000000000000";
-
-/** What the install holds in each state of the plug before Repair is pressed, in the index's words. */
-const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
-  fresh: "nothing exists yet",
-  partial: "some pieces missing or changed",
-  "access-off": "a step only a person can do",
-  done: "every piece stands",
-  "token-refused": "the account token is refused",
-  unreachable: "the provider does not answer",
-};
 
 /** How many logins a stage adds to the log: more than a narrowed page of the log looks at before it stops. */
 const MANY_LOGINS = AUDIT_WINDOW + 200;
@@ -167,16 +156,6 @@ function dashboardEntries(): Entry[] {
   ];
 }
 
-function setupEntries(): Entry[] {
-  const group = "Setup page" as const;
-
-  return [
-    ...PLUG_STATES.map((state) => ({ group, name: `Before Repair: ${SETUP_WORDS[state]}`, path: `/setup/${state}` })),
-    { group, name: "An install with nothing set: its domain and first login", path: "/setup/first" },
-    { group, name: "After the first login: a token alone, for a login that is broken", path: "/setup/repair" },
-  ];
-}
-
 /** The pages of the seeded sites: each site's panel in the dashboard, then what serving answers an admin and a stranger. */
 function siteEntries(places: ReadonlyMap<string, Place>, none: Place): Entry[] {
   const page = (name: string): string => places.get(name)?.page ?? none.page;
@@ -217,5 +196,5 @@ function siteEntries(places: ReadonlyMap<string, Place>, none: Place): Entry[] {
 export async function galleryOf(world: World): Promise<readonly Entry[]> {
   const api: Entry = { group: "API", name: "A request without a token", path: "/api/whoami", status: 401 };
 
-  return [...dashboardEntries(), ...siteEntries(await placesOf(world), noPlace(world)), ...setupEntries(), api];
+  return [...dashboardEntries(), ...siteEntries(await placesOf(world), noPlace(world)), api];
 }

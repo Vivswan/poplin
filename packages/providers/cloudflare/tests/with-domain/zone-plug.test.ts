@@ -30,7 +30,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker route | ${state("routes", usual)} | poplin.example.com/*`,
     `Access application | ${state("access", usual)} | poplin: poplin.example.com, *-p-poplin.example.com`,
     `Access policy | ${state("access", usual)} | poplin logins`,
-    `Access open paths | ${state("access", usual)} | poplin open paths: poplin.example.com/api, poplin.example.com/setup`,
+    `Access open paths | ${state("access", usual)} | poplin open paths: poplin.example.com/api`,
     `Access open paths | ${state("access", usual)} | poplin open paths policy`,
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key", usual)} | poplin kept key`,
@@ -118,7 +118,7 @@ test("a repair makes the open paths, then the Access application over the whole 
   });
 
   expect(plain.applications.map((application) => (application.destinations as { uri: string }[]).map((place) => place.uri))).toEqual([
-    ["poplin.example.com/api", "poplin.example.com/setup"],
+    ["poplin.example.com/api"],
     ["poplin.example.com", "*-p-poplin.example.com"],
   ]);
   expect([Object.keys(plain.rulesets).includes("http_request_dynamic_redirect"), Object.keys(redirecting.rulesets).includes("http_request_dynamic_redirect")]).toEqual([true, false]);
@@ -1343,7 +1343,7 @@ describe("a check the install makes with the key it holds", () => {
     );
   });
 
-  // Drift: first setup holds no key. A check of its own would call Cloudflare with nothing, and the screen would stop asking for the token it needs.
+  // Drift: an install that is being made holds no key. A check of its own would call Cloudflare with nothing, and the screen would stop asking for the token it needs.
   test("an install that holds no key has no check of its own, which is what the console asks its token by", () => {
     expect(createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT }).ownCheck).toBeUndefined();
   });

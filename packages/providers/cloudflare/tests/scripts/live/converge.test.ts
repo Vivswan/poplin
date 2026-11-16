@@ -673,7 +673,7 @@ describe("what a failed wait for the install repeats of its answer", () => {
   });
 });
 
-/** The calls Cloudflare refuses a token made from the link on the setup page, which carries nine rights and none of the four optional ones. */
+/** The calls Cloudflare refuses a token made from the token form's link, which carries nine rights and none of the four optional ones. */
 const REFUSED_WITH_THE_LINK_RIGHTS = [
   "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint",
   "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",

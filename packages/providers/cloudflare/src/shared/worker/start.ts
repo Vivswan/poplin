@@ -68,7 +68,7 @@ const KEY_BYTES = 32;
 /** Every setting this build reads, by its key. */
 const SETTING_KEYS = Object.keys(SETTING_VALUES.entries);
 
-/** The refusal of every login on an install whose Access application setup has not made yet. */
+/** The refusal of every login on an install whose Access application is not made yet. */
 const NO_ACCESS = "not-set-up";
 
 /** The login of a Worker with no `ACCESS` variable: nobody is anybody. */
@@ -88,7 +88,7 @@ export interface Outside {
   /** Fetches the keys Access signs its tokens with. */
   readonly fetch: Parameters<typeof accessKeys>[0]["fetch"];
 
-  /** Sends setup's calls to Cloudflare; the runtime's own fetch when absent. */
+  /** Sends a repair's calls to Cloudflare; the runtime's own fetch when absent. */
   readonly cloudflare?: Connection["fetch"];
 
   /** What asks the project's website, once a day, which version of poplin is the newest. An update fetches the release's files through it too. */
@@ -124,7 +124,7 @@ export interface Instance {
   /** Writes the Activity line of a login, once for each login at Access; it is told every dashboard page a user opens. */
   readonly entered: ReturnType<typeof createEntries>;
 
-  /** The install's side at Cloudflare, for setup and the Domain screen: the plug of the install's kind. */
+  /** The install's side at Cloudflare, for the Domain screen: the plug of the install's kind. */
   readonly domain: DomainPlug;
 
   /** The key poplin keeps for Cloudflare: whether the install holds one, whether Cloudflare still takes it, and the way to a new one. Nothing answers the key itself. */
@@ -238,7 +238,7 @@ async function readStored(database: Database): Promise<SettingsAndKey | Extract<
   }
 }
 
-/** Read the Worker's variables, and list every one that cannot be used. An absent `ACCESS` is no fault: nobody is admitted until setup writes it. */
+/** Read the Worker's variables, and list every one that cannot be used. An absent `ACCESS` is no fault: nobody is admitted until a repair writes it. */
 function readVariables(env: Bindings): {
   readonly hosts: ReturnType<typeof readHosts>;
   readonly own: ReturnType<typeof readOwnWorker>;

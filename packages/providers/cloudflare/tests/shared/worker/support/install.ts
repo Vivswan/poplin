@@ -110,7 +110,7 @@ export async function world(): Promise<World> {
   return { clock: { now: NOW }, team, certs: certs(team) };
 }
 
-/** Where the Cloudflare API is, as the setup client's calls name it. */
+/** Where the Cloudflare API is, as a repair's calls name it. */
 const CLOUDFLARE_API = "/client/v4";
 
 /**
@@ -132,7 +132,7 @@ export function cloudflareOf(account: Account, asked: Asked[]): NonNullable<Outs
 /**
  * Make one Worker instance of a world.
  *
- * @param cloudflare - what answers the setup client's calls; left out, a call to Cloudflare fails the test
+ * @param cloudflare - what answers a repair's calls; left out, a call to Cloudflare fails the test
  * @param latest - what answers the day's question about the newest version; left out, a website that has no such file
  */
 export function instance(from: World, cloudflare?: Outside["cloudflare"], latest: Outside["latest"] = NO_WEBSITE): Worker {
@@ -237,7 +237,7 @@ export async function accessHeaders(from: World, changes: Record<string, unknown
 }
 
 /**
- * Log the owner in as a person does: Access issues its token, and the first page of the dashboard is opened with it, which writes the login's Activity line and shuts the setup page.
+ * Log the owner in as a person does: Access issues its token, and the first page of the dashboard is opened with it, which writes the login's Activity line.
  *
  * @param bindings - the bindings that page is asked on; the simulated ones when left out
  * @returns the headers Access puts on every request of that login, live for the 30 days an Access session lasts
@@ -257,7 +257,7 @@ export function under(site: Pick<Published, "label">, letter: "p" | "u"): string
 }
 
 /**
- * Send a change as the dashboard's client and the setup page's client send it: a POST of JSON from a page of the same origin.
+ * Send a change as the dashboard's client sends it: a POST of JSON from a page of the same origin.
  *
  * @param headers - laid over the client's own, such as the token Access puts on a user's request
  */

@@ -57,7 +57,7 @@ function wildcardName(layout: DomainLayout): string {
   return `*.${layout.domain}`;
 }
 
-// The setup client starts the comment of a record it creates with the mark.
+// A repair starts the comment of a record it creates with the mark.
 function isOwn(record: ZoneRecord): boolean {
   return record.comment?.startsWith(INSTALL_OBJECTS.recordMark) === true;
 }

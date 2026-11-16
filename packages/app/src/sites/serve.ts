@@ -164,7 +164,7 @@ function requesterHost(headers: Headers): string | undefined {
 
 // A browser marks who made a request. Opening the address itself, as the top-level page, always passes.
 // It calls every hostname of the domain `same-site`, so there the requester's own hostname decides; a request that names none passes.
-// A hostname that ends as a site's does is the install's: its routes take every such name, and setup refuses a zone that holds one of its own.
+// A hostname that ends as a site's does is the install's: its routes take every such name, and an install refuses a zone that holds one of its own.
 function isOutsideSubrequest(headers: Headers, addresses: SiteAddresses): boolean {
   const from = headers.get("Sec-Fetch-Site");
   if (from !== "cross-site" && from !== "same-site") return false;

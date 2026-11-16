@@ -1,20 +1,16 @@
 // Which screen the address names: the routes of the console. A new screen is added here, and its section in the frame is then given its path.
 
 import { REVIEW_PAGE } from "@poplin/core/src/api/routes";
-import { CatchBoundary, createLazyRoute, createRootRoute, createRoute, createRouter, RouterProvider, useNavigate } from "@tanstack/react-router";
-import { lazy, type ReactNode, Suspense } from "react";
+import { createLazyRoute, createRootRoute, createRoute, createRouter, RouterProvider, useNavigate } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ADDRESS_RULES } from "@/lib/address";
-import { SETUP } from "@/setup/setup-start";
 import { Unread } from "@/shared/unread";
 import { WaitingRows } from "@/shared/waiting-rows";
 import { AppShell, type Section } from "@/shell/app-shell";
 import { SitesScreen } from "@/sites/sites-screen";
-
-/** The setup screen, whose code only the setup page loads. */
-const SetupScreen = lazy(async () => ({ default: (await import("@/setup/setup-screen")).SetupScreen }));
 
 /** The frame of every route. An address no route names is told as not there. */
 const ROOT = createRootRoute({ notFoundComponent: NoScreen });
@@ -127,15 +123,7 @@ function meanwhile(section: Section, heading: string): { readonly pendingCompone
   };
 }
 
-/** Draw the screen the address names. The setup page has one screen, whatever the path. */
+/** Draw the screen the address names. */
 export function Screens(): ReactNode {
-  if (SETUP === null) return <RouterProvider router={ROUTER} />;
-
-  return (
-    <CatchBoundary getResetKey={() => "setup"} errorComponent={NotLoaded}>
-      <Suspense fallback={<WaitingRows />}>
-        <SetupScreen start={SETUP} />
-      </Suspense>
-    </CatchBoundary>
-  );
+  return <RouterProvider router={ROUTER} />;
 }

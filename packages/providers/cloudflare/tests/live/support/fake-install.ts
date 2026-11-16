@@ -1,7 +1,6 @@
 // A local stand-in for a deployed install, for the self-test of the live checks: the real API and the real serving on a database and a store in memory, with a hand-written edge in front.
 //
 //   poplin.example.com/api...        the real API
-//   poplin.example.com/setup...      the install's own 404: its setup page is shut
 //   poplin.example.com/...           with the login in front, a redirect off the domain to the team's login
 //   poplin.example.com/data/...      from a script, with the login in front, the edge's own 401
 //   poplin.example.com/...           with no login in front, the install's own refusal: 401 as JSON under /data/, a 403 anywhere else
@@ -104,9 +103,6 @@ export interface FakeSwitches {
 
   /** A fault: the login in front of the admin hostname covers the path `/login` alone, as an install made before the whole hostname was guarded, so the install itself answers every other path. */
   readonly loginPathOnly?: boolean;
-
-  /** A fault: the login in front of the admin hostname covers the setup page's path too. */
-  readonly setupBehindLogin?: boolean;
 
   /** No route reaches the public word's hostnames. */
   readonly noPublicRoute?: boolean;
@@ -231,15 +227,9 @@ function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
 
-function isSetupPath(pathname: string): boolean {
-  return pathname === "/setup" || pathname.startsWith("/setup/");
-}
-
-/** Whether the login in front of the admin hostname stops a path that is not the API's: every one but the setup page's, unless a fault moves it. */
+/** Whether the login in front of the admin hostname stops a path that is not the API's. */
 function behindLogin(switches: FakeSwitches, pathname: string): boolean {
   if (switches.access !== true) return false;
-
-  if (isSetupPath(pathname)) return switches.setupBehindLogin === true;
 
   return pathname === "/login" || switches.loginPathOnly !== true;
 }
@@ -424,9 +414,6 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   // What the install itself answers there, to a request the login let through or that met none.
   const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
     if (isApiPath(url.pathname)) return place.api.fetch(request);
-
-    // As the install answers its setup page once somebody has logged in: a 404 that says nothing of keeping.
-    if (isSetupPath(url.pathname)) return new Response("Not found.\n", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
     // As the install refuses a request no login stands behind.
     if (url.pathname.startsWith("/data/")) return Response.json({ ok: false, code: "no_login", about: null, sentence: NO_LOGIN }, { status: 401, headers: REFUSAL_HEADERS });

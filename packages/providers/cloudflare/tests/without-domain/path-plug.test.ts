@@ -48,7 +48,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Forwarder | ${state("forwarders")} | poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)`,
     `Access application | ${state("access")} | poplin: poplin.example.workers.dev, poplin-private.example.workers.dev`,
     `Access policy | ${state("access")} | poplin logins`,
-    `Access open paths | ${state("access")} | poplin open paths: poplin.example.workers.dev/api, poplin.example.workers.dev/setup`,
+    `Access open paths | ${state("access")} | poplin open paths: poplin.example.workers.dev/api`,
     `Access open paths | ${state("access")} | poplin open paths policy`,
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key")} | poplin kept key`,
@@ -90,7 +90,7 @@ test("a check of an account with nothing in it names the two forwarders, the log
   });
 });
 
-// Drift: the count is what one request of a Worker spends on a repair: past 50 the setup page's one press could not finish on the free plan.
+// Drift: the count is what one request of a Worker spends on a repair: past 50 the Domain screen's one press could not finish on the free plan.
 test("a repair makes every object in 29 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
   const account = deployed();
 
@@ -101,7 +101,7 @@ test("a repair makes every object in 29 calls, the forwarders bound to the one W
       ["poplin-sites", "poplin-private"].map((id) => ({ id, tags: ["poplin-forwarder"], bindings: [{ type: "service", name: "POPLIN", service: "poplin" }], enabled: true, previews_enabled: false })),
     );
     expect(account.applications.map((application) => (application.destinations as { uri: string }[]).map((place) => place.uri))).toEqual([
-      ["poplin.example.workers.dev/api", "poplin.example.workers.dev/setup"],
+      ["poplin.example.workers.dev/api"],
       ["poplin.example.workers.dev", "poplin-private.example.workers.dev"],
     ]);
     expect(account.bindings.slice(3)).toEqual([
@@ -368,7 +368,7 @@ test.each([
   });
 });
 
-// Drift: first setup holds no key. A check of its own would call Cloudflare with nothing, and the screen would stop asking for the token it needs.
+// Drift: an install that is being made holds no key. A check of its own would call Cloudflare with nothing, and the screen would stop asking for the token it needs.
 test("an install that holds no key has no check of its own", async () => {
   expect(createPathPlug({ accountId: ACCOUNT, script: "poplin", layout: ADDRESSES }).ownCheck).toBeUndefined();
 });

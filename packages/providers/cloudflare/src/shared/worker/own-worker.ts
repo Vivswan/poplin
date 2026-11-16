@@ -1,5 +1,5 @@
 // The Worker's own place at Cloudflare: the account it runs in and the name it runs under, as its two variables hold them.
-// Setup acts on that account alone, so neither is ever taken from a request.
+// A repair acts on that account alone, so neither is ever taken from a request.
 
 import { INSTALL_OBJECTS } from "../install/install-objects";
 

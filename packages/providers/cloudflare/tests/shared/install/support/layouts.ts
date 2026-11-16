@@ -1,4 +1,4 @@
-// The layouts and hostnames the planner tests share, each checked the way setup checks one.
+// The layouts and hostnames the planner tests share, each checked the way an install checks one.
 
 import { type Hostname, parseHostname } from "@poplin/core/src/names/hostname";
 import { type AccountAddresses, parseAccountAddresses } from "../../../../src/without-domain/address-layout";

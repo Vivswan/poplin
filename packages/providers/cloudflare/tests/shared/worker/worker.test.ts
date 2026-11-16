@@ -123,9 +123,6 @@ const EVERY_ROUTE: { readonly [Path in keyof Routes]: { readonly [Method in keyo
   "/api/update": { $get: (calls) => calls.update.$get({ query: {} }), $post: (calls) => calls.update.$post({ query: {} }) },
 };
 
-/** What a browser and `poplin setup` call on the setup page before anybody can log in: the page, its one change, and a program's two runs. */
-const SETUP_CALLS = ["/setup", "/setup/data/repair", "/setup/api/check", "/setup/api/repair"];
-
 /** Every route the app declares, by its path and then its method. */
 type Routes = ExtractSchema<Api>;
 
@@ -848,7 +845,7 @@ describe("a request over plain http", () => {
   const plain: readonly (readonly [kind: string, address: string])[] = [
     ["a site", "http://report--k3f9x2ab71qz-p-poplin.example.com/a/b.html?c=d"],
     ["the admin hostname", "http://poplin.example.com/sites?page=2"],
-    ["the Worker's own address", "http://poplin.example.workers.dev/setup"],
+    ["the Worker's own address", "http://poplin.example.workers.dev/"],
     ["a hostname of nobody", "http://elsewhere.example.net/"],
   ];
 
@@ -959,7 +956,7 @@ describe("the admin hostname", () => {
     expect([before, during, removal.status, after]).toEqual([[[403, 403], [403, 403]], [[200, 200], [200, 200]], 200, [[403, 403], [403, 403], 403]]);
   });
 
-  // Drift: every page a person opens would write a row, which the free plan counts by the day; or a login would leave no line, and the setup page would stay open after the first one.
+  // Drift: every page a person opens would write a row, which the free plan counts by the day; or a login would leave no line.
   test("one login at Access leaves one Activity line, whatever instance its pages reach and however many it opens; a second login leaves a second", async () => {
     const [worker, other] = [instance(w), instance(w)];
     const { database } = await installOf(w);
@@ -980,14 +977,14 @@ describe("the admin hostname", () => {
 
   // Drift: at Cloudflare the login stands in front of the whole admin hostname but the open paths of the shared table. A route a program calls under none of them would meet a login no program can pass.
   // An open path the Worker answers nothing under, or answers the dashboard under, would be a way past the login with nothing behind it that checks a token of its own.
-  test("every route of the API and every call of the setup page is under an open path of the login; each open path is answered by its own piece, down to a path no route has; and a path that only starts like one is the dashboard's", async () => {
+  test("every route of the API is under an open path of the login; each open path is answered by its own piece, down to a path no route has; and a path that only starts like one is the dashboard's", async () => {
     const worker = instance(w);
     const open: readonly string[] = INSTALL_OBJECTS.openPaths;
     const below = (start: string, path: string): boolean => path === start || path.startsWith(`${start}/`);
     const refused = async (path: string): Promise<boolean> => (await (await ask(worker, `${ADMIN}${path}`)).text()) === `${NO_LOGIN.sentence}\n`;
     const answered = async (paths: readonly string[]): Promise<(readonly [string, boolean])[]> => Promise.all(paths.map(async (path) => [path, await refused(path)] as const));
 
-    const outside = [...Object.keys(EVERY_ROUTE), ...SETUP_CALLS].filter((route) => !open.some((start) => below(start, route)));
+    const outside = Object.keys(EVERY_ROUTE).filter((route) => !open.some((start) => below(start, route)));
     const own = await answered(open.flatMap((start) => [start, `${start}/no-such-route`]));
     const beside = await answered(["/", "/tokens", "/login", ...open.flatMap((start) => [`${start}x`, `${start}-more/data`])]);
 
@@ -1411,8 +1408,8 @@ describe("the rows the live checks count", () => {
 });
 
 describe("a database that takes no more writes for the day", () => {
-  // Drift: an instance wrote on every start and a login wrote its line before its page, so a set-up install answered nobody once its writes were spent. Letting a first login through the same way would leave the setup page open behind a person who is in.
-  test("a new instance of a set-up install starts, serves a page and a file, lets a person who just logged in see the dashboard without the audit entry, which the log notes; the first login of an install is refused and its setup stays open", async () => {
+  // Drift: an instance wrote on every start and a login wrote its line before its page, so a set-up install answered nobody once its writes were spent.
+  test("a new instance of a set-up install starts, serves a page and a file, lets a person who just logged in see the dashboard without the audit entry, which the log notes; the first login of an install is refused", async () => {
     using warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const spent = withBindings({ DB: spentDatabase("write") });
@@ -1443,7 +1440,7 @@ describe("a database that takes no more writes for the day", () => {
 
 describe("a database whose allowance for the day is used up", () => {
   // Drift: D1 says so only in the words of an error, and every address answered a bare 503 or 500 that named nothing. A visitor, a caller of the API, and the owner each need it in their own form, with the wait to midnight UTC, or they ask again all day.
-  test("a site's address answers the paused page, the API the code with what ran out, the dashboard's page its sentence and the dashboard's data its refusal, and a program's setup run its refusal: each a 503 with the seconds to midnight UTC", async () => {
+  test("a site's address answers the paused page, the API the code with what ran out, the dashboard's page its sentence, and the dashboard's data its refusal: each a 503 with the seconds to midnight UTC", async () => {
     using failed = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const token = await tokenOf(w, "admin");
     const site = await publish(instance(w), token, { name: "report", access: "public" }, [page("<h1>report</h1>")]);
@@ -1460,7 +1457,6 @@ describe("a database whose allowance for the day is used up", () => {
       await ask(paused, `${ADMIN}${PATHS.whoami.$path()}`, { headers: bearer }, noReading),
       await ask(paused, `${ADMIN}/`, { headers: session }, noReading),
       await ask(paused, `${ADMIN}/data/sites`, { headers: session }, noReading),
-      await ask(paused, `${ADMIN}/setup/api/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "a-token-0123456789-abcdefgh" }) }, noReading),
       await ask(reading, `${ADMIN}${PATHS.tokens.$path()}`, { method: "POST", headers: { ...bearer, "Content-Type": "application/json" }, body: JSON.stringify({ scope: "publisher", note: "a test" }) }, noWriting),
       await send(reading, `${ADMIN}/data/people/add`, { login: "second@example.com" }, session, noWriting),
     ];
@@ -1473,12 +1469,11 @@ describe("a database whose allowance for the day is used up", () => {
       [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "reading" } })],
       [503, "6400", "no-store", `${NO_READING}\n`],
       [503, "6400", "no-store", JSON.stringify({ ok: false, code: "allowance_spent", about: "reading", sentence: NO_READING })],
-      [503, "6400", "no-store", JSON.stringify({ ok: false, refusal: "allowance_spent" })],
       [503, "6400", "no-store", JSON.stringify({ error: { code: "allowance_spent", message: "a day's allowance of the install is used up: ask again after midnight UTC", about: "writing" } })],
       [503, "6400", "no-store", JSON.stringify({ ok: false, code: "allowance_spent", about: "writing", sentence: "The database takes no more changes today: its free allowance for writing is used up. Changes work again after midnight UTC." })],
     ]);
     // The entry writes down each failure it answers itself. The dashboard answers the change it could not write, so the entry never sees that one. Each is written twice: a line of text, then the error.
-    expect(failed).toHaveBeenCalledTimes(14);
+    expect(failed).toHaveBeenCalledTimes(12);
   });
 });
 

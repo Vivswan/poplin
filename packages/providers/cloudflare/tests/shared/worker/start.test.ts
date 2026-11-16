@@ -177,7 +177,7 @@ describe("the upload key of an instance", () => {
     { name: "an upload key the clock dates to a moment that is still to come", secret: () => keyMade(-60_000), direct: false },
   ];
 
-  // Drift: the bucket refuses a new key for about two minutes. An install that signed with it at once would hand out tickets the bucket refuses, on the first publish after every setup and every repair.
+  // Drift: the bucket refuses a new key for about two minutes. An install that signed with it at once would hand out tickets the bucket refuses, on the first publish after every install and every repair.
   test.each(ages)("$name: a begun publish is handed tickets $direct for the bucket, and no answer holds the key's secret", async ({ secret, direct }) => {
     const worker = instance(w);
     const token = await tokenOf(w, "admin");

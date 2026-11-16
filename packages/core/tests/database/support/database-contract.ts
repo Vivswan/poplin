@@ -281,13 +281,13 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       await database.keepDomainCheck(first, { run: "check", from: "dashboard" });
       const kept = await database.readDomainCheck();
-      await database.keepDomainCheck(second, { run: "repair", from: "setup" });
+      await database.keepDomainCheck(second, { run: "repair", from: "sweep" });
 
       expect([before, kept, await database.readDomainCheck()]).toEqual([undefined, { ...first, ...NOTHING_WAITS }, { ...second, ...NOTHING_WAITS }]);
       expect(await database.readFrame(NOW)).toEqual({ settings: undefined, domainCheck: { ...second, ...NOTHING_WAITS }, updateCheck: undefined, problems: [] });
       expect((await auditTrail(database)).map(({ action, by, at, detail }) => ({ action, by, at, detail }))).toEqual([
         { action: "domain_synced", by: ADA, at: NOW, detail: { run: "check", from: "dashboard" } },
-        { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "setup" } },
+        { action: "domain_synced", by: ADA, at: NOW + 5, detail: { run: "repair", from: "sweep" } },
       ]);
     });
 

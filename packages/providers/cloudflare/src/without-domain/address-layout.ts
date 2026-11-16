@@ -1,6 +1,6 @@
 // The addresses of an install without a domain, after their checks: three hostnames on the account's free `workers.dev` address, each safe to write into a Worker's name and an Access application.
 //
-//   <worker>.<account>.workers.dev            the dashboard, the login, the API, and the setup page
+//   <worker>.<account>.workers.dev            the dashboard, the login, and the API
 //   <worker>-sites.<account>.workers.dev      every unlisted and public site
 //   <worker>-private.<account>.workers.dev    every private site
 
@@ -32,7 +32,7 @@ export interface AccountAddresses {
   /** The one Worker's name. */
   readonly worker: string;
 
-  /** The hostname of the dashboard, the login, the API, and the setup page: the Worker's own free address. */
+  /** The hostname of the dashboard, the login, and the API: the Worker's own free address. */
   readonly adminHost: Hostname;
 
   /** The name of the forwarder in front of the open sites. */

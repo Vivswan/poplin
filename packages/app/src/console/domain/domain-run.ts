@@ -1,4 +1,4 @@
-// One run of the domain plug for the Domain screen or the setup page: the token goes in, the rows come out, and the install keeps the run: its pieces as the last check of the domain, and one audit entry that says what was found or done.
+// One run of the domain plug for the Domain screen: the token goes in, the rows come out, and the install keeps the run: its pieces as the last check of the domain, and one audit entry that says what was found or done.
 // A check with no token is the plug's own, made with what the install itself holds at the provider: it is kept the same way. One nobody pressed is kept with no audit entry.
 // A repair that leaves every piece of the login and every object that holds the users standing has carried the users it read to the domain: a change of the users waits no more while those are still the stored ones.
 // A repair that wrote such an object and stopped short may have left the domain with users of an earlier moment, so the change waits.
@@ -15,7 +15,10 @@ import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState,
 const HIDDEN = "[token]";
 
 /** The status of a page that holds no table. */
-export const REFUSAL_STATUS = { token: 403, unreachable: 502, no_domain: 403, bad_domain: 400, bad_address: 400, bad_login: 400, allowance_spent: 503 } as const;
+export const REFUSAL_STATUS = { token: 403, unreachable: 502, no_domain: 403, allowance_spent: 503 } as const;
+
+/** Where a run a person asked for comes from, as its audit entry says it: the dashboard's Domain screen. */
+const FROM = "dashboard";
 
 /** How the install remembers a row of each state that says how the object stands: what a repair did stands, and one that only lacks an optional right is not set up. */
 const REMEMBERED: Readonly<Record<Exclude<DomainState, "failed" | "not-run" | "left-out">, Extract<CheckedPiece, { state: "ok" | "needs_repair" | "not_set_up" }>["state"]>> = {
@@ -48,17 +51,11 @@ interface Asked {
   /** Reads the settings the provider's side is made to match. The plug asks only once the token is proven. */
   readonly settings: ReadSettings;
 
-  /** Who the audit entry names; left out where no login says, it names the first stored login. */
-  readonly by?: AuditEntry["by"];
-
-  /** The page the form was on. */
-  readonly from: "dashboard" | "setup";
+  /** Who the audit entry names. */
+  readonly by: AuditEntry["by"];
 
   /** Whether the run writes no audit entry: a check nobody pressed, which only renews what the install remembers. Left out, it writes one. */
   readonly unasked?: boolean;
-
-  /** Whether the run is kept, as the last check of the domain and as an audit entry; left out, it is. A run on an install with no stored settings is not: nobody is there to name, and whoever sent it has proven nothing of this install. */
-  readonly unrecorded?: boolean;
 }
 
 function hidden(text: string, token: string): string {
@@ -140,7 +137,6 @@ function askPlug(plug: DomainPlug, asked: Asked, token: string, settings: ReadSe
  * Run the plug once and keep the run: its pieces as the last check of the domain, in place of the run kept before, and its audit entry. A problem the run shows as mended ends with it.
  *
  * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, keeps nothing, so the run kept before stays the last one.
- *   An unrecorded run keeps nothing either, nor does one signed by a name that holds the token.
  *   Nothing kept ever holds the token. A repair that left the login standing settles a change of the users while the logins it carried are the stored ones
  * @throws {Error} the plug or the database failed; nothing was kept
  */
@@ -156,18 +152,12 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
 
   const token = asked.token ?? "";
   const reading = withoutToken(await askPlug(plug, asked, token, settings), token);
-  if (!reading.ok || asked.unrecorded === true) return reading;
-
-  const by = asked.by ?? read?.logins[0];
-  if (by === undefined) throw new Error("a table was read with no login behind it, so the audit entry has nobody to name");
-
-  // An email typed on the setup page can hold the token, in whatever case, and a name cannot be scrubbed: such a run is not kept.
-  if (token !== "" && by.toLowerCase().includes(token.toLowerCase())) return reading;
+  if (!reading.ok) return reading;
 
   const pieces = reading.rows.map(remembered);
-  const detail = asked.unasked === true ? null : { run: asked.run, from: asked.from, ...byState(reading) };
+  const detail = asked.unasked === true ? null : { run: asked.run, from: FROM, ...byState(reading) };
   const carried = usersAfter(asked.run, reading.rows, pieces, read?.logins);
-  await keepDomainRun(install, { ran_at: install.now(), by, run: asked.run, pieces }, detail, carried === undefined ? undefined : { logins: carried, since: began });
+  await keepDomainRun(install, { ran_at: install.now(), by: asked.by, run: asked.run, pieces }, detail, carried === undefined ? undefined : { logins: carried, since: began });
 
   return reading;
 }

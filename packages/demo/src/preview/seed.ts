@@ -410,7 +410,7 @@ async function checkDomain(world: World): Promise<void> {
   const settings = await world.install.database.readSettings();
   if (settings === undefined) throw new Error("the demo's seed lost its settings");
 
-  await runDomain(standingPlug(world.kind.provider), world.install, { run: "check", token: DOMAIN_TOKEN, settings: async () => settings, by: world.admin.holder, from: "dashboard" });
+  await runDomain(standingPlug(world.kind.provider), world.install, { run: "check", token: DOMAIN_TOKEN, settings: async () => settings, by: world.admin.holder });
 }
 
 /**

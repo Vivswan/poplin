@@ -3,7 +3,7 @@
 //   poplin              the whole dashboard hostname and every private site's address   poplin logins: allow, the install's logins
 //   poplin open paths   the paths of the dashboard hostname a program reaches            poplin open paths policy: bypass, everyone
 //
-// Access takes the longer path first, so an open path passes to the Worker with no login, where the API checks its own token and the setup page its own.
+// Access takes the longer path first, so an open path passes to the Worker with no login, where the API checks its own token.
 
 import type { Logins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
@@ -188,7 +188,7 @@ function planPair(policy: WantedPolicy, application: WantedApplication, current:
  *
  * @param current - every reusable policy and application of the account as they are now
  * @returns the steps of the open paths, then those of the guarded application, which covers the whole dashboard hostname and then the private sites' pattern.
- * The open paths come first, so no moment of a run leaves the API or the setup page behind the login
+ * The open paths come first, so no moment of a run leaves the API behind the login
  */
 export function planAccess(desired: DesiredAccess, current: AccountAccess): AccessStep[] {
   const open = INSTALL_OBJECTS.openPaths.map((path) => `${desired.hostname}${path}`);

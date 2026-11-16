@@ -28,7 +28,7 @@ async function openRun() {
   const settings = await opened.install.database.readSettings();
   if (settings === undefined) throw new Error("the settings are not stored");
 
-  const asked = { run: "check", token: TOKEN, settings: async () => settings, by: opened.owner, from: "dashboard" } as const;
+  const asked = { run: "check", token: TOKEN, settings: async () => settings, by: opened.owner } as const;
 
   const synced = async (): Promise<number> => (await opened.audit()).filter((entry) => entry.action === "domain_synced").length;
 
@@ -148,14 +148,6 @@ test("the kept run holds nothing of the token, even from a plug that hands it ba
   expect([stored.includes(TOKEN), stored.includes(TOKEN.slice(0, 8)), stored.includes("[token]")]).toEqual([false, false, true]);
 });
 
-// Drift: the setup page signs a run with the email typed beside the token, and a person can paste the token into that box too. Kept, that name would hold the token in the last check and in the audit log.
-test("a run signed by a name that holds the token is not kept: neither as the last check nor as an audit entry", async () => {
-  const { opened, asked, kept, synced } = await openRun();
-  const reading = await runDomain(fakePlug(() => ({ ok: true, rows: EVERY_STATE, steps: [] })), opened.install, { ...asked, by: `${TOKEN.toUpperCase()}@example.com` as typeof opened.owner });
-
-  expect([reading.ok, await kept(), await synced()]).toEqual([true, undefined, 0]);
-});
-
 // Drift: a provider with hundreds of stale records answers more rows than are kept. Cut from the end, the run would lose the broken login behind them and the install would call itself healthy.
 test("of a run of more rows than are kept, the rows that stand give way first, and of the rows to act on the login's and then the records' and routes' stay", async () => {
   const { opened, asked, kept } = await openRun();
@@ -170,7 +162,7 @@ test("of a run of more rows than are kept, the rows that stand give way first, a
 });
 
 // Drift: a run that judged nothing knows nothing. Kept as an empty run it would wipe the note of a broken login, and a person would read the silence as health.
-test("a run that is refused, that the plug throws on, or that is not recorded keeps nothing: the run kept before stays the last one", async () => {
+test("a run that is refused or that the plug throws on keeps nothing: the run kept before stays the last one", async () => {
   const { opened, asked, kept, synced } = await openRun();
   await runDomain(fakePlug(() => ({ ok: true, rows: EVERY_STATE, steps: [] })), opened.install, asked);
   const first = await kept();
@@ -179,7 +171,6 @@ test("a run that is refused, that the plug throws on, or that is not recorded ke
   for (const refusal of ["token", "unreachable"] as const) await runDomain(fakePlug(() => ({ ok: false, refusal })), opened.install, asked);
   const thrown = runDomain(fakePlug(() => { throw new Error("the provider's answer could not be read"); }), opened.install, asked);
   await expect(thrown).rejects.toThrow();
-  await runDomain(fakePlug(() => ({ ok: true, rows: [], steps: [] })), opened.install, { ...asked, unrecorded: true });
 
   expect([first?.pieces.length, await kept(), await synced()]).toEqual([12, first, 1]);
 });
@@ -194,14 +185,14 @@ test("every text of a reading has the token taken out before anything is shown o
     rows: [{ object: `a${token}b`, state: "failed", detail: `${token}${token}`, part: "rest" }],
     steps: [{ text: `open ${token}`, address: `https://dash.example.com/${token}` }],
   }));
-  const asked = { run: "repair", settings: async () => settings, by: opened.owner, from: "setup" } as const;
+  const asked = { run: "repair", settings: async () => settings, by: opened.owner } as const;
 
   expect(await runDomain(plug, opened.install, { ...asked, token: TOKEN })).toEqual({
     ok: true,
     rows: [{ object: "a[token]b", state: "failed", detail: "[token][token]", part: "rest" }],
     steps: [{ text: "open [token]", address: "https://dash.example.com/[token]" }],
   });
-  expect((await opened.audit())[0]?.detail).toEqual({ run: "repair", from: "setup", failed: ["a[token]b: [token][token]"] });
+  expect((await opened.audit())[0]?.detail).toEqual({ run: "repair", from: "dashboard", failed: ["a[token]b: [token][token]"] });
   expect(await runDomain(plug, opened.install, { ...asked, token: "" })).toMatchObject({ rows: [{ object: "ab", detail: "" }] });
 });
 
@@ -216,7 +207,7 @@ test("a reading that is no table is handed on as it is and writes no audit entry
     const reading = await runDomain(
       fakePlug(() => ({ ok: false, refusal })),
       opened.install,
-      { run: "check", token: TOKEN, settings: async () => settings, by: opened.owner, from: "dashboard" },
+      { run: "check", token: TOKEN, settings: async () => settings, by: opened.owner },
     );
 
     expect(reading).toEqual({ ok: false, refusal });

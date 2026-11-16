@@ -1,4 +1,4 @@
-// The variables setup writes onto the Worker itself: the values no deploy can know, such as the audience tag of the Access application setup made, and on an install with nothing set its domain, its first login, and its account.
+// The variables a repair writes onto the Worker itself: the values no release can know, such as the audience tag of the Access application it made, and on an install with nothing set its domain, its first login, and its account.
 // A change names every other binding as inherited, so the bucket, the database, the limiter, and the variables a person set stay as they are.
 // Every variable a run changes goes in one change: the Worker is deployed anew once, and never starts with half of them.
 // Secrets go in that same change. Cloudflare reads none back, so one is written whenever it is handed over and is never compared.

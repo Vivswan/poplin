@@ -46,7 +46,7 @@ const REFUSALS = {
   "no-proof": { data: 401, page: 403, code: "no_login", sentence: "No login was checked for this request. Open the dashboard's address again." },
   "not-a-user": { data: 403, page: 403, code: "not_a_user", sentence: "This email is not a user of this install." },
   unchecked: { data: 503, page: 503, code: "login_unchecked", sentence: "The login cannot be checked right now. Try again." },
-  "not-set-up": { data: 503, page: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Finish the setup of this install first." },
+  "not-set-up": { data: 503, page: 503, code: "login_not_set_up", sentence: "The login is not set up yet. Run: npx poplin doctor --repair" },
 } as const;
 
 /** What the page of an email that is no user says before the address that ends this browser's login. */

@@ -343,16 +343,6 @@ export const EDGE_CHECKS: readonly Check[] = [
     },
   },
   {
-    id: "setup-open",
-    name: "the setup page's path answers a stranger with the install's own answer, never with a login",
-    needs: [],
-    run: async (bench) => {
-      const response = await bench.visit(`${bench.admin}/setup`);
-      expect(response.status).toBeOneOf([200, 404]);
-      expect(response.headers.get("Location")).toBeNull();
-    },
-  },
-  {
     id: "login-path",
     name: "a path of the dashboard gives a stranger nothing of the install and no cookie, whether the edge or the install answers",
     needs: [],
@@ -360,6 +350,7 @@ export const EDGE_CHECKS: readonly Check[] = [
       for (const [path, headers] of [
         ["/", {}],
         ["/login", {}],
+        ["/setup", {}],
         ["/data/frame", BY_SCRIPT],
         ["/data/sites", BY_SCRIPT],
       ] as const) {

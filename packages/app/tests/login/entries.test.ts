@@ -135,7 +135,7 @@ test("older logins of two people share one question, and its late answer does no
   expect([answers.length, asked(), later, await loginsOf(opened)]).toEqual([1, 1, "given up", [[BO, opened.clock.now]]]);
 });
 
-// Drift: the first login's refused line would stop the person only for five minutes. After them the same login would be let in with no line, and the setup page would stay open behind a person who is in.
+// Drift: the first login's refused line would stop the person only for five minutes. After them the same login would be let in with no line, and the log would hold no login of an install somebody uses.
 test("the first login ever is refused for as long as its line is, however old the login grows, and is written once the database takes it", async () => {
   const { opened, entered } = await openEntries();
   const { database } = opened.install;
@@ -158,7 +158,7 @@ test("the first login ever is refused for as long as its line is, however old th
   expect([outcomes, await loginsOf(opened), await database.hasLoggedIn()]).toEqual([["refused", "refused", "let in"], [[opened.owner, opened.clock.now]], true]);
 });
 
-// Drift: a database that refused the first login's line would let the person in with the setup page still open; one that refused a later line would shut a person out over a record, or lose the line without a word.
+// Drift: a database that refused the first login's line would let the person in with no login in the log; one that refused a later line would shut a person out over a record, or lose the line without a word.
 test("a refused line stops the first login ever, and after it is given up with a report and a noted problem, and not tried again", async () => {
   const { opened, reported, entered } = await openEntries();
   const { database } = opened.install;

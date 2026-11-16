@@ -1,4 +1,4 @@
-// The Worker's `ACCESS` binding: the Access application in front of the dashboard and of every private site, as setup writes it.
+// The Worker's `ACCESS` binding: the Access application in front of the dashboard and of every private site, as an install or a repair writes it.
 
 import { parseHostname } from "@poplin/core/src/names/hostname";
 import * as v from "valibot";

@@ -47,7 +47,7 @@ export interface World {
   /** The clock of the install: `held` set, every action happens at that moment. */
   readonly clock: Clock;
 
-  /** The request counts of the limits, the login codes, and the setup page. */
+  /** The request counts of the limits and the login codes. */
   readonly counters: MemoryCounters;
 }
 

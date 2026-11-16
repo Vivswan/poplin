@@ -422,7 +422,7 @@ export function auditTrim(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
-    // Drift: the setup page is shut by the first login for good. A trim that took the only login entry and left no sign would open the page again to anyone, and with it the change of who may log in.
+    // Drift: the first login ever is let in only once its entry is written. A trim that took the only login entry and left no sign would make the next login the first again.
     test("a log nobody logged in to loses nothing, and one that lost its login entries still says that somebody logged in", async () => {
       const database = await opened(makeDatabase);
       for (const daysAgo of [100, 100, 1]) await database.appendAudit({ action: "domain_synced", detail: {} }, at(daysAgo));
@@ -442,7 +442,7 @@ export function auditTrim(label: string, makeDatabase: DatabaseFactory): void {
 
 export function everLoggedIn(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: whether anybody has logged in`, () => {
-    // Drift: the setup page is open to anyone until the first login and shut for good after it; an answer that counted another entry as a login would shut it on the person setting up, and one that missed a login under later entries would open it again.
+    // Drift: the first login ever is refused while its entry cannot be written. An answer that counted another entry as a login would let that login in unwritten, and one that missed a login under later entries would refuse a person who has long been in.
     test("it is no before any login, whatever else the log holds, and yes from the first login on, however much is written after it", async () => {
       const database = await opened(makeDatabase);
       const by: Signed = { as: "token", by: ADA, at: NOW };
@@ -453,7 +453,7 @@ export function everLoggedIn(label: string, makeDatabase: DatabaseFactory): void
       const without = await database.hasLoggedIn();
       await database.appendAudit({ action: "login", detail: {} }, by);
       const first = await database.hasLoggedIn();
-      for (let entry = 0; entry < 150; entry += 1) await database.appendAudit({ action: "domain_synced", detail: { from: "setup" } }, by);
+      for (let entry = 0; entry < 150; entry += 1) await database.appendAudit({ action: "domain_synced", detail: { from: "sweep" } }, by);
 
       expect([before, without, first, await database.hasLoggedIn()]).toEqual([false, false, true, true]);
     });
