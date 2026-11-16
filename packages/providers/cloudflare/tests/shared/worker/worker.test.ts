@@ -5,6 +5,7 @@ import { reset } from "cloudflare:test";
 import type { Api } from "@poplin/app/src/api/api";
 import type { ExportedSite } from "@poplin/core/src/actions/export";
 import { publishSite } from "@poplin/core/src/actions/publish";
+import { mintToken } from "@poplin/core/src/auth/tokens";
 import { parseUploadId } from "@poplin/core/src/records/upload";
 import { settingsFromText } from "@poplin/core/src/records/settings";
 import { dayOf } from "@poplin/core/src/records/views";
@@ -383,6 +384,20 @@ describe("an instance's first request", () => {
 
     expect({ status: refused.status, text: await refused.text() }).toEqual({ status: 503, text: "This install's database is newer than its code: update poplin.\n" });
     expect(served.status).toBe(401);
+  });
+
+  // Drift: the live harness waits for a new deployment by a token's answer, and reads a 200 as no proof of the new one where the schema only moved forward. Were a started instance to read the schema again, that reading would be wrong the other way.
+  test("an instance that started before the database gained a step it lacks goes on answering a token stored after it, while one that starts then is refused", async () => {
+    const started = instance(w);
+    await ask(started, `${ADMIN}/api/whoami`);
+    await BINDINGS.DB.exec("INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (999, 'a step of a newer poplin', 0, 'newer')");
+    const { token, record } = await mintToken({ scope: "admin", note: "stored after the step", now: w.clock.now });
+    await BINDINGS.DB.prepare("INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ?, ?, ?)").bind(record.id, record.hash, record.note, w.clock.now, w.clock.now + 3_600_000, OWNER).run();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const answers = [await ask(started, `${ADMIN}/api/whoami`, { headers }), await ask(instance(w), `${ADMIN}/api/whoami`, { headers })];
+
+    expect(answers.map((answer) => answer.status)).toEqual([200, 503]);
   });
 
   // Drift: a database an earlier build made counts as up to date by its step number, so every request met the catch-all line with no reason: a public site's address, the dashboard, and the API alike.
@@ -1310,6 +1325,7 @@ describe("the rows the live checks count", () => {
     await done(await calls.config.$patch({ query: {}, json: { default_expires: { count: 1, unit: "d" } } }));
     await step("a new site that takes the install's own expiry", async () => finish(await calls.uploads.$post({ query: {}, json: { name: "inherits", files: [declared] } })));
     await step("a computer's login begun", async () => done(await api(worker, null, meter.fetch).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } })));
+    await step("who a token is, as the wait for a new deployment asks", async () => done(await calls.whoami.$get({ query: {} })));
 
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
@@ -1352,6 +1368,8 @@ describe("the rows the live checks count", () => {
         "a new version that asks who may open the site and a title": [18, 18],
         "a new site that takes the install's own expiry": [20, 20],
         "a computer's login begun": [3, 3],
+        // The wait for a run's new deployment sends this request alone, so it writes no row however long it waits.
+        "who a token is, as the wait for a new deployment asks": [0, 0],
       },
       stopped: undefined,
     });

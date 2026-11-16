@@ -3,12 +3,20 @@
 //   where it answers -> the account's plans, all free -> bucket, database, made anew when another build made it -> the login application -> wrangler deploy of the built bundle
 //     with a domain      -> the zone plug's repair, which makes every object of the zone as the Domain screen does
 //     without a domain   -> the two forwarders -> the key the install keeps
-//     -> wait for the install to answer -> the test install's caps
+//     -> wait for the install to answer and its database to hold this commit's schema -> wait for the new deployment to answer the run's token -> the test install's caps
 //
 // An install without a domain has no plug, so its forwarders, its login, and its key are made by the product's own sync of each.
 // It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to.
 // Every piece is printed as it is settled. A piece Cloudflare refused is printed with the step it stopped at, the status, and the error codes, and with nothing else Cloudflare said.
 // A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
+//
+// The last wait asks the install who the run's token is: once, or 12 times in a row, 3 s apart, each on its own connection, where the database was made anew or brought forward.
+//   the new deployment                                                         200
+//   the build before, bound to the database that was deleted                   503, always: a 200 here is the new deployment's
+//   the build before, started anew on a database with a schema step it lacks   503
+//   the build before, started earlier, on that database                        200: it reads the token it is asked for and no schema again
+// A row of 200s says for how long no request met an instance that fails, never that no instance of the deployment before is left. No check sends anything again: this wait alone waits a 503 out.
+//
 // Step output: `missing` (a JSON object of what the install lacks and still answers without, each with its reason, for the live suite).
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -29,10 +37,11 @@ import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 import { privateSitesPattern } from "../../src/with-domain/layout";
 import type { Report } from "../../src/shared/install/sync";
 import { createDomainPlug, keysMended } from "../../src/with-domain/zone-plug";
+import type { Fetch } from "../../../../cli/src/client/client";
 import { capInstall } from "./caps";
 import { readFreePlans } from "./plan";
 import { sendLive } from "./send";
-import { settleDatabase } from "./shape";
+import { holdsOwnSchema, settleDatabase } from "./shape";
 import { removeTokens, seedToken } from "./tokens";
 import { BUCKET, type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, SCRIPT, type Stop, stopOf } from "./util";
 
@@ -101,6 +110,18 @@ const NO_WORKFLOW = "the Worker's Workflow, which Cloudflare did not make";
 /** What a run says it found of an install of each kind: where it answers. */
 const FOUND_AS = { domain: "Zone", "account address": "Free address" } as const;
 
+/** The answer of the install to a token it knows. */
+const TOKEN_KNOWN = 200;
+
+/** What a deploy that stranded the build before must show: how many answers in a row, over how long at least, in milliseconds. */
+const ROW_NEEDED = { answers: 12, overMs: 30_000 } as const;
+
+/** What any other deploy must show: one answer. */
+const ONE_NEEDED = { answers: 1, overMs: 0 } as const;
+
+/** How often the install is asked, how long one answer may take, and how long after the wait began the last request may start, in milliseconds. */
+const PACE = { everyMs: 3_000, answerMs: 5_000, withinMs: 180_000 } as const;
+
 /** What the Worker's `ACCESS` binding holds. */
 type AccessBinding = typeof NO_ACCESS;
 
@@ -119,6 +140,42 @@ interface Progress {
   readonly pieces: Piece[];
   readonly missing: Record<string, string>;
 }
+
+/** What the wait is given. */
+interface Waiting {
+  /** The origin the install's API answers on. */
+  readonly server: string;
+
+  /** A token whose row the database of this run's deploy holds. */
+  readonly token: string;
+
+  /** What sends a request. */
+  readonly fetch: Fetch;
+
+  /** Whether the build deployed before can no longer answer from the database once it starts anew. */
+  readonly strandsOlder: boolean;
+
+  /** The clock, in milliseconds. */
+  readonly now: () => number;
+
+  /** Waits for so many milliseconds. */
+  readonly pause: (ms: number) => Promise<void>;
+}
+
+/** What a wait that ended well counted. */
+interface Arrived {
+  /** The answers of 200 in a row the wait ended on. */
+  readonly answers: number;
+
+  /** How long that row took, in milliseconds. */
+  readonly overMs: number;
+
+  /** The requests before that row that got no 200: another status, or no answer in time. */
+  readonly others: number;
+}
+
+/** The install as the wait for its new deployment and the caps reach it: every part of that wait but the token and what the deploy did to the database. */
+type Reached = Omit<Waiting, "token" | "strandsOlder">;
 
 /** Add a piece to the summary's rows and print it, so the log shows how far a run came. */
 function note(run: Run, progress: Progress, piece: Piece): void {
@@ -438,29 +495,95 @@ export async function answerOf(asking: Promise<Response>): Promise<{ readonly st
   return { status, told: line === "" ? String(status) : `${status}: ${line.slice(0, SAID_LENGTH)}` };
 }
 
-/** Ask the install's API until it answers as a Worker that started: a 401 to a request with no token. */
-async function waitUntilReady(found: Found): Promise<Stop | undefined> {
+/**
+ * Ask the install's API until it answers as a Worker that started, a 401 to a request with no token, and the database it is bound to holds this commit's schema.
+ *
+ * An instance of the build before answers that 401 too. The schema is read through Cloudflare's API: a Worker that started on that database left it there, and only then does the database take a token's row.
+ */
+async function waitUntilReady(run: Run, found: Found, databaseId: string): Promise<Stop | undefined> {
   const address = `https://${found.adminHost}/api/whoami`;
   const deadline = Date.now() + READY.withinMs;
   let last = { status: 0, told: "0" };
 
   while (Date.now() < deadline) {
     last = await answerOf(fetch(address, { redirect: "manual", signal: AbortSignal.timeout(READY.everyMs) }));
-    if (last.status === 401) return undefined;
+    const holds = last.status === 401 ? await holdsOwnSchema(run, databaseId) : false;
+    if (holds === true) return undefined;
+
+    if (holds !== false) return holds;
 
     await Bun.sleep(READY.everyMs);
   }
 
-  return { kind: "failed", what: `the install did not answer within ${READY.withinMs / 1000} seconds (last status ${last.told})` };
+  const behind = last.status === 401 ? ", and its database does not hold this commit's schema" : "";
+
+  return { kind: "failed", what: `the install did not answer within ${READY.withinMs / 1000} seconds (last status ${last.told})${behind}` };
 }
 
-/** Give the install its caps with a token made for the one call, and remove the token's row. A row that stays stops the run as caps that were refused do. */
-async function capTestInstall(run: Run, found: Found, databaseId: string): Promise<Stop | undefined> {
-  const token = await seedToken(run, databaseId, Date.now());
+/** Ask the install who the token is, on a connection of its own, and answer the status; 0 for no answer in time. */
+async function askWhoami(given: Pick<Waiting, "server" | "token" | "fetch">): Promise<number> {
+  const init = { headers: { Authorization: `Bearer ${given.token}` }, redirect: "manual", keepalive: false, signal: AbortSignal.timeout(PACE.answerMs) } as const;
+  const answer = await given.fetch(`${given.server}/api/whoami`, init).catch(() => undefined);
+  // The body is dropped unread, so the connection is not held for it.
+  await answer?.body?.cancel().catch(() => undefined);
+
+  return answer?.status ?? 0;
+}
+
+/**
+ * Wait until the install answers the run's token: once, or twelve times in a row where the build before can no longer answer.
+ *
+ * @returns what the wait counted; or, once a request would start more than three minutes after the first, a failure that names the last status and no address
+ */
+export async function awaitNewDeployment(given: Waiting): Promise<Arrived | Stop> {
+  const wanted = given.strandsOlder ? ROW_NEEDED : ONE_NEEDED;
+  const began = given.now();
+  let row = { answers: 0, since: began };
+  let others = 0;
+  let last = 0;
+
+  for (let next = began; next - began <= PACE.withinMs; next = given.now() + PACE.everyMs) {
+    if (next > began) await given.pause(PACE.everyMs);
+
+    last = await askWhoami(given);
+    const at = given.now();
+    row = last === TOKEN_KNOWN ? { answers: row.answers + 1, since: row.answers === 0 ? at : row.since } : { answers: 0, since: at };
+    if (last !== TOKEN_KNOWN) others += 1;
+
+    if (row.answers >= wanted.answers && at - row.since >= wanted.overMs) return { answers: row.answers, overMs: at - row.since, others };
+  }
+
+  const seconds = PACE.withinMs / 1000;
+
+  return { kind: "failed", what: `the install did not answer the run's token within ${seconds} seconds (needed in a row: ${wanted.answers}; not a ${TOKEN_KNOWN}: ${others}; last status: ${last})` };
+}
+
+/** How a wait for the new deployment is told: the answers it ended on, and how many requests before them got no 200. */
+function arrivalOf(arrived: Arrived): string {
+  const before = arrived.others === 0 ? "" : `, after ${arrived.others} requests that got no 200`;
+  if (arrived.answers === 1) return `answered the run's token${before}`;
+
+  return `answered the run's token ${arrived.answers} times in a row over ${Math.round(arrived.overMs / 1000)} seconds${before}`;
+}
+
+/**
+ * With a token made for these calls: wait until the install answers it as the new deployment does, give the install its caps, and remove the token's row. A row that stays stops the run as caps that were refused do.
+ *
+ * @param install - where the install's API answers, what sends a request to it, and the clock and the pause of the wait
+ * @param settled - the database the deploy bound, and whether the build before can no longer answer from it
+ * @returns what stopped the run, or `undefined` once the install took its caps and holds no row of the token
+ */
+export async function confirmAndCap(run: Run, install: Reached, settled: { readonly id: string; readonly strandsOlder: boolean }, progress: Progress): Promise<Stop | undefined> {
+  const token = await seedToken(run, settled.id, Date.now());
   if (typeof token !== "string") return token;
 
-  const uncapped = await capInstall({ server: `https://${found.adminHost}`, token, fetch: sendLive });
-  const kept = await removeTokens(run, databaseId, Date.now());
+  const reached = { server: install.server, token, fetch: install.fetch };
+  const arrived = await awaitNewDeployment({ ...install, token, strandsOlder: settled.strandsOlder });
+  if (!isStop(arrived)) note(run, progress, { piece: "New deployment", result: arrivalOf(arrived) });
+
+  const uncapped = isStop(arrived) ? arrived : await capInstall(reached);
+  const kept = await removeTokens(run, settled.id, Date.now());
+  if (uncapped === undefined && kept === undefined) note(run, progress, { piece: "Storage and file caps", result: "set" });
 
   return uncapped ?? kept;
 }
@@ -500,15 +623,10 @@ async function converge(run: Run, progress: Progress, env: Environment): Promise
 
   note(run, progress, { piece: "Worker", result: "deployed" });
 
-  const unready = (await settleKind(run, found, login, progress)) ?? (await waitUntilReady(found));
+  const unready = (await settleKind(run, found, login, progress)) ?? (await waitUntilReady(run, found, settled.id));
   if (unready !== undefined) return unready;
 
-  const uncapped = await capTestInstall(run, found, settled.id);
-  if (uncapped !== undefined) return uncapped;
-
-  note(run, progress, { piece: "Storage and file caps", result: "set" });
-
-  return undefined;
+  return confirmAndCap(run, { server: `https://${found.adminHost}`, fetch: sendLive, now: Date.now, pause: Bun.sleep }, settled, progress);
 }
 
 /**

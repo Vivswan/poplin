@@ -22,6 +22,7 @@ Live Checks workflows, one for each kind of install
                                                            `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
                                                            `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
                                                            `Upload key: created` or `Upload key: present`: the same for the key that sends files straight to the bucket
+                                                           `New deployment: answered the run's token` in its log: the install answered a token whose row the database of this run's deploy holds, so the checks may start
   packages/providers/cloudflare/scripts/live/suite.ts      a token for the run -> bun test packages/providers/cloudflare/live/live.test.ts -> the token removed
   packages/providers/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   packages/providers/cloudflare/scripts/live/orphans.ts    after the reset: the files of the bucket no record of the database names, removed
@@ -171,6 +172,7 @@ A second install, on the test account that holds no domain. It answers on the ac
 | the two forwarders      | `syncForwarders`                                                         | `Forwarders: created 0, changed 0, left 2, not poplin's 0`  |
 | the key                 | `mintKey` and `syncVariables`, where the Worker holds no active key      | `Key: present`                                              |
 | the Workflow            | `syncJobs`, where the deploy left none                                   | `Workflow: present`                                         |
+| the new deployment      | `awaitNewDeployment`, as on the other account                            | `New deployment: answered the run's token`                  |
 
 A step Cloudflare refuses prints the step, the status, and the error codes, and nothing else Cloudflare said:
 
@@ -207,6 +209,42 @@ It acts on a test account alone, as the start-over does, and on the bucket of th
 Files no site owns: removed 4 folders and 298 objects, 21 folders and 1457 objects remain
 Bucket lists and deletes for them: 300 of at most 300
 ```
+
+## The wait for the new deployment
+
+Cloudflare answers some requests from the deployment before for a while after a deploy is at 100 percent. `converge.ts` ends with a wait, on both installs, so that no check meets one.
+
+```text
+the database, left or made anew -> the login -> wrangler deploy -> what the kind adds, which may deploy once more
+  -> the install answers, and its database holds this commit's schema    read through Cloudflare's API: after a database made anew or a new schema step, the new Worker alone leaves it so
+  -> a token for the run, its row written to that database
+  -> the install answers the token with 200                             `awaitNewDeployment`
+  -> the caps -> the token's row removed
+```
+
+| The deploy                                               | The wait asks for                                              | Requests              |
+| -------------------------------------------------------- | -------------------------------------------------------------- | --------------------- |
+| left the build before able to answer                     | 1 answer of 200                                                | 1                     |
+| followed a database made anew, or a new schema step      | 12 answers of 200 in a row, 3 s apart, each on its own connection | 12, over 33 s      |
+| is met by an answer that is no 200                       | the row begins again from nothing                              | that one, and 12 more |
+| gives no such row by 3 minutes                           | nothing more: the step fails, and no check runs                | 61                    |
+
+| Who answers the token                                                      | Answer |
+| -------------------------------------------------------------------------- | ------ |
+| the new deployment, on the database that holds the row                     | 200    |
+| the build before, bound to the database that was deleted                   | 503    |
+| the build before, started anew on a database with a schema step it lacks   | 503    |
+| the build before, started earlier, on that database                        | 200    |
+
+After a database made anew, a 200 is the new deployment's. Twelve in a row say how long no request met an instance that fails; they do not say that no instance of the deployment before is left.
+
+```text
+New deployment: answered the run's token
+New deployment: answered the run's token 12 times in a row over 33 seconds, after 2 requests that got no 200
+The test install could not be made ready: the install did not answer the run's token within 180 seconds (needed in a row: 12; not a 200: 61; last status: 503).
+```
+
+A check sends nothing again because of this: a 503 inside a check fails it.
 
 ## What keeps the test account at no cost
 
@@ -256,17 +294,18 @@ burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few
 burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
 own-limit                about 700
 backup-drill             72, of which 34 make the install write to its bucket or list it
-a run, at its worst      1,140 + 700 + 72 = 1,912
-the plan's day           100,000 requests to the Worker, reached at about 52 such runs
+the two waits            2 a usual run; 13 after a database made anew or a new schema step, and more where a row begins again; 60 + 61 = 121 at their longest
+a run, at its worst      1,140 + 700 + 72 + 121 = 2,033
+the plan's day           100,000 requests to the Worker, reached at about 49 such runs
 ```
 
 The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests.
 
 ```text
 the install without a domain
-a run, at its worst      700 (own-limit) + 72 (backup-drill) = 772: no rate rule stands in front of it, so no burst is sent
+a run, at its worst      700 (own-limit) + 72 (backup-drill) + 121 (the two waits) = 893: no rate rule stands in front of it, so no burst is sent
 a usual run              about 125 (own-limit, which ends at the first 429) + 72 + about 130 (the reset) and a few dozen more
-a day of 45 runs         45 x 772 = 34,740 of its own account's 100,000
+a day of 45 runs         45 x 893 = 40,185 of its own account's 100,000
 a request for a site     one request of a forwarder, which hands it to the Worker at no further request, by Cloudflare's documentation
 ```
 
@@ -304,6 +343,7 @@ the midnight run's checks                959: the copy the install's job finishe
 a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 390
 the harness's own statements             18: three tokens in and out, and the caps
+the wait for the new deployment          0: it asks with the token of the caps, and its request writes no row
 a usual run                              about 922 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
 a day of 40 such runs                    about 42,000 of the 100,000
 ```
