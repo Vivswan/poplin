@@ -29,7 +29,7 @@ export function HomeProblems({ home, className }: { readonly home: keyof typeof 
                 <ProblemWhen problem={problem} />
               </span>
               <span className="text-foreground">
-                What to do: <ProblemTodo problem={problem} />
+                What to do: <ProblemTodo problem={problem} here={home} />
               </span>
               <CopyDetails problem={problem} />
             </AlertDescription>
