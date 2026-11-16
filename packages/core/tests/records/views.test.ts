@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { dayOf, daysUpTo, showViews, viewDays } from "../../src/records/views";
+import { dayOf, daysUpTo, showViews, viewDays, weeksUpTo } from "../../src/records/views";
 
 describe("views", () => {
   // Drift: a sampled count shown as it is stored reads as an exact number; every face words a count here, so one wrong rounding is wrong everywhere.
@@ -31,6 +31,25 @@ describe("views", () => {
 
     expect([daysUpTo("2026-11-13", 1), year.length, year[0], year.at(-1)]).toEqual([["2026-11-13"], 365, "2027-03-03", "2028-03-01"]);
     for (const count of [0, 366, 1.5]) expect(() => daysUpTo("2026-11-13", count)).toThrow(RangeError);
+  });
+
+  // Drift: a graph of a long stretch draws a point a week; a week that ended on another day than the last, or held six or eight days, would put a day's opens beside its own week.
+  test("the weeks of a run end on its last day, each seven days long but the first, which holds the days left over", () => {
+    const year = weeksUpTo("2026-11-13", 365);
+
+    expect([weeksUpTo("2026-11-13", 9), weeksUpTo("2026-11-13", 7).length, year.length, year[0], year.at(-1)?.[0], year.at(-1)?.at(-1), year.flat().length]).toEqual([
+      [
+        ["2026-11-05", "2026-11-06"],
+        ["2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13"],
+      ],
+      1,
+      53,
+      ["2025-11-14"],
+      "2026-11-07",
+      "2026-11-13",
+      365,
+    ]);
+    for (const count of [0, 366]) expect(() => weeksUpTo("2026-11-13", count)).toThrow(RangeError);
   });
 
   test("a moment falls on its UTC day, up to the last millisecond before midnight", () => {

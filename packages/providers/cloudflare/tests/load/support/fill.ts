@@ -6,15 +6,15 @@
 
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { Fill } from "../../../load/profiles";
-import { manyEntries, manyFiles, manySites, manyTokens, siteFolder, siteId } from "../../shared/worker/support/budget-seeds";
+import { manyEntries, manyFiles, manySites, manyTokens, manyVisits, siteFolder, siteId } from "../../shared/worker/support/budget-seeds";
 import { sql, type Stage } from "../../shared/worker/support/budget-stage";
 import { OWNER } from "../../shared/worker/support/install";
 
 /** The public name of site 1. */
 const PUBLIC_NAME = "load";
 
-/** The sites a graph of visits compares at the most, and the days it reads at the most. */
-const GRAPH = { sites: 50, days: 365 } as const;
+/** The sites a graph of visits compares at the most. */
+const MOST_COMPARED = 50;
 
 /** Where the three sites of a fill answer, on the example domain of the Worker's tests. */
 export const FILLED = {
@@ -54,16 +54,11 @@ export async function fillInstall(stage: Stage, fill: Fill): Promise<void> {
   await manyUsers(stage, fill.users);
 }
 
-/** Count nine requests on each of the last 365 days for the first sites of a fill, fifty at the most, and for all sites together: the most a graph of visits reads. */
-export async function yearOfVisits(stage: Stage, fill: Fill): Promise<readonly string[]> {
-  const sites = Math.min(GRAPH.sites, fill.sites);
-  await sql(
-    `WITH RECURSIVE days(d) AS (SELECT 0 UNION ALL SELECT d + 1 FROM days WHERE d < ?1 - 1), counted(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM counted WHERE n < ?2)
-     INSERT INTO request_counts (day, site, requests, views) SELECT date(?3 / 1000, 'unixepoch', '-' || d || ' days'), CASE n WHEN 0 THEN '' ELSE printf('%012d', n) END, 9, 3 FROM days, counted`,
-    GRAPH.days,
-    sites,
-    stage.w.clock.now,
-  );
-
-  return Array.from({ length: sites }, (_site, at) => siteId(at + 1));
+/**
+ * Count requests on each of the last days for the first sites of a fill, fifty at the most, and for all sites together, the days that are over summed: the most a graph of visits reads.
+ *
+ * @returns the ids of those sites, as the graph's address names them
+ */
+export function visitsOf(stage: Stage, fill: Fill, days: number): Promise<string> {
+  return manyVisits(stage, { sites: Math.min(MOST_COMPARED, fill.sites), days });
 }

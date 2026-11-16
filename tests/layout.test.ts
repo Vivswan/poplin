@@ -59,7 +59,7 @@ const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: stri
   ["packages/cli/tests/commands", 12, "the tests of src/commands/, file for file"],
   ["packages/core/src", 12, "the package's entry and one folder for each concept"],
   ["packages/core/src/actions", 41, "one file for each action"],
-  ["packages/core/src/database", 14, "the database: its statements, one file for each table"],
+  ["packages/core/src/database", 15, "the database: its statements, one file for each table; the sums of page views are a table, so a file more"],
   ["packages/core/src/records", 20, "one file for each kind of record"],
   ["packages/core/tests", 9, "the tests of src/, file for file"],
   ["packages/core/tests/actions", 32, "the tests of src/actions/, file for file"],

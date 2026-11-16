@@ -56,13 +56,13 @@ const LARGE_COPY = 113;
 const NOT_MIDNIGHT = "the midnight run";
 
 /** The rows the midnight run counts beside a usual one: the copy the install's job finishes, with its source, its one round, its site set unlisted and opened three times, and both sites removed. */
-const JOB_COPY_ROWS = 93;
+const JOB_COPY_ROWS = 103;
 
 /** How long one install's run of every check may take, in milliseconds: each publishes, reads and removes sites in this process with no wait in it, all of it work of the processor, which on a busy machine passes the five seconds a test gets. */
 const RUN_MS = 30_000;
 
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
-const CHECKS_ROWS = 866;
+const CHECKS_ROWS = 947;
 
 /** What a run says each time it asks a stranger's request again, before the count of its askings so far. */
 const ASKED_AGAIN = "a stranger's request got no answer, asked again";

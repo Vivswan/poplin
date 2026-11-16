@@ -7,7 +7,7 @@ import { INSTALL_OBJECTS } from "../../../../src/shared/install/install-objects"
 import { emptyAccount, TOKEN } from "../../install/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";
 import { type Budget, type BudgetRow, endsLogins, get, type Measured, post, sessionOf, sql, type Stage, unmeasured } from "./budget-stage";
-import { endedTokens, manyEntries, manyProblems, manySites, manyTokens, newLinks, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
+import { endedTokens, manyEntries, manyProblems, manySites, manyTokens, manyVisits, newLinks, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
 import { OWN_KEY, ownRelease } from "./own-release";
 
 /** The group of every row here. */
@@ -50,7 +50,7 @@ const FILE_ENTRIES = 2000;
 const MOST_COUNTED = 10_000;
 
 /** The sites the graph of visits compares at the most, and the days it reads at the most. */
-const GRAPH = { sites: 50, days: 365 } as const;
+const GRAPH = { sites: 50, days: 365, daily: 90 } as const;
 
 /** The logins of computers that may wait at one moment, all visitors together. */
 const MOST_WAITING = 50;
@@ -173,7 +173,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/sites?q=site&sort=title&dir=desc");
     },
     status: 200,
-    budget: { queries: 2, read: 651, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 470, reads: 0, writes: 0 },
   },
   {
     group,
@@ -207,7 +207,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   siteChange("Sites screen: change a site's switches", { queries: 3, reads: 0, writes: 0 }, "settings", { search_engines: true, embeddable: false }),
   siteChange("Sites screen: set when a site deletes itself", { queries: 3, reads: 0, writes: 0 }, "expiry", { expires: "7d" }),
   siteChange("Sites screen: make an older version live", { queries: 3, reads: 0, writes: 0 }, "make-live", { version: 2 }),
-  siteChange("Sites screen: new link", { queries: 3, read: 745, reads: 0, writes: 0 }, "new-link", {}),
+  siteChange("Sites screen: new link", { queries: 3, read: 749, reads: 0, writes: 0 }, "new-link", {}),
   siteChange("Sites screen: delete a site", { queries: 3, reads: 0, writes: 0 }, "delete", {}),
   siteChange("Sites screen: restore a site", { queries: 3, reads: 0, writes: 0 }, "restore", {}, { trashed: true }),
   {
@@ -533,26 +533,34 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
-    name: "Usage screen: a year of visits, 50 sites compared",
+    name: "Usage screen: 90 days of visits, 50 sites compared",
     guide: "Open the Usage screen",
     route: "GET /data/usage/visits",
-    // Worst: the longest stretch, 365 days, and as many sites beside all sites as the graph compares, 50, each with a count on every day.
+    // Worst: the longest stretch drawn day by day, 90 days, and as many sites beside all sites as the graph compares, 50, each with a count on every day.
     arrange: async (stage) => {
       await manySites(stage, GRAPH.sites);
-      await sql(
-        `WITH RECURSIVE days(d) AS (SELECT 0 UNION ALL SELECT d + 1 FROM days WHERE d < ?1 - 1), counted(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM counted WHERE n < ?2)
-         INSERT INTO request_counts (day, site, requests, views) SELECT date(?3 / 1000, 'unixepoch', '-' || d || ' days'), CASE n WHEN 0 THEN '' ELSE printf('%012d', n) END, 9, 3 FROM days, counted`,
-        GRAPH.days,
-        GRAPH.sites,
-        stage.w.clock.now,
-      );
+      const sites = await manyVisits(stage, { sites: GRAPH.sites, days: GRAPH.daily });
       const session = await sessionOf(stage);
-      const sites = Array.from({ length: GRAPH.sites }, (_site, at) => siteId(at + 1)).join(",");
+
+      return (measured) => data(measured, session, `/usage/visits?range=${GRAPH.daily}&sites=${sites}`);
+    },
+    status: 200,
+    budget: { queries: 3, read: 4847, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "Usage screen: a year of visits, 50 sites compared",
+    route: "GET /data/usage/visits",
+    // The longest stretch, 365 days drawn as 53 weeks, of as many sites, each with a count on every day: a week is two sums, so the year reads fewer rows than the 90 days.
+    arrange: async (stage) => {
+      await manySites(stage, GRAPH.sites);
+      const sites = await manyVisits(stage, { sites: GRAPH.sites, days: GRAPH.days });
+      const session = await sessionOf(stage);
 
       return (measured) => data(measured, session, `/usage/visits?range=${GRAPH.days}&sites=${sites}`);
     },
     status: 200,
-    budget: { queries: 3, read: 37383, reads: 0, writes: 0 },
+    budget: { queries: 3, read: 3012, reads: 0, writes: 0 },
   },
   {
     group,

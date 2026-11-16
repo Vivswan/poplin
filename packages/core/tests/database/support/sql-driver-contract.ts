@@ -601,6 +601,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       // A virtual table is a list a statement was given or a setting holds, such as the logins: no table. The count of each user's tokens walks the tokens that were not removed, through their index.
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
+      // A listing by title walks its page through the index of that order, which holds the sites outside the trash. The sum of the days that are over walks the counts it has already picked by their days.
       // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.
       const holds = '(instr("sites"."name", lower(?)) > 0 OR instr(lower(coalesce("sites"."title", "sites"."page_title")), lower(?)) > 0 OR instr("sites"."public_name", lower(?)) > 0 OR "sites"."id" = lower(?))';
       const earlier = `select "earlier_ids"."id" from "earlier_ids" inner join "sites" on "sites"."folder" = "earlier_ids"."folder" where ${holds}`;
@@ -621,7 +622,8 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const newestFirst = 'order by "tokens"."created_at" desc, "tokens"."id" desc';
       expect([exported.sites, imported.kind, again.kind, redeemed.kind, swept]).toEqual([[], "done", "done", "done", 1]);
       expect(driver.statements.length).toBeGreaterThan(105);
-      expect(scans).toEqual([
+      expect(scans.map((scan) => scan.replace(/^(SCAN sites USING INDEX sites_by_title|SCAN \(subquery-\d+\) <- INSERT INTO "view_sums") .*$/, "$1"))).toEqual([
+        "SCAN sites USING INDEX sites_by_title",
         `${tokenScan} where "tokens"."removed_at" is null ${newestFirst}`,
         `${tokenScan} where ("tokens"."removed_at" is null and ("tokens"."expires_at" is null or "tokens"."expires_at" > ?)) ${newestFirst}`,
         'SCAN tokens USING INDEX tokens_by_user <- select "allowed_by", count(*) as "held" from "tokens" where ("tokens"."removed_at" is null and ("tokens"."expires_at" is null or "tokens"."expires_at" > ?)) group by "tokens"."allowed_by"',
@@ -629,6 +631,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         `SCAN newest <- ${counted}`,
         ...bySite.flatMap(readOnce),
         'SCAN logins USING INDEX logins_by_visitor <- delete from "logins" where "logins"."expires_at" <= ?',
+        'SCAN (subquery-4) <- INSERT INTO "view_sums"',
         "SCAN schema_steps <- SELECT * FROM schema_steps ORDER BY step",
       ]);
     });
@@ -701,15 +704,16 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
       await database.readRequests(TODAY, NO_SITE);
       await database.readViews([NO_SITE, OTHER_SITE], TODAY);
       await database.readDailyViews([NO_SITE, OTHER_SITE], TODAY, 365);
+      await database.readWeeklyViews([NO_SITE, OTHER_SITE], TODAY, 365);
       const scans: string[] = [];
 
       for (const statement of driver.statements) {
         const plan = await rows(inner, `EXPLAIN QUERY PLAN ${statement.sql}`, ...statement.params);
-        // The lists of days and sites a read of views is given are walked, as they must be: they are its arguments, not the table.
-        scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step) && !step.includes("VIRTUAL TABLE")));
+        // The lists of days and sites a read of views is given are walked, as they must be: they are its arguments, not the table. So are the days not summed yet, which a read walks from the last one summed on.
+        scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step) && !/VIRTUAL TABLE|CONSTANT ROW|SCAN open$/.test(step)));
       }
 
-      expect([driver.statements.length, scans]).toEqual([6, []]);
+      expect([driver.statements.length, scans]).toEqual([9, []]);
     });
   });
 }

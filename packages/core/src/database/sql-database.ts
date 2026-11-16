@@ -26,7 +26,7 @@ import { mintSiteId, type SiteId } from "../sites/ids";
 import { endedTokenFromRow, tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import type { VersionContents } from "../records/version-contents";
-import { type DailyViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays } from "../records/views";
+import { type CountedViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays, weeksUpTo } from "../records/views";
 import { auditCountAsked, auditCountIn, auditEndsAsked, auditListAsked, auditPartEndAsked, auditPartEndIn, auditSearchAsked, auditStopIn, auditTrimmed, everLoggedInAsked, namedAuditIn } from "./audit-reads";
 import type {
   AuditCount,
@@ -171,6 +171,7 @@ import {
   uploadById,
   writesOf,
 } from "./upload-statements";
+import { ALL_SITES, dailyViewsAsked, dailyViewsIn, sumsDroppedBefore, sumsMoved, viewsSummed, weeklyViewsAsked, weeklyViewsIn } from "./view-statements";
 
 /** How many ids are tried for one site before giving up; an id is about 62 random bits, so a second try is already a rare event. */
 const MINT_ATTEMPTS = 5;
@@ -215,9 +216,6 @@ const READ_SWEEP_PLACE = built(BUILD.select({ place: sweepPlace.place }).from(sw
 
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/** The site column of the row that counts all sites together; no site id is empty. */
-const ALL_SITES = "";
 
 /** No rows of the database: what a site's own count holds, and a count that names none. */
 const NO_ROWS: RowsUsed = { read: 0, written: 0 };
@@ -576,7 +574,8 @@ export class SqlDatabase implements Database {
   async giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const next = this.#mintId();
-      const days = JSON.stringify(daysUpTo(dayOf(signed.at), KEPT_DAYS));
+      const kept = daysUpTo(dayOf(signed.at), KEPT_DAYS);
+      const days = JSON.stringify(kept);
       // The days are walked only once the id was given: the list of them stands behind a row that is there only then.
       const counted = fragment`(SELECT j.value FROM (SELECT 1 WHERE ${CHANGED}) AS given CROSS JOIN json_each(${days}) AS j)`;
       const [updated, , , after, before] = await this.#driver.batch([
@@ -586,6 +585,7 @@ export class SqlDatabase implements Database {
         siteById(next),
         siteById(id),
         built(BUILD.update(requestCounts).set({ site: next }).where(and(eq(requestCounts.site, id), fragment`${requestCounts.day} IN ${counted}`))),
+        sumsMoved(id, next, kept[0] ?? dayOf(signed.at)),
       ]);
       if (changed(updated)) return done(after);
 
@@ -1100,12 +1100,15 @@ export class SqlDatabase implements Database {
 
   async sweepRunOut(now: number): Promise<number> {
     const day = dayOf(now);
+    const firstKept = daysUpTo(day, KEPT_DAYS)[0] ?? day;
     const [removed] = await this.#driver.batch([
       built(BUILD.delete(logins).where(lte(logins.expires_at, now))),
       problemsForgotten(now),
       dropEarlierDays(day),
-      // The days before the oldest one kept are dropped, so the table holds a year.
-      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(day, KEPT_DAYS)[0] ?? day))),
+      // The days before the oldest one kept are dropped, so the tables hold a year.
+      sumsDroppedBefore(firstKept),
+      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, firstKept))),
+      viewsSummed(now),
       auditTrimmed(now),
       endedTokensTrimmed(now),
     ]);
@@ -1464,21 +1467,26 @@ export class SqlDatabase implements Database {
     return views;
   }
 
-  async readDailyViews(sites: readonly SiteId[], day: string, count: number): Promise<DailyViews> {
+  async readDailyViews(sites: readonly SiteId[], day: string, count: number): Promise<CountedViews> {
     requireDay(day);
     if (sites.length > MOST_SITES_COMPARED) throw new RangeError(`the views of at most ${MOST_SITES_COMPARED} sites are read day by day at once, not of ${sites.length}`);
 
     const days = daysUpTo(day, count);
-    const place = new Map(days.map((one, at) => [one, at]));
-    const counts = new Map<string, number[]>([ALL_SITES, ...sites].map((site) => [site, days.map(() => 0)]));
+    // A site named twice is read once.
+    const asked = [...new Set(sites)];
 
-    // Every row is found by its key: all sites together and each site named are joined to each day.
-    const named = fragment`json_each(${JSON.stringify([...counts.keys()])}) AS s CROSS JOIN json_each(${JSON.stringify(days)}) AS d`;
-    const counted = fragment`SELECT ${A_COUNT.day} AS day, ${A_COUNT.site} AS site, ${A_COUNT.views} AS views FROM ${named} JOIN ${requestCounts} AS ${A_COUNT} ON ${A_COUNT.day} = d.value AND ${A_COUNT.site} = s.value`;
-    const [read] = await this.#driver.batch([written(counted)]);
-    for (const row of read?.rows ?? []) (counts.get(String(row.site)) ?? [])[place.get(String(row.day)) ?? 0] = Number(row.views);
+    return dailyViewsIn(await this.#driver.batch([...dailyViewsAsked([ALL_SITES, ...asked], days)]), sites, days);
+  }
 
-    return { days, all: counts.get(ALL_SITES) ?? [], sites: new Map(sites.map((site) => [site, counts.get(site) ?? []])) };
+  async readWeeklyViews(sites: readonly SiteId[], day: string, count: number): Promise<CountedViews> {
+    requireDay(day);
+    if (sites.length > MOST_SITES_COMPARED) throw new RangeError(`the views of at most ${MOST_SITES_COMPARED} sites are read week by week at once, not of ${sites.length}`);
+
+    const weeks = weeksUpTo(day, count);
+    // A site named twice is read once.
+    const asked = [...new Set(sites)];
+
+    return weeklyViewsIn(await this.#driver.batch([...weeklyViewsAsked([ALL_SITES, ...asked], weeks)]), sites, weeks);
   }
 
   async readDayUse(day: string): Promise<DayUse> {
