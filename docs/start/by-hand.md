@@ -72,15 +72,15 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
    **If the build fails**, [When a step fails](when-a-step-fails.md#step-2-the-build-fails) has the next step.
 
-3. **Make a Cloudflare API token.** One link opens Cloudflare's form with the eight permissions poplin needs already chosen. It worked if the form shows eight rows already filled. A zone is your domain. The setup page of step 4 has the same link, on its button Open the account token form.
+3. **Make a Cloudflare API token.** One link opens Cloudflare's form with the nine permissions poplin needs already chosen. It worked if the form shows nine rows already filled. A zone is your domain. The setup page of step 4 has the same link, on its button Open the account token form.
 
-   [Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20setup)
+   [Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20setup)
 
    Finish the form, from top to bottom:
 
    | On the form       | Do                                                                                                                 |
    | ----------------- | ------------------------------------------------------------------------------------------------------------------ |
-   | the eight rows    | leave them                                                                                                         |
+   | the nine rows     | leave them                                                                                                         |
    | Account Resources | choose Include, then your account                                                                                  |
    | Zone Resources    | choose Include, then Specific zone, then your domain                                                               |
    | every other field | leave it as it is                                                                                                  |
@@ -128,7 +128,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | Access application | Cloudflare's login in front of the dashboard        |
    | WAF rule           | an optional rule that stops junk before the Worker  |
 
-   With the eight permissions, Repair adds a DNS record, routes, and a login of poplin's own. It removes only a record that carries poplin's mark and a route that names poplin's Worker. A website or a mailbox on the domain stays as it is.
+   With the nine permissions, Repair adds a DNS record, routes, a login of poplin's own, and the key poplin keeps. It removes only a record that carries poplin's mark and a route that names poplin's Worker. A website or a mailbox on the domain stays as it is.
 
    Three permissions of [the optional part](../run/domain.md#optional-block-junk-traffic-and-crawlers) switch the optional rows on, now or at any time. One permission can hold more than one row.
 

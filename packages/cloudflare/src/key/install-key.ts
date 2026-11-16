@@ -1,4 +1,4 @@
-// The kept key as the dashboard sees it: whether the install holds one, and whether Cloudflare still takes it. The key stays inside this object, and no method answers it.
+// The kept key as the dashboard sees it: whether the install holds one, whether Cloudflare still takes it, and the way to a new one. The key stays inside this object, and no method answers it.
 
 import type { InstallKey } from "@poplin/app/src/console/key/records";
 import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
@@ -13,10 +13,13 @@ const NO_RIGHT = "";
  *
  * @param key - the kept key, or `undefined` on an install that holds none
  * @param accountId - the account that owns the key
- * @returns `has` and `verify`. A key Cloudflare knows as disabled or expired, and one refused for a right, verifies as `key_refused`
+ * @param give - makes a new key with a token a person pasted and writes it onto the Worker
+ * @returns the install's key. A key Cloudflare knows as disabled or expired, and one refused for a right, verifies as `key_refused`. A new key is read by the Worker's next instance, so this one goes on saying what it held
  */
-export function createInstallKey(key: KeptKey | undefined, accountId: string): Pick<InstallKey, "has" | "verify"> {
+export function createInstallKey(key: KeptKey | undefined, accountId: string, give: InstallKey["give"]): InstallKey {
   return {
+    give,
+
     has: () => key !== undefined,
 
     async verify() {

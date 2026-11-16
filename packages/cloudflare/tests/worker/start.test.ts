@@ -4,8 +4,10 @@
 import { reset } from "cloudflare:test";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type Outside, startInstance } from "../../src/worker/start";
+import { emptyAccount, KEY_VALUE_START, TOKEN } from "../zone/support/fake-install";
+import type { Asked } from "../zone/support/replies";
 import { EXAMPLE_ACCOUNT } from "./support/example-bindings";
-import { ADMIN, accessHeaders, ask, BINDINGS, cookieOf, instance, send, tokenOf, type World, world } from "./support/install";
+import { ADMIN, accessHeaders, ask, BINDINGS, cloudflareOf, cookieOf, instance, send, tokenOf, type World, world } from "./support/install";
 
 /** A key in the form the reader takes, and nothing like one Cloudflare makes. */
 const KEY = "kept-key-of-the-test";
@@ -73,6 +75,25 @@ describe("the kept key of an instance", () => {
     const verified = await started.instance.key.verify();
 
     expect([started.instance.key.has(), verified.ok, calls]).toEqual([has, has, asked]);
+  });
+
+  // Drift: the way to a new key is wired at the start, beside the plug. One built over another account, Worker, or fetch would make a key for an install that is not this one.
+  test("an instance with no key is given one with a pasted token: the key is made in the Worker's own account, written onto this Worker as its secret, and no word of the answer or the log holds it", async () => {
+    const prints = PRINTS.map((name) => vi.spyOn(console, name).mockImplementation(() => undefined));
+    const account = emptyAccount();
+    const asked: Asked[] = [];
+    const started = await startInstance(BINDINGS, { ...outsideOf(w, []), cloudflare: cloudflareOf(account, asked) }, async () => "a visitor");
+    if (!started.ok) throw new Error(`the instance did not start: ${started.failure.kind}`);
+
+    const given = await started.instance.key.give(TOKEN);
+    const printed = prints.flatMap((print) => print.mock.calls.map((line) => line.map(printedOf).join(" ")));
+
+    for (const print of prints) print.mockRestore();
+
+    expect(given).toEqual({ ok: true, rows: [{ object: "Key", state: "created", detail: "poplin kept key", part: "rest" }], steps: [] });
+    expect([account.tokens.map((token) => token.name), account.bindings.filter((binding) => binding.type === "secret_text")]).toEqual([["poplin kept key"], [{ name: "KEPT_KEY", type: "secret_text" }]]);
+    expect(asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path}`)).toEqual([`POST /accounts/${EXAMPLE_ACCOUNT}/tokens`, `PATCH /accounts/${EXAMPLE_ACCOUNT}/workers/scripts/poplin/settings`]);
+    expect([JSON.stringify(given), ...printed].filter((text) => text.includes(KEY_VALUE_START))).toEqual([]);
   });
 
   // Drift: nothing answers the key today, and every new page, export, and log line is a new way out for it.

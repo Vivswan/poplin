@@ -81,7 +81,8 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
-| the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request and never stores, logs, or shows it |
+| the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
+| the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to start its own update | an update link, saved once by an admin with `poplin update --save-address` | an admin makes it at Cloudflare, which calls it a Deploy Hook. It is no API token: Cloudflare's documentation says it triggers a build for one branch, and that anyone who has it can. The Worker keeps it in its database, sends it one empty POST when an admin starts an update, and never shows, logs, or exports it. Deleting it at Cloudflare ends it |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:
@@ -92,6 +93,23 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 | admin | a user, whose email is on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
 
 A site belongs to the token that created it, or to the admin's email when it was duplicated on the dashboard. A publisher token updates and manages only the sites it created.
+
+## The kept key
+
+```text
+you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  ->  a secret on the Worker, KEPT_KEY
+```
+
+| Question | Answer |
+| --- | --- |
+| Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
+| What it reaches | your one account and your one domain |
+| What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
+| What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; touch a Worker, the bucket, or the database; make another key |
+| How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
+| How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
+
+Cloudflare limits the key to the account and the domain, not to poplin's own objects: it reaches every Access application of the account and every WAF rule of the domain.
 
 What guards each address:
 
@@ -154,7 +172,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 ## Optional edge rules
 
-The install's setup token needs eight permissions. Four more are optional: three switch on rules at Cloudflare's edge, and one makes a budget alert. [Domain](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The install's setup token needs nine permissions. Four more are optional: three switch on rules at Cloudflare's edge, and one makes a budget alert. [Domain](../run/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | Switches on | Without it |
 | --- | --- | --- |

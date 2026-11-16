@@ -138,11 +138,11 @@ The last command opens Cloudflare in the user's browser to ask for access, then 
 
 ### c. Make a Cloudflare API token
 
-On the Setup page, under Make an account token, the user presses Open the account token form. Cloudflare's form opens in a new tab with eight permissions already chosen.
+On the Setup page, under Make an account token, the user presses Open the account token form. Cloudflare's form opens in a new tab with nine permissions already chosen.
 
 | On the form       | The user                                               |
 | ----------------- | ------------------------------------------------------ |
-| the eight rows    | leaves them                                            |
+| the nine rows     | leaves them                                            |
 | Account Resources | chooses Include, then their account                    |
 | Zone Resources    | chooses Include, then Specific zone, then their domain |
 | every other field | leaves it as it is                                     |
@@ -151,7 +151,7 @@ On the Setup page, under Make an account token, the user presses Open the accoun
 
 The install never stores the token. After part e the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working. Only Check and Repair on the dashboard's Domain screen ask for a token again, and the same form makes a new one.
 
-If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the eight permissions by hand.
+If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/when-a-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the nine permissions by hand.
 
 ### d. Finish on the setup page
 

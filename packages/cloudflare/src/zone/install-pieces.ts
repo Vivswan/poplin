@@ -22,6 +22,7 @@ export const INSTALL_PIECES = {
   },
   repairAlone: {
     "Budget alert": [],
+    Key: [],
   },
   moduleAlone: {
     "Bucket cleanup": ["cloudflare_r2_bucket_lifecycle.sites"],

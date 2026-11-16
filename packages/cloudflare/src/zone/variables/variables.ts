@@ -1,6 +1,7 @@
 // The variables setup writes onto the Worker itself: the values no deploy can know, such as the audience tag of the Access application setup made, and on an install with nothing set its domain, its first login, and its account.
 // A change names every other binding as inherited, so the bucket, the database, the limiter, and the variables a person set stay as they are.
 // Every variable a run changes goes in one change: the Worker is deployed anew once, and never starts with half of them.
+// A secret goes in that same change. Cloudflare reads none back, so one is written whenever it is handed over and is never compared.
 
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import { type Connection, callCloudflare } from "../client";
@@ -25,6 +26,12 @@ interface WorkerBinding {
 
 /** One step of a variables plan; `subject` is the variable's name. */
 type VariableStep = { readonly kind: "create" | "change"; readonly subject: string; readonly value: Value } | { readonly kind: "leave"; readonly subject: string };
+
+/** A secret a change also writes: the binding's name and its whole text. */
+interface Secret {
+  readonly name: string;
+  readonly text: string;
+}
 
 /** The Worker a run writes to. */
 interface OwnWorker {
@@ -84,19 +91,23 @@ export function planVariables(desired: readonly DesiredVariable[], bindings: rea
  * Make the Worker's variables match.
  *
  * @param mode - `plan` reads the Worker's bindings and sends no change
- * @returns what was created, changed, and left. Every changed variable is sent in one change, which deploys the Worker anew with every other binding as it was; when it is refused none was written, and the failure names the first as the step that failed
+ * @param secret - a secret to write in the same change, in `apply` mode alone; the report never names it
+ * @returns what was created, changed, and left. Every changed variable is sent in one change, which deploys the Worker anew with every other binding as it was.
+ *   When it is refused nothing was written, and the failure names the first variable as the step that failed
  */
-export async function syncVariables(connection: Connection, worker: OwnWorker, desired: readonly DesiredVariable[], mode: Mode): Promise<Synced> {
+export async function syncVariables(connection: Connection, worker: OwnWorker, desired: readonly DesiredVariable[], mode: Mode, secret?: Secret): Promise<Synced> {
   const settings = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).get(worker.script, { account_id: worker.accountId }));
   if (!settings.ok) return { ...settings, report: reportOf([]) };
 
   const bindings: readonly WorkerBinding[] = settings.value.bindings ?? [];
   const steps = planVariables(desired, bindings);
   const written = steps.flatMap((step) => (step.kind === "leave" ? [] : [step]));
-  if (mode === "plan" || written.length === 0) return { ok: true, report: reportOf(steps) };
+  const secrets = mode === "plan" || secret === undefined ? [] : [{ name: secret.name, type: "secret_text", text: secret.text }];
+  if (mode === "plan" || written.length + secrets.length === 0) return { ok: true, report: reportOf(steps) };
 
-  const kept = bindings.filter((binding) => !written.some((step) => step.subject === binding.name)).map((binding) => ({ name: binding.name, type: "inherit" }));
-  const text = JSON.stringify({ bindings: [...kept, ...written.map(bindingOf)] });
+  const sent = [...written.map(bindingOf), ...secrets];
+  const kept = bindings.filter((binding) => !sent.some((changed) => changed.name === binding.name)).map((binding) => ({ name: binding.name, type: "inherit" }));
+  const text = JSON.stringify({ bindings: [...kept, ...sent] });
 
   // Cloudflare reads the settings from one form field of JSON text, so the text is handed over as the request's body: given as an object, the SDK spreads it over a field per key.
   const changed = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).edit(worker.script, { account_id: worker.accountId }, { body: { settings: text } }));
