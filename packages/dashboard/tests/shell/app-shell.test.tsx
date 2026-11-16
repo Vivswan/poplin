@@ -2,7 +2,7 @@
 
 import { clearPage } from "../lib/support/page";
 
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
@@ -44,7 +44,10 @@ async function drawWith(domainNote: { readonly label: string; readonly sentence:
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mock.restore();
+});
 afterAll(clearPage);
 
 describe("the mark at a section of the side", () => {
@@ -116,6 +119,28 @@ describe("the sections of a phone", () => {
       null,
       null,
     ]);
+  });
+});
+
+describe("a try to start an update", () => {
+  // Drift: a refused start is a problem the server notes, and the page, which read the frame once, would go on showing Settings with no mark until it is loaded again.
+  test("that the server refuses has the frame read again, so the section whose problem it now is carries its mark", async () => {
+    const sent = (input: Request | string | URL, init?: RequestInit): Request => (input instanceof Request ? input : new Request(new URL(String(input), window.location.href), init));
+    const server = spyOn(globalThis, "fetch").mockImplementation((async (input: Request | string | URL, init?: RequestInit) => {
+      if (sent(input, init).method === "POST") return Response.json({ ok: false, code: "refused", about: null, sentence: "The update could not be started." }, { status: 502 });
+
+      return Response.json({ ...FRAME, ...NEWER, domainNote: null, marks: { ...NO_MARKS, settings: { count: 1, says: "An update could not be started" } } });
+    }) as typeof fetch);
+    await drawWith(null, NEWER);
+    const before = screen.queryAllByRole("link", { name: "Settings 1 problem" }).length;
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Update now", hidden: true })[0] as HTMLElement);
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "Update to 1.1.0?" })).getByRole("button", { name: "Update now" }));
+    await waitFor(() => expect(screen.queryAllByRole("link", { name: "Settings 1 problem" }).length).toBe(1));
+
+    const asked = server.mock.calls.map(([input, init]) => `${sent(input, init).method} ${new URL(sent(input, init).url).pathname.slice(BOOT.base.length)}`);
+
+    expect([before, asked]).toEqual([0, ["POST /data/update", "GET /data/frame"]]);
   });
 });
 

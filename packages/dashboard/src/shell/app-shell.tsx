@@ -24,7 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
 import { useScreenFocus } from "@/lib/focus";
-import { useFrame, useStarted } from "@/lib/frame";
+import { FRAME_KEY, useFrame, useStarted } from "@/lib/frame";
 import { sayDone, sayRefused, send } from "@/lib/notify";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { problemCount } from "@/problems/problem-words";
@@ -206,11 +206,14 @@ function useOffer(): { readonly offer: Offer | undefined; readonly started: bool
   const { update, starts } = useFrame().data;
   const [asking, setAsking] = useState(false);
   const [started, setStarted] = useStarted();
+  const client = useQueryClient();
   const answer = async (yes: boolean): Promise<void> => {
     setAsking(false);
     if (!yes) return;
 
     const taken = await send(api.update.$post({ json: {} }));
+    // A try that was refused is a problem the frame marks, and one that was taken changes what the frame offers: either way it is read again.
+    void client.invalidateQueries({ queryKey: FRAME_KEY });
     if (taken === undefined) return;
 
     setStarted();
