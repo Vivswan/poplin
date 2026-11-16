@@ -6,15 +6,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import type { Domain } from "@/domain/domain-queries";
-
-/** Read an address a link may lead to: a whole one that starts with https. Anything else is no link, so no text that reaches the page is run by a press. */
-function httpsLink(address: string): string | undefined {
-  if (!URL.canParse(address)) return undefined;
-
-  const parsed = new URL(address);
-
-  return parsed.protocol === "https:" ? parsed.href : undefined;
-}
+import { httpsLink } from "@/lib/https-link";
 
 /** The help behind the quiet line: what the form asks, every right to add by hand when it opens empty, and the rights an install works without. */
 function FormHelp({ form }: { readonly form: Domain["form"] }): ReactNode {

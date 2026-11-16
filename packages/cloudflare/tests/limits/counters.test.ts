@@ -581,7 +581,7 @@ describe("Cloudflare counters: the rows the database used", () => {
   });
 
   // Drift: D1 names the rows of every statement of a batch, and counts its allowance by UTC day. A driver that read the last statement alone, kept the rows of a failed write, or gave a day the rows of the day before would show a day D1 never counted.
-  test("the driver adds up the rows D1 names for every statement of a day, a write the database rejects puts them back, the next sampled write stores them in their day, a new day begins at none, and a batch answered after midnight adds to neither day", async () => {
+  test("the driver adds up the rows D1 names for every statement of a day, a rejected write puts them back, the next sampled write stores them in their day, a new day begins at none, and a batch answered after midnight adds to neither day", async () => {
     await reset();
     const clock = { now: NOON };
     const driver = new D1Driver(BINDINGS.DB, () => clock.now);

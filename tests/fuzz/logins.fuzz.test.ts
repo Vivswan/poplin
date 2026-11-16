@@ -8,7 +8,7 @@ import fc from "fast-check";
 import { createConsole } from "../../packages/app/src/console/console";
 import { type ApiInstall, ORIGIN, openApi, VISITOR_HEADER } from "../../packages/app/tests/api/support/install";
 import { CLIENT } from "../../packages/app/tests/console/support/console";
-import { FREE_LIMITS } from "../../packages/app/tests/console/support/install";
+import { FREE_LIMITS, USAGE_HOST } from "../../packages/app/tests/console/support/install";
 import { ADDRESSES } from "../../packages/app/tests/sites/support/layout";
 import { plainComputerName } from "../../packages/core/src/actions/computer-logins";
 import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../../packages/core/src/auth/computer-logins";
@@ -137,6 +137,7 @@ async function openDesk(): Promise<Desk> {
       base: "",
       client: CLIENT,
       freeLimits: FREE_LIMITS,
+      usage: USAGE_HOST,
       rebuild: { accepts: () => false, fetch: async () => new Response(null, { status: 204 }) },
       counters: install.counters,
       // Every request is its own visitor: the counts by address have their own test, and here they would only hide steps.

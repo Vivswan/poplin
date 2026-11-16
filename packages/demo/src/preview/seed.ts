@@ -73,6 +73,12 @@ const WEEKEND_SHARE = 0.8;
 /** The days over which a site's count grew from a third to what it is today. */
 const GROWTH_DAYS = 300;
 
+/** The rows the sample database read for each of today's requests. */
+const ROWS_READ_A_REQUEST = 9;
+
+/** Today's requests for each row the sample database wrote. */
+const REQUESTS_A_ROW_WRITTEN = 4;
+
 /** The days the history of the sites and the people spans, the days before it one person was alone, and how many of those days pass from one check of the domain to the next. */
 const [HISTORY_DAYS, EARLIER_DAYS, CHECK_EVERY] = [31, 170, 7];
 
@@ -330,7 +336,9 @@ async function countRequests(world: World, start: number): Promise<void> {
     for (let ago = 0; ago < days; ago += 1) {
       const moment = new Date(start - ago * DAY_MS);
       const share = sharedOn(moment.getUTCDay(), ago);
-      await world.install.database.addRequests({ day: moment.toISOString().slice(0, DAY_LENGTH), site: site.id, requests: Math.ceil(requests * share), views: Math.floor(views * share) });
+      // Today alone shows the rows the database used, so no earlier day is given any.
+      const rows = ago === 0 ? { read: requests * ROWS_READ_A_REQUEST, written: Math.ceil(requests / REQUESTS_A_ROW_WRITTEN) } : undefined;
+      await world.install.database.addRequests({ day: moment.toISOString().slice(0, DAY_LENGTH), site: site.id, requests: Math.ceil(requests * share), views: Math.floor(views * share), rows });
     }
   }
 }
