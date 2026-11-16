@@ -45,25 +45,40 @@ function unlookedOf(removed: Listed): string[] {
   return removed.rows.filter((row) => row.state === "stay" && row.right !== undefined).map((row) => row.object);
 }
 
+/** Whether a run could not look for a kind: one the install made may still be there, and the same command takes it once the token has the permission. */
+function leftUnlooked(removed: Listed, run: Run): boolean {
+  return run === "apply" && unlookedOf(removed).length > 0;
+}
+
+/**
+ * What to run after a removal that left nothing it was to remove, or met nothing to remove: nothing, or this command again where a run could not look for a kind, as its sentence says.
+ *
+ * @param again - what runs this command again, with the careful choices of its line
+ */
+export function afterRemoval(removed: Listed, run: Run, again: Next): Next {
+  return leftUnlooked(removed, run) ? again : NEXT.none();
+}
+
 /**
  * Say which kinds the token could not look for, in a dry run or in a run.
  *
+ * @param careful - the careful choices of the run's line, which the sentence names as the next step's command line holds them
  * @returns the sentences, a run's with what to do about a kind that may still be there; `undefined` where the token looked for every kind
  */
-export function unlookedWords(removed: Listed, run: Run): string | undefined {
+export function unlookedWords(removed: Listed, run: Run, careful: readonly Careful[]): string | undefined {
   const unlooked = unlookedOf(removed);
   if (unlooked.length === 0) return undefined;
 
   const were = unlooked.length === 1 ? "was not" : "were not";
   const kinds = `${countText(unlooked.length, "kind")} ${run === "dry-run" ? "would not be" : were} looked for, since the token lacks an optional permission: ${LIST.format(unlooked)}.`;
-  const byHand = "If the install made one, it is still there: delete it by hand, or add the permission and run this command again.";
+  const byHand = `If the install made one, it is still there: delete it by hand, or add the permission and run ${againWords(careful)}.`;
 
-  return run === "dry-run" ? kinds : `${kinds} ${byHand}`;
+  return leftUnlooked(removed, run) ? `${kinds} ${byHand}` : kinds;
 }
 
 /** The line of the kinds the token could not look for; none where it looked for every kind. */
-function unlookedLines(removed: Listed, run: Run): Line[] {
-  const words = unlookedWords(removed, run);
+function unlookedLines(removed: Listed, run: Run, careful: readonly Careful[] = []): Line[] {
+  const words = unlookedWords(removed, run, careful);
 
   return words === undefined ? [] : [{ tone: "warning", text: words }];
 }
@@ -123,7 +138,7 @@ export function removedLines(removed: Listed, provider: Provider, careful: reado
   if (!removed.ready) return [...blockedLines(removed.blocked), { tone: "error", text: `${left} not done, ${kinds} removed. Run ${againWords(careful)}: it removes what is left.` }, stored];
 
   const stays = count(removed, ["stay"]);
-  const unlooked = unlookedLines(removed, "apply");
+  const unlooked = unlookedLines(removed, "apply", careful);
   const whole = unlooked.length === 0;
   const done: Line = { tone: whole ? "done" : "warning", text: `the install is removed${whole ? "" : ", but for what the token could not look for"}. ${kinds} removed, 0 left, ${stays} ${stays === 1 ? "stays" : "stay"}.` };
   const byHand = stays === 0 ? [] : [plain("Each row that says stays names what is yours to do by hand.")];
@@ -138,12 +153,12 @@ export function removedLines(removed: Listed, provider: Provider, careful: reado
  * @param found - what the look for an install found, which the run went on from
  * @param again - what runs this command again, with the careful choices the next step keeps
  * @returns the same value for both, but for `run` and the key of each row's state: `will` in a dry run, `did` in a run. `ok` is whether the command exits with 0, and `next` names this command until a run removed all it was to.
- *   `unlooked` names each kind the token could not look for, which may still be there
+ *   `unlooked` names each kind the token could not look for, which may still be there: after a run that has one, `next` names this command too
  */
 export function removalValue(removed: Listed, run: Run, found: string, again: Next): Readonly<Record<string, unknown>> {
   const key = run === "dry-run" ? "will" : "did";
   const rows = removed.rows.map(({ object, state, detail, ...held }) => ({ object, [key]: state, detail, ...held }));
-  const next: Next = run === "apply" && removed.ready ? NEXT.none() : again;
+  const next = run === "apply" && removed.ready ? afterRemoval(removed, run, again) : again;
 
   return { ok: removed.ready, run, ready: removed.ready, found: { state: found }, confirm: removed.confirm, rows, blocked: removed.blocked, unlooked: unlookedOf(removed), next };
 }

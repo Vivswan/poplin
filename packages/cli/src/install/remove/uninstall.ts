@@ -15,7 +15,7 @@ import { carefulOf, carried, followed, heldStop, NEXT, REFUSED_AS, runningWords 
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { RemovalMode, UninstallPlan, UninstallRequest } from "./records";
-import { listedLines, removalLine, removalValue, removedLines, unlookedWords, warningLines } from "./report";
+import { afterRemoval, listedLines, removalLine, removalValue, removedLines, unlookedWords, warningLines } from "./report";
 
 /** The command as it is typed after `poplin`, what runs it again, and the careful choices it takes. */
 const COMMAND = { name: "uninstall", again: NEXT.uninstall, careful: ["--keep-data", "--dry-run"] } as const;
@@ -118,12 +118,13 @@ async function removal(ground: Ground, request: UninstallRequest, how: Removal, 
 
   if (removed.rows.some((row) => !UNTOUCHED_STATES.includes(row.state))) return removed;
 
-  // A kind the token could not look for may still be there, so the stop names it beside what is left.
+  // A kind the token could not look for may still be there, so the stop names it beside what is left, and a run's next step is this command with the permission added.
   const there = removed.rows.some((row) => row.state === "keep") ? NOTHING.data : NOTHING.none;
-  const unlooked = unlookedWords(removed, how.run);
+  const careful = choicesOf(request.mode);
+  const unlooked = unlookedWords(removed, how.run, careful);
   const words = unlooked === undefined ? `${there} ${UNTOUCHED}` : `${there} ${unlooked} ${UNTOUCHED}`;
 
-  return { problem: "no_install", exit: 1, words, next: NEXT.none() };
+  return { problem: "no_install", exit: 1, words, next: afterRemoval(removed, how.run, NEXT.uninstall(request.provider, careful)) };
 }
 
 /** Warn, then take the proof: what the person types once they saw what goes. `undefined` once they ended the question, or typed nothing. */
