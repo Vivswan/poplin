@@ -105,6 +105,15 @@ describe("updateSite", () => {
     expect(await world.audit()).toEqual(["create", "create", "details", "access", "details"]);
   });
 
+  // Drift: every list of sites and every entry of the log carries a site's title whole. The longest one typed is 200 characters; a bound that moved down would refuse a title the field took.
+  test("a title of 200 characters is set whole", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report");
+    const longest = "t".repeat(200);
+
+    expect(await updateSite(world.install, OWNER, { site: id, title: longest })).toMatchObject({ ok: true, site: { title: longest, title_typed: true } });
+  });
+
   // Drift: `--expires 7d` counts from the moment it is set; a span counted from the site's creation would trash an old site at once.
   test("each detail is set as asked, an expiry counts from now, and a detail left out stays", async () => {
     const world = await makeWorld();
@@ -143,6 +152,8 @@ describe("updateSite", () => {
     ["a title with a line break", { title: "two\nlines" }, { code: "bad_argument", about: "title" }],
     ["a title with a control character", { title: "a\u0000b" }, { code: "bad_argument", about: "title" }],
     ["a title with a line separator", { title: "two\u2028lines" }, { code: "bad_argument", about: "title" }],
+    ["a title one character past the longest", { title: "t".repeat(201) }, { code: "bad_argument", about: "title" }],
+    ["a title as long as a request may carry", { title: "t".repeat(60_000) }, { code: "bad_argument", about: "title" }],
     ["a held public name beside a title", { access: "public", public_name: "taken", title: "kept out" }, { code: "name_taken", about: "public_name" }],
   ] as readonly (readonly [string, Changes, object])[])("a change with %s is refused and leaves the site as it was", async (_why, changes, refusal) => {
     const world = await makeWorld();

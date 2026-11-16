@@ -9,6 +9,7 @@ import { mintSiteFolder, type Site, siteFromRow, siteToRow } from "../records/si
 import { MANIFEST_FILE, type ManifestFile, mintUploadId, type Upload, type UploadPlan } from "../records/upload";
 import { parseSiteId } from "../sites/ids";
 import { checkManifest, ENTRY_PAGE, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
+import { PAGE_TITLE_TEXT, TITLE_TEXT } from "./changes";
 import { BACKUP_FORMAT, type ExportedSite } from "./export";
 import { enterInstall } from "./reach";
 import { type Install, type Refused, refuse } from "./records";
@@ -17,14 +18,14 @@ import { type BegunUpload, begunUpload, uploadKey } from "./uploads";
 /** An import bounded by nothing but the install's own limits. */
 const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: Number.MAX_SAFE_INTEGER };
 
-/** The form of a site as a backup holds it, each field of its own type and none besides; what each value must be is the record's rule, checked where the site is turned into a row. A `folder` is taken and not read. */
+/** The form of a site as a backup holds it, each field of its own type and none besides; what each value must be is the record's rule, checked where the site is turned into a row. A `folder` is not read; a title is held as a publish holds one. */
 const SENT_SITE = v.pipe(
   v.strictObject({
     id: v.string(),
     name: v.string(),
     folder: v.optional(v.unknown()),
-    title: v.nullable(v.string()),
-    page_title: v.nullable(v.string()),
+    title: v.nullable(TITLE_TEXT),
+    page_title: v.nullable(PAGE_TITLE_TEXT),
     access: v.picklist(["private", "unlisted", "public"]),
     public_name: v.optional(v.string()),
     search_engines: v.boolean(),

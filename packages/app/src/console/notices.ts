@@ -80,6 +80,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   },
   bad_argument: {
     expires: "Pick a day that is still ahead.",
+    title: "Use one line of 200 characters at most.",
     address: "That is not an update link of the host. Paste the whole link, starting with https://.",
     default_expires: "Use a whole number, 1 or more.",
     default_search_engines: "Use on or off.",

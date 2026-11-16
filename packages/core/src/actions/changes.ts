@@ -24,11 +24,23 @@ const LAST_MOMENT = 8_640_000_000_000_000;
 /** A control character or a line break, which a title shown on one line cannot hold. */
 const LINE_BREAKER = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 
-/** A title as a caller sends it. */
-export const TITLE_TEXT = v.pipe(
-  v.string(),
-  v.check((title) => !LINE_BREAKER.test(title), "a title holds no control character and no line break"),
-);
+/** The longest title a caller may type, in characters: a longer one is refused, so no list of sites carries a title of any length. */
+export const MAX_TITLE_LENGTH = 200;
+
+/** The longest title of a page a site keeps, in characters: a longer one is cut, since it comes from the file and not from a person. */
+export const MAX_PAGE_TITLE_LENGTH = 200;
+
+/** A high surrogate at the end of a text: a cut that leaves one has cut a surrogate pair in two. */
+const HIGH_SURROGATE_AT_END = /[\uD800-\uDBFF]$/;
+
+/** What every title holds to: one line. */
+const ONE_LINE = v.check((title: string) => !LINE_BREAKER.test(title), "a title holds no control character and no line break");
+
+/** A title as a caller types it. */
+export const TITLE_TEXT = v.pipe(v.string(), v.maxLength(MAX_TITLE_LENGTH), ONE_LINE);
+
+/** The title of a page as a publish sends it, cut to the length a site keeps. Only what is kept has to be one line. */
+export const PAGE_TITLE_TEXT = v.pipe(v.string(), v.transform(cutPageTitle), ONE_LINE);
 
 /** What a caller may ask of a site's settings; every key is optional, and no other key is taken. */
 export const SITE_CHANGES = v.strictObject({
@@ -46,7 +58,7 @@ export const SITE_CHANGES = v.strictObject({
  *
  * `public_name` goes with `access: "public"` alone. Left out, a public site keeps the one it holds, and a site going public takes its own name.
  *
- * A `title` is the typed title: `null` or `""` takes it away, and the site then shows its page's own title. A title holds no control character and no line break.
+ * A `title` is the typed title: `null` or `""` takes it away, and the site then shows its page's own title. A title holds at most 200 characters, no control character, and no line break.
  *
  * `expires` is `"never"`, a span from now such as `"7d"` (units `s`, `m`, `h`, `d`), a day such as `"2026-12-01"`, which is that day's start in UTC, or a moment such as `"2026-12-01T08:30:00.000Z"`.
  */
@@ -54,6 +66,11 @@ export type SiteChanges = v.InferInput<typeof SITE_CHANGES>;
 
 /** A time span as the settings count one. */
 type Span = Exclude<SettingValues["default_expires"], "never">;
+
+/** Cut the title of a page to the length a site keeps, and never through a surrogate pair. */
+function cutPageTitle(title: string): string {
+  return title.slice(0, MAX_PAGE_TITLE_LENGTH).replace(HIGH_SURROGATE_AT_END, "");
+}
 
 /** What the changes are checked against. */
 interface Ground {

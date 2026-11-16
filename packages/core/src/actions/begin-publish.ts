@@ -11,7 +11,7 @@ import { MANIFEST_FILE, type ManifestFile, mintUploadId, type UploadPlan } from 
 import { dayOf } from "../records/views";
 import type { ProblemKind } from "../records/problem";
 import type { SiteId } from "../sites/ids";
-import { type CheckedChanges, defaultExpiry, readChanges, SITE_CHANGES, type SiteChanges, TITLE_TEXT } from "./changes";
+import { type CheckedChanges, defaultExpiry, readChanges, PAGE_TITLE_TEXT, SITE_CHANGES, type SiteChanges } from "./changes";
 import { checkFilePath } from "./files";
 import { noteProblem } from "./problems";
 import { enterInstall, reachSite } from "./reach";
@@ -49,7 +49,7 @@ const UNBOUNDED: UploadLimits = { fileBytes: Number.MAX_SAFE_INTEGER, files: MOS
 /** What a publish asks for before any file is sent: its settings, `site` to add a version to that site, the `name` of a new site or the new name of that one, every file as a `MANIFEST_FILE`, and `page_title`, the entry page's own title. */
 export const PUBLISH_REQUEST = v.strictObject({
   ...SITE_CHANGES.entries,
-  page_title: v.optional(TITLE_TEXT),
+  page_title: v.optional(PAGE_TITLE_TEXT),
   site: v.optional(v.string()),
   files: v.array(MANIFEST_FILE),
 });
