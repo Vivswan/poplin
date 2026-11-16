@@ -64,9 +64,13 @@ export interface Entry {
   readonly status?: number;
 }
 
-/** What a stage works with: the seeded install. */
+/** What a stage works with. */
 interface Stage {
+  /** The seeded install. */
   readonly world: World;
+
+  /** The ids of the logins the sample computers began and still hold the secrets of. */
+  readonly samples: readonly string[];
 }
 
 /** What the terminal of a computer that began a login shows: the address of the page that allows it, and the code, which no page of the dashboard shows whole. `computer` is the name it gave. */
@@ -76,11 +80,11 @@ export interface Printed {
   readonly code: string;
 }
 
-/** Answer what the terminal of each sample computer that waits shows: the preview stands in for the terminals, since no computer is behind a sample login. */
-async function waitingLogins({ world }: Stage): Promise<readonly Printed[]> {
+/** Answer what the terminal of each sample computer that waits shows: the preview stands in for those terminals, since no computer is behind a sample login. A login a real terminal began is left out: its code is that terminal's alone. */
+async function waitingLogins({ world, samples }: Stage): Promise<readonly Printed[]> {
   const waiting = await world.install.database.listWaitingComputerLogins(world.install.now());
 
-  return waiting.map((login) => ({ computer: login.computer, address: `${REVIEW_PAGE}/${login.id}`, code: showUserCode(login.code) }));
+  return waiting.filter((login) => samples.includes(login.id)).map((login) => ({ computer: login.computer, address: `${REVIEW_PAGE}/${login.id}`, code: showUserCode(login.code) }));
 }
 
 /** Add more logins to the log than a narrowed page looks at, and lead to the page of what happened to sites: it stops before it finds an entry, and says so. A reset takes the logins away. */

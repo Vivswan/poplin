@@ -122,6 +122,22 @@ async function openPreview(gallery: boolean, real?: Parameters<typeof createPrev
 }
 
 describe("the local preview", () => {
+  // Drift: the page that stands in for the sample computers' terminals would print the code of every login that waits, so a person at the preview could allow a login a real terminal began without seeing that terminal.
+  test("the page of what the waiting computers print holds the sample logins alone: a login a real terminal began is not on it, by its id or by its code", async () => {
+    const preview = await openPreview(false);
+    const ask = (path: string, init?: RequestInit): Promise<Response> => preview.fetch(new Request(`${ORIGIN}${path}`, init));
+    const { logins } = (await (await ask("/data/logins")).json()) as { readonly logins: readonly { readonly id: string }[] };
+    const begun = await ask("/api/logins", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "admin", computer: "a real terminal" }) });
+    const real = (await begun.json()) as { readonly code: string; readonly secret: string };
+    const listed = (await (await ask("/data/logins")).json()) as { readonly logins: readonly { readonly id: string }[] };
+    const printed = await (await ask("/state/allow/waiting")).text();
+    const realId = real.secret.split("_")[2] ?? "";
+
+    expect([begun.status, logins.length, listed.logins.map((login) => login.id).includes(realId)]).toEqual([200, 2, true]);
+    expect(logins.map((login) => printed.includes(`/tokens/review/${login.id}`))).toEqual([true, true]);
+    expect([printed.includes(realId), printed.includes(real.code), printed.includes("a real terminal")]).toEqual([false, false, false]);
+  });
+
   // Drift: a restart leaves a stray server behind, or the command serves a page with no script.
   test("two previews run side by side on two ports, each serves the dashboard's built client, a second start on a port replaces the first, and a stop leaves no server and no pid file", async () => {
     const [one, other] = [freePort(), freePort()];
