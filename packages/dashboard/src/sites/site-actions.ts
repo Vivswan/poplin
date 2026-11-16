@@ -109,9 +109,9 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
     remove: async (site) => {
       const back = (): void => void restore(site);
 
-      const said = `${shownName(site)} moved to the trash.`;
+      const name = shownName(site);
 
-      return (await run(site, send(routes.delete.$post({ param: at(site), json: {} })), said, { run: back, id: trashLine(site) })) !== undefined;
+      return (await run(site, send(routes.delete.$post({ param: at(site), json: {} })), `${name} moved to the trash.`, { run: back, id: trashLine(site), name })) !== undefined;
     },
     name: async (site, naming) => {
       // A refused value is said at its field, where it is corrected, so the refusal goes back to the one who asked.
