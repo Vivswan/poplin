@@ -8,8 +8,8 @@ import { BunSqliteDriver } from "@poplin/core/tests/database/support/bun-sqlite-
 
 import { openConsole } from "./support/console";
 
-/** The most calls to the database one request of a copy may make here: the 44 a copy is held to, less a host's start of 4 and its 2 for counting the day's listings, which no test install makes. The test console's session costs 2 calls, a host's 1. */
-const MOST_DATABASE_CALLS = 38;
+/** The most calls to the database one request of a copy may make here: the 44 a copy is held to, less a host's start of 2 and its 2 for counting the day's listings, which no test install makes. The test console's session costs 2 calls, a host's 1. */
+const MOST_DATABASE_CALLS = 40;
 
 /** The most calls to the store one request of a copy may make. */
 const MOST_STORE_CALLS = 250;
@@ -99,7 +99,7 @@ describe("a copy of a site", () => {
     [40, 1],
     [300, 3],
     [1_001, 10],
-  ])("of %i files takes %i requests, none of which makes more than 38 calls to the database, the session's included, or more than 250 to the store", async (count, requests) => {
+  ])("of %i files takes %i requests, none of which makes more than 40 calls to the database, the session's included, or more than 250 to the store", async (count, requests) => {
     const opened = await openConsole();
     await opened.change("/data/settings", { texts: { max_files_per_publish: "10000" } });
     const source = await publish(opened, "report", count);

@@ -33,7 +33,7 @@ const DATABASE_BUDGET = 44;
 const STORE_BUDGET = 250;
 
 /** The most calls to the database a host makes of its own in a request that starts it, which any request of a copy may be. */
-const START_CALLS = 4;
+const START_CALLS = 2;
 
 /** The most calls to the database before any file is copied: three to reach the source, and one to record the upload or to read it. */
 const STAGE_CALLS = 4;

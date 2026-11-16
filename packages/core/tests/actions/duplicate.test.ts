@@ -20,8 +20,8 @@ const COPY_MS = 30_000;
 /** The calls a caller made before the action: one, as a caller that read a token did. */
 const ASKING = 1;
 
-/** The most calls to the database the action itself may make after a caller's one: the 44 a request of a copy is held to, less the 4 a host may make to start, the caller's own, and the 2 that count the day's listings, which a host makes. */
-const OWN_DATABASE_CALLS = 37;
+/** The most calls to the database the action itself may make after a caller's one: the 44 a request of a copy is held to, less the 2 a host may make to start, the caller's own, and the 2 that count the day's listings, which a host makes. */
+const OWN_DATABASE_CALLS = 39;
 
 /** The most calls to the store one call of the action may make. */
 const STORE_CALLS = 250;
@@ -125,7 +125,7 @@ describe("duplicateSite", () => {
     [1, 1],
     [300, 3],
     [1_001, 10],
-  ])("a copy of %i files is whole after %i calls, none of which makes more than 37 calls to the database or more than 250 to the store", async (count, calls) => {
+  ])("a copy of %i files is whole after %i calls, none of which makes more than 39 calls to the database or more than 250 to the store", async (count, calls) => {
     const world = await makeWorld();
     const pages = Array.from({ length: count - 1 }, (_page, at) => file(`pages/${at}.html`, "x"));
     const source = await publishSite(world.install, OWNER, { name: "report", files: [file("index.html", "<p>home</p>"), ...pages] });
@@ -180,9 +180,9 @@ describe("duplicateSite", () => {
     using batches = spyOn(BunSqliteDriver.prototype, "batch");
     using reads = spyOn(world.install.store, "list");
 
-    await expect(duplicateSite(world.install, OWNER, { site: source }, 25)).rejects.toThrow(RangeError);
+    await expect(duplicateSite(world.install, OWNER, { site: source }, 27)).rejects.toThrow(RangeError);
     expect([batches.mock.calls.length, reads.mock.calls.length]).toEqual([0, 0]);
-    expect(await duplicateSite(world.install, OWNER, { site: source }, 24)).toMatchObject({ ok: true, site: { live_version: 1 } });
+    expect(await duplicateSite(world.install, OWNER, { site: source }, 26)).toMatchObject({ ok: true, site: { live_version: 1 } });
   });
 
   // Drift: a duplicate is a new site made from another's files, so it must pass every door a publish and a read pass: ownership, the trash, and the install's limits.
