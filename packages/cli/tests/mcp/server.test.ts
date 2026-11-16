@@ -323,7 +323,7 @@ describe("the MCP server", () => {
         code: "root_links",
         message: 'this install has no domain, so a link that starts with "/" would not open',
         about: "/logo@2x.png in index.html",
-        hint: "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css, or give the install a domain",
+        hint: "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css",
       },
       ["GET /api/whoami"],
       [],
