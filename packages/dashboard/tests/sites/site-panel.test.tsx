@@ -1,4 +1,4 @@
-// The panel of one site: what stands under the switch for search engines while the switch changes nothing, and under the one for embedding.
+// The panel of one site: what stands under the switch for search engines while the switch changes nothing, and under the one for embedding, who can open it, and how its visits are worded.
 
 import { clearPage } from "../lib/support/page";
 
@@ -41,9 +41,9 @@ const SITE = {
   views: { today: 0, week: 0 },
 };
 
-/** Draw the panel of a site that anyone, or only its owner, can open, on an install that lets search engines in or keeps them out. */
-async function draw(access: string, allowed: boolean): Promise<void> {
-  globalThis.fetch = (async () => Response.json({ ok: true, site: { ...SITE, access }, logins: {}, search_engines_allowed: allowed })) as unknown as typeof fetch;
+/** Draw the panel of a site that anyone, or only its owner, can open, on an install that lets search engines in or keeps them out, with the visits the site counted. */
+async function draw(access: string, allowed: boolean, views: typeof SITE.views = SITE.views): Promise<void> {
+  globalThis.fetch = (async () => Response.json({ ok: true, site: { ...SITE, access, views }, logins: {}, search_engines_allowed: allowed })) as unknown as typeof fetch;
   await drawAt(
     "/",
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -101,5 +101,18 @@ describe("the choice of who can open a site", () => {
     await draw(access, true);
 
     expect(within(document.body).getAllByRole("group", { name: "Who can open it", description: means }).length).toBe(1);
+  });
+});
+
+describe("the visits of a site", () => {
+  // Drift: a site nobody opened would say "about 0" again, which reads as a slip; or a count above none would lose its "about" and read as exact.
+  test.each([
+    [{ today: 0, week: 0 }, "0 today, 0 in 7 days"],
+    [{ today: 0, week: 14 }, "0 today, about 14 in 7 days"],
+    [{ today: 3, week: 1200 }, "about 3 today, about 1,200 in 7 days"],
+  ])("say about before every count but none: %o", async (views, said) => {
+    await draw("private", true, views);
+
+    expect(within(document.body).getByText("Visits").nextElementSibling?.textContent).toBe(said);
   });
 });
