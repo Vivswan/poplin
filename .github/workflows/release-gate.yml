@@ -31,3 +31,25 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Upgrade an install of the last release, and hold its schema steps as shipped
         run: bun test ./tests/upgrade/ ./tests/frozen-steps.test.ts
+
+  # A real install of the older build, on each of the two test accounts, must have taken the build of main this release is
+  # cut from as an update and answered as before (packages/providers/cloudflare/live/README.md, "The upgrade"). That run
+  # reads the test accounts' secrets, which a run of main alone may: so it is started by hand on main, with `upgrade`
+  # ticked, and this job reads that both kinds ended green for the commit of main the release's branch stands on.
+  # Only the pull request of a release is asked: the nightly and a dispatch cut no release.
+  live-upgrade:
+    name: live upgrade of both kinds of install
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Read that the live upgrade ended green on both kinds of install
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bun packages/providers/cloudflare/scripts/upgrade/proof.ts

@@ -81,7 +81,7 @@ async function ask(wait: Wait): Promise<Ending | undefined> {
 }
 
 /** Runs `gh` as a child with this process's environment, its errors on this process's own. A `gh` that does not start is one that failed. */
-async function runGh(args: readonly string[]): Promise<string | undefined> {
+export async function runGh(args: readonly string[]): Promise<string | undefined> {
   try {
     const child = Bun.spawn(["gh", ...args], { stdin: "ignore", stdout: "pipe", stderr: "inherit" });
     const [code, printed] = await Promise.all([child.exited, new Response(child.stdout).text()]);

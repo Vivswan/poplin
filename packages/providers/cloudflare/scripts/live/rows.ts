@@ -113,8 +113,8 @@ const COPY = new URLPattern({ pathname: "/api/sites/:site/duplicate" });
 /** The method and the path of each priced route, as a request is matched against them. */
 const MATCHERS = PRICES.map(({ method, path, rows }) => ({ method, path: new URLPattern({ pathname: path }), rows }));
 
-/** The most rows each step of a run may make the install write: the checks, and the reset when it keeps no sample. */
-export const ROW_CEILINGS = { checks: 1100, reset: 600 } as const;
+/** The most rows each step of a run may make the install write: the checks, the reset when it keeps no sample, and the upgrade. */
+export const ROW_CEILINGS = { checks: 1100, reset: 600, upgrade: 300 } as const;
 
 /** What a price reads of a request: its query, and its JSON body, empty for a request that carries none. */
 interface Asked {
