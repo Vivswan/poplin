@@ -46,8 +46,6 @@ const KINDS = {
 
 /** The files of both kinds that import a file of one kind: each runs what it imports for an install of that kind alone, or is a test. */
 const DECIDERS: readonly string[] = [
-  "packages/providers/cloudflare/scripts/live/converge.ts",
-  "packages/providers/cloudflare/scripts/live/start-over.ts",
   "packages/providers/cloudflare/src/shared/install/first/installer.ts",
   "packages/providers/cloudflare/src/shared/install/kind/first-run.ts",
   "packages/providers/cloudflare/src/shared/install/upkeep/remove/remove.ts",

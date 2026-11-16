@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { removeOrphans } from "../../../scripts/live/orphans";
-import { BUCKET, openRun } from "../../../scripts/live/util";
+import { openRun, TEST_MARK } from "../../../scripts/live/util";
 import { withFake } from "../../shared/install/support/fake-cloudflare";
 import { type Asked, refusal, reply } from "../../shared/install/support/replies";
 import { parseObjectKey } from "../../../../../core/src/storage/storage";
@@ -25,8 +25,8 @@ const DATABASE = "database-1";
 /** Where the fake Cloudflare answers for the account's buckets. */
 const BUCKETS = `/accounts/${ACCOUNT}/r2/buckets`;
 
-/** Where it answers for the objects of the test install's bucket. */
-const OBJECTS = `${BUCKETS}/${BUCKET}/objects`;
+/** Where it answers for the objects of the install's bucket, which is the product's and not the one that marks a test account. */
+const OBJECTS = `${BUCKETS}/poplin-sites/objects`;
 
 /** The folders no site was ever stored under, written by hand: two that no record names, one an upload on its way names, and one a removed site left to be emptied. */
 const [ORPHAN, SECOND_ORPHAN, UPLOADING, LEFTOVER] = ["a".repeat(16), "b".repeat(16), "c".repeat(16), "d".repeat(16)];
@@ -107,7 +107,7 @@ async function answer(world: World, asked: Asked): Promise<Response | undefined>
 
   if (path === `/accounts/${ACCOUNT}/subscriptions`) return reply([]);
 
-  if (path === BUCKETS) return reply({ buckets: world.bucket ? [{ name: BUCKET }] : [] });
+  if (path === BUCKETS) return reply({ buckets: world.bucket ? [{ name: TEST_MARK }] : [] });
 
   if (path === OBJECTS) return listed(world, asked);
 
@@ -227,7 +227,7 @@ describe("the removal of the files no record names, against a local fake account
 
   test.each([
     ["a listing of the bucket that does not end inside the ceiling", (world: World) => Object.assign(world, { page: 1 }), 3, { kind: "failed", what: "the listing of the bucket did not end within the ceiling of 3 lists and deletes" }, 3],
-    ["an account without the test install's bucket", (world: World) => Object.assign(world, { bucket: false }), 300, { kind: "failed", what: "the account holds no bucket of the test install, so nothing in it is removed" }, 0],
+    ["an account without the bucket that marks a test account", (world: World) => Object.assign(world, { bucket: false }), 300, { kind: "failed", what: "the account holds no bucket that marks a test account, so nothing in it is changed" }, 0],
     ["a zone on a plan with a price", (world: World) => Object.assign(world, { price: 20 }), 300, { kind: "failed", what: "the zone's plan has a price, so it is not the Free plan" }, 0],
     ["a database that names no folder", (world: World) => Object.assign(world, { database: "names nothing" }), 300, { kind: "failed", what: "the database names no folder, so no file is removed" }, 1],
     ["a database the token may not read", (world: World) => Object.assign(world, { database: "refuses" }), 300, { kind: "skipped", needs: "the token permission D1: Edit" }, 1],

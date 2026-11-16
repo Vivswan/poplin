@@ -19,7 +19,6 @@
     "test": "bun run build && vitest run",
     "costs": "bun run build && vitest run tests/shared/worker/request-budget.test.ts",
     "costs:compare": "bun scripts/action-costs.ts",
-    "live:start-over": "bun scripts/live/start-over.ts",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",
     "live:reset": "bun scripts/live/reset.ts"

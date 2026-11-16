@@ -1,20 +1,18 @@
-// The script that makes the test install runs against a local fake of the Cloudflare API, and the workflow is read beside it.
-// A run that stopped before it made anything once ended green with an empty log.
+// The script that makes the test install match the commit runs against a fake Cloudflare account in memory, through the product's own commands, and the workflow is read beside it.
+// A run that stopped before it made anything once ended green with an empty log, and a run that deployed by a way of its own proved nothing of the way a person installs.
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempDisposableSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdtempDisposableSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 
-import type { DomainRow, DomainSettings } from "../../../../../app/src/console/domain/records";
-import type { Login } from "../../../../../core/src/auth/logins";
-import { answerOf, awaitNewDeployment, confirmAndCap, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../../scripts/live/converge";
+import { LIVE_CAPS } from "../../../scripts/live/caps";
+import { answerOf, awaitNewDeployment, confirmAndCap, convergeInstall, type World } from "../../../scripts/live/converge";
 import { type Found, openRun } from "../../../scripts/live/util";
-import { createDomainPlug } from "../../../src/with-domain/zone-plug";
 import { withFake } from "../../shared/install/support/fake-cloudflare";
-import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../shared/install/support/fake-install";
-import { ADDRESSES, LAYOUT } from "../../shared/install/support/layouts";
-import { type Asked, bodyOf, page, refusal, reply } from "../../shared/install/support/replies";
+import { ACCOUNT as INSTALL_ACCOUNT, type Account, TOKEN } from "../../shared/install/support/fake-install";
+import { type Asked, page, refusal, reply } from "../../shared/install/support/replies";
+import { COMMIT, COMMIT_MODULE, freshAccount, harnessOf } from "../../live/support/harness-world";
 import { openSqlInstall } from "../../live/support/sql-install";
 import { catchStep } from "../../live/support/step";
 
@@ -45,58 +43,149 @@ const NOT_READ = "Account plans: not read: needs the token permission Billing: R
 /** The warning that goes with it. */
 const NOT_READ_WARNING = "::warning::The account's plans were not read, so nothing checked that they are free: the run needs the token permission Billing: Read.";
 
-/** The package wrangler is installed in. */
-const CLOUDFLARE = join(import.meta.dir, "..", "..", "..");
-
-/** The repository's own configuration of the Worker. */
-const OWN_CONFIG = join(CLOUDFLARE, "..", "..", "..", "wrangler.jsonc");
-
-/** A Worker small enough to bundle in a moment, as source. It exports the class the configuration binds a Workflow to: wrangler bundles no entry that lacks it. */
-const SOURCE = { "worker.ts": 'export class PoplinJobs {}\nexport default { fetch: (): Response => new Response("ok") };\n' };
-
-/** The same Worker as a file that is built already and names the map beside it. */
-const BUILT = { "worker.js": 'export default { fetch: () => new Response("ok") };\n//# sourceMappingURL=worker.js.map\n' };
-
-/** The map of that built file. */
-const BUILT_MAP = { "worker.js.map": '{"version":3,"sources":["../src/worker.ts"],"sourcesContent":[""],"mappings":"AAAA","names":[]}' };
-
-/** How an upload starts the part that is the Worker's map: its name, then its type, which is not that of a module or of a file for visitors. */
-const MAP_PART = 'Content-Disposition: form-data; name="worker.js.map"; filename="worker.js.map"\r\nContent-Type: application/source-map\r\n';
-
-/** The Workflow's binding as an upload states it: the Workflow named after the Worker, and the class the Worker's entry exports. */
-const JOBS_BINDING = { type: "workflow", name: "JOBS", workflow_name: "poplin-jobs", class_name: "PoplinJobs" };
-
-/** An upload that carries the Worker's map and the Workflow's binding, names no folder of the machine, and publishes no file to visitors. */
-const WITH_MAP: Upload = { made: true, map: true, jobs: [JOBS_BINDING], folder: false, assets: false };
-
-/** An upload that was not made. */
-const NOT_MADE: Upload = { made: false, map: false, jobs: [], folder: false, assets: false };
+/** What stops a run on an account whose buckets the token may not list: the bucket that marks a test account is the first thing it looks for once the plans are known to be free. */
+const NO_MARK_READ = "it needs the token permission Workers R2 Storage: Edit";
 
 /** A sentence a Worker that cannot start answers. */
 const REASON = "This install's database is newer than its code: update poplin.";
 
-/** The Workflow of a test install as its configuration names it: after the Worker, bound as the Worker reads it. */
-const JOBS = [{ name: "poplin-jobs", binding: "JOBS", class_name: "PoplinJobs" }];
-
-/** The install of each kind, as a run finds it on a fake account. */
-const FOUND = {
-  domain: { kind: "domain", zone: { id: ZONE.id, name: ZONE.name, plan: "free", accountId: ACCOUNT }, layout: LAYOUT, adminHost: LAYOUT.adminHostname },
-  "account address": { kind: "account address", zone: undefined, layout: ADDRESSES, adminHost: ADDRESSES.adminHost },
-} as const satisfies Record<Found["kind"], Found>;
-
-/** The refusal of a call Cloudflare would not take: its words name things of the account, which no line of a run may repeat. */
-const REFUSED = { status: 400, code: 10021, message: "the-account-s-own-words" };
-
 /** The request of the wait for a new deployment, and the one that sets the caps, as the fake install is sent them. */
 const [WHOAMI, CAPS] = ["GET /api/whoami", "PATCH /api/config"];
 
-/** Where the Workers of the fake account that holds an install are asked for. */
-const SCRIPTS = `/accounts/${INSTALL_ACCOUNT}/workers/scripts`;
+/** Where the Worker of the fake account that holds an install is uploaded. */
+const UPLOAD = `/accounts/${INSTALL_ACCOUNT}/workers/scripts/poplin`;
+
+/** What an upload does with the Worker's bindings: it states each by its first value, or keeps every one the Worker has. */
+const [STATED, KEPT] = ["every binding stated", "every binding kept"];
+
+/** The upload of an install made anew, and of one that stands. */
+const [FIRST_UPLOAD, UPDATE_UPLOAD] = [`${STATED}, this commit's module`, `${KEPT}, this commit's module`];
+
+/** The warning of a run whose command made the upload key. */
+const FRESH_KEY = "::warning::The checks of settled-upload-key are skipped: the install needs an upload key older than two and a half minutes (this run made the key, or could not read it, and the bucket refuses a new one for about two minutes).";
+
+/** What a run that was through says last. */
+const ANSWERS = "The test install answers.";
+
+/** What both kinds tell first of an account on the free plans. */
+const PLANS = "Account plans: free (0 subscriptions: 0 at a price of 0, 0 ended)";
+
+/** What the wait tells after an install that was made anew, and after one that was mended. */
+const [TWELVE, ONCE] = ["New deployment: answered the run's token 12 times in a row over 33 seconds", "New deployment: answered the run's token"];
+
+/** The lines of `poplin install` on an account that holds an install, which the command says beside its value: the address with the account's own name hidden. */
+const ALREADY = [
+  `This account already holds poplin ${COMMIT}, at https://poplin.[hidden]. nothing was changed. The way on is npx poplin doctor --repair.`,
+  "  to check it   npx poplin doctor",
+  "  to mend it    npx poplin doctor --repair",
+  "  to update it  npx poplin update",
+  "  to remove it  npx poplin uninstall cloudflare",
+];
+
+/** The login, the variables, and the keys, which both kinds make alike. */
+const SHARED_MADE = [
+  "Access application: made",
+  "Access policy: made",
+  "Access open paths: made",
+  "Access open paths: made",
+  "Worker variable: made",
+  "Worker variable: made",
+  "Worker variable: made",
+  "Worker variable: made",
+  "Key: made",
+  "Upload key: made",
+];
+
+/** The same pieces as a repair that changes nothing tells them. */
+const SHARED_LEFT = ["Access application: left", "Access policy: left", "Access open paths: left", "Access open paths: left", "Worker variable: left", "Key: left", "Upload key: left"];
+
+/** What a run tells of an account it made the install on from nothing. */
+const FROM_NONE = "Install: none found, so poplin install ran";
+
+/** The Worker's own pieces of a new install. */
+const OWN_MADE = [FROM_NONE, "R2 bucket: made", "D1 database: made", "Worker: made", "Sweep trigger: made", "Worker address: made"];
+
+/** What each kind tells of its account, of an install it made, of one it mended, and of one it removed. `bots` is what a new install does to the zone's bot switches, the one thing a removal leaves as it is set. */
+const TOLD = {
+  domain: {
+    found: "Zone: found",
+    made: (bots: string) => [
+      ...OWN_MADE,
+      "Public word: left",
+      "DNS record: made",
+      "DNS record: made",
+      "Worker route: made",
+      "Worker route: made",
+      "Worker route: made",
+      ...SHARED_MADE,
+      "Redirect rule: made",
+      "WAF rule: made",
+      "WAF rule: made",
+      "Rate rule: made",
+      `Bot settings: ${bots}`,
+      "Budget alert: made",
+      "Workflow: made",
+    ],
+    mended: [
+      "Public word: left",
+      "DNS record: left",
+      "DNS record: left",
+      "Worker route: left",
+      "Worker route: left",
+      "Worker route: left",
+      ...SHARED_LEFT,
+      "Redirect rule: left",
+      "WAF rule: left",
+      "WAF rule: left",
+      "Rate rule: left",
+      "Bot settings: left",
+      "D1 database: left",
+      "Budget alert: left",
+      "Workflow: left",
+    ],
+    removed: [
+      "Worker route: removed",
+      "DNS record: removed",
+      "Redirect rule: removed",
+      "WAF rule: removed",
+      "Rate rule: removed",
+      "Access application: removed",
+      "Access policy: removed",
+      "Budget alert: removed",
+      "Key: removed",
+      "Upload key: removed",
+      "Workflow: removed",
+      "Worker: removed",
+    ],
+    stays: ["Bot switches: stays", "Account token: stays"],
+  },
+  "account address": {
+    found: "Free address: found",
+    made: () => [...OWN_MADE, "Forwarder: made", "Forwarder: made", ...SHARED_MADE, "Budget alert: made", "Workflow: made"],
+    mended: ["Forwarder: left", "Forwarder: left", ...SHARED_LEFT, "D1 database: left", "Budget alert: left", "Workflow: left"],
+    removed: ["Forwarder: removed", "Access application: removed", "Access policy: removed", "Budget alert: removed", "Key: removed", "Upload key: removed", "Workflow: removed", "Worker: removed"],
+    stays: ["Account token: stays"],
+  },
+} as const;
+
+/** The calls Cloudflare refuses a token that carries the needed permissions and none of the optional ones. */
+const REFUSED_WITHOUT_THE_OPTIONAL = [
+  "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint",
+  "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",
+  "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint",
+  "GET /zones/zone-1/bot_management",
+  `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies`,
+];
+
+/** What a run tells the suite of an object that was left out. */
+function leftOut(object: string): string {
+  return `the ${object}, which was left out: the token lacks its optional permission, or the account holds it in another form`;
+}
 
 /** Who answers one request of a wait: the new deployment, the one before, or nobody. */
 type From = "new" | "old" | "none";
 
-/** One wait: whether the deploy stranded the build before, who answers the request of each number, and what the wait comes to with the requests it sent. */
+/** One wait: whether the run stranded the build before, who answers the request of each number, and what the wait comes to with the requests it sent. */
 type Wait = readonly [what: string, strandsOlder: boolean, from: (nth: number) => From, ended: unknown, requests: number];
 
 /** What a wait that never got its answers says. */
@@ -104,10 +193,10 @@ const NEVER = "the install did not answer the run's token within 180 seconds";
 
 /** Every wait, on a clock that moves three seconds a pause. */
 const WAITS: readonly Wait[] = [
-  ["a deploy that left the build before able to answer is confirmed by one answer", false, () => "new", { answers: 1, overMs: 0, others: 0 }, 1],
-  ["the same deploy, met by two answers that are no 200, waits them out", false, (nth) => (nth < 2 ? "old" : "new"), { answers: 1, overMs: 0, others: 2 }, 3],
-  ["after a remake, the new deployment answers twelve times in a row over 33 seconds", true, () => "new", { answers: 12, overMs: 33_000, others: 0 }, 12],
-  ["after a remake, four answers of the deployment before come first and are counted", true, (nth) => (nth < 4 ? "old" : "new"), { answers: 12, overMs: 33_000, others: 4 }, 16],
+  ["a run that left the build before able to answer is confirmed by one answer", false, () => "new", { answers: 1, overMs: 0, others: 0 }, 1],
+  ["the same run, met by two answers that are no 200, waits them out", false, (nth) => (nth < 2 ? "old" : "new"), { answers: 1, overMs: 0, others: 2 }, 3],
+  ["after an install made anew, the new deployment answers twelve times in a row over 33 seconds", true, () => "new", { answers: 12, overMs: 33_000, others: 0 }, 12],
+  ["after an install made anew, four answers of the deployment before come first and are counted", true, (nth) => (nth < 4 ? "old" : "new"), { answers: 12, overMs: 33_000, others: 4 }, 16],
   ["an answer of the deployment before in the middle of the row starts the row over", true, (nth) => (nth === 5 ? "old" : "new"), { answers: 12, overMs: 33_000, others: 1 }, 18],
   ["a request nobody answers starts the row over as a 503 does", true, (nth) => (nth === 11 ? "none" : "new"), { answers: 12, overMs: 33_000, others: 1 }, 24],
   ["a deployment before that never stops answering fails the wait at three minutes", true, () => "old", { kind: "failed", what: `${NEVER} (needed in a row: 12; not a 200: 61; last status: 503)` }, 61],
@@ -121,25 +210,15 @@ const WAITS: readonly Wait[] = [
   ["an install nobody answers from fails the wait with status 0", true, () => "none", { kind: "failed", what: `${NEVER} (needed in a row: 12; not a 200: 61; last status: 0)` }, 61],
 ];
 
-/** What the fake account holds, and which lists its token may read. A list that is absent is refused. */
+/** What the fake account of a run that stops early holds, and which lists its token may read. A list that is absent is refused. */
 interface FakeAccount {
   readonly subdomain?: string;
   readonly zones?: readonly (Omit<typeof ZONE, "plan"> & { readonly plan: { readonly name: string; readonly price?: number } })[];
   readonly subscriptions?: readonly Record<string, unknown>[];
-  readonly buckets?: readonly string[];
 }
 
 /** One fake account, and what a run on it tells: the lines of the log in order, and the reason the summary and the error line give. */
 type Case = readonly [what: string, account: FakeAccount, lines: readonly string[], reason: string];
-
-/** What wrangler made of a configuration: whether it made an upload, and whether the upload holds the map as a part of its own, the name of the folder the Worker was read from, and files for visitors. */
-interface Upload {
-  readonly made: boolean;
-  readonly map: boolean;
-  readonly jobs: readonly unknown[];
-  readonly folder: boolean;
-  readonly assets: boolean;
-}
 
 /** What one run of the script left behind. */
 interface Told {
@@ -149,6 +228,7 @@ interface Told {
   readonly outputs: string[];
 }
 
+/** Every account a run stops early on, with a domain. */
 const CASES: readonly Case[] = [
   ["a token that may not read the zones stops the run with the permission it needs", {}, [], "it needs the token permission Zone: Read"],
   [
@@ -157,51 +237,48 @@ const CASES: readonly Case[] = [
     [],
     "it needs exactly one zone in the account, or the zone's name in CLOUDFLARE_ZONE_NAME",
   ],
-  [
-    "a run that stops at the database has told of the zone, the plans it could not read, and the bucket before it",
-    { zones: [ZONE], buckets: ["poplin-live-sites"] },
-    ["Zone: found", NOT_READ, NOT_READ_WARNING, "R2 bucket: present"],
-    "it needs the token permission D1: Edit",
-  ],
+  ["a run that stops at its look for the marking bucket has told of the zone and the plans it could not read before it", { zones: [ZONE] }, ["Zone: found", NOT_READ, NOT_READ_WARNING], NO_MARK_READ],
   [
     "the list of an account on the free plans goes on: the storage is named as a paid plan at a price of 0, the login stands at 0 a month, and the Workers plan is not listed",
-    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO], buckets: ["poplin-live-sites"] },
-    ["Zone: found", "Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)", "R2 bucket: present"],
-    "it needs the token permission D1: Edit",
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO] },
+    ["Zone: found", "Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)"],
+    NO_MARK_READ,
   ],
   [
     "an ended subscription with a price is no cost, and is counted apart",
-    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO, { price: 5, state: "Cancelled", rate_plan: { id: "a_paid_plan" } }], buckets: ["poplin-live-sites"] },
-    ["Zone: found", "Account plans: free (3 subscriptions: 2 at a price of 0, 1 ended)", "R2 bucket: present"],
-    "it needs the token permission D1: Edit",
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO, { price: 5, state: "Cancelled", rate_plan: { id: "a_paid_plan" } }] },
+    ["Zone: found", "Account plans: free (3 subscriptions: 2 at a price of 0, 1 ended)"],
+    NO_MARK_READ,
   ],
   [
-    "the same list with one subscription at a price stops the run before anything is made, whatever its name",
-    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO, { ...R2_AT_ZERO, price: 5, rate_plan: { id: "a_plan_of_later", public_name: "Free Extras" } }], buckets: ["poplin-live-sites"] },
+    "the same list with one subscription at a price stops the run before anything is read of an install, whatever its name",
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO, { ...R2_AT_ZERO, price: 5, rate_plan: { id: "a_plan_of_later", public_name: "Free Extras" } }] },
     ["Zone: found"],
     "the account's subscriptions are not all at a price of 0: 1 of 3 (a_plan_of_later at 5), and the test account stays on the free plans",
   ],
   [
     "a subscription with no price is not known to be free, and stops the run",
-    { zones: [ZONE], subscriptions: [R2_AT_ZERO, { state: "Paid", rate_plan: { id: "storage" } }], buckets: ["poplin-live-sites"] },
+    { zones: [ZONE], subscriptions: [R2_AT_ZERO, { state: "Paid", rate_plan: { id: "storage" } }] },
     ["Zone: found"],
     "the account's subscriptions are not all at a price of 0: 1 of 2 (storage at no price), and the test account stays on the free plans",
   ],
-  [
-    "a zone on a paid plan stops the run before anything is made",
-    { zones: [{ ...ZONE, plan: { name: "Pro Website" } }], subscriptions: [], buckets: ["poplin-live-sites"] },
-    ["Zone: found"],
-    "the zone is on the pro plan, not the Free plan",
-  ],
+  ["a zone on a paid plan stops the run before anything is read of an install", { zones: [{ ...ZONE, plan: { name: "Pro Website" } }], subscriptions: [] }, ["Zone: found"], "the zone is on the pro plan, not the Free plan"],
   [
     "a zone whose plan has a price and a name the run does not know stops the run all the same",
-    { zones: [{ ...ZONE, plan: { name: "A Plan Of Later", price: 20 } }], subscriptions: [], buckets: ["poplin-live-sites"] },
+    { zones: [{ ...ZONE, plan: { name: "A Plan Of Later", price: 20 } }], subscriptions: [] },
     ["Zone: found"],
     "the zone's plan has a price, so it is not the Free plan",
   ],
 ];
 
-/** Answer for the fake account: its zones, its buckets, and a refusal of anything its token may not read. */
+/** A world no run of these reaches: each stops before its first command. */
+const UNREACHED: World = {
+  release: { version: COMMIT, pin: { source: "0".repeat(64), bundle: "0".repeat(64), schema: 1 }, pages: new Map() },
+  ends: { reach: { fetch: () => Promise.reject(new Error("a command ran")), now: () => 0 }, sleep: async () => undefined },
+  fetch: () => Promise.reject(new Error("the install was asked")),
+};
+
+/** Answer for the fake account: its zones, its subscriptions, and a refusal of anything its token may not read. */
 function answer(account: FakeAccount, asked: Asked): Response {
   const { pathname } = new URL(asked.path, "http://localhost");
   if (pathname === "/zones" && account.zones !== undefined) return page(asked, account.zones);
@@ -212,14 +289,10 @@ function answer(account: FakeAccount, asked: Asked): Response {
 
   if (pathname === `/accounts/${ACCOUNT}/subscriptions` && account.subscriptions !== undefined) return reply(account.subscriptions);
 
-  if (pathname === `/accounts/${ACCOUNT}/r2/buckets` && asked.method === "GET" && account.buckets !== undefined) {
-    return reply({ buckets: account.buckets.map((name) => ({ name })) });
-  }
-
   return refusal(403, 10000, "Authentication error");
 }
 
-/** Run the script on a fake account, with the log, the step summary, and the step's outputs caught. */
+/** Run the script on a fake account it stops early on, with the log, the step summary, and the step's outputs caught. */
 async function converge(account: FakeAccount, kind: Found["kind"] = "domain"): Promise<Told> {
   using folder = mkdtempDisposableSync(join(tmpdir(), "poplin-live-selftest-"));
   const env = {
@@ -235,7 +308,7 @@ async function converge(account: FakeAccount, kind: Found["kind"] = "domain"): P
   await withFake(
     (asked) => answer(account, asked),
     async (connection) => {
-      code = await convergeInstall({ ...openRun(env), connection }, env);
+      code = await convergeInstall({ ...openRun(env), connection }, env, UNREACHED);
     },
   );
 
@@ -244,108 +317,35 @@ async function converge(account: FakeAccount, kind: Found["kind"] = "domain"): P
   return { code, lines, summary: readFileSync(env.GITHUB_STEP_SUMMARY, "utf8"), outputs: Object.keys(step.outputs()) };
 }
 
-/** The test install's configuration, for a fake account that holds a domain, or for one that holds none. */
-function installConfig(kind: Found["kind"] = "domain"): Promise<Record<string, unknown>> {
-  return workerConfig({ accountId: ACCOUNT }, FOUND[kind], { databaseId: "2".repeat(32), access: { team_domain: "team.example.com", audience: "3".repeat(64) }, login: "owner@example.com" });
+/** What one run on the account in memory came to: its exit code, its lines, what it told the suite is lacking, and each upload of the Worker it sent: whether it kept the Worker's bindings, and whose module it carried. */
+interface Ran {
+  readonly code: number;
+  readonly lines: readonly string[];
+  readonly missing: Readonly<Record<string, string>>;
+  readonly uploads: readonly string[];
 }
 
-/** A Worker of a fake account beside the install's own: a forwarder, or somebody's Worker of a forwarder's name. */
-interface OtherWorker {
-  id: string;
-  tags: readonly string[];
-  bindings?: unknown;
-  enabled?: boolean;
-  previews_enabled?: boolean;
-}
+/** A test account in memory, and what runs the script on it once more: of a kind of install, and asked to start over or not. */
+async function standingOn(account: Account, kind: Found["kind"]): Promise<{ readonly account: Account; readonly again: (startOver?: boolean) => Promise<Ran>; readonly printed: () => string; readonly settings: () => Promise<unknown> }> {
+  const harness = await harnessOf(account, kind);
+  const said: string[] = [];
 
-/** A fake account without a domain: the install's own Worker, its tokens, and its permission groups, the Workers beside it, and the one call the fake refuses. */
-interface FreeWorld {
-  readonly account: Account;
-  readonly workers: OtherWorker[];
-  readonly refuse?: string;
-}
+  return {
+    account,
+    printed: () => said.join("\n"),
+    settings: harness.settings,
+    again: async (startOver = false) => {
+      using _step = catchStep();
+      harness.lines.length = 0;
+      const before = harness.asked.length;
+      const code = await convergeInstall(harness.run, { POPLIN_LIVE_INSTALL: kind, POPLIN_LIVE_START_OVER: String(startOver) }, harness.world);
+      const puts = harness.asked.slice(before).filter((asked) => asked.method === "PUT" && (asked.path === UPLOAD || asked.path.startsWith(`${UPLOAD}?`)));
+      const uploads = puts.map((asked) => `${asked.path.includes("bindings_inherit=strict") ? KEPT : STATED}, ${(asked.body as Record<string, unknown>)["worker.js"] === COMMIT_MODULE ? "this commit's module" : "another module"}`);
+      said.push(...harness.lines, JSON.stringify(harness.outputs));
 
-/** Answer for a fake account without a domain: the list of its Workers, each forwarder's upload, settings, and addresses, and everything else as the fake of an install's account does. */
-function answerFree(world: FreeWorld, asked: Asked): Response {
-  if (`${asked.method} ${asked.path}` === world.refuse) return refusal(REFUSED.status, REFUSED.code, REFUSED.message);
-
-  const [, name, part] = /\/workers\/scripts(?:\/([^/?]+))?(?:\/([a-z-]+))?/.exec(asked.path) ?? [];
-  if (name === undefined && asked.path.includes("/workers/scripts")) return page(asked, [{ id: "poplin", tags: [] }, ...world.workers]);
-
-  if (name === undefined || name === "poplin") return answerInstall(world.account, asked);
-
-  const at = world.workers.findIndex((worker) => worker.id === name);
-  if (asked.method === "PUT" && part === undefined) {
-    const { metadata } = asked.body as { readonly metadata: { readonly tags: string[]; readonly bindings: unknown } };
-    world.workers.splice(at < 0 ? world.workers.length : at, 1, { enabled: false, previews_enabled: true, ...world.workers[at], id: name, tags: metadata.tags, bindings: metadata.bindings });
-
-    return reply({ id: name });
-  }
-
-  const current = world.workers[at];
-  if (current === undefined) return refusal(404, 10007, "This Worker does not exist on your account.");
-
-  if (part === "settings") return reply({ bindings: current.bindings ?? [], tags: current.tags });
-
-  if (asked.method === "POST") Object.assign(current, asked.body);
-
-  return reply({ enabled: current.enabled, previews_enabled: current.previews_enabled });
-}
-
-/** Make the forwarders and the keys on a fake account without a domain, once for each number given, and answer what each run stopped at, the rows it told, and what it told the suite. */
-async function settleFree(world: FreeWorld, runs = 1): Promise<{ readonly stops: unknown[]; readonly rows: string[][]; readonly missing: Record<string, string> }> {
-  const told = { stops: [] as unknown[], rows: [] as string[][], missing: {} };
-
-  await withFake(
-    (asked) => answerFree(world, asked),
-    async (connection) => {
-      for (let nth = 0; nth < runs; nth += 1) {
-        const lines: string[] = [];
-        const run = { ...openRun({ CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: INSTALL_ACCOUNT }), connection: { key: TOKEN, baseUrl: connection.baseUrl }, say: (line: string) => void lines.push(line) };
-        const progress = { pieces: [], missing: {} };
-        told.stops.push(await settleFreeAddress(run, ADDRESSES, "owner@example.com", progress));
-        told.rows.push(lines);
-        Object.assign(told.missing, progress.missing);
-      }
+      return { code, lines: [...harness.lines], missing: JSON.parse(harness.outputs.missing ?? "{}") as Record<string, string>, uploads };
     },
-  );
-
-  return told;
-}
-
-/** The Workflow bindings an upload's metadata states, read from the form as Cloudflare reads it. */
-async function workflowBindings(form: string): Promise<unknown[]> {
-  const boundary = form.slice(2, form.indexOf("\r\n"));
-  const sent = (await bodyOf(new Request("http://localhost", { method: "POST", headers: { "content-type": `multipart/form-data; boundary=${boundary}` }, body: form }))) as { metadata: { bindings: { type: string }[] } };
-
-  return sent.metadata.bindings.filter((binding) => binding.type === "workflow");
-}
-
-/**
- * Have wrangler make the upload of a configuration and write it to a file, with nothing sent: no token is handed over.
- * The Worker is the given files in a scratch folder, in place of the real entry, and the step that builds the dashboard is left out.
- */
-async function uploadOf(config: Record<string, unknown>, files: Readonly<Record<string, string>>): Promise<Upload> {
-  // The scratch folder is named as the disk holds it: through a link, wrangler writes the way from one name of it to the other into the map.
-  using folder = mkdtempDisposableSync(join(realpathSync(tmpdir()), "poplin-live-upload-"));
-  const [main = ""] = Object.keys(files);
-  const body = join(folder.path, "upload.form");
-
-  for (const [name, text] of Object.entries(files)) writeFileSync(join(folder.path, name), text);
-
-  writeFileSync(join(folder.path, "wrangler.json"), JSON.stringify({ ...config, $schema: undefined, main: join(folder.path, main), build: undefined }));
-  const wrangler = Bun.spawn([join(CLOUDFLARE, "node_modules", ".bin", "wrangler"), "deploy", "--dry-run", "--config", join(folder.path, "wrangler.json"), "--outfile", body], {
-    cwd: CLOUDFLARE,
-    env: { ...process.env, CLOUDFLARE_API_TOKEN: undefined, CLOUDFLARE_ACCOUNT_ID: undefined, WRANGLER_SEND_METRICS: "false", WRANGLER_WRITE_LOGS: "false", CI: "true" },
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  const made = (await wrangler.exited) === 0;
-  if (!made) return NOT_MADE;
-
-  const text = readFileSync(body, "utf8");
-
-  return { made, map: text.includes(MAP_PART), jobs: await workflowBindings(text), folder: text.includes(basename(folder.path)), assets: text.includes('"assets"') };
+  };
 }
 
 /** What the deployment before answers once its database is gone: the Worker's own 503. */
@@ -429,6 +429,176 @@ function stringsOf(value: unknown): string[] {
   return Object.values(value).flatMap(stringsOf);
 }
 
+describe.each(["domain", "account address"] as const)("the test install of an account, on its %s, made, mended, and removed by the product's own commands on a fake account in memory", (kind) => {
+  const told = TOLD[kind];
+
+  // Drift: a run that put the Worker in place by a way of its own would prove nothing of `poplin install`; and one that made what stands again would leave a new key and a new login on every push.
+  test("the first run makes the install with poplin install and this commit's build in its first upload; the next finds it, puts the build in place by the upload of an update, and mends it with nothing made twice", async () => {
+    const standing = await standingOn(freshAccount(), kind);
+    const [first, second] = [await standing.again(), await standing.again()];
+
+    expect(first).toEqual({ code: 0, lines: [told.found, PLANS, ...told.made("changed"), TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS], missing: { "settled-upload-key": expect.any(String) }, uploads: [FIRST_UPLOAD] });
+    expect(second).toEqual({
+      code: 0,
+      lines: [
+        told.found,
+        PLANS,
+        ...ALREADY,
+        `Install: found, runs ${COMMIT}`,
+        `Worker's code: this commit's build, by the upload of an update (${COMMIT} -> ${COMMIT})`,
+        ...told.mended,
+        "Sweep: has not asked for a newer version yet",
+        ONCE,
+        "Storage and file caps: set",
+        ANSWERS,
+      ],
+      missing: {},
+      uploads: [UPDATE_UPLOAD],
+    });
+    expect({ versions: standing.account.versions.map((version) => (version.annotations as { readonly "workers/tag": string })["workers/tag"]), keys: standing.account.tokens.length }).toEqual({ versions: [COMMIT, COMMIT], keys: 2 });
+    // The caps reached the install's own database, through its real API and a token whose row the run stored there.
+    expect(await standing.settings()).toMatchObject(LIVE_CAPS);
+  });
+
+  // Drift: a start-over that removed by a list of its own would pass while `poplin uninstall` left a piece behind; and one that took the marking bucket would leave an account no later run may remove anything on.
+  test("a run asked to start over removes the install with poplin uninstall, the files and the database too, then makes it anew: the marking bucket stays, and the wait asks twelve answers in a row", async () => {
+    const standing = await standingOn(freshAccount(), kind);
+    await standing.again();
+    const over = await standing.again(true);
+    const removal = [...told.removed, "Sites' files: removed (0 in it)", "Database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + 2} kinds in 0 seconds`];
+
+    expect(over.lines).toEqual([told.found, PLANS, "Start over: asked for", ...removal, ...told.made("left"), TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS]);
+    expect({ code: over.code, uploads: over.uploads, buckets: standing.account.buckets.map((bucket) => bucket.name) }).toEqual({ code: 0, uploads: [FIRST_UPLOAD], buckets: ["poplin-live-sites", "poplin-sites"] });
+  });
+
+  // Drift: the Worker of the next commit refused the database of the last one, and every address answered 503; and an install bound to a bucket of another name would be mended forever and never be the product's.
+  test.each([
+    [
+      "a Worker bound to another bucket than the product's",
+      async (account: Account) => {
+        account.bindings = account.bindings.map((binding) => (binding.name === "SITES" ? { ...binding, bucket_name: "poplin-live-sites" } : binding));
+        account.buckets = account.buckets.filter((bucket) => bucket.name !== "poplin-sites");
+      },
+      [] as readonly string[],
+    ],
+    ["a database that held schema step 1 as another build applied it", async (account: Account) => void (await account.store?.call("UPDATE schema_steps SET fingerprint = 'of another build'", [])), ["Sites' files: removed (0 in it)"]],
+    [
+      "a Worker of an install that was never finished",
+      async (account: Account) => {
+        account.bindings = account.bindings.filter((binding) => binding.name !== "ZONE");
+      },
+      ["Sites' files: removed (0 in it)"],
+    ],
+  ])("an install another build made, with %s, is started over by the run itself, with nobody asking", async (what, drift, files) => {
+    const standing = await standingOn(freshAccount(), kind);
+    await standing.again();
+    await drift(standing.account);
+    const over = await standing.again();
+    const removal = [...told.removed, ...files, "Database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + files.length + 1} kinds in 0 seconds`];
+
+    expect(over).toEqual({
+      code: 0,
+      lines: [told.found, PLANS, `Start over: another build made it: ${what}`, ...removal, ...told.made("left"), TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS],
+      missing: { "settled-upload-key": expect.any(String) },
+      uploads: [FIRST_UPLOAD],
+    });
+  });
+
+  // Drift: the commands are the product's whole install, repair, and uninstall. On the account of a person they would change their install, or take it and every site with it.
+  test.each([
+    ["a usual run", false],
+    ["a run asked to start over", true],
+  ])("on an account without the bucket that marks a test account, %s stops before its first command, and nothing is changed", async (_what, startOver) => {
+    const harness = await harnessOf(freshAccount({ buckets: [] }), kind);
+    using _step = catchStep();
+    const code = await convergeInstall(harness.run, { POPLIN_LIVE_INSTALL: kind, POPLIN_LIVE_START_OVER: String(startOver) }, harness.world);
+
+    expect({ code, lines: harness.lines, changes: harness.asked.filter((asked) => asked.method !== "GET").length }).toEqual({
+      code: 1,
+      lines: [told.found, PLANS, "::error::The test install could not be made ready: the account holds no bucket that marks a test account, so nothing in it is changed."],
+      changes: 0,
+    });
+  });
+
+  // Drift: an install that lost a piece answers nowhere until it is mended. A run that waited for its answer before the repair would time out and never reach the repair that puts the piece back.
+  test("an install that lost a piece nothing answers without is mended before the run waits for its answer", async () => {
+    const standing = await standingOn(freshAccount(), kind);
+    await standing.again();
+    Object.assign(standing.account, kind === "domain" ? { routes: [] } : { workers: [] });
+    const ran = await standing.again();
+    const back = kind === "domain" ? ["Worker route: made", "Worker route: made", "Worker route: made"] : ["Forwarder: made", "Forwarder: made"];
+
+    expect([ran.code, ran.lines.filter((line) => line.endsWith(": made")), ran.lines.at(-1)]).toEqual([0, back, ANSWERS]);
+  });
+
+  // Drift: Access is a switch only a person flips. A run that called its rows a failure would turn the test install red on an account where everything else answers.
+  test("on an account whose Access is off, the login's rows are a lack the suite skips for, on the run that makes the install and on the one that mends it", async () => {
+    const standing = await standingOn(freshAccount({ accessOff: true }), kind);
+    const [first, second] = [await standing.again(), await standing.again()];
+    const lacking = ["Access application", "Access policy", "Access open paths", "Worker variable"].map((object) => `${object}: stopped: needs Access switched on for the account`);
+
+    expect([first.code, second.code, first.missing.access, second.missing]).toEqual([0, 0, "Access switched on for the account", { access: "Access switched on for the account" }]);
+    expect([first.lines.filter((line) => line.includes("stopped")), second.lines.filter((line) => line.includes("stopped"))]).toEqual([lacking, lacking]);
+  });
+
+  // Drift: an install answers without its Workflow, which only a copy too large for one request needs. A run that called that a failure would stop the test install for a part every other check passes without.
+  test("a Workflow Cloudflare does not make is a lack the suite skips for, whatever the refusal, and never a failure of the run", async () => {
+    const standing = await standingOn(freshAccount({ refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workflows/poplin-jobs`, refuseAs: { status: 500, code: 10001 } }), kind);
+    const ran = await standing.again();
+
+    expect([ran.code, ran.missing.jobs, ran.lines.filter((line) => line.startsWith("Workflow"))]).toEqual([
+      0,
+      "the Worker's Workflow, which Cloudflare did not make",
+      ["Workflow: failed (refused with status 500): needs the Worker's Workflow, which Cloudflare did not make"],
+    ]);
+  });
+
+  // Drift: a run that went on after a piece nothing answers without would wait five minutes for an install that cannot answer, and say only that it did not.
+  test("a piece nothing answers without, which the token may not make, stops the run at that piece with the permission it needs", async () => {
+    const standing = await standingOn(freshAccount({ refuse: `POST /accounts/${INSTALL_ACCOUNT}/d1/database` }), kind);
+    const ran = await standing.again();
+
+    expect(ran).toEqual({
+      code: 1,
+      lines: [told.found, PLANS, FROM_NONE, "R2 bucket: made", "D1 database: stopped: needs the token permission D1: Edit", "::error::The test install could not be made ready: it needs the token permission D1: Edit."],
+      missing: {},
+      uploads: [],
+    });
+  });
+
+  // Drift: every line of a run is public. The commands word their rows with the install's addresses, and one of them printed whole would name the test account.
+  test("no line and no output of a run holds the token, the account, or a name of the place the install answers at", async () => {
+    const standing = await standingOn(freshAccount({ accessOff: true }), kind);
+    await standing.again();
+    await standing.again();
+    await standing.again(true);
+    const printed = standing.printed();
+
+    expect([TOKEN, INSTALL_ACCOUNT, "example.com", "example.workers.dev"].filter((name) => printed.includes(name))).toEqual([]);
+  });
+});
+
+describe("the rows of an install with a domain, made by a token with none of the optional permissions", () => {
+  // Drift: the install page says the needed permissions are enough, so a run that called the optional rows a failure would turn the test install red for the very token a reader is told to make.
+  test("every optional object is left out, which is a lack the suite skips for and never a failure, and every object an install answers with is made", async () => {
+    const ran = await (await standingOn(freshAccount({ refuse: REFUSED_WITHOUT_THE_OPTIONAL }), "domain")).again();
+    const out = ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "Budget alert"];
+
+    expect({ code: ran.code, out: ran.lines.filter((line) => line.includes(": left out: ")), made: ran.lines.filter((line) => line.endsWith(": made")).length }).toEqual({
+      code: 0,
+      out: out.map((object) => `${object}: left out: needs ${leftOut(object)}`),
+      made: 21,
+    });
+    expect(ran.missing).toEqual({
+      "settled-upload-key": expect.any(String),
+      "https-redirect": leftOut("Redirect rule"),
+      "guard-rules": leftOut("WAF rule"),
+      "rate-rule": leftOut("Rate rule"),
+      "bot-block": leftOut("Bot settings"),
+    });
+  });
+});
+
 describe.each(["domain", "account address"] as const)("the wait for a run's new deployment, against a local fake install on its %s", (kind) => {
   // Drift: the checks once began right after a deploy that followed a remade database, and requests of theirs reached the build before, which answered 503.
   test.each(WAITS)("%s", async (_what, strandsOlder, from, ended, requests) => {
@@ -454,11 +624,11 @@ describe.each(["domain", "account address"] as const)("the wait for a run's new 
 });
 
 describe.each(["domain", "account address"] as const)("the end of the script, on a fake install on its %s: the wait for the new deployment, then the caps", (kind) => {
-  // Drift: a wait that every run paid in full would add half a minute and a dozen requests to each push; one that a remake did not pay would start the checks on the deployment before.
+  // Drift: a wait that every run paid in full would add half a minute and a dozen requests to each push; one that an install made anew did not pay would start the checks on the deployment before.
   test.each([
-    ["a deploy that left the build before able to answer costs one request, then the caps", false, 0, ["New deployment: answered the run's token", "Storage and file caps: set"], [WHOAMI, CAPS]],
+    ["a run that left the build before able to answer costs one request, then the caps", false, 0, ["New deployment: answered the run's token", "Storage and file caps: set"], [WHOAMI, CAPS]],
     [
-      "a deploy after a remake waits out the deployment before, then twelve answers in a row, then the caps",
+      "a run after an install made anew waits out the deployment before, then twelve answers in a row, then the caps",
       true,
       3,
       ["New deployment: answered the run's token 12 times in a row over 33 seconds, after 3 requests that got no 200", "Storage and file caps: set"],
@@ -477,7 +647,7 @@ describe.each(["domain", "account address"] as const)("the end of the script, on
   });
 });
 
-describe("the script that makes the test install, against a local fake account", () => {
+describe("the script that makes the test install, on a fake account it stops early on", () => {
   test.each(CASES)("%s", async (_what, account, lines, reason) => {
     const told = await converge(account);
     const sentence = `The test install could not be made ready: ${reason}.`;
@@ -489,7 +659,7 @@ describe("the script that makes the test install, against a local fake account",
   });
 
   test("every output of the step the workflow reads is one the script writes, even on a run that stopped", async () => {
-    const told = await converge({ zones: [ZONE], buckets: [] });
+    const told = await converge({ zones: [ZONE] });
     const written = told.outputs.map((output) => `${CONVERGE_STEP}.${output}`);
     const workflow: unknown = Bun.YAML.parse(readFileSync(WORKFLOW, "utf8"));
     const read = stringsOf(workflow)
@@ -505,9 +675,9 @@ describe("the script that makes the test install, against a local fake account",
     ["a token that may not read the account's free address stops the run with the permission it needs", {}, [], "it needs the token permission Workers Scripts: Edit"],
     [
       "an account without a domain is found by its free address, its plans are read with no zone, and its name is in no line",
-      { subdomain: "example", subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO], buckets: ["poplin-live-sites"] },
-      ["Free address: found", "Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)", "R2 bucket: present"],
-      "it needs the token permission D1: Edit",
+      { subdomain: "example", subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO] },
+      ["Free address: found", "Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)"],
+      NO_MARK_READ,
     ],
     [
       "a free address no hostname can be made under stops the run with the rule it breaks",
@@ -530,133 +700,6 @@ describe("the script that makes the test install, against a local fake account",
   });
 });
 
-describe("the forwarders and the keys of an install without a domain, against a local fake account", () => {
-  // Drift: the run makes them on every push. One that uploaded a forwarder or made a key each time would leave the account a new Worker version and a new token a run.
-  test("the first run makes both forwarders, both keys, the budget alert, and the Workflow, and a second run leaves all six", async () => {
-    const world: FreeWorld = { account: emptyAccount(), workers: [] };
-    const told = await settleFree(world, 2);
-
-    expect(told).toEqual({
-      stops: [undefined, undefined],
-      rows: [
-        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created", "Upload key: created", "Budget alert: created", "Workflow: created"],
-        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present", "Upload key: present", "Budget alert: present", "Workflow: present"],
-      ],
-      // The first run made the upload key, which the bucket refuses for its first minutes: the suite is told to count on no file sent straight to it.
-      missing: { "settled-upload-key": "an upload key older than two and a half minutes (this run made the key, or could not read it, and the bucket refuses a new one for about two minutes)" },
-    });
-    expect([world.workers.map((worker) => worker.id), world.account.tokens.length, world.account.alerts.map((alert) => alert.mechanisms)]).toEqual([["poplin-sites", "poplin-private"], 2, [{ email: [{ id: "owner@example.com" }] }]]);
-  });
-
-  // Drift: the alert is optional on both kinds. One that stopped the run on a token without its right would end every check of the second test install for a part no check reads.
-  test("an alert Cloudflare refuses is a lack that stops nothing: its row names the status and the permission, none of Cloudflare's words, and the Workflow is still made", async () => {
-    const world: FreeWorld = { account: emptyAccount(), workers: [], refuse: `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies` };
-    const told = await settleFree(world);
-
-    expect([told.stops, told.rows[0]?.slice(-2), world.account.alerts]).toEqual([[undefined], ["Budget alert: failed (refused with status 400): needs the token permission for the Budget alert", "Workflow: created"], []]);
-    expect(JSON.stringify(told)).not.toContain(REFUSED.message);
-  });
-
-  // Drift: the first runs meet the real provider for the first time. A stop that said only "refused" would not tell the upload from the address switch, and one that quoted Cloudflare would put the account's own names in a public log.
-  test.each([
-    ["the upload of the first forwarder", `PUT ${SCRIPTS}/poplin-sites`, "Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and codes 10021", ["poplin-sites"]],
-    ["the address switch of the second forwarder", `POST ${SCRIPTS}/poplin-private/subdomain`, "Forwarders: stopped at poplin-private: Cloudflare refused with status 400 and codes 10021", ["poplin-sites", "poplin-private"]],
-  ])("a refusal of %s is told as the step, the status, and the code, with none of Cloudflare's words", async (_what, refuse, row, held) => {
-    const world: FreeWorld = { account: emptyAccount(), workers: [], refuse };
-    const told = await settleFree(world);
-
-    expect(told).toMatchObject({ stops: [{ kind: "failed", what: "Cloudflare refused with status 400 and codes 10021" }], rows: [[row]] });
-    expect(JSON.stringify(told)).not.toContain(REFUSED.message);
-    expect(world.workers.map((worker) => worker.id).filter((id) => !held.includes(id))).toEqual([]);
-  });
-
-  test("a Worker of a forwarder's name that has no tag of poplin's stays as it is and stops the run, and the other forwarder is made", async () => {
-    const world: FreeWorld = { account: emptyAccount(), workers: [{ id: "poplin-private", tags: ["somebody-s-own"] }] };
-    const told = await settleFree(world);
-
-    expect(told).toMatchObject({
-      stops: [{ kind: "failed", what: "1 of the 2 forwarders' names are held by a Worker without poplin's tag" }],
-      rows: [["Forwarders: created 1, changed 0, left 0, not poplin's 1"]],
-    });
-    expect(world.workers[0]).toEqual({ id: "poplin-private", tags: ["somebody-s-own"] });
-  });
-
-  test("a token that may not make a key is a lack the suite skips for: the forwarders are made and the run goes on", async () => {
-    const world: FreeWorld = { account: { ...emptyAccount(), refuse: `GET /accounts/${INSTALL_ACCOUNT}/tokens/permission_groups` }, workers: [] };
-    const told = await settleFree(world);
-
-    expect(told).toMatchObject({
-      stops: [undefined],
-      rows: [
-        [
-          "Forwarders: created 2, changed 0, left 0, not poplin's 0",
-          "Key: failed (refused with status 403): needs the token permission for the Key",
-          "Upload key: failed (refused with status 403): needs the token permission for the Upload key",
-          "Budget alert: created",
-          "Workflow: created",
-        ],
-      ],
-      missing: { "kept-key": "the token permission for the Key", "upload-key": "the token permission for the Upload key" },
-    });
-  });
-});
-
-describe("the Workflow of an install without a domain, against a local fake account", () => {
-  // Drift: the second test install is made by this run alone, with no repair of a zone. A Workflow nobody made there would fail every copy too large for one request.
-  // One called a failure would stop the install for a part every other check works without.
-  test.each([
-    ["Cloudflare refuses", { refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workflows/poplin-jobs` }, [], "Workflow: failed (refused with status 400): needs the Worker's Workflow, which Cloudflare did not make"],
-    ["another Worker's code runs under its name", {}, [{ name: "poplin-jobs", script_name: "shop", class_name: "Orders" }], "Workflow: left out: needs the Worker's Workflow, which Cloudflare did not make"],
-  ])("a Workflow that is not made because %s is a lack the suite skips for, and stops no run", async (_why, refusing, workflows, row) => {
-    const world: FreeWorld = { account: { ...emptyAccount(), workflows: [...workflows] }, workers: [], ...refusing };
-    const told = await settleFree(world);
-
-    expect([told.stops, told.rows[0]?.at(-1), told.missing.jobs, world.account.workflows]).toEqual([[undefined], row, "the Worker's Workflow, which Cloudflare did not make", workflows]);
-    expect(JSON.stringify(told)).not.toContain(REFUSED.message);
-  });
-});
-
-describe("the configuration the built bundle is uploaded by", () => {
-  // Drift: an install without a domain answers on the Worker's own free address alone. A configuration that left it off, or named a domain, would deploy a Worker no request reaches, on the second test account alone.
-  test("each kind of install is told where it answers: a domain with the free address off, or the account's name with it on, never a preview address, and each binds the Workflow named after its Worker", async () => {
-    const told = async (kind: Found["kind"]): Promise<unknown[]> => {
-      const config = await installConfig(kind);
-
-      return [(config.vars as { readonly ZONE: unknown }).ZONE, config.workers_dev, config.preview_urls, config.workflows];
-    };
-
-    expect([await told("domain"), await told("account address")]).toEqual([
-      [{ domain: "example.com" }, false, false, JOBS],
-      [{ account_address: "example" }, true, false, JOBS],
-    ]);
-  });
-
-  // Drift: the repository's own configuration says how wrangler bundles the Worker, and the upload hands wrangler a file that is bundled already. Wrangler warns of `minify` beside `no_bundle`, on a deploy that runs against the real account alone.
-  test("as wrangler reads it, the file is uploaded as it is and nothing says to minify it", async () => {
-    const config = await installConfig();
-    const read = JSON.parse(JSON.stringify(config)) as Record<string, unknown>;
-
-    expect({ asItIs: read.no_bundle, minify: "minify" in read }).toEqual({ asItIs: true, minify: false });
-  });
-});
-
-describe("the upload wrangler makes, with nothing sent", () => {
-  // Drift: an error in Cloudflare's log names a source file and its line only while every upload carries the map. A map that went missing would be left out with no word, on a deploy against the real account alone.
-  // The map is a part of the upload with a type of its own, beside the Worker and not among files for visitors: the upload names none. A map that named the scratch folder would name any machine it is built on.
-  // An upload without the Workflow's binding leaves the install copying a large site by the page's requests, and one that names another Workflow than the Worker's own binds to one no repair and no start-over knows.
-  test.each([
-    ["a deploy of the repository's own configuration bundles the Worker and sends its map and the Workflow's binding", async () => Bun.JSONC.parse(readFileSync(OWN_CONFIG, "utf8")) as Record<string, unknown>, SOURCE, WITH_MAP],
-    ["the test install's upload of a built file sends the map beside it, and the same binding", installConfig, { ...BUILT, ...BUILT_MAP }, WITH_MAP],
-    ["the test install's upload of a built file whose map is missing stops", installConfig, BUILT, NOT_MADE],
-  ])(
-    "%s",
-    async (_what, config, files, upload) => {
-      expect(await uploadOf(await config(), files)).toEqual(upload);
-    },
-    60_000,
-  );
-});
-
 describe("what a failed wait for the install repeats of its answer", () => {
   // Drift: a wait that told the status alone ended as "last status 503" after five minutes, while the Worker's own sentence said why it could not start.
   test.each([
@@ -670,93 +713,5 @@ describe("what a failed wait for the install repeats of its answer", () => {
     const asking = response === undefined ? Promise.reject(new Error("the name does not resolve")) : Promise.resolve(response);
 
     expect((await answerOf(asking)).told).toBe(told);
-  });
-});
-
-/** The calls Cloudflare refuses a token made from the link on the setup page, which carries nine rights and none of the four optional ones. */
-const REFUSED_WITH_THE_LINK_RIGHTS = [
-  "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint",
-  "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint",
-  "GET /zones/zone-1/rulesets/phases/http_ratelimit/entrypoint",
-  "GET /zones/zone-1/bot_management",
-  `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies`,
-];
-
-describe("the zone's repair with the nine rights of the token link alone, against a local fake account", () => {
-  // Drift: the install page says the link's token is enough, so a run that called its rows a failure would turn the test install red for the very token a reader is told to make.
-  test("every row the repair did not settle is a lack the suite skips for, never a failure, and every object an install answers with is made", async () => {
-    const account = { ...emptyAccount(), refuse: REFUSED_WITH_THE_LINK_RIGHTS };
-    let rows: readonly DomainRow[] = [];
-
-    await withFake(
-      (asked) => answerInstall(account, asked),
-      async (connection) => {
-        const plug = createDomainPlug({ accountId: INSTALL_ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl });
-        const reading = await plug.repair(TOKEN, async () => ({ logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" }));
-        rows = reading.ok ? reading.rows : [];
-      },
-    );
-
-    const unsettled = rows.filter((row) => row.state !== "present" && row.state !== "created");
-
-    expect(unsettled.map((row) => [row.object, row.state, needOf(row)])).toEqual([
-      ["Redirect rule", "optional", "the token permission for the Redirect rule"],
-      ["WAF rule", "optional", "the token permission for the WAF rule"],
-      ["Rate rule", "optional", "the token permission for the Rate rule"],
-      ["Bot settings", "optional", "the token permission for the Bot settings"],
-      ["Budget alert", "optional", "the token permission for the Budget alert"],
-    ]);
-    expect([...new Set(rows.filter((row) => row.state === "created").map((row) => row.object))]).toEqual([
-      "DNS record",
-      "Worker route",
-      "Access application",
-      "Access policy",
-      "Access open paths",
-      "Worker variable",
-      "Key",
-      "Upload key",
-      "D1 database",
-      "Workflow",
-    ]);
-  });
-
-  // Drift: an install answers without its Workflow, which only a copy too large for one request needs. A run that called that a failure would stop the test install for a part every other check passes without.
-  test("a Workflow Cloudflare does not make is a lack the suite skips for, whatever the refusal, and never a failure of the run", async () => {
-    const account = { ...emptyAccount(), refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workflows/poplin-jobs`, refuseAs: { status: 500, code: 10001 } };
-
-    await withFake(
-      (asked) => answerInstall(account, asked),
-      async (connection) => {
-        const plug = createDomainPlug({ accountId: INSTALL_ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl });
-        const reading = await plug.repair(TOKEN, async () => ({ logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" }));
-        const unsettled = (reading.ok ? reading.rows : []).filter((row) => row.state !== "present" && row.state !== "created" && row.state !== "changed");
-
-        expect(unsettled.map((row) => [row.object, row.state, needOf(row)])).toEqual([["Workflow", "failed", "the Worker's Workflow, which Cloudflare did not make"]]);
-      },
-    );
-  });
-
-  // Drift: the run holds no key of the install, so it reads the key's state at Cloudflare. A run that made a key on every push would leave the test install a new Worker version and a new token each time.
-  test("the two keys: the first run makes them, a later run finds them present and makes none, and a token that may not make one is a lack the suite skips for", async () => {
-    const [account, lacking] = [emptyAccount(), { ...emptyAccount(), refuse: `GET /accounts/${INSTALL_ACCOUNT}/tokens/permission_groups` }];
-    const settings = async (): Promise<DomainSettings> => ({ logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" });
-    const keyOf = async (baseUrl: string | undefined): Promise<(string | undefined)[]> => {
-      const reading = await createDomainPlug({ accountId: INSTALL_ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl }).repair(TOKEN, settings);
-
-      return (reading.ok ? reading.rows : []).filter((row) => row.object === "Key" || row.object === "Upload key").flatMap((row) => [row.state, needOf(row)]);
-    };
-
-    await withFake(
-      (asked) => answerInstall(account, asked),
-      async (connection) => {
-        expect([await keyOf(connection.baseUrl), await keyOf(connection.baseUrl), account.tokens.length]).toEqual([["created", undefined, "created", undefined], ["present", undefined, "present", undefined], 2]);
-      },
-    );
-    await withFake(
-      (asked) => answerInstall(lacking, asked),
-      async (connection) => {
-        expect(await keyOf(connection.baseUrl)).toEqual(["failed", "the token permission for the Key", "failed", "the token permission for the Upload key"]);
-      },
-    );
   });
 });

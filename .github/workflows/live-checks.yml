@@ -56,7 +56,7 @@ on:
         type: boolean
         default: false
       start_over:
-        description: First remove everything poplin made on the test account, then make the install from nothing
+        description: First remove the test install with poplin uninstall, then make it from nothing with poplin install
         type: boolean
         default: false
 
