@@ -115,7 +115,7 @@ function OrderSelect({ descending, onChoose }: { readonly descending: boolean; r
   );
 }
 
-/** The log on a phone: one row an entry, what was done and to which site over who did it and when, with the row's action at its end, and after the last row what follows the list. */
+/** The log on a phone: one row an entry, what was done and to which site over who did it and when, with the row's action at its end, and after the last row what follows the list. A site that has no room beside what was done stands under it. */
 function PhoneList({ page, place, actions, after }: { readonly page: Page; readonly place: string; readonly actions: (entry: Entry) => ReactNode; readonly after: ReactNode }): ReactNode {
   const list = useTopOfPlace(place);
 
@@ -125,9 +125,9 @@ function PhoneList({ page, place, actions, after }: { readonly page: Page; reado
         {page.entries.map((entry) => (
           <li key={entry.seq} tabIndex={-1} className="group/row flex min-h-16 items-center gap-2 border-b px-4 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className="truncate">{whatOf(entry)}</span>
-                <span className="-mx-1 min-w-0 shrink-0 truncate px-1">
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                <span className="min-w-0 break-words">{whatOf(entry)}</span>
+                <span className="-mx-1 max-w-full min-w-0 truncate px-1">
                   <SiteThen entry={entry} />
                 </span>
               </span>
