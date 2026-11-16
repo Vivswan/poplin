@@ -8,6 +8,7 @@ import { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
 import { showBytes } from "../../../core/src/records/settings";
 import { sha256Of } from "../files/hash";
 import { type PublishFile, readFiles } from "../files/read";
+import { firstRootLink } from "../files/root-links";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
@@ -118,6 +119,25 @@ function published(plan: PublishPlan, answer: Published): Outcome {
 }
 
 /**
+ * Why the install of a session cannot serve a plan's pages: it has no domain, so a site of it sits under a path, where a link that starts with `/` leaves the site.
+ *
+ * The session is asked how the install's addresses are laid out, and the pages are read only when a site sits under a path.
+ *
+ * @returns the refusal, which names the first such link of the first file that holds one, or why the install did not answer; `undefined` when the plan can be sent
+ */
+async function refusedByLayout(plan: PublishPlan, { layout, io }: Session): Promise<Outcome | undefined> {
+  const asked = await callUnhurried(io, layout);
+  if (!asked.ok) return { ok: false, problem: problemOf(asked.failure) };
+
+  if (asked.value.kind !== "path") return undefined;
+
+  const found = await firstRootLink(plan.files);
+  if (found === undefined) return undefined;
+
+  return { ok: false, problem: problem("root_links", `${found.link} in ${found.file}`) };
+}
+
+/**
  * Read the folder or the page a publish names, and decide what the install is asked to make of it. Every file is read, to be hashed. No install is called.
  *
  * @param stopped - aborts when the person stops the command, which ends the reading of the files
@@ -169,6 +189,7 @@ export function previewPublish(plan: PublishPlan, addressRead: boolean): Outcome
 /**
  * Send a planned publish to the install.
  *
+ * Nothing is sent to an install without a domain when a page of the plan links with a path that starts with `/`.
  * Four files are sent at once, each to the address its ticket names, and one the install fails on is sent again after a pause, up to three times more. A publish the install says lacks files is sent those and finished again, up to three finishes in all.
  * A first step answered "too many requests" began nothing, and is made again after the rest the answer asks for, as every later step is.
  *
@@ -176,6 +197,9 @@ export function previewPublish(plan: PublishPlan, addressRead: boolean): Outcome
  */
 export async function sendPublish(plan: PublishPlan, session: Session): Promise<Outcome> {
   const { client, io } = session;
+  const refused = await refusedByLayout(plan, session);
+  if (refused !== undefined) return refused;
+
   const begun = await callUnhurried(io, () => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ json: plan.manifest }), "repeatable"));
   if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: problemOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
 

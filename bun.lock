@@ -52,6 +52,7 @@
         "p-map": "7.1.1",
         "p-retry": "9.0.0",
         "publint": "0.3.25",
+        "srcset": "5.0.3",
         "string-width": "9.0.0",
         "tsdown": "0.23.7",
         "valibot": "1.5.0",
@@ -1629,6 +1630,8 @@
     "space-separated-tokens": ["space-separated-tokens@2.0.2", "", {}, "sha512-PEGlAwrG8yXGXRjW32fGbg66JAlOAwbObuqVoJpv/mRgoWDQfgH1wDPvtzWyUSNAXBGSk8h755YDbbcEy3SH2Q=="],
 
     "sql.js": ["sql.js@1.16.0", "", {}, "sha512-q/JOZuJfmVh8Zf8Eo+cMJvtxAWeWBqTfJ6AQYGXZmcaLGHMwhA2niH3fQYHrBtPeOss1ttzHec07K5+rHaMRMw=="],
+
+    "srcset": ["srcset@5.0.3", "", {}, "sha512-AZswtOXIsu0LeHdo6YY7d0r2pCH2Rl1D8ae1utvXUX4GxG3RggsVUAOFX1r8RI4YHFMYb4g89+UBPBv3mNUU2g=="],
 
     "std-env": ["std-env@4.3.0", "", {}, "sha512-OtU/EgQ1kIm5KwqQpBC6ZEMXrZRui11w8zgfTWp8cdO9B8OaPsbA8bTHO2P+HNo1VlUTGMVBwPhydu6poeXiag=="],
 

@@ -40,6 +40,7 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 
 - **No `--site` means a new site, every time.** Keep the label and pass it to update.
 - **A folder needs an `index.html` at its top.**
+- **On an install without a domain, a link that starts with `/` is refused:** an `href`, a `src`, or a `srcset` address in an `.html` or `.htm` file, such as `/css/site.css`. The refusal names the first one and nothing is sent. `poplin` and the agent's tool check this; `--dry-run` and a publish that reaches the install any other way are not checked.
 - **Not uploaded:** hidden files (a name that starts with a dot) and anything named `node_modules`.
 - **A name** is 3 to 40 lowercase letters, digits, and single dashes, with no dash first or last.
 - **Each file is read before it is sent,** for its fingerprint, a SHA-256 of its bytes. `--dry-run` takes the fingerprints too.

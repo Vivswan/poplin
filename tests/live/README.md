@@ -159,7 +159,7 @@ A run starts after a green main that changed a file reaching the install, or by 
 burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few seconds after one data center passed 300
 burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
 own-limit                about 700
-backup-drill             64, of which 34 make the install write to its bucket or list it
+backup-drill             69, of which 34 make the install write to its bucket or list it
 a run, at its worst      1,140 + 700 + 64 = 1,904
 the plan's day           100,000 requests to the Worker, reached at about 52 such runs
 ```
@@ -234,7 +234,7 @@ Anything else that is not the same fails the check, with its place in the backup
 backup-drill: 3 sites, 5 files, 119 bytes put back and exported the same; passed over made_at of manifest.json; <milliseconds> ms
 ```
 
-The line holds no name and no address. One drill is 64 requests when none is sent again.
+The line holds no name and no address. One drill is 69 requests when none is sent again.
 
 ## The check of the users
 

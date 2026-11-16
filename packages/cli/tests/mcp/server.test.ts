@@ -309,6 +309,27 @@ describe("the MCP server", () => {
     expect(codeOf(after)).toBe("not_found");
   });
 
+  // Drift: a tool and the command send a publish through one function; a tool that planned its own way would publish to an install without a domain what the command refuses.
+  test("publish_site to an install without a domain refuses a page that links from the root, as the command does, before anything is sent", async () => {
+    const bench = await open(undefined, PATHS);
+    const path = folderOf("notes", { "index.html": '<img srcset="logo.png 1x, /logo@2x.png 2x">' });
+
+    const answer = await bench.call("publish_site", { path });
+
+    expect([answer.error, codeOf(answer), answer.data.error, bench.sent, await bench.install.keys()]).toEqual([
+      true,
+      "root_links",
+      {
+        code: "root_links",
+        message: 'this install has no domain, so a link that starts with "/" would not open',
+        about: "/logo@2x.png in index.html",
+        hint: "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css, or give the install a domain",
+      },
+      ["GET /api/whoami"],
+      [],
+    ]);
+  });
+
   test.each([
     ["a site no install has", "get_site", { site: NO_SITE }, "not_found"],
     ["an update of a site in the trash", "update_site", { site: "TRASHED", access: "unlisted" }, "in_trash"],

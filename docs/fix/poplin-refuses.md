@@ -77,6 +77,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `unreadable`                                      | the path cannot be published                     | check the path                                               |
 | `no_index`                                        | the folder has no `index.html` at its top        | add one, or publish one HTML file                            |
 | `no_name`                                         | the path gives no name                           | `poplin ./report --name q3-report`                           |
+| `root_links`                                      | the install has no domain, and a page links with a path that starts with `/`; nothing was sent | write the link from its own page, `css/site.css` for `/css/site.css`, or give the install a domain |
 | `bad_path`                                        | a file's path cannot be served                   | rename or remove that file                                   |
 | `too_large`                                       | a size limit is passed                           | `poplin config` shows the limits                             |
 | `too_many_sites`                                  | the install holds as many sites as it may        | `poplin config max_sites`; `poplin list --trash` still counts |
