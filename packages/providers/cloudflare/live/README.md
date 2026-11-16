@@ -51,13 +51,14 @@ Each workflow runs the same steps on its own install. A push starts the one whos
 | only the rest of `.github/**`, the root test guards, `tests/{fuzz,support}/**`               | no run            |
 | only the settings of lint, review, hook, and release tools at the root                       | no run            |
 
-| The files of one kind of install alone                                                                                                    | Kind             |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `packages/providers/cloudflare/{src,tests}/zone/{bots,dns,routes,rules}/**`                                                               | with a domain    |
-| `packages/providers/cloudflare/{src,tests}/zone/forwarders/**`                                                                            | without a domain |
-| `packages/providers/cloudflare/src/without-domain/path-plug.ts` and its test                                                                                  | without a domain |
+| The files of one kind of install alone                                                                                                  | Kind             |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `packages/providers/cloudflare/{src,tests}/with-domain/pieces/{bots,dns,routes}/**`                                                     | with a domain    |
+| `guards.ts`, `rules.ts`, `waf.ts` of `packages/providers/cloudflare/src/with-domain/pieces/rules/`, and the tests of `guards` and `waf` | with a domain    |
+| `packages/providers/cloudflare/{src,tests}/without-domain/pieces/forwarders/**`                                                         | without a domain |
+| `packages/providers/cloudflare/src/without-domain/path-plug.ts` and its test                                                            | without a domain |
 
-A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/providers/cloudflare/scripts/live`.
+A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. `rules-follow.ts` beside the rules is another: every install's sweep reads it. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/providers/cloudflare/scripts/live`.
 
 The `paths` list of each workflow holds every row: the two lists are the same, and each ends with the files of the other kind, taken out. `packages/providers/cloudflare/tests/live/workflow.test.ts` holds the two kinds' files once and reads both lists beside them.
 
