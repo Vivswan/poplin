@@ -50,6 +50,9 @@ const NAME = "poplin";
 /** The look of the way past the sections: over the page's corner, and in sight only while it holds the focus after a key. */
 const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focus-visible:pointer-events-auto focus-visible:opacity-100";
 
+/** The look of the email where it rests: blurred, and sharp under a pointer, with the focus the keys give it, and with the focus a tap gives it where a finger is the pointer. */
+const EMAIL_AT_REST = "blur-xs transition-[filter] hover:blur-none focus-visible:blur-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:focus:blur-none";
+
 /** What keeps the router from marking a link of the frame as the place the address is at for every address under it, and from adding a class of its own. */
 const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const;
 
@@ -93,12 +96,17 @@ function SectionLink({ section, current }: { readonly section: (typeof SECTIONS)
   );
 }
 
-/** The email of who is logged in, whole: where one line is too short for it, it goes on at the "@" on a second line. What follows the "@" is quieter either way. */
+/**
+ * The email of who is logged in, whole: where one line is too short for it, it goes on at the "@" on a second line. What follows the "@" is quieter either way.
+ *
+ * It is blurred where it rests, so a shared screen or a screenshot does not show it. A pointer over it, the focus the keys give it, or a tap on a phone shows it sharp. A screen reader reads it either way.
+ */
 function Email({ className }: { readonly className?: string }): ReactNode {
   const at = Math.max(BOOT.email.lastIndexOf("@"), 0);
 
   return (
-    <span title={BOOT.email} className={cn("flex min-w-0 flex-wrap text-xs leading-4 font-normal", className)}>
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: the keys must reach the email to show it sharp, and it does nothing a button does.
+    <span title={BOOT.email} tabIndex={0} className={cn("flex min-w-0 flex-wrap rounded-sm text-xs leading-4 font-normal outline-none", EMAIL_AT_REST, className)}>
       <span className="max-w-full break-all text-foreground">{BOOT.email.slice(0, at)}</span>
       <span className="max-w-full break-all text-muted-foreground">{BOOT.email.slice(at)}</span>
     </span>
@@ -265,7 +273,7 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
           <div className="mt-auto flex flex-col gap-2">
             <DomainNote onGo={() => setOpen(false)} />
             <VersionLine offer={offer === undefined ? undefined : { ...offer, ask: askAndClose }} started={started} />
-            <Email className="px-2.5 pb-1" />
+            <Email className="px-2.5 py-1" />
           </div>
         </div>
       </SheetContent>
@@ -318,7 +326,7 @@ export function AppShell({
         <div className="mt-auto flex flex-col gap-2">
           <DomainNote />
           <VersionLine offer={offer} started={started} />
-          <Email className="px-2.5 pb-1" />
+          <Email className="px-2.5 py-1" />
         </div>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">
