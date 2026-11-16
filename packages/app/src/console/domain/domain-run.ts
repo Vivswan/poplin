@@ -1,4 +1,4 @@
-// One run of the domain plug for the Domain tab or the setup page: the token goes in, the rows come out, and the install keeps the run: its pieces as the last check of the domain, and one audit entry that says what was found or done.
+// One run of the domain plug for the Domain screen or the setup page: the token goes in, the rows come out, and the install keeps the run: its pieces as the last check of the domain, and one audit entry that says what was found or done.
 // A check with no token is the plug's own, made with what the install itself holds at the provider: it is kept the same way. One nobody pressed is kept with no audit entry.
 // A repair that leaves every piece of the login and every object that holds the users standing has carried the users it read to the domain: a change of the users waits no more while those are still the stored ones.
 // A repair that wrote such an object and stopped short may have left the domain with users of an earlier moment, so the change waits.

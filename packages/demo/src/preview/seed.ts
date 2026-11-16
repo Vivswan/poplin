@@ -1,6 +1,6 @@
 // The sample data of the demo, made through the product's own actions: tokens, the sites of `sample-sites.ts` published from the sample sites the host hands in, settings above a free limit, logins, the day's requests, and a check of the domain.
 //
-// The check finds every piece in place, so the install remembers a healthy domain. A Check on the Domain tab finds pieces to repair and replaces that memory; a reset brings the healthy one back.
+// The check finds every piece in place, so the install remembers a healthy domain. A Check on the Domain screen finds pieces to repair and replaces that memory; a reset brings the healthy one back.
 //
 // Every name and address is invented. The history is played in the order of its moments, so the audit log rises in time with its sequence, as a real install's does.
 

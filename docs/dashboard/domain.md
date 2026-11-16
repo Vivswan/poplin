@@ -68,6 +68,8 @@ The row `Key` is the key poplin keeps at Cloudflare. Repair makes one where the 
 
 The row `Upload key` is the key that sends a publish's files straight to the bucket. Repair makes it the same way: [The upload key](../about/security.md#the-upload-key). An install without it still publishes, through the Worker.
 
+The row `Workflow` is what runs the install's background jobs: the copy of a site of more than 112 files. Repair makes it where the account has none. Until then a copy of such a site is not made.
+
 ## Without a domain
 
 On an install [without a domain](../start/without-a-domain.md) the screen is the same, with other rows. Its first line says `No domain: your sites answer at Cloudflare's free address.`
@@ -82,6 +84,7 @@ On an install [without a domain](../start/without-a-domain.md) the screen is the
 | Key                | [the key poplin keeps](../about/security.md#the-kept-key)              |
 | Upload key         | [the key that sends files straight to the bucket](../about/security.md#the-upload-key) |
 | D1 database        | the database of the install                                            |
+| Workflow           | what runs the install's background jobs: the copy of a large site      |
 
 It has no DNS record, route, or rule, and its account token needs no permission of a zone. The optional parts below are of an install under a domain.
 

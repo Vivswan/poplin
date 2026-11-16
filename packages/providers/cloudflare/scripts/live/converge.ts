@@ -1,7 +1,7 @@
 // Make the standing test install of the run's account match main: the bucket, the database, the login, the Worker, then what its kind adds.
 //
 //   where it answers -> the account's plans, all free -> bucket, database, made anew when another build made it -> the login application -> wrangler deploy of the built bundle
-//     with a domain      -> the zone plug's repair, which makes every object of the zone as the Domain tab does
+//     with a domain      -> the zone plug's repair, which makes every object of the zone as the Domain screen does
 //     without a domain   -> the two forwarders -> the key the install keeps
 //     -> wait for the install to answer -> the test install's caps
 //
@@ -320,7 +320,7 @@ function isFreshKey(row: { readonly object: string; readonly state: string }): b
   return row.object === UPLOAD_KEY && row.state !== "present";
 }
 
-/** Run the zone plug's repair, the same code the Domain tab runs, and sort its rows into the summary and the lacking things. */
+/** Run the zone plug's repair, the same code the Domain screen runs, and sort its rows into the summary and the lacking things. */
 async function repairZone(run: Run, found: Extract<Found, { readonly kind: "domain" }>, login: string, progress: Progress): Promise<Stop | undefined> {
   const logins = parseLogins([login]);
   if (!logins.ok) return { kind: "failed", what: "the first login is no email address" };
@@ -377,7 +377,7 @@ async function ensureForwarders(run: Run, layout: AccountAddresses, progress: Pr
 /**
  * Give the Worker of an install without a domain the two keys it keeps, where it holds one that Cloudflare does not list as active and whole.
  *
- * The keys are read, made, and written by the piece the Domain tab's repair runs; a value goes from Cloudflare onto the Worker and is never printed. A token that may not make a key is a lack the suite skips for.
+ * The keys are read, made, and written by the piece the Domain screen's repair runs; a value goes from Cloudflare onto the Worker and is never printed. A token that may not make a key is a lack the suite skips for.
  */
 async function ensureKeys(run: Run, progress: Progress): Promise<Stop | undefined> {
   const reading = await keysMended(run.connection, { script: SCRIPT, accountId: run.accountId, zoneId: undefined, key: undefined, uploadKeyId: undefined, now: undefined });
@@ -416,7 +416,7 @@ export async function settleFreeAddress(run: Run, layout: AccountAddresses, prog
   return stopped;
 }
 
-/** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain tab's repair, or the forwarders and the keys of an install without a domain. */
+/** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain screen's repair, or the forwarders and the keys of an install without a domain. */
 function settleKind(run: Run, found: Found, login: string, progress: Progress): Promise<Stop | undefined> {
   return found.kind === "domain" ? repairZone(run, found, login, progress) : settleFreeAddress(run, found.layout, progress);
 }

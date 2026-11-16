@@ -124,7 +124,7 @@ function answer(world: World, asked: Asked): Response {
   return answerInstall(world.account, asked);
 }
 
-/** A fake account that holds a whole install, made by the Domain tab's own repair, and the owner's own things beside it. */
+/** A fake account that holds a whole install, made by the Domain screen's own repair, and the owner's own things beside it. */
 async function installed(): Promise<World> {
   const world: World = { account: emptyAccount(), bucket: true, objects: ["sites/a/1/index.html", "sites/a/1/style.css"], worker: true };
 
