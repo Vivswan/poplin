@@ -61,7 +61,7 @@ test("one repair gives a deployed Worker its domain, its first login, its accoun
       { name: "ZONE", type: "json", json: { domain: "example.com" } },
       { name: "FIRST_SETTINGS", type: "json", json: { logins: OWNER } },
       { name: "ACCOUNT_ID", type: "plain_text", text: ACCOUNT },
-      { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications[0]?.aud } },
+      { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } },
       { name: "KEPT_KEY", type: "secret_text" },
     ]);
     // The key goes in that one change and nowhere else, and no row or step repeats it.
@@ -70,7 +70,7 @@ test("one repair gives a deployed Worker its domain, its first login, its accoun
     // Every call but the search for the zone goes under the zone and the account the token showed the domain in, and under no other.
     expect(asked.slice(before).map((entry) => entry.path).filter((path) => !path.startsWith("/zones?") && !path.startsWith("/zones/zone-1/") && !path.startsWith(`/accounts/${ACCOUNT}/`))).toEqual([]);
     expect(asked.length - before).toBeLessThanOrEqual(CALLS_A_FREE_PLAN_REQUEST_MAY_SEND);
-    expect(asked.length - before).toBe(36);
+    expect(asked.length - before).toBe(38);
   });
 });
 

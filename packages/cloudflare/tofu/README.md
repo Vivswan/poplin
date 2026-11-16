@@ -37,7 +37,8 @@ bun run --cwd packages/cloudflare build   # writes packages/cloudflare/dist/work
 | Worker cron trigger | runs the Worker's sweep every 15 minutes: expired sites go to the trash, and sites past `trash_days` in the trash and uploads nobody finished are removed with their files |
 | Worker routes | send the install's hostnames, and no other hostname of the zone, to the Worker |
 | DNS records | proxied, each with a comment starting `poplin: ` |
-| Access policy and application | one login, allowing exactly `logins`, in front of `/login` of the dashboard's hostname and of every private site's address, `*-p-poplin.example.com`; a login lasts 30 days |
+| Access policy and application | one login, allowing exactly `logins`, in front of the whole dashboard hostname and of every private site's address, `*-p-poplin.example.com`; a login lasts 30 days |
+| Access open paths | a second application and its policy, which let everyone past the login on two paths of the dashboard's hostname: `/api`, where the Worker checks a caller's own token, and `/setup`, the setup page |
 | Redirect rule | sends a request over `http` to one of the install's hostnames to `https`, with a 301, before the Worker runs |
 | Rate rule | blocks an address for 10 seconds after 300 requests in 10 seconds, [counted in each data center](../../../docs/run/limits-and-cost.md#where-a-limit-is-counted) |
 | Guard rules | two custom rules that block a request to a site hostname before the Worker runs: one from a page of another domain; one from a verified bot, with a method other than GET and HEAD, or for a scanner path |
@@ -75,6 +76,7 @@ The setup page's Repair and this module make the same objects with the same valu
 | DNS records | Repair | `cloudflare_dns_record.poplin` | Repair also removes a marked record the install no longer uses, and skips a name an NS record holds; here a record outside the state stays, and Cloudflare refuses a name an NS record holds |
 | Worker routes | Repair | `cloudflare_workers_route.worker` | Repair also removes a route of the Worker the install no longer uses, and skips a pattern another Worker holds; here a route outside the state stays, and Cloudflare refuses a pattern that is taken |
 | Access policy and application | Repair | `cloudflare_zero_trust_access_policy.logins`, `cloudflare_zero_trust_access_application.login` | nowhere |
+| Access open paths | Repair | `cloudflare_zero_trust_access_policy.open_paths`, `cloudflare_zero_trust_access_application.open_paths` | nowhere |
 | the Worker's values | Repair | the bindings of `cloudflare_workers_script.poplin` | Repair writes the domain, the first login, the account, and the login's audience, and keeps every other binding; here every binding is declared, with the public word and every first setting |
 | Redirect rule | Repair | `cloudflare_ruleset.https` | Repair writes none where the zone's own Always Use HTTPS is on and the install has no rule yet; here `https_redirect` says so |
 | Guard rules | Repair | `cloudflare_ruleset.guards` | Repair adds its rules beside the zone's own; here they are the whole ruleset |
@@ -99,6 +101,7 @@ Each object carries a fixed name or mark, the same one poplin's own setup code w
 | Worker routes | the Worker's name, `worker_name` |
 | Access policy | the name `poplin logins` |
 | Access application | the name `poplin` |
+| Access open paths | the application's name `poplin open paths` and the policy's name `poplin open paths policy` |
 | D1 database | the name `poplin` |
 | Rate rule | the ref `poplin_rate`, in a ruleset named `poplin rate rule` |
 | Guard rules | the refs `poplin_outside_pages` and `poplin_bots`, in a ruleset named `poplin guard rules` |
@@ -265,12 +268,12 @@ tofu apply
 | build the Worker | build the bundle with `bun run --cwd packages/cloudflare build` and pass its path in `worker_bundle_path` |
 | read the Zero Trust team domain | pass it in `access_team_domain` |
 | apply the database's schema | the Worker brings the database up to its own schema when it opens it |
-| set up two installs in one account | the Access policy, the Access application, and the database have fixed names |
+| set up two installs in one account | the Access policies, the Access applications, and the database have fixed names |
 | take over an object it did not create | an object that already exists under one of the names above is imported into the state first |
 | configure the provider or hold a token | the caller's provider block does |
 | add to rate rules the zone already has | the rate rule is the zone's whole rate limiting ruleset. Set `rate_rule` to `off` on a zone with rate rules of its own |
 | add to redirect rules the zone already has | the redirect rule is the zone's whole redirect ruleset. Set `https_redirect` to `false` on a zone with redirect rules of its own, or one whose Always Use HTTPS is on |
-| fit a domain of more than 50 characters | Access takes an application address of 63 characters, and `poplin.<domain>/login` must fit |
+| fit a domain of more than 50 characters | Access takes an application address of 63 characters, and `poplin.<domain>/setup` must fit |
 | add to custom rules the zone already has | the guard rules are the zone's whole custom ruleset. Set `guard_rules` to `false` on a zone with custom rules of its own, and add the `guard_rule_expressions` to them |
 | keep bot settings the zone already has | the module sets the AI bot block and Bot Fight Mode both. Set `block_bots` to `off` on a zone that sets its own |
 | stop a bot Cloudflare has not verified | a bot that presents as a browser passes both rules; telling it apart takes a bot score, which the Free plan does not have |

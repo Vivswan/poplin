@@ -32,7 +32,7 @@ const REMOVED = [
   "Worker routes: removed 3",
   "DNS records: removed 2",
   "Rules: removed 4",
-  "Access application and policy: removed 2",
+  "Access applications and policies: removed 4",
   "Worker: removed 1",
   "Database: removed 1",
   "Bucket objects: removed 2",

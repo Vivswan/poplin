@@ -56,7 +56,9 @@ One job touches the install at a time. The checks and the midnight reset wait in
 
 On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
 
-The run removes the Worker and its routes, poplin's DNS records, rules, Access application and policy, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make. A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
+The run removes the Worker and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
+
+A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
 
 ## The test install
 
@@ -252,7 +254,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
-| Access switched on for the account                                  | `L1`                                                                     |
+| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |

@@ -3,7 +3,7 @@
 import { expect } from "bun:test";
 
 import { type Bench, type Check, Skip } from "../records";
-import { GHOST_ID, labelAddress } from "../util";
+import { GHOST_ID, isOwnAddress, labelAddress } from "../util";
 
 /** The most requests the burst sends before the paced ones: past the rate rule's 300 in ten seconds. */
 const BURST = 340;
@@ -37,6 +37,12 @@ const OWN_LIMIT_TEXT = "Too many requests.";
 
 /** A user agent of an AI crawler the bot block stops. */
 const CRAWLER = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)";
+
+/** What every team's login hostname ends in, and the path its login page of a hostname starts with: the edge's own redirect, which no install writes. */
+const TEAM_LOGIN = { host: ".cloudflareaccess.com", path: "/cdn-cgi/access/login/" };
+
+/** The paths of the dashboard a stranger must not reach the install on: its page, its data, a file of its client, and a page a link in a terminal opens. */
+const BEHIND_LOGIN = ["/", "/data/frame", "/assets/index.js", "/tokens/review/x"];
 
 /** What a browser sends with an image a page of another domain loads. */
 const OUTSIDE_PAGE = { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Dest": "image" };
@@ -258,11 +264,25 @@ async function sendBurst(bench: Bench): Promise<Met> {
   return closeRun(bench, run, ended);
 }
 
+/**
+ * Whether an answer is the edge's own redirect to the team's login, which the install never sends: its own way to the login stays on its admin hostname.
+ *
+ * @returns `true` for a redirect to a login page under a team's hostname, off the install's domain
+ */
+function sentToTeamLogin(bench: Bench, response: Response): boolean {
+  const location = response.headers.get("Location") ?? "";
+  if (response.status !== 302 || !URL.canParse(location) || isOwnAddress(bench.domain, location)) return false;
+
+  const { hostname, pathname } = new URL(location);
+
+  return hostname.endsWith(TEAM_LOGIN.host) && pathname.startsWith(TEAM_LOGIN.path);
+}
+
 /** Every check a stranger makes alone. The two checks of the limits come last: they use up the visitor's minute. */
 export const EDGE_CHECKS: readonly Check[] = [
   {
     id: "api-token",
-    name: "the API refuses a request with no token, and says nothing of the install",
+    name: "the API answers a request with no token itself, with no login in front: its own refusal, which says nothing of the install",
     needs: [],
     run: async (bench) => {
       const response = await bench.visit(`${bench.admin}/api/sites`);
@@ -273,14 +293,24 @@ export const EDGE_CHECKS: readonly Check[] = [
   },
   {
     id: "dashboard-login",
-    name: "the dashboard sends a stranger to the login and sets no cookie",
+    name: "the edge sends a stranger to the team's login from every path of the dashboard, before the install is asked, and the install sets no cookie",
+    needs: ["access"],
+    run: async (bench) => {
+      for (const path of BEHIND_LOGIN) {
+        const response = await bench.visit(`${bench.admin}${path}`);
+        expect([path, sentToTeamLogin(bench, response)]).toEqual([path, true]);
+        expect(response.headers.get("Set-Cookie") ?? "").not.toContain("poplin");
+      }
+    },
+  },
+  {
+    id: "setup-open",
+    name: "the setup page's path answers a stranger with the install's own answer, never with a login",
     needs: [],
     run: async (bench) => {
-      const response = await bench.visit(`${bench.admin}/`);
-      expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toStartWith(`${bench.admin}/login`);
-      expect(response.headers.get("Set-Cookie")).toBeNull();
-      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      const response = await bench.visit(`${bench.admin}/setup`);
+      expect(response.status).toBeOneOf([200, 404]);
+      expect(response.headers.get("Location")).toBeNull();
     },
   },
   {
