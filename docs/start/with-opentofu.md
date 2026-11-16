@@ -5,7 +5,7 @@ order: 40
 
 # With OpenTofu
 
-poplin's OpenTofu module makes the whole install instead of [steps 2 to 4](by-hand.md#the-steps). [The module's page](../../packages/cloudflare/tofu/README.md) lists every input and every object.
+poplin's OpenTofu module makes the whole install instead of [steps 2 to 4](by-hand.md#the-steps). It makes an install under a domain alone: `zone_id` names the domain. [The module's page](../../packages/cloudflare/tofu/README.md) lists every input and every object.
 
 ```hcl
 module "poplin" {

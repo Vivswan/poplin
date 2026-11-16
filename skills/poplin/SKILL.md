@@ -60,6 +60,8 @@ You publish with the MCP tools, or with the `poplin` command when the tools are 
 
 "Share this with my team" is not yet a yes to unlisted: say what unlisted means and let the user choose. Going public claims a public name, the site's name unless you pass `public_name` (`--public --public-name docs`).
 
+An install without a domain writes other addresses: [Without a domain](#without-a-domain) has them.
+
 Change `access` only when the user asks, in either direction. A public site that goes private or unlisted gives up its public name, and that address stops working.
 
 **To or from private changes the address.** The answer then ends in a line `address changed: <old> is now <new>`. Give the user the new `url`, and say that the old address sends visitors on to it. The label you pass as `site` stays the same.
@@ -82,11 +84,30 @@ Leave `forever` to the user. With the command, `--forever` asks a person to type
 
 Look at the folder first: what is in it will be on the site, and an unlisted or public site shows all of it. `npx poplin ./report --dry-run` lists the files and uploads nothing.
 
-**The site is static.** Files are served as they are. Relative links between them work (`<a href="notes/q3.html">`, `<img src="chart.svg">`). There is no server code, no form handler, and no database, so build pages that need none.
+**The site is static.** Files are served as they are. Relative links between them work (`<a href="notes/q3.html">`, `<img src="chart.svg">`): write every link that way, since a link that starts with `/` is refused on an install without a domain. There is no server code, no form handler, and no database, so build pages that need none.
 
 **A site can bring its own page for a wrong address:** a file named `404.html` at the root of the folder. A visitor who asks for a file the site does not have gets that page, with status 404. A site without one answers a plain `Not found`.
 
 **A wrong publish can be taken back.** `rollback_site` puts the version before it live again, when the install still keeps one. The address stays the same.
+
+## Without a domain
+
+An install is one of two kinds: under the user's own domain, or without a domain, at the address Cloudflare gives its Worker. The `url` of any answer shows which. You publish the same way on both. What differs:
+
+| Thing                    | Under a domain                                | Without a domain                                                     |
+| ------------------------ | --------------------------------------------- | -------------------------------------------------------------------- |
+| a private site's address | `report--k3f9x2ab71qz-p-poplin.example.com`   | `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/`         |
+| an open site's address   | `report--k3f9x2ab71qz-u-poplin.example.com`   | `poplin-sites.your-name.workers.dev/report--k3f9x2ab71qz/`           |
+| a public name            | `docs-page.example.com`                       | `poplin-sites.your-name.workers.dev/docs/`                           |
+| a link that starts with `/` | opens a file of the site                   | leaves the site, so the publish is refused with `root_links`         |
+| two sites in one browser | kept apart                                    | sites of a kind share one origin                                     |
+| blocking AI crawlers     | a setting of the install                      | that one setting does nothing: it needs a domain                     |
+
+**A publish with a root link is refused, and nothing is sent.** It is an address in an href, src, or srcset attribute that starts with one `/`, in an `.html` or `.htm` file. The refusal names the first one. An address that names a host, such as `https://example.com/chart.svg` or `//example.com/chart.svg`, passes: leave it. Write it from its own page, `css/site.css` or `../css/site.css`, then publish again.
+
+**Sites of a kind share one browser origin.** Every unlisted and public site is on one hostname, and every private site on another. A script of one site can read another site of its kind whose address it knows, and that site's browser storage. So publish there only pages the user trusts, and say so before you publish a page with scripts neither of you wrote.
+
+**To or from private, the hostname changes** in place of the letter. The answer ends in the same `address changed` line.
 
 ## After you publish, tell the user
 

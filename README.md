@@ -38,14 +38,21 @@ Look at https://github.com/Vivswan/poplin, read its skill, and help me set up po
 
 The agent sets poplin up with you: it tells you what to click in your browser, checks each step, and does the rest. It acts as you, with the login the setup saves on your computer.
 
-Have ready a Cloudflare account with a domain and a payment method on it, and a GitHub account: [What you need](docs/start/by-hand.md#what-you-need) has the whole list. A first install takes about an hour and twenty minutes. [With an agent](docs/start/with-an-agent.md) shows who does what.
+Have ready a Cloudflare account with a payment method on it, and a GitHub account: [What you need](docs/start/by-hand.md#what-you-need) has the whole list. A first install takes about an hour and twenty minutes. [With an agent](docs/start/with-an-agent.md) shows who does what.
+
+A domain is your choice. The agent asks which way you want:
+
+| You install         | A site answers at                                                 | The steps                                             |
+| ------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
+| under your domain   | a hostname of its own: `report--k3f9x2ab71qz-p-poplin.example.com` | [By hand](docs/start/by-hand.md)                      |
+| without a domain    | a path: `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/` | [Without a domain](docs/start/without-a-domain.md) |
 
 | You have       | The agent                                                                      |
 | -------------- | ------------------------------------------------------------------------------ |
 | no install yet | takes you through making one: your own copy of poplin, in your Cloudflare account |
 | an install     | connects itself to it, and adds poplin's tools to itself                       |
 
-Installing by hand: [By hand](docs/start/by-hand.md) has the same steps.
+Installing by hand: the two pages of the table have the same steps.
 
 If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
 
@@ -57,7 +64,7 @@ If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKIL
 | unlisted              | anyone who has the link  | `report--k3f9x2ab71qz-u-poplin.example.com`                       |
 | public                | everyone                 | a name you choose, `docs-page.example.com`, and its unlisted link |
 
-`example.com` stands for your own domain. "You" is every user of your install: yourself, and anyone you add. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
+`example.com` stands for your own domain; [Without a domain](docs/start/without-a-domain.md) shows the addresses of an install that has none. "You" is every user of your install: yourself, and anyone you add. Your dashboard is a private page that lists every site you published: `poplin.example.com`.
 
 ## Use it from the command line
 
@@ -71,7 +78,7 @@ npx poplin set report--k3f9x2ab71qz --public --public-name docs   # everyone, at
 
 ## Where it runs
 
-In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment method to switch two parts on, the bucket and the login: [What can cost money](docs/upkeep/cost/what-can-cost-money.md) says when it is charged. You need the account and a domain on it.
+In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment method to switch two parts on, the bucket and the login: [What can cost money](docs/upkeep/cost/what-can-cost-money.md) says when it is charged. You need the account. A domain on it is your choice.
 
 | The install is  | It                                              |
 | --------------- | ----------------------------------------------- |
@@ -84,6 +91,6 @@ In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment 
 | Page                                      | What it covers                                       |
 | ----------------------------------------- | ---------------------------------------------------- |
 | [The guide](docs/README.md)               | every command, every agent tool, and every error     |
-| [Install](docs/start/by-hand.md)          | getting your own install                             |
+| [Install](docs/start/README.md)           | getting your own install, under a domain or without  |
 | [Security](docs/about/security.md)        | what poplin protects against and what it does not    |
 | [Remove](docs/upkeep/remove.md)              | taking an install down, piece by piece               |

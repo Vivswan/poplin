@@ -5,7 +5,7 @@ order: 10
 
 # When a step fails
 
-Each failure of [the six steps](../start/by-hand.md#the-steps) and what to do next; the steps themselves are not repeated here.
+Each failure of [the six steps](../start/by-hand.md#the-steps) and what to do next; the steps themselves are not repeated here. The steps [without a domain](../start/without-a-domain.md#the-steps) fail the same way: steps 3 and 4 say what differs.
 
 ## Step 2: the build fails
 
@@ -37,6 +37,8 @@ Then build again: [Build again](../upkeep/update.md#build-again) has the three c
 
 Then finish the form as in the table of [step 3](../start/by-hand.md#the-steps).
 
+**Without a domain**, add the five Account rows and no Zone row, and finish the form as [its own step 3](../start/without-a-domain.md#the-steps) has it.
+
 ## Step 4: the page shows something else
 
 **When the page shows something else**, the table has it. Fix the cause and press Repair again: what is already made stays.
@@ -59,6 +61,8 @@ after every run:   the token's box is empty    paste the token again
 | a row `optional`                                                         | nothing is wrong: an optional permission is not on the token        | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
 | a row `failed` ending `Add this right to the account token` and a name   | the token lacks the permission of that name                         | add it to the token: the table below                                       |
 | a row `failed` with other words, and rows `not run`                      | that one step failed, and the row says why                          | do what the row asks, then press Repair again; a row that asks nothing: Repair again |
+
+**Without a domain** the page has no Domain box, so the two lines about a domain do not come up. `Account token refused` then means the token does not reach the account the Worker is in: check its Account Resources.
 
 **Only when a row says failed for a permission**, add it to the token. Your tokens are listed on the page step 3's link opened (in Cloudflare: My Profile, then API Tokens). Each token's row ends in a menu.
 

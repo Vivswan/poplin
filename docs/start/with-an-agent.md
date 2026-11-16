@@ -5,7 +5,7 @@ order: 10
 
 # Install with an agent
 
-What happens after you paste the line below, and what you do yourself; the agent follows [the skill's setup page](../../skills/poplin/references/setup.md), and the clicks are those of [By hand](by-hand.md).
+What happens after you paste the line below, and what you do yourself; the agent follows [the skill's setup page](../../skills/poplin/references/setup.md), and the clicks are those of [By hand](by-hand.md), or of [Without a domain](without-a-domain.md).
 
 ```text
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
@@ -13,13 +13,13 @@ Look at https://github.com/Vivswan/poplin, read its skill, and help me set up po
 
 Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a terminal on your own computer and runs commands there. It is a separate tool that you install yourself, and it may cost money: poplin brings none. A chat in a browser cannot run commands, so it cannot publish.
 
-**Have ready** what [What you need](by-hand.md#what-you-need) lists. With no install yet, allow about an hour and twenty minutes.
+**Have ready** what [What you need](by-hand.md#what-you-need) lists. The domain is your choice: the agent asks, and with none it follows [Without a domain](without-a-domain.md). With no install yet, allow about an hour and twenty minutes.
 
 | Step | What happens                                          | Who does it                                                      |
 | ---- | ----------------------------------------------------- | ---------------------------------------------------------------- |
 | 1    | the agent says what it will do, and asks once         | you say yes                                                      |
 | 2    | a check: Node.js, a saved login, an install           | the agent; you install Node.js when it is missing                |
-| 3    | with no install: steps 1 to 5 of By hand              | you click in your browser; the agent says what, and checks each  |
+| 3    | with no install: steps 1 to 5, under a domain or without | you choose the way and click in your browser; the agent says what, and checks each |
 | 4    | with no saved login: `npx poplin login`               | the agent runs it; you allow it in your browser                  |
 | 5    | poplin's tools are added to the agent's configuration | the agent; it may ask you to restart it, so that the tools show  |
 | 6    | a last check                                          | the agent names your install                                     |

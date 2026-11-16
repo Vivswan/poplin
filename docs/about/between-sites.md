@@ -54,7 +54,7 @@ The switch means the same for a private, an unlisted, and a public site, and a c
 
 An install [without a domain](../start/without-a-domain.md) has three hostnames. Every unlisted and public site is a path on one, every private site a path on another, and the dashboard has the third to itself.
 
-**The open sites share one browser origin, and so do the private sites: publish only pages you trust, or add a domain.**
+**The open sites share one browser origin, and so do the private sites: publish only pages you trust.**
 
 | A script of one site | Under a domain | Without a domain |
 | --- | --- | --- |
