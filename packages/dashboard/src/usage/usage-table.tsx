@@ -1,6 +1,7 @@
 // The table of the Usage screen: each number beside its limit, with words only once a number nears it, the way to the setting that holds the limit, and the way to the host's own page of the number.
 //
 // A number the install counted itself reads "about", since its count can read low. Once the host gave its own figures, the line over the table says when.
+// A day's number is of a UTC day: its line says "today" where that is the reader's date too, and names the day where it is not.
 
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";
@@ -11,26 +12,37 @@ import { type ReactNode, useMemo } from "react";
 import { Progress } from "@/components/ui/progress";
 import { httpsLink } from "@/lib/https-link";
 import { showCount } from "@/lib/sites";
-import { momentIn, useChosenTimeZone } from "@/lib/timezone";
+import { momentIn, useChosenTimeZone, useTimeZoneChoice } from "@/lib/timezone";
 import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
 import { type ColumnSpec, DataTable } from "@/table/data-table";
 import type { Line, Usage } from "@/usage/usage-queries";
+import { spansOf } from "@/usage/usage-spans";
 import { shareOf } from "@/usage/usage-values";
 
-/** What each line counts, in the words of the screen. */
+/** What each line counts, in the words of the screen. A line counted over a day or a month says which after them. */
 const NAMES: Readonly<Record<Line["what"], string>> = {
   stored: "Storage, all sites",
-  host_stored: "Account storage",
+  host_stored: "Account storage, highest in 24 hours",
   sites: "Sites, the trash included",
   trashed: "In the trash",
   files: "Files",
-  requests: "Requests today",
-  host_requests: "Account requests today",
-  rows_read: "Database rows read today",
-  rows_written: "Database rows written today",
-  storage_writes: "Storage writes this month",
-  storage_reads: "Storage reads this month",
+  requests: "Requests",
+  host_requests: "Account requests",
+  rows_read: "Database rows read",
+  rows_written: "Database rows written",
+  storage_writes: "Storage writes",
+  storage_reads: "Storage reads",
+};
+
+/** The lines counted over a UTC day, and those over a UTC month. */
+const OVER: Readonly<Partial<Record<Line["what"], "day" | "month">>> = {
+  requests: "day",
+  host_requests: "day",
+  rows_read: "day",
+  rows_written: "day",
+  storage_writes: "month",
+  storage_reads: "month",
 };
 
 /** The lines counted in bytes. */
@@ -57,8 +69,26 @@ function used(line: Line): string {
   return line.about ? `about ${amount(line, line.used)}` : amount(line, line.used);
 }
 
+/** What a line is called on the screen, by what it counts. */
+type Names = (what: Line["what"]) => string;
+
+/** A line of the screen with what it is called there. */
+interface Named {
+  readonly line: Line;
+  readonly name: string;
+}
+
+/** What every line is called on the screen: what it counts, then the day or the month it is counted over, in the words given. */
+function namesOf(spans: ReturnType<typeof spansOf>): Names {
+  return (what) => {
+    const over = OVER[what];
+
+    return over === undefined ? NAMES[what] : `${NAMES[what]} ${spans[over]}`;
+  };
+}
+
 /** How much of its limit a line has used: a thin bar, the percent, and words from near the limit on. Nothing for a line without a limit. */
-function ShareCell({ line }: { readonly line: Line }): ReactNode {
+function ShareCell({ line, name }: Named): ReactNode {
   const share = shareOf(line.used, line.limit);
   if (share === undefined) return null;
 
@@ -68,7 +98,7 @@ function ShareCell({ line }: { readonly line: Line }): ReactNode {
     <span className="flex items-center gap-3">
       <Progress
         value={Math.min(share.percent, 100)}
-        aria-label={`${NAMES[line.what]}: share of the limit`}
+        aria-label={`${name}: share of the limit`}
         className={cn("w-20 shrink-0 xl:w-40", loud && "**:data-[slot=progress-indicator]:bg-warn")}
       />
       <span className="w-10 shrink-0 text-right text-muted-foreground tabular-nums">{share.percent}%</span>
@@ -78,19 +108,19 @@ function ShareCell({ line }: { readonly line: Line }): ReactNode {
 }
 
 /** The way from a line to the setting that holds its limit, also where that setting sets none; nothing for a line no setting bounds. */
-function LimitLink({ line }: { readonly line: Line }): ReactNode {
+function LimitLink({ line, name }: Named): ReactNode {
   if (line.setting === null) return null;
 
   return (
-    <IconButton label="Change this limit" name={`Change the limit of ${NAMES[line.what]}`} link={<Link {...settingAddress(line.setting)} />}>
+    <IconButton label="Change this limit" name={`Change the limit of ${name}`} link={<Link {...settingAddress(line.setting)} />}>
       <ArrowUpRightIcon />
     </IconButton>
   );
 }
 
 /** What a link to the host's page of a line is called: the line first, so a list of the links reads apart. */
-function hostLinkName(line: Line, host: string): string {
-  return `${NAMES[line.what]}: see it at ${host}`;
+function hostLinkName(name: string, host: string): string {
+  return `${name}: see it at ${host}`;
 }
 
 /** The host's own page of a line's number; none for a line the host has no page of, or whose address is no https link. */
@@ -98,29 +128,24 @@ function hostPage(line: Line): string | undefined {
   return line.link === null ? undefined : httpsLink(line.link);
 }
 
-/** What a row of the table leads to: the host's own page of its number, in a new tab, then the setting that holds its limit. */
-function RowLinks({ line, host }: { readonly line: Line; readonly host: string }): ReactNode {
+/** What a row of the table leads to: the host's own page of its number, in a new tab, then the setting that holds its limit. Whichever a row has, its last icon ends at the row's right edge. */
+function RowLinks({ line, name, host }: Named & { readonly host: string }): ReactNode {
   const link = hostPage(line);
 
-  // Each of the two has a place of its own, so the icons of one kind stand under each other whichever a row has.
   return (
-    <span className="inline-grid grid-cols-2 items-center justify-items-center gap-1">
-      <span>
-        {link === undefined ? null : (
-          <IconButton label={hostLinkName(line, host)} link={<a href={link} target="_blank" rel="noreferrer" />}>
-            <ExternalLinkIcon />
-          </IconButton>
-        )}
-      </span>
-      <span>
-        <LimitLink line={line} />
-      </span>
+    <span className="flex items-center justify-end gap-1">
+      {link === undefined ? null : (
+        <IconButton label={hostLinkName(name, host)} link={<a href={link} target="_blank" rel="noreferrer" />}>
+          <ExternalLinkIcon />
+        </IconButton>
+      )}
+      <LimitLink line={line} name={name} />
     </span>
   );
 }
 
 /** The way from a line to the host's own page of its number, in words, for a phone: it has no pointer to show a hint to. */
-function HostLink({ line, host }: { readonly line: Line; readonly host: string }): ReactNode {
+function HostLink({ line, name, host }: Named & { readonly host: string }): ReactNode {
   const link = hostPage(line);
   if (link === undefined) return null;
 
@@ -129,7 +154,7 @@ function HostLink({ line, host }: { readonly line: Line; readonly host: string }
       href={link}
       target="_blank"
       rel="noreferrer"
-      aria-label={hostLinkName(line, host)}
+      aria-label={hostLinkName(name, host)}
       className="inline-flex items-center gap-1 self-start text-[13px] whitespace-nowrap text-link underline-offset-2 hover:underline"
     >
       See it at {host}
@@ -139,9 +164,9 @@ function HostLink({ line, host }: { readonly line: Line; readonly host: string }
 }
 
 /** The columns of the Usage table. */
-function usageColumns(): readonly ColumnSpec<Line>[] {
+function usageColumns(names: Names): readonly ColumnSpec<Line>[] {
   return [
-    { id: "what", header: "What", fixed: true, cell: (line) => NAMES[line.what] },
+    { id: "what", header: "What", fixed: true, cell: (line) => names(line.what) },
     { id: "used", header: "Used", numeric: true, cell: (line) => <span className="tabular-nums">{used(line)}</span> },
     {
       id: "limit",
@@ -149,26 +174,28 @@ function usageColumns(): readonly ColumnSpec<Line>[] {
       numeric: true,
       cell: (line) => <span className="text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : amount(line, line.limit)}</span>,
     },
-    { id: "share", header: "Share of the limit", grows: true, cell: (line) => <ShareCell line={line} /> },
+    { id: "share", header: "Share of the limit", grows: true, cell: (line) => <ShareCell line={line} name={names(line.what)} /> },
   ];
 }
 
 /** The lines on a phone: the name over the number and its limit, the share under them, and the way to the host's page last. */
-function PhoneList({ usage }: { readonly usage: Usage }): ReactNode {
+function PhoneList({ usage, names }: { readonly usage: Usage; readonly names: Names }): ReactNode {
+  const named = usage.lines.map((line) => ({ line, name: names(line.what) }));
+
   return (
     <ul aria-label="Usage" className="border-t md:hidden">
-      {usage.lines.map((line) => (
+      {named.map(({ line, name }) => (
         <li key={line.what} className="flex min-h-16 flex-col justify-center gap-1 border-b px-4 py-2">
           <span className="flex items-center gap-2">
-            <span className="min-w-0 flex-1">{NAMES[line.what]}</span>
+            <span className="min-w-0 flex-1">{name}</span>
             <span className="shrink-0 tabular-nums">{used(line)}</span>
             <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : `of ${amount(line, line.limit)}`}</span>
             <span className="flex w-10 shrink-0 justify-end">
-              <LimitLink line={line} />
+              <LimitLink line={line} name={name} />
             </span>
           </span>
-          <ShareCell line={line} />
-          <HostLink line={line} host={usage.host} />
+          <ShareCell line={line} name={name} />
+          <HostLink line={line} name={name} host={usage.host} />
         </li>
       ))}
     </ul>
@@ -200,17 +227,21 @@ function OfficialLine({ usage }: { readonly usage: Usage }): ReactNode {
  * Draw the table of the Usage screen.
  *
  * @param usage - the server's answer: the lines, the host's name, and what became of asking the host for its own figures
+ * @param read - when the answer was read, in milliseconds since the epoch: a day's line says "today" where the reader's date was the day of its number then
  */
-export function UsageTable({ usage }: { readonly usage: Usage }): ReactNode {
-  const columns = useMemo(usageColumns, []);
+export function UsageTable({ usage, read }: { readonly usage: Usage; readonly read: number }): ReactNode {
+  const [choice] = useTimeZoneChoice();
+  const { day, month } = spansOf(usage.day, read, choice);
+  const names = useMemo(() => namesOf({ day, month }), [day, month]);
+  const columns = useMemo(() => usageColumns(names), [names]);
 
   return (
     <>
       <OfficialLine usage={usage} />
       <div className="shrink-0 max-md:hidden">
-        <DataTable label="Usage" columns={columns} rows={usage.lines} rowId={(line) => line.what} sort={AS_GIVEN} actions={(line) => <RowLinks line={line} host={usage.host} />} actionsWidth={ACTIONS_WIDTH} />
+        <DataTable label="Usage" columns={columns} rows={usage.lines} rowId={(line) => line.what} sort={AS_GIVEN} actions={(line) => <RowLinks line={line} name={names(line.what)} host={usage.host} />} actionsWidth={ACTIONS_WIDTH} />
       </div>
-      <PhoneList usage={usage} />
+      <PhoneList usage={usage} names={names} />
     </>
   );
 }

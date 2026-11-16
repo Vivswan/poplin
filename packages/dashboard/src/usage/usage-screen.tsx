@@ -12,7 +12,7 @@ import { VisitsBlock } from "@/usage/visits-block";
 
 /** Draw the Usage screen. */
 export function UsageScreen(): ReactNode {
-  const { data: usage, error } = useUsage();
+  const { data: usage, error, dataUpdatedAt: read } = useUsage();
 
   return (
     <AppShell current="usage" heading="Usage">
@@ -21,7 +21,7 @@ export function UsageScreen(): ReactNode {
           <VisitsBlock />
           {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
           {usage === undefined && error === null ? <WaitingRows /> : null}
-          {usage === undefined ? null : <UsageTable usage={usage} />}
+          {usage === undefined ? null : <UsageTable usage={usage} read={read} />}
           <ProblemsBlock />
         </section>
       </ProblemsPlace>

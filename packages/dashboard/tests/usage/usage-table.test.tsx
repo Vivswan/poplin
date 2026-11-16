@@ -16,6 +16,9 @@ import { drawAt } from "../lib/support/router";
 /** The host's pages, as the server names them. */
 const PAGES = { requests: "https://provider.example/requests", database: "https://provider.example/database", storage: "https://provider.example/storage" };
 
+/** When the answers were read: noon of the day they are of in the time zone the tests run in, whichever it is, so the reader's date is that day. */
+const NOON = new Date(2026, 10, 15, 12).getTime();
+
 /** A line with no setting, no link, and a number that is exact, but for what a test names. */
 function line(what: Line["what"], used: number, limit: number | null, more: Partial<Line> = {}): Line {
   return { what, used, limit, setting: null, about: false, link: null, ...more };
@@ -49,11 +52,11 @@ const OFFICIAL: Usage = {
   ],
 };
 
-async function draw(usage: Usage): Promise<void> {
+async function draw(usage: Usage, read: number = NOON): Promise<void> {
   await drawAt(
     "/usage",
     <TooltipProvider>
-      <UsageTable usage={usage} />
+      <UsageTable usage={usage} read={read} />
     </TooltipProvider>,
   );
 }
@@ -154,12 +157,27 @@ describe("the table of the Usage screen", () => {
     expect([officialLine(), tableRows().slice(1)]).toEqual([
       `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}.`,
       [
-        ["Account storage", "5 MB", "10 GB", "0%", ""],
+        ["Account storage, highest in 24 hours", "5 MB", "10 GB", "0%", ""],
         ["Account requests today", "1,318", "100,000", "1%", ""],
         ["Database rows read today", "13,902", "5,000,000", "0%", ""],
         ["Storage writes this month", "41,200", "1,000,000", "4%", ""],
         ["Storage reads this month", "310,000", "10,000,000", "3%", ""],
       ],
+    ]);
+  });
+
+  // Drift: the day's and the month's numbers are of a UTC day; called "today" and "this month" on a reader's other date, they read as numbers of a day they are not of.
+  test("names the UTC day and month of the numbers where the reader's date was another when they were read, in the table, on a phone, and in every name a screen reader hears", async () => {
+    await draw({ ...OWN, lines: [line("requests", 1240, 100_000, { setting: "requests_per_day", link: PAGES.requests }), line("storage_reads", 310_000, 10_000_000)] }, new Date(2026, 11, 2, 12).getTime());
+
+    expect([tableRows().slice(1), phoneRows(), hostLinks().map(([name]) => name), screen.getAllByRole("button", { name: /^Change/ }).map((way) => way.getAttribute("aria-label"))]).toEqual([
+      [
+        ["Requests on 15 Nov UTC", "1,240", "100,000", "1%", ""],
+        ["Storage reads in Nov UTC", "310,000", "10,000,000", "3%", ""],
+      ],
+      ["Requests on 15 Nov UTC1,240of 100,0001%See it at Provider", "Storage reads in Nov UTC310,000of 10,000,0003%"],
+      ["Requests on 15 Nov UTC: see it at Provider", "Requests on 15 Nov UTC: see it at Provider"],
+      ["Change the limit of Requests on 15 Nov UTC", "Change the limit of Requests on 15 Nov UTC"],
     ]);
   });
 

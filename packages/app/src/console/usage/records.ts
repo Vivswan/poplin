@@ -4,7 +4,7 @@
 //   requests        the sites' requests of the day, sampled    every request the account answered today
 //   rows read       the rows this install's database read      the account's rows read today
 //   rows written    the rows this install's database wrote     the account's rows written today
-//   storage         the bytes the sites hold                   the bytes the account's storage holds
+//   storage         the bytes the sites hold                   the bytes the account's storage held, each part at its most in a day
 //   storage calls   none                                       the month's writes and reads of the storage
 //
 // The names, the numbers, and the addresses are the host's: this file names no host.
@@ -27,7 +27,7 @@ export interface HostFigures {
   /** The rows the account's databases wrote on the UTC day. */
   readonly rowsWritten?: number;
 
-  /** The bytes the account's storage holds. */
+  /** The bytes the account's storage held: every part of it at its most in the 24 hours before the host was asked, added up. */
   readonly storedBytes?: number;
 
   /** The writes and listings of the storage in the UTC month. */

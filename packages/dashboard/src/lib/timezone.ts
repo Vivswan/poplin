@@ -81,6 +81,20 @@ export function dayIn(moment: number, choice: TimeZoneChoice = shown, own?: stri
 }
 
 /**
+ * The date of a moment in the chosen time zone, as a UTC day is written: 2026-11-14.
+ *
+ * @param moment - milliseconds since the epoch
+ * @param choice - the time zone to read the date in; left out, the one a person chose
+ * @param own - the name of the browser's own time zone; left out, the browser's
+ */
+export function dateIn(moment: number, choice: TimeZoneChoice = shown, own?: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: timeZoneOf(choice, own) }).formatToParts(moment);
+  const [year, month, day] = (["year", "month", "day"] as const).map((type) => parts.find((part) => part.type === type)?.value ?? "");
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * The short name of the browser's own time zone at a moment, such as CET or GMT+1: it differs between summer and winter.
  *
  * @param own - the name of the time zone; left out, the browser's
