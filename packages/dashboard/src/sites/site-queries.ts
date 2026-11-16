@@ -1,13 +1,18 @@
 // How the Sites screen reads its data: one page of the table and one site, each kept under a key that every change of a site makes stale.
 
+import { unwrapped } from "@poplin/core/src/sites/references";
 import { keepPreviousData, type UseQueryResult, useQuery } from "@tanstack/react-query";
 import type { InferResponseType } from "hono/client";
 
 import { answerOf, api } from "@/lib/api";
+import { BOOT } from "@/lib/boot";
 import { filterOf, sortOf } from "@/sites/sites-query";
 
 /** The first part of every key the sites' data is kept under: a change of a site marks all of it stale, so the table and the panel read again. */
 export const SITES_KEY = ["sites"] as const;
+
+/** How the dashboard's own address of a site's panel begins: the site's label follows. */
+const PANEL_ADDRESS = `${location.origin}${BOOT.base}/sites/`;
 
 /** One page of the table as the server answers it: the sites, the name of each login by its id, and the cursor of the following page or `null`. */
 type Page = InferResponseType<typeof api.sites.$get, 200>;
@@ -15,11 +20,25 @@ type Page = InferResponseType<typeof api.sites.$get, 200>;
 /** One site as the server answers it: the site, and the name of each login by its id. */
 export type Shown = InferResponseType<(typeof api.sites)[":site"]["$get"], 200>;
 
+/**
+ * What the server is asked to find: the text as typed, or the site's label out of the dashboard's own address of a site's panel, as copied from the browser's bar.
+ *
+ * The server knows a site by its label and by its links, and this address is neither: it is the dashboard's.
+ */
+function soughtIn(typed: string): string {
+  const text = unwrapped(typed);
+  if (!text.startsWith(PANEL_ADDRESS)) return typed.trim();
+
+  const [label = ""] = text.slice(PANEL_ADDRESS.length).split(/[/?#]/u);
+
+  return label === "" ? typed.trim() : label;
+}
+
 /** What the table's address asks of the server, with only the keys and values the server knows. */
 function pageQueryOf(query: URLSearchParams): NonNullable<Parameters<typeof api.sites.$get>[0]>["query"] {
   const filter = filterOf(query);
   const sort = sortOf(query);
-  const search = (query.get("q") ?? "").trim();
+  const search = soughtIn(query.get("q") ?? "");
   const after = query.get("after");
 
   return {
