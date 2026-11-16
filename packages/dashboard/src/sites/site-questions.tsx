@@ -3,7 +3,7 @@
 import { type ReactNode, type RefObject, useRef } from "react";
 import { useDebounce } from "use-debounce";
 
-import { ACCESSES, type Access, LONGEST_NAME, plainAddress, type Site, shownName } from "@/lib/sites";
+import { ACCESSES, type Access, plainAddress, type Site, shownName } from "@/lib/sites";
 import { AskDialog } from "@/shared/ask-dialog";
 import { Confirm, type Question } from "@/shared/confirm";
 import { DeleteForGoodQuestion } from "@/sites/delete-for-good-question";
@@ -120,7 +120,6 @@ export function SiteQuestions({
         label="Public name"
         under={(name) => <PublicAddress name={name} />}
         initial={shown?.name ?? ""}
-        maxLength={LONGEST_NAME}
         takesInitial
         returnTo={returnTo}
         submit="Make it public"

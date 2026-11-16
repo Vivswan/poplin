@@ -34,9 +34,6 @@ interface AskDialogProps {
   /** The value the field opens with. */
   readonly initial: string;
 
-  /** The most characters the field takes. */
-  readonly maxLength?: number;
-
   /** `true` where the value the field opens with is itself an answer: the button is then on for it. */
   readonly takesInitial?: boolean;
 
@@ -51,7 +48,7 @@ interface AskDialogProps {
 }
 
 /** Ask for one value in a dialog. The button stays off while the value is empty, and while it is unchanged unless the value it opened with is an answer. */
-export function AskDialog({ open, onOpenChange, title, says, label, hint, under, initial, maxLength, takesInitial = false, returnTo, submit, onSubmit }: AskDialogProps): ReactNode {
+export function AskDialog({ open, onOpenChange, title, says, label, hint, under, initial, takesInitial = false, returnTo, submit, onSubmit }: AskDialogProps): ReactNode {
   const [value, setValue] = useState(initial);
   const [refusal, setRefusal] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -96,7 +93,6 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, under,
               onFocus={(event) => event.currentTarget.select()}
               autoComplete="off"
               spellCheck={false}
-              maxLength={maxLength}
               aria-required
               autoFocus
             />
