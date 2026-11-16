@@ -84,7 +84,7 @@ export const earlierIds = sqliteTable(
   (table) => [index("earlier_ids_by_folder").on(table.folder)],
 );
 
-/** The hashed record of every token. Only an admin token expires. A removed token keeps its row, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
+/** The hashed record of every token. Only an admin token expires. A removed token keeps its row for a time, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
 export const tokens = sqliteTable(
   "tokens",
   {
@@ -152,7 +152,7 @@ export const totals = sqliteTable(
   ],
 );
 
-/** What was done, by whom, and when; rows are only ever added. The logins among them are indexed, so whether anyone has logged in is read from one entry. */
+/** What was done, by whom, and when; rows are added at the newest end and leave at the oldest. The logins among them are indexed, so whether one is held is read from one entry. */
 export const audit = sqliteTable(
   "audit",
   {

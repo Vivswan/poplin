@@ -1,10 +1,10 @@
-// The statements that search the audit log, count it and find where a part of it ends, and what each answers. Each reads no further than it is told, since the provider charges every row a statement reads.
+// The statements that search the audit log, count it, find where a part of it ends and trim its oldest end, and what each answers. Each reads no further than it is told, since the provider charges every row a statement reads.
 
 import { and, asc, count, desc, eq, getTableColumns, gt, inArray, isNull, lt, min, type SQL, sql as fragment, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 
-import { type AuditAction, auditFromRow } from "../records/audit";
+import { type AuditAction, auditFromRow, HISTORY_KEPT_MS } from "../records/audit";
 import { COUNT, POSITIVE, SITE_ID, SITE_NAME } from "../records/fields";
 import { TITLE } from "../records/site";
 import type { SiteId } from "../sites/ids";
@@ -19,6 +19,18 @@ const AUDIT_COUNT_ROW = v.object({ whole: v.picklist([0, 1]), found: COUNT });
 
 /** The oldest and the newest `seq` of the log, as the statement of its ends answers them: both `null` for an empty log. */
 const AUDIT_ENDS_ROW = v.object({ oldest: v.nullable(POSITIVE), newest: v.nullable(POSITIVE) });
+
+/** The most entries one trim of the log removes. The sweep trims up to 96 times a day, and the provider counts each entry removed as a row written. */
+const MOST_ENTRIES_TRIMMED = 100;
+
+/** The oldest `seq` of the log. */
+const OLDEST_SEQ = fragment`(SELECT min(${audit.seq}) FROM ${audit})`;
+
+/** The newest `seq` of the log. */
+const NEWEST_SEQ = fragment`(SELECT max(${audit.seq}) FROM ${audit})`;
+
+/** True once anybody has logged in: the log holds a login, or lost its first entry, which only a log that held a login does. The kind stands in the text itself, since the engine reads the index of the logins only for a kind it can see there. */
+const EVER_LOGGED_IN = fragment`(EXISTS (SELECT 1 FROM ${audit} WHERE ${audit.action} = 'login') OR coalesce(${OLDEST_SEQ} > 1, 0))`;
 
 /** The `sites` table as `held`: the site that has the id an entry holds. */
 const HELD = alias(sites, "held");
@@ -108,6 +120,25 @@ function auditOf(id: SiteId | undefined): SQL | undefined {
   return fragment`(${audit.site_id} = ${id} OR ${audit.site_id} IN ${now} OR ${audit.site_id} IN ${before})`;
 }
 
+/** Build the statement that reads whether anybody has ever logged in, as `found`, 1 or 0: one row read once somebody has, and two before. */
+export function everLoggedInAsked(): Statement {
+  return written(fragment`SELECT ${EVER_LOGGED_IN} AS found`);
+}
+
+/**
+ * Build the statement that removes the oldest entries of the log written over 90 days before a moment: no more than `MOST_ENTRIES_TRIMMED` of them, never the newest entry, and none past the first entry that is kept.
+ *
+ * So the log loses one run of entries from its oldest end, and a count from its two ends stays the count of its rows. A log nobody has logged in to loses nothing: its first entry is what says so.
+ * With nothing to remove it reads the log's two ends, its oldest entry, and whether anybody logged in, and writes no row.
+ */
+export function auditTrimmed(now: number): Statement {
+  const ends = fragment`(SELECT ${OLDEST_SEQ} AS oldest, ${NEWEST_SEQ} AS newest) AS ends`;
+  const firstKept = fragment`(SELECT ${audit.seq} FROM ${audit} WHERE ${audit.at} >= ${now - HISTORY_KEPT_MS} AND ${audit.seq} < ends.oldest + ${MOST_ENTRIES_TRIMMED} ORDER BY ${audit.seq} LIMIT 1)`;
+  const bound = fragment`(SELECT min(ends.oldest + ${MOST_ENTRIES_TRIMMED}, coalesce(${firstKept}, ends.newest)) FROM ${ends})`;
+
+  return written(fragment`DELETE FROM ${audit} WHERE ${audit.seq} < ${bound} AND ${EVER_LOGGED_IN}`);
+}
+
 /** Build the statement that reads the oldest and the newest `seq` of the log: two rows read, whatever the log's length. */
 export function auditEndsAsked(): Statement {
   return written(fragment`SELECT (SELECT min(${audit.seq}) FROM ${audit}) AS oldest, (SELECT max(${audit.seq}) FROM ${audit}) AS newest`);
@@ -175,7 +206,7 @@ export function auditStopIn(ends: StatementResult | undefined, query: AuditSearc
 }
 
 /**
- * Build the statement that counts the entries a narrowing keeps among the newest `most` of the log. An entry's `seq` is its place: the log is only ever added to, one `seq` after the other.
+ * Build the statement that counts the entries a narrowing keeps among the newest `most` of the log. An entry's `seq` is its place: the log is added to one `seq` after the other, and loses entries at its oldest end alone.
  *
  * With no narrowing the count is read off the log's two ends, the newest `seq` less the oldest and one: two rows, whatever the log's length. No `seq` is left out between them.
  *

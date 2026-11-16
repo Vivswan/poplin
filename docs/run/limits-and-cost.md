@@ -141,6 +141,7 @@ Cloudflare's free plan     one request: 50 database queries
 - **The day's count** is written for every request of a day's first 2,000, then for 1 in 2, then 1 in 3, and so on down to 1 in 50 from 98,000 on. A request that is not counted writes no row, and is 1 query on a Worker that served the site a moment before.
 - **The storage** is read once for a page view. A path that names no file reads it up to 3 times.
 - **A Worker that starts** with a request asks 2 queries more for it.
+- **The clean-up**, every 15 minutes, removes at most 100 Activity entries and 25 ended tokens that are over 90 days old: 125 rows written. With none that old it writes no row.
 - **The Usage screen** reads the most rows when its graph shows a year of 50 sites, and the Activity screen when it is narrowed to a site or a kind: it then looks at up to 5,000 entries.
 
 ## Database rows by day

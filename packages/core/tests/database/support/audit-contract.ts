@@ -30,6 +30,9 @@ import {
   storedBack,
 } from "./database-fixtures";
 
+/** One day, in milliseconds. */
+const DAY_MS = 86_400_000;
+
 export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the audit log`, () => {
     const signed: Signed = { by: BO, at: NOW + 1 };
@@ -376,6 +379,63 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       } while (read.at(-1)?.length === 2);
 
       expect<unknown>(read).toEqual(pages);
+    });
+  });
+}
+
+export function auditTrim(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the sweep's trim of the audit log`, () => {
+    const at = (daysAgo: number): Signed => ({ by: ADMIN, at: NOW - daysAgo * DAY_MS });
+    const held = async (database: Database): Promise<unknown> => [(await auditTrail(database)).map((entry) => entry.seq), await database.countAudit({ most: 1000 })];
+
+    // Drift: the Activity screen counts the log from its two ends. A trim that took an old entry from behind a kept one would leave a gap and a count one too many, and one that took the newest entry would let the next entry take its number.
+    test("it removes the entries of over 90 days ago from the oldest end up to the first one kept, never the newest, and the count from the two ends stays the count of the rows", async () => {
+      const database = await opened(makeDatabase);
+      for (const daysAgo of [100, 91, 90, 95, 1]) await database.appendAudit({ action: "login", detail: {} }, at(daysAgo));
+
+      await database.sweepRunOut(NOW);
+      const once = await held(database);
+      await database.sweepRunOut(NOW + 200 * DAY_MS);
+      const allOld = await held(database);
+      await database.appendAudit({ action: "login", detail: {} }, at(-200));
+
+      expect([once, allOld, await held(database)]).toEqual([
+        [[3, 4, 5], { count: 3, whole: true }],
+        [[5], { count: 1, whole: true }],
+        [[5, 6], { count: 2, whole: true }],
+      ]);
+    });
+
+    // Drift: the provider counts every entry a sweep removes against the day's writes, so one run takes a bounded number and the next goes on where it stopped.
+    test("one sweep removes no more than 100 entries, and the next one goes on", async () => {
+      const database = await opened(makeDatabase);
+      for (let entry = 0; entry < 105; entry += 1) await database.appendAudit({ action: "login", detail: {} }, at(100));
+      await database.appendAudit({ action: "login", detail: {} }, at(1));
+
+      await database.sweepRunOut(NOW);
+      const once = await held(database);
+      await database.sweepRunOut(NOW);
+
+      expect([once, await held(database)]).toEqual([
+        [[101, 102, 103, 104, 105, 106], { count: 6, whole: true }],
+        [[106], { count: 1, whole: true }],
+      ]);
+    });
+
+    // Drift: the setup page is shut by the first login for good. A trim that took the only login entry and left no sign would open the page again to anyone, and with it the change of who may log in.
+    test("a log nobody logged in to loses nothing, and one that lost its login entries still says that somebody logged in", async () => {
+      const database = await opened(makeDatabase);
+      for (const daysAgo of [100, 100, 1]) await database.appendAudit({ action: "domain_synced", detail: {} }, at(daysAgo));
+      await database.sweepRunOut(NOW);
+      const unused = [await held(database), await database.hasLoggedIn()];
+      await database.appendAudit({ action: "login", detail: {} }, at(1));
+      await database.appendAudit({ action: "domain_synced", detail: {} }, at(0));
+      await database.sweepRunOut(NOW + 200 * DAY_MS);
+
+      expect([unused, [await held(database), await database.hasLoggedIn()]]).toEqual([
+        [[[1, 2, 3], { count: 3, whole: true }], false],
+        [[[5], { count: 1, whole: true }], true],
+      ]);
     });
   });
 }

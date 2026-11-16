@@ -1,10 +1,11 @@
-// The statements that read tokens and the logins of computers, and the ones that make room for a new login.
+// The statements that read tokens and the logins of computers, the ones that make room for a new login, and the one that removes the tokens that ended long ago.
 
-import { and, eq, inArray, isNull, type SQL, sql as fragment } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, type SQL, sql as fragment } from "drizzle-orm";
 import * as v from "valibot";
 
 import type { PendingLogin } from "../auth/computer-logins";
 import type { TokenId } from "../auth/tokens";
+import { HISTORY_KEPT_MS } from "../records/audit";
 import { TOKEN_ID } from "../records/fields";
 import type { Statement } from "./driver";
 import { logins, tokens } from "./schema";
@@ -25,6 +26,9 @@ export const NAMED_TOKEN = v.object({ id: TOKEN_ID, note: v.string() });
 /** True of a token that was not removed. Every read of a token that may prove something holds it. */
 export const NOT_REMOVED = isNull(tokens.removed_at);
 
+/** The most tokens one trim removes. The sweep trims up to 96 times a day, and the provider counts a token removed as up to three rows written. */
+const MOST_TOKENS_TRIMMED = 25;
+
 /** The token with the given id, unless it was removed. */
 export function tokenById(id: TokenId): Statement {
   return built(BUILD.select(TOKEN_FIELDS).from(tokens).where(and(eq(tokens.id, id), NOT_REMOVED)));
@@ -33,6 +37,17 @@ export function tokenById(id: TokenId): Statement {
 /** The id and the note of each of these tokens that has a note, removed or not: a name proves nothing. The ids are the only values bound to the statement, and a database binds only so many. */
 export function tokenNames(ids: readonly TokenId[]): Statement {
   return built(BUILD.select({ id: tokens.id, note: tokens.note }).from(tokens).where(and(inArray(tokens.id, ids), fragment`${tokens.note} <> ''`)));
+}
+
+/**
+ * Build the statement that removes the tokens that ended over 90 days before a moment, the longest ended first, no more than `MOST_TOKENS_TRIMMED` of them.
+ *
+ * Only a token's end decides: `end_at` is its removal, else its expiry, and is `NULL` for a token that never ends. A token that works at the moment has no end before it, however long ago it was made.
+ */
+export function endedTokensTrimmed(now: number): Statement {
+  const longEnded = BUILD.select({ id: tokens.id }).from(tokens).where(lt(tokens.end_at, now - HISTORY_KEPT_MS)).orderBy(asc(tokens.end_at)).limit(MOST_TOKENS_TRIMMED);
+
+  return built(BUILD.delete(tokens).where(inArray(tokens.id, longEnded)));
 }
 
 /** The logins a condition holds for. */

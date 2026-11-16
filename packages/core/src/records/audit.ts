@@ -1,10 +1,13 @@
-// An entry of the audit log: what was done, by whom, when, and to which site. Entries are only ever added.
+// An entry of the audit log: what was done, by whom, when, and to which site. Entries are added at the newest end and leave at the oldest, once they are past the days kept.
 
 import * as v from "valibot";
 
 import type { SiteName } from "../names/names";
 import type { SiteId } from "../sites/ids";
 import { HOLDER, type Holder, MOMENT, POSITIVE, SITE_ID, SITE_NAME } from "./fields";
+
+/** How long an entry of the log, and a token that ended, are kept before the sweep removes them, in milliseconds: 90 days. */
+export const HISTORY_KEPT_MS = 90 * 86_400_000;
 
 /** Every action the log names, each written with the change it tells of. `login` stands alone; the three after it go with a computer's login and a domain sync, and the last three with the address that starts a rebuild. */
 const AUDIT_ACTIONS = [

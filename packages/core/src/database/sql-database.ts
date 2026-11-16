@@ -3,7 +3,7 @@
 // A change is one batch: the statement that changes a row carries its own condition, and each statement after it runs only when the one before it changed a row.
 // So a change and its audit entry are kept together or not at all, and nothing is decided from an earlier read.
 
-import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 
@@ -11,7 +11,7 @@ import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/com
 import type { Login } from "../auth/logins";
 import type { TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName } from "../names/names";
-import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audit";
+import { type AuditAction, type AuditEntry, auditFromRow, HISTORY_KEPT_MS } from "../records/audit";
 import type { CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
 import type { Problem } from "../records/problem";
@@ -27,7 +27,7 @@ import { endedTokenFromRow, tokenFromRow } from "../records/token";
 import { type ManifestFile, type Upload, type UploadId, uploadFromRow } from "../records/upload";
 import type { VersionContents } from "../records/version-contents";
 import { type DailyViews, dayOf, daysUpTo, KEPT_DAYS, MOST_SITES_COMPARED, type SiteViews, viewDays } from "../records/views";
-import { auditCountAsked, auditCountIn, auditEndsAsked, auditListAsked, auditPartEndAsked, auditPartEndIn, auditSearchAsked, auditStopIn, namedAuditIn } from "./audit-reads";
+import { auditCountAsked, auditCountIn, auditEndsAsked, auditListAsked, auditPartEndAsked, auditPartEndIn, auditSearchAsked, auditStopIn, auditTrimmed, everLoggedInAsked, namedAuditIn } from "./audit-reads";
 import type {
   AuditCount,
   AuditCountQuery,
@@ -108,6 +108,7 @@ import {
   NOT_REMOVED,
   TOKEN_COLUMNS,
   TOKEN_FIELDS,
+  endedTokensTrimmed,
   isNewLogin,
   loginsWhere,
   makeRoomOfAll,
@@ -968,8 +969,8 @@ export class SqlDatabase implements Database {
 
     const works = and(NOT_REMOVED, or(isNull(tokens.expires_at), gt(tokens.expires_at, now)));
     const live = BUILD.select(TOKEN_FIELDS).from(tokens).where(works).orderBy(desc(tokens.created_at), desc(tokens.id));
-    // A removal is never ahead of the clock, so `end_at` up to now holds every removed token and every one that ran out.
-    const ended = BUILD.select(ENDED_TOKEN_FIELDS).from(tokens).where(lte(tokens.end_at, now)).orderBy(desc(tokens.end_at), desc(tokens.id));
+    // A removal is never ahead of the clock, so `end_at` up to now holds every removed token and every one that ran out. One that ended before the days kept waits for the sweep, and is told no more.
+    const ended = BUILD.select(ENDED_TOKEN_FIELDS).from(tokens).where(and(lte(tokens.end_at, now), gte(tokens.end_at, now - HISTORY_KEPT_MS))).orderBy(desc(tokens.end_at), desc(tokens.id));
     const [lived, over] = await this.#driver.batch([built(live), built(ended.limit(mostEnded + 1))]);
     const rows = over?.rows ?? [];
 
@@ -1063,6 +1064,8 @@ export class SqlDatabase implements Database {
       dropEarlierDays(day),
       // The days before the oldest one kept are dropped, so the table holds a year.
       built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(day, KEPT_DAYS)[0] ?? day))),
+      auditTrimmed(now),
+      endedTokensTrimmed(now),
     ]);
 
     return removed?.changes ?? 0;
@@ -1312,8 +1315,7 @@ export class SqlDatabase implements Database {
   }
 
   async hasLoggedIn(): Promise<boolean> {
-    // The kind stands in the statement itself: the engine reads the index of the logins only for a kind it can see there.
-    const [read] = await this.#driver.batch([written(fragment`SELECT EXISTS (SELECT 1 FROM ${audit} WHERE ${audit.action} = 'login') AS found`)]);
+    const [read] = await this.#driver.batch([everLoggedInAsked()]);
 
     return read?.rows[0]?.found === 1;
   }

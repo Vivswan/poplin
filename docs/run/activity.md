@@ -7,6 +7,8 @@ order: 35
 
 The dashboard's Activity screen lists every change of a site, a token, or a setting, the newest first, and saves the list as files. [Security](../about/security.md#hardening) names the actions it holds.
 
+Entries older than 90 days are removed, a few at a time; the newest entry always stays. A removed token, or one that ran out, is listed under Access for 90 days.
+
 ## Read the log
 
 | On the screen                        | Does                                                                         |

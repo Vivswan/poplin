@@ -129,7 +129,7 @@ A computer's login is a token. The dashboard lists them under Access, Tokens.
 | ------------------------------ | -------------------------------------------------------------------------- |
 | a token that works             | its name, what it can change, when it was allowed, when it runs out        |
 | Remove, in the menu of its row | ends it at once                                                            |
-| Removed tokens, folded         | the 50 that ended last, each with `Removed by` and who did it, `Logged out`, or `Ran out` |
+| Removed tokens, folded         | the 50 that ended last in the past 90 days, each with `Removed by` and who did it, `Logged out`, or `Ran out` |
 
 A removed token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. [Security](../about/security.md#hardening) says what the install stores of a token.
 
