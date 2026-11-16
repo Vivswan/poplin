@@ -1,6 +1,7 @@
 // What each data route of the dashboard may cost, and the page around them: one row a route, seeded for the worst the product's own limits let it meet.
 
 import type { DataRoutes } from "@poplin/app/src/console/routes";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import type { hc, InferRequestType } from "hono/client";
 import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";
@@ -11,7 +12,7 @@ import { endedTokens, manyEntries, manyProblems, manySites, manyTokens, newLinks
 const group = "Each dashboard screen";
 
 /** A release newer than any build, as the install keeps it once it has learned of one. */
-const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", database: true };
+const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA + 1 };
 
 /** An address the provider starts a rebuild at, in the form Cloudflare gives a Deploy Hook. */
 const HOOK = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";

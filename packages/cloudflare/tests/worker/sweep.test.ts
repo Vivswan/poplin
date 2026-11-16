@@ -4,6 +4,7 @@ import { reset } from "cloudflare:test";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ADMIN, api, ask, BINDINGS, done, freePlanBindings, installOf, instance, OWNER, page, problemsOf, publish, refusingDatabase, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
@@ -111,7 +112,7 @@ describe("the scheduled run", () => {
   // Drift: nothing but the scheduled run ever asks which version is the newest. An entry that did not hand it the fetch, or a run that asked every time, would leave the install silent or have it ask the website 96 times a day.
   test("the runs of one day ask the website once, the API then names the newer version to a token, and the next day's first run asks again", async () => {
     const asked: string[] = [];
-    const release = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", database: true };
+    const release = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA + 1 };
     const latest = {
       fetch: async (address: string): Promise<Response> => {
         asked.push(new URL(address).pathname.split("/").at(-1) ?? "");
@@ -144,7 +145,7 @@ describe("the scheduled run", () => {
     const built: string[] = [];
     const tally = { calls: 0 };
     const hook = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-    const latest = { fetch: async (): Promise<Response> => Response.json({ version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", database: false }) };
+    const latest = { fetch: async (): Promise<Response> => Response.json({ version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA }) };
     const rebuild = async (address: string): Promise<Response> => {
       built.push(address);
 

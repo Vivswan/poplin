@@ -66,6 +66,7 @@
     "./src/records/domain-states": "./src/records/domain-states.ts",
     "./src/records/problem": "./src/records/problem.ts",
     "./src/records/release": "./src/records/release.ts",
+    "./src/records/release-bundle": "./src/records/release-bundle.ts",
     "./src/records/settings": "./src/records/settings.ts",
     "./src/records/site": "./src/records/site.ts",
     "./src/records/update": "./src/records/update.ts",

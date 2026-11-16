@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { projectReleases, sourceAddress } from "../../src/deploy/release-source";
+import { bundleAddress, bundleAsset, MANIFEST_FILE, projectReleases, sourceAddress } from "../../src/deploy/release-source";
 
 /** The workflow that packs a release's files and adds them to its page. */
 const RELEASE_WORKFLOW = join(import.meta.dir, "..", "..", "..", "..", ".github", "workflows", "update-release.yml");
@@ -10,8 +10,11 @@ const RELEASE_WORKFLOW = join(import.meta.dir, "..", "..", "..", "..", ".github"
 /** A digest of the published form. */
 const DIGEST = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
+/** One release as the website's file holds it. */
+const PIN = { source: DIGEST, bundle: DIGEST, schema: 1 };
+
 /** The website's file with one release. */
-const ONE_RELEASE = JSON.stringify({ "0.3.1": { source: DIGEST } });
+const ONE_RELEASE = JSON.stringify({ "0.3.1": PIN });
 
 /** What a source asked of the world: each address, in order. */
 type Asked = string[];
@@ -30,7 +33,7 @@ function body(status: number, text: string | Uint8Array<ArrayBuffer>): () => Pro
 
 describe("projectReleases", () => {
   const files: readonly { readonly name: string; readonly answer: () => Promise<Response>; readonly pins: unknown }[] = [
-    { name: "200 with the file", answer: body(200, ONE_RELEASE), pins: { "0.3.1": { source: DIGEST } } },
+    { name: "200 with the file", answer: body(200, ONE_RELEASE), pins: { "0.3.1": PIN } },
     { name: "200 with a file that names no release", answer: body(200, "{}"), pins: {} },
     { name: "200 with a page that is not the file", answer: body(200, "<!doctype html><title>poplin</title>"), pins: undefined },
     { name: "200 with a list", answer: body(200, "[]"), pins: undefined },
@@ -69,5 +72,22 @@ describe("projectReleases", () => {
     const packed = /git archive --format=tar\.gz --prefix=(\S+) --output="(\S+)" HEAD/.exec(workflow);
 
     expect([packed?.[1], packed?.[2]?.replaceAll("$version", "0.2.0")]).toEqual(["poplin/", sourceAddress("0.2.0").split("/").at(-1)]);
+  });
+
+  // Drift: the workflow names the built files in its own words, the website's build and an install in code; apart, the website finds no built file on any release's page and stops.
+  test("the release workflow attests and uploads the built Worker under the names its files are fetched by, from the folder the build wrote them to", () => {
+    const workflow = readFileSync(RELEASE_WORKFLOW, "utf8").replaceAll(/\$\{\{ steps\.pack\.outputs\.version \}\}/g, "0.2.0").replaceAll(/\$\{\{ runner\.temp \}\}/g, "TEMP");
+    const names = [MANIFEST_FILE, "worker.js", "worker.js.map"].map((file) => bundleAsset("0.2.0", file));
+    const built = `TEMP/bundle/first/${bundleAsset("0.2.0", "worker")}`;
+
+    expect({
+      attested: names.map((name) => workflow.includes(`\n            TEMP/bundle/first/${name}\n`)),
+      uploaded: [workflow.includes(`BUILT: ${built}\n`), workflow.includes(`"$ARCHIVE" "$BUILT.json" "$BUILT.js" "$BUILT.js.map" --clobber`)],
+      fetched: [MANIFEST_FILE, "worker.js"].map((file) => bundleAddress("0.2.0", file)),
+    }).toEqual({
+      attested: [true, true, true],
+      uploaded: [true, true],
+      fetched: ["https://github.com/Vivswan/poplin/releases/download/v0.2.0/poplin-0.2.0-worker.json", "https://github.com/Vivswan/poplin/releases/download/v0.2.0/poplin-0.2.0-worker.js"],
+    });
   });
 });

@@ -2,11 +2,17 @@
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
 # Publishing waits for every job, and every asset uploaded here is attested at publish time.
 #
-# The one asset is the release's source files, which an install's hosted build fetches and runs. The website publishes
-# its SHA-256 digest only when the attestation made HERE holds: by this workflow, in a run of main. So the archive is
-# attested in the job that packed it, never after a round trip through the draft, where a write token could swap it.
+# The assets are the release's source files, which an install's hosted build fetches and runs, and its built Worker: the
+# one module a deploy uploads, its source map, and a manifest that states the digest and size of both, the version, and
+# the schema. The website publishes the digests only when the attestation made HERE holds: by this workflow, in a run of
+# main. So every file is attested in the run that made it, never after a round trip through the draft, where a write
+# token could swap it.
+#
+#   build-bundle     installs the dependencies and builds the Worker, twice; holds no right to sign and reads no secret
+#   update-release   packs the source, takes the built files, attests all four, uploads them; runs nothing of the tree
 #
 #   the tag's commit is not on main, or its files say another version than the tag -> the job fails, nothing is uploaded
+#   the two builds of the Worker differ by one byte                                -> the same
 
 name: Update Release
 
@@ -19,7 +25,43 @@ on:
         type: string
 
 jobs:
+  # The dependencies are installed and the tree's scripts run here, so this job may only read the repository. It runs
+  # twice: a second build that gives other bytes fails the release, so that anyone who builds the commit gets the files.
+  build-bundle:
+    name: build the Worker (${{ matrix.build }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        build: [first, second]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The full name: a branch named like the tag would be taken before it.
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+          # The whole history, so the tag's commit can be looked for on main.
+          fetch-depth: 0
+      - name: Refuse a tag whose commit is not on main
+        run: git merge-base --is-ancestor HEAD refs/remotes/origin/main
+      - name: Refuse files that say another version than the tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: test "v$(jq -r .version packages/cli/package.json)" = "$RELEASE_TAG"
+      - uses: ./.github/actions/setup
+      - name: Build the Worker and write its manifest
+        run: bun run --cwd packages/cloudflare bundle "$RUNNER_TEMP/bundle"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: worker-bundle-${{ matrix.build }}
+          path: ${{ runner.temp }}/bundle
+          if-no-files-found: error
+          retention-days: 1
+
   update-release:
+    needs: [build-bundle]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -47,12 +89,31 @@ jobs:
           version="$(jq -r .version packages/cli/package.json)"
           git archive --format=tar.gz --prefix=poplin/ --output="poplin-$version.tar.gz" HEAD
           echo "file=poplin-$version.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Take the built Worker of the first build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: worker-bundle-first
+          path: ${{ runner.temp }}/bundle/first
+      - name: Take the built Worker of the second build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: worker-bundle-second
+          path: ${{ runner.temp }}/bundle/second
+      - name: Refuse built files that the second build of the same commit did not give
+        run: diff -r "$RUNNER_TEMP/bundle/first" "$RUNNER_TEMP/bundle/second"
+      # The built files are named one by one, by the version the tree says: a file the build added beside them is neither attested nor uploaded.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: ${{ steps.pack.outputs.file }}
-      - name: Add the archive to the draft release
+          subject-path: |
+            ${{ steps.pack.outputs.file }}
+            ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker.json
+            ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker.js
+            ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker.js.map
+      - name: Add the archive and the built Worker to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           ARCHIVE: ${{ steps.pack.outputs.file }}
-        run: gh release upload "$RELEASE_TAG" "$ARCHIVE" --clobber
+          BUILT: ${{ runner.temp }}/bundle/first/poplin-${{ steps.pack.outputs.version }}-worker
+        run: gh release upload "$RELEASE_TAG" "$ARCHIVE" "$BUILT.json" "$BUILT.js" "$BUILT.js.map" --clobber

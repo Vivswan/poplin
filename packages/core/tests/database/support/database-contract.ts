@@ -126,7 +126,7 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
     // Drift: the day's one question about a newer version is asked again only when the kept moment is of another day. A moment or a release that read back changed would ask on every scheduled run, or show a release nobody published.
     test("what was kept reads back as it was, with a release and with none, and the last kept is the one read", async () => {
       const database = await opened(makeDatabase);
-      const release = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: true };
+      const release = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", schema: 2 };
       const before = await database.readUpdateCheck();
 
       await database.keepUpdateCheck({ checked_at: NOW, news: null });
@@ -143,7 +143,7 @@ function updateCheck(label: string, makeDatabase: DatabaseFactory): void {
     // Drift: the install starts a release by itself only some days after it first learned of its version. A moment that moved with every asking would never let the wait end, and one that stayed over a new version would start that one at once.
     test("the moment a version was first learned of stays while later askings name it, moves when they name another, and goes when they name none", async () => {
       const database = await opened(makeDatabase);
-      const release = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: false };
+      const release = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", schema: 1 };
       const kept = [];
 
       for (const news of [release, { ...release, notes: "https://example.com/changelog/" }, { ...release, version: "0.3.0" }, null, release]) {

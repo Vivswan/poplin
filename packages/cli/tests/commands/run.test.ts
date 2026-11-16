@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import type { Code } from "../../../app/src/api/respond";
 import type { Login as Email } from "../../../core/src/auth/logins";
+import { OWN_SCHEMA } from "../../../core/src/database/open";
 import { answered, INSTALL_VERSION, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
 import { saveLogin } from "../../src/local/login-file";
 import type { Login } from "../../src/local/login";
@@ -343,7 +344,7 @@ describe("run", () => {
     const bench = await openBench();
     const login = { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.admin };
     const withAddress = { env: { ...login, POPLIN_UPDATE_ADDRESS: REBUILD_ADDRESS } };
-    await bench.install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false } });
+    await bench.install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", schema: OWN_SCHEMA } });
 
     const none = await bench.run("update");
     const empty = await bench.run("update --save-address");
@@ -576,7 +577,7 @@ describe("run", () => {
     const bench = await openBench();
     const before = await bench.run("doctor");
     const unknown = jsonOf(await bench.run("doctor --json"));
-    await bench.install.database.keepUpdateCheck({ checked_at: 1_700_000_000_000, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false } });
+    await bench.install.database.keepUpdateCheck({ checked_at: 1_700_000_000_000, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", schema: OWN_SCHEMA } });
 
     const report = await bench.run("doctor");
 

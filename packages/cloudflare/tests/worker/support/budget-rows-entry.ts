@@ -1,6 +1,7 @@
 // What a visitor's request, a login, the setup page, an instance's start, and a scheduled run may cost.
 
 import { reset } from "cloudflare:test";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import { vi } from "vitest";
 import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
@@ -21,7 +22,7 @@ const BACKGROUND: Group = "Background work";
 const DAY_MS = 86_400_000;
 
 /** A release newer than any build that changes no database, which an install with `auto_update` on starts by itself. */
-const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", database: false };
+const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA };
 
 /** An address the provider starts a rebuild at, in the form Cloudflare gives a Deploy Hook. */
 const HOOK = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";

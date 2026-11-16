@@ -3,6 +3,7 @@
 import gt from "semver/functions/gt";
 import * as v from "valibot";
 
+import { OWN_SCHEMA } from "../database/open";
 import { isPlainVersion, UPDATE_NEWS, type UpdateCheck, type UpdateNews } from "../records/update";
 import type { SettingValues } from "../records/settings";
 import { type Install, settingsOf } from "./records";
@@ -21,8 +22,8 @@ export const UPDATE_NOTICE = v.object({
   /** The address of its release notes. */
   notes: UPDATE_NEWS.entries.notes,
 
-  /** Whether updating to it changes the database, which no older poplin can read afterwards. */
-  database: UPDATE_NEWS.entries.database,
+  /** Whether its schema differs from this install's own, so that updating to it changes the database, which no older poplin can read afterwards. */
+  database: v.boolean(),
 });
 
 /** A release newer than the running version. */
@@ -44,6 +45,15 @@ export function newerRelease(check: Pick<UpdateCheck, "news"> | undefined, curre
 }
 
 /**
+ * Whether a release's schema differs from the one this code keeps its database at.
+ *
+ * @returns `true` for a release that changes the database when it starts, which is never started by the install itself
+ */
+export function changesDatabase(release: Pick<UpdateNews, "schema">): boolean {
+  return release.schema !== OWN_SCHEMA;
+}
+
+/**
  * Pick the release an install shows as newer than the running version, from what it has read already. Nothing is read.
  *
  * @param current - the version the install runs
@@ -55,7 +65,7 @@ export function updateIn(read: { readonly settings: Pick<SettingValues, "update_
   const newer = newerRelease(read.updateCheck, current);
   if (newer === undefined) return undefined;
 
-  return { current, newest: newer.version, released: newer.released, notes: newer.notes, database: newer.database };
+  return { current, newest: newer.version, released: newer.released, notes: newer.notes, database: changesDatabase(newer) };
 }
 
 /**

@@ -6,6 +6,9 @@ import type { Database } from "./database";
 import type { SqlDriver } from "./driver";
 import { SqlDatabase } from "./sql-database";
 
+/** The schema this code keeps a database at: the number of its steps. A release states its own, and an install compares the two. */
+export const OWN_SCHEMA = STEPS.length;
+
 /** The answer to `openDatabase`: the database ready for use with the steps this call applied, or why it cannot be used. */
 export type Opened = { readonly kind: "open"; readonly database: Database; readonly applied: readonly string[] } | Exclude<Migrated, { kind: "current" }>;
 

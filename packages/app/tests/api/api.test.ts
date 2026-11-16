@@ -5,6 +5,7 @@ import { publishSite } from "@poplin/core/src/actions/publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import type { InferRequestType } from "hono/client";
 import type { ExtractSchema } from "hono/types";
@@ -250,7 +251,7 @@ describe("createApi", () => {
   test("whoami carries the newer release once the install has learned of one, and no such key before", async () => {
     const install = await openApi();
     const before = (await answered(install.routes.whoami.$get({ query: {} }))).body;
-    await install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false } });
+    await install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", schema: OWN_SCHEMA } });
 
     expect(["update" in before, (await answered(install.routes.whoami.$get({ query: {} }))).body.update]).toEqual([
       false,

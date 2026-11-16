@@ -5,11 +5,12 @@ import { type Asking, checkForUpdate } from "../../src/actions/check-update";
 import type { Install } from "../../src/actions/records";
 import type { Rebuilding } from "../../src/actions/start-update";
 import { saveUpdateAddress } from "../../src/actions/update-address";
+import { OWN_SCHEMA } from "../../src/database/open";
 import type { SettingValues } from "../../src/records/settings";
 import { ADMIN, DAY, makeWorld, NOW, type World } from "./support/actions-fixture";
 
 const ADDRESS = "https://builds.example.com/hooks/3f9c2a7e5b";
-const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", database: false };
+const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", schema: OWN_SCHEMA };
 const LATER = { ...RELEASE, version: "0.3.0" };
 const WAIT = 3 * DAY;
 const SWITCHED_ON = { auto_update: true };
@@ -77,8 +78,8 @@ describe("startDueUpdate", () => {
     { name: "auto_update is off, as in a new install", settings: {}, after: WAIT, expected: NOTHING },
     { name: "update_check was switched off after the release was learned", settings: SWITCHED_ON, later: { update_check: false }, after: WAIT, expected: NOTHING },
     { name: "the website does not answer that day", settings: SWITCHED_ON, website: { fetch: async () => new Response("down", { status: 503 }) }, after: WAIT, expected: NOTHING },
-    { name: "the release changes the database", settings: SWITCHED_ON, release: { ...RELEASE, database: true }, after: WAIT, expected: NOTHING },
-    { name: "the release changes the database, a year on", settings: SWITCHED_ON, release: { ...RELEASE, database: true }, after: 365 * DAY, expected: NOTHING },
+    { name: "the release changes the database", settings: SWITCHED_ON, release: { ...RELEASE, schema: OWN_SCHEMA + 1 }, after: WAIT, expected: NOTHING },
+    { name: "the release changes the database, a year on", settings: SWITCHED_ON, release: { ...RELEASE, schema: OWN_SCHEMA + 1 }, after: 365 * DAY, expected: NOTHING },
     { name: "one second before the wait is over", settings: SWITCHED_ON, after: WAIT - 1000, expected: NOTHING },
     { name: "the install runs the newest version", settings: SWITCHED_ON, version: "0.2.0", after: WAIT, expected: NOTHING },
     { name: "the install runs a version that is no three numbers", settings: SWITCHED_ON, version: "0.1.0-dev", after: WAIT, expected: NOTHING },

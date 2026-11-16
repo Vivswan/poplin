@@ -1,4 +1,4 @@
-// The releases an install may take: the project's website publishes each version with the SHA-256 digest of its files, and an install runs no files that do not match.
+// The releases an install may take: the project's website publishes each version with the SHA-256 digest of its source files, the digest of the manifest of its built files, and its schema. An install runs no files that do not match.
 //
 //   older than the version that runs, when the taker gives one   older            nothing is fetched
 //   no digest published for the version                          no_digest        nothing is fetched
@@ -14,17 +14,29 @@ import rsort from "semver/functions/rsort";
 import { uint8ArrayToHex } from "uint8array-extras";
 import * as v from "valibot";
 
-import { isPlainVersion } from "./update";
+import { isPlainVersion, UPDATE_NEWS } from "./update";
 
 /** A SHA-256 digest as it is published: 64 lowercase hex characters. */
-const DIGEST = /^[0-9a-f]{64}$/;
+export const DIGEST = /^[0-9a-f]{64}$/;
 
-/** The file the website publishes, as JSON text: every release an install may take, by its version, with the digest of its source files. The keys are checked first: a record takes a list, and passes over a key such as `constructor`. */
+/** One release as the website publishes it. A key a later poplin added is passed over: installs of every older version read the file. */
+const RELEASE_PIN = v.object({
+  /** The digest of the archive of its source files. */
+  source: v.pipe(v.string(), v.regex(DIGEST)),
+
+  /** The digest of the manifest of its built files. */
+  bundle: v.pipe(v.string(), v.regex(DIGEST)),
+
+  /** How many steps its database has been through. */
+  schema: UPDATE_NEWS.entries.schema,
+});
+
+/** The file the website publishes, as JSON text: every release an install may take, by its version, with what `RELEASE_PIN` holds. The keys are checked first: a record takes a list, and passes over a key such as `constructor`. */
 const RELEASE_PINS = v.pipe(
   v.string(),
   v.parseJson(),
   v.check((parsed) => typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).every(isPlainVersion)),
-  v.record(v.pipe(v.string(), v.check(isPlainVersion)), v.object({ source: v.pipe(v.string(), v.regex(DIGEST)) })),
+  v.record(v.pipe(v.string(), v.check(isPlainVersion)), RELEASE_PIN),
 );
 
 /** Every release an install may take, by its version. */

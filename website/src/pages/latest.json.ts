@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 import { REPOSITORY_URL } from "../lib/paths.ts";
 import { released } from "../lib/released.ts";
 
-/** The newest released version, for an install to compare with its own. Installs of every older version read it, so a field is only ever added. */
+/** The newest released version, with its day, its notes, and its schema, for an install to compare with its own. Installs of every older version read it, so a field is only ever added. */
 export const GET: APIRoute = () => {
   const newest = released();
 

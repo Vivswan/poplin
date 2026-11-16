@@ -3,7 +3,7 @@
 //   `auto_update` is off                                      nothing is started
 //   the website did not answer this run                       nothing is started: a release known from an earlier day may no longer be the newest
 //   no release newer than the running version is known        nothing is started
-//   the release changes the database                          never started: a person starts it
+//   the release's schema differs from this install's own      never started: it changes the database, so a person starts it
 //   less than three days since the install first knew of it   nothing is started yet
 //   a start the provider took for that version or a newer one never a second one
 //   no address that starts a rebuild is saved                 nothing is started, and nothing is kept
@@ -19,7 +19,7 @@ import type { Install } from "./records";
 import { DAY_MS } from "./site-object";
 import { type Rebuilding, startUpdate } from "./start-update";
 import { SWEEPER } from "./sweep";
-import { newerRelease } from "./update";
+import { changesDatabase, newerRelease } from "./update";
 
 /** How long a release waits, from the moment the install first knew of its version, before the install starts it by itself, in milliseconds: three days. */
 const AUTO_UPDATE_WAIT_MS = 3 * DAY_MS;
@@ -35,7 +35,7 @@ function dueVersion(running: Running, now: number): string | undefined {
   if (!settings.auto_update || !answered) return undefined;
 
   const newer = newerRelease(check, version);
-  if (newer === undefined || newer.database) return undefined;
+  if (newer === undefined || changesDatabase(newer)) return undefined;
 
   if (check.seen_at === null || now - check.seen_at < AUTO_UPDATE_WAIT_MS) return undefined;
 

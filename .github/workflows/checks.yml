@@ -137,6 +137,28 @@ jobs:
           export PAGES_ORIGIN="https://${GITHUB_REPOSITORY_OWNER}.github.io"
           bun run --cwd website build
 
+  # What a release ships, made from this commit with no release cut: the Worker built twice as the release run builds it,
+  # the two compared byte for byte, the source packed, and the four files named as the website's build names a release.
+  # The one rule left out is the attestation, which only a release's own run makes.
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Build the Worker and write its manifest
+        run: bun run --cwd packages/cloudflare bundle "$RUNNER_TEMP/bundle/first"
+      - name: Build it again
+        run: bun run --cwd packages/cloudflare bundle "$RUNNER_TEMP/bundle/second"
+      - name: Refuse built files that a second build of the same commit does not give
+        run: diff -r "$RUNNER_TEMP/bundle/first" "$RUNNER_TEMP/bundle/second"
+      - name: Pack the source files as a release does
+        run: git archive --format=tar.gz --prefix=poplin/ --output="$RUNNER_TEMP/bundle/first/poplin-$(jq -r .version packages/cli/package.json).tar.gz" HEAD
+      - name: Name the release from its four files as the website's build does
+        run: bun run --cwd packages/cloudflare check-bundle "$RUNNER_TEMP/bundle/first"
+
   # The dashboard demo as a visitor meets it: built as static files, served under a path of a static host, and walked
   # in a real browser, one job per engine. Each job builds the demo itself: the build takes about a second. The test
   # that stops the demo's worker runs in Chromium alone, as the walk's own config sets. The WebKit here is Playwright's

@@ -44,37 +44,55 @@ const LATER_RELEASE = `## [0.2.0](https://github.com/example/poplin/compare/v0.1
 
 const DIGEST = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
-const FIRST_NEWS = { version: "0.1.0", released: "2026-11-20", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.1.0" };
+const BUNDLE_DIGEST = "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae";
 
-const LATER_NEWS = { version: "0.2.0", released: "2026-12-04", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0" };
+const FIRST_NEWS = { version: "0.1.0", released: "2026-11-20", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.1.0", schema: 1 };
+
+const LATER_NEWS = { version: "0.2.0", released: "2026-12-04", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", schema: 2 };
+
+const FIRST_PIN = { source: DIGEST, bundle: BUNDLE_DIGEST, schema: 1 };
+
+const LATER_PIN = { source: DIGEST, bundle: BUNDLE_DIGEST, schema: 2 };
 
 const CHANGELOGS: readonly {
   readonly what: string;
   readonly changelog: string;
-  readonly pins: Readonly<Record<string, { source: string }>> | undefined;
+  readonly pins: Readonly<Record<string, object>> | undefined;
+  readonly named: ReturnType<typeof publishedPins>;
   readonly foot: string;
   readonly latest: unknown;
   readonly read: ReturnType<typeof publishedRelease>;
 }[] = [
-  { what: "no version released", changelog: "# Changelog\n", pins: {}, foot: "poplin", latest: { version: null }, read: null },
-  { what: "one version, its digest published", changelog: `# Changelog\n\n${FIRST_RELEASE}`, pins: { "0.1.0": { source: DIGEST } }, foot: "poplin 0.1.0", latest: FIRST_NEWS, read: { ...FIRST_NEWS, database: false } },
+  { what: "no version released", changelog: "# Changelog\n", pins: {}, named: {}, foot: "poplin", latest: { version: null }, read: null },
+  { what: "one version, its digests published", changelog: `# Changelog\n\n${FIRST_RELEASE}`, pins: { "0.1.0": FIRST_PIN }, named: { "0.1.0": FIRST_PIN }, foot: "poplin 0.1.0", latest: FIRST_NEWS, read: FIRST_NEWS },
   {
-    what: "two versions, both digests published",
+    what: "two versions, the digests of both published",
     changelog: `# Changelog\n\n${LATER_RELEASE}${FIRST_RELEASE}`,
-    pins: { "0.2.0": { source: DIGEST }, "0.1.0": { source: DIGEST } },
+    pins: { "0.2.0": LATER_PIN, "0.1.0": FIRST_PIN },
+    named: { "0.2.0": LATER_PIN, "0.1.0": FIRST_PIN },
     foot: "poplin 0.2.0",
     latest: LATER_NEWS,
-    read: { ...LATER_NEWS, database: false },
+    read: LATER_NEWS,
   },
   {
     what: "two versions, the newer with no digest published",
     changelog: `# Changelog\n\n${LATER_RELEASE}${FIRST_RELEASE}`,
-    pins: { "0.1.0": { source: DIGEST } },
+    pins: { "0.1.0": FIRST_PIN },
+    named: { "0.1.0": FIRST_PIN },
     foot: "poplin 0.1.0",
     latest: FIRST_NEWS,
-    read: { ...FIRST_NEWS, database: false },
+    read: FIRST_NEWS,
   },
-  { what: "one version, in a build with no step that looks for digests", changelog: `# Changelog\n\n${FIRST_RELEASE}`, pins: undefined, foot: "poplin", latest: { version: null }, read: null },
+  {
+    what: "two versions, the newer with the digest of its source alone and nothing of its built files",
+    changelog: `# Changelog\n\n${LATER_RELEASE}${FIRST_RELEASE}`,
+    pins: { "0.2.0": { source: DIGEST }, "0.1.0": FIRST_PIN },
+    named: { "0.1.0": FIRST_PIN },
+    foot: "poplin 0.1.0",
+    latest: FIRST_NEWS,
+    read: FIRST_NEWS,
+  },
+  { what: "one version, in a build with no step that looks for digests", changelog: `# Changelog\n\n${FIRST_RELEASE}`, pins: undefined, named: {}, foot: "poplin", latest: { version: null }, read: null },
 ];
 
 /** Builds the website into a folder, with the build settings it is given and no other. */
@@ -127,8 +145,8 @@ describe("the built website", () => {
   );
 
   test.each(CHANGELOGS)(
-    "names in releases.json every release whose digest was found, and in latest.json and the footer the newest of those alone ($what): without this an install is told of a release its build refuses, or of one that was never released",
-    ({ what, changelog, pins, foot, latest, read }) => {
+    "names in releases.json every release whose digests and schema were found, and in latest.json and the footer the newest of those ($what): without this an install is told of a release with no attested built files, or of one never released",
+    ({ what, changelog, pins, named, foot, latest, read }) => {
       using site = mkdtempDisposableSync(join(tmpdir(), "poplin-website-"));
       using source = mkdtempDisposableSync(join(tmpdir(), "poplin-changelog-"));
       const file = join(source.path, "CHANGELOG.md");
@@ -141,7 +159,7 @@ describe("the built website", () => {
 
       expect(JSON.parse(published), what).toEqual(latest);
       expect(publishedRelease(published), "what an install reads from the file").toEqual(read);
-      expect(publishedPins(readFileSync(join(site.path, "releases.json"), "utf8")), "what a build reads as the releases it may take").toEqual(pins ?? {});
+      expect(publishedPins(readFileSync(join(site.path, "releases.json"), "utf8")), "what an install reads as the releases it may take").toEqual(named);
       expect(footLine(readFileSync(join(site.path, "index.html"), "utf8")), what).toBe(foot);
       expect(existsSync(join(site.path, "changelog")), "the release notes are on the repository, not the site").toBe(false);
     },

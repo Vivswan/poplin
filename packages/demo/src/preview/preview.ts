@@ -23,6 +23,7 @@ import { parseLoginSecret } from "../../../core/src/auth/computer-logins";
 import { importSessionKey } from "../../../core/src/auth/cookie";
 import { parseLogins } from "../../../core/src/auth/logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
+import { OWN_SCHEMA } from "../../../core/src/database/open";
 import { DEFAULT_PUBLIC_WORD } from "../../../core/src/names/marker";
 import type { ObjectStore } from "../../../core/src/storage/storage";
 import { changingPlug, PLUG_STATES, type PlugState, previewFirstRun, previewPlug } from "./domain-plug";
@@ -57,8 +58,8 @@ const USAGE_HOST = {
   links: { requests: "https://provider.example/usage/requests", database: "https://provider.example/usage/database", storage: "https://provider.example/usage/storage" },
 } as const;
 
-/** When the sample release the seeded install knows of came out, and where its notes are: the page of the project's releases. No such release exists. */
-const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", database: false } as const;
+/** When the sample release the seeded install knows of came out, where its notes are (the page of the project's releases), and its schema, which is the install's own. No such release exists. */
+const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", schema: OWN_SCHEMA } as const;
 
 /** The address the seeded install keeps as the one that starts its rebuild. Nothing is there, and nothing is ever sent to it. */
 const SAMPLE_REBUILD = "https://provider.example/rebuilds/sample";
