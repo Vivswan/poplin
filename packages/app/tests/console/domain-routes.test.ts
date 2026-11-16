@@ -89,7 +89,7 @@ describe("what the screen opens with", () => {
         { piece: "DNS record", state: "present", tone: "good", detail: "*.example.com" },
         { piece: "DNS record", state: "needs repair", tone: "bad", detail: "poplin.example.com" },
         { piece: "Worker route", state: "present", tone: "good", detail: "poplin.example.com/*" },
-        { piece: "Rate rule", state: "not set up", tone: "idle", detail: "rate rule: the domain has other hostnames" },
+        { piece: "Rate rule", state: "optional", tone: "idle", detail: "rate rule: the domain has other hostnames" },
       ],
       summary: { line: "1 to repair", tone: "bad" },
     });
@@ -315,7 +315,7 @@ describe("the run the install remembers", () => {
       rows: [
         { piece: "DNS record", state: "present", tone: "good", detail: "every site" },
         { piece: "Login policy", state: "needs repair", tone: "bad", detail: "the logins" },
-        { piece: "Rate rule", state: "not set up", tone: "idle", detail: "left out" },
+        { piece: "Rate rule", state: "optional", tone: "idle", detail: "left out" },
         { piece: "Route", state: "not run", tone: "idle", detail: "never reached" },
       ],
       summary: { line: "2 not done", tone: "bad" },

@@ -16,6 +16,12 @@ import type { TokenFacts } from "../../../core/src/install/token-facts";
 /** Every state a preview plug can be in, as the address of the setup page names it. */
 export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable"] as const;
 
+/** The optional right of an install under a domain, and what it adds. */
+const FLOOD_RULE: OptionalRight = { right: "Rules: Edit", adds: "The provider stops floods before they reach a site." };
+
+/** The optional right of an install without a domain, and what it adds. */
+const SPEND_ALERT: OptionalRight = { right: "Alerts: Edit", adds: "The provider emails your first user when the account's charges reach an amount." };
+
 /** The provider's side of an install under a domain. The states of the setup page name its pieces by their place. */
 export const WITH_DOMAIN: Provider = {
   pieces: [
@@ -25,12 +31,12 @@ export const WITH_DOMAIN: Provider = {
     { object: "Route", detail: "the dashboard", part: "reach" },
     { object: "Login application", detail: "the dashboard's login", part: "login" },
     { object: "Login policy", detail: "your users only", part: "login", broken: { found: "differs", mended: "changed" }, lacks: "Login: Edit" },
-    { object: "Rate rule", detail: "sample-rate-rule", part: "rest", optional: "Rules: Edit" },
+    { object: "Rate rule", detail: "sample-rate-rule", part: "rest", optional: FLOOD_RULE },
   ],
   form: {
     tokenRights: ["Records: Edit", "Routes: Edit", "Login: Edit"],
     tokenLink: "https://provider.example/tokens/new",
-    tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods before they reach a site." }],
+    tokenOptional: [FLOOD_RULE],
     tokenNote: "On the form, choose the account and the domain the account token is for.",
     tokenFor: "this account and this domain",
   },
@@ -44,12 +50,12 @@ export const WITHOUT_DOMAIN: Provider = {
     { object: "Address", detail: "the private sites", part: "reach", broken: { found: "missing", mended: "created" } },
     { object: "Login application", detail: "the dashboard and the private sites", part: "login" },
     { object: "Login policy", detail: "your users only", part: "login", broken: { found: "differs", mended: "changed" }, lacks: "Login: Edit" },
-    { object: "Spend alert", detail: "sample-spend-alert", part: "rest", optional: "Alerts: Edit" },
+    { object: "Spend alert", detail: "sample-spend-alert", part: "rest", optional: SPEND_ALERT },
   ],
   form: {
     tokenRights: ["Scripts: Edit", "Login: Edit"],
     tokenLink: "https://provider.example/tokens/new",
-    tokenOptional: [{ right: "Alerts: Edit", adds: "The provider emails your first user when the account's charges reach an amount." }],
+    tokenOptional: [SPEND_ALERT],
     tokenNote: "On the form, choose the account the account token is for.",
     tokenFor: "this account",
   },
@@ -77,6 +83,9 @@ const FAILED_DETAIL = "the dashboard: the provider refused the change. Add this 
 /** One state of the preview's plug. */
 export type PlugState = (typeof PLUG_STATES)[number];
 
+/** A right the install works without, as the token form lists it. */
+type OptionalRight = TokenFacts["tokenOptional"][number];
+
 /** One object of an install at its provider, and what the changing plug does with it. */
 interface Piece {
   /** The object, as a provider would name its kind. */
@@ -94,8 +103,8 @@ interface Piece {
   /** The right the token `lacking` has not, so that its repair fails at the piece. */
   readonly lacks?: string;
 
-  /** The right of a piece the install works without: its row says to add that right, whatever a run did. */
-  readonly optional?: string;
+  /** The right of a piece the install works without: its row says what the piece adds and to add that right, whatever a run did. */
+  readonly optional?: OptionalRight;
 }
 
 /** The provider's side of one kind of install, as the preview invents it. */
@@ -146,7 +155,7 @@ function repaired(state: PlugState): DomainReading {
 /** The row of one piece of the changing plug in a state. A piece that failed names the right the token lacks. */
 function changingRow(piece: Piece, state: DomainState): DomainRow {
   const row = { object: piece.object, detail: piece.detail, part: piece.part, state };
-  if (piece.optional !== undefined) return { ...row, state: "optional", detail: `${piece.detail}: add this right to the account token and press Repair: ${piece.optional}` };
+  if (piece.optional !== undefined) return { ...row, state: "optional", detail: `${piece.detail}: ${piece.optional.adds} To switch this on, add this right to the account token and press Repair: ${piece.optional.right}` };
 
   if (state !== "failed" || piece.lacks === undefined) return row;
 
