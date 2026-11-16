@@ -54,7 +54,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 | `usage`             | the line is written wrong; `words` says how                        | the command's own help: `npx poplin install --help`             |
 | `already_installed` | the account holds an install; `found` has its version, its address, and in `mend` whether it needs mending | nothing was changed: run what `next` names, the login for `mend` nothing, and for the rest the repair as `next.command` writes it |
 | `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or delete it at `address`    |
-| `name_held`         | a Worker named poplin that is not poplin's                         | rename or delete it at `address`                                |
+| `name_held`         | a Worker named poplin that is not poplin's own, or an install's Worker that lost a binding; `words` says which | do what `words` says at `address`, then run what `next` names |
 | `blocked`           | a person must act first; `blocked` lists what, with the address to open | the table below                                            |
 | `token_refused`     | Cloudflare refused the token, or it shows no such account          | make the token again, for the account the install goes to       |
 | `no_domain`         | the token shows no active domain of that name                      | correct `--domain`, or the token's Zone Resources               |

@@ -79,6 +79,7 @@ export type Blocked =
  * `none` is nothing of the product; `leftover` is data of the product's names and no install, which a run takes only once a person said to; `started` is an install begun and not finished, which a run goes on with.
  * `whole` is an install that is set: its version where it can be read, its dashboard's address, and the newest release where the project's website answered.
  * `held` is a name the install needs, held by something that is not the product's, or by an install the provider cannot take as one, which its words say; `blocked` is a person having to act first.
+ * `after` is the command its words name for once a person did what they say: the one that ran, `again`, or an install or a repair.
  * `choice` is a token that shows more than one place: the question's answer is a `Where` to find with again; `refused` is a token that is refused or shows no such domain, or a provider that gave no answer.
  * `notes` are on a state a run can go on from: what is switched off that a run does not stop for.
  */
@@ -87,7 +88,7 @@ export type Found<Where, Place> =
   | { readonly state: "leftover"; readonly place: Place; readonly notes: readonly Blocked[]; readonly words: string; readonly address: string }
   | { readonly state: "started"; readonly place: Place; readonly notes: readonly Blocked[] }
   | { readonly state: "whole"; readonly place: Place; readonly version: string | undefined; readonly address: string; readonly newest: string | undefined }
-  | { readonly state: "held"; readonly words: string; readonly address: string }
+  | { readonly state: "held"; readonly words: string; readonly address: string; readonly after: "again" | "install" | "repair" }
   | { readonly state: "blocked"; readonly blocked: readonly Blocked[] }
   | { readonly state: "choice"; readonly question: Question<Where> }
   | { readonly state: "refused"; readonly why: "token" | "no_domain" | "unreachable"; readonly words: string };

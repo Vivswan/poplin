@@ -27,6 +27,9 @@ const SENTENCES = ["The host refused the token.", "The host refused the token"] 
 /** A whole install, as a look finds it. */
 const WHOLE: Found<Where, Place> = { state: "whole", place: { token: TOKEN as Token }, version: "0.1.0", address: ADDRESS, newest: "0.1.0" };
 
+/** A held name as a look finds it, but for the command that goes on once a person acted, which each case adds. */
+const HELD_NAME = { state: "held", words: "A program named poplin is in this account.", address: "https://host.example.com/programs/poplin" } as const;
+
 /** An object a run could not make. */
 const UNDONE: Row = { object: "Program", state: "fail", detail: "refused with status 500" };
 
@@ -70,6 +73,10 @@ describe("the next step, in the one JSON value", () => {
     ["an install that is made", `${INSTALL} --no-wait`, emptyAccount(), 0, NEXT.login],
     ["an install that left a piece undone, and is not set yet", INSTALL, { ...emptyAccount(), installed: undone }, 1, NEXT.install],
     ["an install that left a piece undone, and is set", INSTALL, { ...accountWith({ state: "none", place: WHOLE.place, notes: [] }, WHOLE), installed: undone }, 1, NEXT.repair],
+    ["an install that met a name held by a stranger", INSTALL, accountWith({ ...HELD_NAME, after: "again" }), 1, NEXT.install],
+    ["an install that met an install of its own that a repair takes once it is whole", INSTALL, accountWith({ ...HELD_NAME, after: "repair" }), 1, NEXT.repair],
+    ["a removal that met an install that was never set, which an install goes on from", REMOVAL, accountWith({ ...HELD_NAME, after: "install" }), 1, NEXT.install],
+    ["a removal that met a name held by a stranger", REMOVAL, accountWith({ ...HELD_NAME, after: "again" }), 1, NEXT.uninstall],
     ["an install the token is refused for", INSTALL, accountWith({ state: "refused", why: "token", words: "The host refused the token." }), 1, NEXT.install],
     ["a repair's dry run that would change something", `${REPAIR} --dry-run`, { ...accountWith(WHOLE), repaired: repairedOf([MADE]) }, 0, NEXT.repair],
     ["a repair's dry run that would change nothing", `${REPAIR} --dry-run`, accountWith(WHOLE), 0, NEXT.login],

@@ -274,7 +274,7 @@ describe("what stops a removal before it starts", () => {
   });
 
   test("a name the install needs that something else holds is said with its page, and nothing is asked of the provider's removal: without this a stranger's object is listed as poplin's", async () => {
-    const account: Account = { ...emptyAccount(), scenes: [{ state: "held", words: "A program named poplin is in this account and is not poplin's.", address: "https://host.example.com/programs/poplin" }] };
+    const account: Account = { ...emptyAccount(), scenes: [{ state: "held", words: "A program named poplin is in this account and is not poplin's.", address: "https://host.example.com/programs/poplin", after: "again" }] };
     const ran = await runLine(`uninstall stand-in --no-place --confirm ${NAME}`, account, { env: HELD });
 
     expect([ran.code, ran.err, account.removals]).toEqual([1, ["A program named poplin is in this account and is not poplin's.", "  https://host.example.com/programs/poplin", "nothing was changed"], []]);
