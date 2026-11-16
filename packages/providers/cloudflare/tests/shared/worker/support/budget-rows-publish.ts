@@ -209,7 +209,7 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).uploads[":upload"].finish.$post({ param: { upload }, query: {} });
     },
     status: 200,
-    budget: { queries: 8, reads: 0, writes: 3, deletes: 1 },
+    budget: { queries: 7, reads: 0, writes: 3, deletes: 1 },
   },
   {
     group,
@@ -274,15 +274,16 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
     group,
     name: "restore a backup's site: start",
     route: "POST /api/import/sites",
-    // Worst: the site comes with every version it kept, so the import declares each version's files.
+    // Worst: the site comes with every version it kept, so the import declares each version's files, and it is public, so its public name is looked for with its id, in one read.
     arrange: async (stage) => {
       const token = await adminToken(stage);
       const backup = await backupOf(stage, token);
+      const site = { ...backup.site, access: "public", public_name: "report" } as ImportRequest["site"];
 
-      return (measured) => apiOf(measured, token).import.sites.$post({ query: {}, json: { format: 1, site: backup.site, files: [...backup.files] } });
+      return (measured) => apiOf(measured, token).import.sites.$post({ query: {}, json: { format: 1, site, files: [...backup.files] } });
     },
     status: 200,
-    budget: { queries: 5, reads: 0, writes: 0 },
+    budget: { queries: 4, reads: 0, writes: 0 },
   },
   {
     group,

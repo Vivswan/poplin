@@ -33,7 +33,7 @@ export const API_ROWS: readonly BudgetRow[] = [
     group,
     name: "who am I",
     route: "GET /api/whoami",
-    // Worst: a newer release is known, so the answer reads it beside the token and the settings.
+    // Worst: a newer release is known, so the answer reads it with the settings, in one step after the token.
     arrange: async (stage) => {
       await knownUpdate(stage);
       const token = await adminToken(stage);
@@ -41,7 +41,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).whoami.$get({ query: {} });
     },
     status: 200,
-    budget: { queries: 3, reads: 0, writes: 0 },
+    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,
@@ -424,7 +424,7 @@ export const API_ROWS: readonly BudgetRow[] = [
     group,
     name: "say what an update would come to",
     route: "GET /api/update",
-    // Worst: a newer release is known, which is read beside the settings.
+    // Worst: a newer release is known, which is read with the settings, in one step.
     arrange: async (stage) => {
       await knownUpdate(stage);
       const token = await adminToken(stage);
@@ -432,7 +432,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).update.$get({ query: {} });
     },
     status: 200,
-    budget: { queries: 3, reads: 0, writes: 0 },
+    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,

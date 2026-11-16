@@ -238,7 +238,8 @@ export function uploads(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: the versions a publish drops are named in the upload's record, which is all that tells the sweep whose files to remove after a crash.
-    test("an update goes live with its settings in one step, each with its audit entry, and its record names the versions it dropped", async () => {
+    // The site as it was is read in the same step: read after a setting of the publish, it would tell the publisher that nothing changed.
+    test("an update goes live with its settings in one step, each with its audit entry, its answer holds the site as it was before any of it, and its record names the versions it dropped", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
       const second = await begunVersion(database, site);
@@ -249,8 +250,9 @@ export function uploads(label: string, makeDatabase: DatabaseFactory): void {
       const published = await database.publishUploadAsVersion(third, { keep: 1, ...settings }, BY_BO_LATER);
       const again = await database.publishUploadAsVersion(third, { keep: 1, access: { access: "unlisted" }, details: { title: "changed" } }, BY_BO_LATER);
       const live = { access: "public", public_name: DOCS, title: "Q3 sales", embeddable: false, live_version: 3, updated_at: NOW + 5 };
+      const was = { access: "private", title: null, embeddable: true, live_version: 2, updated_at: NOW };
 
-      expect(published).toMatchObject({ kind: "done", dropped: [1, 2], site: { ...live, versions: [{ number: 3, bytes: 1000, files: 2, published_by: BO }] } });
+      expect(published).toMatchObject({ kind: "done", before: was, dropped: [1, 2], site: { ...live, versions: [{ number: 3, bytes: 1000, files: 2, published_by: BO }] } });
       expect([again, await database.getUpload(third)]).toMatchObject([{ kind: "not_pending" }, { manifest: [], upload: { state: "finished", dropped: [1, 2] } }]);
       expect(await auditActions(database)).toEqual(["create", "publish", "access", "details", "publish"]);
       expect([await database.getSiteByFolder(site.folder), await database.readTotals()]).toMatchObject([{ id: site.id, title: "Q3 sales" }, { sites: 1, bytes: 1000, files: 2 }]);

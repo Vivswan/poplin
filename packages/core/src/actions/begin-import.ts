@@ -3,11 +3,10 @@
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
-import { type PublicName, parsePublicName } from "../names/names";
+import { parsePublicName } from "../names/names";
 import { POSITIVE } from "../records/fields";
 import { mintSiteFolder, type Site, siteFromRow, siteToRow } from "../records/site";
 import { MANIFEST_FILE, type ManifestFile, mintUploadId, type Upload, type UploadPlan } from "../records/upload";
-import { parseSiteId } from "../sites/ids";
 import { checkManifest, ENTRY_PAGE, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
 import { PAGE_TITLE_TEXT, TITLE_TEXT } from "./changes";
 import { BACKUP_FORMAT, type ExportedSite } from "./export";
@@ -112,21 +111,16 @@ function checkFiles(placed: Placed & { readonly site: Site }, files: readonly Ma
   return { ok: true };
 }
 
-/** Find what this install already holds that the site would take: its id or its public name. The database decides for good when the import is finished; this spares an upload that would be refused. */
+/** Find what this install already holds that the site would take: its id or its public name, in one read. The database decides for good when the import is finished; this spares an upload that would be refused. */
 async function findConflict(install: Install, site: Site): Promise<Refused<"id_taken" | "name_taken" | "reserved_name"> | undefined> {
-  const { database } = install;
-  if ((await database.getSite(site.id)) !== undefined) return refuse("id_taken", "id");
-
-  if ((await database.getSiteByPublicName(site.id as string as PublicName)) !== undefined) return refuse("id_taken", "id");
+  const taken = await install.database.findTaken(site.id, site.access === "public" ? site.public_name : undefined);
+  if (taken.id) return refuse("id_taken", "id");
 
   if (site.access !== "public") return undefined;
 
   if (!parsePublicName(site.public_name, install.reservedNames).ok) return refuse("reserved_name", "public_name");
 
-  const asId = parseSiteId(site.public_name);
-  const held = (await database.getSiteByPublicName(site.public_name)) ?? (asId.ok ? await database.getSite(asId.value) : undefined);
-
-  return (site.public_name as string) === site.id || held !== undefined ? refuse("name_taken", "public_name") : undefined;
+  return (site.public_name as string) === site.id || taken.publicName ? refuse("name_taken", "public_name") : undefined;
 }
 
 /**

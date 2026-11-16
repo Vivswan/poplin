@@ -205,8 +205,8 @@ export function isFree(name: string): SQL | undefined {
   return and(notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.id, name))), notExists(BUILD.select(ONE).from(OTHER).where(eq(OTHER.public_name, name))));
 }
 
-/** A new site, only while its id and its public name are free, and its upload, when it has one, is pending as the first version of its folder. Its owner is whoever began that upload, or `signed.by`. */
-export function insertSite(id: SiteId, site: v.InferOutput<typeof NEW_SITE>, signed: Signed, upload: UploadId | undefined): Statement {
+/** A new site, only while its id and its public name are free and its upload is pending as the first version of its folder. Its owner is whoever began that upload. */
+export function insertSite(id: SiteId, site: v.InferOutput<typeof NEW_SITE>, signed: Signed, upload: UploadId): Statement {
   const publicName = publicNameOf(site);
   const columns = [
     sites.id,
@@ -225,11 +225,11 @@ export function insertSite(id: SiteId, site: v.InferOutput<typeof NEW_SITE>, sig
     sites.embeddable,
     sites.page_title,
   ];
-  const owner = fragment`COALESCE((SELECT ${uploads.owner} FROM ${uploads} WHERE ${uploads.id} = ${upload ?? null}), ${signed.by})`;
+  const owner = fragment`(SELECT ${uploads.owner} FROM ${uploads} WHERE ${uploads.id} = ${upload})`;
   const expires = site.expires === "never" ? null : site.expires;
   const identity = fragment`${id}, ${site.name}, ${site.folder}, ${site.access}, ${publicName}, ${site.title}, ${site.search_engines ? 1 : 0}, ${expires}`;
   const values = fragment`${identity}, 1, 2, ${owner}, ${signed.at}, ${signed.at}, ${site.embeddable ? 1 : 0}, ${site.page_title ?? null}`;
-  const conditions = and(isFree(id), publicNameIsFree(publicName, id), upload === undefined ? undefined : isFirstPending(upload, site.folder));
+  const conditions = and(isFree(id), publicNameIsFree(publicName, id), isFirstPending(upload, site.folder));
 
   return insertFrom(sites, columns, fragment`SELECT ${values} WHERE ${conditions}`);
 }

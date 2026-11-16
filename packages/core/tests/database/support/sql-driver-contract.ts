@@ -32,6 +32,7 @@ import {
   OTHER_SITE,
   pendingLogin,
   publish,
+  publishedVersion,
   REPORT,
   SETTINGS,
   storedBack,
@@ -492,6 +493,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.getSiteWithSettings(site.id);
       await database.getShownSite(site.id, { day: "2026-11-13", publishers: true });
       await database.getSiteByPublicName(DOCS);
+      await database.findTaken(site.id, DOCS);
       await database.findServed({ id: site.id }, NOW);
       await database.findServed({ public_name: DOCS }, NOW);
       await database.findServedWith({ public_name: DOCS }, NOW, { counts: { day: "2026-11-13", site: site.id }, settingsAndKey: true });
@@ -503,7 +505,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.changeAccessAndDetails(site.id, { access: "private" }, { title: "T" }, BY_ADA);
       await database.changeDetails(site.id, { title: "T", search_engines: true, embeddable: false, expires: NOW }, BY_ADA);
       await database.reserveVersion(site.id);
-      await database.addVersion(site.id, publish(2, 3), BY_ADA);
+      await publishedVersion(database, site.id, publish(2, 3), BY_ADA);
       await database.setLiveVersion(site.id, "previous", BY_ADA);
       await database.setLiveVersion(site.id, 2, BY_ADA);
       await database.readTotals();
@@ -511,6 +513,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.exportSites({ limit: 10 });
       await database.readVisitorKey();
       await database.readSettingsAndKey();
+      await database.readSettingsAndUpdateCheck();
       await database.readFrame(NOW);
       await database.ensureVisitorKey(FIRST_KEY, NOW);
       const moved = await database.giveNewId(site.id, BY_ADA);

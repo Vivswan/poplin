@@ -26,6 +26,8 @@ import {
   mintFrom,
   opened,
   publish,
+  publishedSite,
+  publishedVersion,
   storedBack,
 } from "./database-fixtures";
 
@@ -38,7 +40,7 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
 
     // Drift: the Activity tab is only as true as this; a change with no entry, or an entry for a change that was refused, makes it lie.
     test.each([
-      ["a site made", async (database: Database): Promise<unknown> => database.createSite(draft(DOCS), signed), ["create"]],
+      ["a site made", async (database: Database): Promise<unknown> => publishedSite(database, draft(DOCS), signed), ["create"]],
       [
         "access changed",
         async (database: Database, site: Site): Promise<unknown> => database.changeAccess(site.id, { access: "unlisted" }, signed),
@@ -53,7 +55,7 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         "a version reserved and published",
         async (database: Database, site: Site): Promise<unknown> => [
           await database.reserveVersion(site.id),
-          await database.addVersion(site.id, publish(2, 3), signed),
+          await publishedVersion(database, site.id, publish(2, 3), signed),
         ],
         ["publish"],
       ],
@@ -66,7 +68,7 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
         "the live version moved back",
         async (database: Database, site: Site): Promise<unknown> => [
           await database.reserveVersion(site.id),
-          await database.addVersion(site.id, publish(2, 3), signed),
+          await publishedVersion(database, site.id, publish(2, 3), signed),
           await database.setLiveVersion(site.id, "previous", signed),
         ],
         ["publish", "live_version"],
@@ -107,12 +109,12 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       ],
       [
         "a version published to a trashed site",
-        async (database: Database, _site: Site, trashed: Site): Promise<unknown> => database.addVersion(trashed.id, publish(1, 3), signed),
+        async (database: Database, _site: Site, trashed: Site): Promise<unknown> => publishedVersion(database, trashed.id, publish(1, 3), signed),
         [],
       ],
       [
         "an unreserved version published",
-        async (database: Database, site: Site): Promise<unknown> => database.addVersion(site.id, publish(2, 3), signed),
+        async (database: Database, site: Site): Promise<unknown> => publishedVersion(database, site.id, publish(2, 3), signed),
         [],
       ],
       ["the live version set to what it is", async (database: Database, site: Site): Promise<unknown> => database.setLiveVersion(site.id, 1, signed), []],

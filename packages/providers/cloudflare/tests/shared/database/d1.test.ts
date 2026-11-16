@@ -23,7 +23,7 @@ import type { UploadId } from "@poplin/core/src/records/upload";
 import { dayOf } from "@poplin/core/src/records/views";
 import type { SiteId } from "@poplin/core/src/sites/ids";
 import { describeDatabase } from "@poplin/core/tests/database/support/database-contract";
-import { BY_ADA, begunFiles, begunSite, begunVersion, draft, numberedFiles, pendingLogin, publish, storedBack } from "@poplin/core/tests/database/support/database-fixtures";
+import { BY_ADA, begunFiles, begunSite, begunVersion, draft, numberedFiles, pendingLogin, publish, publishedSite, publishedVersion, storedBack } from "@poplin/core/tests/database/support/database-fixtures";
 import { AUDIT_WINDOW } from "@poplin/core/src/database/database";
 import { describeSqlDriver, LONG_LOG, sqlDatabaseOver } from "@poplin/core/tests/database/support/sql-driver-contract";
 
@@ -105,6 +105,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readSettingsAndKey": [2, 0],
   "keepUpdateCheck": [2, 1],
   "readUpdateCheck": [1, 0],
+  "readSettingsAndUpdateCheck": [2, 0],
   "keepAutoStart": [1, 1],
   "keepDomainCheck": [1, 2],
   "keepDomainCheck, 200 pieces over the run before": [1, 2],
@@ -126,9 +127,6 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
-  "createSite": [9, 11],
-  "createSite, public": [10, 11],
-  "createSite, name taken": [3, 0],
   "getSite": [3, 0],
   "getSite, none": [0, 0],
   "getSiteWithSettings": [4, 0],
@@ -136,6 +134,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "getShownSite, with the views and the publishers": [15, 0],
   "getSiteNames": [10, 0],
   "getSiteByPublicName": [2, 0],
+  "findTaken, the id and the public name held": [2, 0],
   "getSiteByFolder": [3, 0],
   "findServed, by id": [2, 0],
   "findServed, by public name": [2, 0],
@@ -148,8 +147,6 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "giveNewId": [737, 8],
   "getLaterSites": [9, 0],
   "reserveVersion": [5, 1],
-  "addVersion": [22, 4],
-  "addVersion, one dropped": [27, 6],
   "setLiveVersion, a number": [8, 2],
   "setLiveVersion, the same": [6, 0],
   "setLiveVersion, previous": [9, 2],
@@ -171,8 +168,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "setUploadDropped": [1, 1],
   "removeUpload": [1, 1],
   "reserveVersion and addUpload, a version": [14, 6],
-  "publishUploadAsVersion, with access and details": [62, 13],
-  "publishUploadAsVersion, plain": [43, 8],
+  "publishUploadAsVersion, with access and details": [67, 13],
+  "publishUploadAsVersion, plain": [48, 8],
   "addUpload, 500 files": [8, 5],
   "abandonUpload": [2, 2],
   "addToken": [1, 5],
@@ -230,9 +227,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "countAudit, one kind, the sites named with a text": [61, 0],
   "countAudit, no further back than five entries, and where the log starts": [6, 0],
   "no site: getSiteByPublicName": [0, 0],
+  "no site: findTaken": [0, 0],
   "no site: giveNewId": [2, 0],
   "no site: reserveVersion": [0, 0],
-  "no site: addVersion": [2, 0],
   "no site: setLiveVersion": [0, 0],
   "no site: trashSite": [0, 0],
   "no site: restoreSite": [0, 0],
@@ -243,9 +240,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "in the trash: changeAccess": [5, 0],
   "in the trash: changeDetails": [5, 0],
   "refused: restoreSite, a live site": [6, 0],
-  "refused: addVersion, a number not set aside": [17, 0],
   "refused: setLiveVersion, no such version": [6, 0],
-  "refused: publishUploadAsVersion, not pending": [19, 0],
+  "refused: publishUploadAsVersion, not pending": [24, 0],
   "refused: removeUpload, none": [0, 0],
   "refused: abandonUpload, not pending": [1, 0],
   "refused: addUpload, its holder's room is full": [4, 0],
@@ -407,7 +403,7 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
 
     for (let index = 0; index < LISTED; index += 1) {
       const site = { ...draft(`site-${index}` as SiteName), folder: `fold${String(index).padStart(12, "0")}` as SiteFolder };
-      const made = await database.createSite(site, { ...BY_ADA, at: NOW + index });
+      const made = await publishedSite(database, site, { ...BY_ADA, at: NOW + index });
       if (made.kind === "done") ids.push(made.site.id);
     }
 
@@ -488,7 +484,7 @@ describe("D1: the rows a search of the audit log by a site costs of a day's allo
     const first: SiteId[] = [];
     for (let index = 0; index < SEARCHED_SITES; index += 1) {
       const site = { ...draft(`site-${index}` as SiteName), title: `Title ${index}`, folder: `fold${String(index).padStart(12, "0")}` as SiteFolder };
-      const made = await database.createSite(site, { ...BY_ADA, at: NOW + index });
+      const made = await publishedSite(database, site, { ...BY_ADA, at: NOW + index });
       if (made.kind !== "done") throw new Error(`no site was made: ${made.kind}`);
 
       first.push(made.site.id);
@@ -741,18 +737,18 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readSettingsAndKey", () => database.readSettingsAndKey());
     await cost("keepUpdateCheck", () => database.keepUpdateCheck({ checked_at: NOW, news: null }));
     await cost("readUpdateCheck", () => database.readUpdateCheck());
+    await cost("readSettingsAndUpdateCheck", () => database.readSettingsAndUpdateCheck());
     await cost("keepAutoStart", () => database.keepAutoStart({ version: "0.2.0", at: NOW, taken: "0.2.0" }));
     await cost("keepSweepPlace", () => database.keepSweepPlace({ trash: false }));
     await cost("readSweepPlace", () => database.readSweepPlace());
     await cost("keepSweepPlace, forgotten", () => database.keepSweepPlace(undefined));
 
     const sites: Site[] = [];
-    for (let index = 0; index < SITES; index += 1) sites.push(done(await database.createSite(site(index), { ...BY_ADA, at: NOW + index })).site);
+    for (let index = 0; index < SITES; index += 1) sites.push(done(await publishedSite(database, site(index), { ...BY_ADA, at: NOW + index })).site);
     const [first, second, third, fourth, fifth, sixth] = sites as [Site, Site, Site, Site, Site, Site];
 
-    await cost("createSite", () => database.createSite(site(SITES), BY_ADA));
-    await cost("createSite, public", () => database.createSite({ ...draft("open" as SiteName, "public", "open" as PublicName), folder: folder(SITES + 1) }, BY_ADA));
-    await cost("createSite, name taken", () => database.createSite({ ...draft("open" as SiteName, "public", "open" as PublicName), folder: folder(SITES + 2) }, BY_ADA));
+    await publishedSite(database, site(SITES), BY_ADA);
+    await publishedSite(database, { ...draft("open" as SiteName, "public", "open" as PublicName), folder: folder(SITES + 1) }, BY_ADA);
     await cost("getSite", () => database.getSite(first.id));
     await cost("getSite, none", () => database.getSite(NOBODY));
     await cost("getSiteWithSettings", () => database.getSiteWithSettings(first.id));
@@ -760,6 +756,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getShownSite, with the views and the publishers", () => database.getShownSite(first.id, { day: DAY, publishers: true }));
     await cost("getSiteNames", () => database.getSiteNames(sites.slice(0, 5).map((made) => made.id)));
     await cost("getSiteByPublicName", () => database.getSiteByPublicName("open" as PublicName));
+    await cost("findTaken, the id and the public name held", () => database.findTaken(first.id, "open" as PublicName));
     await cost("getSiteByFolder", () => database.getSiteByFolder(first.folder));
     await cost("findServed, by id", () => database.findServed({ id: first.id }, NOW));
     await cost("findServed, by public name", () => database.findServed({ public_name: "open" as PublicName }, NOW));
@@ -768,9 +765,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("exportSites, after", () => database.exportSites({ limit: 5, after: first.id }));
     const moved = done(await cost("giveNewId", () => database.giveNewId(second.id, BY_ADA)));
     await cost("reserveVersion", () => database.reserveVersion(first.id));
-    await cost("addVersion", () => database.addVersion(first.id, publish(2, 2), BY_ADA));
+    await publishedVersion(database, first.id, publish(2, 2), BY_ADA);
     await database.reserveVersion(first.id);
-    await cost("addVersion, one dropped", () => database.addVersion(first.id, publish(3, 2), BY_ADA));
+    await publishedVersion(database, first.id, publish(3, 2), BY_ADA);
     await cost("setLiveVersion, a number", () => database.setLiveVersion(first.id, 2, BY_ADA));
     await cost("setLiveVersion, the same", () => database.setLiveVersion(first.id, 2, BY_ADA));
     await database.setLiveVersion(first.id, 3, BY_ADA);
@@ -873,9 +870,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await database.trashSite(sixth.id, BY_ADA);
     const version: Parameters<typeof database.publishUploadAsVersion>[1] = { keep: 2, details: {} };
     await cost("no site: getSiteByPublicName", () => database.getSiteByPublicName("nobody" as PublicName));
+    await cost("no site: findTaken", () => database.findTaken(NOBODY, "nobody" as PublicName));
     await cost("no site: giveNewId", () => database.giveNewId(NOBODY, BY_ADA));
     await cost("no site: reserveVersion", () => database.reserveVersion(NOBODY));
-    await cost("no site: addVersion", () => database.addVersion(NOBODY, publish(2, 2), BY_ADA));
     await cost("no site: setLiveVersion", () => database.setLiveVersion(NOBODY, 1, BY_ADA));
     await cost("no site: trashSite", () => database.trashSite(NOBODY, BY_ADA));
     await cost("no site: restoreSite", () => database.restoreSite(NOBODY, BY_ADA));
@@ -886,7 +883,6 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("in the trash: changeAccess", () => database.changeAccess(sixth.id, { access: "unlisted" }, BY_ADA));
     await cost("in the trash: changeDetails", () => database.changeDetails(sixth.id, { title: "Notes" }, BY_ADA));
     await cost("refused: restoreSite, a live site", () => database.restoreSite(first.id, BY_ADA));
-    await cost("refused: addVersion, a number not set aside", () => database.addVersion(first.id, publish(99, 2), BY_ADA));
     await cost("refused: setLiveVersion, no such version", () => database.setLiveVersion(first.id, 99, BY_ADA));
     await cost("refused: publishUploadAsVersion, not pending", () => database.publishUploadAsVersion(plain, version, BY_ADA));
     await cost("refused: removeUpload, none", () => database.removeUpload(begun.id));

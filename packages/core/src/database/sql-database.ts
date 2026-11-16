@@ -52,7 +52,6 @@ import type {
   MadeWith,
   NewSite,
   NewUpload,
-  NewVersion,
   Published,
   Refused,
   RequestCounts,
@@ -62,6 +61,7 @@ import type {
   ServedAlso,
   ServedLookup,
   SettingsAndKey,
+  SettingsAndUpdateCheck,
   SettingsAndSite,
   ShownSite,
   ShownSitesPage,
@@ -74,6 +74,7 @@ import type {
   SitesQuery,
   SitesShown,
   SweepStart,
+  Taken,
   TokenStates,
   Unchanged,
   UploadedVersion,
@@ -411,15 +412,6 @@ export class SqlDatabase implements Database {
     this.#mintId = mintId;
   }
 
-  async createSite(draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken">> {
-    const made = await this.#insertSite(draft, signed, { contents });
-    if (made.kind === "done") return made;
-
-    if (made.kind === "not_pending") throw new Error("a site made from no upload waits for none");
-
-    return { kind: "name_taken" };
-  }
-
   async getSite(id: SiteId): Promise<Site | undefined> {
     const [found] = await this.#driver.batch([siteById(id)]);
 
@@ -475,6 +467,14 @@ export class SqlDatabase implements Database {
     const [found] = await this.#driver.batch([sitesWhere(eq(sites.public_name, name))]);
 
     return siteIn(found);
+  }
+
+  async findTaken(id: SiteId, publicName?: PublicName): Promise<Taken> {
+    // A name left out is no site's.
+    const nameHeld = publicName === undefined ? fragment`0` : fragment`NOT (${isFree(publicName)})`;
+    const [found] = await this.#driver.batch([written(fragment`SELECT NOT (${isFree(id)}) AS id_held, ${nameHeld} AS name_held`)]);
+
+    return { id: found?.rows[0]?.id_held === 1, publicName: found?.rows[0]?.name_held === 1 };
   }
 
   async getSiteByFolder(folder: Site["folder"]): Promise<Site | undefined> {
@@ -649,34 +649,6 @@ export class SqlDatabase implements Database {
     if (changed(updated)) return { kind: "reserved", number: Number(reserved?.rows[0]?.number) };
 
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
-  }
-
-  async addVersion(id: SiteId, version: NewVersion, signed: Signed): Promise<Published | Refused<"not_found" | "in_trash" | "stale_number">> {
-    if (!Number.isSafeInteger(version.keep) || version.keep < 1) throw new RangeError(`a site keeps at least 1 version, not ${version.keep}`);
-
-    requireCount("the size of a version in bytes", version.bytes);
-    requireCount("the number of files of a version", version.files);
-
-    // A version is kept only when its number was set aside and is above every kept one, so a slower, older publish never replaces a newer one.
-    const above = fragment`${version.number} < ${sites.next_version} AND ${version.number} > (SELECT MAX(${versions.number}) FROM ${versions} WHERE ${versions.folder} = ${sites.folder})`;
-    const [missingPage, bareFiles] = contentsValues(version.contents);
-    const size = fragment`${version.bytes}, ${version.files}, ${missingPage}, ${bareFiles}`;
-    const entry = fragment`SELECT ${sites.folder}, ${version.number}, ${signed.at}, ${signed.by}, ${size} FROM ${sites} WHERE ${sites.id} = ${id} AND ${sites.trashed} = 0 AND ${above}`;
-    const [before, , updated, , , after] = await this.#driver.batch([
-      siteById(id),
-      insertFrom(versions, VERSION_COLUMNS, entry),
-      built(BUILD.update(sites).set({ live_version: version.number, updated_at: signed.at }).where(and(eq(sites.id, id), CHANGED))),
-      auditOfSite(signed, "publish", id, { version: version.number }),
-      dropOldVersions(fragment`(SELECT ${sites.folder} FROM ${sites} WHERE ${sites.id} = ${id})`, version.keep),
-      siteById(id),
-    ]);
-    if (!changed(updated)) return unreachable(siteIn(after)) ?? { kind: "stale_number" };
-
-    const published = done(after);
-    const kept = new Set(published.site.versions.map((entry) => entry.number));
-    const dropped = (siteIn(before)?.versions ?? []).map((entry) => entry.number).filter((number) => !kept.has(number));
-
-    return { ...published, dropped };
   }
 
   async setLiveVersion(
@@ -861,8 +833,40 @@ export class SqlDatabase implements Database {
     return { upload, files: filesUnderKeys(Object.keys(lists).map((name) => String(row?.[name])), paths) };
   }
 
-  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made: MadeWith = {}): Promise<Done | Refused<"name_taken" | "not_pending">> {
-    return this.#insertSite(draft, signed, { ...made, upload: id });
+  async publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made: MadeWith = {}): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    const site = v.parse(NEW_SITE, draft);
+    const [missingPage, bareFiles] = contentsValues(made.contents);
+    const first = { bytes: site.bytes, files: site.files, missing_page: missingPage, bare_files: bareFiles };
+    const publicName = publicNameOf(site);
+    const detail = { access: site.access, public_name: publicName };
+    // The first version, which the schema made with the site, is given its size and what it holds only when the site was made.
+    const size = BUILD.update(versions).set(first).where(and(eq(versions.folder, site.folder), eq(versions.number, 1), CHANGED));
+    const held = fragment`SELECT (EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${publicName}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${publicName})) AS held`;
+
+    for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
+      const minted = this.#mintId();
+      // A copy's second entry follows the first, so it is written only when the site was made, and the upload is finished only after both.
+      const copied = made.copiedFrom === undefined ? [] : [auditOfSite(signed, "duplicate", minted, { from: made.copiedFrom })];
+      const answers = await this.#driver.batch([
+        insertSite(minted, site, signed, id),
+        built(size),
+        auditOfSite(signed, "create", minted, detail),
+        ...copied,
+        finishUpload(id),
+        written(held),
+        siteById(minted),
+        uploadById(id),
+      ]);
+      const [inserted] = answers;
+      const [taken, stored, waiting] = answers.slice(-3);
+      if (changed(inserted)) return done(stored);
+
+      if (uploadIn(waiting)?.state !== "pending") return { kind: "not_pending" };
+
+      if (publicName !== null && taken?.rows[0]?.held === 1) return { kind: "name_taken" };
+    }
+
+    throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
   }
 
   async publishUploadAsVersion(
@@ -887,7 +891,9 @@ export class SqlDatabase implements Database {
     const highest = fragment`(SELECT ${A_KEPT_VERSION.number} FROM ${versions} ${A_KEPT_VERSION} WHERE ${A_KEPT_VERSION.folder} = ${uploads.folder} ORDER BY ${A_KEPT_VERSION.number} DESC LIMIT ${version.keep})`;
     const dropped = fragment<string>`(SELECT json_group_array(${A_VERSION.number}) FROM ${versions} ${A_VERSION} WHERE ${A_VERSION.folder} = ${uploads.folder} AND ${A_VERSION.number} NOT IN ${highest})`;
     const isHeld = fragment`SELECT (EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${publicName} AND ${sites.folder} <> ${folderOf(id)}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${publicName})) AS held`;
+    // The site is read first, as it was before any setting asked with the version.
     const results = await this.#driver.batch([
+      sitesWhere(inFolder),
       ...settings,
       insertFrom(versions, VERSION_COLUMNS, uploaded),
       built(BUILD.update(sites).set({ live_version: number, page_title: version.page_title ?? null, updated_at: signed.at }).where(and(inFolder, CHANGED))),
@@ -898,9 +904,10 @@ export class SqlDatabase implements Database {
       uploadById(id),
       written(isHeld),
     ]);
-    const [inserted, , , , , after, finished, held] = results.slice(settings.length);
+    const before = siteIn(results[0]);
+    const [inserted, , , , , after, finished, held] = results.slice(settings.length + 1);
     const upload = uploadIn(finished);
-    if (changed(inserted) && upload !== undefined) return { ...done(after), dropped: upload.dropped };
+    if (changed(inserted) && upload !== undefined && before !== undefined) return { ...done(after), before, dropped: upload.dropped };
 
     if (upload?.state !== "pending") return { kind: "not_pending" };
 
@@ -1230,6 +1237,12 @@ export class SqlDatabase implements Database {
     return settingsIn(read);
   }
 
+  async readSettingsAndUpdateCheck(): Promise<SettingsAndUpdateCheck> {
+    const [stored, update] = await this.#driver.batch([READ_SETTINGS, READ_UPDATE_CHECK]);
+
+    return { settings: settingsIn(stored), updateCheck: updateCheckIn(update) };
+  }
+
   async readFrame(now: number): Promise<FrameRecords> {
     const [yesterday] = daysUpTo(dayOf(now), 2);
     const [stored, domain, update, noted] = await this.#driver.batch([READ_SETTINGS, domainCheckAsked(), READ_UPDATE_CHECK, problemsAsked(yesterday ?? dayOf(now))]);
@@ -1507,44 +1520,6 @@ export class SqlDatabase implements Database {
     const ready = and(fragment`${sites.folder} = ${folderOf(id)}`, differs, hasAccess(id, asked.access, asked.publicName), canPublish(id));
 
     return [built(BUILD.update(sites).set(stored).where(ready)), auditWithUpload(signed, "details", id, given)];
-  }
-
-  /** Make a site under a fresh id; with `upload`, only while that upload is pending, and marking it finished in the same step. */
-  async #insertSite(draft: NewSite, signed: Signed, from: MadeWith & { readonly upload?: UploadId }): Promise<Done | Refused<"name_taken" | "not_pending">> {
-    const { upload } = from;
-    const site = v.parse(NEW_SITE, draft);
-    const [missingPage, bareFiles] = contentsValues(from.contents);
-    const first = { bytes: site.bytes, files: site.files, missing_page: missingPage, bare_files: bareFiles };
-    const publicName = publicNameOf(site);
-    const detail = { access: site.access, public_name: publicName };
-    // The first version, which the schema made with the site, is given its size and what it holds only when the site was made.
-    const size = BUILD.update(versions).set(first).where(and(eq(versions.folder, site.folder), eq(versions.number, 1), CHANGED));
-    const held = fragment`SELECT (EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.public_name} = ${publicName}) OR EXISTS (SELECT 1 FROM ${sites} WHERE ${sites.id} = ${publicName})) AS held`;
-
-    for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
-      const id = this.#mintId();
-      // A copy's second entry follows the first, so it is written only when the site was made, and the upload is finished only after both.
-      const copied = from.copiedFrom === undefined ? [] : [auditOfSite(signed, "duplicate", id, { from: from.copiedFrom })];
-      const answers = await this.#driver.batch([
-        insertSite(id, site, signed, upload),
-        built(size),
-        auditOfSite(signed, "create", id, detail),
-        ...copied,
-        finishUpload(upload ?? null),
-        written(held),
-        siteById(id),
-        uploadById(upload ?? null),
-      ]);
-      const [inserted] = answers;
-      const [taken, made, waiting] = answers.slice(-3);
-      if (changed(inserted)) return done(made);
-
-      if (upload !== undefined && uploadIn(waiting)?.state !== "pending") return { kind: "not_pending" };
-
-      if (publicName !== null && taken?.rows[0]?.held === 1) return { kind: "name_taken" };
-    }
-
-    throw new Error(`no free site id in ${MINT_ATTEMPTS} tries`);
   }
 
   async #unchanged(id: SiteId): Promise<Unchanged | Refused<"not_found" | "in_trash">> {

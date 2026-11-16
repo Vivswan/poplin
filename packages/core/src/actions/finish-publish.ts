@@ -74,11 +74,8 @@ async function importSite(install: Install, plan: Extract<UploadPlan, { kind: "i
   throw new Error("the folder minted for an import is a site's");
 }
 
-/** Add the upload as a version, with the settings asked with it: the database makes all of it, or nothing. */
+/** Add the upload as a version, with the settings asked with it: the database makes all of it, or nothing, and reads the site as it was in the same step. */
 async function addVersion(install: Install, plan: Extract<UploadPlan, { kind: "update" }>, commit: Commit): Promise<Committed | Refused<LostCode> | "not_pending"> {
-  const site = await install.database.getSiteByFolder(commit.upload.folder);
-  if (site === undefined) return refuse("not_found");
-
   const { access, details, page_title } = plan;
   const version = { keep: commit.settings.versions_kept, access, details, page_title, contents: commit.contents.get(commit.upload.number) };
   const added = await install.database.publishUploadAsVersion(commit.upload.id, version, commit.signed);
@@ -90,7 +87,7 @@ async function addVersion(install: Install, plan: Extract<UploadPlan, { kind: "u
 
   if (added.kind !== "done") return refuse(added.kind);
 
-  return { ok: true, before: site, site: added.site, dropped: added.dropped };
+  return { ok: true, before: added.before, site: added.site, dropped: added.dropped };
 }
 
 /** Make what the upload was begun for. */
