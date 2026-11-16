@@ -36,6 +36,8 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 
 `logins` is the list under Access, Users: [Add a user](access.md#add-a-user).
 
+A saved `search_engines_allowed` or `outside_pages` also changes its rule at Cloudflare by itself, with [the key poplin keeps](../about/security.md#the-kept-key); `block_bots` changes there at the next Repair on [Domain](domain.md), and so do all three on an install that holds no key.
+
 ## The install
 
 | Example                                                              | Does                                              |
