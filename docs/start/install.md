@@ -376,7 +376,7 @@ A repair that found kept data and no install names `npx poplin install cloudflar
 | `install`   | `npx poplin install cloudflare`, with the same answers                      |
 | `repair`    | the repair, as `command` writes it: `npx poplin doctor --repair`, the newest poplin's, or with `--add-user` after an install that kept its users and did not use `--login` |
 | `login`     | `npx poplin login`, with `--server` and the install's address               |
-| `uninstall` | `npx poplin uninstall cloudflare`: a removal's dry run, or one that left a kind |
+| `uninstall` | `npx poplin uninstall cloudflare`: a removal's dry run, one that left a kind, or one whose token could not look for a kind |
 | `none`      | nothing                                                                     |
 
 | Exit code | Means                                                                              |
