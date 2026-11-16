@@ -38,6 +38,16 @@ const ONLY_ASKED = "nothing of the backup was sent: the install was asked only h
 /** The refusal of a site whose live pages this install cannot serve; every other refusal before a site is begun is the install not answering, which each later site would meet too. */
 const ROOT_LINKS = "root_links";
 
+/** The refusal of a site whose public name another site of this install holds. */
+const NAME_TAKEN = "name_taken";
+
+/** The way through for a site whose public name another site of the install holds, a site in the trash included: no flag imports it under another name. */
+const NAME_TAKEN_STEP =
+  "another site of this install holds that public name, and keeps it in the trash too: free the name there (poplin set <that site> --unlisted, after poplin restore <that site> if it is in the trash), then: poplin import <zip> --site <label>";
+
+/** What a dry run cannot see: it reads the zip alone, and what the install already holds shows only once a site is sent. */
+const NOT_CHECKED = "an id or a public name the install already holds shows only once a site is sent";
+
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
   abandoned: "the upload was given up and the site was not made",
@@ -79,10 +89,10 @@ interface Sized {
   readonly bytes: number;
 }
 
-/** What became of one site of the backup: it was made, or it was not and the code says why. `stops` is set by a failure every later site would meet too. */
+/** What became of one site of the backup: it was made, or it was not and the code says why. `stops` is set by a failure every later site would meet too, to how a run that stops there exits. */
 type Result =
   | (Sized & { readonly result: "imported"; readonly live_only?: true })
-  | (Sized & { readonly result: "skipped" | "failed"; readonly code: string; readonly message: string; readonly stops?: true });
+  | (Sized & { readonly result: "skipped" | "failed"; readonly code: string; readonly message: string; readonly stops?: Problem["exit"] });
 
 function sizeOf(site: BackupSite): Sized {
   return { id: site.record.id, label: site.label, versions: site.versions.length, files: site.files, bytes: site.bytes };
@@ -173,7 +183,7 @@ function sentenceOf(said: Problem): string {
 
 /** A site of which nothing was sent: its live version has a link the install cannot serve, or the install did not say how its addresses are laid out. */
 function unsent(site: BackupSite, said: Problem): Result {
-  const stops = said.code === ROOT_LINKS ? {} : { stops: true as const };
+  const stops = said.code === ROOT_LINKS ? {} : { stops: said.exit };
 
   return { ...sizeOf(site), result: "failed", code: said.code, message: sentenceOf(said), ...stops };
 }
@@ -185,7 +195,7 @@ function unfinished(site: BackupSite, failure: Failure, aftermath?: string): Res
   const result = isRefusedAs(failure, ALREADY_THERE) ? "skipped" : "failed";
   const forAll = failure.kind !== "refused" || REFUSED_FOR_ALL.includes(failure.status);
 
-  return { ...sizeOf(site), result, code: said.code, message, ...(forAll ? { stops: true as const } : {}) };
+  return { ...sizeOf(site), result, code: said.code, message, ...(forAll ? { stops: said.exit } : {}) };
 }
 
 function finished(site: BackupSite, sending: Sending): Result {
@@ -216,7 +226,7 @@ async function importSite(session: Session, format: number, site: BackupSite): P
     const sent = await sendUpload(client, begun.value, sending.files, {
       arrived: () => {
         arrived += 1;
-        if (io.terminal.progress) io.status(`importing ${site.label}: ${arrived}/${sending.files.length} files`);
+        if (io.terminal.progress) io.status(`importing ${site.label}: ${arrived}/${countText(sending.files.length, "file")}`);
       },
       io,
     });
@@ -236,7 +246,7 @@ async function importSite(session: Session, format: number, site: BackupSite): P
 }
 
 function stopsRun(done: Result): boolean {
-  return done.result !== "imported" && done.stops === true;
+  return done.result !== "imported" && done.stops !== undefined;
 }
 
 /** A result as `--json` prints it: without the mark that only steers the run. */
@@ -267,9 +277,14 @@ function reported(request: ImportRequest, results: readonly Result[]): Outcome {
   const sites = results.map(shown);
   const value = { file: request.zip, settings: request.settings, ...counts, stopped, sites };
   const notes = stopped ? ["the import stopped there: the sites after it were not tried"] : [];
+  if (results.some((done) => done.result === "failed" && done.code === NAME_TAKEN)) notes.push(NAME_TAKEN_STEP);
+
   if (counts.failed === 0) return { ok: true, value, lines, notes };
 
-  return { ok: true, value, lines, notes, found: "failed" };
+  // A run the install gave no answer to exits as every command does that it gave none to.
+  const ending = results.find(stopsRun);
+
+  return { ok: true, value, lines, notes, found: ending?.result === "failed" && ending.stops === "unreachable" ? "unreachable" : "failed" };
 }
 
 /** Put the backup into the install: the settings first when they were asked for, then each chosen site. */
@@ -311,7 +326,8 @@ async function preview(backup: Backup, request: ImportRequest, chosen: Chosen, a
   return {
     ok: true,
     value: { dry_run: true, file: request.zip, format: backup.manifest.format, settings: request.settings, sites },
-    lines: [...lines, `the backup passed every check; ${dryRunText(asked)}`],
+    lines: [...lines, `the backup passed every check of the zip; ${dryRunText(asked)}`],
+    notes: [NOT_CHECKED],
   };
 }
 

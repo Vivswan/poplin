@@ -35,6 +35,9 @@ type InstallRequest = RequestOf<"whoami" | "logout" | "config" | "doctor">;
 /** `config` showing every setting, showing one, or changing one. */
 type ConfigAction = RequestOf<"config">["action"];
 
+/** The key of one setting of an install. */
+type SettingKey = Extract<ConfigAction, { readonly key: unknown }>["key"];
+
 /** What the install remembers of its domain needing, as the API answers it. */
 type DomainNote = v.InferOutput<typeof DOMAIN_STATE>["note"];
 
@@ -97,15 +100,20 @@ async function logout({ client, io, server, source }: Session): Promise<Outcome>
   return { ok: true, value: { server, revoked: failure === undefined }, lines, notes: source === "file" ? [] : [local] };
 }
 
+/** What `--json` prints of the one setting a command named: its key and its value, so a script reads what it asked about and no other setting. */
+function oneSetting(key: SettingKey, values: v.InferOutput<typeof SETTINGS_ANSWER>["values"]): { readonly key: SettingKey; readonly value: unknown } {
+  return { key, value: values[key] };
+}
+
 async function config(action: ConfigAction, { client }: Session): Promise<Outcome> {
   if (action.kind !== "change") {
     const read = await client.call(SETTINGS_ANSWER, (api) => api.config.$get());
     if (!read.ok) return failed(read.failure);
 
     const texts = settingsToText(read.value.values);
-    const lines = action.kind === "show" ? [texts[action.key]] : columns(Object.entries(texts));
+    if (action.kind === "show") return { ok: true, value: oneSetting(action.key, read.value.values), lines: [texts[action.key]] };
 
-    return { ok: true, value: read.value, lines };
+    return { ok: true, value: read.value, lines: columns(Object.entries(texts)) };
   }
 
   const value = readSetting(action.key, action.value);
@@ -115,13 +123,14 @@ async function config(action: ConfigAction, { client }: Session): Promise<Outcom
   if (!changed.ok) return failed(changed.failure, "changes");
 
   const lines = columns([[action.key, settingsToText(changed.value.values)[action.key]]]);
-  if (action.key !== "logins") return { ok: true, value: changed.value, lines, notes: [] };
+  const answer = oneSetting(action.key, changed.value.values);
+  if (action.key !== "logins") return { ok: true, value: answer, lines, notes: [] };
 
   // The install says whether the change still waits for a repair. One that does not say, or that remembers no run of its domain to say it by, is taken to wait.
   const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
   const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
 
-  return { ok: true, value: changed.value, lines, notes: settled ? [] : [LOGINS_STEP] };
+  return { ok: true, value: answer, lines, notes: settled ? [] : [LOGINS_STEP] };
 }
 
 /** A check that reads something an admin alone may read: a publisher's refusal is a finding, not a failure. */

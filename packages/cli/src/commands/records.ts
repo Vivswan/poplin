@@ -76,8 +76,8 @@ export interface Session {
  * What a command came to.
  *
  * `value` is what `--json` prints, `lines` what a person reads on stdout, and `notes` go to stderr either way.
- * `steps` follow the lines and say what to type next: they hold nothing of a site but its label. `found` is set by a command that did its work and found something wrong, and exits as a failure.
+ * `steps` follow the lines and say what to type next: they hold nothing of a site but its label. `found` is set by a command that did its work and found something wrong: it exits as a failure, or as `unreachable` where the install stopped answering.
  */
 export type Outcome =
-  | { readonly ok: true; readonly value: unknown; readonly lines: readonly string[]; readonly steps?: readonly string[]; readonly notes?: readonly string[]; readonly found?: "failed" }
+  | { readonly ok: true; readonly value: unknown; readonly lines: readonly string[]; readonly steps?: readonly string[]; readonly notes?: readonly string[]; readonly found?: "failed" | "unreachable" }
   | { readonly ok: false; readonly problem: Problem };
