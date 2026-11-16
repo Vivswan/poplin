@@ -82,7 +82,8 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no database key exists outside Cloudflare; the one bucket key is the upload key below |
 | the CLI, to the bucket, for the files of a publish | one ticket a file: a signed address that lives 10 minutes | the Worker signs it with the upload key, which never leaves the Worker; [The upload key](#the-upload-key) says what a ticket and the key can reach |
-| the person who sets the install up | a Cloudflare API token, pasted into the setup page or into Repair on the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
+| the person who makes the install | a Cloudflare API token, read by `poplin install` on that person's own computer | the person makes it at Cloudflare; the command sends it to Cloudflare alone, uses it for that one run, in which it also makes the kept key, and never stores, logs, or prints it |
+| a person who repairs the install | a Cloudflare API token, pasted into Repair on the Domain screen or into the setup page | the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
 | the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
 
@@ -168,7 +169,7 @@ What guards each address:
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 | the setup page, `/setup` | the pasted Cloudflare API token alone: it must show the install's own zone, or without a domain the address of the install's own account, which a token that only reads can do. On a Worker with nothing set yet, a token changes only what its own account holds, and the run writes nothing to the install's own database. Anyone may open the page and gets the form; with no token that passes, nothing of the install. A run with a token that passes answers every user's email. Five tries a minute from one address. After the first login it only repairs: it takes the token and no other value, and corrects no login |
-| the Worker's own `workers.dev` address, on an install under a domain | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
+| the Worker's own `workers.dev` address, on an install under a domain | the install switches it off: nothing answers there |
 
 Two Access applications do this, made once at install, never per site:
 
@@ -201,7 +202,7 @@ An install [without a domain](../start/without-a-domain.md) answers at three hos
 | a public name | a path on the hostname of the open sites: `poplin-sites.your-name.workers.dev/docs/` |
 | DNS and certificates | hold hostnames alone. A site's name and id are in the path, which neither holds |
 | the `workers.dev` address | is the dashboard's own. No hostname answers the setup page alone |
-| the setup token | five permissions, all of the account |
+| the account token | six permissions to install and five to repair, all of the account |
 | the kept key | the account's rights alone: it reads and writes nothing of a domain |
 | rules at Cloudflare's edge | none. Every request reaches the Worker, and its limits per visitor and per site count it |
 | `block_bots` | does nothing. `search_engines_allowed` and `outside_pages` work through the Worker |
@@ -255,7 +256,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 ## Optional edge rules
 
-The setup token of an install under a domain needs nine permissions. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The account token of an install under a domain needs ten permissions to install, and nine to repair. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
 | Permission | With it, Repair makes | Without it |
 | --- | --- | --- |

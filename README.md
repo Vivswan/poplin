@@ -36,25 +36,35 @@ Paste this line into an agent, such as Claude Code or Codex. A chat in a browser
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
-The agent sets poplin up with you: it tells you what to click in your browser, checks each step, and does the rest. It acts as you, with the login the setup saves on your computer.
+The agent sets poplin up with you: it asks for a domain or none and for your email, tells you what to choose in your browser, and runs one command. It acts as you, with the login the setup saves on your computer.
 
-Have ready a Cloudflare account with a payment method on it, and a GitHub account: [What you need](docs/start/by-hand.md#what-you-need) has the whole list. A first install takes about an hour and twenty minutes. [With an agent](docs/start/with-an-agent.md) shows who does what.
+| You have       | The agent                                                                         |
+| -------------- | --------------------------------------------------------------------------------- |
+| no install yet | makes one with you: your own copy of poplin, in your Cloudflare account           |
+| an install     | connects itself to it, and adds poplin's tools to itself                          |
 
-A domain is your choice. The agent asks which way you want:
+[With an agent](docs/start/with-an-agent.md) shows who does what. If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
 
-| You install         | A site answers at                                                 | The steps                                             |
-| ------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
-| under your domain   | a hostname of its own: `report--k3f9x2ab71qz-p-poplin.example.com` | [By hand](docs/start/by-hand.md)                      |
-| without a domain    | a path: `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/` | [Without a domain](docs/start/without-a-domain.md) |
+## Install
 
-| You have       | The agent                                                                      |
-| -------------- | ------------------------------------------------------------------------------ |
-| no install yet | takes you through making one: your own copy of poplin, in your Cloudflare account |
-| an install     | connects itself to it, and adds poplin's tools to itself                       |
+One command makes your install. A domain is your choice:
 
-Installing by hand: the two pages of the table have the same steps.
+| You install       | The command                                          | A site answers at                                                    |
+| ----------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| under your domain | `npx poplin install cloudflare --domain example.com` | a hostname of its own: `report--k3f9x2ab71qz-p-poplin.example.com`   |
+| without a domain  | `npx poplin install cloudflare --no-domain`          | a path: `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/` |
 
-If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
+```text
+$ npx poplin install cloudflare
+Your own domain (example.com), or Enter for none: example.com
+Your email, the first login: you@example.com
+Account token (not shown):
+made      Worker                poplin, runs 0.1.0
+poplin 0.1.0 is installed.
+Your dashboard: https://poplin.example.com
+```
+
+Have ready a Cloudflare account with a payment method on it, and Node.js 24. An option answers a question before it is asked. The command prints a link to the form that makes the account token, and `--dry-run` lists what a run would make and changes nothing. [Install](docs/start/install.md) has every step for both kinds.
 
 ## Who can open a site
 
@@ -91,6 +101,6 @@ In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment 
 | Page                                      | What it covers                                       |
 | ----------------------------------------- | ---------------------------------------------------- |
 | [The guide](docs/README.md)               | every command, every agent tool, and every error     |
-| [Install](docs/start/README.md)           | getting your own install, under a domain or without  |
+| [Start](docs/start/README.md)             | getting your own install, under a domain or without  |
 | [Security](docs/about/security.md)        | what poplin protects against and what it does not    |
 | [Remove](docs/upkeep/remove.md)              | taking an install down, piece by piece               |

@@ -5,14 +5,16 @@ order: 25
 
 # Install poplin without a domain
 
-An install at the address Cloudflare gives a Worker, which needs no domain; [By hand](by-hand.md) is the install under a domain of your own. [Your agent can lead these steps](with-an-agent.md) too.
+What differs when an install has no domain: its addresses, its account token, and what the command prints. The steps are those of [Install](install.md), with `--no-domain`. [Your agent can run them with you](with-an-agent.md) too.
 
 ```text
-before:  a Cloudflare account
+you have:  a Cloudflare account
 
-after:   https://poplin.your-name.workers.dev                               your dashboard
-         https://poplin-sites.your-name.workers.dev/report--k3f9x2ab71qz/   an unlisted or public site
-         https://poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/ a private site
+you run:   npx poplin install cloudflare --no-domain
+
+you get:   https://poplin.your-name.workers.dev                               your dashboard
+           https://poplin-sites.your-name.workers.dev/report--k3f9x2ab71qz/   an unlisted or public site
+           https://poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/ a private site
 ```
 
 `your-name` stands for the word of your own account in the address Cloudflare gives its Workers.
@@ -29,68 +31,97 @@ after:   https://poplin.your-name.workers.dev                               your
 | a public name                 | `docs-page.example.com`                  | `poplin-sites.your-name.workers.dev/docs/`                    |
 | junk traffic                  | stopped by Cloudflare's rules first      | no rule runs first: the Worker's own limits per visitor and per site count every request |
 | the `block_bots` setting      | blocks AI crawlers on the domain         | does nothing: it needs a domain                               |
-| the account token             | nine permissions, account and domain     | five permissions, account alone                               |
-
-## What you need
-
-The table of [By hand](by-hand.md#what-you-need), without the domain. Cloudflare asks for a payment method before it switches on R2 and Zero Trust; [What can cost money](../upkeep/cost/what-can-cost-money.md) says when it is charged.
+| the account token             | ten permissions, account and domain      | six permissions, account alone                                |
+| what you need                 | a domain that is Active on the account   | the account's `workers.dev` subdomain, of 36 characters at most |
 
 ## The steps
 
-Steps 1, 2, and 6 are the ones of [By hand](by-hand.md#the-steps). Three differ.
+The five steps of [Install](install.md), each with what differs here:
 
-3. **Make a Cloudflare API token.** The link opens Cloudflare's form with five permissions chosen, and none of a zone.
+| Step of Install                  | Here                                                                  |
+| -------------------------------- | --------------------------------------------------------------------- |
+| 1. Switch on what no command can | all three rows of its table, the account's subdomain included        |
+| 2. Run the command               | press Enter at the first question, or add `--no-domain`              |
+| 3. Make the account token        | [the other link, and six permissions](#the-account-token)            |
+| 4. Read what it made             | [forwarders in place of records and routes](#what-it-prints)         |
+| 5. Log this computer in          | the same question and the same page, at [your own address](#log-in)  |
 
-   [Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&name=poplin%20install)
+## What you need
 
-   | On the form       | Do                                                                               |
-   | ----------------- | -------------------------------------------------------------------------------- |
-   | the five rows     | leave them                                                                       |
-   | Account Resources | choose Include, then your account                                                |
-   | every other field | leave it as it is                                                                |
-   | the bottom        | press Continue to summary, then Create Token                                     |
-   | the next page     | The token is shown once: paste it into a note now; you need it in the next step. |
+The table of [Install](install.md#what-you-need), without the row of the domain. The account's subdomain is the `your-name` of every address above.
 
-4. **Finish on the setup page.** Open the Worker's address from step 2, the one ending in `workers.dev`. Choose No domain, fill in two boxes, and press Repair once.
+## The command
 
-   | Box           | Put in                                             |
-   | ------------- | -------------------------------------------------- |
-   | Your email    | an email whose inbox you can read: the first login |
-   | Account token | the token of step 3                                |
+At the first question, press Enter:
 
-   The page lists what it made, with the address of your dashboard and of your sites:
+```text
+Your own domain (example.com), or Enter for none:
+```
 
-   ```text
-   11 repaired
-   The login is ready. Open your dashboard and log in: https://poplin.your-name.workers.dev
+Or give the answer as an option, and the question is not asked:
 
-   Piece                State     Detail
-   Forwarder            created   poplin-private: https://poplin-private.your-name.workers.dev (private sites)
-   Forwarder            created   poplin-sites: https://poplin-sites.your-name.workers.dev (unlisted and public sites)
-   Access application   created   poplin: poplin.your-name.workers.dev, poplin-private.your-name.workers.dev
-   ```
+```sh
+npx poplin install cloudflare --no-domain
+```
 
-   | Piece              | It is                                                                                   |
-   | ------------------ | --------------------------------------------------------------------------------------- |
-   | Forwarder          | a small Worker that gives your sites an address of their own and hands every request on |
-   | Access application | Cloudflare's login in front of the dashboard and of every private site                  |
+## The account token
 
-   The setup page must be opened at the Worker's own `workers.dev` address: the install reads the name of your account from it.
+```text
+The account token needs 6 permissions, for this account:
+  Access: Apps and Policies: Edit, Workers Scripts: Edit, ...
+Optional:
+  Notifications: Edit: Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.
+This link opens the form with each one chosen that a link can choose:
+  https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
+```
 
-   From a terminal, the same run is `poplin setup` with no `--domain`:
+The link opens Cloudflare's form with five rows filled, and none of a domain. The install needs six permissions: the link cannot choose Workers R2 Storage, so add that one yourself.
 
-   ```sh
-   export POPLIN_SETUP_TOKEN="paste the account token here"
-   npx poplin setup --server https://poplin.your-name.workers.dev --login you@example.com
-   ```
+[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&name=poplin%20install)
 
-5. **Open your dashboard and log in.** It is at the Worker's address, the one the setup page was on. Cloudflare's login asks for your email and sends a code to its inbox.
+| On the form       | Do                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| the five rows     | leave them                                                                           |
+| Add more          | press it, and choose in the new row's three boxes: Account, Workers R2 Storage, Edit |
+| Account Resources | choose Include, then your account                                                    |
+| every other field | leave it as it is                                                                    |
+| the bottom        | press Continue to summary, then Create Token                                         |
+| the next page     | the token is shown once: copy it, paste it at the command's question, and press Enter. Its letters do not show |
 
-   ```text
-   https://poplin.your-name.workers.dev
-   ```
+One permission is optional here: Notifications: Edit, which the command lists with what it adds. With it, the install makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar). The other optional permissions are all of a domain.
 
-In step 6, the address after `--server` is that same address:
+## What it prints
+
+```text
+looking for an install ... none
+made      R2 bucket             poplin-sites
+made      D1 database           poplin
+made      Worker                poplin, runs 0.1.0
+made      Worker address        on: poplin.your-name.workers.dev
+made      Forwarder             poplin-private: https://poplin-private.your-name.workers.dev (private sites)
+made      Forwarder             poplin-sites: https://poplin-sites.your-name.workers.dev (unlisted and public sites)
+made      Access application    poplin: poplin.your-name.workers.dev, poplin-private.your-name.workers.dev
+made      Key                   poplin kept key
+waiting for https://poplin.your-name.workers.dev to answer
+https://poplin.your-name.workers.dev answers
+poplin 0.1.0 is installed.
+Your dashboard: https://poplin.your-name.workers.dev
+The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
+Log this computer in now?
+```
+
+The sample shows a few of the rows. Two pieces are of this kind alone:
+
+| Piece          | It is                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------- |
+| Worker address | the address Cloudflare gives the Worker, switched on: your dashboard answers there      |
+| Forwarder      | a small Worker that gives the sites of one kind their hostname and hands every request on |
+
+The Access application is Cloudflare's login in front of the dashboard and of every private site.
+
+## Log in
+
+The command's last question logs this computer in, as [step 5 of Install](install.md#5-log-this-computer-in-and-check) shows: the pages in your browser are the same. After a no, or on another computer, the address after `--server` is the dashboard's, as the command printed it:
 
 ```sh
 npx poplin login --server https://poplin.your-name.workers.dev

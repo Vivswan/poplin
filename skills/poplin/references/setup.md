@@ -6,16 +6,16 @@ Open this when the user asks you to set poplin up, or when you have no poplin to
 
 Poplin publishes a static site (a folder, or one HTML file) to an install: the user's own copy of poplin, in their own Cloudflare account. Once you are set up, the user can ask you to put a page online and you hand back its address.
 
-| Step | What happens                                          | Who does it                                 |
-| ---- | ----------------------------------------------------- | ------------------------------------------- |
-| 1    | Say what is about to happen, and ask                  | you                                         |
-| 2    | Check what exists: Node.js, a saved login, an install | you                                         |
-| 3    | Make the install, when there is none                  | the user clicks; you say what, and check    |
-| 4    | Log this computer in, when no login is saved          | you run it; the user allows it in a browser |
-| 5    | Add the MCP server to your own configuration          | you                                         |
-| 6    | Confirm that it works, and tell the user              | you                                         |
+| Step | What happens                                          | Who does it                                         |
+| ---- | ----------------------------------------------------- | --------------------------------------------------- |
+| 1    | Say what is about to happen, and ask                  | you                                                 |
+| 2    | Check what exists: Node.js, a saved login, an install | you                                                 |
+| 3    | Make the install, when there is none                  | one command; the user does what only a browser can  |
+| 4    | Log this computer in, when no login is saved          | you run it; the user allows it in a browser         |
+| 5    | Add the MCP server to your own configuration          | you                                                 |
+| 6    | Confirm that it works, and tell the user              | you                                                 |
 
-`example.com` stands for the user's own domain, and `https://poplin.example.com` for the address of their dashboard, here and below. On an install without a domain the dashboard is at the Worker's own address, `https://poplin.your-name.workers.dev`. The poplin repository and the place you read this page from are neither. `npx` may ask to download the `poplin` package the first time it runs: answer yes.
+`example.com` stands for the user's own domain, and `https://poplin.example.com` for the address of their dashboard, here and below. On an install without a domain the dashboard is at `https://poplin.your-name.workers.dev`, where `your-name` is a word of the user's account. The poplin repository and the place you read this page from are neither. `npx` may ask to download the `poplin` package the first time it runs: answer yes.
 
 ## 1. Say what is about to happen, and ask
 
@@ -63,170 +63,176 @@ With no login, ask: "Do you already have a poplin install? If so, what is the ad
 
 ## 3. Make the install
 
-The user makes the install in their browser, in five parts. You give one part at a time: the address to open, what to click, and what to tell you back. You check it before the next part.
+One command makes the install: `npx poplin install cloudflare`. It looks for an install first, and where one is, it says so and changes nothing.
 
-| Part | What                                    | The user tells you back                   |
-| ---- | --------------------------------------- | ----------------------------------------- |
-| a    | switch on two things in Cloudflare      | that both show their overview             |
-| b    | make the Worker, with the Deploy button | the address ending in `workers.dev`       |
-| c    | make a Cloudflare API token             | that they hold it; never the token itself |
-| d    | finish on the setup page                | the lines the page shows above its table  |
-| e    | log in to the dashboard                 | that the dashboard is open                |
+```text
+a  ask two things          a domain or none; the email of the first login
+b  the browser             the user switches on what no command can
+c  the account token       the user makes it; it never passes through the chat
+d  the dry run             reads everything, changes nothing, and says what blocks a run
+e  the run                 makes the install, and prints the dashboard's address
+```
 
 Before part a, ask what the user has. Say which of these is missing, and stop until they have it.
 
-| The user needs                                    | For                                       |
-| ------------------------------------------------- | ----------------------------------------- |
-| a Cloudflare account                              | the Free plan is enough                   |
-| an email inbox they can read                      | the login's code goes there               |
-| a payment method on the account                   | part a asks for one, at a price of 0      |
-| a GitHub account, or git and bun on this computer | part b                                    |
+| The user needs                  | For                               |
+| ------------------------------- | --------------------------------- |
+| a Cloudflare account            | the Free plan is enough           |
+| an email inbox they can read    | the login's code goes there       |
+| a payment method on the account | part b asks for one               |
 
-Then ask which of the two ways the user wants, and keep the answer: parts c, d, and e differ by it. Show the table, and say the last row in a sentence of your own.
+Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/cost/what-can-cost-money.md).
+
+### a. Ask two things
+
+Ask which of the two kinds the user wants, and keep the answer. Show the table, and say the last row in a sentence of your own.
 
 | Thing                    | Under the user's domain                                 | Without a domain                                             |
 | ------------------------ | ------------------------------------------------------- | ------------------------------------------------------------ |
 | the user needs           | a domain that Cloudflare's home page lists as Active    | nothing more                                                 |
+| the option               | `--domain example.com`                                  | `--no-domain`                                                |
 | the dashboard            | `https://poplin.example.com`                            | `https://poplin.your-name.workers.dev`                       |
 | a site's address         | a hostname: `report--k3f9x2ab71qz-p-poplin.example.com` | a path: `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/` |
 | a link that starts with `/` | works                                                | the publish is refused: links are written from their own page |
 | blocking AI crawlers     | a setting of the install                                | that one setting does nothing                                |
 | two sites in one browser | kept apart                                              | sites of a kind share one browser origin: a script of one can read another, so only trusted pages belong there |
 
-The way is chosen once. Poplin has no command and no screen that changes it on an install that is made.
+The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made.
 
-Say when the payment method can be charged, in the words of [What can cost money](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/cost/what-can-cost-money.md).
+Then ask for the email of the first login: one whose inbox the user can read. It goes after `--login`.
 
-**Never take the Cloudflare API token in the chat.** The token of parts c and d changes the user's Cloudflare account. The user pastes it into the setup page in their own browser, where it goes to the install and nowhere else.
-
-If the user pastes it to you all the same, do not repeat it. Ask them to open My Profile, then API Tokens, at Cloudflare, to choose Roll in that token's menu, and to use the new text in part d.
-
-### a. Switch on two things in Cloudflare
+### b. The browser: what no command switches on
 
 Ask the user to open <https://dash.cloudflare.com> and log in.
 
-| Open                                        | Do                                 |
-| ------------------------------------------- | ---------------------------------- |
-| Zero Trust, in the left menu                | pick a team name and the Free plan |
-| Storage & databases, then R2, then Overview | finish the checkout it shows       |
+| Open                                        | Do                                                | Kind             |
+| ------------------------------------------- | ------------------------------------------------- | ---------------- |
+| Zero Trust, in the left menu                | pick a team name and the Free plan                | both             |
+| Storage & databases, then R2, then Overview | finish the checkout it shows                      | both             |
+| Workers & Pages                             | set the account's subdomain, if it shows none yet | without a domain |
 
-The team name can be any word. Each sign-up asks for the payment method and names its price. Each is done when Cloudflare shows its overview instead of the sign-up. While one still shows the sign-up, ask what the page asks for, and have the user finish it.
+The team name can be any word. Zero Trust and R2 each ask for the payment method. Each is done when Cloudflare shows its overview instead of the sign-up. The dry run of part d tells you when one is still off.
 
-### b. Make the Worker
+### c. The account token
 
-Ask the user to open this address and sign in to GitHub when asked:
+**Never take the account token in the chat.** It changes the user's Cloudflare account. The user gives it to the command alone, which sends it to Cloudflare and stores it nowhere.
 
-```text
-https://deploy.workers.cloudflare.com/?url=https://github.com/Vivswan/poplin
-```
+If the user pastes it to you all the same, do not repeat it. Ask them to open My Profile, then API Tokens, at Cloudflare, to choose Roll in that token's menu, and to use the new text.
 
-Where the form asks for an account, they pick their own. They change nothing else: the project stays `poplin`, the bucket `poplin-sites`, the database `poplin`. Then they press the button at the bottom of the form, the one that starts the deploy.
-
-| The form or GitHub asks                           | The user                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------ |
-| whether Cloudflare may reach their GitHub account | allows it: Cloudflare puts the copy there and builds from it |
-| whether the copy is private or public             | picks either. The copy holds poplin's code and no token      |
-
-The user keeps the tab open. After a few minutes it shows the Worker's page, with the Worker's own address on it, the one ending in `workers.dev`. Ask for it, and keep it:
-
-```text
-https://poplin.your-name.workers.dev
-```
-
-If the tab was closed or shows no address, the user opens <https://dash.cloudflare.com>, goes to Workers & Pages, and selects the Worker `poplin`: its page names the address.
-
-Check: ask the user to open that address.
-
-| The address shows   | Next                                                                        |
-| ------------------- | --------------------------------------------------------------------------- |
-| a page headed Setup | part c                                                                      |
-| anything else       | ask for its words; have the user wait a minute and reload, then check again |
-
-If the build fails, no page with the address opens and Cloudflare shows the build's log. Ask for its last lines, and look them up under step 2 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-2-the-build-fails).
-
-**Without a GitHub account**, you run part b yourself: the three commands under From a terminal instead, in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/start/from-a-terminal.md). First run `git --version` and `bun --version`: with either missing, the user installs it or takes the GitHub way.
-
-The last command opens Cloudflare in the user's browser to ask for access, then deploys and prints the Worker's address. Go on from the check above.
-
-### c. Make a Cloudflare API token
-
-On the Setup page the user first chooses the way, at the top of the form: Your domain, or No domain. Then, under Make an account token, they press Open the account token form. Cloudflare's form opens in a new tab with the permissions already chosen: nine under a domain, five without one.
-
-| On the form       | The user                                               |
-| ----------------- | ------------------------------------------------------ |
-| the rows          | leaves them                                            |
-| Account Resources | chooses Include, then their account                    |
-| Zone Resources    | under a domain alone: chooses Include, then Specific zone, then their domain |
-| every other field | leaves it as it is                                     |
-| the bottom        | presses Continue to summary, then Create Token         |
-| the next page     | copies the token: it is shown once                     |
-
-The install never stores the token. After part e the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working. Only Check and Repair on the dashboard's Domain screen ask for a token again, and the same form makes a new one.
-
-If the form opens empty, step 3 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-3-the-form-opens-empty) has the clicks that add the permissions by hand.
-
-### d. Finish on the setup page
-
-Back on the Setup page, the user fills each box and presses Repair. The boxes are under Fill in three boxes, or under Fill in two boxes without a domain, where there is no Domain box.
-
-| Box           | Holds                                                     |
-| ------------- | --------------------------------------------------------- |
-| Domain        | under a domain alone: their domain, with nothing before it: `example.com` |
-| Your email    | an email whose inbox they can read: the first login       |
-| Account token | the token of part c                                       |
-
-Ask the user to copy you the lines the page shows above its table. They hold no token.
-
-| The lines say                                              | Means               | Next                                       |
-| ---------------------------------------------------------- | ------------------- | ------------------------------------------ |
-| a count that is repaired, or `Nothing to repair`           | the install is made | part e                                     |
-| a count that is not done, or that is to repair             | a row needs work    | ask for those rows, then the install guide |
-| one sentence and no table, such as `Account token refused` | the run was refused | the install guide                          |
-
-For rows that need work, ask the user to copy each row whose State is failed, missing, differs, or not run, with its Detail, and any line with a link above the table. Look the words up in the table under step 4 of the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#step-4-the-page-shows-something-else).
-
-Repair is safe to repeat. The page empties the token's box after every run and keeps the other two, so the user pastes the token again before they press it.
-
-**The same from a terminal.** `poplin setup` does what the page does, and reads the account token from `POPLIN_SETUP_TOKEN` in the environment alone. The user runs it in a terminal of their own, where you do not see the token:
+Run this, and give the user the link of their kind from what it prints:
 
 ```sh
-export POPLIN_SETUP_TOKEN="paste the account token here"
-npx poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com
+npx poplin install cloudflare --help
 ```
 
-In PowerShell the first line is `$env:POPLIN_SETUP_TOKEN = "paste the account token here"`. Without a domain, the second line has no `--domain`, and its `--server` must be the Worker's own `workers.dev` address.
+The link opens Cloudflare's form with every permission chosen but one.
 
-Ask the user to copy you what the second line printed: the token is not in it.
+| On the form       | The user                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| the rows          | leaves them: nine under a domain, five without one                                   |
+| Add more          | presses it, and chooses in the new row's three boxes: Account, Workers R2 Storage, Edit |
+| Account Resources | chooses Include, then their account                                                  |
+| Zone Resources    | under a domain alone: chooses Include, then Specific zone, then their domain         |
+| every other field | leaves it as it is                                                                   |
+| the bottom        | presses Continue to summary, then Create Token                                       |
+| the next page     | copies the token: it is shown once                                                   |
 
-| It ends with                            | Exit code | Next                                                          |
-| --------------------------------------- | --------- | ------------------------------------------------------------- |
-| `the install's side is as it should be` | 0         | part e                                                        |
-| a count that is not done                | 1         | the rows above it say why: the install guide, as for the page |
-| a sentence and a hint, with no rows     | 1         | the hint says what to do                                      |
+That makes ten permissions under a domain, and six without one. If the form opens empty, the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#the-token-form-opens-empty) has the rows to add by hand.
 
-### e. Log in to the dashboard
+### d. The dry run
 
-The user opens the dashboard's address: `https://poplin.example.com` with their own domain, or without a domain the Worker's address of part b. The lines of part d name it. Cloudflare's login asks for their email and sends a code to its inbox.
+Run it with the user's two answers. It changes nothing.
 
-| The user sees                       | Do                                                                                  |
-| ----------------------------------- | ----------------------------------------------------------------------------------- |
-| the browser cannot find the site    | a new address takes a few minutes: wait, then reload                                |
-| no code arrives                     | the email differs from part d: on the Setup page, the right email, the token, Repair |
-| the dashboard, with `No sites yet`  | the install is ready: step 4                                                        |
+```sh
+npx poplin install cloudflare --domain example.com --login you@example.com --dry-run --json
+```
 
-After this first login the Setup page only repairs: it takes the account token alone.
+Without a domain, `--no-domain` stands in place of `--domain example.com`. It prints one JSON value:
+
+```json
+{ "ok": true, "run": "dry-run", "ready": true, "address": "https://poplin.example.com",
+  "rows": [{ "object": "R2 bucket", "will": "make", "detail": "poplin-sites" }],
+  "blocked": [], "steps": [] }
+```
+
+| The value says                                         | Exit code | Means                                          | Next                                                  |
+| ------------------------------------------------------ | --------- | ---------------------------------------------- | ----------------------------------------------------- |
+| `missing_answer`, and its list holds the word token    | 2         | your environment holds no token                | the user runs parts d and e: see below                |
+| `ready` is true                                        | 0         | no read found anything that blocks a run       | part e                                                |
+| `ready` is false, and `blocked` has entries            | 1         | the user must act first                        | the table of blocks below, then this part again       |
+| `ready` is false, `blocked` is empty, and no `problem` | 1         | a read failed, and its row says why            | run it again in a minute                              |
+| `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`, and go to step 4      |
+| `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt` |
+| any other `problem`                                    | 1, 2, 5   | a stop                                         | [`refusals.md`](refusals.md)                          |
+
+Each entry of `blocked` has the address to open, and says what blocks:
+
+| It says         | Ask the user to                                                               |
+| --------------- | ----------------------------------------------------------------------------- |
+| `storage_off`   | finish the R2 row of part b, and check the token's row Workers R2 Storage     |
+| `login_off`     | finish the Zero Trust row of part b                                           |
+| `right_lacking` | add the permission it names to the token: Edit in the token's menu, then save |
+| `no_address`    | finish the Workers & Pages row of part b: a subdomain of 36 characters at most |
+| `no_release`    | wait: poplin's website names no version to install yet                        |
+| `newer_release` | nothing: run the line again as `npx poplin@latest install cloudflare`         |
+| `bad_release`   | nothing: run the line again, and tell the user if it comes back               |
+
+**When your environment holds no token**, the user runs the command in a terminal of their own, where you do not see the token. Give them this one line, with their answers in it:
+
+```sh
+npx poplin install cloudflare --domain example.com --login you@example.com --dry-run
+```
+
+It asks `Account token (not shown):`. The user pastes the token there and presses Enter. Ask them to copy you everything it printed: the token is in no line.
+
+| Its last line starts with | Next                                                |
+| ------------------------- | --------------------------------------------------- |
+| `ready:`                  | part e                                              |
+| `not ready:`              | the lines above it say what to switch on, and where |
+| anything else             | look the line up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md) |
+
+### e. The run
+
+The same line, with `--yes` in place of `--dry-run`:
+
+```sh
+npx poplin install cloudflare --domain example.com --login you@example.com --yes --json
+```
+
+| The value says                          | Exit code | Next                                                                   |
+| --------------------------------------- | --------- | ---------------------------------------------------------------------- |
+| a `problem`                             | 1, 2, 5   | a stop, with no rows: the table of part d, then [`refusals.md`](refusals.md) |
+| `ok` is true                            | 0         | the install is made: keep `address`, the dashboard's, and go to step 4 |
+| `ready` is true, and `answers` is false | 1         | the install is made, and its new address does not answer yet: wait a few minutes, then step 4 |
+| `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows |
+
+A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
+
+**When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again, prints a row for each thing it makes, and ends:
+
+```text
+poplin 0.1.0 is installed.
+Your dashboard: https://poplin.example.com
+Log this computer in now?
+```
+
+Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Then run the check of step 4.
+
+The command stores the token nowhere. Afterwards the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working.
 
 ## 4. Log this computer in
 
 Do this when step 2 found no login. For a login that ran out, do it only on the user's yes. Never replace a login that works.
 
-Run the login with the dashboard's address. It prints a web address and a short code, and then waits for the user, so run it in a way that lets you read its output while it is still running:
+Run the login with the dashboard's address: the one the user gave you, or the one the install printed. It prints a web address and a short code, and then waits for the user, so run it in a way that lets you read its output while it is still running:
 
 ```sh
 npx poplin login --server https://poplin.example.com
 ```
 
 Give the user both, each on its own line. The address opens the dashboard on the question `Allow this login?`. The page asks for the last 4 letters of the code. Neither the page nor the address holds any of them, so the user needs the code you gave them.
+
+On a new install Cloudflare's login comes first: it asks for the user's email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser cannot find it.
 
 | The user                           | Does                                              |
 | ---------------------------------- | ------------------------------------------------- |

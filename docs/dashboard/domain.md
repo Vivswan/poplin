@@ -5,7 +5,7 @@ order: 50
 
 # Domain
 
-What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules at Cloudflare with what makes each; the first Repair is step 4 of [By hand](../start/by-hand.md#the-steps).
+What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules at Cloudflare with what makes each; the first Repair is step 4 of [Install](../start/install.md).
 
 After the first login, Domain does what the setup page did.
 
@@ -53,7 +53,7 @@ The key may not change a DNS record, a route, or a redirect, so Repair opens a d
 
 | Step | In the dialog         | Do                                                                                                         |
 | ---- | --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 1    | Make an account token | press Open the account token form, or take the token you kept from [step 3](../start/by-hand.md#the-steps) |
+| 1    | Make an account token | press Open the account token form, or take the token you kept from [step 3](../start/install.md#3-make-the-account-token) |
 | 2    | Paste it              | paste the token into the box Account token, then press the dialog's Repair                                 |
 
 Three rows are Cloudflare's login:
@@ -132,7 +132,7 @@ A bot the rule lets through reaches the Worker as any visitor does: a private si
 
 A rule the domain lacks is made, and one its plan has no room for is left out. No permission is added for it, and no Repair is pressed.
 
-An install holds its key from its first Repair: Account API Tokens: Edit is one of the nine permissions, and the key holds the right to write WAF rules whatever else the token held.
+An install holds its key from the run that made it: Account API Tokens: Edit is one of the ten permissions, and the key holds the right to write WAF rules whatever else the token held.
 
 An install [without a domain](../start/without-a-domain.md) has none of the five rules: no Repair and no saved setting makes one.
 
