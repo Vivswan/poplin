@@ -20,6 +20,9 @@ const LEAVES_WITHIN = { timeout: 5000 };
 /** How long a result that is on its way out stays at the most on an idle machine, with room to spare, in milliseconds: one still there after it has not been taken away. */
 const STAYED_MS = 500;
 
+/** How long the test of the results may take, in milliseconds: both waits for a result to leave at their longest, the time one must stay, and as much again for drawing the menu and saving three files. */
+const RESULTS_TEST_MS = 2 * LEAVES_WITHIN.timeout + 2 * STAYED_MS + 4000;
+
 /** What a menu did: the questions it asked of the server, and the addresses it had the browser save. */
 interface Done {
   readonly asked: string[];
@@ -146,7 +149,7 @@ describe("the Download menu", () => {
     await waitFor(() => expect(ways()).toBe(0), LEAVES_WITHIN);
 
     expect([stayed, menu.saved.map((address) => new URL(address, window.location.href).searchParams.get("part")), document.activeElement?.getAttribute("aria-label")]).toEqual([1, ["1", "2", "3"], "Download"]);
-  });
+  }, RESULTS_TEST_MS);
 
   // Drift: a result would outlive the screen it was said on, and a download begun after coming back would stand beside it, two ways to a next file at once.
   test("takes its result with the way to the next file away when the screen is left", async () => {
