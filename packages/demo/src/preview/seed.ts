@@ -239,7 +239,7 @@ function sentOf(draft: Draft, samples: Samples): Made["sent"] {
   return title === undefined ? { files } : { files, page_title: title };
 }
 
-/** The two people of the install, each as an admin behind a session. */
+/** The two people of the install, each as an admin in a browser. */
 function people(world: World): Cast["actors"] {
   const second = parseLogin(SECOND_ADMIN);
   if (!second.ok) throw new Error(`the demo's second login was refused: ${second.refusal}`);

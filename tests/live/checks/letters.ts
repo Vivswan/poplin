@@ -123,7 +123,7 @@ export const LETTER_CHECKS: readonly Check[] = [
     run: async (bench) => {
       const site = labelAddress(bench.domain, GHOST_ID, "u");
 
-      for (const address of [`${site}page`, `${bench.admin}/login`]) {
+      for (const address of [`${site}page`, `${bench.admin}/settings`]) {
         const response = await bench.visit(address.replace("https://", "http://"));
         expect(response.status, address).toBeOneOf([301, 308]);
         expect(response.headers.get("Location"), address).toBe(address);

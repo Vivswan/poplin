@@ -1,4 +1,4 @@
-// The setup's own handler: the two runs a program calls on an install nobody can log in to yet, with no session behind them.
+// The setup's own handler: the two runs a program calls on an install nobody can log in to yet, with no login behind them.
 //
 //   POST /setup/api/check    read every piece with the token in a JSON body, and answer the reading as JSON
 //   POST /setup/api/repair   make every piece match; on an install with nothing set it also gives the install its domain and first login

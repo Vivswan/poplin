@@ -173,8 +173,9 @@ The database's free plan takes 100,000 rows written a day, every database of the
 | One request of a run                      | Rows, at most | Which are                                                                  |
 | ----------------------------------------- | ------------- | -------------------------------------------------------------------------- |
 | a new site, from its begin to its finish  | 19            | the site 8, the upload 6, the day's counts 2, the version 2, the log 1     |
-| a new site that is told an expiry         | 20            | its entry in the index of expiries; every site of the checks has one       |
+| a new site not told never to run out      | 20            | its entry in the index of expiries; one that names no expiry may take the install's |
 | a new version that drops no older one     | 13            | 17 where it drops one, and 2 for each further one it drops                 |
+| a new version that asks settings of its site |            | and what those settings cost as a change of the site, below                |
 | a site put back from a backup             | 19            | 2 for each version more, and 1 where it runs out                           |
 | a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 6 out of it         |
 | a change of who may open a site           | 3             | any other setting 2, both at once 5, and 1 where it is told an expiry      |
@@ -261,6 +262,8 @@ Each result comes with one line: the requests, the time, each answer's count, ea
 
 ## A request that is cut off
 
+The edge closes a connection it kept open, and a request sent on it then gets no answer. A client sends a read again by itself, and no other request. So every request of a run that is no read opens a connection of its own, in `send.ts`; reads keep the open ones.
+
 The edge's rules block with an answer: a 403. A stranger's request whose connection closes before any answer says nothing of a rule or of the install. The run sends it once more and reads the second answer, and the log holds one line for it. A request that is cut off twice reaches its check as cut off, and so does a change asked of the API, which is never sent twice.
 
 ```text
@@ -278,7 +281,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`                                                           |
-| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard |
+| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |

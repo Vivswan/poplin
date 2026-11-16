@@ -74,8 +74,8 @@ const FIRST_RESET_ROWS = 302;
 /** The rows of a site removed for good, as the harness counts one. */
 const REMOVAL_ROWS = 13;
 
-/** The rows of a new version of a site: what a reset that keeps every sample and updates the demo's site counts. */
-const DEMO_UPDATE_ROWS = 13;
+/** The rows of a new version of a site, 13, and of the title it asks for, 2: what a reset that keeps every sample and updates the demo's site counts. */
+const DEMO_UPDATE_ROWS = 15;
 
 /** Every sample site, in the table's order: what a reset that finds each as its row ends says it kept. */
 const SAMPLES_IN_ORDER = ["handbook", "sales-report", "old-notes", "launch-deck", "team-site", "lisbon-trip", "winter-offer", "pricing", "spring-offer", "status-board", "checkout"];

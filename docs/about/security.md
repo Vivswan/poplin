@@ -76,7 +76,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 
 | Who | Credential | Where it comes from |
 | --- | --- | --- |
-| a user at the dashboard | the dashboard's cookie | one login through Cloudflare Access, by email code or Google; the Worker checks the email against the list of allowed logins, then sets a cookie for the dashboard's hostname alone |
+| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by email code or Google; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time. poplin sets no cookie of its own |
 | a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
@@ -90,7 +90,7 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 | Scope | Given to | May |
 | --- | --- | --- |
 | publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login --publisher` and allows it in the dashboard, under Access | publish, and manage its own sites |
-| admin | a user, whose email is on the list of allowed logins; the dashboard's cookie carries the same rights | everything: every site, the settings, the tokens |
+| admin | a user, whose email is on the list of allowed logins; a user's login at the dashboard carries the same rights | everything: every site, the settings, the tokens |
 
 The page that allows a computer's login treats what the login says of itself as a stranger's words, since anyone can begin one:
 
@@ -126,14 +126,14 @@ What guards each address:
 
 | Address | Guarded by |
 | --- | --- |
-| the login and the dashboard | Cloudflare Access authenticates the user at the login path; the Worker checks the email, then sets the dashboard's cookie |
+| the login and the dashboard | Cloudflare Access authenticates the user in front of the whole dashboard; the Worker checks Access's token and the email on every request |
 | the API, which the CLI and `poplin mcp` call | the token the Worker issued; no Access in front, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 | the setup page, `/setup`, until the first login | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it answers 404 for good |
 | the Worker's own `workers.dev` address | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
-One Access application covers the login path and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
+One Access application covers the dashboard and every address that ends in `-p-poplin.<domain>`. It is made once at install, never per site.
 
 Every site hostname answers GET and HEAD only. The Worker refuses every other method, and the optional bots rule at Cloudflare's edge blocks it before the Worker.
 
@@ -164,12 +164,12 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 | Measure | What poplin does |
 | --- | --- |
-| the dashboard's cookie | HttpOnly, Secure, SameSite Lax, for the dashboard's hostname alone, under a `__Host-` name: no script can read it, no site receives it, and no site can set or replace it. A browser counts every site of the install as the same site as the dashboard, so SameSite Lax holds back only what a page of another domain sends, a followed link aside; the row on writes covers a site's page |
+| the login of the dashboard | Cloudflare Access's cookie, HttpOnly and SameSite Lax, for the dashboard's hostname alone, 30 days: no script can read it, and no site receives it. A browser counts every site of the install as the same site as the dashboard, so SameSite Lax holds back only what a page of another domain sends, a followed link aside; the row on writes covers a site's page |
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
 | a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
 | tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. A removed token's row is kept, and it never logs in again; [Removed tokens](../run/settings.md#tokens) lists the 50 that ended last |
-| the signing key | kept in the database, where the Worker can rotate it; Sign everyone out, under Access, rotates it and ends every dashboard session. A private site's login is Access's own: removing the login ends it. A computer's token is revoked on its own |
+| the stored key | kept in the database; the limits per visitor are made from it. Sign everyone out, under Access, replaces it: every visitor's limit starts again, and nobody is logged out. A login is Access's own: removing the user ends it. A computer's token is revoked on its own |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and correct content types on every answer of a site but three: the 308 from plain http, the 429 of a limit, and the page of a paused site carry neither header. The files of a site whose Allow embedding is off carry one more, which [Between sites](between-sites.md) describes |
 | page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept a year; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |

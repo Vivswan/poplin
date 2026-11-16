@@ -7,14 +7,14 @@ order: 20
 
 What a page of one site, or of another domain, can ask of a site; [Security](security.md) says who may open a site.
 
-Each site is its own origin, so a page's scripts cannot fetch another site's pages or files and read what comes back. A page can still run another site's script file, as the tables below say. The dashboard's cookie is sent to the dashboard alone.
+Each site is its own origin, so a page's scripts cannot fetch another site's pages or files and read what comes back. A page can still run another site's script file, as the tables below say. The cookie of the dashboard's login is sent to the dashboard alone.
 
 A browser still counts every site of the install, the dashboard, and every other hostname under the domain as one site. What a script of one site can do with that:
 
 | A script of one site | Result |
 | --- | --- |
-| reads the dashboard's cookie, or a cookie another hostname set for itself alone | cannot |
-| sets or replaces the dashboard's cookie | cannot: its name starts with `__Host-`, which a browser takes from the dashboard's hostname alone |
+| reads the cookie of the dashboard's login, or a cookie another hostname set for itself alone | cannot |
+| sets a cookie for the whole domain under the name of Cloudflare's login cookie, `CF_Authorization` | can. A browser that holds it before its person logs in is sent to the login again and again, at the dashboard and at every private site, until the cookies for the domain are cleared. It opens nothing: the cookie holds no login |
 | changes anything in the dashboard as the logged-in owner | cannot: the dashboard refuses a write that any page but its own sent |
 | sets cookies for the whole domain, under a name without the `__Host-` or `__Http-` prefix | can. The browser sends them to every site, to the dashboard, and to every other hostname under the domain |
 | reads a cookie that a script of any hostname set for the whole domain | can |

@@ -1,11 +1,11 @@
-// The one place a row of the secrets table becomes what the install uses: the signing key as bytes, and the address that starts a rebuild. Neither leaves the database in any other record.
+// The one place a row of the secrets table becomes what the install uses: the visitor key as bytes, and the address that starts a rebuild. Neither leaves the database in any other record.
 
 import { hexToUint8Array, uint8ArrayToHex } from "uint8array-extras";
 import * as v from "valibot";
 
 import { MOMENT } from "./fields";
 
-/** The fewest bytes a signing key holds: the output size of HMAC-SHA-256. */
+/** The fewest bytes a visitor key holds. */
 const KEY_BYTES = 32;
 
 /** A row of the secrets table: the key as lowercase hex, whole bytes, at least 32 of them. */
@@ -21,25 +21,25 @@ export interface UpdateAddress {
 }
 
 /**
- * Turn the bytes of a signing key into the text a row holds.
+ * Turn the bytes of a visitor key into the text a row holds.
  *
  * @returns lowercase hex, two characters a byte
  * @throws {RangeError} the key is under 32 bytes
  */
-export function signingKeyToText(key: Uint8Array): string {
-  if (key.length < KEY_BYTES) throw new RangeError(`a signing key holds at least ${KEY_BYTES} bytes, not ${key.length}`);
+export function visitorKeyToText(key: Uint8Array): string {
+  if (key.length < KEY_BYTES) throw new RangeError(`a visitor key holds at least ${KEY_BYTES} bytes, not ${key.length}`);
 
   return uint8ArrayToHex(key);
 }
 
 /**
- * Turn a row of the secrets table into the bytes of the signing key.
+ * Turn a row of the secrets table into the bytes of the visitor key.
  *
- * @throws {Error} the row holds no signing key; the message never quotes what is stored
+ * @throws {Error} the row holds no visitor key; the message never quotes what is stored
  */
-export function signingKeyFromRow(row: unknown): Uint8Array<ArrayBuffer> {
+export function visitorKeyFromRow(row: unknown): Uint8Array<ArrayBuffer> {
   const parsed = v.safeParse(SECRET_ROW, row);
-  if (!parsed.success) throw new Error("the stored signing key is not a key");
+  if (!parsed.success) throw new Error("the stored visitor key is not a key");
 
   return hexToUint8Array(parsed.output.value);
 }

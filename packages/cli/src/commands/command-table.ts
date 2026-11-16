@@ -259,7 +259,7 @@ export const COMMANDS = [
       ...installFlags("the zip's file and its sites"),
     ],
     examples: ["poplin export", "poplin export --all-versions --out backup.zip", "poplin export report--k3f9x2ab71qz"],
-    notes: ["The zip holds plain files: every site's record and files, and the settings.", "It holds no token and no signing key."],
+    notes: ["The zip holds plain files: every site's record and files, and the settings.", "It holds no token and no key of the install."],
   },
   {
     name: "import",

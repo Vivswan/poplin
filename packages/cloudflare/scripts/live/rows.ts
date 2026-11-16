@@ -1,6 +1,6 @@
 // A ceiling on the rows one step of a live run makes the install write to its database. D1's Free plan takes 100,000 rows written a day, every database of the account together, and refuses each write past them until midnight UTC.
 //
-//   POST   /api/uploads                    a new site 19, and 1 where it is told an expiry; a new version 13: the begin and its finish together
+//   POST   /api/uploads                    a new site 20, and 19 where it is told never to run out; a new version 13, and what the settings it asks for cost as a change: the begin and its finish together
 //   POST   /api/uploads/:upload/finish     2 where the publish dropped older versions and 2 for each of them, once its answer says how many
 //   POST   /api/import/sites               a site with one version 19, 2 for each version more, and 1 where it runs out and is in no trash
 //   DELETE /api/sites/:site                to the trash 6, for good 13
@@ -52,6 +52,9 @@ const CHANGED = { access: 3, details: 2 } as const;
 /** The keys of a change that say who may open a site. */
 const ACCESS_KEYS: ReadonlySet<string> = new Set(["access", "public_name"]);
 
+/** The keys of a publish that ask no setting of its site: which site it is, its files, and the title of its entry page, which a version's own rows hold. */
+const NO_SETTING: ReadonlySet<string> = new Set(["site", "files", "page_title"]);
+
 /** The rows a visit writes that a site answered with a page or a file: the day's count of the site, and of all sites. */
 const VISIT = 2;
 
@@ -72,7 +75,7 @@ const HELD_BACK = 403;
 
 /** The routes whose requests make the install write rows, each with the most rows one request writes. One the app does not declare does not compile. */
 const PRICES = [
-  { method: "POST", path: "/api/uploads", rows: (asked) => (asked.body.site === undefined ? NEW_SITE + expiryRows(asked.body) : NEW_VERSION) },
+  { method: "POST", path: "/api/uploads", rows: (asked) => (asked.body.site === undefined ? NEW_SITE + inheritedExpiryRows(asked.body) : NEW_VERSION + changeRows(settingsOf(asked.body))) },
   { method: "POST", path: "/api/import/sites", rows: (asked) => IMPORTED_SITE + IMPORTED_VERSION * (versionsIn(asked.body) - 1) + importedExpiryRows(asked.body.site) },
   { method: "PUT", path: "/api/uploads/:upload/file", rows: () => 0 },
   { method: "POST", path: "/api/uploads/:upload/finish", rows: () => 0 },
@@ -131,6 +134,16 @@ function versionsIn(body: Asked["body"]): number {
 /** The row a request writes that tells a site when it runs out; none for a request that names no expiry, or says never. */
 function expiryRows(body: Asked["body"]): number {
   return typeof body.expires === "string" && body.expires !== "never" ? EXPIRY : 0;
+}
+
+/** The row a new site writes for its expiry: none where its request says never. One that names no expiry takes the install's own, which no request shows, so it is counted as if that were one. */
+function inheritedExpiryRows(body: Asked["body"]): number {
+  return body.expires === "never" ? 0 : EXPIRY;
+}
+
+/** The settings a publish asks of its site: its request without what names the site and its files. */
+function settingsOf(body: Asked["body"]): Asked["body"] {
+  return Object.fromEntries(Object.entries(body).filter(([key]) => !NO_SETTING.has(key)));
 }
 
 /** The row a site put back from a backup writes for its expiry: a backup holds the moment, and a site in the trash has no entry. */

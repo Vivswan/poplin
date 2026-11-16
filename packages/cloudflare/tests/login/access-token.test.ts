@@ -1,4 +1,6 @@
 import { afterEach, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
+import { admit } from "@poplin/app/src/login/admit";
+import { parseLogins } from "@poplin/core/src/auth/logins";
 import { SignJWT, UnsecuredJWT } from "jose";
 import { accessIdentity } from "../../src/login/access-token";
 import { accessKeys } from "../../src/login/keys";
@@ -39,12 +41,38 @@ afterEach(() => {
   setSystemTime();
 });
 
-describe("an Access token", () => {
-  // Drift: the email would be trusted in the case Access sent it, and no longer match the logins' normal form.
-  test("a live token of this team and application gives its email in lowercase", async () => {
-    const verdict = await check(certs(team), await sign(team, { email: "Owner@Example.COM" }));
+describe("the dashboard's admission over the real check", () => {
+  // Drift: a request Access never signed, or signed for somebody who is no user, would be admitted; or a user would be kept out by the case Access wrote the email in.
+  test.each([
+    ["a user, in whatever case Access sends the email", { ok: true, actor: { scope: "admin", holder: "second@example.com" }, since: NOW - 10_000 }, (): Promise<string> => sign(team, { email: "Second@Example.com" })],
+    ["a person Access let in who is no user", { ok: false, refusal: "not-a-user" }, (): Promise<string> => sign(team, { email: "guest@example.com" })],
+    ["a user's email in a token another key signed", { ok: false, refusal: "bad-signature" }, (): Promise<string> => sign(stranger, {}, team.kid)],
+    ["a user's email in a token for another application", { ok: false, refusal: "wrong-audience" }, (): Promise<string> => sign(team, { aud: "another-application" })],
+    ["a user's token that ran out", { ok: false, refusal: "expired" }, (): Promise<string> => sign(team, { exp: NOW_SECONDS - 31 })],
+    ["no token, only a claim to be the owner", { ok: false, refusal: "missing" }, (): undefined => undefined],
+  ])("%s is answered whole", async (_name, outcome, token) => {
+    const users = parseLogins(["owner@example.com", "second@example.com"]);
+    if (!users.ok) throw new Error(`the test's users were refused: ${users.refusal}`);
 
-    expect(verdict).toEqual({ ok: true, value: "owner@example.com" } as Verdict);
+    const identify = accessIdentity({ keys: accessKeys({ teamDomain: TEAM, fetch: certs(team).fetch }), audience: AUDIENCE });
+    const headers = headersOf(await token());
+    if ("refusal" in outcome && outcome.refusal === "missing") headers.set("X-Forwarded-Email", "owner@example.com");
+    setSystemTime(new Date(NOW));
+
+    expect<unknown>(await admit(headers, { identify, logins: users.value, now: NOW })).toEqual(outcome);
+  });
+});
+
+describe("an Access token", () => {
+  // Drift: the email would be trusted in the case Access sent it, and no longer match the logins' normal form; or the login would be dated by the request, and every request would look like a new login.
+  test("a live token of this team and application gives its email in lowercase, and the moment Access issued it", async () => {
+    const verdict = await check(certs(team), await sign(team, { email: "Owner@Example.COM", iat: NOW_SECONDS - 4000, nbf: NOW_SECONDS - 4000 }), NOW);
+    const later = await check(certs(team), await sign(team, { iat: NOW_SECONDS - 4000, nbf: NOW_SECONDS - 4000 }), NOW + 1000 * 1000);
+
+    expect([verdict, later]).toEqual([
+      { ok: true, value: "owner@example.com", since: NOW - 4_000_000 },
+      { ok: true, value: "owner@example.com", since: NOW - 4_000_000 },
+    ] as Verdict[]);
   });
 
   // Drift: a second audience on a token would lock the owner out.

@@ -139,16 +139,16 @@ describe("a decision", () => {
     expect(listed.logins).toHaveLength(waiting);
   });
 
-  // Drift: the letters could be guessed without end, or a request that is no decision would spend the tries of the person whose session it rides on.
+  // Drift: the letters could be guessed without end, or a request that is no decision would spend the tries of the person whose login it rides on.
   test("is refused after twenty tries in a minute, which a request that is no decision does not spend, and listing is not", async () => {
     const opened = await openConsole();
     const { id } = await plant(opened, "studio-laptop");
     const attempt = (): Promise<Response> => opened.change("/data/logins/decide", { login: id, allow: true, scope: "publisher", letters: PLANTED.wrong });
     for (let nth = 0; nth < 30; nth += 1) await opened.change("/data/logins/decide", { login: id, allow: true });
-    // A page of a site of the same install rides on the person's session: what it can send is no decision, and spends nothing.
+    // A page of a site of the same install rides on the person's login: what it can send is no decision, and spends nothing.
     const forged: number[] = [];
     for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.change("/data/logins/decide", `login=${id}&allow=true&scope=admin&letters=BBBB`, SIBLING_PAGE)).status);
-    for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.fetch(new Request(`${ORIGIN}/data/logins/find?code=BBBB-BBBB`, { headers: { Cookie: opened.base.cookie, ...SIBLING_PAGE } }))).status);
+    for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.fetch(new Request(`${ORIGIN}/data/logins/find?code=BBBB-BBBB`, { headers: { ...opened.base.proof, ...SIBLING_PAGE } }))).status);
     const statuses: number[] = [];
     for (let nth = 0; nth < 21; nth += 1) statuses.push((await attempt()).status);
     const last = await attempt();

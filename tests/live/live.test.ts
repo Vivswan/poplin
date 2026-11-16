@@ -19,6 +19,7 @@ import { writeFileSync } from "node:fs";
 import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
 import { readLoginList } from "../../packages/cloudflare/scripts/live/login-list";
 import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
+import { sendLive } from "../../packages/cloudflare/scripts/live/send";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
@@ -72,7 +73,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
   const missing: Missing = {};
   const outcomes: Outcome[] = [];
   // A request past the ceiling of bucket writes and lists is held back, which fails its check, and the run says so in one line.
-  const meter = meterBucket((input, init) => fetch(input, init), setting("POPLIN_LIVE_MANY_FILES") === "1" ? CEILINGS.manyFiles : CEILINGS.checks);
+  const meter = meterBucket(sendLive, setting("POPLIN_LIVE_MANY_FILES") === "1" ? CEILINGS.manyFiles : CEILINGS.checks);
   const rows = meterRows(meter.fetch, ROW_CEILINGS.checks);
   const provider = providerOf();
   const opened = LIVE

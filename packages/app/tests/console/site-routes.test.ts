@@ -5,6 +5,7 @@ import { expect, test } from "bun:test";
 import { fileKey, sitePrefix } from "@poplin/core/src/actions/files";
 
 import { NOW } from "../sites/support/install";
+import { LOGIN_HEADER } from "./support/install";
 import { openConsole } from "./support/console";
 
 /** A day in milliseconds. */
@@ -49,7 +50,7 @@ test.each([
   ["2023-12-01", Date.UTC(2023, 11, 1)],
   ["2023-12-01T08:30:00.250Z", Date.UTC(2023, 11, 1, 8, 30, 0, 250)],
   ["never", "never"],
-])("a site's expiry set to %p is answered as the moment it ends, signed by the session's admin", async (expires, moment) => {
+])("a site's expiry set to %p is answered as the moment it ends, signed by the admin who asks", async (expires, moment) => {
   const opened = await openConsole();
   const site = await opened.base.publish("guide", "private");
   // An expiry is there first, so "never" is seen to take one away.
@@ -82,7 +83,7 @@ test.each([
 });
 
 // Drift: a site in the trash would stay with its files after it was deleted for good, or the log would not say who did it.
-test("a site in the trash is deleted for good with its files, signed by the session's admin", async () => {
+test("a site in the trash is deleted for good with its files, signed by the admin who asks", async () => {
   const opened = await openConsole();
   const site = await opened.base.publish("guide", "private");
   const label = `${site.name}--${site.id}`;
@@ -119,18 +120,18 @@ test.each([
   expect(refusal.sentence?.length).toBeGreaterThan(10);
 });
 
-// Drift: either change would be done for a request with no session, or for a body a page of another origin sends with the owner's session.
+// Drift: either change would be done for a request with no login, or for a body a page of another origin sends with the owner's login.
 test.each([
   ["expiry", { expires: "7d" }],
   ["delete-for-good", {}],
-])("%s is refused without a session and from another origin, and changes nothing", async (change, body) => {
+])("%s is refused without a login and from another origin, and changes nothing", async (change, body) => {
   const opened = await openConsole();
   const site = await opened.base.publish("guide", "private");
   const label = `${site.name}--${site.id}`;
   if (change === "delete-for-good") await opened.change(`/data/sites/${label}/delete`, {});
   const entries = (await opened.base.audit()).length;
 
-  const loggedOut = await opened.change(`/data/sites/${label}/${change}`, body, { Cookie: "" });
+  const loggedOut = await opened.change(`/data/sites/${label}/${change}`, body, { [LOGIN_HEADER]: "" });
   const elsewhere = await opened.change(`/data/sites/${label}/${change}`, body, { "Content-Type": "text/plain", Origin: "https://evil.example", "Sec-Fetch-Site": "cross-site" });
   const after = (await (await opened.get(`/data/sites/${label}`)).json()) as Changed;
 

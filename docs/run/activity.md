@@ -91,7 +91,7 @@ On Cloudflare's Workers Paid plan, lines past the plan's own allowance are charg
 | `poplin: the sweep failed`                                            | a scheduled run met an error                                              | the error's kind, places in code   |
 
 - **An error the Worker caught is written by its kind, never by its message.** `RangeError`, then the places in the code it passed through; for a scheduled run that failed, Cloudflare names them by the source's file and line. a message could repeat a site's id or a file's path. The database's own error at a step that failed is the one message kept.
-- **poplin writes into no line** a token, the dashboard's cookie, a login code, an email, a visitor's address, a site's id, or a value of a setting or a variable.
+- **poplin writes into no line** a token, a login's token, a login code, an email, a visitor's address, a site's id, or a value of a setting or a variable.
 - **Cloudflare's own record of each request is off.** It would hold the request's address, and the address of an unlisted or a private site is its link.
 - **Cloudflare adds fields of its own to every line.** The log is in your Cloudflare account, and whoever can open the account can read it.
 - **A request that goes well writes no line.**

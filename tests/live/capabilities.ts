@@ -22,7 +22,7 @@ function redirectOf(response: Response): string | undefined {
 /**
  * Find what an install lacks.
  *
- * It sends two requests, neither with a token: the address of a site nobody has, and the login path.
+ * It sends two requests, neither with a token: the address of a site nobody has, and a path of the dashboard.
  *
  * @param known - what the run already knows to be lacking, which is kept as it is
  * @returns every lacking capability with its reason; `person` is always among them
@@ -33,6 +33,7 @@ export async function probeMissing(install: Pick<Bench, "domain" | "admin" | "vi
   const moved = redirectOf(await install.visit(labelAddress(install.domain, GHOST_ID, "u")));
   if (moved !== labelAddress(install.domain, GHOST_ID, "p")) missing.letters ??= NO_LETTERS;
 
+  // A path of the dashboard an install of any shape has the login in front of, one made when the login guarded this path alone included.
   const login = redirectOf(await install.visit(`${install.admin}/login`));
   if (login === undefined || isOwnAddress(install.domain, login)) missing.access ??= NO_ACCESS;
 

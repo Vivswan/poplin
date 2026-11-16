@@ -1,8 +1,7 @@
-// What an instance reads from the database and then holds: the settings, and the keys made from the stored signing key.
+// What an instance reads from the database and then holds: the settings, and the secret made from the stored visitor key.
 //
-// A new signing key therefore ends every session, restarts every visitor's minute, and voids every open form of the dashboard.
+// A new visitor key therefore restarts every visitor's minute.
 
-import { importSessionKey } from "@poplin/core/src/auth/cookie";
 import { type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
 import type { SettingValues } from "@poplin/core/src/records/settings";
@@ -27,10 +26,7 @@ export interface Held {
   /** The emails allowed in. */
   readonly logins: Logins;
 
-  /** Signs and checks the session cookie. */
-  readonly sessionKey: CryptoKey;
-
-  /** Hashes a visitor's network for the per-visitor limit. It is derived from the signing key, so nothing more is stored. */
+  /** Hashes a visitor's network for the per-visitor limit. It is derived from the visitor key, so nothing more is stored. */
   readonly visitorSecret: CryptoKey;
 }
 
@@ -55,15 +51,15 @@ interface Holding {
   readonly ofSite: (database: Database) => SiteHeld;
 }
 
-/** How a secret is derived from the signing key: HKDF with SHA-256, no salt, and the label as its info. */
+/** How a secret is derived from the visitor key: HKDF with SHA-256, no salt, and the label as its info. */
 function derivation(label: string): HkdfParams {
   return { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: ENCODER.encode(label) };
 }
 
 /**
- * Derive the secret an instance keeps beside the session key.
+ * Derive the secret an instance keeps from the stored visitor key.
  *
- * @param key - the bytes of the install's signing key
+ * @param key - the bytes of the install's visitor key
  * @returns the key that hashes a visitor's address for the limits
  */
 export async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<Held, "visitorSecret">> {
@@ -73,23 +69,23 @@ export async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<
 }
 
 /**
- * Make what an instance holds from the settings and the signing key one read gave.
+ * Make what an instance holds from the settings and the visitor key one read gave.
  *
- * @throws {Error} the install holds no settings or no signing key, or its logins are refused
+ * @throws {Error} the install holds no settings or no visitor key, or its logins are refused
  */
 async function heldFrom({ settings, key }: SettingsAndKey): Promise<Held> {
-  if (settings === undefined || key === undefined) throw new Error("the install holds no settings or no signing key");
+  if (settings === undefined || key === undefined) throw new Error("the install holds no settings or no visitor key");
 
   const logins = parseLogins(settings.logins);
   if (!logins.ok) throw new Error(`the stored logins are refused: ${logins.refusal}`);
 
-  return { settings, logins: logins.value, sessionKey: await importSessionKey(key), ...(await derivedSecret(key)) };
+  return { settings, logins: logins.value, ...(await derivedSecret(key)) };
 }
 
 /**
- * Read the settings and the signing key, as one question to the database.
+ * Read the settings and the visitor key, as one question to the database.
  *
- * @throws {Error} the install holds no settings or no signing key, or the database failed
+ * @throws {Error} the install holds no settings or no visitor key, or the database failed
  */
 async function readHeld(database: Pick<Database, "readSettingsAndKey">): Promise<Held> {
   return heldFrom(await database.readSettingsAndKey());

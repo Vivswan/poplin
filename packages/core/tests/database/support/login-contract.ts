@@ -1,4 +1,4 @@
-// The part of the database contract about who may come in: tokens and settings, the logins of computers, and the signing key.
+// The part of the database contract about who may come in: tokens and settings, the logins of computers, and the visitor key.
 
 import { describe, expect, test } from "bun:test";
 
@@ -29,55 +29,55 @@ import {
   sizeOf,
 } from "./database-fixtures";
 
-export function signingKey(label: string, makeDatabase: DatabaseFactory): void {
-  describe(`${label}: the signing key`, () => {
-    // Drift: two Workers that each kept their own key would refuse each other's cookies, signing people out at random.
+export function visitorKey(label: string, makeDatabase: DatabaseFactory): void {
+  describe(`${label}: the visitor key`, () => {
+    // Drift: two Workers that each kept their own key would count one visitor under two keys, and let each through twice as often.
     test("starters at the same moment end with one key, a later starter gets it, and replacing it is the only thing that changes it", async () => {
       const database = await opened(makeDatabase);
-      const none = await database.readSigningKey();
-      const started = await Promise.all([FIRST_KEY, SECOND_KEY, THIRD_KEY].map((fresh) => database.ensureSigningKey(fresh, NOW)));
+      const none = await database.readVisitorKey();
+      const started = await Promise.all([FIRST_KEY, SECOND_KEY, THIRD_KEY].map((fresh) => database.ensureVisitorKey(fresh, NOW)));
       const winner = started.find((start) => start.kind === "created")?.key;
-      const later = await database.ensureSigningKey(new Uint8Array(32).fill(0xd4), NOW + 1);
-      await database.rotateSigningKey(new Uint8Array(48).fill(0xe5), { by: BO, at: NOW + 2 });
+      const later = await database.ensureVisitorKey(new Uint8Array(32).fill(0xd4), NOW + 1);
+      await database.rotateVisitorKey(new Uint8Array(48).fill(0xe5), { by: BO, at: NOW + 2 });
 
       expect(none).toBeUndefined();
       expect(started.map((start) => start.kind).sort()).toEqual(["created", "kept", "kept"]);
       expect<unknown>(started.map((start) => start.key)).toEqual([winner, winner, winner]);
       expect<unknown>([FIRST_KEY, SECOND_KEY, THIRD_KEY]).toContainEqual(winner);
       expect<unknown>(later).toEqual({ kind: "kept", key: winner });
-      expect<unknown>(await database.readSigningKey()).toEqual(new Uint8Array(48).fill(0xe5));
+      expect<unknown>(await database.readVisitorKey()).toEqual(new Uint8Array(48).fill(0xe5));
       expect(await auditTrail(database)).toEqual([{ seq: 1, at: NOW + 2, by: BO, action: "signed_everyone_out", site: null, detail: {} }]);
-      await expect(database.ensureSigningKey(new Uint8Array(31), NOW)).rejects.toThrow(RangeError);
-      await expect(database.rotateSigningKey(new Uint8Array(31), BY_ADA)).rejects.toThrow(RangeError);
-      expect<unknown>(await database.readSigningKey()).toEqual(new Uint8Array(48).fill(0xe5));
+      await expect(database.ensureVisitorKey(new Uint8Array(31), NOW)).rejects.toThrow(RangeError);
+      await expect(database.rotateVisitorKey(new Uint8Array(31), BY_ADA)).rejects.toThrow(RangeError);
+      expect<unknown>(await database.readVisitorKey()).toEqual(new Uint8Array(48).fill(0xe5));
     });
 
-    // Drift: a session is checked against both; a joint read that gave either one differently from its own read would refuse a good cookie or trust a removed login.
+    // Drift: a request is checked against both; a joint read that gave either one differently from its own read would count a visitor under another key or trust a removed login.
     test("the settings and the key read together are what each read alone gives: neither before setup, then the one without the other, then both", async () => {
       const database = await opened(makeDatabase);
       const together = [await database.readSettingsAndKey()];
       await database.initSettings(SETTINGS, BY_ADA);
       together.push(await database.readSettingsAndKey());
-      await database.ensureSigningKey(FIRST_KEY, NOW);
+      await database.ensureVisitorKey(FIRST_KEY, NOW);
       together.push(await database.readSettingsAndKey());
 
       expect<unknown>(together).toEqual([
         { settings: undefined, key: undefined },
         { settings: SETTINGS, key: undefined },
-        { settings: await database.readSettings(), key: await database.readSigningKey() },
+        { settings: await database.readSettings(), key: await database.readVisitorKey() },
       ]);
       expect<unknown>(together[2]?.key).toEqual(FIRST_KEY);
     });
 
-    // Drift: a backup or a dashboard page that carried the key would let whoever reads it sign a cookie for any login.
+    // Drift: a backup or a dashboard page that carried the key would let whoever reads it work out the key a visitor is counted under.
     test("no listing, export, settings read, or audit entry holds the key, before or after it is replaced", async () => {
       const database = await opened(makeDatabase);
       await database.initSettings(SETTINGS, BY_ADA);
       await database.addToken((await mintToken({ scope: "admin", note: "laptop", now: NOW })).record, BY_ADA);
       const site = await made(database, draft(REPORT, "public", DOCS));
       await database.trashSite((await made(database, draft(REPORT))).id, BY_ADA);
-      await database.ensureSigningKey(FIRST_KEY, NOW);
-      await database.rotateSigningKey(SECOND_KEY, BY_ADA);
+      await database.ensureVisitorKey(FIRST_KEY, NOW);
+      await database.rotateVisitorKey(SECOND_KEY, BY_ADA);
 
       const shown = JSON.stringify([
         await database.exportSites({ limit: 100 }),
@@ -94,7 +94,7 @@ export function signingKey(label: string, makeDatabase: DatabaseFactory): void {
 
       expect(needles.filter((needle) => shown.includes(needle))).toEqual([]);
       expect(shown).toContain("signed_everyone_out");
-      expect<unknown>(await database.readSigningKey()).toEqual(SECOND_KEY);
+      expect<unknown>(await database.readVisitorKey()).toEqual(SECOND_KEY);
     });
   });
 }

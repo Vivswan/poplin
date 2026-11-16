@@ -1,7 +1,6 @@
-// An install the console's tests work on: the serving tests' install with its settings stored and its one owner logged in.
+// An install the console's tests work on: the serving tests' install with its settings stored, and the header its one owner is known by.
 
 import type { Install } from "@poplin/core/src/actions/records";
-import { importSessionKey } from "@poplin/core/src/auth/cookie";
 import type { AuditEntry } from "@poplin/core/src/records/audit";
 import { defaultSettings } from "@poplin/core/src/records/settings";
 import type { Site } from "@poplin/core/src/records/site";
@@ -9,9 +8,11 @@ import { MemoryStore } from "@poplin/core/src/storage/memory";
 
 import type { CodeTries } from "../../../src/limits/code-tries";
 import { MemoryCounters } from "../../../src/limits/memory-counters";
-import { mintSessionCookie } from "../../../src/login/session";
 import { NOW, openInstall } from "../../sites/support/install";
 import { ADDRESSES } from "../../sites/support/layout";
+
+/** The header the tests' stand-in for a provider's login reads who asks from: an email it vouches for, or one of its own refusals. No request of a real install carries it. */
+export const LOGIN_HEADER = "Test-Login";
 
 /** The origin every test request is sent to. */
 export const ORIGIN = "https://poplin.example.com";
@@ -38,11 +39,11 @@ export const USAGE_HOST = {
 /** The version of poplin the test console says it runs. */
 export const VERSION = "1.0.0";
 
-/** A test install and what the tests read its effects from. */
+/** A test install and what the tests read its effects from. `proof` is the headers a request of the owner carries: what the stand-in for the provider's login vouches for. */
 interface Owned {
   readonly install: Install;
   readonly owner: Awaited<ReturnType<typeof openInstall>>["owner"];
-  readonly cookie: string;
+  readonly proof: Readonly<Record<string, string>>;
   readonly clock: { now: number };
   readonly counters: MemoryCounters;
   readonly publish: (name: string, access?: "private" | "unlisted" | "public", by?: Site["owner"]) => Promise<Site>;
@@ -56,9 +57,9 @@ export function codeCounts(counters = new MemoryCounters()): CodeTries {
 }
 
 /**
- * Open a fresh install with the default settings and one login, who holds a session.
+ * Open a fresh install with the default settings and one login.
  *
- * @returns the install and its helpers: `publish` makes a site, published by the owner unless it names who, and `cookie` is the owner's session
+ * @returns the install and its helpers: `publish` makes a site, published by the owner unless it names who, and `proof` is what a request of the owner carries
  */
 export async function openOwned(): Promise<Owned> {
   const base = await openInstall();
@@ -73,13 +74,12 @@ export async function openOwned(): Promise<Owned> {
   };
   await base.database.initSettings(defaultSettings({ installer: base.owner }), { by: base.owner, at: NOW });
 
-  const signing = await base.database.ensureSigningKey(new Uint8Array(32).fill(5), NOW);
-  const setCookie = await mintSessionCookie({ email: base.owner, key: await importSessionKey(signing.key), now: NOW });
+  await base.database.ensureVisitorKey(new Uint8Array(32).fill(5), NOW);
 
   return {
     install,
     owner: base.owner,
-    cookie: setCookie.slice(0, setCookie.indexOf(";")),
+    proof: { [LOGIN_HEADER]: base.owner },
     clock,
     counters: new MemoryCounters(),
     publish: (name, access = "unlisted", by = base.owner) => base.publish({ name, access, files: {}, by }),

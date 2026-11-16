@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
+import { arrive, isUnanswered, openPanel, reset, said, screenHeading, siteName, TRASH, test } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -551,7 +551,9 @@ async function watchClosely(page: Page, origin: string): Promise<string[]> {
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(`console: ${message.text()}`);
   });
-  page.on("pageerror", (error) => problems.push(`thrown: ${String(error)}`));
+  page.on("pageerror", (error) => {
+    if (!isUnanswered(error, origin)) problems.push(`thrown: ${String(error)}`);
+  });
   page.on("request", (request) => {
     if (!request.url().startsWith(`${origin}/`)) problems.push(`asked elsewhere: ${request.url()}`);
   });

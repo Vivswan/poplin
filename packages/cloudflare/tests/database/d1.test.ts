@@ -94,11 +94,11 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "removeLogin, the last": [5, 0],
   "changeSettings, a login more": [13, 3],
   "changeSettings, another first login": [4, 3],
-  "ensureSigningKey, the first": [2, 1],
-  "ensureSigningKey, kept": [3, 0],
-  "readSigningKey": [1, 0],
+  "ensureVisitorKey, the first": [2, 1],
+  "ensureVisitorKey, kept": [3, 0],
+  "readVisitorKey": [1, 0],
   "readSettingsAndKey": [2, 0],
-  "rotateSigningKey": [0, 2],
+  "rotateVisitorKey": [0, 2],
   "keepUpdateAddress": [0, 2],
   "readUpdateAddress": [1, 0],
   "forgetUpdateAddress": [1, 2],
@@ -188,6 +188,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "appendAudit, a login": [0, 2],
   "hasLoggedIn, nobody yet": [0, 0],
   "hasLoggedIn": [1, 0],
+  "noteLogin, a new login": [2, 2],
+  "noteLogin, known": [2, 0],
   "addRequests": [2, 2],
   "addRequests, again": [2, 2],
   "readRequests": [2, 0],
@@ -552,6 +554,38 @@ describe("D1: the rows a narrowed page of a long audit log costs of a day's allo
   });
 });
 
+describe("D1: the rows the Activity line of a login costs of a day's allowance", () => {
+  // Drift: the line is asked for by its email and its moment, which the index of the logins serves. Asked of the log, or of every login in it, each page a person opens after a login would read the logins of the install's whole life.
+  test("with 3,000 logins in the log, 1,000 of them this email's: a login whose line stands reads 2 rows and writes none, a new login reads 2 and writes 2, and whether anybody ever logged in reads 1", async () => {
+    const { driver, rows } = await meteredDatabase();
+    const opened = await openDatabase(driver, NOW);
+    if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
+
+    const database = new SqlDatabase(driver);
+    const emails = "CASE n % 3 WHEN 0 THEN 'ada@example.com' WHEN 1 THEN 'bo@example.com' ELSE 'cy@example.com' END";
+    await driver.batch([{ sql: `WITH RECURSIVE counted(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM counted WHERE n < 3000) INSERT INTO audit (at, actor, action, detail) SELECT ?1 + n, ${emails}, 'login', '{}' FROM counted`, params: [NOW] }]);
+    const cost = async (run: () => Promise<unknown>): Promise<readonly [read: number, written: number]> => {
+      rows.read = 0;
+      rows.written = 0;
+      await run();
+
+      return [rows.read, rows.written];
+    };
+
+    expect({
+      "a login whose line stands": await cost(() => database.noteLogin(ADMIN, { since: NOW + 2000, at: NOW + 4000 })),
+      "a new login": await cost(() => database.noteLogin(ADMIN, { since: NOW + 4000, at: NOW + 4000 })),
+      "the same login again": await cost(() => database.noteLogin(ADMIN, { since: NOW + 4000, at: NOW + 4001 })),
+      "whether anybody ever logged in": await cost(() => database.hasLoggedIn()),
+    }).toEqual({
+      "a login whose line stands": [2, 0],
+      "a new login": [2, 2],
+      "the same login again": [2, 0],
+      "whether anybody ever logged in": [1, 0],
+    });
+  });
+});
+
 describe("D1: the rows a computer's login costs of a day's allowance", () => {
   // Drift: anyone may begin a login, and a day allows 5,000,000 rows read and 100,000 written. The room once cost 2,705 rows read a login, and a terminal's question one row written.
   test("with the fifty places held, a new login reads 58 rows and writes 4, and a terminal's question reads 1 and writes none", async () => {
@@ -668,11 +702,11 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("changeSettings", () => database.changeSettings({ versions_kept: 4 }, BY_ADA));
     await cost("changeSettings, the same", () => database.changeSettings({ versions_kept: 4 }, BY_ADA));
     await cost("initSettings, already set", () => database.initSettings(defaultSettings({ installer: ADMIN }), BY_ADA));
-    await cost("ensureSigningKey, the first", () => database.ensureSigningKey(new Uint8Array(32).fill(1), NOW));
-    await cost("ensureSigningKey, kept", () => database.ensureSigningKey(new Uint8Array(32).fill(2), NOW));
-    await cost("readSigningKey", () => database.readSigningKey());
+    await cost("ensureVisitorKey, the first", () => database.ensureVisitorKey(new Uint8Array(32).fill(1), NOW));
+    await cost("ensureVisitorKey, kept", () => database.ensureVisitorKey(new Uint8Array(32).fill(2), NOW));
+    await cost("readVisitorKey", () => database.readVisitorKey());
     await cost("readSettingsAndKey", () => database.readSettingsAndKey());
-    await cost("rotateSigningKey", () => database.rotateSigningKey(new Uint8Array(32).fill(3), BY_ADA));
+    await cost("rotateVisitorKey", () => database.rotateVisitorKey(new Uint8Array(32).fill(3), BY_ADA));
     await cost("keepUpdateAddress", () => database.keepUpdateAddress("https://example.com/hook", BY_ADA));
     await cost("readUpdateAddress", () => database.readUpdateAddress());
     await cost("forgetUpdateAddress", () => database.forgetUpdateAddress(BY_ADA));
@@ -884,6 +918,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     const again = done(await database.giveNewId(moved.site.id, BY_ADA));
     // What a page of the log asks for the ids on it that are no site: here two a site gave up, one of them two new links ago, the id a site has now, and two no site ever had.
     await cost("getLaterSites", () => database.getLaterSites([second.id, moved.site.id, again.site.id, NOBODY, "yyyyyyyyyyyy" as SiteId]));
+    // Last, so the line it adds to the log changes no count before it.
+    await cost("noteLogin, a new login", () => database.noteLogin(ADMIN, { since: NOW + 10, at: NOW + 10 }));
+    await cost("noteLogin, known", () => database.noteLogin(ADMIN, { since: NOW + 10, at: NOW + 20 }));
 
     expect(costs).toEqual(ROWS);
   });
