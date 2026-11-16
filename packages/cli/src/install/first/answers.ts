@@ -5,7 +5,7 @@
 
 import pRetry from "p-retry";
 
-import type { InstallEnds } from "./records";
+import type { InstallEnds } from "../records";
 
 /** The path asked, which an install that is up answers for everybody. */
 const PATH = "/api/whoami";

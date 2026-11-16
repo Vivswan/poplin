@@ -170,13 +170,14 @@ function stopWords(stop: Exclude<Stop, { readonly problem: "missing_answer" | "b
 }
 
 /**
- * Word why a command made no install.
+ * Word why a command stopped before its work was done.
  *
  * @param provider - the provider the line names, when the command got as far as one
+ * @param command - the command as it is typed after `poplin`, such as `install`
  * @returns the lines for a person, the first of which says what it is
  */
-export function stopLines(stop: Stop, provider: Provider | undefined): Line[] {
-  if (stop.problem === "missing_answer") return stop.missing.map((one) => ({ tone: "error", text: `poplin install: an answer is missing: ${one.name}. ${one.give}` }));
+export function stopLines(stop: Stop, provider: Provider | undefined, command: string): Line[] {
+  if (stop.problem === "missing_answer") return stop.missing.map((one) => ({ tone: "error", text: `poplin ${command}: an answer is missing: ${one.name}. ${one.give}` }));
 
   if (stop.problem === "blocked") return [...blockedLines(stop.blocked), { tone: "error", text: UNCHANGED }];
 

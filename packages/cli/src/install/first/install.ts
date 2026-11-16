@@ -4,20 +4,18 @@
 //
 // A dry run goes the same way and changes nothing. Nothing is kept on this computer, and the token is in no line and no value.
 
-import type { Found, Installed, Question, Run, Startable } from "../../../core/src/install/installer";
-import { exitCode } from "../commands/exit-codes";
-import { logIn } from "../commands/login";
-import { problemLines } from "../commands/problems";
-import type { Io } from "../commands/records";
-import { hide, written } from "../commands/util";
-import type { Screen, Tone } from "../local/screen";
-import { VERSION } from "../poplin";
+import type { Found, Installed, Question, Startable } from "../../../../core/src/install/installer";
+import { exitCode } from "../../commands/exit-codes";
+import { logIn } from "../../commands/login";
+import { problemLines } from "../../commands/problems";
+import type { Io } from "../../commands/records";
 import { installAnswers } from "./answers";
-import { askWhere, STOPPED, settle } from "./ask";
+import { askWhere, STOPPED, settle } from "../ask";
+import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
-import { parseInstall, TOKEN_VARIABLE } from "./parse";
-import type { InstallEnds, InstallRequest, ParsedInstall, Plan, Provider, Stop } from "./records";
-import { dryRunLines, rowLine, runLines, runValue, stopLines, stopValue } from "./report";
+import { parseInstall } from "./parse";
+import type { InstallEnds, InstallRequest, Plan, Stop } from "../records";
+import { dryRunLines, rowLine, runLines, runValue } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -34,27 +32,6 @@ const FOUND_WORDS: Readonly<Record<Found<unknown, unknown>["state"], string>> = 
   refused: "no",
 };
 
-/** The stop of a build that carries no provider. */
-const NO_PROVIDER: Stop = { problem: "no_provider", exit: 1, lines: ["this build of poplin carries no provider to install at", "install the published package: npx poplin install"] };
-
-/** The exits of a stop, as the endings the command table knows. */
-const ENDINGS = { 1: "failed", 2: "usage-error", 5: "unreachable" } as const;
-
-/** How a command says what it does: lines for a person, or nothing but the one JSON value at its end. */
-interface Show {
-  /** One line of the result. */
-  readonly line: (tone: Tone, text: string) => void;
-
-  /** One line that is no result. */
-  readonly aside: (tone: Tone, text: string) => void;
-
-  /** What is being worked on, until the next line. */
-  readonly working: (text: string) => void;
-
-  /** The one JSON value of a run for a program. */
-  readonly value: (value: unknown) => void;
-}
-
 /** What a look came to that a run goes on from, with the place the provider was last asked about. */
 interface Ground {
   readonly found: Startable<unknown>;
@@ -65,49 +42,6 @@ interface Ground {
 interface Ended {
   readonly code: number;
   readonly value: Readonly<Record<string, unknown>>;
-}
-
-/**
- * The same screen and the same machine's ends, with every token taken out of each line, each question, and each choice before it is shown.
- *
- * Stdout is left to its writers: the screen, the one JSON value written without tokens, and the help, which holds nothing a person or a variable gave.
- */
-function guarded(io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): { readonly io: Io; readonly ends: InstallEnds } {
-  const safe = (text: string): string => hide(text, secrets);
-  const { screen } = ends;
-  const hiding: Screen = {
-    line: (tone, text) => screen.line(tone, safe(text)),
-    aside: (tone, text) => screen.aside(tone, safe(text)),
-    ask: (question, secret) => screen.ask(safe(question), secret),
-    confirm: (question, initial) => screen.confirm(safe(question), initial),
-    choose: (question, picks) =>
-      screen.choose(
-        safe(question),
-        picks.map((pick) => ({ value: pick.value, label: safe(pick.label), hint: safe(pick.hint) })),
-      ),
-    working: (text) => screen.working(safe(text)),
-    rest: screen.rest,
-  };
-
-  return { io: { ...io, err: (line) => io.err(safe(line)) }, ends: { ...ends, screen: hiding } };
-}
-
-/** The ways to show for one command. With `--json` no line reaches stdout but the one value, and what is no result goes to stderr as it is. */
-function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): Show {
-  const value = (said: unknown): void => io.out(written(said, secrets));
-
-  if (json) return { line: () => undefined, aside: (_tone, text) => io.err(text), working: () => undefined, value };
-
-  return { line: ends.screen.line, aside: ends.screen.aside, working: ends.screen.working, value: () => undefined };
-}
-
-/** Say why the command made no install, and choose its exit code. `run` is on a stop that came after the plan: a program then reads `ready` as it does of a run. */
-function stopped(stop: Stop, show: Show, provider: Provider | undefined, run?: Run): number {
-  for (const line of stopLines(stop, provider)) show.aside(line.tone, line.text);
-
-  show.value(run === undefined ? stopValue(stop) : { ...stopValue(stop), run, ready: false });
-
-  return exitCode({ kind: ENDINGS[stop.exit] });
 }
 
 /** The stop a look that found no ground to start from is. */
@@ -251,7 +185,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
 async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
   const ground = await look(request, ends, show);
-  if ("problem" in ground) return stopped(ground, show, provider, mode.mode);
+  if ("problem" in ground) return stopped(ground, show, { name: "install", provider, run: mode.mode });
 
   if (ground.found.state === "started") show.line("note", "An install was started here and not finished: this run goes on with it.");
 
@@ -264,7 +198,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
     show.working(doing);
   });
 
-  if (!installed.ok) return stopped({ problem: "unreachable", exit: 5, words: installed.words }, show, provider, mode.mode);
+  if (!installed.ok) return stopped({ problem: "unreachable", exit: 5, words: installed.words }, show, { name: "install", provider, run: mode.mode });
 
   const { code, value } = await ended(installed, ground, request, io, ends, show);
   show.value(value);
@@ -272,79 +206,23 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
   return code;
 }
 
-/** The list of providers, for a line that names none where nobody can be asked. */
-function list(providers: readonly Provider[], json: boolean, io: Io): number {
-  if (json) io.out(JSON.stringify({ ok: true, providers: providers.map((one) => ({ id: one.id, name: one.name, about: one.about })) }));
-  else io.out(installHelp(providers));
-
-  return exitCode({ kind: "done" });
-}
-
-/** Ask which provider, where there is more than one; `undefined` once the person ended the question. */
-async function picked(providers: readonly Provider[], ends: InstallEnds): Promise<Provider | undefined> {
-  const [first, ...others] = providers;
-  if (others.length === 0) return first;
-
-  const id = await ends.screen.choose(
-    "Where?",
-    providers.map((one) => ({ value: one.id, label: one.name, hint: one.about })),
-  );
-
-  return providers.find((one) => one.id === id);
-}
-
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: Plan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const request = await settle(plan, ends);
-  if ("problem" in request) return stopped(request, show, plan.provider, plan.mode.mode);
+  if ("problem" in request) return stopped(request, show, { name: "install", provider: plan.provider, run: plan.mode.mode });
 
   secrets.add(request.token);
 
   return work(request, io, ends, show);
 }
 
-/** Do what a line that was read asks for. */
-async function answered(parsed: ParsedInstall, providers: readonly Provider[], io: Io, ends: InstallEnds, secrets: Set<string>): Promise<number> {
-  if (parsed.kind === "help" || parsed.kind === "version") {
-    io.out(parsed.kind === "help" ? installHelp(providers, parsed.provider) : VERSION);
-
-    return exitCode({ kind: "done" });
-  }
-
-  const show = showOf(parsed.kind === "plan" ? parsed.plan.json : parsed.json, io, ends, secrets);
-  if (providers.length === 0) return stopped(NO_PROVIDER, show, undefined);
-
-  if (parsed.kind === "list") return list(providers, parsed.json, io);
-
-  if (parsed.kind === "stop") return stopped(parsed.stop, show, undefined);
-
-  if (parsed.kind === "plan") return planned(parsed.plan, io, ends, show, secrets);
-
-  const provider = await picked(providers, ends);
-
-  return provider === undefined ? stopped(STOPPED, show, undefined) : answered(parsed.named(provider), providers, io, ends, secrets);
-}
-
 /**
  * Run the words after `poplin install`.
  *
- * @param rawIo - the machine's ends: where to print, the environment, and whether a person is there to ask
- * @param rawEnds - the providers the package carries, the screen, standard input, and what a provider reaches the world through
+ * @param io - the machine's ends: where to print, the environment, and whether a person is there to ask
+ * @param ends - the providers the package carries, the screen, standard input, and what a provider reaches the world through
  * @returns the exit code: 0 installed or a dry run that is ready, 1 nothing or not all was made, 2 written wrong or an answer missing, 5 no answer. Nothing throws
  */
-export async function runInstall(words: readonly string[], rawIo: Io, rawEnds: InstallEnds): Promise<number> {
-  const held = rawIo.machine.env[TOKEN_VARIABLE] ?? "";
-  const secrets = new Set(held === "" ? [] : [held]);
-  const { io, ends } = guarded(rawIo, rawEnds, secrets);
-
-  try {
-    const providers = await ends.providers();
-
-    return await answered(parseInstall(words, providers, io.machine.env, io.terminal.asks), providers, io, ends, secrets);
-  } catch (error) {
-    const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
-    const said = io.stopped.aborted ? "the command was stopped. Run it again: it goes on from what stands." : `poplin install failed in a way it has no word for: ${what}. Run it again: it goes on from what stands.`;
-
-    return stopped({ problem: io.stopped.aborted ? "stopped" : "crashed", exit: 1, words: said }, showOf(words.includes("--json"), io, ends, secrets), undefined);
-  }
+export function runInstall(words: readonly string[], io: Io, ends: InstallEnds): Promise<number> {
+  return runCommand({ name: "install", parse: parseInstall, help: installHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
 }

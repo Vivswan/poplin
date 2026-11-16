@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Installer } from "../../../core/src/install/installer";
-import { parseInstall, TOKEN_VARIABLE } from "../../src/install/parse";
-import type { ParsedInstall, Plan } from "../../src/install/records";
-import { words } from "../commands/support/command-line";
-import { emptyAccount, standIn, TOKEN } from "./support/stand-in";
+import type { Installer } from "../../../../core/src/install/installer";
+import { TOKEN_VARIABLE } from "../../../src/install/ask";
+import { parseInstall } from "../../../src/install/first/parse";
+import type { ParsedInstall, Plan } from "../../../src/install/records";
+import { words } from "../../commands/support/command-line";
+import { emptyAccount, standIn, TOKEN } from "../support/stand-in";
 
 /** Two made-up providers: the second declares an option the first has not, so an option of one can be given to the other. */
 const PROVIDERS: readonly Installer<unknown, unknown>[] = [
