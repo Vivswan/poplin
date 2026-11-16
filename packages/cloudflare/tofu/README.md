@@ -169,13 +169,22 @@ Bot Fight Mode is a switch of the Free plan: on a paid plan `on` blocks AI bots 
 | `worker_name` | string | `poplin` | the name of the Worker script |
 | `bucket_name` | string | `poplin-sites` | the name of the R2 bucket |
 
-`outside_pages`, `search_engines_allowed`, and `block_bots` are first settings too. Each lives in two places, and `poplin config` changes the stored setting alone. For the Cloudflare side, change the input and apply:
+`outside_pages`, `search_engines_allowed`, and `block_bots` are first settings too. Each lives in two places.
+
+On an install that holds no key, `poplin config` changes the stored setting alone. For the Cloudflare side, change the input and apply:
 
 | Setting | The Worker, from the stored setting | Cloudflare, from the module's input |
 | --- | --- | --- |
 | `outside_pages` | while `blocked`, refuses a request to a site that a page other than one of the install's sites made, and names the pages under the domain as the only ones that may frame a site | the outside pages rule: created while `blocked`, with `guard_rules` on |
 | `search_engines_allowed` | reads nothing from it | the bots rule: whether the crawlers of search engines pass it, with `guard_rules` on |
 | `block_bots` | reads nothing from it | the zone's AI bot block and Bot Fight Mode |
+
+An install the module made holds no key. Once a Repair on the Domain screen gave it one, a saved `outside_pages` or `search_engines_allowed` also writes the guard rules at Cloudflare with the key, as [Domain](../../../docs/dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says:
+
+| `guard_rules` | The rules the key wrote |
+| --- | --- |
+| on | an apply writes the module's rules again: keep the two inputs at the stored settings |
+| off | the module declares no such rules, so they are outside its state |
 
 The first settings. The names and text forms are those of `poplin config`:
 

@@ -181,7 +181,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
 | a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
-| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed. A removed token's row is kept, and it never logs in again; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last |
+| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed. A removed token never logs in again, and its row is removed 90 days after it ended; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |
 | every login at once | Sign everyone out, under Access, asks Cloudflare with the kept key to end every login of the dashboard and of private sites: each browser meets the login again at its next request, a few seconds on. A computer's token is untouched, and is revoked on its own |
 | the stored key | kept in the database; the limits per visitor are made from it |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
@@ -199,10 +199,12 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 
 ## Optional edge rules
 
-The install's setup token needs nine permissions. Four more are optional: three switch on rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
+The install's setup token needs nine permissions. Four more are optional: with three, Repair makes rules at Cloudflare's edge, and one makes a budget alert. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them.
 
-| Permission | Switches on | Without it |
+| Permission | With it, Repair makes | Without it |
 | --- | --- | --- |
-| Zone WAF: Edit | the bots rule, the outside pages rule, and the rate rule | such requests reach the Worker. It refuses a page of another domain while `outside_pages` is `blocked`, and sends `noindex` as the two switches say |
+| Zone WAF: Edit | the bots rule, the outside pages rule, and the rate rule | Repair makes none of the three. Requests no rule stops reach the Worker. It refuses a page of another domain while `outside_pages` is `blocked`, and sends `noindex` as the two switches say |
 | Single Redirect: Edit | the redirect of plain http | the Worker sends the same redirect |
 | Bot Management: Edit | the block of AI crawlers that `block_bots` asks for | `block_bots` is stored and nothing applies it |
+
+Two of the rules need no added permission. An install with a domain that holds [its key](#the-kept-key) writes the bots rule and the outside pages rule with it when `search_engines_allowed` or `outside_pages` is saved. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says which rule is made when, and which install holds a key.
