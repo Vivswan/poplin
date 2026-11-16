@@ -153,7 +153,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).sites[":site"].$get({ param: { site: siteId(1) }, query: {} });
     },
     status: 200,
-    budget: { queries: 3, reads: 0, writes: 0 },
+    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,
@@ -168,7 +168,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).sites[":site"].$patch({ param: { site: siteId(1) }, query: {}, json });
     },
     status: 200,
-    budget: { queries: 4, reads: 0, writes: 0 },
+    budget: { queries: 3, reads: 0, writes: 0 },
   },
   {
     group,
@@ -196,7 +196,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).sites[":site"]["new-link"].$post({ param: { site: siteId(1) }, query: {} });
     },
     status: 200,
-    budget: { queries: 3, read: 746, reads: 0, writes: 0 },
+    budget: { queries: 3, read: 744, reads: 0, writes: 0 },
   },
   {
     group,

@@ -250,9 +250,35 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(last !== undefined && "site" in last ? await database.reserveVersion(last.site.id) : last).toEqual({ kind: "reserved", number: 3 });
     });
 
+    // Drift: an access and a title asked in one request were two steps, so the access could land and the title fail, with one audit entry for half a change.
+    // Together they are one step: a refused access changes nothing, and each half that changes is audited once.
+    test("an access and details asked together change in one step, each audited only when it changed, and a public name that is taken leaves the details as they were too", async () => {
+      const database = await opened(makeDatabase);
+      await made(database, draft("holder" as SiteName, "public", DOCS));
+      const site = await made(database, draft(REPORT));
+      const taken = await database.changeAccessAndDetails(site.id, { access: "public", public_name: DOCS }, { title: "Q3" }, BY_ADA);
+      const afterRefusal = await database.getSite(site.id);
+      const both = await database.changeAccessAndDetails(site.id, { access: "unlisted" }, { title: "Q3", embeddable: false }, BY_ADA);
+      const same = await database.changeAccessAndDetails(site.id, { access: "unlisted" }, { title: "Q3", embeddable: false }, BY_ADA);
+      const half = await database.changeAccessAndDetails(site.id, { access: "unlisted" }, { title: "Q4" }, BY_ADA);
+      const none = await database.changeAccessAndDetails(site.id, { access: "private" }, {}, BY_ADA);
+      const kinds = [taken, both, same, half, none].map((answer) => answer.kind);
+
+      expect([kinds, afterRefusal]).toEqual([["name_taken", "done", "unchanged", "done", "done"], site]);
+      expect("site" in both ? [both.site.access, both.site.title, both.site.embeddable] : both).toEqual(["unlisted", "Q3", false]);
+      expect((await auditTrail(database)).filter((entry) => entry.site?.id === site.id).map((entry) => [entry.action, entry.detail])).toEqual([
+        ["create", { access: "private", public_name: null }],
+        ["access", { access: "unlisted", public_name: null }],
+        ["details", { title: "Q3", embeddable: false }],
+        ["details", { title: "Q4" }],
+        ["access", { access: "private", public_name: null }],
+      ]);
+    });
+
     // Drift: a caller tells "there is no such site" from "it is in the trash" by these answers alone, and offers a restore only for the second.
     test.each([
       ["access changed", (database: Database, id: SiteId): Promise<{ kind: string }> => database.changeAccess(id, { access: "unlisted" }, BY_ADA)],
+      ["access and details changed", (database: Database, id: SiteId): Promise<{ kind: string }> => database.changeAccessAndDetails(id, { access: "unlisted" }, { title: "T" }, BY_ADA)],
       ["details changed", (database: Database, id: SiteId): Promise<{ kind: string }> => database.changeDetails(id, { title: "T" }, BY_ADA)],
       ["a new id given", (database: Database, id: SiteId): Promise<{ kind: string }> => database.giveNewId(id, BY_ADA)],
       ["the site trashed", (database: Database, id: SiteId): Promise<{ kind: string }> => database.trashSite(id, BY_ADA)],
@@ -405,6 +431,35 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       expect(await database.createSite(draft(DOCS, "public"), BY_ADA)).toEqual({ kind: "name_taken" });
       expect(await database.restoreSite(site.id, { by: ADA, at: NOW + 2 })).toEqual({ kind: "done", site });
       expect((await database.findServed({ public_name: DOCS }, NOW))?.site).toEqual(site);
+    });
+
+    // Drift: the sweep acts on a list that is a moment old, with nobody watching. A list that held a site not due would cost a row each run for nothing.
+    // A move or a removal that trusted the list would trash a site its owner had just renewed, or delete for good one just restored.
+    test("the sites due are listed the longest due first and no other, and each is moved or removed only while it is still due, in the step that checks it", async () => {
+      const database = await opened(makeDatabase);
+      const [early, late, never, later, sat, fresh] = await Promise.all(["early", "late", "never", "later", "sat", "fresh"].map((name) => made(database, draft(name as SiteName)))) as [Site, Site, Site, Site, Site, Site];
+      for (const [site, expires] of [[early, NOW + 5], [late, NOW + 10], [later, NOW + 20]] as const) await database.changeDetails(site.id, { expires }, BY_ADA);
+      await database.trashSite(sat.id, { by: ADA, at: NOW + 1 });
+      await database.trashSite(fresh.id, { by: ADA, at: NOW + 50 });
+      const sweeper = { by: BO, at: NOW + 10 };
+
+      const expired = [await database.listDueSites({ expiredBy: NOW + 10 }, 10), await database.listDueSites({ expiredBy: NOW + 10 }, 1), await database.listDueSites({ expiredBy: NOW + 4 }, 10)];
+      await database.changeDetails(early.id, { expires: NOW + 30 }, BY_ADA);
+      const moved = [];
+      for (const site of [early, late, late, never, later, sat]) moved.push((await database.trashExpiredSite(site.id, sweeper)).kind);
+      moved.push((await database.trashExpiredSite(NO_SITE, sweeper)).kind);
+      const satOut = [await database.listDueSites({ trashedBy: NOW + 10 }, 10), await database.listDueSites({ trashedBy: NOW }, 10)];
+      await database.restoreSite(late.id, { by: ADA, at: NOW + 11 });
+      const removed = [];
+      for (const site of [late, fresh, never, sat, sat]) removed.push((await database.deleteSatOutSite(site.id, sweeper, NOW + 10)).kind);
+
+      expect(expired).toEqual([[early.id, late.id], [early.id], []]);
+      expect(moved).toEqual(["not_due", "done", "not_due", "not_due", "not_due", "not_due", "not_due"]);
+      expect(satOut).toEqual([[sat.id, late.id], []]);
+      expect(removed).toEqual(["not_due", "not_due", "not_due", "done", "not_due"]);
+      expect<unknown>((await everySite(database)).map((site) => [site.name, site.state]).sort()).toEqual([["early", "live"], ["fresh", "trash"], ["late", "live"], ["later", "live"], ["never", "live"]]);
+      expect<unknown>((await auditTrail(database)).filter((entry) => entry.by === BO).map((entry) => [entry.action, entry.site?.name])).toEqual([["trash", "late"], ["delete", "sat"]]);
+      await expect(database.listDueSites({ expiredBy: NOW }, 101)).rejects.toThrow(RangeError);
     });
 
     // Drift: a site restored with an expiry already behind it would be live in the answer and served to nobody, and the sweep would trash it again.
@@ -957,7 +1012,7 @@ export function versionContents(label: string, makeDatabase: DatabaseFactory): v
       const first = { missing_page: true, bare_files: "\nLICENSE\n" };
       const second = { missing_page: false, bare_files: "" };
       const upload = await begunSite(database, draft(REPORT));
-      const site = await database.publishUploadAsSite(upload.id, upload.site, BY_ADA, first);
+      const site = await database.publishUploadAsSite(upload.id, upload.site, BY_ADA, { contents: first });
       if (site.kind !== "done") throw new Error(`the fixture site was refused: ${site.kind}`);
 
       const contents = [(await database.findServed({ id: site.site.id }, NOW))?.contents];

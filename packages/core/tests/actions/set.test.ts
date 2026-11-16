@@ -158,8 +158,8 @@ describe("updateSite", () => {
   test("an access change alone answers done, though the site gets a new link the moment after", async () => {
     const world = await makeWorld();
     const id = await made(world, OWNER, "report");
-    const change = world.install.database.changeAccess.bind(world.install.database);
-    spyOn(world.install.database, "changeAccess").mockImplementation(async (...parameters) => {
+    const change = world.install.database.changeAccessAndDetails.bind(world.install.database);
+    spyOn(world.install.database, "changeAccessAndDetails").mockImplementation(async (...parameters) => {
       const changed = await change(...parameters);
       await newLink(world.install, OWNER, id);
 

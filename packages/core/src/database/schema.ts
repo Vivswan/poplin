@@ -43,9 +43,8 @@ export const sites = sqliteTable(
     check("sites_next_is_above_live", sql`${table.next_version} > ${table.live_version}`),
     index("sites_by_change").on(table.trashed, sql`${table.updated_at} DESC`, sql`${table.id} DESC`),
     index("sites_by_owner").on(table.owner, table.trashed, sql`${table.updated_at} DESC`, sql`${table.id} DESC`),
-    index("sites_by_name").on(table.trashed, table.name, table.id),
-    index("sites_by_access").on(table.trashed, table.access_rank, table.id),
-    index("sites_by_title").on(table.trashed, table.title_key, table.id),
+    index("sites_by_expiry").on(table.expires_at, table.id).where(sql`expires_at IS NOT NULL AND trashed_at IS NULL`),
+    index("sites_by_trashing").on(table.trashed_at, table.id).where(sql`trashed_at IS NOT NULL`),
   ],
 );
 
@@ -157,7 +156,7 @@ export const totals = sqliteTable(
 export const audit = sqliteTable(
   "audit",
   {
-    seq: integer().primaryKey({ autoIncrement: true }),
+    seq: integer().primaryKey(),
     at: integer().notNull(),
     actor: text().notNull(),
     action: text().notNull(),

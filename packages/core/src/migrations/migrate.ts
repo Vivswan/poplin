@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS schema_steps (
   fingerprint TEXT NOT NULL
 ) STRICT`;
 
-/** Whether the ledger exists; a database no step ran on has none. */
+/** Whether the ledger exists; a database no step ran on has none. It reads a row for everything the schema holds, so it is asked only once the ledger could not be read. */
 const HAS_LEDGER = "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'schema_steps'";
 
 /** Every applied step as the ledger holds it, in order. The last one is the schema version. */
@@ -78,17 +78,36 @@ function fingerprintOf(step: Step): Promise<string> {
 }
 
 /**
+ * Read the applied steps as the ledger holds them, in order: none for a database that has no ledger, which is one no step ran on.
+ *
+ * @throws {AllowanceSpent} the day's allowance of the database is used up
+ * @throws whatever the driver rejects with, when the ledger is there and still cannot be read
+ */
+async function appliedSteps(driver: SqlDriver): Promise<readonly Readonly<Record<string, unknown>>[]> {
+  const read = async (): Promise<readonly Readonly<Record<string, unknown>>[]> => (await driver.batch([{ sql: APPLIED_STEPS, params: [] }]))[0]?.rows ?? [];
+
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof AllowanceSpent) throw error;
+
+    // The read fails on a database with no ledger. Whether that is why it failed is asked of the schema itself.
+    const [ledger] = await driver.batch([{ sql: HAS_LEDGER, params: [] }]);
+    if (ledger?.rows.length !== 1) return [];
+
+    // The ledger is there: another runner made it since the read, or the read failed for another reason, which reading again tells.
+    return read();
+  }
+}
+
+/**
  * Read where a database stands against the given steps. Nothing is written.
  *
  * @param steps - every step the code knows, in ascending order from 1
  * @returns `at` with the stored schema version, 0 for a database no step has run on; `newer` for one with a step beyond the code's; `differs` for one whose applied step is not the code's
  */
 export async function readStanding(driver: SqlDriver, steps: readonly Step[]): Promise<Standing> {
-  const [ledger] = await driver.batch([{ sql: HAS_LEDGER, params: [] }]);
-  if (ledger?.rows.length !== 1) return { kind: "at", version: 0 };
-
-  const [applied] = await driver.batch([{ sql: APPLIED_STEPS, params: [] }]);
-  const rows = applied?.rows ?? [];
+  const rows = await appliedSteps(driver);
   const stored = Number(rows.at(-1)?.step ?? 0);
   if (stored > steps.length) return newer(stored, steps.length);
 

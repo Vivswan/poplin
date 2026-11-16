@@ -47,7 +47,7 @@ const MANY_FILES = 7;
 const RUN_MS = 30_000;
 
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
-const CHECKS_ROWS = 922;
+const CHECKS_ROWS = 755;
 
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];

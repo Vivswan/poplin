@@ -177,12 +177,21 @@ export function auditStopIn(ends: StatementResult | undefined, query: AuditSearc
 /**
  * Build the statement that counts the entries a narrowing keeps among the newest `most` of the log. An entry's `seq` is its place: the log is only ever added to, one `seq` after the other.
  *
+ * With no narrowing the count is read off the log's two ends, the newest `seq` less the oldest and one: two rows, whatever the log's length. No `seq` is left out between them.
+ *
  * @throws {RangeError} `most` is not a whole number of at least 1
  */
 export function auditCountAsked(query: AuditCountQuery): Statement {
   if (!Number.isSafeInteger(query.most) || query.most < 1) throw new RangeError(`a count reads at least 1 entry, not ${query.most}`);
 
   const oldestSeq = fragment`(SELECT min(${audit.seq}) FROM ${audit})`;
+
+  if (query.actions === undefined && query.site === undefined && query.of === undefined) {
+    const ends = fragment`(SELECT ${oldestSeq} AS oldest, (SELECT max(${audit.seq}) FROM ${audit}) AS newest) AS ends`;
+    const held = fragment`ends.newest - ends.oldest + 1`;
+
+    return written(fragment`SELECT coalesce(${held} <= ${query.most}, 1) AS whole, coalesce(min(${held}, ${query.most}), 0) AS found FROM ${ends}`);
+  }
 
   // A text or an id finds a site among the sites, and the engine charges that look once an entry inside a reading that is counted from: under either the entries are counted where they are narrowed, by their place in the log.
   if (query.site !== undefined || query.of !== undefined) {

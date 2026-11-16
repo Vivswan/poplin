@@ -133,7 +133,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/sites?q=site&sort=title&dir=desc");
     },
     status: 200,
-    budget: { queries: 2, read: 470, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 651, reads: 0, writes: 0 },
   },
   {
     group,
@@ -147,7 +147,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, `/sites/${LABEL}`);
     },
     status: 200,
-    budget: { queries: 4, reads: 0, writes: 0 },
+    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,
@@ -167,7 +167,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   siteChange("Sites screen: change a site's switches", { queries: 3, reads: 0, writes: 0 }, "settings", { search_engines: true, embeddable: false }),
   siteChange("Sites screen: set when a site deletes itself", { queries: 3, reads: 0, writes: 0 }, "expiry", { expires: "7d" }),
   siteChange("Sites screen: make an older version live", { queries: 3, reads: 0, writes: 0 }, "make-live", { version: 2 }),
-  siteChange("Sites screen: new link", { queries: 3, read: 747, reads: 0, writes: 0 }, "new-link", {}),
+  siteChange("Sites screen: new link", { queries: 3, read: 745, reads: 0, writes: 0 }, "new-link", {}),
   siteChange("Sites screen: delete a site", { queries: 3, reads: 0, writes: 0 }, "delete", {}),
   siteChange("Sites screen: restore a site", { queries: 3, reads: 0, writes: 0 }, "restore", {}, { trashed: true }),
   {
@@ -183,7 +183,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => post(measured, `/data/sites/${LABEL}/delete-for-good`, {}, session);
     },
     status: 200,
-    budget: { queries: 8, reads: 0, writes: 2, deletes: 2 },
+    budget: { queries: 7, reads: 0, writes: 2, deletes: 2 },
   },
   {
     group,
@@ -339,7 +339,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     name: "Activity screen: the count of entries",
     guide: "Open the Activity screen",
     route: "GET /data/activity/total",
-    // Worst: the log holds more than the 10,000 entries a count reads.
+    // A long log: the count is read off its two ends, so it costs what a short one does.
     arrange: async (stage) => {
       await manyEntries(stage, MOST_COUNTED + 1, 10);
       const session = await sessionOf(stage);
@@ -347,7 +347,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/activity/total");
     },
     status: 200,
-    budget: { queries: 2, read: 10003, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 4, reads: 0, writes: 0 },
   },
   {
     group,

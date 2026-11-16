@@ -15,7 +15,7 @@ import { type AuditAction, type AuditEntry, auditFromRow } from "../records/audi
 import type { DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
 import type { Problem } from "../records/problem";
-import { LOGIN } from "../records/fields";
+import { LOGIN, SITE_ID } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signingKeyFromRow, signingKeyToText, type UpdateAddress, updateAddressFromRow } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
@@ -43,11 +43,13 @@ import type {
   DayUse,
   Database,
   Done,
+  DueSites,
   ExportPage,
   FrameRecords,
   LeftoversPage,
   LoginDecision,
   LoginRoom,
+  MadeWith,
   NewSite,
   NewUpload,
   NewVersion,
@@ -71,6 +73,7 @@ import type {
   SitesPage,
   SitesQuery,
   SitesShown,
+  SweepStart,
   TokenStates,
   Unchanged,
   UploadedVersion,
@@ -114,29 +117,25 @@ import {
 } from "./login-statements";
 import {
   A_KEPT_VERSION,
-  DEFAULT_DIRECTIONS,
   LATER_FIELDS,
   LATER_SITE,
-  LISTED_FIELDS,
   NAMED_FIELDS,
   NAMED_SITE,
   OTHER,
   SHOWN_BESIDE,
   SITE_FIELDS,
-  TITLE_KEY,
   VERSION_COLUMNS,
-  cursorPlace,
   dropOldVersions,
   insertSite,
   isFirstPending,
   isFree,
   keepEarlierId,
   moveLive,
-  narrowing,
+  pageAsked,
+  pageIn,
   pageWithBeside,
   publicNameIsFree,
   publicNameOf,
-  requireCursor,
   servedSite,
   setAccess,
   siteById,
@@ -199,6 +198,9 @@ const READ_UPDATE_ADDRESS = built(BUILD.select({ value: secrets.value, created_a
 const READ_UPDATE_CHECK = built(
   BUILD.select({ checked_at: updateCheck.checked_at, news: updateCheck.news, seen_at: updateCheck.seen_at, auto: updateCheck.auto }).from(updateCheck).where(eq(updateCheck.id, 1)),
 );
+
+/** Where the scheduled sweep's walk stopped, as JSON text. */
+const READ_SWEEP_PLACE = built(BUILD.select({ place: sweepPlace.place }).from(sweepPlace).where(eq(sweepPlace.id, 1)));
 
 /** The form of a day: a date such as `2026-11-13`, which sorts as text in the order of time. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -273,43 +275,6 @@ function requestsOf(day: string, site: string): Statement {
   return built(BUILD.select({ requests: requestCounts.requests }).from(requestCounts).where(and(eq(requestCounts.day, day), eq(requestCounts.site, site))));
 }
 
-/**
- * One page of a listing as a query: one row more than the page, which shows whether another page follows. Each row names what the page is ordered by `listed_by`.
- *
- * @throws {RangeError} the limit is no page's, or the cursor lacks what its order goes by
- */
-function pageAsked(query: SitesQuery) {
-  requirePage(query.limit);
-  requireCursor(query);
-
-  // The trash is listed by when each site went there, the sites by when their content last changed.
-  const moment = query.trash ? sites.trashed_at : sites.updated_at;
-  const sort = query.sort ?? "updated";
-  const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
-  const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}`, title: fragment`${sites.title_key}` }[sort];
-  const conditions = narrowing(query);
-
-  if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
-
-  const fields = { ...LISTED_FIELDS, listed_by: column.as("listed_by") };
-  const page = BUILD.select(fields).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
-
-  return { page, descending };
-}
-
-/** The page a listing's statement answered: its sites, and where the page after it starts when one follows. */
-function pageIn(listed: StatementResult | undefined, query: SitesQuery): SitesPage {
-  const rows = (listed?.rows ?? []).slice(0, query.limit);
-  const listedSites = rows.map(siteFromRow);
-  const last = listedSites.at(-1);
-  if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
-
-  // The key is read as the engine holds it: cut and lowered here, it could differ from the one the order goes by.
-  const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access }, title: { title: v.parse(TITLE_KEY, rows.at(-1)).title_key } }[query.sort ?? "updated"];
-
-  return { sites: listedSites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
-}
-
 function requirePage(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new RangeError(`a page holds 1 to ${MAX_PAGE} rows, not ${limit}`);
 }
@@ -346,6 +311,34 @@ function unreachable(site: Site | undefined): Refused<"not_found" | "in_trash"> 
   if (site.state === "trash") return { kind: "in_trash" };
 
   return undefined;
+}
+
+/**
+ * The update of a live site's details that changes a row only where a detail differs, with the details as they were checked; `undefined` when no detail is asked.
+ *
+ * @param also - a further condition the site must meet
+ * @throws {Error} a detail breaks its field rule
+ */
+function detailsUpdate(id: SiteId, details: SiteDetails, also?: SQL): { readonly update: Statement; readonly given: Readonly<Record<string, unknown>> } | undefined {
+  const given = v.parse(SITE_DETAILS, details);
+  const stored = storedDetails(given);
+  const columns = Object.keys(stored) as (keyof typeof stored)[];
+  if (columns.length === 0) return undefined;
+
+  const differs = or(...columns.map((column) => fragment`${sites[column]} IS NOT ${stored[column] ?? null}`));
+
+  return { update: built(BUILD.update(sites).set(stored).where(and(eq(sites.id, id), eq(sites.trashed, 0), also, differs))), given };
+}
+
+/** What an access asked for a site comes to when it changed no row, from the read of the site after: there is none, it sits in the trash, it has that access already, or its public name is taken. */
+function accessLeft(after: StatementResult | undefined, access: SiteAccess): Unchanged | Refused<"not_found" | "in_trash" | "name_taken"> {
+  const site = siteIn(after);
+  const refusal = unreachable(site);
+  if (site === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+
+  if (site.access === access.access && publicNameOf(site) === publicNameOf(access)) return { kind: "unchanged", site };
+
+  return { kind: "name_taken" };
 }
 
 function uploadIn(result: StatementResult | undefined): Upload | undefined {
@@ -516,12 +509,14 @@ export class SqlDatabase implements Database {
   }
 
   async listSites(query: SitesQuery): Promise<SitesPage> {
+    requirePage(query.limit);
     const [listed] = await this.#driver.batch([built(pageAsked(query).page)]);
 
     return pageIn(listed, query);
   }
 
   async listShownSites(query: SitesQuery, shown: SitesShown): Promise<ShownSitesPage> {
+    requirePage(query.limit);
     requireDay(shown.day);
     const { page, descending } = pageAsked(query);
     const [stored, listed] = await this.#driver.batch([READ_SETTINGS, pageWithBeside(fragment`${page}`, shown, descending)]);
@@ -540,26 +535,32 @@ export class SqlDatabase implements Database {
       auditOfSite(signed, "access", id, { access: access.access, public_name: publicName }),
       siteById(id),
     ]);
-    if (changed(updated)) return done(after);
 
-    const site = siteIn(after);
-    const refusal = unreachable(site);
-    if (site === undefined || refusal !== undefined) return refusal ?? { kind: "not_found" };
+    return changed(updated) ? done(after) : accessLeft(after, access);
+  }
 
-    if (site.access === access.access && publicNameOf(site) === publicName) return { kind: "unchanged", site };
+  async changeAccessAndDetails(id: SiteId, access: SiteAccess, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">> {
+    const publicName = publicNameOf(access);
+    // The details change only once the site has the access asked, which the statement before them gave it or it had.
+    const asked = detailsUpdate(id, details, and(eq(sites.access, access.access), fragment`${sites.public_name} IS ${publicName}`));
+    if (asked === undefined) return this.changeAccess(id, access, signed);
 
-    return { kind: "name_taken" };
+    const [opened, , detailed, , after] = await this.#driver.batch([
+      setAccess(id, access.access, publicName),
+      auditOfSite(signed, "access", id, { access: access.access, public_name: publicName }),
+      asked.update,
+      auditOfSite(signed, "details", id, asked.given),
+      siteById(id),
+    ]);
+
+    return changed(opened) || changed(detailed) ? done(after) : accessLeft(after, access);
   }
 
   async changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">> {
-    const given = v.parse(SITE_DETAILS, details);
-    const stored = storedDetails(given);
-    const columns = Object.keys(stored) as (keyof typeof stored)[];
-    if (columns.length === 0) return this.#unchanged(id);
+    const asked = detailsUpdate(id, details);
+    if (asked === undefined) return this.#unchanged(id);
 
-    const differs = or(...columns.map((column) => fragment`${sites[column]} IS NOT ${stored[column] ?? null}`));
-    const update = BUILD.update(sites).set(stored).where(and(eq(sites.id, id), eq(sites.trashed, 0), differs));
-    const [updated, , after] = await this.#driver.batch([built(update), auditOfSite(signed, "details", id, given), siteById(id)]);
+    const [updated, , after] = await this.#driver.batch([asked.update, auditOfSite(signed, "details", id, asked.given), siteById(id)]);
     if (changed(updated)) return done(after);
 
     return this.#unchangedIn(after);
@@ -569,13 +570,15 @@ export class SqlDatabase implements Database {
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const next = this.#mintId();
       const days = JSON.stringify(daysUpTo(dayOf(signed.at), KEPT_DAYS));
+      // The days are walked only once the id was given: the list of them stands behind a row that is there only then.
+      const counted = fragment`(SELECT j.value FROM (SELECT 1 WHERE ${CHANGED}) AS given CROSS JOIN json_each(${days}) AS j)`;
       const [updated, , , after, before] = await this.#driver.batch([
         built(BUILD.update(sites).set({ id: next }).where(and(eq(sites.id, id), eq(sites.trashed, 0), isFree(next)))),
         auditOfSite(signed, "new_id", next, { from: id }),
         keepEarlierId(id, next),
         siteById(next),
         siteById(id),
-        built(BUILD.update(requestCounts).set({ site: next }).where(and(eq(requestCounts.site, id), fragment`${requestCounts.day} IN (SELECT j.value FROM json_each(${days}) AS j)`, CHANGED))),
+        built(BUILD.update(requestCounts).set({ site: next }).where(and(eq(requestCounts.site, id), fragment`${requestCounts.day} IN ${counted}`))),
       ]);
       if (changed(updated)) return done(after);
 
@@ -587,11 +590,25 @@ export class SqlDatabase implements Database {
   }
 
   async trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">> {
-    const trash = BUILD.update(sites).set({ trashed_at: signed.at }).where(and(eq(sites.id, id), eq(sites.trashed, 0)));
-    const [updated, , after] = await this.#driver.batch([built(trash), auditOfSite(signed, "trash", id, {}), siteById(id)]);
-    if (changed(updated)) return done(after);
+    const { moved, after } = await this.#trashWhere(undefined, id, signed);
+    if (moved) return done(after);
 
     return unreachable(siteIn(after)) ?? { kind: "not_found" };
+  }
+
+  async listDueSites(due: DueSites, limit: number): Promise<readonly SiteId[]> {
+    requirePage(limit);
+    // Each condition is the one its index holds, so the engine walks the due sites alone and reads no site's row.
+    const [dueBy, since] = "expiredBy" in due ? [sites.expires_at, and(lte(sites.expires_at, due.expiredBy), isNull(sites.trashed_at))] : [sites.trashed_at, lte(sites.trashed_at, due.trashedBy)];
+    const [found] = await this.#driver.batch([built(BUILD.select({ id: sites.id }).from(sites).where(since).orderBy(asc(dueBy), asc(sites.id)).limit(limit))]);
+
+    return (found?.rows ?? []).map((row) => v.parse(SITE_ID, row.id));
+  }
+
+  async trashExpiredSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_due">> {
+    const { moved, after } = await this.#trashWhere(lte(sites.expires_at, signed.at), id, signed);
+
+    return moved ? done(after) : { kind: "not_due" };
   }
 
   async restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">> {
@@ -605,13 +622,11 @@ export class SqlDatabase implements Database {
   }
 
   async deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">> {
-    // The audit entry is written while the site is still there to name, and the delete only when it was.
-    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'delete', ${sites.id}, ${sites.name}, '{}' FROM ${sites} WHERE ${sites.id} = ${id}`;
-    const remove = BUILD.delete(sites).where(and(eq(sites.id, id), CHANGED));
-    const [before, , deleted] = await this.#driver.batch([siteById(id), insertFrom(audit, AUDIT_COLUMNS, entry), built(remove)]);
-    if (!changed(deleted)) return { kind: "not_found" };
+    return (await this.#deleteWhere(eq(sites.id, id), id, signed)) ?? { kind: "not_found" };
+  }
 
-    return done(before);
+  async deleteSatOutSite(id: SiteId, signed: Signed, trashedBy: number): Promise<Done | Refused<"not_due">> {
+    return (await this.#deleteWhere(and(eq(sites.id, id), lte(sites.trashed_at, trashedBy)), id, signed)) ?? { kind: "not_due" };
   }
 
   async listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage> {
@@ -785,9 +800,8 @@ export class SqlDatabase implements Database {
     const added = fragment`${files} = ${files} + excluded.${files}, ${writes} = ${writes} + excluded.${writes}`;
     const counted = fragment`SELECT ${room.day}, ${checked.files}, ${room.writes} WHERE ${CHANGED} ON CONFLICT (${bare(declaredFiles.day)}) DO UPDATE SET ${added}`;
 
-    const [before, , inserted] = await this.#driver.batch([
+    const [before, inserted] = await this.#driver.batch([
       written(held),
-      dropEarlierDays(room.day),
       insertFrom(uploads, columns, record),
       insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files, declaredFiles.writes], counted),
     ]);
@@ -831,8 +845,8 @@ export class SqlDatabase implements Database {
     return { upload, file: fileUnderKey(stored, path) };
   }
 
-  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken" | "not_pending">> {
-    return this.#insertSite(draft, signed, { upload: id, contents });
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made: MadeWith = {}): Promise<Done | Refused<"name_taken" | "not_pending">> {
+    return this.#insertSite(draft, signed, { ...made, upload: id });
   }
 
   async publishUploadAsVersion(
@@ -1042,7 +1056,14 @@ export class SqlDatabase implements Database {
   }
 
   async sweepRunOut(now: number): Promise<number> {
-    const [removed] = await this.#driver.batch([built(BUILD.delete(logins).where(lte(logins.expires_at, now))), problemsForgotten(now)]);
+    const day = dayOf(now);
+    const [removed] = await this.#driver.batch([
+      built(BUILD.delete(logins).where(lte(logins.expires_at, now))),
+      problemsForgotten(now),
+      dropEarlierDays(day),
+      // The days before the oldest one kept are dropped, so the table holds a year.
+      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(day, KEPT_DAYS)[0] ?? day))),
+    ]);
 
     return removed?.changes ?? 0;
   }
@@ -1060,9 +1081,15 @@ export class SqlDatabase implements Database {
   }
 
   async readSweepPlace(): Promise<SweepPlace | undefined> {
-    const [read] = await this.#driver.batch([built(BUILD.select({ place: sweepPlace.place }).from(sweepPlace).where(eq(sweepPlace.id, 1)))]);
+    const [read] = await this.#driver.batch([READ_SWEEP_PLACE]);
 
     return placeIn(read);
+  }
+
+  async readSweepStart(): Promise<SweepStart> {
+    const [update, stored, place] = await this.#driver.batch([READ_UPDATE_CHECK, READ_SETTINGS, READ_SWEEP_PLACE]);
+
+    return { updateCheck: updateCheckIn(update), settings: settingsIn(stored), place: placeIn(place) };
   }
 
   async keepSweepPlace(place: SweepPlace | undefined): Promise<void> {
@@ -1131,7 +1158,7 @@ export class SqlDatabase implements Database {
     requireCount("the writes a day takes beyond its bound", spare);
     // The check and the count are one statement, so no two requests pass the bound together. An install that has stored no settings has no bound.
     const most = fragment`COALESCE((SELECT ${settings.value} ->> 'max_storage_writes_per_day' FROM ${settings} WHERE ${settings.id} = 1), ${NO_BOUND})`;
-    const [, taken] = await this.#driver.batch([dropEarlierDays(day), addWrites(day, 1, fragment`${writesOf(day)} < ${most} + ${spare}`)]);
+    const [taken] = await this.#driver.batch([addWrites(day, 1, fragment`${writesOf(day)} < ${most} + ${spare}`)]);
 
     return changed(taken);
   }
@@ -1140,7 +1167,7 @@ export class SqlDatabase implements Database {
     requireDay(day);
     if (!Number.isSafeInteger(writes) || writes < 1) throw new RangeError(`a count of writes is a whole number of at least 1, not ${writes}`);
 
-    await this.#driver.batch([dropEarlierDays(day), addWrites(day, writes, fragment`true`)]);
+    await this.#driver.batch([addWrites(day, writes, fragment`true`)]);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {
@@ -1227,9 +1254,7 @@ export class SqlDatabase implements Database {
 
   async ensureSigningKey(fresh: Uint8Array, at: number): Promise<SigningKey> {
     const text = signingKeyToText(fresh);
-    const stored = await this.readSigningKey();
-    if (stored !== undefined) return { kind: "kept", key: stored };
-
+    // One step whether a key is stored or not: the insert does nothing where one is, and the read after it gives the stored one.
     const noneStored = fragment`NOT EXISTS (SELECT 1 FROM ${secrets} WHERE ${secrets.name} = 'session_key')`;
     const first = insertFrom(secrets, [secrets.name, secrets.value, secrets.created_at], fragment`SELECT 'session_key', ${text}, ${at} WHERE ${noneStored}`);
     const [inserted, read] = await this.#driver.batch([first, READ_SIGNING_KEY]);
@@ -1328,9 +1353,7 @@ export class SqlDatabase implements Database {
     requireCount("the rows read", rows.read);
     requireCount("the rows written", rows.written);
 
-    const [, site, all] = await this.#driver.batch([
-      // The days before the oldest one kept are dropped, so the table holds a year.
-      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(counted.day, KEPT_DAYS)[0] ?? counted.day))),
+    const [site, all] = await this.#driver.batch([
       addRequests({ day: counted.day, site: counted.site, requests: counted.requests, views, rows: NO_ROWS }),
       addRequests({ day: counted.day, site: ALL_SITES, requests: counted.requests, views, rows }),
     ]);
@@ -1390,6 +1413,24 @@ export class SqlDatabase implements Database {
     return { site: requestsIn(read[1]), all: requestsIn(read[0]) };
   }
 
+  /** Move the live site with an id to the trash while a further condition holds for it, with its audit entry: whether it moved, and the read of the site after. */
+  async #trashWhere(holds: SQL | undefined, id: SiteId, signed: Signed): Promise<{ readonly moved: boolean; readonly after: StatementResult | undefined }> {
+    const trash = BUILD.update(sites).set({ trashed_at: signed.at }).where(and(eq(sites.id, id), eq(sites.trashed, 0), holds));
+    const [updated, , after] = await this.#driver.batch([built(trash), auditOfSite(signed, "trash", id, {}), siteById(id)]);
+
+    return { moved: changed(updated), after };
+  }
+
+  /** Remove the site with an id for good while a condition holds for it, with its audit entry; `undefined` when it does not hold. */
+  async #deleteWhere(holds: SQL | undefined, id: SiteId, signed: Signed): Promise<Done | undefined> {
+    // The audit entry is written while the site is still there to name, and the delete only when it was.
+    const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'delete', ${sites.id}, ${sites.name}, '{}' FROM ${sites} WHERE ${holds}`;
+    const remove = BUILD.delete(sites).where(and(eq(sites.id, id), CHANGED));
+    const [before, , deleted] = await this.#driver.batch([siteById(id), insertFrom(audit, AUDIT_COLUMNS, entry), built(remove)]);
+
+    return changed(deleted) ? done(before) : undefined;
+  }
+
   /** The statements that set the access asked with an upload, and their audit entry; none when no access is asked. */
   #accessWith(id: UploadId, access: SiteAccess | undefined, signed: Signed): Statement[] {
     if (access === undefined) return [];
@@ -1425,7 +1466,7 @@ export class SqlDatabase implements Database {
   }
 
   /** Make a site under a fresh id; with `upload`, only while that upload is pending, and marking it finished in the same step. */
-  async #insertSite(draft: NewSite, signed: Signed, from: { readonly upload?: UploadId; readonly contents?: VersionContents }): Promise<Done | Refused<"name_taken" | "not_pending">> {
+  async #insertSite(draft: NewSite, signed: Signed, from: MadeWith & { readonly upload?: UploadId }): Promise<Done | Refused<"name_taken" | "not_pending">> {
     const { upload } = from;
     const site = v.parse(NEW_SITE, draft);
     const [missingPage, bareFiles] = contentsValues(from.contents);
@@ -1438,15 +1479,20 @@ export class SqlDatabase implements Database {
 
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const id = this.#mintId();
-      const [inserted, , , , taken, made, waiting] = await this.#driver.batch([
+      // A copy's second entry follows the first, so it is written only when the site was made, and the upload is finished only after both.
+      const copied = from.copiedFrom === undefined ? [] : [auditOfSite(signed, "duplicate", id, { from: from.copiedFrom })];
+      const answers = await this.#driver.batch([
         insertSite(id, site, signed, upload),
         built(size),
         auditOfSite(signed, "create", id, detail),
+        ...copied,
         finishUpload(upload ?? null),
         written(held),
         siteById(id),
         uploadById(upload ?? null),
       ]);
+      const [inserted] = answers;
+      const [taken, made, waiting] = answers.slice(-3);
       if (changed(inserted)) return done(made);
 
       if (upload !== undefined && uploadIn(waiting)?.state !== "pending") return { kind: "not_pending" };

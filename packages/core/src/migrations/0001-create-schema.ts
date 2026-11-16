@@ -45,7 +45,7 @@ CREATE TABLE sites (
   CHECK ((access = 'public') = (public_name IS NOT NULL)),
   CHECK (public_name IS NOT id),
   CHECK (next_version > live_version)
-) STRICT`;
+) STRICT, WITHOUT ROWID`;
 
 /** The publishes of a site that can still be gone back to; they go when the site does. `missing_page` says whether the version holds a `404.html` at its top, and `bare_files` lists its files without an extension, NULL when they are not kept. */
 const VERSIONS = `
@@ -82,7 +82,7 @@ CREATE TABLE tokens (
   end_at INTEGER GENERATED ALWAYS AS (coalesce(removed_at, expires_at)) VIRTUAL,
   CHECK ((scope = 'admin') = (expires_at IS NOT NULL)),
   CHECK ((removed_at IS NULL) = (removed_by IS NULL))
-) STRICT`;
+) STRICT, WITHOUT ROWID`;
 
 /** The settings of the whole install, in one row. */
 const SETTINGS = `
@@ -113,10 +113,10 @@ CREATE TABLE totals (
 /** The one row of the totals, for an install with no site. */
 const TOTALS_START_AT_ZERO = "INSERT INTO totals (id, sites, trashed_sites, bytes, files) VALUES (1, 0, 0, 0, 0)";
 
-/** What was done, by whom, and when. */
+/** What was done, by whom, and when. An entry's `seq` is one above the newest entry's, which no entry is ever removed after: no number is given twice, and none is left out. */
 const AUDIT = `
 CREATE TABLE audit (
-  seq INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  seq INTEGER NOT NULL PRIMARY KEY,
   at INTEGER NOT NULL,
   actor TEXT NOT NULL,
   action TEXT NOT NULL,
@@ -161,7 +161,7 @@ CREATE TABLE uploads (
   dropped TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(dropped)),
   created_at INTEGER NOT NULL,
   UNIQUE (folder, number)
-) STRICT`;
+) STRICT, WITHOUT ROWID`;
 
 /** A computer's login from the terminal's first request on. `hash` is the SHA-256 of the secret the terminal holds; `code` is what a person compares, and `visitor` the key of whoever asked. Only a decided login names who decided it. */
 const LOGINS = `
@@ -344,9 +344,8 @@ export const CREATE_SCHEMA: Step = {
     PROBLEMS,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
-    "CREATE INDEX sites_by_name ON sites (trashed, name, id)",
-    "CREATE INDEX sites_by_access ON sites (trashed, access_rank, id)",
-    "CREATE INDEX sites_by_title ON sites (trashed, title_key, id)",
+    "CREATE INDEX sites_by_expiry ON sites (expires_at, id) WHERE expires_at IS NOT NULL AND trashed_at IS NULL",
+    "CREATE INDEX sites_by_trashing ON sites (trashed_at, id) WHERE trashed_at IS NOT NULL",
     "CREATE INDEX earlier_ids_by_folder ON earlier_ids (folder)",
     "CREATE INDEX audit_logins ON audit (action) WHERE action = 'login'",
     "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",

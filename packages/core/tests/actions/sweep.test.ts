@@ -175,7 +175,7 @@ describe("sweepExpired", () => {
   });
 
   // Drift: one Worker request may make few calls; a step that looked at more sites than its limit, or a `next` that skipped one, would leave the walk unfinished for good.
-  test("a step looks at no more than `limit` sites, and following `next` reaches every site and all of the trash", async () => {
+  test("a step takes no more than `limit` due sites, and following `next` reaches every expired site and all that sat out the trash", async () => {
     const world = await makeWorld({ trash_days: 1 });
     for (const [at, name] of ["one", "two", "three"].entries()) {
       world.clock.now = NOW + at;
@@ -191,7 +191,6 @@ describe("sweepExpired", () => {
     expect(steps).toEqual([
       [2, 0, []],
       [1, 0, []],
-      [0, 0, []],
       [0, 1, []],
       [0, 0, []],
       [0, 0, []],
@@ -207,13 +206,15 @@ describe("sweepExpired", () => {
     const restored = await made(world, OWNER, "restored");
     await deleteSite(world.install, OWNER, { site: restored });
     world.clock.now = NOW + 2 * DAY;
-    const list = world.install.database.listSites.bind(world.install.database);
-    spyOn(world.install.database, "listSites").mockImplementation(async (query) => {
-      const page = await list(query);
-      if (query.trash) await restoreSite(world.install, OWNER, restored);
-      if (!query.trash) await updateSite(world.install, OWNER, { site: renewed, expires: "never" });
+    const list = world.install.database.listDueSites.bind(world.install.database);
+    const listed: number[] = [];
+    spyOn(world.install.database, "listDueSites").mockImplementation(async (due, limit) => {
+      const ids = await list(due, limit);
+      listed.push(ids.length);
+      if ("trashedBy" in due) await restoreSite(world.install, OWNER, restored);
+      if ("expiredBy" in due) await updateSite(world.install, OWNER, { site: renewed, expires: "never" });
 
-      return page;
+      return ids;
     });
 
     expect(await walk(world, 10)).toEqual([
@@ -222,6 +223,7 @@ describe("sweepExpired", () => {
       [0, 0, []],
       [0, 0, []],
     ]);
+    expect(listed).toEqual([1, 1]);
     expect([await getSite(world.install, OWNER, renewed), await getSite(world.install, OWNER, restored)]).toMatchObject([
       { site: { state: "live", expires: "never" } },
       { site: { state: "live" } },

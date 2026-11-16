@@ -188,6 +188,22 @@ export interface ShownSite extends SettingsAndSite {
   readonly publishers: ReadonlyMap<TokenId, string>;
 }
 
+/** Which sites a sweep is due to act on: the live ones whose expiry is at or before a moment, or the ones that went to the trash at or before a moment. */
+export type DueSites = { readonly expiredBy: number } | { readonly trashedBy: number };
+
+/** What a scheduled run starts from, as one read gave it; each is `undefined` where its own read gives that. */
+export interface SweepStart {
+  readonly updateCheck: UpdateCheck | undefined;
+  readonly settings: SettingValues | undefined;
+  readonly place: SweepPlace | undefined;
+}
+
+/** What a site is made with beside its record: what its first version holds, and the site it is a copy of. */
+export interface MadeWith {
+  readonly contents?: VersionContents;
+  readonly copiedFrom?: SiteId;
+}
+
 /** One page of every site, the trash included, in ascending order of id. `next` is the id to pass as `after`, absent on the last page. */
 export interface ExportPage {
   readonly sites: readonly Site[];
@@ -593,11 +609,34 @@ export interface Database {
    */
   changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">>;
 
+  /**
+   * Set who may open a site and its details together, in one step: the details change only once the site has the access asked, so a refused access leaves all of it as it was.
+   * Each of the two that changes writes its own audit entry.
+   *
+   * @returns `unchanged` when the site already has the access and the details; the refusals as in `changeAccess`
+   * @throws {Error} a detail breaks its field rule
+   */
+  changeAccessAndDetails(id: SiteId, access: SiteAccess, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">>;
+
   /** Give a site a new id. The old id names no site from then on, and is kept as an earlier id of the site; the public name, the folder, the request counts of the year up to `signed.at`, and everything else stay with the site. */
   giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
 
   /** Move a site into the trash. It keeps its public name. */
   trashSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
+
+  /**
+   * The ids of the sites a sweep is due to act on, the one due longest first, each found through an index: a site that is not due costs nothing.
+   *
+   * @throws {RangeError} `limit` is not a whole number from 1 to 100
+   */
+  listDueSites(due: DueSites, limit: number): Promise<readonly SiteId[]>;
+
+  /**
+   * Move a site into the trash only while it is live and its expiry is at or before `signed.at`: the check and the move are one step.
+   *
+   * @returns `not_due` for a site that is gone, in the trash already, or given a later expiry or none
+   */
+  trashExpiredSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_due">>;
 
   /** Take a site out of the trash. An expiry that is not after `signed.at` becomes `"never"` in the same step, so the site is served again and no sweep trashes it for that expiry. */
   restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">>;
@@ -608,6 +647,13 @@ export interface Database {
    * @returns `site` is the site as it was, whose folder the caller empties and then forgets
    */
   deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">>;
+
+  /**
+   * Remove a site for good, as `deleteSite` does, only while it sits in the trash since `trashedBy` or before: the check and the removal are one step.
+   *
+   * @returns `not_due` for a site that is gone, was restored, or went to the trash later
+   */
+  deleteSatOutSite(id: SiteId, signed: Signed, trashedBy: number): Promise<Done | Refused<"not_due">>;
 
   /**
    * One page of the leftovers: the folders of removed sites that are not known to be empty. A folder a site is stored into again is no leftover.
@@ -667,7 +713,7 @@ export interface Database {
   /**
    * Record a staged publish as pending, only while it fits the room it is given. It writes no audit entry: nothing a reader of any site sees has changed.
    *
-   * The files it declares and the writes it makes are added to the counts of its day in the same step, and the counts of the days before the day before it are dropped.
+   * The files it declares and the writes it makes are added to the counts of its day in the same step.
    *
    * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`, `day`, `writes`; of uploads recorded at the same moment only those that fit together are kept.
    * `left` is how much of the day's bound was still free: files for `day_full`, writes for `writes_full`, and 0 for a day that is used up
@@ -688,11 +734,12 @@ export interface Database {
    * Make a pending upload's site, at version 1 under a fresh id, and mark the upload finished, in one step. The site belongs to whoever began the upload, whoever finishes it.
    *
    * @param draft - the site, whose folder is the upload's
-   * @param contents - what version 1 holds, worked out from the upload's manifest; nothing is known of it when left out
+   * @param made - `contents` is what version 1 holds, worked out from the upload's manifest; nothing is known of it when left out.
+   *   `copiedFrom` is the site a copy was made of: it writes one `duplicate` audit entry more about the new site, in the same step
    * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; `name_taken` as in `createSite`
    * @throws {Error} the draft breaks a field rule, or its folder is already a site's
    */
-  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken" | "not_pending">>;
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made?: MadeWith): Promise<Done | Refused<"name_taken" | "not_pending">>;
 
   /**
    * Record a pending upload as the next version of the site in its folder and make it live, with the settings asked with it, and mark the upload finished with the versions dropped.
@@ -801,7 +848,8 @@ export interface Database {
   redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">>;
 
   /**
-   * Remove what ran out, in one step: every login of a computer that ran out at or before a moment, whatever its state, and every problem of a day before the 30 that are kept.
+   * Remove what ran out by a moment, in one step: every login of a computer that ran out at or before it, whatever its state; every problem of a day before the 30 that are kept;
+   * the counts of declared files and store writes of the days before the day before it; and the request counts of days over a year before it. No write of a count drops an old day itself.
    *
    * @returns how many logins were removed
    */
@@ -824,6 +872,9 @@ export interface Database {
 
   /** Where the scheduled sweep's walk stopped: `undefined` before a run kept a place, once a walk ended, and for a kept place no walk can go on from. */
   readSweepPlace(): Promise<SweepPlace | undefined>;
+
+  /** Read what a scheduled run starts from, in one step: the last asking for a newer version, the settings, and where the walk stopped. */
+  readSweepStart(): Promise<SweepStart>;
 
   /** Keep where the scheduled sweep's walk stopped, in place of what was kept; `undefined` forgets it, for a walk that ended. */
   keepSweepPlace(place: SweepPlace | undefined): Promise<void>;
@@ -1008,7 +1059,7 @@ export interface Database {
   endOfAuditPart(query: AuditPartQuery): Promise<number | undefined>;
 
   /**
-   * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day more than a year before it. No audit entry is written.
+   * Add requests, and the page views among them, to a day's count of one site and of all sites together. No audit entry is written.
    *
    * @returns both request counts after the addition
    * @throws {RangeError} `day` is not a date such as `2026-11-13`, `requests` is not a whole number of at least 1, `views` is not a whole number from 0 to `requests`, or a count of `rows` is not a whole number from 0
@@ -1043,7 +1094,7 @@ export interface Database {
 
   /**
    * Count one write to the store, or one listing of it, on a UTC day, only while the day's count is under the settings' bound and `spare` more.
-   * The check and the count are one step: of calls made at the same moment only as many are taken as the day has room for. The counts of the days before the day before it are dropped.
+   * The check and the count are one step: of calls made at the same moment only as many are taken as the day has room for.
    *
    * @param spare - how many beyond the bound the day takes from this caller: a whole number from 0 up
    * @returns whether it was counted; an install whose settings are not stored has no bound
@@ -1052,7 +1103,7 @@ export interface Database {
   takeStorageWrite(day: string, spare: number): Promise<boolean>;
 
   /**
-   * Add to a day's count of the times the store was written to or listed, and drop the counts of the days before the day before it. No audit entry is written.
+   * Add to a day's count of the times the store was written to or listed. No audit entry is written.
    *
    * @param writes - how many: a whole number of at least 1
    * @throws {RangeError} `day` is not a date such as `2026-11-13`, or `writes` is not such a number

@@ -45,14 +45,16 @@ interface Commit {
   readonly signed: Signed;
 }
 
-/** Make the upload's new site. A copy gets one more audit entry, which names the site it was copied from. */
+/** Make the upload's new site. A copy gets one more audit entry, which names the site it was copied from, in the step that makes the site. */
 async function makeSite(install: Install, plan: Extract<UploadPlan, { kind: "create" | "duplicate" }>, commit: Commit): Promise<Committed | Refused<LostCode> | "not_pending"> {
-  const made = await install.database.publishUploadAsSite(commit.upload.id, plan.site, commit.signed, commit.contents.get(commit.upload.number));
+  const contents = commit.contents.get(commit.upload.number);
+  const made = await install.database.publishUploadAsSite(commit.upload.id, plan.site, commit.signed, {
+    ...(contents === undefined ? {} : { contents }),
+    ...(plan.kind === "duplicate" ? { copiedFrom: plan.from.id } : {}),
+  });
   if (made.kind === "not_pending") return "not_pending";
 
   if (made.kind !== "done") return refuse(made.kind, "public_name");
-
-  if (plan.kind === "duplicate") await install.database.appendAudit({ action: "duplicate", site: made.site, detail: { from: plan.from.id } }, commit.signed);
 
   return { ok: true, before: null, site: made.site, dropped: [] };
 }

@@ -280,6 +280,41 @@ function migrations(label: string, makeDriver: DriverFactory): void {
       expect(await readStanding(inner, STEPS)).toEqual({ kind: "at", version: 0 });
     });
 
+    // Drift: a runner learns that a database is new from a read of the ledger that fails, and asks the schema why. Between the two another runner may have made the ledger: told as a failure, the first request of an install would be answered 503.
+    test("a runner that found no ledger while another runner made it reads the ledger again and ends current, with no step applied twice", async () => {
+      const inner = await makeDriver();
+      const raced = { yet: false };
+      const late: SqlDriver = {
+        batch: async (statements) => {
+          const asksSchema = statements.some((statement) => statement.sql.includes("sqlite_master"));
+          if (asksSchema && !raced.yet) {
+            raced.yet = true;
+            await migrate(inner, STEPS, NOW);
+          }
+
+          return inner.batch(statements);
+        },
+      };
+
+      expect([await migrate(late, STEPS, NOW), raced.yet]).toEqual([{ kind: "current", version: SCHEMA_VERSION, applied: [] }, true]);
+      expect(await rows(inner, "SELECT step FROM schema_steps")).toEqual(STEPS.map((step) => ({ step: step.number })));
+    });
+
+    // Drift: a read the day's allowance stopped says so itself. Asked of the schema instead, which may fail in its own way, the start would answer a fault where the wait is to midnight UTC.
+    test("a read of the ledger that the day's allowance stops is thrown as that, and the schema is not asked", async () => {
+      const asked: string[] = [];
+      const spent: SqlDriver = {
+        batch: (statements) => {
+          asked.push(...statements.map((statement) => statement.sql));
+
+          return Promise.reject(asked.length === 1 ? new AllowanceSpent("reading") : new Error("the database is away"));
+        },
+      };
+
+      await expect(readStanding(spent, STEPS)).rejects.toThrow(AllowanceSpent);
+      expect(asked).toHaveLength(1);
+    });
+
     test("opening an empty database applies every step and hands back a database that works", async () => {
       const opened = await openDatabase(await makeDriver(), NOW);
       if (opened.kind !== "open") throw new Error(`the database did not open: ${opened.kind}`);
@@ -402,6 +437,32 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
   });
 }
 
+function auditNumbers(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: the numbers of the audit log`, () => {
+    // Drift: the log is counted from its two ends, the newest number less the oldest, and one. A number given to a write that was rolled back and never given again would leave a gap, and every count after it would be one too many.
+    test("an entry's number follows the one before it with no gap, also after a write that held an entry was rolled back whole, and the count from the two ends is the count of the rows", async () => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+      const entry = "INSERT INTO audit (at, actor, action, detail) VALUES (1, 'ada@example.com', 'login', ?1)";
+      for (let written = 0; written < 2; written += 1) await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
+      const before = await database.countAudit({ most: 100 });
+
+      // The second statement breaks the rule of `detail`, so the first one's entry is rolled back with it.
+      await expect(driver.batch([{ sql: entry, params: ["{}"] }, { sql: entry, params: ["no json"] }])).rejects.toThrow();
+      for (let written = 0; written < 3; written += 1) await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
+
+      expect(await rows(driver, "SELECT seq FROM audit ORDER BY seq")).toEqual([1, 2, 3, 4, 5].map((seq) => ({ seq })));
+      expect([before, await database.countAudit({ most: 100 }), await database.countAudit({ most: 5 }), await database.countAudit({ most: 4 })]).toEqual([
+        { count: 2, whole: true },
+        { count: 5, whole: true },
+        { count: 5, whole: true },
+        { count: 4, whole: false },
+      ]);
+      expect(await rows(driver, "SELECT COUNT(*) AS held FROM audit")).toEqual([{ held: 5 }]);
+    });
+  });
+}
+
 function queryPlans(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: how the engine runs each statement`, () => {
     // Drift: D1 bills and limits by rows read; one statement that walks a whole table costs a row per site on every request.
@@ -424,6 +485,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.listSites({ trash: true, owner: ADA, limit: 10, after: { updated_at: NOW, id: site.id } });
       await database.listSites({ trash: false, limit: 10, after: { updated_at: NOW, id: site.id } });
       await database.changeAccess(site.id, { access: "unlisted" }, BY_ADA);
+      await database.changeAccessAndDetails(site.id, { access: "private" }, { title: "T" }, BY_ADA);
       await database.changeDetails(site.id, { title: "T", search_engines: true, embeddable: false, expires: NOW }, BY_ADA);
       await database.reserveVersion(site.id);
       await database.addVersion(site.id, publish(2, 3), BY_ADA);
@@ -441,7 +503,11 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       const id = moved.kind === "done" ? moved.site.id : site.id;
       await database.getLaterSites([site.id, NO_SITE]);
       await database.trashSite(id, BY_ADA);
+      await database.listDueSites({ trashedBy: NOW }, 10);
+      await database.deleteSatOutSite(id, BY_ADA, NOW - 1);
       await database.restoreSite(id, BY_ADA);
+      await database.listDueSites({ expiredBy: NOW }, 10);
+      await database.trashExpiredSite(id, { by: ADA, at: NOW - 1 });
       const deleted = await database.deleteSite(id, BY_ADA);
       const imported = deleted.kind === "done" ? await storedBack(database, deleted.site) : deleted;
       await database.addToken(token, BY_ADA);
@@ -506,12 +572,13 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|kept VIRTUAL TABLE)/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|kept VIRTUAL TABLE|given\b)/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
-      // A screen's listing walks `page`, the page of sites it has cut already, and `kept`, the versions of one site of it: neither is a table.
+      // A listing walks `cut`, the ids of the one page it has cut already, a screen's listing `page`, that page's sites, and `kept`, the versions of one site of it: none is a table.
+      // A new link walks `given`, the one row that is there only once the id was given, before it walks the days: no table either.
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
       // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.
@@ -584,14 +651,17 @@ function auditWindow(label: string, makeDriver: DriverFactory): void {
 function requestCountRows(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the rows of the day's request counts`, () => {
     // Drift: the table is meant to hold a year; rows of earlier days left behind would grow it by a row per site every day.
-    test("the table holds the newest year alone: a row per day and counted site with its views, and one under the empty site for all of them", async () => {
+    test("the table holds the newest year alone once the sweep ran: a row per day and counted site with its views, and one under the empty site for all of them", async () => {
       const driver = await migrated(makeDriver);
       const database = new SqlDatabase(driver);
       await database.addRequests({ day: "2025-11-14", site: NO_SITE, requests: 9, views: 9 });
       await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50, views: 20 });
       await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 1 });
       await database.addRequests({ day: TOMORROW, site: OTHER_SITE, requests: 2, views: 2 });
+      const before = await rows(driver, "SELECT COUNT(*) AS held FROM request_counts WHERE day = '2025-11-14'");
+      await database.sweepRunOut(Date.parse(`${TOMORROW}T12:00:00Z`));
 
+      expect(before).toEqual([{ held: 2 }]);
       expect(await rows(driver, "SELECT day, site, requests, views FROM request_counts ORDER BY day, site")).toEqual([
         { day: TODAY, site: "", requests: 51, views: 20 },
         { day: TODAY, site: OTHER_SITE, requests: 1, views: 0 },
@@ -618,7 +688,7 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
         scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step) && !step.includes("VIRTUAL TABLE")));
       }
 
-      expect([driver.statements.length, scans]).toEqual([7, []]);
+      expect([driver.statements.length, scans]).toEqual([6, []]);
     });
   });
 }
@@ -626,7 +696,7 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
 function manifestRows(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the row of an upload's manifest`, () => {
     // Drift: a request for a file runs once per file of a publish, and a database counts every entry of a manifest it walks as a row read; a lookup that walked the manifest would read as many rows as the publish has files, squared.
-    test.each([3, 5000])("an upload of %d files is recorded in four statements, its whole manifest is read in one, and one file of it in one that walks nothing but the upload's key", async (files) => {
+    test.each([3, 5000])("an upload of %d files is recorded in three statements, its whole manifest is read in one, and one file of it in one that walks nothing but the upload's key", async (files) => {
       const inner = await migrated(makeDriver);
       const driver = new RecordingDriver(inner);
       const database = new SqlDatabase(driver);
@@ -637,7 +707,7 @@ function manifestRows(label: string, makeDriver: DriverFactory): void {
       const lookup = driver.statements.at(-1);
       const plan = await rows(inner, `EXPLAIN QUERY PLAN ${lookup?.sql}`, ...(lookup?.params ?? []));
 
-      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([4, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
+      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([3, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
       expect(plan.map((step) => String(step.detail).split(" ")[0])).toEqual(["SEARCH"]);
     });
 
@@ -697,6 +767,7 @@ export function describeSqlDriver(label: string, makeDriver: DriverFactory): voi
   schemaRules(label, makeDriver);
   storedRows(label, makeDriver);
   queryPlans(label, makeDriver);
+  auditNumbers(label, makeDriver);
   auditWindow(label, makeDriver);
   requestCountRows(label, makeDriver);
   manifestRows(label, makeDriver);

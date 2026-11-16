@@ -13,7 +13,7 @@ import { homepage } from "../../../cli/package.json";
 import { textUpTo } from "../api/text-up-to";
 import type { SettingValues } from "../records/settings";
 import { publishedRelease, type UpdateCheck, type UpdateNews } from "../records/update";
-import type { Install } from "./records";
+import { type Install, settingsOf } from "./records";
 import { DAY_MS } from "./site-object";
 
 /** Where the newest release is published: one static file of the project's website. */
@@ -75,17 +75,22 @@ async function newestRelease(asking: Asking): Promise<UpdateNews | null | undefi
  * Learn the newest released version, at most once a UTC day, and keep it for `updateOf`.
  *
  * It costs one read of the database when today's question was asked, two when `update_check` is off, and two reads, one request, and one row written on the one call a day that asks.
- * A website that is down, slow, or answers anything but the file is never an error: the day counts as asked.
+ * A caller that read the last asking or the settings already hands them in, and each saves its read. A website that is down, slow, or answers anything but the file is never an error: the day counts as asked.
  *
+ * @param known - the last asking as the caller read it, `undefined` inside it for an install that never asked; left out, it is read here
  * @returns what the one call a day that asks kept, whether the website answered or not; `undefined` from every other call
  * @throws {Error} the database failed; nothing was kept, and the next call asks again
  */
-export async function checkForUpdate(install: Pick<Install, "database" | "now">, asking: Asking): Promise<Learned | undefined> {
+export async function checkForUpdate(
+  install: Pick<Install, "database" | "now" | "knownSettings">,
+  asking: Asking,
+  known?: { readonly last: UpdateCheck | undefined },
+): Promise<Learned | undefined> {
   const now = install.now();
-  const last = await install.database.readUpdateCheck();
+  const last = known === undefined ? await install.database.readUpdateCheck() : known.last;
   if (last !== undefined && Math.floor(last.checked_at / DAY_MS) === Math.floor(now / DAY_MS)) return undefined;
 
-  const settings = await install.database.readSettings();
+  const settings = await settingsOf(install);
   if (settings?.update_check !== true) return undefined;
 
   const newest = await newestRelease(asking);

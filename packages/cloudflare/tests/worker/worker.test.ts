@@ -262,6 +262,16 @@ describe("an instance's first request", () => {
     expect(opened.status).toBe(200);
   });
 
+  // Drift: Cloudflare starts a new instance whenever it likes, and every start is paid out of the 50 queries of the request that met it. A start that asked whether the ledger exists, then for its steps, then for the settings, then for the key, cost four.
+  test("an instance that starts on a set-up install asks the database two questions: the steps it is stamped with, and the settings with the key", async () => {
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const tally = { calls: 0 };
+
+    const started = await ask(instance(w), `${ADMIN}/api/whoami`, {}, countedBindings(tally));
+
+    expect([started.status, tally.calls]).toEqual([401, 2]);
+  });
+
   // Drift: a later apply of the module changes FIRST_SETTINGS; an instance that read the binding again would overwrite what the dashboard set.
   test("an instance that starts on stored settings never reads FIRST_SETTINGS: it starts without the binding and leaves the settings as they are", async () => {
     await ask(instance(w), `${ADMIN}/api/whoami`);
@@ -310,7 +320,8 @@ describe("an instance's first request", () => {
     },
     { name: "first settings with no logins", broken: () => withBindings({ FIRST_SETTINGS: { trash_days: "9" } }), status: 503, says: "  FIRST_SETTINGS: missing at logins", hides: "9" },
     { name: "first settings whose login is no email", broken: () => withBindings({ FIRST_SETTINGS: { logins: "the-owner" } }), status: 503, says: "  FIRST_SETTINGS: bad-form at logins", hides: "the-owner" },
-    { name: "a schema step that fails", broken: () => withBindings({ DB: failingDatabase((batch) => batch === 2) }), status: 503, says: "could not be brought up to date. Try again.", hides: "away" },
+    // The third batch of a start on an empty database is the step: the first two find that no ledger is there.
+    { name: "a schema step that fails", broken: () => withBindings({ DB: failingDatabase((batch) => batch === 3) }), status: 503, says: "could not be brought up to date. Try again.", hides: "away" },
     { name: "a database that is away", broken: () => withBindings({ DB: failingDatabase(() => true) }), status: 503, says: "Something went wrong. Try again.", hides: "away" },
   ];
 
@@ -687,21 +698,32 @@ describe("the product, from a token to an opened site", () => {
   });
 
   // Drift: the limits would sit behind serving, or count nothing for an address that names no site, and a probe of made-up names would run free.
+  // A visitor's minute taken after the site was looked up would let a flood of one visitor's requests cost a query each, refused or not.
   test.each([
     { name: "a public site", address: "https://docs-page.example.com/", served: 200 },
     { name: "a name no site holds", address: "https://nothing-page.example.com/", served: 404 },
-  ])("$name answers a visitor past the per-visitor limit 429 with Retry-After, and another visitor as before", async ({ address, served }) => {
-    const tight = withBindings({ FIRST_SETTINGS: { ...FIRST, visitor_requests_per_minute: "2" } });
+  ])("$name answers a visitor past the per-visitor limit 429 with Retry-After and asks the database nothing for it within the instance's minute, and another visitor as before", async ({ address, served }) => {
+    const tally = { calls: 0 };
+    const tight = { ...countedBindings(tally), FIRST_SETTINGS: { ...FIRST, visitor_requests_per_minute: "2" } } as Bindings;
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, tight);
     await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public" }, [page("<p>docs</p>")]);
 
     const from = (visitor: string): Promise<Response> => ask(worker, address, { headers: { "CF-Connecting-IP": visitor } });
     await awayFromMinuteEnd();
-    const answers = [await from("203.0.113.7"), await from("203.0.113.7"), await from("203.0.113.7"), await from("198.51.100.9")];
+    const answers = [await from("203.0.113.7"), await from("203.0.113.7")];
+    tally.calls = 0;
+    answers.push(await from("203.0.113.7"));
+    const refused = tally.calls;
+    answers.push(await from("198.51.100.9"));
+    // Once the instance's minute ran out, a refused request reads the settings anew with its lookup: a limit raised meanwhile is not held off by the refusals.
+    wait(w, 2 / 60);
+    tally.calls = 0;
+    const later = await from("203.0.113.7");
 
     expect(answers.map((answer) => answer.status)).toEqual([served, served, 429, served]);
     expect(answers.map((answer) => answer.headers.get("Retry-After"))).toEqual([null, null, "60", null]);
+    expect([refused, later.status, tally.calls]).toEqual([0, 429, 1]);
   });
 
   // Drift: the id alone names a site, under any name; counted apart from the site, every other name before the id would be a fresh allowance.
@@ -878,6 +900,9 @@ describe("the admin hostname", () => {
       "one site: the site, its views, and who published it": await asked(`/data/sites/${site.label}`),
       "a change to one site: the session, the settings with the site, the change": await counted(() => send(worker, `${ADMIN}/data/sites/${site.label}/naming`, { title: "Report" }, session)),
       "one site through the API: the token, the settings with the site, its views": await counted(() => ask(worker, `${ADMIN}/api/sites/${site.id}`, { headers: { Authorization: `Bearer ${token}` } })),
+      "an access and a title set together through the API: the token, the site, the one change": await counted(() =>
+        ask(worker, `${ADMIN}/api/sites/${site.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ access: "unlisted", title: "Both" }) }),
+      ),
     }).toEqual({
       "an address that asks nothing but who is there": [200, 1],
       "the people, who are in the settings the session read": [200, 1],
@@ -888,6 +913,7 @@ describe("the admin hostname", () => {
       "one site: the site, its views, and who published it": [200, 2],
       "a change to one site: the session, the settings with the site, the change": [200, 3],
       "one site through the API: the token, the settings with the site, its views": [200, 2],
+      "an access and a title set together through the API: the token, the site, the one change": [200, 3],
     });
   });
 
@@ -957,7 +983,7 @@ describe("the audit log as a file", () => {
   // The rows are pinned where no start is counted: an entry and its token's row, each read once.
   test.each([
     ["an instance that answered before", true, { calls: 4, read: 2 * FILE_ENTRIES + 4 }],
-    ["a new instance, its start counted with the file", false, { calls: 8 }],
+    ["a new instance, its start counted with the file", false, { calls: 6 }],
   ])("a file of 2,000 entries, each about its own site that is gone and by its own token, is read by %s in the queries of any other file, far under the Free plan's 50", async (_which, warm, cost) => {
     const session = { Cookie: cookieOf(await logIn(instance(w), w)) };
     const counted = "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?)";
@@ -988,10 +1014,10 @@ describe("the audit log as a file", () => {
 });
 
 describe("a copy of a site", () => {
-  // Drift: the Free plan ends a request past 50 queries of the database, 4 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
+  // Drift: the Free plan ends a request past 50 queries of the database, 2 of them made by a request that starts an instance, and bounds the bucket apart. A copy that counts its own calls alone passes 50 on a new instance.
   test.each([
-    [130, 2, { database: [9, 13], bucket: [225, 225] }],
-    [1_001, 10, { database: [9, 13], bucket: [228, 228] }],
+    [130, 2, { database: [8, 10], bucket: [225, 225] }],
+    [1_001, 10, { database: [8, 10], bucket: [228, 228] }],
   ])(
     "of %i files takes %i requests through the API, and the request that makes the most calls stays under 44 to the database and 250 to the bucket, on an instance that runs and on one each request starts",
     async (count, requests, most) => {
@@ -1130,24 +1156,25 @@ describe("the rows the live checks count", () => {
 
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
-        "a new site": [25, 25],
-        "a second version": [15, 15],
-        "a fourth version, which drops the first": [19, 19],
+        "a new site": [19, 19],
+        "a second version": [13, 13],
+        "a fourth version, which drops the first": [17, 17],
         "a page opened": [2, 2],
-        "a rollback": [3, 3],
-        "who may open it changed": [5, 5],
-        "a new name": [5, 5],
-        "to the trash": [9, 9],
-        "out of the trash": [9, 9],
-        "a new link": [12, 12],
+        "a rollback": [2, 2],
+        "who may open it changed": [3, 3],
+        // A new name is counted as the change of who may open the site, which shares its route and writes one row more.
+        "a new name": [2, 3],
+        "to the trash": [6, 6],
+        "out of the trash": [5, 5],
+        "a new link": [9, 9],
         "the files of a version listed": [1, 1],
-        "removed for good, with three versions, an earlier id, and a day's count": [14, 14],
-        "put back from a backup, with three versions": [29, 29],
+        "removed for good, with three versions, an earlier id, and a day's count": [13, 13],
+        "put back from a backup, with three versions": [23, 23],
         // An upload that is given up was counted with the finish it never had.
-        "an upload begun, asked what it lacks, and given up": [10, 29],
+        "an upload begun, asked what it lacks, and given up": [9, 23],
         // One row more is written where the logins change after a check of the domain.
-        "a setting changed": [3, 4],
-        "a fourth version, which drops two once the install keeps two": [21, 21],
+        "a setting changed": [2, 3],
+        "a fourth version, which drops two once the install keeps two": [19, 19],
         "a computer's login begun": [3, 3],
       },
       stopped: undefined,

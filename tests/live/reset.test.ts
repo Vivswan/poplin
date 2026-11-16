@@ -68,14 +68,14 @@ const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, s
 /** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo of three files: 3 removals, 85 for eleven sites and their 74 files, 12 for two more versions of one, 1 move to the trash, 4 for the demo. */
 const FIRST_RESET = 105;
 
-/** The rows the same reset counts: 3 removals at 14, 12 new sites at 25, the demo among them, 2 more versions at 15, and 1 move to the trash at 9. */
-const FIRST_RESET_ROWS = 381;
+/** The rows the same reset counts: 3 removals at 13, 12 new sites at 19, the demo among them, 2 more versions at 13, and 1 move to the trash at 6. */
+const FIRST_RESET_ROWS = 299;
 
 /** The rows of a site removed for good, as the harness counts one. */
-const REMOVAL_ROWS = 14;
+const REMOVAL_ROWS = 13;
 
 /** The rows of a new version of a site: what a reset that keeps every sample and updates the demo's site counts. */
-const DEMO_UPDATE_ROWS = 15;
+const DEMO_UPDATE_ROWS = 13;
 
 /** Every sample site, in the table's order: what a reset that finds each as its row ends says it kept. */
 const SAMPLES_IN_ORDER = ["handbook", "sales-report", "old-notes", "launch-deck", "team-site", "lisbon-trip", "winter-offer", "pricing", "spring-offer", "status-board", "checkout"];
