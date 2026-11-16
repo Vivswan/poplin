@@ -34,8 +34,8 @@ const LIMIT = { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_
 
 type SharedKey = Exclude<keyof typeof INSTALL_OBJECTS, (typeof PLUG_ALONE)[number]>;
 
-/** The names the setup client writes and the module does not declare. */
-const PLUG_ALONE = ["keyBinding", "keyName"] as const satisfies readonly (keyof typeof INSTALL_OBJECTS)[];
+/** What the module does not declare: the names the setup client writes alone, and the path the Worker answers its own login at. */
+const PLUG_ALONE = ["keyBinding", "keyName", "loginPath"] as const satisfies readonly (keyof typeof INSTALL_OBJECTS)[];
 
 /** Where the module writes each shared value: the file, and the text around it. `%v` stands for the value as HCL writes it, `%i` for the value inside a longer HCL text, and `%l` for a list written one entry a line. */
 const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string]>> = {
@@ -46,7 +46,9 @@ const WRITTEN: Readonly<Record<SharedKey, readonly [file: string, around: string
   recordContent: ["dns.tf", "content = %v"],
   accessApplication: ["access.tf", "name = %v"],
   accessPolicy: ["access.tf", "name = %v"],
-  loginPath: ["access.tf", `{ type = "public", uri = "\${local.admin_host}%i" },`],
+  accessOpenApplication: ["access.tf", "name = %v"],
+  accessOpenPolicy: ["access.tf", "name = %v"],
+  openPaths: ["main.tf", "open_paths = %v"],
   privateSitesStart: ["access.tf", `{ type = "public", uri = "%i\${local.domain}" },`],
   accessSession: ["access.tf", "session_duration = %v"],
   accessHttpOnly: ["access.tf", "http_only_cookie_attribute = %v"],
@@ -107,7 +109,9 @@ function hcl(value: string | number | boolean | readonly string[]): string {
 /** What the module's resources read back as from the API, for its default inputs on `example.com`. `rate` is the expression of its rate rule. */
 function moduleZone(rate: string): Readonly<Record<string, unknown>> {
   const placeholder = { type: "AAAA", content: "100::", proxied: true, ttl: 1 };
-  const login = "poplin.example.com/login";
+  const admin = "poplin.example.com";
+  const open = ["poplin.example.com/api", "poplin.example.com/setup"];
+  const kept = { session_duration: "720h", http_only_cookie_attribute: true, same_site_cookie_attribute: "lax" };
   const rateRule = { id: "r1", ref: "poplin_rate", description: "poplin: 300 requests per 10 seconds per address", expression: rate, action: "block" };
   const outside = `${SITES} and any(http.request.headers["sec-fetch-site"][*] eq "cross-site") and any(http.request.headers["sec-fetch-dest"][*] ne "document")`;
 
@@ -123,21 +127,29 @@ function moduleZone(rate: string): Readonly<Record<string, unknown>> {
     ],
     [`/accounts/${ACCOUNT}/access/policies`]: [
       { id: "pol-1", name: "poplin logins", decision: "allow", include: [{ email: { email: "owner@example.com" } }], exclude: [], require: [] },
+      { id: "pol-2", name: "poplin open paths policy", decision: "bypass", include: [{ everyone: {} }], exclude: [], require: [] },
     ],
     [`/accounts/${ACCOUNT}/access/apps`]: [
       {
         id: "app-1",
         name: "poplin",
         type: "self_hosted",
-        domain: login,
+        domain: admin,
         destinations: [
-          { type: "public", uri: login },
+          { type: "public", uri: admin },
           { type: "public", uri: "*-p-poplin.example.com" },
         ],
         policies: [{ id: "pol-1", precedence: 1, name: "poplin logins", decision: "allow" }],
-        session_duration: "720h",
-        http_only_cookie_attribute: true,
-        same_site_cookie_attribute: "lax",
+        ...kept,
+      },
+      {
+        id: "app-2",
+        name: "poplin open paths",
+        type: "self_hosted",
+        domain: open[0],
+        destinations: open.map((uri) => ({ type: "public", uri })),
+        policies: [{ id: "pol-2", precedence: 1, name: "poplin open paths policy", decision: "bypass" }],
+        ...kept,
       },
     ],
     [`/zones/${ZONE}/rulesets/phases/http_ratelimit/entrypoint`]: {
@@ -216,7 +228,7 @@ describe("the values the setup client shares with the OpenTofu module", () => {
   });
 });
 
-describe("the names the setup client writes alone", () => {
+describe("the values the module does not declare", () => {
   const files = readdirSync(MODULE).filter((file) => file.endsWith(".tf"));
 
   // Drift: a name left in this list after the module declares it would be compared with nothing, and the two tools could then write it apart.

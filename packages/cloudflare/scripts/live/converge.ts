@@ -67,6 +67,7 @@ const CAPABILITIES: Readonly<Record<string, string>> = {
   "Bot settings": "bot-block",
   "Access application": "access",
   "Access policy": "access",
+  "Access open paths": "access",
 };
 
 /** An error code of Cloudflare's, as wrangler prints it. */

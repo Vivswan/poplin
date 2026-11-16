@@ -331,6 +331,7 @@ describe("the zone's repair with the nine rights of the token link alone, agains
       "Worker route",
       "Access application",
       "Access policy",
+      "Access open paths",
       "Worker variable",
       "Key",
       "D1 database",

@@ -48,6 +48,9 @@ type Row = Record<string, unknown>;
 /** How many keys the fake has made, over every account of a test run. */
 let madeKeys = 0;
 
+/** How many audience tags the fake has given out, so no two applications of a test run share one. */
+let madeTags = 0;
+
 /** The account's state. A test changes it between runs to make an object missing or different. */
 export interface Account {
   /** The zone's DNS records. */
@@ -166,10 +169,15 @@ function rules(account: Account, asked: Asked, parts: readonly string[]): Respon
   return stored(ruleset.rules, asked, parts[5]);
 }
 
-/** The account's Access applications. Access gives each an audience tag of 64 hexadecimal characters, here made from its place in the list. */
+/** The account's Access applications. Access gives each an audience tag of 64 hexadecimal characters, here the count of tags given out, and a change keeps the tag. */
 function applications(account: Account, asked: Asked, id: string | undefined): Response {
+  const kept = new Map(account.applications.map((application) => [application.id, application.aud]));
   const answered = stored(account.applications, asked, id);
-  for (const [index, application] of account.applications.entries()) application.aud ??= String(index + 1).padStart(64, "0");
+
+  for (const application of account.applications) {
+    madeTags += 1;
+    application.aud ??= kept.get(application.id) ?? madeTags.toString(16).padStart(64, "0");
+  }
 
   return answered;
 }

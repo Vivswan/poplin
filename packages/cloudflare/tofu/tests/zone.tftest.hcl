@@ -71,13 +71,13 @@ run "login_allows_exactly_the_logins" {
   }
 
   assert {
-    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : "${destination.type} ${destination.uri}"]) == tolist(["public poplin.example.com/login", "public *-p-poplin.example.com"])
-    error_message = "The one application covers the login path on the admin hostname and every private site's address, and nothing else: no other path of the dashboard, no open site."
+    condition     = tolist([for destination in cloudflare_zero_trust_access_application.login.destinations : "${destination.type} ${destination.uri}"]) == tolist(["public poplin.example.com", "public *-p-poplin.example.com"])
+    error_message = "The guarded application covers the whole admin hostname and every private site's address, and nothing else: no open site."
   }
 
   assert {
-    condition     = cloudflare_zero_trust_access_application.login.domain == "poplin.example.com/login" && length(cloudflare_zero_trust_access_application.login.policies) == 1
-    error_message = "The application's first address is the login path, and one policy decides who passes."
+    condition     = cloudflare_zero_trust_access_application.login.domain == "poplin.example.com" && length(cloudflare_zero_trust_access_application.login.policies) == 1
+    error_message = "The application's first address is the admin hostname, and one policy decides who passes."
   }
 
   assert {
@@ -86,7 +86,17 @@ run "login_allows_exactly_the_logins" {
   }
 }
 
-# Access takes an application address of 63 characters at most. Under a domain of 51 the login path is 64.
+# A program has no login to give: the API and the setup page must pass Access, and nothing else of the dashboard may. The module joins each address from the hostname and a path.
+run "open_paths_are_the_api_and_the_setup_page" {
+  command = plan
+
+  assert {
+    condition     = tolist([for destination in cloudflare_zero_trust_access_application.open_paths.destinations : "${destination.type} ${destination.uri}"]) == tolist(["public poplin.example.com/api", "public poplin.example.com/setup"])
+    error_message = "The open application covers the API and the setup page on the admin hostname, in that order, and no other path."
+  }
+}
+
+# Access takes an application address of 63 characters at most. Under a domain of 51 the setup page's address is 64.
 run "domain_too_long_for_the_login" {
   command = plan
 
@@ -99,7 +109,7 @@ run "domain_too_long_for_the_login" {
     }
   }
 
-  expect_failures = [cloudflare_zero_trust_access_application.login]
+  expect_failures = [cloudflare_zero_trust_access_application.open_paths]
 }
 
 # The public word is one of the install's two endings: it gets a route of its own, every rule reads it, and the Worker is told it.
@@ -308,8 +318,8 @@ run "values_shared_with_the_setup_client" {
   }
 
   assert {
-    condition     = cloudflare_zero_trust_access_policy.logins.name == "poplin logins" && cloudflare_zero_trust_access_application.login.name == "poplin"
-    error_message = "The policy and the application carry the names the setup client finds them by."
+    condition     = cloudflare_zero_trust_access_policy.logins.name == "poplin logins" && cloudflare_zero_trust_access_application.login.name == "poplin" && cloudflare_zero_trust_access_policy.open_paths.name == "poplin open paths policy" && cloudflare_zero_trust_access_application.open_paths.name == "poplin open paths"
+    error_message = "Both policies and both applications carry the names the setup client finds them by."
   }
 
   assert {
