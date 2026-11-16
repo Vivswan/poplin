@@ -7,7 +7,7 @@
 //   GET  <base>/...             the shell page, whatever the path: the client draws the screen the path names
 //
 // Every request is asked who it is from, a file of the client included, and the console keeps no answer: the next request is asked again.
-// A change is also refused when its headers name any page but this origin's own: a browser counts every site of the install as the same site as the dashboard and sends the login along.
+// A change, and a read of the data too, is also refused when its headers name any page but this origin's own: a browser counts every site of the install as the same site as the dashboard and sends the login along.
 // A change is JSON and nothing else, which a page of another origin cannot send unless this origin lets it, and it never does.
 
 import type { Install } from "@poplin/core/src/actions/records";
@@ -153,15 +153,21 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
 /** The most bytes a change's body holds: no change of the console comes near it. */
 const MOST_BODY_BYTES = 1_048_576;
 
-/** Let a change through only when no header a browser wrote names a page of another origin, a site of the same install included. One with neither header goes on to the JSON rule: one host hands a page's request over before the browser wrote them. */
-const ownPageOnly: MiddlewareHandler<Shared> = async (context, next) => {
-  const site = context.req.header("Sec-Fetch-Site");
-  const origin = context.req.header("Origin");
-  const foreign = (site !== undefined && site !== "same-origin") || (origin !== undefined && origin !== new URL(context.req.url).origin);
-  if (foreign) return context.text("Forbidden", 403);
+/**
+ * Refuse a request that a header a browser wrote says a page of another origin sent, a site of the same install included. One with neither header goes on: one host hands a page's request over before the browser wrote them.
+ *
+ * @param typed - whether a request no page sent goes on too: an address a person typed, which a browser marks `none`
+ */
+function ownPageOnly(typed: boolean): MiddlewareHandler<Shared> {
+  return async (context, next) => {
+    const site = context.req.header("Sec-Fetch-Site");
+    const origin = context.req.header("Origin");
+    const own = site === undefined || site === "same-origin" || (typed && site === "none");
+    if (!own || (origin !== undefined && origin !== new URL(context.req.url).origin)) return context.text("Forbidden", 403);
 
-  return next();
-};
+    return next();
+  };
+}
 
 /** Let a change through only when its media type is JSON, whatever parameters follow it. */
 const jsonOnly: MiddlewareHandler<Shared> = async (context, next) => {
@@ -200,7 +206,10 @@ export function createConsole(parts: ConsoleParts): Console {
   app.get("/favicon.ico", (context) => context.body(ICON.body, 200, { "Content-Type": ICON.type, "Cache-Control": KEPT_A_DAY }));
 
   app.use(noStore);
-  app.post("*", bodyLimit({ maxSize: MOST_BODY_BYTES, onError: (context) => refused(context, { code: "too_large" }) }), ownPageOnly, jsonOnly);
+  app.post("*", bodyLimit({ maxSize: MOST_BODY_BYTES, onError: (context) => refused(context, { code: "too_large" }) }), ownPageOnly(false), jsonOnly);
+
+  // A browser sends the login along with a request of a site's page, so no data is read for one: nothing but the browser would keep the answer from that page.
+  app.use("/data/*", ownPageOnly(true));
 
   app.route("/data", dataRoutes);
   app.all("/data/*", (context) => refused(context, { code: "no_page" }));

@@ -228,6 +228,29 @@ describe("the data routes", () => {
     expect(await response.json()).toMatchObject({ ok: false, code: "no_login" });
   });
 
+  // Drift: a page of a site of the same install, which a browser counts as the same site as the dashboard and sends the login along for, would be answered the owner's data. Nothing but the browser would then stand between that page and the answer.
+  test.each([
+    ["the dashboard's own page", { "Sec-Fetch-Site": "same-origin" }, 200],
+    ["the dashboard's own page, which names itself in `Origin` too", { Origin: DASHBOARD, "Sec-Fetch-Site": "same-origin" }, 200],
+    ["neither header, as a host hands it over that takes a page's request before the browser wrote them", {}, 200],
+    ["an address a person typed, by `Sec-Fetch-Site: none`", { "Sec-Fetch-Site": "none" }, 200],
+    ["a site of the same install", { Origin: SIBLING, "Sec-Fetch-Site": "same-site" }, 403],
+    ["a site of the same install, by `Origin` alone", { Origin: SIBLING }, 403],
+    ["a site of the same install, by `Sec-Fetch-Site` alone", { "Sec-Fetch-Site": "same-site" }, 403],
+    ["another domain", { Origin: "https://elsewhere.example.net", "Sec-Fetch-Site": "cross-site" }, 403],
+    ["a page with no origin of its own", { Origin: "null" }, 403],
+    ["a page that says `same-origin` but names a site", { Origin: SIBLING, "Sec-Fetch-Site": "same-origin" }, 403],
+    ["a page that says `none` but names a site", { Origin: SIBLING, "Sec-Fetch-Site": "none" }, 403],
+  ])("answer a read from %s with the data only when no header names a page of another origin", async (_case, headers, status) => {
+    const opened = await openConsole();
+    await opened.base.publish("first-name", "private");
+    const answers = await Promise.all(["/data/sites", "/data/frame", "/data/nothing"].map((path) => opened.fetch(new Request(`${DASHBOARD}${path}`, { headers: { ...headers, ...opened.base.proof } }))));
+    const pages = await Promise.all(answers.map((answer) => answer.text()));
+
+    expect(answers.map((answer) => answer.status)).toEqual(status === 200 ? [200, 200, 404] : [403, 403, 403]);
+    expect(status === 200 ? pages[0]?.includes("first-name") : pages).toEqual(status === 200 ? true : ["Forbidden", "Forbidden", "Forbidden"]);
+  });
+
   // Drift: a data route nobody wrote would answer the shell page, and the client would fail on HTML.
   test("answer 404 in JSON for a route that is not there", async () => {
     const opened = await openConsole();

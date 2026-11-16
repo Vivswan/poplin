@@ -134,7 +134,7 @@ export interface FakeSwitches {
   /** The install has no domain: it answers on three hosts of an account's free address, every site is a path, and no rule of a zone stands in front. */
   readonly noDomain?: boolean;
 
-  /** A fault: the dashboard's hostname lets the origin a request names read its answer. */
+  /** A fault: the install lets the origin a request names read every answer it gives on the dashboard's hostname. The login's own redirect does so on any install. */
   readonly grantsOrigin?: boolean;
 
   /** A fault: a site's hostname answers the API's paths as the dashboard's hostname does. */
@@ -184,14 +184,32 @@ function refusal(status: number, text: string, extra: Readonly<Record<string, st
   return new Response(text, { status, headers: { ...REFUSAL_HEADERS, ...extra } });
 }
 
-/** An answer of the dashboard's hostname that lets an origin read it; the answer as it is for no origin. */
+/** An answer that lets an origin read it, with the visitor's cookies sent along; the answer as it is for no origin. */
 function granting(answered: Response, origin: string | null): Response {
   if (origin === null) return answered;
 
   const open = new Response(answered.body, answered);
   open.headers.set("Access-Control-Allow-Origin", origin);
+  open.headers.set("Access-Control-Allow-Credentials", "true");
 
   return open;
+}
+
+/**
+ * The login's own answer to a stranger on a path it stands in front of, as the real one gives it: a question before a change is refused outright, a script's call is answered 401, and a page is sent on to the team's login.
+ *
+ * The redirect lets the origin a request names read it, with the visitor's cookies: it holds nothing of the install.
+ */
+function atLogin(request: Request, loginPage: string): Response {
+  if (request.method === "OPTIONS") return refusal(403, "Forbidden\n");
+
+  if (request.headers.get("X-Requested-With") === "XMLHttpRequest") return refusal(401, "Unauthorized\n");
+
+  return granting(refusal(302, "", { Location: loginPage }), request.headers.get("Origin"));
+}
+
+function isApiPath(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
 }
 
 function isSetupPath(pathname: string): boolean {
@@ -347,11 +365,13 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     });
   };
 
-  const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
-    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return place.api.fetch(request);
+  // The login's own answer on the dashboard's hostname, or none for a request it lets through. The edge answers a script's call itself, where it sends a page on to the team's login.
+  const stoppedAtLogin = (request: Request, url: URL): Response | undefined =>
+    !isApiPath(url.pathname) && behindLogin(switches, url.pathname) ? atLogin(request, loginPage) : undefined;
 
-    // The edge answers a script's call itself, where it sends a page on to the team's login.
-    if (behindLogin(switches, url.pathname)) return request.headers.get("X-Requested-With") === "XMLHttpRequest" ? refusal(401, "Unauthorized\n") : refusal(302, "", { Location: loginPage });
+  // What the install itself answers there, to a request the login let through or that met none.
+  const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
+    if (isApiPath(url.pathname)) return place.api.fetch(request);
 
     // As the install answers its setup page once somebody has logged in: a 404 that says nothing of keeping.
     if (isSetupPath(url.pathname)) return new Response("Not found.\n", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
@@ -373,7 +393,8 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     const secured = redirects ? toHttps(url) : undefined;
     if (secured !== undefined) return secured;
 
-    if (url.hostname === place.adminHost) return granting(await answerAdmin(request, url), grantedOf(request));
+    // The fault of an install that lets an origin read its answers is in the install's own alone: the login's are none of its.
+    if (url.hostname === place.adminHost) return stoppedAtLogin(request, url) ?? granting(await answerAdmin(request, url), grantedOf(request));
 
     const reached = place.sites.isSiteHost(url.hostname) && !(switches.noPublicRoute === true && !url.hostname.endsWith(`-poplin.${FAKE_DOMAIN}`));
     if (!reached) throw new TypeError("no server answers on this hostname");
