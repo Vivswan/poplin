@@ -92,6 +92,18 @@ describe("publish", () => {
     expect((site as { url: string }).url).toBe("https://sales-page.example.com");
   });
 
+  // Drift: a publish refused for a taken public name hinted `poplin set <site> ...`, though the refused publish made no site to set.
+  test("a new site whose public name another site holds is hinted with the publish's own flag, and no site is made", async () => {
+    const bench = await openBench();
+    await bench.run(`${folderOf("docs", { "index.html": "<title>Docs</title>" })} --public`);
+    const before = await stateOf(bench);
+
+    const refused = await bench.run(`${folderOf("guide", { "index.html": "<title>Guide</title>" })} --public --public-name docs`);
+
+    expect([refused.code, refused.err]).toEqual([1, ["another site holds that public name: public_name", "to pick another: publish again with --public-name <public name>"]]);
+    expect(await stateOf(bench)).toEqual(before);
+  });
+
   test("--dry-run says what would be sent and calls no install, so it runs with no login and changes nothing", async () => {
     const bench = await openBench();
     const folder = folderOf("notes", PAGES);

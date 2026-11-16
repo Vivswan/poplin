@@ -67,7 +67,7 @@ const LOCAL_ROWS = {
   login_expired: { sentence: "nobody allowed the login before it ran out", hint: "nothing was saved on this machine; to ask again: poplin login", exit: "failed" },
   interrupted: { sentence: "the login was stopped", hint: "nothing was saved on this machine", exit: "failed" },
   bad_login: { sentence: "the login cannot be used", exit: "no-install" },
-  bad_server: { sentence: "--server takes an https:// address with nothing after the host", hint: "for example: --server https://poplin.example.com", exit: "usage-error" },
+  bad_server: { sentence: "--server takes an https:// address with nothing after the host", hint: "for example: --server https://poplin.example.com; http:// is taken for this machine alone, as 127.0.0.1, localhost, or [::1]", exit: "usage-error" },
   wrong_server: {
     sentence: "there is no token for that install",
     hint: "a token is sent only to the install it was saved for; to log in to the other one: poplin login --server <its address>",

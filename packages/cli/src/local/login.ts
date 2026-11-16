@@ -8,7 +8,7 @@ const SECURE = "https:";
 const PLAIN = "http:";
 const TOKEN_PATTERN = /^[\x21-\x7e]+$/;
 const NOT_AN_OBJECT = "it must hold a server and a token and nothing else";
-const NOT_A_SERVER = "the server must be an https:// address with nothing after the host, such as https://poplin.example.com";
+const NOT_A_SERVER = "the server must be an https:// address with nothing after the host, such as https://poplin.example.com; http:// is taken for this machine alone, as 127.0.0.1, localhost, or [::1]";
 const NOT_A_TOKEN = "the token must be printable ASCII with no spaces";
 const LOGIN_SCHEMA = v.pipe(
   v.strictObject(

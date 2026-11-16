@@ -328,7 +328,10 @@ export async function openBackup(path: string): Promise<{ readonly ok: true; rea
   if (handle === undefined) return { ok: false, reason: `"${path}" cannot be opened` };
 
   try {
-    const file = new BoundedFile(handle, (await handle.stat()).size);
+    const found = await handle.stat();
+    if (found.isDirectory()) refuse(`"${path}" is a folder; a backup is the zip poplin export writes`);
+
+    const file = new BoundedFile(handle, found.size);
     const head = await readHead(file);
     await checkContents(file, head.manifest);
 

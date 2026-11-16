@@ -3,12 +3,16 @@
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createWriteStream, promises as fs } from "node:fs";
+import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { finished, pipeline } from "node:stream/promises";
 import yazl from "yazl";
 
 /** What the file is called while it is written: the target's name, a random word, and this. */
 const PART_SUFFIX = ".part";
+
+/** The code of the system's error for a path whose folder is not there. */
+const MISSING = "ENOENT";
 
 /** How many random bytes name the file while it is written. */
 const PART_BYTES = 4;
@@ -38,15 +42,18 @@ export interface BackupWriter {
   readonly abandon: () => Promise<void>;
 }
 
-/** Whether the name is taken, by a file, a folder, or a link, even one that leads nowhere. */
-function isThere(path: string): Promise<boolean> {
+/** What stands under the name: nothing, a folder, or something a backup may replace, which is a file or a link, even one that leads nowhere. */
+function standsAt(path: string): Promise<"nothing" | "folder" | "file"> {
   return fs.lstat(path).then(
-    () => true,
-    () => false,
+    (found) => (found.isDirectory() ? "folder" : "file"),
+    () => "nothing" as const,
   );
 }
 
-function reasonOf(error: unknown): string {
+/** Why the file `part` cannot be made, in the command's words where the cause is known: a missing folder is named, not the system's error about a file the person never typed. */
+function reasonOf(error: unknown, part: string): string {
+  if (error instanceof Error && "code" in error && error.code === MISSING) return `the folder "${dirname(part)}" does not exist`;
+
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -70,14 +77,20 @@ function givenOnce(bytes: Buffer): Readable {
  * The zip is written to a new file beside the target, so a backup that fails or is interrupted never stands under the target's name.
  *
  * @param overwrite - whether a file already at `target` is replaced when the backup is finished
- * @returns the writer, `exists` for a target that is there and may not be replaced, or `unwritable` with the reason the file beside it cannot be made
+ * @returns the writer, `exists` for a target that is there and may not be replaced, or `unwritable` with the reason the file beside it cannot be made. A folder under the target's name is never replaced
  */
 export async function createBackup(target: string, overwrite: boolean): Promise<{ readonly ok: true; readonly writer: BackupWriter } | NotWritable> {
-  if (!overwrite && (await isThere(target))) return { ok: false, reason: "exists" };
+  const there = await standsAt(target);
+  if (there === "folder") return { ok: false, reason: "unwritable", why: `"${target}" is a folder; --out names the file to write` };
+
+  if (!overwrite && there === "file") return { ok: false, reason: "exists" };
 
   const part = `${target}.${randomBytes(PART_BYTES).toString("hex")}${PART_SUFFIX}`;
   const file = createWriteStream(part, { flags: "wx", mode: FILE_MODE });
-  const refused = await once(file, "open").then(() => undefined, reasonOf);
+  const refused = await once(file, "open").then(
+    () => undefined,
+    (error: unknown) => reasonOf(error, part),
+  );
   if (refused !== undefined) return { ok: false, reason: "unwritable", why: refused };
 
   const zip = new yazl.ZipFile();
@@ -112,7 +125,7 @@ export async function createBackup(target: string, overwrite: boolean): Promise<
       zip.end();
       await Promise.race([written, broken]);
 
-      if (!overwrite && (await isThere(target))) throw new Error(`a file appeared at "${target}" while the backup was written`);
+      if (!overwrite && (await standsAt(target)) !== "nothing") throw new Error(`a file appeared at "${target}" while the backup was written`);
 
       await fs.rename(part, target);
 

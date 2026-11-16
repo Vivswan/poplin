@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempDisposableSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempDisposableSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { text } from "node:stream/consumers";
@@ -84,6 +84,8 @@ const BEYOND = Buffer.concat([Buffer.from("504b0607" + "00000000" + "00000000000
 /** Every zip that is no backup: what is wrong with it, what builds it, and the reason it is refused with. */
 const REFUSED: readonly (readonly [what: string, build: Build, reason: RegExp])[] = [
   ["bytes that are no zip", (path) => writeFileSync(path, "PK hello"), /^it is not a zip that can be read: /],
+  // Drift: a folder was refused in the system's words, "EISDIR: illegal operation on a directory, read".
+  ["a folder", (path) => mkdirSync(path), /^".*" is a folder; a backup is the zip poplin export writes$/],
   ["a zip that is cut off", async (path) => writeFileSync(path, (await Bun.file(await writeZip(`${path}.whole`, backupEntries())).bytes()).slice(0, 200)), /^it is not a zip that can be read: /],
   ["no manifest at the end", without("manifest.json"), /^it does not end in a manifest\.json/],
   ["an entry after the manifest", entriesWith((entries) => [...entries, [`${VERSION_FILES}/late.txt`, "late"]]), /^an entry follows its manifest\.json/],

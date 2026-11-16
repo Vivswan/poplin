@@ -108,6 +108,21 @@ describe("export", () => {
     expect([replaced.code, (await readZip(zip)).at(-1)?.[0]]).toEqual([0, "manifest.json"]);
   });
 
+  // Drift: a folder under the target's name was called a file and --overwrite was offered for it, which then failed in the system's words; a folder that is not there was said as an error about a file the person never typed.
+  test("a target that is a folder, or in a folder that is not there, is refused in the command's words before the install is asked, and --overwrite is offered for neither", async () => {
+    const bench = await openBench();
+    await publishedTwice(bench, "notes");
+    const folder = scratch();
+    bench.sent.length = 0;
+
+    const onto = [await bench.run(`export --out ${folder}`), await bench.run(`export --out ${folder} --overwrite`)];
+    const nowhere = await bench.run(`export --out ${join(folder, "none", "backup.zip")}`);
+
+    expect(onto.map((ran) => [ran.code, ran.err])).toEqual(Array(2).fill([1, [`the backup cannot be written: "${folder}" is a folder; --out names the file to write`]]));
+    expect([nowhere.code, nowhere.err]).toEqual([1, [`the backup cannot be written: the folder "${join(folder, "none")}" does not exist`]]);
+    expect([bench.sent, readdirSync(folder)]).toEqual([[], []]);
+  });
+
   test.each<[string, () => Response, RegExp, number]>([
     ["a refusal half way", () => answer(500, { error: { code: "internal", message: "no" } }), /^the install failed to do that/, 1],
     ["a file that stops arriving", () => new Response(new ReadableStream({ pull: (controller) => controller.error(new Error("reset")) }), { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } }), /^the backup cannot be written: /, 1],

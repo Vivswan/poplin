@@ -6,6 +6,7 @@ import type * as v from "valibot";
 import type { PUBLISH_REQUEST } from "../../../core/src/actions/begin-publish";
 import { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
 import { showBytes } from "../../../core/src/records/settings";
+import type { Failure } from "../client/client";
 import { sha256Of } from "../files/hash";
 import { type PublishFile, readFiles } from "../files/read";
 import { firstRootLink } from "../files/root-links";
@@ -21,6 +22,12 @@ const ENTRY_PAGE = "index.html";
 
 /** How many files are read at once to be hashed. */
 const HASHED_AT_ONCE = 4;
+
+/** The refusal of a public name another site holds. */
+const NAME_TAKEN = "name_taken";
+
+/** What to do about a taken public name on a publish. */
+const ANOTHER_NAME = "to pick another: publish again with --public-name <public name>";
 
 /** What became of a publish that was stopped while its files were read. */
 const STOPPED_UNSENT = "nothing was sent and no site changed";
@@ -77,7 +84,7 @@ function progressOn(io: Io, plan: PublishPlan): Progress {
     arrived: (file) => {
       files = Math.min(files + 1, total);
       bytes = Math.min(bytes + file.size, plan.bytes);
-      io.status(`uploading ${files}/${total} files, ${showBytes(bytes)} of ${showBytes(plan.bytes)}`);
+      io.status(`uploading ${files}/${countText(total, "file")}, ${showBytes(bytes)} of ${showBytes(plan.bytes)}`);
     },
     clear: () => io.status(""),
   };
@@ -187,6 +194,13 @@ export function previewPublish(plan: PublishPlan, addressRead: boolean): Outcome
   };
 }
 
+/** The problem of a publish the install refused to begin. A taken public name is hinted with the publish's own flag: a refused publish made no site to set. */
+function refusalOf(failure: Failure): Problem {
+  const said = problemOf(failure);
+
+  return said.code === NAME_TAKEN ? { ...said, hint: ANOTHER_NAME } : said;
+}
+
 /**
  * Send a planned publish to the install.
  *
@@ -202,7 +216,7 @@ export async function sendPublish(plan: PublishPlan, session: Session): Promise<
   if (refused !== undefined) return { ok: false, problem: refused };
 
   const begun = await callUnhurried(io, () => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ json: plan.manifest }), "repeatable"));
-  if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: problemOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
+  if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: refusalOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
 
   const upload = begun.value.upload.id;
   const progress = progressOn(io, plan);
