@@ -2,6 +2,7 @@
 
 import { showViews } from "@poplin/core/src/records/views";
 import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
+import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
 import { cn } from "cn";
 import { type ReactNode, useEffect } from "react";
 
@@ -9,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toggle } from "@/components/ui/toggle";
+import { IN_BROWSER, PHONE } from "@/lib/media";
 import { showCount } from "@/lib/sites";
 import { LineSample, type Series, stepWords, VisitsChart } from "@/usage/visits-chart";
 import { VisitsPicker } from "@/usage/visits-picker";
@@ -26,11 +28,11 @@ const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--cha
 /** The patterns of dashes of a picked site's line: each differs from the others, and from the whole line of all sites, without its colour. */
 const DASHES = ["1 4 1 4 9 4", "7 5", "1 5", "12 5 1 5", "3 4"] as const;
 
-/** From this many lines on the legend scrolls in a room of its own height, so the table under it stays where it is. */
+/** From this many lines on the legend scrolls in a room of its own height on a screen wider than a phone, so the table under it stays where it is. */
 const LEGEND_SCROLLS_FROM = 9;
 
-/** How tall that room is: three rows of names on a wide screen and six on a phone, where a row is a switch as tall as a phone's controls. A gap lies between two rows. */
-const LEGEND_ROOM = "h-[calc(3*1.75rem+2*0.25rem)] max-md:h-[calc(6*2.5rem+5*0.25rem)]";
+/** How tall that room is: three rows of names, with a gap between two rows. */
+const LEGEND_ROOM = "h-[calc(3*1.75rem+2*0.25rem)]";
 
 /** Below this a sum says too little to name a number. */
 const FEWEST_NAMED = 10;
@@ -93,10 +95,11 @@ interface LegendProps {
   readonly onSwitch: (key: string, on: boolean) => void;
 }
 
-/** The names of the lines under the graph, each a switch beside a piece of its line and the sum of its days. The last line drawn cannot be switched off. Many lines scroll in a room of a set height. */
+/** The names of the lines under the graph, each a switch beside a piece of its line and the sum of its days. The last line drawn cannot be switched off. Many lines scroll in a room of a set height. On a phone they stand in the page. */
 function Legend({ lines, shown, onSwitch }: LegendProps): ReactNode {
+  const phone = useMediaQuery(PHONE, IN_BROWSER);
   const names = <LegendNames lines={lines} shown={shown} onSwitch={onSwitch} />;
-  if (lines.length < LEGEND_SCROLLS_FROM) return names;
+  if (phone || lines.length < LEGEND_SCROLLS_FROM) return names;
 
   return (
     <ScrollArea className={LEGEND_ROOM}>
