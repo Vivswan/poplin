@@ -19,6 +19,7 @@ import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
 import { readShell } from "../../../app/tests/console/support/shell";
 import { meterRows } from "../../scripts/live/rows";
 import type { Bindings } from "../../src/worker/bindings";
+import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { signer } from "../login/support/access";
 import {
   ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, cookieOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
@@ -117,6 +118,9 @@ const EVERY_ROUTE: { readonly [Path in keyof Routes]: { readonly [Method in keyo
     $delete: (calls) => calls.update.address.$delete({ query: {} }),
   },
 };
+
+/** What a browser and `poplin setup` call on the setup page before anybody can log in: the page, its one change, and a program's two runs. */
+const SETUP_CALLS = ["/setup", "/setup/data/repair", "/setup/api/check", "/setup/api/repair"];
 
 /** Every route the app declares, by its path and then its method. */
 type Routes = ExtractSchema<Api>;
@@ -784,6 +788,39 @@ describe("the admin hostname", () => {
     expect([sites.status, (await sites.json<{ sites: Published[] }>()).sites.map((listed) => listed.label)]).toEqual([200, [site.label]]);
     expect([forms.map((answer) => answer.status), after.site.state, unknown.status]).toEqual([[403, 415], "live", 404]);
     expect([out.status, signedOut.map((answer) => answer.status), privately.status]).toEqual([200, [302, 401], 200]);
+  });
+
+  // Drift: at Cloudflare the login stands in front of the whole admin hostname but the open paths of the shared table. A route a program calls under none of them would meet a login no program can pass.
+  // An open path the Worker answers nothing under, or answers the dashboard under, would be a way past the login with nothing behind it that checks a token of its own.
+  test("every route of the API and every call of the setup page is under an open path of the login; each open path is answered by its own piece, down to a path no route has; and a path that only starts like one is the dashboard's", async () => {
+    const worker = instance(w);
+    const open: readonly string[] = INSTALL_OBJECTS.openPaths;
+    const below = (start: string, path: string): boolean => path === start || path.startsWith(`${start}/`);
+    const toLogin = async (path: string): Promise<boolean> => (await ask(worker, `${ADMIN}${path}`)).headers.get("Location")?.startsWith(`${ADMIN}${INSTALL_OBJECTS.loginPath}?`) === true;
+    const answered = async (paths: readonly string[]): Promise<(readonly [string, boolean])[]> => Promise.all(paths.map(async (path) => [path, await toLogin(path)] as const));
+
+    const outside = [...Object.keys(EVERY_ROUTE), ...SETUP_CALLS].filter((route) => !open.some((start) => below(start, route)));
+    const own = await answered(open.flatMap((start) => [start, `${start}/no-such-route`]));
+    const beside = await answered(["/", "/tokens", ...open.flatMap((start) => [`${start}x`, `${start}-more/data`])]);
+
+    expect([outside, Object.keys(EVERY_ROUTE).length > 25]).toEqual([[], true]);
+    expect(own.filter(([, sent]) => sent)).toEqual([]);
+    expect(beside.filter(([, sent]) => !sent)).toEqual([]);
+  });
+
+  // Drift: with the login in front of every path, the edge lets a person through to the page they asked for before the Worker has made its own session.
+  // A Worker that sent them on anywhere but to its login path, or whose login path did not send them back, would turn that into a loop.
+  test("a person the edge let through to a page, with no session of the dashboard's yet, is sent to the login path once, back once, and then sees the page", async () => {
+    const worker = instance(w);
+    const signed = await accessHeaders(w);
+    const asked = `${ADMIN}/settings?tab=access`;
+
+    const first = await ask(worker, asked, { headers: signed });
+    const second = await ask(worker, first.headers.get("Location") ?? "", { headers: signed });
+    const third = await ask(worker, `${ADMIN}${second.headers.get("Location")}`, { headers: { ...signed, Cookie: cookieOf(second) } });
+
+    expect([first.status, first.headers.get("Location")]).toEqual([302, `${ADMIN}/login?return=${encodeURIComponent("/settings?tab=access")}`]);
+    expect([second.status, second.headers.get("Location"), third.status, third.headers.get("Location")]).toEqual([302, "/settings?tab=access", 200, null]);
   });
 
   // Drift: D1 answers one invocation 50 queries, a batch being one. Reads that left their batch would cost every request of the dashboard a query more each, unseen until a long request ran out of them.

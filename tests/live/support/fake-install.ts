@@ -1,8 +1,10 @@
 // A local stand-in for a deployed install, for the self-test of the live checks: the real API and the real serving on a database and a store in memory, with a hand-written edge in front.
 //
 //   poplin.example.com/api...        the real API
-//   poplin.example.com/login         the login: a redirect off the domain with the login in front, a 403 without
-//   poplin.example.com/...           a redirect to the login
+//   poplin.example.com/setup...      the install's own 404: its setup page is shut
+//   poplin.example.com/...           with the login in front, a redirect off the domain to the team's login
+//   poplin.example.com/login         with no login in front, a 403
+//   poplin.example.com/...           with no login in front, the install's own redirect to its login path
 //   *-poplin.example.com             the edge's rules, the install's own count of one visitor, then the real serving
 //   *-page.example.com               the same, on an install whose routes reach the public word
 //   any other hostname               no answer
@@ -23,7 +25,7 @@ export const FAKE_DOMAIN = "example.com";
 const ADMIN_HOST = `poplin.${FAKE_DOMAIN}`;
 
 /** Where the login in front of the install sends a stranger. */
-const LOGIN_PAGE = "https://team.example.net/login";
+const LOGIN_PAGE = `https://team.cloudflareaccess.com/cdn-cgi/access/login/${ADMIN_HOST}`;
 
 /** The most requests the fake's own limit lets one minute hold. */
 const OWN_LIMIT = 120;
@@ -69,8 +71,14 @@ const READS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
 
 /** How the fake differs from an install with every rule in front and no login. Every switch is off unless said. */
 export interface FakeSwitches {
-  /** A login stands in front of the login path and of every letter p hostname. */
+  /** A login stands in front of the whole admin hostname but its open paths, and of every letter p hostname. */
   readonly access?: boolean;
+
+  /** A fault: the login in front of the admin hostname covers the login path alone, so the install itself answers every other path. */
+  readonly loginPathOnly?: boolean;
+
+  /** A fault: the login in front of the admin hostname covers the setup page's path too. */
+  readonly setupBehindLogin?: boolean;
 
   /** No route reaches the public word's hostnames. */
   readonly noPublicRoute?: boolean;
@@ -126,6 +134,19 @@ function toHttps(url: URL): Response | undefined {
 
 function refusal(status: number, text: string, extra: Readonly<Record<string, string>> = {}): Response {
   return new Response(text, { status, headers: { ...REFUSAL_HEADERS, ...extra } });
+}
+
+function isSetupPath(pathname: string): boolean {
+  return pathname === "/setup" || pathname.startsWith("/setup/");
+}
+
+/** Whether the login in front of the admin hostname stops a path that is not the API's: every one but the setup page's, unless a fault moves it. */
+function behindLogin(switches: FakeSwitches, pathname: string): boolean {
+  if (switches.access !== true) return false;
+
+  if (isSetupPath(pathname)) return switches.setupBehindLogin === true;
+
+  return pathname === "/login" || switches.loginPathOnly !== true;
 }
 
 /**
@@ -202,9 +223,11 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
     if (url.pathname.startsWith("/api/")) return install.api.fetch(request);
 
-    if (url.pathname !== "/login") return refusal(302, "", { Location: `https://${ADMIN_HOST}/login` });
+    if (behindLogin(switches, url.pathname)) return refusal(302, "", { Location: LOGIN_PAGE });
 
-    return switches.access === true ? refusal(302, "", { Location: LOGIN_PAGE }) : refusal(403, "Forbidden\n");
+    if (isSetupPath(url.pathname)) return refusal(404, "Not found.\n");
+
+    return url.pathname === "/login" ? refusal(403, "Forbidden\n") : refusal(302, "", { Location: `https://${ADMIN_HOST}/login` });
   };
 
   const fetch: Fetch = async (input, init) => {
