@@ -2,6 +2,7 @@
 //
 //   asked for            the release is                                    answer
 //   the newest           none published, or none above the running one     no_update
+//   the running version                                                    no_update: there is nothing to do
 //   one below the running one, other than the version before               no_update: going back reaches the version before alone
 //   one version          not published                                     no_digest
 //   one, by itself       not above the running one                         no_update
@@ -60,7 +61,7 @@ export function pickRelease(pins: ReleasePins, wanted: WantedRelease, running: s
   const version = versionOf(pins, wanted, running);
   if (version === undefined) return { ok: false, refusal: "no_update" };
 
-  if (isPlainVersion(version) && lt(version, running) && version !== wanted.back) return { ok: false, refusal: "no_update" };
+  if (isPlainVersion(version) && !gt(version, running) && version !== wanted.back) return { ok: false, refusal: "no_update" };
 
   const pin = Object.hasOwn(pins, version) ? pins[version] : undefined;
   if (pin === undefined) return { ok: false, refusal: "no_digest" };

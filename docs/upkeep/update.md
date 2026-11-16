@@ -59,7 +59,7 @@ the install now runs 0.3.1; it ran 0.3.0
 
 | The install finds                                         | It answers            | Changed |
 | --------------------------------------------------------- | --------------------- | ------- |
-| no release above the running version                      | `no_update`           | nothing |
+| no release above the running version, or `--to` the version it runs | `no_update` | nothing |
 | a start in the same minute                                | `too_many_requests`   | nothing |
 | a key Cloudflare no longer takes, or none                 | `key_refused`, `no_key` | nothing |
 | a key made before poplin could update itself              | `lacks_right`, about `Workers Scripts Write` | nothing |
