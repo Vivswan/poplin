@@ -184,7 +184,7 @@ On an install that holds no key, `poplin config` changes the stored setting alon
 | `search_engines_allowed` | reads nothing from it | the bots rule: whether the crawlers of search engines pass it, with `guard_rules` on |
 | `block_bots` | reads nothing from it | the zone's AI bot block and Bot Fight Mode |
 
-An install the module made holds no key. Once a Repair on the Domain screen gave it one, a saved `outside_pages` or `search_engines_allowed` also writes the guard rules at Cloudflare with the key, as [Domain](../../../docs/dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says:
+An install the module made holds no key. Once a Repair on the Domain screen gave it one, a saved `outside_pages` or `search_engines_allowed` also writes or removes the guard rules at Cloudflare with the key, as [Domain](../../../docs/dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says:
 
 | `guard_rules` | The rules the key wrote |
 | --- | --- |

@@ -83,9 +83,9 @@ The install works without this part. Cloudflare can stop unwanted requests befor
 | the redirect             | plain http, which it sends to https                           | by a Repair with Single Redirect: Edit                                                    |
 | the block of AI crawlers | AI crawlers on the whole domain, as `block_bots` says         | by a Repair with Bot Management: Edit                                                     |
 
-**A saved setting makes two of them.** On an install that holds its key, saving `search_engines_allowed` or `outside_pages` writes the bots rule, and the outside pages rule while `outside_pages` is `blocked`. A rule the domain lacks is made, and one its plan has no room for is left out.
+**A saved setting makes two of them.** On an install that holds its key, saving `search_engines_allowed` or `outside_pages` writes the bots rule, and the outside pages rule while `outside_pages` is `blocked`. Saving `outside_pages` as `allowed` removes the outside pages rule and keeps the bots rule.
 
-No permission is added for it, and no Repair is pressed.
+A rule the domain lacks is made, and one its plan has no room for is left out. No permission is added for it, and no Repair is pressed.
 
 | An install                         | Holds its key                                                                                         |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
