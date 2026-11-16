@@ -10,7 +10,7 @@ import type { DomainCheck } from "../../../src/records/domain-check";
 import { dayOf } from "../../../src/records/views";
 import { mintSiteFolder } from "../../../src/records/site";
 import type { SiteId } from "../../../src/sites/ids";
-import { auditLog, everLoggedIn } from "./audit-contract";
+import { auditLog, auditTrim, everLoggedIn } from "./audit-contract";
 import {
   ADA,
   ADMIN,
@@ -637,6 +637,7 @@ export function describeDatabase(label: string, makeDatabase: DatabaseFactory): 
   visitorKey(label, makeDatabase);
   updateAddress(label, makeDatabase);
   auditLog(label, makeDatabase);
+  auditTrim(label, makeDatabase);
   everLoggedIn(label, makeDatabase);
   tokensAndSettings(label, makeDatabase);
   computerLogins(label, makeDatabase);

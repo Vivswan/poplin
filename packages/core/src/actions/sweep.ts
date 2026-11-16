@@ -1,5 +1,5 @@
 // The sweep a scheduled job runs: expired sites go to the trash, sites whose time in the trash has passed go for good, uploads past their time go with their files, and the files removed sites left behind go.
-// What ran out goes last: the logins of computers, and the problems noted over 30 days ago.
+// What ran out goes last: the logins of computers, the problems noted over 30 days ago, and the audit entries and ended tokens of over 90 days ago.
 
 import * as v from "valibot";
 
@@ -143,7 +143,7 @@ async function sweepUploads(install: Install, from: Extract<SweepPlace, { readon
   return { ...NOTHING_SWEPT, ...removed, next: old.next === undefined ? { leftovers: true } : { uploads: true, after: old.next } };
 }
 
-/** One step over the leftovers. The one that has looked at the last of them ends the walk by removing the logins that ran out and the problems past the days kept. */
+/** One step over the leftovers. The one that has looked at the last of them ends the walk by removing the logins that ran out, the problems past the days kept, and a bounded number of the audit entries and ended tokens past theirs. */
 async function sweepLeftovers(install: Install, from: Extract<SweepPlace, { readonly leftovers: true }>, rule: { readonly limit: number; readonly signed: Signed }): Promise<Swept> {
   const page = await install.database.listLeftovers({ limit: rule.limit, after: from.after });
   const swept = { ...NOTHING_SWEPT, ...(await emptyLeftovers(install, page.folders)) };
@@ -154,7 +154,7 @@ async function sweepLeftovers(install: Install, from: Extract<SweepPlace, { read
 
 /**
  * Take one step of the walk that moves every site past its expiry to the trash, removes for good every site that has sat in the trash for `trash_days`, and removes every upload begun over 25 hours ago.
- * The walk ends by removing the files removed sites left behind, then every login of a computer that ran out.
+ * The walk ends by removing the files removed sites left behind, then every login of a computer that ran out, and the audit entries and ended tokens of over 90 days ago, a bounded number a walk.
  *
  * One step lists once, up to `limit` due sites, uploads, or leftovers, so its cost is bounded: one change per site that is due, nothing for a site that is not, and one bounded file removal per item.
  * @param actor - an admin, who signs the audit entry of every site moved or removed

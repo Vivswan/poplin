@@ -29,6 +29,9 @@ import {
   sizeOf,
 } from "./database-fixtures";
 
+/** One day, in milliseconds. */
+const DAY_MS = 86_400_000;
+
 export function visitorKey(label: string, makeDatabase: DatabaseFactory): void {
   describe(`${label}: the visitor key`, () => {
     // Drift: two Workers that each kept their own key would count one visitor under two keys, and let each through twice as often.
@@ -204,6 +207,55 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const removed = { id: admin.id, scope: "admin", note: "laptop", createdAt: NOW, endedAt: ranOutAt + 7, how: "removed", by: ADA };
 
       expect<unknown>(await database.listTokenStates(ranOutAt + 9, 50)).toEqual({ live: [], ended: [removed], more: false });
+    });
+
+    // Drift: the sweep removes tokens by their end alone. One that went by a token's age would end the login of a computer that still publishes, and one that kept every ended token would let the table grow for ever.
+    test("the sweep removes the tokens that ended over 90 days ago, by removal or by running out, and leaves a token that works, however old, and one that ended within 90 days", async () => {
+      const database = await opened(makeDatabase);
+      const longAgo = NOW - 1100 * DAY_MS;
+      const minted = async (scope: "admin" | "publisher", note: string): Promise<TokenRecord> => (await mintToken({ scope, note, now: longAgo })).record;
+      const [works, removedLong, ranOutLong] = [await minted("publisher", "works"), await minted("publisher", "removed long ago"), await minted("admin", "ran out long ago")];
+      const [removedLately, removedOnTheDay] = [await minted("publisher", "removed lately"), await minted("publisher", "removed 90 days ago")];
+      const all = [works, removedLong, ranOutLong, removedLately, removedOnTheDay];
+      for (const token of all) await database.addToken(token, { by: ADMIN, at: longAgo });
+      await database.revokeToken(removedLong.id, { by: ADMIN, at: NOW - 90 * DAY_MS - 1 });
+      await database.revokeToken(removedLately.id, { by: ADMIN, at: NOW - DAY_MS });
+      await database.revokeToken(removedOnTheDay.id, { by: ADMIN, at: NOW - 90 * DAY_MS });
+      const told = async (): Promise<unknown> => {
+        const { live, ended } = await database.listTokenStates(NOW, 50);
+
+        return [live, ended.map((token) => token.note)];
+      };
+
+      const before = await told();
+      await database.sweepRunOut(NOW);
+      const rows = [...(await database.getTokenNames(all.map((token) => token.id))).values()].sort();
+
+      // The list tells of the same ended tokens before the sweep as after it: one past its days is not told while it waits.
+      expect<unknown>([await database.getToken(works.id), rows, before, await told()]).toEqual([
+        works,
+        ["removed 90 days ago", "removed lately", "works"],
+        [[works], ["removed lately", "removed 90 days ago"]],
+        [[works], ["removed lately", "removed 90 days ago"]],
+      ]);
+    });
+
+    // Drift: the provider counts every row a sweep removes against the day's writes, so one run takes a bounded number; a run that took the newest ended first would leave the oldest for ever.
+    test("one sweep removes no more than 25 ended tokens, the longest ended first, and the next one goes on", async () => {
+      const database = await opened(makeDatabase);
+      const longAgo = NOW - 200 * DAY_MS;
+      const ended = await Promise.all(Array.from({ length: 27 }, async (_token, at) => (await mintToken({ scope: "publisher", note: `ci ${at}`, now: longAgo })).record));
+      for (const [at, token] of ended.entries()) {
+        await database.addToken(token, { by: ADMIN, at: longAgo });
+        await database.revokeToken(token.id, { by: ADMIN, at: longAgo + 1 + at });
+      }
+      const left = async (): Promise<string[]> => [...(await database.getTokenNames(ended.map((token) => token.id))).values()].sort();
+
+      await database.sweepRunOut(NOW);
+      const afterOne = await left();
+      await database.sweepRunOut(NOW);
+
+      expect([afterOne, await left()]).toEqual([["ci 25", "ci 26"], []]);
     });
 
     // Drift: the token page shows this list; an order that changed between two reads would shuffle tokens made in the same millisecond.

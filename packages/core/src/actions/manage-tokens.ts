@@ -11,7 +11,7 @@ import { UPDATE_NOTICE } from "./update";
 /** The longest note a token carries, in characters. */
 const MAX_NOTE_LENGTH = 200;
 
-/** How many ended tokens a listing tells of: the ones that ended last. */
+/** How many ended tokens a listing tells of: the ones that ended last, in the 90 days an ended token is kept. */
 const MOST_ENDED = 50;
 
 /** What a new token is asked with: its scope, and a note that says what it is for, such as a workspace's name. */
@@ -122,7 +122,7 @@ export async function nameTokens(
 }
 
 /**
- * List the tokens that work, the newest first, and apart from them the 50 that ended last: the removed ones and the ones that ran out.
+ * List the tokens that work, the newest first, and apart from them the 50 that ended last in the past 90 days: the removed ones and the ones that ran out.
  *
  * @returns `more` says that more than 50 ended. `not_allowed` for anyone but an admin
  */

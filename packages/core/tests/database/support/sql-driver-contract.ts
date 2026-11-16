@@ -385,7 +385,7 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       ["a second login under one code", [login("login-b", "CODEA", "pending", null)]],
       ["a login that runs out before it was asked for", [{ sql: "UPDATE logins SET expires_at = 0 WHERE id = 'login-a'", params: [] }]],
       ["an audit entry rewritten", [{ sql: "UPDATE audit SET actor = 'someone' WHERE seq = 1", params: [] }]],
-      ["an audit entry removed", [{ sql: "DELETE FROM audit WHERE seq = 1", params: [] }]],
+      ["the newest audit entry removed", [{ sql: "DELETE FROM audit WHERE seq = 1", params: [] }]],
     ] as ReadonlyArray<readonly [string, readonly Statement[]]>)("refuses %s", async (_state, statements) => {
       const driver = await migrated(makeDriver);
       await driver.batch([stored, upload("upload-a", "folder-a", "pending"), login("login-a", "CODEA", "pending", null), { sql: "INSERT INTO audit (at, actor, action, detail) VALUES (0, ?1, 'login', '{}')", params: [ADA] }]);
@@ -459,6 +459,23 @@ function auditNumbers(label: string, makeDriver: DriverFactory): void {
         { count: 4, whole: false },
       ]);
       expect(await rows(driver, "SELECT COUNT(*) AS held FROM audit")).toEqual([{ held: 5 }]);
+    });
+  });
+}
+
+function auditEnds(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: where the audit log loses entries`, () => {
+    // Drift: a count of the log trusts that no number is missing between its two ends and that the newest is never given twice. A statement that took an entry from the middle, or the newest one, would break either, whatever wrote it.
+    test("an entry leaves from the oldest end alone: one from the middle and the newest one are refused, alone or among others, and the oldest ones go", async () => {
+      const driver = await migrated(makeDriver);
+      for (let written = 0; written < 4; written += 1) await rows(driver, "INSERT INTO audit (at, actor, action, detail) VALUES (1, 'ada@example.com', 'login', '{}')");
+      const refused = ["DELETE FROM audit WHERE seq = 2", "DELETE FROM audit WHERE seq = 4", "DELETE FROM audit WHERE seq IN (1, 3)", "DELETE FROM audit"];
+
+      for (const statement of refused) await expect(rows(driver, statement)).rejects.toThrow();
+      const kept = await rows(driver, "SELECT seq FROM audit ORDER BY seq");
+      await rows(driver, "DELETE FROM audit WHERE seq < 3");
+
+      expect([kept, await rows(driver, "SELECT seq FROM audit ORDER BY seq")]).toEqual([[1, 2, 3, 4].map((seq) => ({ seq })), [3, 4].map((seq) => ({ seq }))]);
     });
   });
 }
@@ -572,13 +589,13 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|kept VIRTUAL TABLE|given\b)/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|kept VIRTUAL TABLE|given\b|ends\b)/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
       // A listing walks `cut`, the ids of the one page it has cut already, a screen's listing `page`, that page's sites, and `kept`, the versions of one site of it: none is a table.
-      // A new link walks `given`, the one row that is there only once the id was given, before it walks the days: no table either.
+      // A new link walks `given`, the one row that is there only once the id was given, before it walks the days: no table either. The trim of the log walks `ends`, the one row of its two ends.
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
       // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.
@@ -768,6 +785,7 @@ export function describeSqlDriver(label: string, makeDriver: DriverFactory): voi
   storedRows(label, makeDriver);
   queryPlans(label, makeDriver);
   auditNumbers(label, makeDriver);
+  auditEnds(label, makeDriver);
   auditWindow(label, makeDriver);
   requestCountRows(label, makeDriver);
   manifestRows(label, makeDriver);

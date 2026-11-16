@@ -7,7 +7,7 @@
 // settings     one row for the whole install
 // secrets      what the install must keep and never show, such as the key the visitor limits are made from
 // totals       one row: how many sites there are and how much their kept versions hold
-// audit        what was done, by whom, and when; rows are only ever added
+// audit        what was done, by whom, and when; rows are added at the newest end and leave at the oldest
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together; a year is kept
 // declared_files   one row per UTC day: the files the uploads begun on it declared, and the times the store was written to or listed on it; the newest day and the one before it are kept
 // uploads      the staged publishes: begun, taking files, then live or given up
@@ -68,7 +68,7 @@ CREATE TABLE earlier_ids (
   folder TEXT NOT NULL REFERENCES sites (folder) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID`;
 
-/** The hashed record of every token. Only an admin token expires. A removed token keeps its row, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
+/** The hashed record of every token. Only an admin token expires. A removed token keeps its row for a time, marked with when it was removed and by whom; `end_at` is when a token ended or will: its removal, else its expiry. */
 const TOKENS = `
 CREATE TABLE tokens (
   id TEXT NOT NULL PRIMARY KEY,
@@ -113,7 +113,7 @@ CREATE TABLE totals (
 /** The one row of the totals, for an install with no site. */
 const TOTALS_START_AT_ZERO = "INSERT INTO totals (id, sites, trashed_sites, bytes, files) VALUES (1, 0, 0, 0, 0)";
 
-/** What was done, by whom, and when. An entry's `seq` is one above the newest entry's, which no entry is ever removed after: no number is given twice, and none is left out. */
+/** What was done, by whom, and when. An entry's `seq` is one above the newest entry's, which is never removed: no number is given twice. Entries leave at the oldest end alone, so none is left out between the two ends. */
 const AUDIT = `
 CREATE TABLE audit (
   seq INTEGER NOT NULL PRIMARY KEY,
@@ -309,15 +309,16 @@ const FOLDER_NEVER_CHANGES = `
 CREATE TRIGGER sites_folder_never_changes BEFORE UPDATE OF folder ON sites
 BEGIN SELECT RAISE(ABORT, 'the folder of a site never changes'); END`;
 
-/** The audit log is append-only: no entry is removed. */
-const AUDIT_KEEPS_ITS_ROWS = `
-CREATE TRIGGER audit_keeps_its_rows BEFORE DELETE ON audit
-BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
+/** The audit log loses entries at its oldest end alone, and never its newest one. */
+const AUDIT_LOSES_ONLY_ITS_OLDEST = `
+CREATE TRIGGER audit_loses_only_its_oldest BEFORE DELETE ON audit
+WHEN OLD.seq > (SELECT min(seq) FROM audit) OR OLD.seq = (SELECT max(seq) FROM audit)
+BEGIN SELECT RAISE(ABORT, 'the audit log loses its oldest entry alone, and never its newest'); END`;
 
 /** And no entry is rewritten. */
 const AUDIT_ROWS_NEVER_CHANGE = `
 CREATE TRIGGER audit_rows_never_change BEFORE UPDATE ON audit
-BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END`;
+BEGIN SELECT RAISE(ABORT, 'an entry of the audit log is never rewritten'); END`;
 
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
@@ -368,7 +369,7 @@ export const CREATE_SCHEMA: Step = {
     TOTALS_TAKE_OFF_A_DROPPED_VERSION,
     TOTALS_FOLLOW_A_RESIZED_VERSION,
     TOTALS_KEEP_THEIR_ROW,
-    AUDIT_KEEPS_ITS_ROWS,
+    AUDIT_LOSES_ONLY_ITS_OLDEST,
     AUDIT_ROWS_NEVER_CHANGE,
   ],
 };

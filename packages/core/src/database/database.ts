@@ -799,7 +799,7 @@ export interface Database {
   getTokenNames(ids: readonly TokenId[]): Promise<ReadonlyMap<TokenId, string>>;
 
   /**
-   * The tokens that work at a moment and the newest that ended, in one read. Every token is in exactly one of the two, or among the ended ones left out.
+   * The tokens that work at a moment and the newest that ended in the 90 days before it, in one read. Every token is in exactly one of the two, or among the ended ones left out.
    *
    * @param now - a token that runs out at this moment has ended
    * @param mostEnded - how many ended tokens are told, from 1 to 100; one row more is read
@@ -850,6 +850,9 @@ export interface Database {
   /**
    * Remove what ran out by a moment, in one step: every login of a computer that ran out at or before it, whatever its state; every problem of a day before the 30 that are kept;
    * the counts of declared files and store writes of the days before the day before it; and the request counts of days over a year before it. No write of a count drops an old day itself.
+   *
+   * The same step trims what is over 90 days old, a bounded number a call: the oldest entries of the audit log, once anybody has logged in and never the newest entry, and the tokens that ended, by removal or by running out.
+   * A token that works at the moment stays, however long ago it was made. A call with nothing to remove writes no row.
    *
    * @returns how many logins were removed
    */
@@ -1028,7 +1031,7 @@ export interface Database {
    */
   noteLogin(login: Login, entered: { readonly since: number; readonly at: number }): Promise<{ readonly kind: "written" | "known" }>;
 
-  /** Whether the audit log holds a `login` entry, which is whether anybody has ever logged in. It is one query, whatever the log's length. */
+  /** Whether anybody has ever logged in: the audit log holds a `login` entry, or held one before its oldest entries were removed. It is one query, whatever the log's length. */
   hasLoggedIn(): Promise<boolean>;
 
   /**
