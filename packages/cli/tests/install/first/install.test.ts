@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { Login } from "../../../../core/src/auth/logins";
 import type { Blocked, Found, Installer, Row, Token } from "../../../../core/src/install/installer";
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { jsonOf } from "../../commands/support/harness";
@@ -419,6 +420,56 @@ describe("what a run comes to", () => {
     expect(ran.fetched).toEqual([`${ADDRESS}/api/logins`]);
     expect(jsonOf(ran)).toMatchObject({ ok: true, ready: true, login: { ok: false, problem: "unreachable" } });
     expect(ran.err.at(-1)).toBe(`To try again: npx poplin login --server ${ADDRESS}`);
+  });
+});
+
+describe("a first login the run did not use", () => {
+  const login = "new@example.com" as Login;
+  const line = "install stand-in --no-place --login new@example.com --adopt";
+  const unusedAt = (): Account => ({ ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: login } });
+
+  // Drift: the install kept the users its records hold, and the email of the line is none of them. An ending that offers the login asks a person in who gets no code, and a `next` of `login` sends a program the same way.
+  test("ends with the repair that lets that person in, as its last line and as the next step, and offers no login: without this a person is asked to log in who gets no code", async () => {
+    const letIn = "npx poplin doctor --repair --add-user new@example.com";
+    const plain = await runLine(`${line} --no-wait`, unusedAt(), { env: HELD, asks: true });
+    const told = await runLine(`${line} --yes --log-in --no-wait`, unusedAt(), { env: HELD });
+    const json = await runLine(`${line} --yes --no-wait --json`, unusedAt(), { env: HELD });
+    const silent = await runLine(`${line} --yes`, unusedAt(), { env: HELD, statuses: [503] });
+
+    expect([plain.code, plain.asked, plain.out.slice(-4)]).toEqual([
+      0,
+      [],
+      ["poplin 0.1.0 is installed.", `Your dashboard: ${ADDRESS}`, "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.", `To let new@example.com log in too: ${letIn}`],
+    ]);
+    expect([told.code, told.fetched, told.out.at(-1)]).toEqual([0, [], plain.out.at(-1)]);
+    expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, next: { step: "repair", command: letIn } }]);
+    expect("login" in jsonOf(json)).toBe(false);
+    // An install whose address gives no answer yet names the same line, and no login the person could not finish.
+    expect<unknown>([silent.code, silent.out.filter((text) => text.includes("log in"))]).toEqual([1, [plain.out.at(-1)]]);
+  });
+
+  // Drift: the repair that finishes such an install mends the login to the users it kept. Named without the email, it leaves the person of the line out for good, and no later line says how to let them in.
+  test("that left a piece undone names the repair that also lets that person in, once the install is found whole", async () => {
+    const whole: Found<Where, Place> = { state: "whole", place: PLACE, version: "0.1.0", address: ADDRESS, newest: "0.1.0" };
+    const undone: Row[] = [{ object: "Login", state: "block", detail: "the login product is not switched on" }];
+    const account: Account = { ...accountWith(LEFTOVER, whole), installed: { ...installedOf([...FRESH, ...undone], { ready: false }), unused: login } };
+    const ran = await runLine(`${line} --yes --no-wait`, account, { env: HELD });
+    const json = await runLine(`${line} --yes --no-wait --json`, { ...account, scenes: [LEFTOVER, whole] }, { env: HELD });
+
+    expect([ran.code, ran.out.at(-2)]).toEqual([1, "1 not done. Run npx poplin doctor --repair --add-user new@example.com: it goes on from what stands."]);
+    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, next: { step: "repair", command: "npx poplin doctor --repair --add-user new@example.com" } });
+  });
+
+  // Drift: the line is one a person pastes into a shell. An email with an apostrophe or a dollar sign, pasted bare, opens a quote that never closes or names a variable, and the repair adds nobody or somebody else.
+  test.each([
+    ["o'brien@example.com", "'o'\\''brien@example.com'"],
+    ["pay$roll&co@example.com", "'pay$roll&co@example.com'"],
+    ["first.last+tag@example.com", "first.last+tag@example.com"],
+  ])("the line that lets %s in too writes the email as one word of a POSIX shell: %s", async (email, word) => {
+    const account: Account = { ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: email as Login } };
+    const json = await runLine(`${line} --yes --no-wait --json`, account, { env: HELD });
+
+    expect((jsonOf(json).next as { readonly command: string }).command).toBe(`npx poplin doctor --repair --add-user ${word}`);
   });
 });
 
