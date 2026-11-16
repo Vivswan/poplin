@@ -5,7 +5,7 @@ order: 50
 
 # Domain
 
-What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules at Cloudflare with what makes each; the first Repair is step 4 of [Install](../start/install.md).
+What the dashboard's Domain screen shows and does, the last check it keeps, and the optional rules at Cloudflare with what makes each. An install needs no Repair: [the command](../start/install.md#4-read-what-it-made) makes every piece an install needs.
 
 | On the screen       | What it is                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------- |
@@ -26,6 +26,18 @@ An install that holds [its key](../about/security.md#the-kept-key) reads every p
 | open Domain, and the last check is older, or there is none | shows the last check at once, checks again by itself, then shows the new one |
 | press Check                                            | checks again, with no dialog                                           |
 | press Repair                                           | opens the dialog that asks for an account token                        |
+
+The check the screen opens on is a remembered one. Its State column has five words of its own:
+
+| State          | Means                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `Present`      | the piece stood as it should                                                           |
+| `Needs repair` | the piece was missing, or differed: press Repair                                       |
+| `Optional`     | an optional piece the run left as it is: Detail says why. Nothing is wrong, and the install works without it |
+| `Failed`       | the run could not read the piece, or could not change it. Detail says why, such as a permission that is lacking |
+| `Not run`      | the run did not get to the piece: a piece it rests on stopped the run, or was not read |
+
+A run you press writes its own words there: `Missing` and `Differs` for a piece to repair, and `Created`, `Changed`, or `Removed` for what a Repair did. The screen writes each word with a capital, and the tables below write them small.
 
 No other screen starts a check. A check of an install whose every piece stands sends Cloudflare about 21 requests under a domain and about 16 without: fewer where a piece is missing, more where a list fills more than one page or a request is sent again. Each only reads. A check the screen ran by itself writes no line into Activity, and a pressed one writes one.
 
@@ -136,7 +148,7 @@ An install holds its key from the run that made it: Account API Tokens: Edit is 
 
 An install [without a domain](../start/without-a-domain.md) has none of the five rules: no Repair and no saved setting makes one.
 
-Three more permissions on the token let Repair make the rules. Add any of them, on any day.
+Four permissions on the token are optional. Three of them let Repair make the rules, and [the fourth](#optional-an-email-when-charges-reach-1-dollar) an email about charges at once. Add any of them, on any day.
 
 | First box | Second box      | Third box | With it, Repair makes                                         | Without it                                                                                  |
 | --------- | --------------- | --------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -170,7 +182,7 @@ Cloudflare emails your first user when the account's usage charges for the billi
 | the first clean-up run of each UTC day | the same                                                            |
 | it holds no key, or one Cloudflare no longer takes | makes none: press Repair, which makes a key             |
 
-One more permission on the account token lets Repair make the alert at once. Add it the same way, in the three steps above.
+The fourth optional permission on the account token lets Repair make the alert at once. It is the one optional permission of an install without a domain. Add it the same way, in the three steps above.
 
 | First box | Second box    | Third box | With it, Repair                                      | Without it                                                        |
 | --------- | ------------- | --------- | ---------------------------------------------------- | ----------------------------------------------------------------- |

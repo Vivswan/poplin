@@ -10,7 +10,7 @@ Your AI agent, or you at the command line, publish a static site (a folder, or o
 ```text
 You:    Put this report online.
 
-Agent:  Published. It is private: only you can open it, after you log in.
+Agent:  Published. It is private: only the users of your install can open it, after they log in.
 
         https://report--k3f9x2ab71qz-p-poplin.example.com
 ```

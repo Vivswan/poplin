@@ -19,7 +19,7 @@ you get:   https://poplin.your-name.workers.dev                               yo
 
 `your-name` stands for the word of your own account in the address Cloudflare gives its Workers.
 
-**The open sites share one browser origin, and so do the private sites: publish only pages you trust.** [Between sites](../about/between-sites.md#without-a-domain) says what a page of one site can do to another.
+**A page of one site can read your other sites of its kind: publish only pages you trust.** An open site, unlisted or public, can read the other open sites. A private site can read the other private sites. Each kind answers at one address of its own, as the block above shows. [Between sites](../about/between-sites.md#without-a-domain) says what a page of one site can do to another.
 
 ## What differs from an install under a domain
 
@@ -88,9 +88,21 @@ The link opens Cloudflare's form with five rows filled, and none of a domain. Th
 | Account Resources | choose Include, then your account                                                    |
 | every other field | leave it as it is                                                                    |
 | the bottom        | press Continue to summary, then Create Token                                         |
-| the next page     | the token is shown once: copy it, paste it at the command's question, and press Enter. Its letters do not show |
+| the next page     | the token is shown once: copy it, and leave the page open                            |
 
-One permission is optional here: Notifications: Edit, which the command lists with what it adds. With it, the run makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once. Without it, the install makes that email by itself within a day, with the key it keeps. The other optional permissions are all of a domain.
+Then paste the token at the command's question, `Account token (not shown):`.
+
+```text
+Mac:      click the terminal, press Command and V, then Enter
+Windows:  click the Command Prompt window, press Ctrl and V, or click the right mouse button; then Enter
+Linux:    click the terminal, press Ctrl, Shift and V, then Enter
+```
+
+The terminal shows a row of small marks for what you paste, never the letters. Press Enter once.
+
+**Leave Cloudflare's page with the token open** until the command says `is installed`: Cloudflare shows the token once, and a run that stops asks for it again. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
+
+One permission is optional here: Notifications: Edit, which the command lists with what it adds. **Skip it on a first install:** nothing is wrong without it. With it, the run makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once. Without it, the install makes that email by itself within a day, with the key it keeps. The other optional permissions are all of a domain.
 
 ## What it prints
 
@@ -129,6 +141,23 @@ The command's last question logs this computer in, as [step 5 of Install](instal
 npx poplin login --server https://poplin.your-name.workers.dev
 npx poplin doctor
 ```
+
+## A domain, afterwards
+
+No command puts this install under a domain. The way is to [move it](../upkeep/back-up.md#move-an-install): back up, install anew under the domain, and bring the data back. Both lines need their options:
+
+| Line                                                | Without its option                                                    |
+| --------------------------------------------------- | --------------------------------------------------------------------- |
+| `npx poplin export --all-versions --out backup.zip` | the zip holds each site's live version alone: the kept versions before it are lost with this install |
+| `npx poplin import backup.zip --settings`           | the sites come back, and the new install keeps its own settings       |
+
+| Thing                 | After the move                                                     |
+| --------------------- | ------------------------------------------------------------------ |
+| a site's address      | new: a hostname of its own under your domain                       |
+| a link you shared     | stops with this install. Send the new one                          |
+| each computer's login | made anew, with `npx poplin login`: the zip holds no token         |
+| the users             | the first login of the new install. `--settings --logins` brings the old list |
+| the activity log      | starts anew: the zip does not hold it                              |
 
 ## Afterwards
 

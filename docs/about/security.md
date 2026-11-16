@@ -38,13 +38,13 @@ The id alone finds the site. The letter never opens anything: the stored site de
 - **Lists and commands show it.** The id shown in lists and commands is the link of an unlisted site. Someone who saw it while the site was private can open the site once it is unlisted, since the address differs by one known letter; running `poplin new-link` first avoids that.
 - **A pasted address travels.** Paste it in a chat and the chat's preview bot fetches it; forward it and the next reader has it.
 - **A plain DNS lookup shows the name.** A network between the visitor and Cloudflare can learn that the address exists, though it cannot read the page.
-- **A leak is fixed by `poplin new-link`.** The site gets a new id, and the old address stops at once. Making the site private closes it to everyone but the owner.
+- **A leak is fixed by `poplin new-link`.** The site gets a new id, and the old address stops at once. Making the site private closes it to everyone but the users of the install.
 
 ## The three access states
 
 | State | Address | Who opens it | What the visitor needs |
 | --- | --- | --- | --- |
-| private, the default | `report--k3f9x2ab71qz-p-poplin.example.com` | the owner | the login |
+| private, the default | `report--k3f9x2ab71qz-p-poplin.example.com` | the users of the install | the login |
 | unlisted | `report--k3f9x2ab71qz-u-poplin.example.com` | anyone who has the address | the address alone |
 | public | the unlisted address, and a name the site claims: `report-page.example.com` | everyone | nothing |
 
@@ -84,7 +84,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | the CLI, to the bucket, for the files of a publish | one ticket a file: a signed address that lives 10 minutes | the Worker signs it with the upload key, which never leaves the Worker; [The upload key](#the-upload-key) says what a ticket and the key can reach |
 | the person who makes the install | a Cloudflare API token, read by `poplin install` on that person's own computer | the person makes it at Cloudflare; the command sends it to Cloudflare alone, uses it for that one run, in which it also makes the kept key, and never stores, logs, or prints it |
 | a person who repairs the install | a Cloudflare API token, pasted into Repair on the Domain screen, or read by `poplin doctor --repair` on that person's own computer | the Worker uses a pasted one for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it; the command sends its own to Cloudflare alone |
-| the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
+| the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | `poplin install` makes it in its run, and puts it on the Worker as an encrypted secret. A Repair makes a new one where the install holds none, or one Cloudflare no longer takes; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:
@@ -121,7 +121,7 @@ A ticket is a signed address for one file. The bucket itself checks it:
 | the declared length, type, and SHA-256 | other bytes, another length, another type |
 | 10 minutes, or to within a second of the publish's own end where that is sooner | a ticket that ran out |
 
-Repair makes the key beside the kept key, as an API token named "poplin upload key" that the account owns.
+`poplin install` makes the key beside the kept key, as an API token named "poplin upload key" that the account owns. A Repair makes a new one where the install holds none.
 
 | Question | Answer |
 | --- | --- |
@@ -139,7 +139,8 @@ Without the key, or for the first minutes of a new one, every file goes through 
 ## The kept key
 
 ```text
-you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  ->  a secret on the Worker, KEPT_KEY
+you give one account token  ->  poplin install makes "poplin kept key" at Cloudflare  ->  a secret on the Worker, KEPT_KEY
+                                Repair makes a new one where the install holds none, or one Cloudflare no longer takes
 ```
 
 | Question | Answer |
@@ -238,7 +239,8 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
 | a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
-| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed. A removed token never logs in again, and its row is removed once it ended more than 90 days ago, a few rows at a time; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |
+| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed |
+| a token that ended | a removed token never logs in again, and its row is removed once it ended more than 90 days ago, a few rows at a time; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |
 | every login at once | Sign everyone out, under Access, asks Cloudflare with the kept key to end every login of the dashboard and of private sites: each browser meets the login again at its next request, a few seconds on. A computer's token is untouched, and is revoked on its own |
 | the stored key | kept in the database; the limits per visitor are made from it |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
@@ -248,10 +250,13 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | a published file | before a file's bytes, the CLI sends its path, its size, its type, and its fingerprint, a SHA-256 of its bytes. The storage checks the bytes against the fingerprint as they arrive. A file of other bytes is refused and stored nowhere, one of the same length included |
 | content | the Worker never reads, parses, or rewrites a site's files, and adds none to them. A site that holds no `favicon.ico` is answered poplin's own icon at `/favicon.ico`, from the Worker's code |
 | the activity log | the dashboard shows every action of the last 90 days under Activity: publish, state change, delete, login, token issued. [Activity](../dashboard/activity.md) says how it is paged and saved as files |
-| plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days, but for the 308 from plain http, the 429 of a limit, the page of a paused site, and the Worker's own plain answers, such as the one of an install that could not start. The zone's other hostnames are left as they are |
+| plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. The zone's other hostnames are left as they are |
+| `https` alone, afterwards | every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days, but for the 308 from plain http, the 429 of a limit, the page of a paused site, and the Worker's own plain answers, such as the one of an install that could not start |
 | the Worker's log | Cloudflare keeps the lines the Worker writes about refusals and errors, with its own record of each request switched off. poplin writes into no line a token, a cookie, a login code, an email, a visitor's address, or a site's id: [the Worker's log](../dashboard/activity.md#the-workers-log-at-cloudflare) |
+| an address in the Worker's log | Cloudflare stores each line with the whole address of its request. So the address of a private or an unlisted site, which holds its id, is in the log for a request in which the Worker wrote a line, such as one that met an error. Whoever can read the account's logs can read it: [what Cloudflare stores with a line](../dashboard/activity.md#what-cloudflare-stores-with-a-line) |
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
-| a release an update deploys | An install that updates with its key uploads a release's built Worker only when the manifest's SHA-256 digest is the one poplin's website publishes for that version, and each built file's digest and size are the manifest's; any other file changes nothing. A release publishes its built Worker, and the website publishes the manifest's digest only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins. [Update](../upkeep/update.md#with-the-kept-key) has each refusal, and [what a release publishes](../upkeep/update.md#what-a-release-publishes) |
+| a release an update deploys | an install that updates with its key uploads a release's built Worker only when the manifest's SHA-256 digest is the one poplin's website publishes for that version, and each built file's digest and size are the manifest's; any other file changes nothing. [Update](../upkeep/update.md#with-the-kept-key) has each refusal |
+| what a release rests on | a release publishes its built Worker, and the website publishes the manifest's digest only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins: [what a release publishes](../upkeep/update.md#what-a-release-publishes) |
 | junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../upkeep/cost/limits.md#where-a-limit-is-counted). Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own |
 
 ## Optional edge rules

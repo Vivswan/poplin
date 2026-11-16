@@ -65,8 +65,9 @@ const CALLERS = Object.fromEntries(BOTH.map((kind) => [kind, parse(KINDS[kind].f
 /** The file both workflows call: the steps of one install, parsed. */
 const STEPS = parse("live-install.yml");
 
-/** The one lane of every job that touches an install: each waiting job is kept, and none is stopped. */
-const LANE = { group: "live-checks", "cancel-in-progress": false, queue: "max" };
+/** The lane of every job that touches the install of one kind, named by the kind the caller hands over: each waiting job is kept, and none is stopped. */
+// biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.
+const LANE = { group: "live-checks-${{ inputs.kind }}", "cancel-in-progress": false, queue: "max" };
 
 /** The step that waits for the commit's gate. */
 const WAIT = STEPS.jobs.checks?.steps?.find((step) => step.name?.startsWith("Wait for")) as Step;
@@ -257,7 +258,8 @@ describe("the secrets of the live workflows", () => {
 });
 
 describe("the lanes of the live workflows", () => {
-  test("every job that is handed a secret waits in the one lane that keeps each waiting job, the midnight reset among them", () => {
+  // Drift: the two kinds are two accounts, and one lane for both made each wait for the other. A lane that named no kind would be that one lane again.
+  test("every job that is handed a secret waits in the lane of its kind, which keeps each waiting job, the midnight reset among them", () => {
     const touching = Object.entries(STEPS.jobs).filter(([, job]) => job.steps?.some(holdsSecret));
 
     expect(Object.fromEntries(touching.map(([name, job]) => [name, job.concurrency]))).toEqual({ checks: LANE, reset: LANE });
