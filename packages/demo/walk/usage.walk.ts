@@ -198,8 +198,9 @@ for (const screen of [SCREENS[0], { width: 390, height: 844 }]) {
 test.describe("for a reader in UTC, whose date is the day of the numbers", () => {
   test.use({ timezoneId: "UTC" });
 
-  // Drift: the sample install would show the install's own lines alone again, so nobody who looks at the demo sees a line of the host's figures; or a slow day would be written as a limit passed while no request was stopped.
-  test("the sample install shows the host's own figures: how far behind they run, the size of the database, the jobs, and a sign in place of words on a processing time above its limit", async ({ page }) => {
+  // Drift: the sample install would show the install's own lines alone again, so nobody who looks at the demo sees a line of the host's figures; or a slow day would be written as a limit passed while no request was stopped,
+  // or shown by a sign alone that says nothing until a pointer rests on it.
+  test("the sample install shows the host's own figures: how far behind they run, the size of the database, the jobs, and Slow beside a sign on a processing time above its limit", async ({ page }) => {
     await openUsage(page, false);
     const table = page.getByRole("table", { name: "Usage", exact: true });
     await expect(table.getByRole("row").nth(1)).toBeVisible();
@@ -207,7 +208,7 @@ test.describe("for a reader in UTC, whose date is the day of the numbers", () =>
     const shown = cells.filter(([name]) => ["Database size", "Account database size", "Requests stopped by a limit today", "Processing time, slowest 1 in 100, today", "Background jobs running now"].includes(name ?? ""));
     const sign = table.getByRole("button", { name: /Requests are stopped/u });
 
-    await expect(page.getByText(/own figures, as of .+\. They run about 10 minutes behind\.$/u)).toBeVisible();
+    await expect(page.getByText(/own figures, as of .+\. They run about 10 minutes behind\. "Account" lines count the whole account, not only poplin\.$/u)).toBeVisible();
     expect(shown).toEqual([
       ["Database size", "1.4 MB", "500 MB"],
       ["Account database size", "at most 2.3 MB", "5 GB"],
@@ -216,7 +217,8 @@ test.describe("for a reader in UTC, whose date is the day of the numbers", () =>
       ["Background jobs running now", "1", "100"],
     ]);
     await sign.hover();
-    await expect(page.locator("[data-slot=tooltip-content]")).toHaveText("Requests are stopped only when the host says so: see Requests stopped by a limit.");
+    await expect(page.locator("[data-slot=tooltip-content]")).toHaveText("Requests are stopped only when the provider says so: see Requests stopped by a limit.");
+    await expect(table.getByRole("row", { name: /^Processing time/u }).getByText("Slow", { exact: true })).toBeVisible();
     await expect(table.getByRole("row", { name: /^Processing time/u }).getByText(/the limit/u)).toHaveCount(0);
   });
 });

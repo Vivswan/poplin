@@ -108,9 +108,9 @@ describe("the table of the Usage screen", () => {
       ["Database rows written today", "about 310", "100,000", "0%", ""],
     ]);
     expect(phoneRows()).toEqual([
-      "Storage, all sites1.2 GBof 9 GB13%See it at Provider",
+      "Storage, all sites1.2 GBof 9 GB13%Change the limitSee it at Provider",
       "Files156No limit",
-      "Requests today1,240of 100,0001%See it at Provider",
+      "Requests today1,240of 100,0001%Change the limitSee it at Provider",
       "Database rows read todayabout 4,100,000of 5,000,00082%Near the limitSee it at Provider",
       "Database rows written todayabout 310of 100,0000%See it at Provider",
     ]);
@@ -156,7 +156,7 @@ describe("the table of the Usage screen", () => {
     await draw(OFFICIAL);
 
     expect([officialLine(), tableRows().slice(1)]).toEqual([
-      `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}. They run about 10 minutes behind.`,
+      `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}. They run about 10 minutes behind. "Account" lines count the whole account, not only poplin.`,
       [
         ["Account storage, last 24 hours", "at most 5.1 MB", "10 GB", "0%", ""],
         ["Account requests today", "1,318", "100,000", "1%", ""],
@@ -176,7 +176,7 @@ describe("the table of the Usage screen", () => {
         ["Requests on 15 Nov UTC", "1,240", "100,000", "1%", ""],
         ["Storage reads since 01 Nov UTC", "310,000", "10,000,000", "3%", ""],
       ],
-      ["Requests on 15 Nov UTC1,240of 100,0001%See it at Provider", "Storage reads since 01 Nov UTC310,000of 10,000,0003%"],
+      ["Requests on 15 Nov UTC1,240of 100,0001%Change the limitSee it at Provider", "Storage reads since 01 Nov UTC310,000of 10,000,0003%"],
       ["Requests on 15 Nov UTC: see it at Provider", "Requests on 15 Nov UTC: see it at Provider"],
       ["Change the limit of Requests on 15 Nov UTC", "Change the limit of Requests on 15 Nov UTC"],
     ]);
@@ -203,7 +203,7 @@ describe("the table of the Usage screen", () => {
     });
 
     expect([officialLine(), tableRows().slice(1), phoneRows().filter((row) => row.includes("Not read")), screen.queryAllByRole("button", { name: /Requests are stopped/ }).length]).toEqual([
-      `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}.`,
+      `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}. "Account" lines count the whole account, not only poplin.`,
       [
         ["Database size", "1.4 MB", "500 MB", "0%", ""],
         ["Account database size", "at most 2.4 MB", "5 GB", "0%", ""],
@@ -223,17 +223,18 @@ describe("the table of the Usage screen", () => {
   });
 
   // Drift: the host stops a request only when it says so, and counts those on a line of their own; a slow day written as a limit passed would read as an emergency while no request was stopped.
-  test("above its limit the processing time shows a sign with a hint that names the line of the stopped requests, in words on a phone, and never the words of a limit passed", async () => {
+  // A sign with no word beside it says nothing until a pointer rests on it, while the line at nine tenths of its limit says so in words.
+  test("above its limit the processing time says Slow beside a sign with a hint that names the line of the stopped requests, the hint in words on a phone, and never the words of a limit passed", async () => {
     await draw({ ...OWN, lines: [line("host_stopped", 0, null), line("host_slowest", 27.9, 10)] });
     const hint = "Requests are stopped only when Provider says so: see Requests stopped by a limit.";
 
     expect([tableRows().slice(1), screen.getAllByRole("button", { name: /Requests are stopped/ }).map((sign) => [sign.getAttribute("aria-label"), sign.tagName]), phoneRows()]).toEqual([
       [
         ["Requests stopped by a limit today", "0", "No limit", "", ""],
-        ["Processing time, slowest 1 in 100, today", "27.9 ms", "10 ms", "", ""],
+        ["Processing time, slowest 1 in 100, today", "27.9 ms", "10 ms", "Slow", ""],
       ],
       [[`Processing time, slowest 1 in 100, today: ${hint}`, "BUTTON"]],
-      ["Requests stopped by a limit today0No limit", `Processing time, slowest 1 in 100, today27.9 msof 10 ms${hint}`],
+      ["Requests stopped by a limit today0No limit", `Processing time, slowest 1 in 100, today27.9 msof 10 msSlow${hint}`],
     ]);
   });
 
@@ -252,7 +253,7 @@ describe("the table of the Usage screen", () => {
 
   // Drift: a host named by a plain word, as the preview's is, would start the line over the table with a small letter, while its links keep the word as it is.
   test.each([
-    [{ at: Date.UTC(2026, 10, 15, 14, 5), behind: null }, `The host's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}.`],
+    [{ at: Date.UTC(2026, 10, 15, 14, 5), behind: null }, `The host's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}. "Account" lines count the whole account, not only poplin.`],
     [{ refusal: "unreachable", right: null }, "The host did not answer. The numbers here are poplin's own count."],
   ] as const)("a host named in plain words starts the line %j with a capital and keeps its own letters in a link", async (official, says) => {
     await draw({ ...OWN, host: "the host", official });

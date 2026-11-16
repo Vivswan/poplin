@@ -39,19 +39,19 @@ const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000
 
 /** The free plan of the preview's invented host: the numbers are samples, and no real plan is behind them. */
 const FREE_LIMITS = {
-  totalBytes: { most: 10_000_000_000, warning: "The host bills storage past its free 10 GB." },
-  siteBytes: { most: 10_000_000_000, warning: "The host bills storage past its free 10 GB." },
+  totalBytes: { most: 10_000_000_000, warning: "The provider bills storage past its free 10 GB." },
+  siteBytes: { most: 10_000_000_000, warning: "The provider bills storage past its free 10 GB." },
   filesPerPublish: { most: 5000, warning: "A publish over 5,000 files may not start on a free plan." },
-  filesPerDay: { most: 32_258, warning: "Past 1,000,000 writes a month, the host bills the rest." },
-  storageWritesPerDay: { most: 30_281, warning: "Past 1,000,000 writes a month, the host bills the rest." },
-  storageReadsPerMonth: { most: 10_000_000, warning: "Requests read the storage. Past 10,000,000 reads a month, the host bills the rest." },
+  filesPerDay: { most: 32_258, warning: "Past 1,000,000 writes a month, the provider bills the rest." },
+  storageWritesPerDay: { most: 30_281, warning: "Past 1,000,000 writes a month, the provider bills the rest." },
+  storageReadsPerMonth: { most: 10_000_000, warning: "Requests read the storage. Past 10,000,000 reads a month, the provider bills the rest." },
   requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need a paid plan." },
-  logins: { most: 50, warning: "Past 50 users, the host bills each login." },
+  logins: { most: 50, warning: "Past 50 users, the provider bills each login." },
 } as const;
 
-/** The figures the invented host answers as its own: made up, the same at every reading, with a processing time above its limit so the sign of one shows. */
+/** The figures the invented host answers as its own: made up, the same at every reading, with the account's requests a little over the install's own count of the day, and a processing time above its limit so the sign of one shows. */
 const SAMPLE_FIGURES = {
-  requests: 1318,
+  requests: 226_318,
   errors: 4,
   stopped: 0,
   slowestMs: 12.4,
@@ -71,7 +71,7 @@ const SAMPLE_FIGURES = {
 
 /** The invented host's side of the Usage screen as an install that keeps no key has it: sample limits, pages nothing answers at, a made-up size of the database, and no figures of the host's own. */
 const OWN_USAGE_HOST = {
-  name: "the host",
+  name: "the provider",
   limits: {
     requestsPerDay: 100_000,
     rowsReadPerDay: 5_000_000,
