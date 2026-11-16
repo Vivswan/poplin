@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import { type DeployConfig, keepCopyConfig } from "../../src/deploy/kept-config";
 
-/** A release's configuration: newer than the copy's in its date, its sweep, a second bucket, and a field on the database, and it uploads its source map. */
+/** A release's configuration: newer than the copy's in its date, its sweep, a second bucket, and a field on the database, it uploads its source map, and it keeps the Worker's log. */
 const RELEASE: DeployConfig = {
   name: "poplin",
   main: "packages/cloudflare/src/worker/worker.ts",
   compatibility_date: "2027-03-01",
   keep_vars: true,
   upload_source_maps: true,
+  observability: { enabled: true, logs: { enabled: true, invocation_logs: false } },
   triggers: { crons: ["*/5 * * * *"] },
   r2_buckets: [
     { binding: "SITES", bucket_name: "poplin-sites" },
@@ -28,6 +29,7 @@ describe("keepCopyConfig", () => {
         main: "old/worker.ts",
         compatibility_date: "2026-11-01",
         upload_source_maps: false,
+        observability: { enabled: false, logs: { enabled: true, invocation_logs: true } },
         triggers: { crons: ["*/15 * * * *"] },
         r2_buckets: [
           { binding: "SITES", bucket_name: "my-bucket", jurisdiction: "eu", preview_bucket_name: "local" },

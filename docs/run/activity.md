@@ -64,3 +64,34 @@ Download, at the top of the screen, saves what the filters keep, the newest firs
 - **A filtered file can end sooner:** where its search stopped. Its last line is then `Searched 5,000 entries of the log. It holds more: download the next part.`
 - **The files of a longer log are numbered:** `poplin-activity-2026-11-15-1.csv`, then `-2`. The day in the name is the day of the download, in UTC.
 - **In the CSV file** a field that starts with `=`, `+`, `-`, or `@` has an apostrophe before it.
+
+## The Worker's log at Cloudflare
+
+The Activity screen holds what people did. What went wrong inside the Worker is in Cloudflare's own log: in the Cloudflare dashboard, Workers & Pages, the Worker, Observability.
+
+| Cloudflare's Free plan | Until 30 November 2026 | From 1 December 2026                                        |
+| ---------------------- | ---------------------- | ----------------------------------------------------------- |
+| keeps a line           | 3 days                 | 7 days                                                      |
+| takes in a day         | 200,000 lines          | 0.5 GB, shared with the account's other logs                |
+| past that              |                        | stores no further line until midnight UTC, and charges none |
+
+On Cloudflare's Workers Paid plan, lines past the plan's own allowance are charged.
+
+| A line starts                                                         | Written when                                                              | Then holds                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------- |
+| `poplin: a request failed`                                            | a request met an error and was answered a 503                             | the error's kind, places in code   |
+| `poplin: an API request failed`                                       | a call of the API met an error and was answered a 500                     | the error's kind, places in code   |
+| `poplin: a login was refused:`                                        | a login came with no valid proof from Access, or for an email not allowed | the kind of refusal                |
+| `poplin: a request for a private site was refused:`                   | the same, at a private site                                               | the kind of refusal                |
+| `poplin: a login was not written to the audit log`                    | the database took no write, and the person was let in                     | the error's kind, places in code   |
+| `poplin: the day's count of writes to the bucket was not written`     | the database took no write after a request                                | the error's kind, places in code   |
+| `poplin: the stored settings are not the ones this build reads, at`   | another build of poplin wrote the settings                                | the names of the settings          |
+| `poplin: step`, `poplin: the database could not be brought up to date` | the database could not be opened or brought up to date                    | the step that failed, its error    |
+| `poplin: the sweep did not run.`                                      | a scheduled run found the variables or the database not ready             | the names of the variables, if any |
+| `poplin: the sweep failed`                                            | a scheduled run met an error                                              | the error's kind, places in code   |
+
+- **An error the Worker caught is written by its kind, never by its message.** `RangeError`, then the functions it passed through: a message could repeat a site's id or a file's path. The database's own error at a step that failed is the one message kept.
+- **poplin writes into no line** a token, the dashboard's cookie, a login code, an email, a visitor's address, a site's id, or a value of a setting or a variable.
+- **Cloudflare's own record of each request is off.** It would hold the request's address, and the address of an unlisted or a private site is its link.
+- **Cloudflare adds fields of its own to every line.** The log is in your Cloudflare account, and whoever can open the account can read it.
+- **A request that goes well writes no line.**

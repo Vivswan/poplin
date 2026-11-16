@@ -982,8 +982,8 @@ describe("a database that takes no more writes for the day", () => {
     expect([first.status, first.headers.get("Set-Cookie"), open]).toEqual([503, null, true]);
     expect([later.status, later.headers.get("Location"), logins.length]).toEqual([302, "/", 1]);
     expect(answers.map((answer) => answer.status)).toEqual(answers.map(() => 200));
-    expect(warned.mock.calls.map(([line]) => line)).toEqual(["poplin: a login was not written to the audit log"]);
-    expect(failed.mock.calls.map(([line]) => line)).toEqual(["poplin: a request failed"]);
+    expect(warned.mock.calls).toEqual([]);
+    expect(failed.mock.calls.map(([line]) => String(line).split("\n")[0])).toEqual(["poplin: a request failed (AllowanceSpent, caused by Error)", "poplin: a login was not written to the audit log (AllowanceSpent, caused by Error)"]);
   });
 });
 
