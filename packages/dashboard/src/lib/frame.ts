@@ -39,7 +39,7 @@ export function useFrame(): DefinedUseQueryResult<Frame> {
  */
 export function useStarted(): readonly [boolean, () => void] {
   const client = useQueryClient();
-  const { data } = useQuery({ queryKey: STARTED_KEY, queryFn: () => false, initialData: false, staleTime: Number.POSITIVE_INFINITY });
+  const { data } = useQuery({ queryKey: STARTED_KEY, queryFn: () => false, initialData: false, staleTime: "static" });
 
   return [data, () => client.setQueryData(STARTED_KEY, true)];
 }

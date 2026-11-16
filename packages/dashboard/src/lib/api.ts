@@ -1,6 +1,8 @@
-// The client of the console's data routes. Every call is checked against the routes the server declares: its path, its query, its body, and what it answers.
+// The client of the console's data routes, and where their answers are kept. Every call is checked against the routes the server declares: its path, its query, its body, and what it answers.
+// An answer stands for a while, so a window that is looked at again does not ask for everything at once. A change a person makes ends that at once, for every answer.
 
 import type { DataRoutes } from "@poplin/app/src/console/routes";
+import { QueryClient, type QueryKey } from "@tanstack/react-query";
 import { DetailedError, hc, parseResponse } from "hono/client";
 import { toast } from "sonner";
 
@@ -11,6 +13,18 @@ const LOGGED_OUT = 401;
 
 /** What every call says of itself. The provider answers a script's call with 401 once its login ended, where it would send a page on to its login. */
 const ASKED_BY_SCRIPT = { "X-Requested-With": "XMLHttpRequest" } as const;
+
+/** How long a read stands as it was made, in milliseconds. */
+const FRESH_MS = 30_000;
+
+/** How long the visits graph's days stand, in milliseconds: its read walks the most rows, and a day's count moves slowly. */
+const VISITS_FRESH_MS = 5 * 60_000;
+
+/** The key the visits graph's reads start with. */
+const VISITS_KEY: QueryKey = ["usage", "visits"];
+
+/** The methods of a call that only reads. */
+const READS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
 
 /** What is shown when the login ended while the page holds typing that is not saved. */
 const LOG_IN_AGAIN = "Your login ended. Log in again in a new tab, then try again here.";
@@ -63,8 +77,31 @@ export class Refused extends Error {
   }
 }
 
+/**
+ * Make the place every screen's data is kept in.
+ *
+ * A refused read is not asked again by itself: the refusal is shown. A read that still stands is not made again when its screen is drawn or the window is looked at again. A read that repeats by the clock rests while the page is hidden.
+ */
+function createQueries(): QueryClient {
+  const queries = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: FRESH_MS, refetchIntervalInBackground: false } } });
+  queries.setQueryDefaults(VISITS_KEY, { staleTime: VISITS_FRESH_MS });
+
+  return queries;
+}
+
+/** Where every screen's data is kept. */
+export const QUERIES = createQueries();
+
+/** Send a call. After a change that was done, every read made before it is old, and is made again when a screen next shows it. A screen that shows the changed thing reads it again itself, at once. */
+async function fetchAndNote(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const answer = await fetch(input, init);
+  if (answer.ok && !READS.has((init?.method ?? "GET").toUpperCase())) void QUERIES.invalidateQueries({ refetchType: "none" });
+
+  return answer;
+}
+
 /** The data routes, called as `api.sites.$get({ query })` or `api.sites[":site"].naming.$post({ param, json })`. */
-export const api = hc<DataRoutes>(`${BOOT.base}/data`, { headers: ASKED_BY_SCRIPT });
+export const api = hc<DataRoutes>(`${BOOT.base}/data`, { headers: ASKED_BY_SCRIPT, fetch: fetchAndNote });
 
 function isRefusal(data: unknown): data is RefusalBody {
   return (
