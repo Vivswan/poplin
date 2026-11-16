@@ -24,6 +24,7 @@ import { shownName } from "@/lib/sites";
 import { ownTimeZoneName, useTimeZoneChoice, TIMEZONES, type TimeZoneChoice } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
+import { ResultLine, rowsSaid } from "@/shared/result-line";
 import { SearchBox } from "@/shared/search-box";
 import { Who } from "@/shared/who";
 import { AppShell } from "@/shell/app-shell";
@@ -149,6 +150,32 @@ function PhoneList({ page, place, actions, after }: { readonly page: Page; reado
   );
 }
 
+/** What a log is narrowed to, as said to a screen reader. */
+interface Narrowed {
+  /** The kind of entry the log is narrowed to. */
+  readonly kind: Kind;
+
+  /** The site it is narrowed to: by a text, or by the id of one site. */
+  readonly site: ReturnType<typeof siteIn>;
+}
+
+/**
+ * What the log says of itself to a screen reader: how many entries the page shows and what the log is narrowed to, or the words of an empty log.
+ *
+ * @param there - whether the page is the one the address asks for, and not one still shown from the address before
+ * @returns `undefined` while there is nothing new to say: a page not there yet, a read that was refused, or a page that stopped looking with none found, which its foot speaks for
+ */
+function saidOf({ page, there, failure }: { readonly page: Page | undefined; readonly there: boolean; readonly failure: Error | null }, { kind, site }: Narrowed): string | undefined {
+  if (page === undefined || !there || failure !== null) return undefined;
+
+  if (page.entries.length === 0) return page.stopped ? undefined : emptyWords(kind, site).title;
+
+  const one = page.of === null ? [] : [page.of.title ?? page.of.name ?? "one site"];
+  const narrowed = [...KINDS.filter((entry) => entry.value === kind && kind !== "all").map((entry) => entry.label), ...(site.text === "" ? [] : [`"${site.text}"`]), ...one];
+
+  return rowsSaid(page.entries.length, { one: "entry", many: "entries", paged: page.next !== null || page.previous !== null, narrowed });
+}
+
 /** What stands where the rows would: the refusal of the read, the rows being read, or the words of an empty page with the way back to every entry. `undefined` when there are rows to draw. */
 function insteadOfRows(failure: string | undefined, page: Page | undefined, kind: Kind, site: ReturnType<typeof siteIn>, onShowAll: () => void): ReactNode {
   if (failure !== undefined) return <p className="px-6 py-8 text-muted-foreground max-md:px-4">{failure}</p>;
@@ -260,6 +287,7 @@ export function ActivityScreen(): ReactNode {
               maxLength={MAX_SEARCH}
             />
           </div>
+          <ResultLine words={saidOf({ page, there, failure: error }, { kind, site })} />
           {site.of === "" ? null : <OnlySite of={site.of} page={page} current={!isPlaceholderData} onShowEvery={() => move({ of: "" })} />}
           <div className="flex min-w-0 flex-1 items-center gap-2 max-md:order-4 max-md:basis-full">
             <KindSelect kind={kind} onChoose={(chosen) => move({ kind: chosen === "all" ? "" : chosen })} />

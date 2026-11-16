@@ -1362,3 +1362,24 @@ test("a site in the trash is deleted for good only once its name is typed, with 
   await toSection(page, "Activity");
   await expect(page.locator(':text-is("Deleted for good"):visible').first()).toBeVisible();
 });
+
+// Drift: a search or a filter would change a list's rows with nothing said to a screen reader again; or a second search that finds as many rows would be said in the same words, which is not said at all.
+test("a list says how many rows it shows, and that it shows none, each time it is searched", async ({ page }) => {
+  await arrive(page);
+  const sites = page.locator('section[aria-label="Sites"] output');
+  const findSite = page.getByRole("searchbox", { name: "Find a site", exact: true });
+  await expect(sites).toHaveText(/^\d+ sites( on this page)?$/u);
+  await findSite.fill("zzzz");
+  await expect(sites).toHaveText('No sites match "zzzz"');
+  // Two searches that each find one site are said apart: the line names what was searched for.
+  await findSite.fill(SAMPLE.site);
+  await expect(sites).toHaveText(`1 site, "${SAMPLE.site}"`);
+  await findSite.fill(SAMPLE.graphed);
+  await expect(sites).toHaveText(`1 site, "${SAMPLE.graphed}"`);
+
+  await toSection(page, "Activity");
+  const log = page.locator('section[aria-label="Activity"] output');
+  await expect(log).toHaveText(/^\d+ entries( on this page)?$/u);
+  await page.getByRole("searchbox", { name: "Find activity by a site's title or name", exact: true }).fill("zzzz");
+  await expect(log).toHaveText('No activity for "zzzz"');
+});

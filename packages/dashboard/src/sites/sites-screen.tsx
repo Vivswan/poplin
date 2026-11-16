@@ -16,6 +16,7 @@ import { addressParts, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { IconButton } from "@/shared/icon-button";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
+import { ResultLine, rowsSaid } from "@/shared/result-line";
 import { SearchBox } from "@/shared/search-box";
 import { openerOf, useKeptFocus, useLiesOver } from "@/shared/side-panel";
 import type { LoginNames } from "@/shared/who";
@@ -220,19 +221,40 @@ interface NoRowsProps {
   readonly onFirst: () => void;
 }
 
+/** The words of an empty place: of a read that was refused, of a later page that emptied, or of a list that holds no site. */
+function noRowsWords({ failure, filter, search, later }: Pick<NoRowsProps, "failure" | "filter" | "search" | "later">): { readonly title: string; readonly says: string } {
+  if (failure !== undefined) return { title: "The sites could not be read", says: failure };
+
+  if (later) return { title: "No more sites on this page", says: "The sites that were here are gone." };
+
+  return emptyWords(filter, search);
+}
+
 /** The words and the one button of an empty place: a refused read is tried again, a later page that emptied leads to the first, a narrowed list to every site, and an empty install to the command. */
-function noRowsOf({ failure, filter, search, later, onRetry, onShowAll, onFirst }: NoRowsProps): {
+function noRowsOf(props: NoRowsProps): {
   readonly title: string;
   readonly says: string;
   readonly button?: readonly [string, () => void];
 } {
-  if (failure !== undefined) return { title: "The sites could not be read", says: failure, button: ["Try again", onRetry] };
+  const words = noRowsWords(props);
+  if (props.failure !== undefined) return { ...words, button: ["Try again", props.onRetry] };
 
-  if (later) return { title: "No more sites on this page", says: "The sites that were here are gone.", button: ["First page", onFirst] };
+  if (props.later) return { ...words, button: ["First page", props.onFirst] };
 
-  const words = emptyWords(filter, search);
+  return props.filter !== "all" || props.search !== "" ? { ...words, button: ["Show all sites", props.onShowAll] } : words;
+}
 
-  return filter !== "all" || search !== "" ? { ...words, button: ["Show all sites", onShowAll] } : words;
+/** What the list says of itself to a screen reader once the rows the address asks for are there: how many sites it shows, or the words of its empty place. */
+function SitesSaid({ query, filter, search }: { readonly query: URLSearchParams; readonly filter: Filter; readonly search: string }): ReactNode {
+  const { data: page, error, isPending, isPlaceholderData } = useSitesPage(query);
+  const later = query.get("after") !== null;
+  const rows = page?.sites.length ?? 0;
+  const empty = error !== null || rows === 0;
+  // The filter and the search are said with the count: two lists of as many sites are then two different lines.
+  const narrowed = [...FILTERS.filter((entry) => entry.value === filter && filter !== "all").map((entry) => entry.label), ...(search === "" ? [] : [`"${search}"`])];
+  const shown = empty ? noRowsWords({ failure: error?.message, filter, search, later }).title : rowsSaid(rows, { one: "site", many: "sites", paged: later || page?.next != null, narrowed });
+
+  return <ResultLine words={isPending || isPlaceholderData ? undefined : shown} />;
 }
 
 /** What stands where the rows would when there are none. */
@@ -284,6 +306,7 @@ function Toolbar({
         className="max-md:basis-full"
         maxLength={MAX_SEARCH}
       />
+      <SitesSaid query={query} filter={filter} search={search} />
       <FilterSelect filter={filter} onChoose={(chosen) => void navigate({ to: "/", search: searchOf(filteredQuery(query, chosen)) })} />
       <SortSelect query={query} onChoose={(key) => onStay(sortedQuery(query, key))} />
       <div className="ml-auto flex items-center gap-2">
