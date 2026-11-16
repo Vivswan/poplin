@@ -51,7 +51,6 @@ const DECIDERS: readonly string[] = [
   "packages/cloudflare/src/zone/https/https.ts",
   "packages/cloudflare/src/zone/zone-plug.ts",
   "packages/cloudflare/tests/key/rules-follow.test.ts",
-  "packages/cloudflare/tests/zone/install-objects.test.ts",
 ];
 
 /** Both kinds, in the order of `KINDS`. */
