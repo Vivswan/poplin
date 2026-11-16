@@ -800,9 +800,8 @@ export class SqlDatabase implements Database {
     const added = fragment`${files} = ${files} + excluded.${files}, ${writes} = ${writes} + excluded.${writes}`;
     const counted = fragment`SELECT ${room.day}, ${checked.files}, ${room.writes} WHERE ${CHANGED} ON CONFLICT (${bare(declaredFiles.day)}) DO UPDATE SET ${added}`;
 
-    const [before, , inserted] = await this.#driver.batch([
+    const [before, inserted] = await this.#driver.batch([
       written(held),
-      dropEarlierDays(room.day),
       insertFrom(uploads, columns, record),
       insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files, declaredFiles.writes], counted),
     ]);
@@ -1057,7 +1056,14 @@ export class SqlDatabase implements Database {
   }
 
   async sweepRunOut(now: number): Promise<number> {
-    const [removed] = await this.#driver.batch([built(BUILD.delete(logins).where(lte(logins.expires_at, now))), problemsForgotten(now)]);
+    const day = dayOf(now);
+    const [removed] = await this.#driver.batch([
+      built(BUILD.delete(logins).where(lte(logins.expires_at, now))),
+      problemsForgotten(now),
+      dropEarlierDays(day),
+      // The days before the oldest one kept are dropped, so the table holds a year.
+      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(day, KEPT_DAYS)[0] ?? day))),
+    ]);
 
     return removed?.changes ?? 0;
   }
@@ -1152,7 +1158,7 @@ export class SqlDatabase implements Database {
     requireCount("the writes a day takes beyond its bound", spare);
     // The check and the count are one statement, so no two requests pass the bound together. An install that has stored no settings has no bound.
     const most = fragment`COALESCE((SELECT ${settings.value} ->> 'max_storage_writes_per_day' FROM ${settings} WHERE ${settings.id} = 1), ${NO_BOUND})`;
-    const [, taken] = await this.#driver.batch([dropEarlierDays(day), addWrites(day, 1, fragment`${writesOf(day)} < ${most} + ${spare}`)]);
+    const [taken] = await this.#driver.batch([addWrites(day, 1, fragment`${writesOf(day)} < ${most} + ${spare}`)]);
 
     return changed(taken);
   }
@@ -1161,7 +1167,7 @@ export class SqlDatabase implements Database {
     requireDay(day);
     if (!Number.isSafeInteger(writes) || writes < 1) throw new RangeError(`a count of writes is a whole number of at least 1, not ${writes}`);
 
-    await this.#driver.batch([dropEarlierDays(day), addWrites(day, writes, fragment`true`)]);
+    await this.#driver.batch([addWrites(day, writes, fragment`true`)]);
   }
 
   async readSettings(): Promise<SettingValues | undefined> {
@@ -1347,9 +1353,7 @@ export class SqlDatabase implements Database {
     requireCount("the rows read", rows.read);
     requireCount("the rows written", rows.written);
 
-    const [, site, all] = await this.#driver.batch([
-      // The days before the oldest one kept are dropped, so the table holds a year.
-      built(BUILD.delete(requestCounts).where(lt(requestCounts.day, daysUpTo(counted.day, KEPT_DAYS)[0] ?? counted.day))),
+    const [site, all] = await this.#driver.batch([
       addRequests({ day: counted.day, site: counted.site, requests: counted.requests, views, rows: NO_ROWS }),
       addRequests({ day: counted.day, site: ALL_SITES, requests: counted.requests, views, rows }),
     ]);

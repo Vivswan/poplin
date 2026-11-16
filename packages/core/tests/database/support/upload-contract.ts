@@ -397,7 +397,7 @@ export function declaredFiles(label: string, makeDatabase: DatabaseFactory): voi
   });
 }
 
-/** A day whose count's arrival drops the fixture's first day: three days after it. */
+/** A day by which the sweep drops the fixture's first day: three days after it. */
 const THREE_DAYS_ON = "2026-11-16";
 
 export function storageWrites(label: string, makeDatabase: DatabaseFactory): void {
@@ -421,7 +421,7 @@ export function storageWrites(label: string, makeDatabase: DatabaseFactory): voi
     });
 
     // Drift: the day's files and the day's writes share a row. A listing counted on a day no upload began would have no row to add to, and a count that outlived its day would refuse the next day's work.
-    test("writes are counted on a day no upload began, change no count of declared files, and a listing that takes its place drops the days before the day before", async () => {
+    test("writes are counted on a day no upload began, change no count of declared files, and stay until the sweep drops the days before the day before", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
       await database.initSettings(SETTINGS, BY_ADA);
@@ -429,9 +429,12 @@ export function storageWrites(label: string, makeDatabase: DatabaseFactory): voi
       await database.addStorageWrites(TODAY, 1);
       const fits = await database.addUpload({ id: mintUploadId(), folder: site.folder, number: 2, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW }, { ...ROOMY, day: TODAY, dayFiles: 2 });
       await database.takeStorageWrite(THREE_DAYS_ON, 0);
+      const writes = async (): Promise<unknown> => (await Promise.all([TODAY, TOMORROW, THREE_DAYS_ON].map((day) => database.readStorageWrites(day)))).map((read) => read?.writes);
+      const counted = await writes();
+      await database.sweepRunOut(Date.parse(`${THREE_DAYS_ON}T12:00:00Z`));
 
       expect(fits).toEqual({ kind: "done" });
-      expect((await Promise.all([TODAY, TOMORROW, THREE_DAYS_ON].map((day) => database.readStorageWrites(day)))).map((read) => read?.writes)).toEqual([0, 0, 1]);
+      expect([counted, await writes()]).toEqual([[8, 0, 1], [0, 0, 1]]);
     });
 
     // Drift: a listing is checked and counted in one step. Checked first and counted after, the listings of requests that arrive together would each see the same room and pass the bound together.

@@ -572,12 +572,12 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|kept VIRTUAL TABLE|given\b)/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|kept VIRTUAL TABLE|given\b)/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
-      // A screen's listing walks `page`, the page of sites it has cut already, and `kept`, the versions of one site of it: neither is a table.
+      // A listing walks `cut`, the ids of the one page it has cut already, a screen's listing `page`, that page's sites, and `kept`, the versions of one site of it: none is a table.
       // A new link walks `given`, the one row that is there only once the id was given, before it walks the days: no table either.
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
@@ -651,14 +651,17 @@ function auditWindow(label: string, makeDriver: DriverFactory): void {
 function requestCountRows(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the rows of the day's request counts`, () => {
     // Drift: the table is meant to hold a year; rows of earlier days left behind would grow it by a row per site every day.
-    test("the table holds the newest year alone: a row per day and counted site with its views, and one under the empty site for all of them", async () => {
+    test("the table holds the newest year alone once the sweep ran: a row per day and counted site with its views, and one under the empty site for all of them", async () => {
       const driver = await migrated(makeDriver);
       const database = new SqlDatabase(driver);
       await database.addRequests({ day: "2025-11-14", site: NO_SITE, requests: 9, views: 9 });
       await database.addRequests({ day: TODAY, site: NO_SITE, requests: 50, views: 20 });
       await database.addRequests({ day: TODAY, site: OTHER_SITE, requests: 1 });
       await database.addRequests({ day: TOMORROW, site: OTHER_SITE, requests: 2, views: 2 });
+      const before = await rows(driver, "SELECT COUNT(*) AS held FROM request_counts WHERE day = '2025-11-14'");
+      await database.sweepRunOut(Date.parse(`${TOMORROW}T12:00:00Z`));
 
+      expect(before).toEqual([{ held: 2 }]);
       expect(await rows(driver, "SELECT day, site, requests, views FROM request_counts ORDER BY day, site")).toEqual([
         { day: TODAY, site: "", requests: 51, views: 20 },
         { day: TODAY, site: OTHER_SITE, requests: 1, views: 0 },
@@ -685,7 +688,7 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
         scans.push(...plan.map((step) => String(step.detail)).filter((step) => /\bSCAN\b/.test(step) && !step.includes("VIRTUAL TABLE")));
       }
 
-      expect([driver.statements.length, scans]).toEqual([7, []]);
+      expect([driver.statements.length, scans]).toEqual([6, []]);
     });
   });
 }
@@ -693,7 +696,7 @@ function requestCountRows(label: string, makeDriver: DriverFactory): void {
 function manifestRows(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: the row of an upload's manifest`, () => {
     // Drift: a request for a file runs once per file of a publish, and a database counts every entry of a manifest it walks as a row read; a lookup that walked the manifest would read as many rows as the publish has files, squared.
-    test.each([3, 5000])("an upload of %d files is recorded in four statements, its whole manifest is read in one, and one file of it in one that walks nothing but the upload's key", async (files) => {
+    test.each([3, 5000])("an upload of %d files is recorded in three statements, its whole manifest is read in one, and one file of it in one that walks nothing but the upload's key", async (files) => {
       const inner = await migrated(makeDriver);
       const driver = new RecordingDriver(inner);
       const database = new SqlDatabase(driver);
@@ -704,7 +707,7 @@ function manifestRows(label: string, makeDriver: DriverFactory): void {
       const lookup = driver.statements.at(-1);
       const plan = await rows(inner, `EXPLAIN QUERY PLAN ${lookup?.sql}`, ...(lookup?.params ?? []));
 
-      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([4, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
+      expect([recorded, driver.statements.length - recorded, read?.file, whole?.manifest.length]).toEqual([3, 2, { path: "page-2.html", size: 2, content_type: "text/html" }, files]);
       expect(plan.map((step) => String(step.detail).split(" ")[0])).toEqual(["SEARCH"]);
     });
 

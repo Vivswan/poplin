@@ -133,7 +133,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/sites?q=site&sort=title&dir=desc");
     },
     status: 200,
-    budget: { queries: 2, read: 470, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 651, reads: 0, writes: 0 },
   },
   {
     group,
@@ -167,7 +167,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   siteChange("Sites screen: change a site's switches", { queries: 3, reads: 0, writes: 0 }, "settings", { search_engines: true, embeddable: false }),
   siteChange("Sites screen: set when a site deletes itself", { queries: 3, reads: 0, writes: 0 }, "expiry", { expires: "7d" }),
   siteChange("Sites screen: make an older version live", { queries: 3, reads: 0, writes: 0 }, "make-live", { version: 2 }),
-  siteChange("Sites screen: new link", { queries: 3, read: 747, reads: 0, writes: 0 }, "new-link", {}),
+  siteChange("Sites screen: new link", { queries: 3, read: 745, reads: 0, writes: 0 }, "new-link", {}),
   siteChange("Sites screen: delete a site", { queries: 3, reads: 0, writes: 0 }, "delete", {}),
   siteChange("Sites screen: restore a site", { queries: 3, reads: 0, writes: 0 }, "restore", {}, { trashed: true }),
   {

@@ -713,7 +713,7 @@ export interface Database {
   /**
    * Record a staged publish as pending, only while it fits the room it is given. It writes no audit entry: nothing a reader of any site sees has changed.
    *
-   * The files it declares and the writes it makes are added to the counts of its day in the same step, and the counts of the days before the day before it are dropped.
+   * The files it declares and the writes it makes are added to the counts of its day in the same step.
    *
    * @returns the first bound the upload does not fit, in the order `own`, `folder`, `total`, `sites`, `day`, `writes`; of uploads recorded at the same moment only those that fit together are kept.
    * `left` is how much of the day's bound was still free: files for `day_full`, writes for `writes_full`, and 0 for a day that is used up
@@ -848,7 +848,8 @@ export interface Database {
   redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">>;
 
   /**
-   * Remove what ran out, in one step: every login of a computer that ran out at or before a moment, whatever its state, and every problem of a day before the 30 that are kept.
+   * Remove what ran out by a moment, in one step: every login of a computer that ran out at or before it, whatever its state; every problem of a day before the 30 that are kept;
+   * the counts of declared files and store writes of the days before the day before it; and the request counts of days over a year before it. No write of a count drops an old day itself.
    *
    * @returns how many logins were removed
    */
@@ -1058,7 +1059,7 @@ export interface Database {
   endOfAuditPart(query: AuditPartQuery): Promise<number | undefined>;
 
   /**
-   * Add requests, and the page views among them, to a day's count of one site and of all sites together, and drop the counts of every day more than a year before it. No audit entry is written.
+   * Add requests, and the page views among them, to a day's count of one site and of all sites together. No audit entry is written.
    *
    * @returns both request counts after the addition
    * @throws {RangeError} `day` is not a date such as `2026-11-13`, `requests` is not a whole number of at least 1, `views` is not a whole number from 0 to `requests`, or a count of `rows` is not a whole number from 0
@@ -1093,7 +1094,7 @@ export interface Database {
 
   /**
    * Count one write to the store, or one listing of it, on a UTC day, only while the day's count is under the settings' bound and `spare` more.
-   * The check and the count are one step: of calls made at the same moment only as many are taken as the day has room for. The counts of the days before the day before it are dropped.
+   * The check and the count are one step: of calls made at the same moment only as many are taken as the day has room for.
    *
    * @param spare - how many beyond the bound the day takes from this caller: a whole number from 0 up
    * @returns whether it was counted; an install whose settings are not stored has no bound
@@ -1102,7 +1103,7 @@ export interface Database {
   takeStorageWrite(day: string, spare: number): Promise<boolean>;
 
   /**
-   * Add to a day's count of the times the store was written to or listed, and drop the counts of the days before the day before it. No audit entry is written.
+   * Add to a day's count of the times the store was written to or listed. No audit entry is written.
    *
    * @param writes - how many: a whole number of at least 1
    * @throws {RangeError} `day` is not a date such as `2026-11-13`, or `writes` is not such a number

@@ -411,9 +411,11 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       expect([...(await database.readViews([NO_SITE], "2026-10-31"))]).toEqual([[NO_SITE, { today: 3, week: 62 }]]);
       expect([await database.readViews([], "2026-11-01"), await database.readRequests("2026-11-01", NO_SITE)]).toEqual([new Map(), { site: 15, all: 22 }]);
 
-      await database.addRequests({ day: "2027-10-25", site: OTHER_SITE, requests: 1 });
-      const kept = await database.readViews([NO_SITE], "2026-11-01");
+      // A count written a year on drops nothing: the days over a year old go with the sweep that runs after them.
       await database.addRequests({ day: "2027-10-26", site: OTHER_SITE, requests: 1 });
+      await database.sweepRunOut(Date.parse("2027-10-25T12:00:00Z"));
+      const kept = await database.readViews([NO_SITE], "2026-11-01");
+      await database.sweepRunOut(Date.parse("2027-10-26T12:00:00Z"));
 
       expect([[...kept], [...(await database.readViews([NO_SITE], "2026-11-01"))]]).toEqual([[[NO_SITE, { today: 2, week: 55 }]], [[NO_SITE, { today: 2, week: 5 }]]]);
       await expect(database.readViews([NO_SITE], "tomorrow")).rejects.toThrow(RangeError);

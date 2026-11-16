@@ -8,9 +8,8 @@
 //              Cloudflare counts per location and catches up in the background, so a burst can pass a little over.
 //   a day      the database, sampled: one request in N adds N. N grows with the day: the first 2,000 requests are
 //              counted one by one, the next 2,000 in twos, and from 98,000 on in fifties. A day of 100,000 requests
-//              is about 9,000 samples, each two rows written, and every write also drops the rows older than
-//              a year, against D1's 100,000 rows a day. A sampled count is an estimate: exact up to 2,000,
-//              off by about 1.6% at 100,000.
+//              is about 9,000 samples, each two rows written, against D1's 100,000 rows a day. The sweep drops
+//              the rows older than a year. A sampled count is an estimate: exact up to 2,000, off by about 1.6% at 100,000.
 //              A sampled request that opened a page adds the same N to its site's views, in the same row and the same write.
 //              So a site's views are exact while the install's day is under 2,000 requests, and move in steps of up to 50 after.
 //

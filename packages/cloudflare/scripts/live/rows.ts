@@ -1,15 +1,15 @@
 // A ceiling on the rows one step of a live run makes the install write to its database. D1's Free plan takes 100,000 rows written a day, every database of the account together, and refuses each write past them until midnight UTC.
 //
-//   POST   /api/uploads                    a new site 25, a new version 15: the begin and its finish together
+//   POST   /api/uploads                    a new site 19, a new version 13: the begin and its finish together
 //   POST   /api/uploads/:upload/finish     2 where the publish dropped older versions and 2 for each of them, once its answer says how many
-//   POST   /api/import/sites               a site with one version 25, and 2 for each version more
-//   DELETE /api/sites/:site                to the trash 10, for good 14
-//   POST   /api/sites/:site/new-link 12    POST /api/sites/:site/restore 9    PATCH /api/sites/:site 5    POST /api/sites/:site/rollback 3
-//   PATCH  /api/config 4                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
+//   POST   /api/import/sites               a site with one version 19, and 2 for each version more
+//   DELETE /api/sites/:site                to the trash 6, for good 13
+//   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 5    PATCH /api/sites/:site 3    POST /api/sites/:site/rollback 2
+//   PATCH  /api/config 3                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
 //
-// D1 counts an index entry and a row a trigger writes as rows, so one new site is 12 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
+// D1 counts an index entry and a row a trigger writes as rows, so one new site is 8 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
 // A visit is counted once it is answered, since only the answer says that a site was served, and so is a dropped version. Once a step is stopped, no further request for a site's address is sent.
 // A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
 // A request that would pass the ceiling is not sent, and every one after it: each is answered here as refused, with a 403, which the CLI does not send again.
@@ -19,23 +19,23 @@
 import type { Fetch } from "../../../cli/src/client/client";
 import type { Declared } from "./budget";
 
-/** The rows of a new site, from its first request to its finish: the site and its first version 12, the upload 7, the day's counts 2, the version's size 2, and the log 2. */
-const NEW_SITE = 25;
+/** The rows of a new site, from its first request to its finish: the site and its first version 8, the upload 6, the day's counts 2, the version's size 2, and the log 1. */
+const NEW_SITE = 19;
 
 /** The rows of a new version of a site, from its first request to its finish, where it drops no older one. */
-const NEW_VERSION = 15;
+const NEW_VERSION = 13;
 
 /** The rows a publish adds that drops older versions: 2 for the list of what it dropped and its listing of the bucket, and 2 for each version. One is dropped while an install keeps as many as it did, more once it was told to keep fewer. */
 const DROPPED = { any: 2, each: 2 } as const;
 
 /** The rows of a site put back from a backup with one version. */
-const IMPORTED_SITE = 25;
+const IMPORTED_SITE = 19;
 
 /** The rows each further version of a site put back from a backup adds. */
 const IMPORTED_VERSION = 2;
 
 /** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
-const REMOVED = { trash: 10, forever: 14 } as const;
+const REMOVED = { trash: 6, forever: 13 } as const;
 
 /** The rows a visit writes that a site answered with a page or a file: the day's count of the site, and of all sites. */
 const VISIT = 2;
@@ -64,11 +64,11 @@ const PRICES = [
   { method: "GET", path: "/api/uploads/:upload", rows: () => 1 },
   { method: "DELETE", path: "/api/uploads/:upload", rows: () => 3 },
   { method: "DELETE", path: "/api/sites/:site", rows: (asked) => (asked.query.get("forever") === "true" ? REMOVED.forever : REMOVED.trash) },
-  { method: "PATCH", path: "/api/sites/:site", rows: () => 5 },
-  { method: "POST", path: "/api/sites/:site/restore", rows: () => 9 },
-  { method: "POST", path: "/api/sites/:site/new-link", rows: () => 12 },
-  { method: "POST", path: "/api/sites/:site/rollback", rows: () => 3 },
-  { method: "PATCH", path: "/api/config", rows: () => 4 },
+  { method: "PATCH", path: "/api/sites/:site", rows: () => 3 },
+  { method: "POST", path: "/api/sites/:site/restore", rows: () => 5 },
+  { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },
+  { method: "POST", path: "/api/sites/:site/rollback", rows: () => 2 },
+  { method: "PATCH", path: "/api/config", rows: () => 3 },
   { method: "POST", path: "/api/logins", rows: () => 3 },
   { method: "GET", path: "/api/export/sites/:site/files", rows: () => 1 },
 ] as const satisfies readonly (Declared & { readonly rows: (asked: Asked) => number })[];

@@ -92,7 +92,8 @@ export function holding(text: string): SQL {
 
 /** The conditions that narrow a listing to what its query asks for: the trash or not, and each filter given. */
 function narrowing(query: SitesQuery): SQL[] {
-  const conditions: SQL[] = [eq(sites.trashed, query.trash ? 1 : 0)];
+  // The trash is named by its own column: that is the condition the index of the trash holds, which a trash listing is then read in the order of.
+  const conditions: SQL[] = [query.trash ? isNotNull(sites.trashed_at) : eq(sites.trashed, 0)];
 
   if (query.owner !== undefined) conditions.push(eq(sites.owner, query.owner));
 
@@ -287,6 +288,9 @@ function cursorPlace(after: NonNullable<SitesQuery["after"]>, sort: NonNullable<
 /**
  * One page of a listing as a query: one row more than the page, which shows whether another page follows. Each row names what the page is ordered by `listed_by`.
  *
+ * The order by the last change is one an index holds, and its page is read as the index gives it. Any other order sorts every site of the listing, and each one sorted would cost its versions too:
+ * such a page is cut first, by the sites' own columns, and only its sites are read with their versions.
+ *
  * @throws {RangeError} the cursor lacks what its order goes by
  */
 export function pageAsked(query: SitesQuery) {
@@ -301,8 +305,23 @@ export function pageAsked(query: SitesQuery) {
 
   if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
 
-  const fields = { ...LISTED_FIELDS, listed_by: column.as("listed_by") };
-  const page = BUILD.select(fields).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
+  const order = (by: SQL, id: SQL | SQLiteColumn): SQL[] => (descending ? [desc(by), desc(id)] : [asc(by), asc(id)]);
+  if (sort === "updated") {
+    const indexed = BUILD.select({ ...LISTED_FIELDS, listed_by: column.as("listed_by") }).from(sites).where(and(...conditions));
+
+    return { page: indexed.orderBy(...order(column, sites.id)).limit(query.limit + 1), descending };
+  }
+
+  const cut = BUILD.select({ id: sites.id, listed_by: column.as("listed_by") })
+    .from(sites)
+    .where(and(...conditions))
+    .orderBy(...order(column, sites.id))
+    .limit(query.limit + 1)
+    .as("cut");
+  const page = BUILD.select({ ...LISTED_FIELDS, listed_by: fragment`${cut.listed_by}`.as("listed_by") })
+    .from(cut)
+    .innerJoin(sites, eq(sites.id, cut.id))
+    .orderBy(...order(fragment`${cut.listed_by}`, sites.id));
 
   return { page, descending };
 }
