@@ -5,7 +5,7 @@ import type { Found, Repaired, RowState, Run, Whole } from "../../../../core/src
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
 import type { Provider, Stop } from "../records";
-import { dryRunLines, type Line, optionLines, rowValues, runLines } from "../report";
+import { dryRunLines, followed, type Line, optionLines, rowValues, runLines, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** The states of an object that a run changes, or a dry run would. */
@@ -13,9 +13,6 @@ const CHANGES: ReadonlySet<RowState> = new Set(["make", "change", "remove"]);
 
 /** How far a line of a list stands in. */
 const INDENT = "  ";
-
-/** The line every stop before the first change ends in. */
-const UNCHANGED = "nothing was changed";
 
 /** The problem each of the provider's own refusals of a repair is, as the command's JSON names it. */
 const PROBLEMS = { elsewhere: "other_place", another: "another_version", changed: "changed" } as const;
@@ -31,11 +28,6 @@ type NotWhole = Exclude<Found<unknown, unknown>, { readonly state: "whole" | "ch
 
 function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
-}
-
-/** A provider's sentence, with the one that says nothing was changed after it. */
-function unchanged(words: string): string {
-  return `${words.replace(/\.$/, "")}. ${UNCHANGED}`;
 }
 
 /** How many objects a repair changed, or with a dry run would. */
@@ -68,7 +60,7 @@ export function stopOf(found: NotWhole, provider: Provider): Stop {
 
   if (found.state === "none") return { problem: "no_install", exit: 1, words: `No install is in this account. To make one: ${install}` };
 
-  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: `${found.words} To make an install that uses it: ${install} --adopt` };
+  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${install} --adopt`) };
 
   if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}` };
 
@@ -76,14 +68,14 @@ export function stopOf(found: NotWhole, provider: Provider): Stop {
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
-  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: unchanged(found.words) };
+  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNCHANGED) };
 
-  return { problem: found.why === "token" ? "token_refused" : "no_domain", exit: 1, words: unchanged(found.words) };
+  return { problem: found.why === "token" ? "token_refused" : "no_domain", exit: 1, words: followed(found.words, UNCHANGED) };
 }
 
 /** The stop of a repair that changed nothing, in the provider's own words. */
 export function unmended(repaired: Extract<Repaired, { readonly ok: false }>): Stop {
-  const words = unchanged(repaired.words);
+  const words = followed(repaired.words, UNCHANGED);
   if (repaired.why === "unreachable") return { problem: "unreachable", exit: 5, words };
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
