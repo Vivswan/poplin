@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
-import { planVariables } from "../../../../../src/shared/install/pieces/variables/variables";
+import { planVariables, readBindings, readWorker, syncVariables } from "../../../../../src/shared/install/pieces/variables/variables";
+import { withFake } from "../../support/fake-cloudflare";
+import { answer, emptyAccount, TOKEN } from "../../support/fake-install";
 
 const WANTED = { team_domain: "team.cloudflareaccess.com", audience: "a".repeat(64) };
 const DESIRED = [{ name: "ACCESS", value: WANTED }];
@@ -32,4 +34,29 @@ test.each(texts)("a plain text against $name is a $kind", ({ bindings, kind }) =
 // Drift: a value read as different when it is the same deploys the Worker anew on every repair, and one read as the same when it differs leaves a login nobody passes.
 test.each(cases)("$name is a $kind", ({ bindings, kind }) => {
   expect(planVariables(DESIRED, bindings).map((step) => `${step.kind} ${step.subject}`)).toEqual([`${kind} ACCESS`]);
+});
+
+// Drift: a dry run of an install reads the Worker before it exists. Read as a failure, every row after it would say "not run" where a run makes each one.
+test("a Worker that does not exist is told apart from one with no binding, reads as one with none in a plan of its variables, and any other refusal stays a failure", async () => {
+  const worker = { accountId: ACCOUNT, script: "poplin" };
+  const account = { ...emptyAccount(), bindings: [], noWorker: true };
+
+  await withFake(
+    (asked) => answer(account, asked),
+    async (connection, asked) => {
+      const token = { ...connection, key: TOKEN };
+
+      expect([await readWorker(token, worker), await readBindings(token, worker)]).toEqual([
+        { ok: true, value: undefined },
+        { ok: true, value: [] },
+      ]);
+      expect(await syncVariables(token, worker, [{ name: "ACCOUNT_ID", value: ACCOUNT }], "plan")).toMatchObject({ ok: true, report: { created: ["ACCOUNT_ID"] } });
+
+      account.noWorker = false;
+
+      expect(await readWorker(token, worker)).toEqual({ ok: true, value: [] });
+      expect(await readWorker({ ...connection, key: "token-nobody-knows-0123456789" }, worker)).toMatchObject({ ok: false, failure: "refused", status: 401 });
+      expect(asked.filter((entry) => entry.method !== "GET")).toEqual([]);
+    },
+  );
 });

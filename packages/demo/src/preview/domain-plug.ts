@@ -10,7 +10,8 @@
 // A repair with the token `lacking` mends one piece and fails at the other for a right the token lacks; that piece stays to repair until a token that has the right.
 // It also checks by itself, as an install that holds something to read its provider with does: its own check reads what a check with a good token reads, and takes none.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun, TokenFacts } from "../../../app/src/console/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainState, FirstRun } from "../../../app/src/console/domain/records";
+import type { TokenFacts } from "../../../core/src/install/token-facts";
 
 /** Every state a preview plug can be in, as the address of the setup page names it. */
 export const PLUG_STATES = ["fresh", "partial", "access-off", "done", "token-refused", "unreachable"] as const;

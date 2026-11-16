@@ -1,0 +1,415 @@
+// `poplin install cloudflare`: an install made with an account token, from a terminal, in one run.
+//
+//   the release      releases.json at the project's website, then the release's files, each digest checked
+//   the bucket       made, or left
+//   the database     made, or left
+//   the Worker       the first upload of the release's files, with every binding stated; then its sweep trigger and its free address
+//   the rest         the repair of the install's kind, with the first login: records and routes or forwarders, the login, the variables and the keys, the rules, the Workflow
+//
+// An install is the first update: the upload is the self-update's own, and everything after it is the repair the dashboard's Domain screen runs.
+// A dry run reads the same things and sends no change, so its rows are the rows of the run after it: the same objects, in the same order.
+// Every piece reads before it writes, so a run that stopped is run again and goes on from what stands.
+// This file asks nothing and prints nothing: the command asks the questions it declares, and words the rows it answers.
+
+import type { DomainRow } from "@poplin/app/src/console/domain/records";
+import type { Login } from "@poplin/core/src/auth/logins";
+import type { Blocked, Given, Installed, Installer, OptionRow, Question, Reach, Read, Row, RowState, Run, Startable, Step, Token } from "@poplin/core/src/install/installer";
+import { newestPinned } from "@poplin/core/src/records/release";
+import { defaultSettings } from "@poplin/core/src/records/settings";
+import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
+import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
+import { homepage } from "../../../../../../cli/package.json";
+import { projectReleases } from "../../release/deploy/release-source";
+import { type CheckedBundle, checkedBundle } from "../../release/update/bundle-files";
+import { putCrons, putFirst, readCrons } from "../../release/update/upload";
+import { type AccountAddresses, parseAccountAddresses } from "../../../without-domain/address-layout";
+import { syncBucket } from "../pieces/bucket/bucket";
+import { type CloudflareFailure, type CloudflareResult, callCloudflare } from "../client";
+import { syncDatabase } from "../pieces/database/database";
+import { INSTALL_OBJECTS } from "../install-objects";
+import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
+import { createPathPlug } from "../../../without-domain/path-plug";
+import type { Mode, Synced } from "../sync";
+import { createDomainPlug, lacksRight, rightFor, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
+import { findInstall, type Place, type Where } from "./find";
+import { firstBindings } from "./first-bindings";
+
+/** The name of the install's Worker. */
+const SCRIPT = INSTALL_OBJECTS.worker;
+
+/** What `POPLIN_DOMAIN` says for an install without a domain. */
+const NO_DOMAIN = "none";
+
+/** An account's id, as Cloudflare writes it. */
+const ACCOUNT_ID = /^[0-9a-f]{32}$/;
+
+/** The provider's own options. */
+const OPTIONS: readonly OptionRow[] = [
+  { flag: "--domain", value: "<name>", about: "under your own domain, which is Active on the account: example.com", variable: "POPLIN_DOMAIN" },
+  { flag: "--no-domain", value: null, about: "at the free address Cloudflare gives the account", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
+  { flag: "--account", value: "<id>", about: "the account, when the token shows more than one", variable: "POPLIN_ACCOUNT" },
+];
+
+/** What a line of the run says, where no row of a piece's own says it. */
+const WORDS = {
+  both: "give one of --domain <name> and --no-domain",
+  noName: "--domain takes a name, such as example.com",
+  account: "--account takes an account's id: 32 characters of 0-9 and a-f",
+  domain: { "bad-domain": "is no domain name", "domain-too-long": "is too long: an address of the login under it passes 63 characters", "bad-public-word": "is no domain name" },
+  noRelease: "No release of poplin is published yet.",
+  badRelease: "The release's files are not the ones the project published. Nothing was uploaded.",
+  newerRelease: "This release needs a newer poplin: run npx poplin@latest install",
+  noAddress: "This account has no free address yet, or one whose name is too long for the login. Open Workers & Pages in your browser and set the account's subdomain.",
+  lacks: "The token lacks a permission. Add this one",
+  refusedLater: "Cloudflare refused the token before the install was finished",
+} as const;
+
+/** What a run answers that could not start its work, or lost Cloudflare on the way. */
+const UNREACHABLE: Installed = { ok: false, why: "unreachable", words: "Cloudflare or the project's website gave no usable answer." };
+
+/** The states of a row that leave a run not done. */
+const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);
+
+/** What each state of a repair's row is as a row of an install: a check's `missing` is what a run makes, and after a run it is what the run could not make. */
+const STATES: Readonly<Record<Mode, Readonly<Record<DomainRow["state"], RowState>>>> = {
+  plan: { present: "leave", missing: "make", differs: "change", "left-out": "leave-out", optional: "leave-out", created: "make", changed: "change", removed: "remove", failed: "fail", "not-run": "not-run" },
+  apply: { present: "leave", missing: "block", differs: "block", "left-out": "leave-out", optional: "leave-out", created: "make", changed: "change", removed: "remove", failed: "fail", "not-run": "not-run" },
+};
+
+/** What an install makes that no repair does, so that its token needs the permission for it. */
+const MADE_FIRST = ["R2 bucket"] as const;
+
+/** The row of the repair that this file settles itself, before the upload. */
+const OWN_ROWS: ReadonlySet<string> = new Set(["D1 database"]);
+
+/** Where the install answers, with its checked addresses. */
+type Target = { readonly kind: "domain"; readonly layout: DomainLayout } | { readonly kind: "no-domain"; readonly layout: AccountAddresses };
+
+/** A release ready to upload: its checked files, and what states the first value of each binding it keeps. */
+interface Release {
+  readonly bundle: CheckedBundle;
+  readonly first: NonNullable<ReturnType<typeof firstBindings>>;
+}
+
+/** What one run gathers. `form` is the address of the token's form, where a permission is added. */
+interface Work {
+  readonly mode: Mode;
+  readonly place: Place;
+  readonly form: string;
+  readonly rows: Row[];
+  readonly steps: Step[];
+  readonly blocked: Blocked[];
+  readonly say: (row: Row) => void;
+}
+
+/** A write that was not sent or not taken: Cloudflare's own failure, a release this code cannot place, or a database Cloudflare gave no id for. */
+type NotWritten = CloudflareFailure | { readonly ok: false; readonly failure: "needs-hand" | "no-id" };
+
+/** Read where an install goes from what a person typed for it: a domain, or the word for none. */
+function whereOf(text: string, account: string | undefined): Read<Where> {
+  const typed = text.trim().toLowerCase();
+  if (typed === "" || typed === NO_DOMAIN) return { ok: true, where: { kind: "no-domain", account } };
+
+  const layout = parseDomainLayout({ domain: typed });
+
+  return layout.ok ? { ok: true, where: { kind: "domain", layout: layout.value, account } } : { ok: false, why: "refused", refused: `${typed} ${WORDS.domain[layout.refusal]}` };
+}
+
+/** The question of where the install answers, for a run that was given neither option. */
+function whichPlace(account: string | undefined): Question<Where> {
+  return {
+    key: "where",
+    name: "where it answers",
+    ask: "Your own domain (example.com), or Enter for none:",
+    give: "Give --domain <name> or --no-domain (or POPLIN_DOMAIN).",
+    answer: (text) => whereOf(text, account),
+  };
+}
+
+/** Read the provider's own options and variables, once; an option outranks its variable. */
+function read(given: Given): Read<Where> {
+  const [domain, none] = [given.flags.get("domain"), given.flags.has("no-domain")];
+  if (domain !== undefined && none) return { ok: false, why: "refused", refused: WORDS.both };
+
+  if (domain === true || domain?.trim() === "") return { ok: false, why: "refused", refused: WORDS.noName };
+
+  const named = given.flags.get("account") ?? given.env.POPLIN_ACCOUNT;
+  if (named !== undefined && (named === true || !ACCOUNT_ID.test(named))) return { ok: false, why: "refused", refused: WORDS.account };
+
+  // A variable that is set to nothing is one that was not given: only Enter at the question means none.
+  const typed = domain ?? (none ? NO_DOMAIN : given.env.POPLIN_DOMAIN);
+
+  return typed === undefined || typed.trim() === "" ? { ok: false, why: "open", open: [whichPlace(named)] } : whereOf(typed, named);
+}
+
+/** The lines of the help that say what the account token needs, for each kind of install. */
+function tokenHelp(): string[] {
+  const [domain, none] = [tokenFacts("domain", MADE_FIRST), tokenFacts("noDomain", MADE_FIRST)];
+  const gap = " ".repeat(16);
+
+  return [
+    "The account token needs:",
+    `  with a domain ${domain.tokenRights.length} permissions: ${domain.tokenRights.join(", ")}`,
+    `${gap}${domain.tokenLink}`,
+    `  without       ${none.tokenRights.length} permissions: ${none.tokenRights.join(", ")}`,
+    `${gap}${none.tokenLink}`,
+    `  optional      ${domain.tokenOptional.map((optional) => optional.right).join(", ")}`,
+  ];
+}
+
+/** Why a call failed, with nothing Cloudflare said but its status. */
+function whyOf(failure: NotWritten): string {
+  if (failure.failure === "needs-hand") return WORDS.newerRelease;
+
+  if (failure.failure === "no-id") return "Cloudflare named no database";
+
+  if (failure.failure === "refused") return `refused with status ${failure.status}`;
+
+  return failure.failure === "rate-limited" ? "Cloudflare asked to wait" : "no answer from Cloudflare";
+}
+
+/** Add a row to the run and tell the command. */
+function note(work: Work, row: Row): boolean {
+  work.rows.push(row);
+  work.say(row);
+
+  return !UNDONE.has(row.state);
+}
+
+/** The row of a piece whose call failed: blocked where the token lacks its permission, which the row names. A piece of the Worker's needs the permission its variables need. */
+function failed(work: Work, object: "R2 bucket" | "D1 database" | "Worker" | "Sweep trigger" | "Worker address", detail: string, failure: NotWritten): false {
+  const right = rightFor(object === "R2 bucket" || object === "D1 database" ? object : "Worker variable");
+  if (lacksRight(failure)) note(work, { object, state: "block", detail: `${detail}: ${WORDS.lacks}: ${right}`, right });
+  else note(work, { object, state: "fail", detail: `${detail}: ${whyOf(failure)}` });
+
+  return false;
+}
+
+/** The row of a piece that a sync of its own settled: made, or left as it is. */
+function synced(work: Work, object: "R2 bucket" | "D1 database", detail: string, answer: Synced | Awaited<ReturnType<typeof syncDatabase>>): boolean {
+  if (!answer.ok) return failed(work, object, detail, answer);
+
+  return note(work, { object, state: answer.report.changedNothing ? "leave" : "make", detail });
+}
+
+/**
+ * Settle one piece of the Worker: its code, its sweep trigger, or its free address.
+ *
+ * @param stands - reads whether the piece is as it should be, on a Worker that was there before the run; `undefined` on a Worker the run makes, where the piece is made with it
+ * @param write - makes the piece match; never called by a dry run, nor for a piece that stands
+ */
+async function workerPiece(
+  work: Work,
+  row: { readonly object: "Worker" | "Sweep trigger" | "Worker address"; readonly detail: string },
+  stands: (() => Promise<CloudflareResult<boolean>>) | undefined,
+  write: () => Promise<{ readonly ok: true } | NotWritten>,
+): Promise<boolean> {
+  const stood = stands === undefined ? undefined : await stands();
+  if (stood?.ok === false) return failed(work, row.object, row.detail, stood);
+
+  if (stood?.value === true) return note(work, { ...row, state: "leave" });
+
+  const written = work.mode === "apply" ? await write() : ({ ok: true } as const);
+  if (!written.ok) return failed(work, row.object, row.detail, written);
+
+  return note(work, { ...row, state: stood === undefined ? "make" : "change" });
+}
+
+/** Whether two cron lists hold the same crons. */
+function sameCrons(one: readonly string[], other: readonly string[]): boolean {
+  const [left, right] = [new Set(one), new Set(other)];
+
+  return left.size === right.size && [...left].every((cron) => right.has(cron));
+}
+
+/** Read where the install answers: the domain's own layout, or the three hosts on the account's free address, whose name is read here. */
+async function targetOf(place: Place, where: Where, form: string): Promise<Target | Blocked | CloudflareFailure> {
+  if (where.kind === "domain") return { kind: "domain", layout: where.layout };
+
+  const address = await callCloudflare(place.connection, (api) => new BaseSubdomains(api).get({ account_id: place.accountId }));
+  if (!address.ok && lacksRight(address)) {
+    const right = rightFor("Forwarder");
+
+    return { what: "right_lacking", right, words: `Free address: ${WORDS.lacks}: ${right}`, address: form };
+  }
+
+  if (!address.ok) return address;
+
+  // An account that never set its free address answers with no name.
+  const layout = typeof address.value.subdomain === "string" && address.value.subdomain !== "" ? parseAccountAddresses({ account_address: address.value.subdomain }, SCRIPT) : undefined;
+  if (layout?.ok === true) return { kind: "no-domain", layout: layout.value };
+
+  return { what: "no_address", words: WORDS.noAddress, address: `https://dash.cloudflare.com/${place.accountId}/workers-and-pages` };
+}
+
+/** Fetch the newest release the project published, with every digest checked. It asks the project's website and the release's page alone. */
+async function releaseOf(reach: Reach): Promise<Release | Blocked | "unreachable"> {
+  const pins = await projectReleases({ fetch: reach.fetch }).pins();
+  if (pins === undefined) return "unreachable";
+
+  const version = newestPinned(pins);
+  const pin = version === undefined ? undefined : pins[version];
+  if (version === undefined || pin === undefined) return { what: "no_release", words: WORDS.noRelease, address: homepage };
+
+  const checked = await checkedBundle({ fetch: reach.fetch }, version, pin);
+  if (!checked.ok && checked.why === "unreachable") return "unreachable";
+
+  if (!checked.ok) return checked.why === "needs_hand" ? { what: "newer_release", words: WORDS.newerRelease, address: homepage } : { what: "bad_release", words: WORDS.badRelease, address: homepage };
+
+  const first = firstBindings(checked.bundle.deploy.bindings.flatMap((binding) => (binding.kind === "kept" ? [binding.name] : [])));
+
+  return first === undefined ? { what: "newer_release", words: WORDS.newerRelease, address: homepage } : { bundle: checked.bundle, first };
+}
+
+/** The Worker's own pieces, in order: its code, its sweep trigger, and whether its free address is switched on. Each stops the ones after it. */
+async function workerPieces(work: Work, target: Target, release: Release, made: { readonly standing: boolean; readonly databaseId: string | undefined }): Promise<boolean> {
+  const { connection, accountId } = work.place;
+  const worker = { accountId, script: SCRIPT };
+  const { bundle } = release;
+  const wanted = { enabled: target.kind === "no-domain", previews_enabled: false };
+  const reads = <Value>(read: () => Promise<CloudflareResult<Value>>, same: (value: Value) => boolean): (() => Promise<CloudflareResult<boolean>>) | undefined => {
+    if (!made.standing) return undefined;
+
+    return async () => {
+      const answer = await read();
+
+      return answer.ok ? { ok: true, value: same(answer.value) } : answer;
+    };
+  };
+
+  const uploaded = await workerPiece(
+    work,
+    { object: "Worker", detail: made.standing ? SCRIPT : `${SCRIPT}, runs ${bundle.version}` },
+    made.standing ? async () => ({ ok: true, value: true }) : undefined,
+    async () => (made.databaseId === undefined ? { ok: false, failure: "no-id" } : putFirst(connection, worker, bundle, release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: made.databaseId }))),
+  );
+  if (!uploaded) return false;
+
+  const scheduled = await workerPiece(
+    work,
+    { object: "Sweep trigger", detail: bundle.deploy.crons.join(", ") },
+    reads(
+      () => readCrons(connection, worker),
+      (crons) => sameCrons(crons, bundle.deploy.crons),
+    ),
+    () => putCrons(connection, worker, bundle.deploy.crons),
+  );
+  if (!scheduled) return false;
+
+  return workerPiece(
+    work,
+    { object: "Worker address", detail: target.kind === "no-domain" ? `on: ${target.layout.adminHost}` : "off: the install answers under its domain" },
+    reads(
+      () => callCloudflare(connection, (api) => new BaseSubdomain(api).get(SCRIPT, { account_id: accountId })),
+      (current) => current.enabled === wanted.enabled && current.previews_enabled === wanted.previews_enabled,
+    ),
+    () => callCloudflare(connection, (api) => new BaseSubdomain(api).create(SCRIPT, { account_id: accountId, ...wanted })),
+  );
+}
+
+/**
+ * A row of the repair as a row of the install.
+ *
+ * Where Access is off, the rows that wait for it are blocked in a dry run too: a run cannot make them.
+ * Where it is on, a dry run names the login's variable as a run does, with no word on when it is written.
+ */
+function rowOf(row: DomainRow, mode: Mode, loginOff: boolean): Row {
+  const login = row.state === "missing" && row.detail.startsWith(`${INSTALL_OBJECTS.accessBinding}:`);
+  const waits = loginOff && row.state === "missing" && (login || row.object.startsWith("Access"));
+  const state = waits || (row.state === "failed" && row.right !== undefined) ? "block" : STATES[mode][row.state];
+
+  return { object: row.object, state, detail: login && !waits ? INSTALL_OBJECTS.accessBinding : row.detail, ...(row.right === undefined ? {} : { right: row.right }) };
+}
+
+/**
+ * Finish the install with the repair of its kind and its first login: the code the dashboard's Domain screen runs, on a Worker with nothing set.
+ *
+ * The repair is given the account the token was found in, so it looks for no other.
+ *
+ * @returns whether Cloudflare answered; its rows are added to the run, but the database's, which stands by now
+ */
+async function finish(work: Work, target: Target, login: Login, reach: Reach): Promise<boolean> {
+  const parts = { script: SCRIPT, first: { login, accountId: work.place.accountId }, fetch: reach.fetch, now: reach.now };
+  const plug = target.kind === "domain" ? createDomainPlug({ ...parts, layout: target.layout }) : createPathPlug({ ...parts, layout: target.layout });
+  const settings = defaultSettings({ installer: login });
+  const reading = await (work.mode === "plan" ? plug.check(work.place.connection.key, async () => settings) : plug.repair(work.place.connection.key, async () => settings));
+  if (!reading.ok && reading.refusal === "unreachable") return false;
+
+  if (!reading.ok) {
+    note(work, { object: "Token", state: "fail", detail: WORDS.refusedLater });
+
+    return true;
+  }
+
+  const loginOff = work.blocked.some((block) => block.what === "login_off");
+  for (const row of reading.rows.filter((entry) => !OWN_ROWS.has(entry.object))) note(work, rowOf(row, work.mode, loginOff));
+
+  work.steps.push(...reading.steps);
+
+  return true;
+}
+
+/** What a run came to, from what it gathered. Each permission a row names as lacking is a block too, once. */
+function done(work: Work, known: { readonly release?: string; readonly address?: string }): Installed {
+  const rights = [...new Set(work.rows.flatMap((row) => (row.right === undefined ? [] : [row.right])))];
+  const lacking = rights.map((right): Blocked => ({ what: "right_lacking", right, words: `${WORDS.lacks}: ${right}`, address: work.form }));
+  const blocked = [...work.blocked, ...lacking];
+  const ready = blocked.length === 0 && !work.rows.some((row) => UNDONE.has(row.state));
+
+  return { ok: true, rows: work.rows, steps: work.steps, blocked, release: known.release, address: known.address, ready, proof: "reads" };
+}
+
+/** Read what a run is made from, before it makes anything: where the install answers, and the release. A block of either ends the run with nothing changed. */
+async function prepared(work: Work, where: Where, reach: Reach): Promise<{ readonly target: Target; readonly release: Release } | Installed> {
+  const target = await targetOf(work.place, where, work.form);
+  if ("failure" in target) return UNREACHABLE;
+
+  if ("what" in target) return done({ ...work, blocked: [...work.blocked, target] }, {});
+
+  const release = await releaseOf(reach);
+  if (release === "unreachable") return UNREACHABLE;
+
+  return "what" in release ? done({ ...work, blocked: [...work.blocked, release] }, {}) : { target, release };
+}
+
+/** Make what the install's own repair cannot: the bucket, the database, and the Worker with its trigger and its address. Each stops the ones after it. */
+async function madeFirst(work: Work, target: Target, release: Release, standing: boolean): Promise<boolean> {
+  const { connection, accountId } = work.place;
+  if (!synced(work, "R2 bucket", INSTALL_OBJECTS.bucket, await syncBucket(connection, accountId, work.mode))) return false;
+
+  const database = await syncDatabase(connection, accountId, work.mode);
+  if (!synced(work, "D1 database", INSTALL_OBJECTS.database, database)) return false;
+
+  return workerPieces(work, target, release, { standing, databaseId: database.ok ? database.id : undefined });
+}
+
+/** Make the install, or with a dry run say what a run would make. */
+async function install(found: Startable<Place>, where: Where, login: Login, run: Run, reach: Reach, say: (row: Row) => void): Promise<Installed> {
+  const { tokenLink: form } = tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST);
+  const work: Work = { mode: run === "apply" ? "apply" : "plan", place: found.place, form, rows: [], steps: [], blocked: [...found.notes], say };
+  const ready = await prepared(work, where, reach);
+  if ("ok" in ready) return ready;
+
+  const { target, release } = ready;
+  const address = `https://${target.kind === "domain" ? target.layout.adminHostname : target.layout.adminHost}`;
+  const standing = found.state === "started";
+  const known = { release: standing ? undefined : release.bundle.version, address };
+  if (!(await madeFirst(work, target, release, standing))) return done(work, known);
+
+  return (await finish(work, target, login, reach)) ? done(work, known) : UNREACHABLE;
+}
+
+/** Cloudflare, as the command works through it. */
+export const installer: Installer<Where, Place> = {
+  id: "cloudflare",
+  name: "Cloudflare",
+  about: "Cloudflare: under your own domain, or without one",
+  options: OPTIONS,
+  usage: "(--domain <name> | --no-domain)",
+  tokenHelp: tokenHelp(),
+  token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
+  read,
+  facts: (where) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST),
+  find: (token, where, reach) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor }),
+  install,
+};

@@ -10,6 +10,7 @@
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { CheckedPiece } from "@poplin/core/src/records/domain-check";
 import type { SettingValues } from "@poplin/core/src/records/settings";
+import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 
 /** The settings the provider's side is made to match. */
 export type DomainSettings = Pick<SettingValues, "logins" | "outside_pages" | "search_engines_allowed" | "block_bots">;
@@ -53,23 +54,8 @@ export type DomainReading =
   | { readonly ok: true; readonly rows: readonly DomainRow[]; readonly steps: readonly DomainStep[] }
   | { readonly ok: false; readonly refusal: "token" | "unreachable" | "no_domain" | "bad_domain" | "bad_address" | "bad_login" | "allowance_spent" };
 
-/** The provider's side of an install. Neither method keeps the token past its own call, and neither throws for anything the provider answers. */
-export interface DomainPlug {
-  /** Every right a token needs for an install to work, each in the provider's own name for it. */
-  readonly tokenRights: readonly string[];
-
-  /** The address of the provider's form for a new token, with every one of those rights already chosen. */
-  readonly tokenLink: string;
-
-  /** The rights an install works without: the provider's name for each, and in one line what a token that has it adds. */
-  readonly tokenOptional: readonly { readonly right: string; readonly adds: string }[];
-
-  /** What else the provider's form asks of the person, in one sentence, such as which account the token is for. */
-  readonly tokenNote: string;
-
-  /** What a token must be made for, as a refusal of one says it, such as `this account and this domain`. */
-  readonly tokenFor: string;
-
+/** The provider's side of an install, with what its form for a new token is and asks for. Neither method keeps the token past its own call, and neither throws for anything the provider answers. */
+export interface DomainPlug extends TokenFacts {
   /** How the screens speak of the install's side at the provider: `thing` is what a sentence calls it, such as `the domain`, and `line` is one sentence said first on its screen, or `null`. */
   readonly words: { readonly thing: string; readonly line: string | null };
 
@@ -88,9 +74,6 @@ export interface DomainPlug {
   /** Make every object match, in order. It goes on past an object the token has no right for, `optional` where the right is, and stops at any other failure: the rows say what was done, what failed, and what was never reached. */
   repair(token: string, settings: ReadSettings): Promise<DomainReading>;
 }
-
-/** What the provider's form for a new token is and asks for, as both pages show it. */
-export type TokenFacts = Pick<DomainPlug, "tokenRights" | "tokenLink" | "tokenOptional" | "tokenNote" | "tokenFor">;
 
 /**
  * What a person chose for an install with nothing set, with its first login.

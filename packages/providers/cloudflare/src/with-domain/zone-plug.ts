@@ -17,10 +17,11 @@
 //
 // No row of such a check holds a text Cloudflare sent.
 
-import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
+import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings } from "@poplin/app/src/console/domain/records";
 import type { KeyRefusal } from "@poplin/app/src/console/key/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
+import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 import { type KeptKey, keyed } from "../shared/install/key/kept-key";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "../shared/install/pieces/access/access";
 import { syncBudgetAlert } from "../shared/install/pieces/alerts/budget-alert";
@@ -131,7 +132,7 @@ const PRESS_REPAIR = "Press Repair.";
 /** What the database's row says in a check the install makes by itself, after the database's name. */
 const OWN_DATABASE = "the install is running on it";
 
-/** Every permission the plug's calls use, in Cloudflare's own name: one an install needs, with its key as Cloudflare's page on token template links names it, or an optional one, which that page names no key for. */
+/** Every permission the plug's calls use, in Cloudflare's own name: one an install needs, with its key as Cloudflare's page on token template links names it, or chosen by hand where that page names none; or an optional one. */
 const RIGHT = {
   zone: { name: "Zone: Read", key: "zone", type: "read" },
   dns: { name: "DNS: Edit", key: "dns", type: "edit" },
@@ -144,11 +145,12 @@ const RIGHT = {
   waf: { name: "Zone WAF: Edit", adds: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin." },
   bots: { name: "Bot Management: Edit", adds: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says." },
   database: { name: "D1: Edit", key: "d1", type: "edit" },
+  bucket: { name: "Workers R2 Storage: Edit", chosen: "by hand" },
   notifications: { name: "Notifications: Edit", adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar." },
   tokens: { name: "Account API Tokens: Edit", key: "account_api_tokens", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
-/** The permissions the calls of each object use, the one its changes use first. */
+/** The permissions the calls of each object use, the one its changes use first. The bucket is no piece of a repair: an install makes it. */
 const RIGHTS = {
   Zone: [RIGHT.zone],
   "DNS record": [RIGHT.dns],
@@ -162,6 +164,7 @@ const RIGHTS = {
   "Rate rule": [RIGHT.waf],
   "Bot settings": [RIGHT.bots],
   "D1 database": [RIGHT.database],
+  "R2 bucket": [RIGHT.bucket],
   Workflow: [RIGHT.scripts],
   "Budget alert": [RIGHT.notifications],
   Key: [RIGHT.tokens, RIGHT.scripts],
@@ -169,7 +172,7 @@ const RIGHTS = {
   Forwarder: [RIGHT.scripts],
 } as const satisfies Readonly<Record<string, readonly Right[]>>;
 
-/** The right of the key each object is read under in a check the install makes by itself. The database and the two keys are read with no call. A piece with no row here does not compile. */
+/** The right of the key each object is read under in a check the install makes by itself. The database, the bucket, and the two keys are read with no call. A piece with no row here does not compile. */
 const KEY_RIGHT: Readonly<Record<Piece, KeyRight | undefined>> = {
   Zone: "Zone Read",
   "DNS record": "DNS Read",
@@ -183,6 +186,7 @@ const KEY_RIGHT: Readonly<Record<Piece, KeyRight | undefined>> = {
   "Rate rule": "Zone WAF Write",
   "Bot settings": "Bot Management Read",
   "D1 database": undefined,
+  "R2 bucket": undefined,
   "Budget alert": "Notifications Write",
   Key: undefined,
   "Upload key": undefined,
@@ -204,6 +208,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Rate rule": "rest",
   "Bot settings": "rest",
   "D1 database": "rest",
+  "R2 bucket": "rest",
   Workflow: "rest",
   "Budget alert": "rest",
   Key: "rest",
@@ -254,6 +259,9 @@ const TOKEN_FORMS = {
 /** The name the form suggests for the token. */
 const TOKEN_NAME = "poplin setup";
 
+/** What the form's note says before each permission the link cannot choose. */
+const BY_HAND = "The link does not choose this permission, so choose it on the form yourself";
+
 /** What each state of a step is called in a check and in a repair. */
 const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "removed", DomainState>>>> = {
   plan: { created: "missing", changed: "differs", removed: "differs" },
@@ -265,12 +273,13 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
  *
  * One that is set has `accountId`, the account the Worker runs in, never one a token's holder names.
  * One with nothing set has `first`, its first login: its account is the one the token shows the install in, and a repair also writes where the install answers, this login, and that account onto the Worker.
+ * Where the token was already found in an account, `first.accountId` names it, and no other account is looked in.
  * `key` is the install's kept key as its own Worker holds it, and `uploadKeyId` the id of the upload key that Worker holds. Without `key`, how both keys stand is read at Cloudflare with the token.
  * `kept` is the kept key ready to call Cloudflare with: an install that has it checks by itself, with no token.
  */
 export type Known =
   | { readonly accountId: string; readonly first?: undefined; readonly key?: HeldKey; readonly uploadKeyId?: string | undefined; readonly kept?: KeptKey | undefined }
-  | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined; readonly uploadKeyId?: undefined; readonly kept?: undefined };
+  | { readonly accountId?: undefined; readonly first: { readonly login: Login; readonly accountId?: string | undefined }; readonly key?: undefined; readonly uploadKeyId?: undefined; readonly kept?: undefined };
 
 /** What the plug is built from. */
 type PlugParts = Known & {
@@ -290,8 +299,8 @@ type PlugParts = Known & {
   readonly now?: (() => number) | undefined;
 };
 
-/** One permission of a token: one an install needs, with its key and level in a link to the form, or an optional one, with what it adds. */
-type Right = { readonly name: string; readonly key: string; readonly type: "read" | "edit" } | { readonly name: string; readonly adds: string };
+/** One permission of a token: one an install needs, with its key and level in a link to the form, or one the link cannot choose, which the person chooses on the form; or an optional one, with what it adds. */
+type Right = { readonly name: string; readonly key: string; readonly type: "read" | "edit" } | { readonly name: string; readonly chosen: "by hand" } | { readonly name: string; readonly adds: string };
 
 /** An install once the token has shown its account: what the pieces both kinds of install share are made from. */
 export interface Placed {
@@ -405,7 +414,7 @@ function lackedRight(object: Piece, failed: string): Right {
 }
 
 /** Whether Cloudflare refused a step for a permission the token lacks, and for nothing else: an account whose Access is off answers with the same status. */
-function lacksRight(stopped: Stopped): boolean {
+export function lacksRight(stopped: { readonly failure: string; readonly status?: number; readonly errors?: readonly { readonly code: number; readonly message: string }[] }): boolean {
   if (stopped.failure !== "refused" || stopped.status !== NOT_PERMITTED.status) return false;
 
   const errors = stopped.errors ?? [];
@@ -823,7 +832,8 @@ async function findZone(parts: PlugParts, connection: Connection): Promise<Zone 
   const zones = parts.accountId === undefined ? await findZones(connection, parts.layout.domain) : await listZones(connection, parts.accountId);
   if (!zones.ok) return zones.failure === "refused" ? REFUSED : UNREACHABLE;
 
-  const zone = zones.value.find((candidate) => candidate.name === parts.layout.domain);
+  const found = parts.first?.accountId;
+  const zone = zones.value.find((candidate) => candidate.name === parts.layout.domain && (found === undefined || candidate.accountId === found));
   if (zone !== undefined) return zone;
 
   return parts.accountId === undefined ? NO_DOMAIN : REFUSED;
@@ -973,23 +983,34 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], 
  * Say what Cloudflare's form for a new token is and asks for.
  *
  * @param kind - the kind of install the token is for: one with a domain, or one without
- * @returns every permission such an install needs, the link that opens the form with all of them chosen, and the optional ones with what each adds
+ * @param also - the objects the token is to make beside the ones a repair of that kind makes, such as the bucket of a new install
+ * @returns every permission such an install needs, the link that opens the form with each one chosen that a link can choose, and the optional ones with what each adds
  */
-export function tokenFacts(kind: keyof typeof TOKEN_FORMS): TokenFacts {
+export function tokenFacts(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): TokenFacts {
   const form = TOKEN_FORMS[kind];
   const asked: readonly Piece[] = form.pieces;
-  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object));
+  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object) || also.includes(object));
   const used = [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
-  const needed = used.flatMap((right) => ("key" in right ? [right] : []));
+  const needed = used.filter((right) => !("adds" in right));
   const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));
+  const byHand = needed.flatMap((right) => ("chosen" in right ? [right.name] : []));
 
   return {
     tokenRights: needed.map((right) => right.name),
-    tokenLink: tokenLink(needed, form.zones),
+    tokenLink: tokenLink(needed.flatMap((right) => ("key" in right ? [right] : [])), form.zones),
     tokenOptional: optional,
-    tokenNote: form.note,
+    tokenNote: byHand.length === 0 ? form.note : `${form.note} ${BY_HAND}: ${byHand.join(", ")}.`,
     tokenFor: form.for,
   };
+}
+
+/**
+ * Name the permission a token needs first for one object of an install, as the token form names it.
+ *
+ * @param object - an object as its row names it, such as `R2 bucket`
+ */
+export function rightFor(object: Piece): string {
+  return RIGHTS[object][0].name;
 }
 
 /**

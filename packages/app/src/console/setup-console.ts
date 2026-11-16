@@ -9,11 +9,12 @@
 // The token is in the body of its one request and nowhere else. A page that is shut answers 404 on every path and says nothing.
 
 import { mediaTypeOf } from "@poplin/core/src/api/media-type";
+import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 
 import { createSetup, kindSent, type SetupForm, setupForm } from "./domain/setup";
-import type { DomainReading, FirstRun, TokenFacts } from "./domain/records";
+import type { DomainReading, FirstRun } from "./domain/records";
 import { POLICY } from "./console";
 import { runDone, runRefusal } from "./domain-answers";
 import { NOTHING_MARKED } from "./problems-routes";

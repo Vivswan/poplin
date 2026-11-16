@@ -5,6 +5,10 @@
 //   words, binding types, headers, hosts, `.cf`     in the code of a source file, comments apart
 //   a types reference                               the one import that is a comment
 //   a manifest, a `tsconfig`                        a provider taken in with no import
+//   a path into a provider's folder                 in a text of portable code, such as an entry of a build
+//
+// One way out is allowed: the published command is built with one file per provider, from `<provider>/src/shared/install/first/installer.ts`, which the command loads through core's `Installer`.
+// The build finds those files by listing the packages, so it names no provider, and no other file of a provider is an entry of it.
 //
 // The provider's words are read in the code of a portable `src` folder by these rules:
 //
@@ -20,11 +24,12 @@
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { join, posix, relative, resolve, sep } from "node:path";
 
 import { SyntaxKind } from "typescript/unstable/ast";
 import { createScanner } from "typescript/unstable/ast/scanner";
 
+import commandBuild from "../packages/cli/tsdown.config";
 import { plantedLint } from "./support/planted-lint";
 import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
@@ -205,8 +210,8 @@ function codeOf(path: string, text: string): string {
   return code;
 }
 
-/** What the provider's names and words find in the code of one portable source file, as `[rule, path, line, what]`. */
-function codeFindings(path: string, text: string): [string, string, number, string][] {
+/** What the provider's names and words, and a path into one of the providers' folders, find in the code of one portable source file, as `[rule, path, line, what]`. */
+function codeFindings(path: string, text: string, folders: readonly string[]): [string, string, number, string][] {
   const found: [string, string, number, string][] = [];
   const code = codeOf(path, text);
   const words = WORD_PLACE.test(path) ? WORDS : [];
@@ -222,6 +227,10 @@ function codeFindings(path: string, text: string): [string, string, number, stri
     for (const match of code.matchAll(pattern)) found.push(["provider word", path, lineOf(text, placed(match)), word]);
   }
 
+  for (const folder of folders) {
+    for (const match of code.matchAll(new RegExp(`(?<![\\w-])${folder}/`, "g"))) found.push(["provider path", path, lineOf(text, placed(match)), `${folder}/`]);
+  }
+
   return found;
 }
 
@@ -232,7 +241,7 @@ function sourceFindings({ root, providers }: Tree): [string, string, number, str
 
   for (const path of filesUnder(root, PORTABLE)) {
     const text = readFileSync(join(root, path), "utf8");
-    found.push(...codeFindings(path, text));
+    found.push(...codeFindings(path, text, folders));
 
     for (const match of text.matchAll(REFERENCE)) {
       const [, named = ""] = match;
@@ -305,6 +314,18 @@ function openImports({ packages, providers }: Tree): string[] {
   return [...new Set(open.map(({ from, provider }) => `${from} may import ${provider}`))].sort();
 }
 
+/** The entries of one build of the published command, as `[the built file's name, its source from the root]`; an entry built under its source's own name has no name. */
+function buildEntries(entry: unknown): [name: string, file: string][] {
+  const placed = (file: unknown): string => relative(ROOT, resolve(ROOT, "packages", "cli", String(file))).split(sep).join("/");
+  if (typeof entry === "string") return [["", placed(entry)]];
+
+  if (Array.isArray(entry)) return entry.flatMap(buildEntries);
+
+  if (typeof entry !== "object" || entry === null) return [];
+
+  return Object.entries(entry).flatMap(([name, files]) => [files].flat().map((file): [string, string] => [name, placed(file)]));
+}
+
 describe("provider code stays out of the portable packages", () => {
   test("drift: a provider's module, type, header, or word in portable code would make a second provider a rewrite of the product, not a new adapter", () => {
     expect(
@@ -329,6 +350,14 @@ describe("provider code stays out of the portable packages", () => {
     });
 
     expect(readTree(tree.path)).toMatchObject({ providers: ["packages/providers/cloudflare"], strays: ["packages/cloudflare", "packages/other"] });
+  });
+
+  // Drift: the build of the published command is the one place a provider's code is taken into a portable package. A second entry there would ship provider code no interface stands in front of.
+  test("the published command is built from its own source and from one file per provider, that provider's shared/install/first/installer.ts, and from no other file", () => {
+    const placed = [commandBuild].flat().flatMap(({ entry }) => buildEntries(entry));
+
+    expect(placed.filter(([, file]) => !file.startsWith("packages/cli/src/"))).toEqual(readTree(ROOT).providers.map((folder) => [`providers/${posix.basename(folder)}`, `${folder}/src/shared/install/first/installer.ts`]));
+    expect(placed.filter(([, file]) => file.startsWith("packages/cli/src/")).length).toBeGreaterThan(0);
   });
 
   test("drift: a lint rule that matches nothing passes forever; each row is a leak planted in a throwaway tree that the rule must name, beside code that only looks like one", () => {
@@ -497,6 +526,7 @@ describe("provider code stays out of the portable packages", () => {
     ["the clearance cookie", 'const clearance = cookies.get("cf_clearance");', "provider header", "cf_clearance"],
     ["the provider's API", 'const zones = await fetch("https://api.cloudflare.com/client/v4/zones");', "provider host", "api.cloudflare.com"],
     ["the Access team's host", 'const keys = await fetch("https://team.cloudflareaccess.com/cdn-cgi/access/certs");', "provider host", "cloudflareaccess.com"],
+    ["a file of the provider as an entry of a build", 'export default { entry: ["../providers/cloudflare/src/shared/install/client.ts"] };', "provider path", "cloudflare/"],
   ])("names %s", (_, line, rule, what) => {
     using tree = plantedRepository({
       "packages/providers/cloudflare/package.json": '{ "name": "@poplin/cloudflare" }',
