@@ -11,7 +11,7 @@ Updates, settings, the domain, the limits, and the removal of an install.
 | [Update](update.md)                       | how each kind of install updates; the notice of a newer version   |
 | [Settings](settings.md)                   | the install's settings, who can log in, this computer's login     |
 | [Domain](domain.md)                       | the Domain screen, Repair, the last check, the optional rules     |
-| [Activity](activity.md)                   | the Activity screen: its pages, and the log saved as files        |
+| [Activity](activity.md)                   | the Activity screen, its log as files, the Worker's own log       |
 | [Limits and cost](limits-and-cost.md)     | what can cost money; the limits; the graph of visits              |
 | [With OpenTofu](with-opentofu.md)         | installing with the module                                        |
 | [Remove](remove.md)                       | every piece an install made, and where each is removed by hand    |
