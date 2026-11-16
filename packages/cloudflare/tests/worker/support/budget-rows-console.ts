@@ -339,7 +339,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     name: "Activity screen: the count of entries",
     guide: "Open the Activity screen",
     route: "GET /data/activity/total",
-    // Worst: the log holds more than the 10,000 entries a count reads.
+    // A long log: the count is read off its two ends, so it costs what a short one does.
     arrange: async (stage) => {
       await manyEntries(stage, MOST_COUNTED + 1, 10);
       const session = await sessionOf(stage);
@@ -347,7 +347,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/activity/total");
     },
     status: 200,
-    budget: { queries: 2, read: 10003, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 4, reads: 0, writes: 0 },
   },
   {
     group,

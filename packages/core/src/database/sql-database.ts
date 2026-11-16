@@ -570,13 +570,15 @@ export class SqlDatabase implements Database {
     for (let attempt = 0; attempt < MINT_ATTEMPTS; attempt += 1) {
       const next = this.#mintId();
       const days = JSON.stringify(daysUpTo(dayOf(signed.at), KEPT_DAYS));
+      // The days are walked only once the id was given: the list of them stands behind a row that is there only then.
+      const counted = fragment`(SELECT j.value FROM (SELECT 1 WHERE ${CHANGED}) AS given CROSS JOIN json_each(${days}) AS j)`;
       const [updated, , , after, before] = await this.#driver.batch([
         built(BUILD.update(sites).set({ id: next }).where(and(eq(sites.id, id), eq(sites.trashed, 0), isFree(next)))),
         auditOfSite(signed, "new_id", next, { from: id }),
         keepEarlierId(id, next),
         siteById(next),
         siteById(id),
-        built(BUILD.update(requestCounts).set({ site: next }).where(and(eq(requestCounts.site, id), fragment`${requestCounts.day} IN (SELECT j.value FROM json_each(${days}) AS j)`, CHANGED))),
+        built(BUILD.update(requestCounts).set({ site: next }).where(and(eq(requestCounts.site, id), fragment`${requestCounts.day} IN ${counted}`))),
       ]);
       if (changed(updated)) return done(after);
 

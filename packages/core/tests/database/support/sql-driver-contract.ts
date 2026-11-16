@@ -437,6 +437,32 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
   });
 }
 
+function auditNumbers(label: string, makeDriver: DriverFactory): void {
+  describe(`${label}: the numbers of the audit log`, () => {
+    // Drift: the log is counted from its two ends, the newest number less the oldest, and one. A number given to a write that was rolled back and never given again would leave a gap, and every count after it would be one too many.
+    test("an entry's number follows the one before it with no gap, also after a write that held an entry was rolled back whole, and the count from the two ends is the count of the rows", async () => {
+      const driver = await migrated(makeDriver);
+      const database = new SqlDatabase(driver);
+      const entry = "INSERT INTO audit (at, actor, action, detail) VALUES (1, 'ada@example.com', 'login', ?1)";
+      for (let written = 0; written < 2; written += 1) await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
+      const before = await database.countAudit({ most: 100 });
+
+      // The second statement breaks the rule of `detail`, so the first one's entry is rolled back with it.
+      await expect(driver.batch([{ sql: entry, params: ["{}"] }, { sql: entry, params: ["no json"] }])).rejects.toThrow();
+      for (let written = 0; written < 3; written += 1) await database.appendAudit({ action: "login", detail: {} }, BY_ADA);
+
+      expect(await rows(driver, "SELECT seq FROM audit ORDER BY seq")).toEqual([1, 2, 3, 4, 5].map((seq) => ({ seq })));
+      expect([before, await database.countAudit({ most: 100 }), await database.countAudit({ most: 5 }), await database.countAudit({ most: 4 })]).toEqual([
+        { count: 2, whole: true },
+        { count: 5, whole: true },
+        { count: 5, whole: true },
+        { count: 4, whole: false },
+      ]);
+      expect(await rows(driver, "SELECT COUNT(*) AS held FROM audit")).toEqual([{ held: 5 }]);
+    });
+  });
+}
+
 function queryPlans(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: how the engine runs each statement`, () => {
     // Drift: D1 bills and limits by rows read; one statement that walks a whole table costs a row per site on every request.
@@ -546,12 +572,13 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|kept VIRTUAL TABLE)/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|j VIRTUAL TABLE|\(subquery-1\)|page\b|kept VIRTUAL TABLE|given\b)/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }
 
       // A screen's listing walks `page`, the page of sites it has cut already, and `kept`, the versions of one site of it: neither is a table.
+      // A new link walks `given`, the one row that is there only once the id was given, before it walks the days: no table either.
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
       // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.
@@ -737,6 +764,7 @@ export function describeSqlDriver(label: string, makeDriver: DriverFactory): voi
   schemaRules(label, makeDriver);
   storedRows(label, makeDriver);
   queryPlans(label, makeDriver);
+  auditNumbers(label, makeDriver);
   auditWindow(label, makeDriver);
   requestCountRows(label, makeDriver);
   manifestRows(label, makeDriver);
