@@ -248,9 +248,9 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. When 
 
 | The value says                              | Exit code | Next                                                                  |
 | ------------------------------------------- | --------- | --------------------------------------------------------------------- |
+| a `problem`                                 | 1, 2, 5   | a stop, with no rows: [`refusals.md`](refusals.md) says what to change first, or to wait |
 | `ok` is true                                | 0         | nothing is left undone: keep `address` under `found`, and go to step 4 |
-| `ready` is false                            | 1         | tell the user each row that did not come to make, change, or leave, and each entry of `blocked` and `steps`; then this line again |
-| a `problem`                                 | 1, 2, 5   | [`refusals.md`](refusals.md)                                          |
+| `ready` is false, and no `problem`          | 1         | tell the user each row that did not come to make, change, or leave, and each entry of `blocked` and `steps`; then this line again |
 
 With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits with 1 while `changes` is above 0: that is no failure.
 
