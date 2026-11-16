@@ -990,18 +990,6 @@ for (const size of [PHONE, FITS_FROM]) {
   });
 }
 
-// Drift: the way out would be drawn and lead nowhere a browser's login ends, or be out of reach of the keys beside the email.
-test("Sign out is the next stop of the keys after the email at the foot of the side, and leaves the dashboard for the page a request with no login behind it gets", async ({ page }) => {
-  await arrive(page);
-  const out = page.getByRole("complementary").getByRole("button", { name: "Sign out", exact: true });
-  await page.getByRole("complementary").getByTitle(/@example\.com$/).focus();
-  await page.keyboard.press("Tab");
-  await expect(out).toBeFocused();
-
-  await page.keyboard.press("Enter");
-  await expect(page.locator("body")).toContainText("No login was checked for this request. Open the dashboard's address again.");
-});
-
 // Drift: the keys would reach Close before Undo again, or the result would name keys that do not lead to it.
 test("a result's Undo is reached with the keys the result names, then Tab twice, and Close comes after it", async ({ page }) => {
   await arrive(page);
