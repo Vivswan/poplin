@@ -397,8 +397,8 @@ test.each(lacking)("a repair with a token without $name fails nothing: every oth
     const reading = await plug.repair(TOKEN, SETTINGS);
     const rows = shown(reading);
     const calm = (row: string): boolean => row.includes(" | optional | ");
-    const named = (found: readonly string[]): string[] => found.filter(calm).map((row) => `${row.split(" | ")[0]}: ${row.slice(row.indexOf("add this right"))}`).sort();
-    const expected = optional.map(([object, right]) => `${object}: add this right to the account token and press Repair: ${right}`).sort();
+    const named = (found: readonly string[]): string[] => found.filter(calm).map((row) => `${row.split(" | ")[0]}: ${row.slice(row.indexOf("add this permission"))}`).sort();
+    const expected = optional.map(([object, right]) => `${object}: add this permission to the account token and press Repair: ${right}`).sort();
 
     expect(named(rows)).toEqual(expected);
     expect(rows.filter((row) => !calm(row))).toEqual(made);
@@ -425,7 +425,7 @@ test("a token that may read the guard rules and not make them leaves both rules 
     const guards = rows.filter((row) => row.startsWith("WAF rule | ") || row.startsWith("Rate rule | ") || row.startsWith("Redirect rule | "));
 
     expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional"]);
-    expect(guards.filter((row) => !row.includes("add this right to the account token and press Repair: "))).toEqual([]);
+    expect(guards.filter((row) => !row.includes("add this permission to the account token and press Repair: "))).toEqual([]);
     expect(rows.slice(-4)).toEqual([
       "D1 database | created | poplin",
       "Budget alert | created | poplin: usage charges reached 1 dollar",
@@ -465,7 +465,7 @@ test.each(built)("a repair with a token that may not read $name makes nothing th
     const stateOf = (object: string): string => [...new Set(rows.filter((row) => row.startsWith(`${object} | `)).map((row) => row.split(" | ")[1] ?? ""))].join();
     const after = pieces.slice(pieces.indexOf(failed) + 1);
 
-    expect([stateOf(failed), rows.filter((row) => row.includes("Add this right")).length]).toEqual(["failed", 1]);
+    expect([stateOf(failed), rows.filter((row) => row.includes("Add this permission")).length]).toEqual(["failed", 1]);
     expect(after.filter((object) => stateOf(object) !== "not-run")).toEqual([...made]);
     expect(made.map(stateOf).filter((state) => state !== "created" && state !== "changed")).toEqual([]);
     expect(writes(asked).filter((write) => write.includes("/workers/scripts/"))).toEqual([]);
@@ -496,13 +496,13 @@ test.each(NEEDS)("a token without %s gets a row that names that right in the wor
   await withAccount(account, async (plug) => {
     await plug.repair(TOKEN, SETTINGS);
     account.refuse = call;
-    const naming = shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes("dd this right"));
+    const naming = shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.includes("dd this permission"));
     const needed = plug.tokenRights.includes(right);
     // Two rows are read under one right: the two keys under the tokens', the two alerts under the notifications'.
     const rows = right === "Account API Tokens: Edit" || right === "Notifications: Edit" ? 2 : 1;
 
     expect(naming.map((row) => row.split(" | ")[1])).toEqual(Array.from({ length: rows }, () => (needed ? "failed" : "optional")));
-    expect([...new Set(naming.map((row) => row.slice(row.indexOf("dd this right"))))]).toEqual([needed ? `dd this right to the account token: ${right}` : `dd this right to the account token and press Repair: ${right}`]);
+    expect([...new Set(naming.map((row) => row.slice(row.indexOf("dd this permission"))))]).toEqual([needed ? `dd this permission to the account token: ${right}` : `dd this permission to the account token and press Repair: ${right}`]);
   });
 });
 
@@ -525,7 +525,7 @@ test.each(otherwise)("$name fails its row and names no right", async ({ refused 
   await withAccount(account, async (plug) => {
     const failed = shown(await plug.repair(TOKEN, SETTINGS)).filter((row) => row.includes(" | failed | "));
 
-    expect([failed.length, failed.join().includes("Add this right")]).toEqual([1, false]);
+    expect([failed.length, failed.join().includes("Add this permission")]).toEqual([1, false]);
   });
 });
 
@@ -629,7 +629,7 @@ const SPARE_KEY = { ...WHOLE_KEY, id: "spare-key" };
 const KEY_BOUND = [...emptyAccount().bindings, { name: "KEPT_KEY", type: "secret_text" }];
 
 /** The row of a key that works and lacks a right, in any way a key can lack one. */
-const LACKS = "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now";
+const LACKS = "Key | differs | poplin kept key: the key the install holds lacks a permission the install uses now";
 
 /** The one right of an upload key. */
 const UPLOAD_RIGHT = "Workers R2 Storage Bucket Item Write";
@@ -643,7 +643,7 @@ function uploadPolicies(right: string, resources: Record<string, unknown>): { ef
 const UPLOAD_HELD = { id: "upload-held", name: "poplin upload key", status: "active", policies: uploadPolicies(UPLOAD_RIGHT, OWN.bucket) };
 
 /** The row of an upload key that works and lacks its right where the install's bucket is. */
-const UPLOAD_LACKS = "Upload key | differs | poplin upload key: the key the install holds lacks a right the install uses now";
+const UPLOAD_LACKS = "Upload key | differs | poplin upload key: the key the install holds lacks a permission the install uses now";
 
 /** The row of an upload key that works. */
 const UPLOAD_PRESENT = "Upload key | present | poplin upload key";
@@ -661,7 +661,7 @@ const NOW = 1_700_000_000_000;
 const UNWRITTEN = "made, and deleted again when its write onto the Worker failed";
 
 /** What a row says to a token that may not make a key. */
-const NO_TOKENS_RIGHT = "refused with status 403: 10000 Authentication error. Add this right to the account token: Account API Tokens: Edit";
+const NO_TOKENS_RIGHT = "refused with status 403: 10000 Authentication error. Add this permission to the account token: Account API Tokens: Edit";
 
 /**
  * One run that has to do with the keys: the account it meets, the keys the Worker holds, and what the two keys' rows, the steps, and the account say after it.
@@ -1042,8 +1042,8 @@ const keyRuns: readonly KeyRun[] = [
     upload: "none",
     account: { refuse: SETTINGS_WRITE, refuseQuotes: true },
     rows: [
-      `Key | failed | poplin kept key, ${UNWRITTEN}: refused with status 403: 10000 Authentication error. Add this right to the account token: Workers Scripts: Edit`,
-      `Upload key | failed | poplin upload key, ${UNWRITTEN}: refused with status 403: 10000 Authentication error. Add this right to the account token: Workers Scripts: Edit`,
+      `Key | failed | poplin kept key, ${UNWRITTEN}: refused with status 403: 10000 Authentication error. Add this permission to the account token: Workers Scripts: Edit`,
+      `Upload key | failed | poplin upload key, ${UNWRITTEN}: refused with status 403: 10000 Authentication error. Add this permission to the account token: Workers Scripts: Edit`,
     ],
     rights: ["Workers Scripts: Edit", "Workers Scripts: Edit"],
     keys: 0,
@@ -1061,7 +1061,7 @@ function secretsOf(asked: readonly Asked[]): { readonly changes: number; readonl
 /** The rows of the two keys as a reading holds them and the steps that name a key, with what the fake's refusal quotes of the call left out: the token it was sent with, and where it quotes them the bindings. */
 function keyRowsOf(reading: DomainReading): { readonly shown: string[]; readonly rights: (string | undefined)[][]; readonly steps: readonly unknown[] } {
   const found = reading.ok ? reading.rows.filter((row) => row.object === "Key" || row.object === "Upload key") : [];
-  const plain = (detail: string): string => detail.replace(/ for Bearer .*?(\. Add this right|$)/, "$1");
+  const plain = (detail: string): string => detail.replace(/ for Bearer .*?(\. Add this permission|$)/, "$1");
 
   const steps = reading.ok ? reading.steps.filter((entry) => entry.text.includes("key")) : [];
 
@@ -1193,15 +1193,15 @@ describe("the keys an install keeps", () => {
 describe("a check the install makes with the key it holds", () => {
   /** How an optional piece that is not set up reads, as a token without its right reads it. */
   const OPTIONAL = {
-    redirect: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself. To switch this on, add this right to the account token and press Repair: Single Redirect: Edit",
-    waf: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin. To switch this on, add this right to the account token and press Repair: Zone WAF: Edit",
-    bots: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says. To switch this on, add this right to the account token and press Repair: Bot Management: Edit",
+    redirect: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself. To switch this on, add this permission to the account token and press Repair: Single Redirect: Edit",
+    waf: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin. To switch this on, add this permission to the account token and press Repair: Zone WAF: Edit",
+    bots: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says. To switch this on, add this permission to the account token and press Repair: Bot Management: Edit",
     alert:
       "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. " +
-      "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair: Notifications: Edit",
+      "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair: Notifications: Edit",
     certificates:
       "Cloudflare emails your first user when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone. " +
-      "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair: Notifications: Edit",
+      "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair: Notifications: Edit",
   } as const;
 
   /** The database's row in such a check, which no call reads. */
@@ -1263,22 +1263,22 @@ describe("a check the install makes with the key it holds", () => {
   });
 
   const lacking = [
-    { name: "the records", refuse: "/zones/zone-1/dns_records", row: "DNS record | failed | the key the install holds lacks this right: DNS Read. Press Repair.", right: "DNS Read", unread: ["Rate rule | not-run | ", "Bot settings | not-run | "] },
-    { name: "the routes", refuse: "/zones/zone-1/workers/routes", row: "Worker route | failed | the key the install holds lacks this right: Workers Routes Read. Press Repair.", right: "Workers Routes Read", unread: [] },
+    { name: "the records", refuse: "/zones/zone-1/dns_records", row: "DNS record | failed | the key the install holds lacks this permission: DNS Read. Press Repair.", right: "DNS Read", unread: ["Rate rule | not-run | ", "Bot settings | not-run | "] },
+    { name: "the routes", refuse: "/zones/zone-1/workers/routes", row: "Worker route | failed | the key the install holds lacks this permission: Workers Routes Read. Press Repair.", right: "Workers Routes Read", unread: [] },
     {
       name: "the zone's own https switch",
       refuse: "/zones/zone-1/settings/always_use_https",
-      row: "Redirect rule | failed | the zone's own https switch: the key the install holds lacks this right: Zone Settings Read. Press Repair.",
+      row: "Redirect rule | failed | the zone's own https switch: the key the install holds lacks this permission: Zone Settings Read. Press Repair.",
       right: "Zone Settings Read",
       unread: [],
     },
-    { name: "the bot switches", refuse: "/zones/zone-1/bot_management", row: "Bot settings | failed | the key the install holds lacks this right: Bot Management Read. Press Repair.", right: "Bot Management Read", unread: [] },
+    { name: "the bot switches", refuse: "/zones/zone-1/bot_management", row: "Bot settings | failed | the key the install holds lacks this permission: Bot Management Read. Press Repair.", right: "Bot Management Read", unread: [] },
     {
       name: "the two alerts",
       refuse: `/accounts/${ACCOUNT}/alerting/v3/policies`,
-      row: "Budget alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair.",
+      row: "Budget alert | failed | the key the install holds lacks this permission: Notifications Write. Press Repair.",
       right: "Notifications Write",
-      unread: ["Certificate alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair."],
+      unread: ["Certificate alert | failed | the key the install holds lacks this permission: Notifications Write. Press Repair."],
     },
   ];
 
@@ -1292,7 +1292,7 @@ describe("a check the install makes with the key it holds", () => {
       account.refuse = `GET ${refuse}`;
       const reading = await own();
       const changed = [row, ...unread, "Key", "D1 database"].map(kindOf);
-      const expected = [...table({}).filter((line) => !changed.includes(kindOf(line))), DATABASE, "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now", row, ...unread];
+      const expected = [...table({}).filter((line) => !changed.includes(kindOf(line))), DATABASE, "Key | differs | poplin kept key: the key the install holds lacks a permission the install uses now", row, ...unread];
 
       expect(shown(reading).sort()).toEqual(expected.sort());
       expect(reading.ok ? [...new Set(reading.rows.flatMap((found) => (found.right === undefined ? [] : [found.right])))] : []).toEqual([right]);

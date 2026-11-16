@@ -32,7 +32,7 @@ function deployed(): Account {
 const OPTIONAL = {
   right: "Notifications: Edit",
   adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.",
-  how: "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this right to the account token and press Repair: Notifications: Edit",
+  how: "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair: Notifications: Edit",
 } as const;
 
 /** The budget alert's row where a token lacks the right, which may not read the alert's name, and where a check by the key finds none set up. */
@@ -324,8 +324,8 @@ test.each([
     refuse: `GET /accounts/${ACCOUNT}/access/organizations`,
     as: undefined,
     rows: [
-      "Worker variable | failed | the team's domain: the key the install holds lacks this right: Access: Organizations, Identity Providers, and Groups Read. Press Repair.",
-      "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now",
+      "Worker variable | failed | the team's domain: the key the install holds lacks this permission: Access: Organizations, Identity Providers, and Groups Read. Press Repair.",
+      "Key | differs | poplin kept key: the key the install holds lacks a permission the install uses now",
       "Upload key | not-run | ",
       "D1 database | present | poplin: the install is running on it",
     ],
@@ -335,9 +335,9 @@ test.each([
     refuse: `GET /accounts/${ACCOUNT}/alerting/v3/policies`,
     as: undefined,
     rows: [
-      "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now",
+      "Key | differs | poplin kept key: the key the install holds lacks a permission the install uses now",
       "D1 database | present | poplin: the install is running on it",
-      "Budget alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair.",
+      "Budget alert | failed | the key the install holds lacks this permission: Notifications Write. Press Repair.",
     ],
   },
   {

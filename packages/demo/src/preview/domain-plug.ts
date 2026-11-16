@@ -105,11 +105,11 @@ function table(found: readonly DomainRow[]): DomainReading {
 /** The row of one piece of the changing plug in a state. A piece that failed names the right the token lacks. */
 function changingRow(piece: Piece, state: DomainState): DomainRow {
   const row = { object: piece.object, detail: piece.detail, part: piece.part, state };
-  if (piece.optional !== undefined) return { ...row, state: "optional", detail: `${piece.detail}: ${piece.optional.adds} To switch this on, add this right to the account token and press Repair: ${piece.optional.right}` };
+  if (piece.optional !== undefined) return { ...row, state: "optional", detail: `${piece.detail}: ${piece.optional.adds} To switch this on, add this permission to the account token and press Repair: ${piece.optional.right}` };
 
   if (state !== "failed" || piece.lacks === undefined) return row;
 
-  return { ...row, detail: `${piece.detail}: the account token lacks a right. Add this right to the account token: ${piece.lacks}`, right: piece.lacks };
+  return { ...row, detail: `${piece.detail}: the account token lacks a permission. Add this permission to the account token: ${piece.lacks}`, right: piece.lacks };
 }
 
 /** How a run of the changing plug leaves a piece that is still broken: a check finds it so, and a repair mends it unless the token lacks its right. */
