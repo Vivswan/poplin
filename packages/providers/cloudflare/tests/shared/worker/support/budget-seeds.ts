@@ -117,6 +117,24 @@ export async function manyEntries(stage: Stage, count: number, about = count): P
   );
 }
 
+/**
+ * Count nine requests, three of them page views, on each of the last days for the first made-up sites and for all sites together, and sum the days that are over as a scheduled run leaves them.
+ *
+ * @returns the ids of the sites counted, as a graph's address names them
+ */
+export async function manyVisits(stage: Stage, counted: { readonly sites: number; readonly days: number }): Promise<string> {
+  await sql(
+    `WITH RECURSIVE days(d) AS (SELECT 0 UNION ALL SELECT d + 1 FROM days WHERE d < ?1 - 1), counted(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM counted WHERE n < ?2)
+     INSERT INTO request_counts (day, site, requests, views) SELECT date(?3 / 1000, 'unixepoch', '-' || d || ' days'), CASE n WHEN 0 THEN '' ELSE printf('%012d', n) END, 9, 3 FROM days, counted`,
+    counted.days,
+    counted.sites,
+    stage.w.clock.now,
+  );
+  await stage.install.database.sweepRunOut(stage.w.clock.now);
+
+  return Array.from({ length: counted.sites }, (_site, at) => siteId(at + 1)).join(",");
+}
+
 /** The path of the made-up file of a number: the entry page first. */
 export function filePath(n: number): string {
   return n === 0 ? "index.html" : `page-${n}.html`;

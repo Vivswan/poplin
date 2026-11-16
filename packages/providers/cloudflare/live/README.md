@@ -411,20 +411,20 @@ The database's free plan takes 100,000 rows written a day, every database of the
 
 | One request of a run                      | Rows, at most | Which are                                                                  |
 | ----------------------------------------- | ------------- | -------------------------------------------------------------------------- |
-| a new site, from its begin to its finish  | 19            | the site 8, the upload 6, the day's counts 2, the version 2, the log 1     |
-| a new site not told never to run out      | 20            | its entry in the index of expiries; one that names no expiry may take the install's |
+| a new site, from its begin to its finish  | 22            | the site 11, the upload 6, the day's counts 2, the version 2, the log 1    |
+| a new site not told never to run out      | 23            | its entry in the index of expiries; one that names no expiry may take the install's |
 | a new version that drops no older one     | 13            | 17 where it drops one, and 2 for each further one it drops                 |
 | a new version that asks settings of its site |            | and what those settings cost as a change of the site, below                |
-| a site put back from a backup             | 19            | 2 for each version more, and 1 where it runs out                           |
-| a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 6 out of it         |
-| a change of who may open a site           | 3             | any other setting 2, both at once 5, and 1 where it is told an expiry      |
-| a new link                                | 9             | a rollback 2, a setting of the install 3, a computer's login 3             |
-| a copy of a site                          | 21            | counted at the request that begins it; 16 for each request that goes on    |
-| a copy the install's job finishes         | 21            | none for an ask while the job copies; 16 and 1 for each round of the job, with the answer that names the site |
+| a site put back from a backup             | 22            | 2 for each version more, and 1 where it runs out                           |
+| a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 9 out of it         |
+| a change of who may open a site           | 4             | any other setting 2, a title 1 more and a name 2 more, and 1 where it is told an expiry |
+| a new link                                | 12            | a rollback 2, a setting of the install 3, a computer's login 3             |
+| a copy of a site                          | 24            | counted at the request that begins it; 19 for each request that goes on    |
+| a copy the install's job finishes         | 24            | none for an ask while the job copies; 19 and 1 for each round of the job, with the answer that names the site |
 | a listing of the bucket                   | 1             | the files of a version, and what an upload lacks                           |
 | a page or a file a site answered          | 2             | the day's count of the site, and of all sites                              |
 
-The database counts an index entry and a row a trigger writes as rows, so the one row of a new site is 8. `rows.ts` holds the prices, and a test in the Workers pool sends each kind of request to a Worker on D1 and compares the two counts.
+The database counts an index entry and a row a trigger writes as rows, so the one row of a new site is 11: a site outside the trash has an entry in the index of each order a listing offers. `rows.ts` holds the prices, and a test in the Workers pool sends each kind of request to a Worker on D1 and compares the two counts.
 
 A product change that moves a row cost turns that test red, with the database's count beside the harness's for each kind of request.
 
@@ -434,14 +434,14 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   866 on the local fake, a few more with the demo's check: every site they publish, change, and remove
-the midnight run's checks                959: the copy the install's job finishes, 93 more
-a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
-a reset that keeps none                  about 390
+the checks, as the harness counts them   947 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the midnight run's checks                1,050: the copy the install's job finishes, 103 more
+a reset that keeps every sample          41: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
+a reset that keeps none                  about 430
 the harness's own statements             18: three tokens in and out, and the caps
 the wait for the new deployment          0: it asks with the token of the caps, and its request writes no row
-a usual run                              about 922 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
-a day of 40 such runs                    about 42,000 of the 100,000
+a usual run                              about 1,006 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
+a day of 40 such runs                    about 46,000 of the 100,000
 ```
 
 The install without a domain writes to the database of its own account: the same checks, the same ceilings, a count line of its own in each step of its workflow, and its own 100,000 a day.
@@ -449,7 +449,7 @@ The install without a domain writes to the database of its own account: the same
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 866 of at most 1100
+Rows written this run: 947 of at most 1100
 ```
 
 ## The load
@@ -467,7 +467,7 @@ A run started by hand with `load` ticked adds one check after all the others: so
 | the run's sweep removes the 7 sites | one removal each | 13 each | 1 each |
 
 ```text
-load: at most 432 rows written of a ceiling of 600, 60 bucket writes and lists of a ceiling of 80, and 100 visits of one visitor's 120 a minute
+load: at most 453 rows written of a ceiling of 600, 60 bucket writes and lists of a ceiling of 80, and 100 visits of one visitor's 120 a minute
 ```
 
 | The load | What happens |

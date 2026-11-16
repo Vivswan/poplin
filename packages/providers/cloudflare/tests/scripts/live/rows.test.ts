@@ -52,9 +52,9 @@ const [BEGUN, GONE_ON, WATCHED, MADE] = [
 describe("the meter of rows written", () => {
   // Drift: a copy the install's job runs writes its rows in steps no request shows, while every ask after it writes none. Counted as before, a run that waits long would stop at the ceiling for rows nobody wrote, and the job's own rows would go uncounted.
   test.each([
-    ["a copy the requests make counts its begin, and each request that goes on with it as the one that finishes it", [BEGUN, GONE_ON, MADE], 21 + 16 + 16],
-    ["a copy the install's job makes counts its begin, nothing for an ask that finds the job at it, and with the site the finish and the job's two rounds", [BEGUN, WATCHED, WATCHED, WATCHED, MADE], 21 + 16 + 2],
-    ["an ask whose answer cannot be read is counted as one that finished the copy", [BEGUN, WATCHED, 502], 21 + 16],
+    ["a copy the requests make counts its begin, and each request that goes on with it as the one that finishes it", [BEGUN, GONE_ON, MADE], 24 + 19 + 19],
+    ["a copy the install's job makes counts its begin, nothing for an ask that finds the job at it, and with the site the finish and the job's two rounds", [BEGUN, WATCHED, WATCHED, WATCHED, MADE], 24 + 19 + 2],
+    ["an ask whose answer cannot be read is counted as one that finished the copy", [BEGUN, WATCHED, 502], 24 + 19],
   ])("%s", async (_what, answers, written) => {
     const meter = meterRows(copying(answers), 1000);
     await meter.fetch(`${SERVER}/api/sites/docs/duplicate`, json("POST", {}));
@@ -72,7 +72,7 @@ describe("the meter of rows written", () => {
 
     expect({ ended, written: meter.written(), sent: install.sent, stopped: meter.stopped() }).toEqual({
       ended: [200, 403, 403, 200],
-      written: 20,
+      written: 23,
       sent: ["POST /api/uploads", "GET /api/sites"],
       stopped: "passed its ceiling of 30 rows written to the database",
     });
@@ -92,7 +92,7 @@ describe("the meter of rows written", () => {
     const ended = [(await meter.fetch(`${SERVER}/api/sites/docs/duplicate`, json("POST", {}))).status];
     for (let ask = 0; ask < 2; ask += 1) ended.push((await meter.fetch(`${SERVER}/api/sites/docs/duplicate`, json("POST", { upload: "u1" }))).status);
 
-    expect({ ended, written: meter.written(), stopped: meter.stopped() }).toEqual({ ended: [200, 200, 403], written: 37, stopped: "passed its ceiling of 30 rows written to the database" });
+    expect({ ended, written: meter.written(), stopped: meter.stopped() }).toEqual({ ended: [200, 200, 403], written: 43, stopped: "passed its ceiling of 30 rows written to the database" });
   });
 
   // A visit's rows are known by its answer alone, so it is sent before it is counted: visits that passed the ceiling unseen would leave a run green past it.

@@ -581,6 +581,75 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
+    // Drift: a week is read as the difference of two sums the sweep keeps, and the days it has not summed are added to it; a day counted in both, in neither, or in the week beside its own would draw a year that the days never were.
+    test("views are read week by week, the weeks ending on the last day: the same before any day is summed, with some summed, and with all but the newest summed, and from what is left once a year dropped the oldest", async () => {
+      const database = await opened(makeDatabase);
+      const counted = [
+        { day: "2026-10-05", site: NO_SITE, requests: 4, views: 4 },
+        { day: "2026-10-12", site: NO_SITE, requests: 1, views: 1 },
+        { day: "2026-10-12", site: OTHER_SITE, requests: 2, views: 2 },
+        { day: "2026-10-20", site: OTHER_SITE, requests: 5, views: 5 },
+        { day: "2026-10-25", site: NO_SITE, requests: 3, views: 3 },
+        { day: "2026-10-26", site: NO_SITE, requests: 6 },
+        { day: "2026-11-01", site: NO_SITE, requests: 2, views: 2 },
+        { day: "2026-11-01", site: OTHER_SITE, requests: 7, views: 7 },
+        { day: "2026-11-02", site: NO_SITE, requests: 8, views: 8 },
+      ];
+      for (const one of counted) await database.addRequests(one);
+      const unseen = "bbbbbbbbbbbb" as SiteId;
+      const month = async (): Promise<unknown> => {
+        const read = await database.readWeeklyViews([NO_SITE, OTHER_SITE, NO_SITE, unseen], "2026-11-02", 30);
+
+        return [read.days, read.all, [...read.sites]];
+      };
+      const weeks = (ofNoSite: number[], ofOther: number[], all: number[]): unknown => [
+        ["2026-10-04", "2026-10-06", "2026-10-13", "2026-10-20", "2026-10-27"],
+        all,
+        [
+          [NO_SITE, ofNoSite],
+          [OTHER_SITE, ofOther],
+          [unseen, [0, 0, 0, 0, 0]],
+        ],
+      ];
+
+      const open = await month();
+      // The days before the 21st are summed, then every day before the 1st: a day is summed an hour after it ended at the earliest.
+      await database.sweepRunOut(Date.parse("2026-10-21T12:00:00Z"));
+      const partly = await month();
+      await database.sweepRunOut(Date.parse("2026-11-02T00:30:00Z"));
+      const mostly = await month();
+      // A stretch that starts among the summed days counts from its first day, and one that holds no counted day counts nothing.
+      const inside = await database.readWeeklyViews([NO_SITE], "2026-10-26", 10);
+      const between = await database.readWeeklyViews([NO_SITE], "2026-10-19", 7);
+      // A year on, the days before 2026-10-23 are dropped with their sums; the sums that stay still count from where they did.
+      await database.sweepRunOut(Date.parse("2027-10-22T12:00:00Z"));
+
+      expect([open, partly, mostly]).toEqual(Array.from({ length: 3 }, () => weeks([4, 1, 0, 3, 10], [0, 2, 0, 5, 7], [4, 3, 0, 8, 17])));
+      expect([inside, between]).toEqual([
+        { days: ["2026-10-17", "2026-10-20"], all: [0, 8], sites: new Map([[NO_SITE, [0, 3]]]) },
+        { days: ["2026-10-13"], all: [0], sites: new Map([[NO_SITE, [0]]]) },
+      ]);
+      expect(await month()).toEqual(weeks([0, 0, 0, 3, 10], [0, 0, 0, 0, 7], [0, 0, 0, 3, 17]));
+    });
+
+    // Drift: the days of a graph are read from the sums once the sweep made them, and from the counts before; a day read from both would be drawn twice as high, and one read from neither not at all.
+    test("views read day by day are the same before the sweep summed a day and after", async () => {
+      const database = await opened(makeDatabase);
+      for (const [day, views] of [["2026-10-29", 9], ["2026-10-31", 3], ["2026-11-01", 7], ["2026-11-02", 8]] as const) await database.addRequests({ day, site: NO_SITE, requests: views, views });
+      const read = async (): Promise<unknown> => {
+        const { all, sites } = await database.readDailyViews([NO_SITE], "2026-11-02", 5);
+
+        return [all, sites.get(NO_SITE)];
+      };
+
+      const open = await read();
+      await database.sweepRunOut(Date.parse("2026-11-01T12:00:00Z"));
+      const partly = await read();
+      await database.sweepRunOut(Date.parse("2026-11-03T12:00:00Z"));
+
+      expect([open, partly, await read()]).toEqual(Array.from({ length: 3 }, () => [[9, 0, 3, 7, 8], [9, 0, 3, 7, 8]]));
+    });
+
     // Drift: a read day by day costs a row for every day of every site; one that took any number of either would spend the database's rows of a day on a single page.
     test.each([
       ["a day that is no date", [], "tomorrow", 30],
@@ -588,14 +657,32 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       ["half a day", [], "2026-11-01", 1.5],
       ["a day more than a year", [], "2026-11-01", 366],
       ["fifty-one sites", Array.from({ length: 51 }, (_site, at) => `site-${at}`), "2026-11-01", 30],
-    ])("a read day by day of %s is refused", async (_what, sites, day, count) => {
+    ])("a read day by day, or week by week, of %s is refused", async (_what, sites, day, count) => {
       const database = await opened(makeDatabase);
 
       await expect(database.readDailyViews(sites as SiteId[], day, count)).rejects.toThrow(RangeError);
+      await expect(database.readWeeklyViews(sites as SiteId[], day, count)).rejects.toThrow(RangeError);
+    });
+
+    // Drift: a sum is dropped with the count it was made from, found by the same site and day; a new link that moved a sum of a day whose count stays behind would leave that sum for ever.
+    test("a sum of a day past the year kept stays under the id it was counted under when its site gets a new one, and goes with the next sweep", async () => {
+      const database = await opened(makeDatabase);
+      const site = await made(database, draft("report" as SiteName));
+      const old = new Date(NOW - 365 * 86_400_000).toISOString().slice(0, 10);
+      await database.addRequests({ day: old, site: site.id, requests: 9, views: 9 });
+      await database.sweepRunOut(NOW - 363 * 86_400_000);
+      const summed = await database.readDailyViews([site.id], old, 1);
+
+      const moved = await database.giveNewId(site.id, BY_ADA);
+      if (moved.kind !== "done") throw new Error("no new id was given");
+      await database.sweepRunOut(NOW);
+      const left = await database.readDailyViews([site.id, moved.site.id], old, 1);
+
+      expect([summed.sites.get(site.id), [...left.sites.values()], left.all]).toEqual([[9], [[0], [0]], [0]]);
     });
 
     // Drift: the counts are kept under a site's id, and a new link changes the id; counts left under the old one would show a site nobody ever opened, and free its share of the day.
-    test("a site that gets a new id keeps its views and its day's requests under it, a site named twice is read once, and no other site's counts move", async () => {
+    test("a site that gets a new id keeps its views, summed or not, and its day's requests under it, a site named twice is read once, and no other site's counts move", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft("report" as SiteName));
       const other = await made(database, draft("notes" as SiteName));
@@ -603,14 +690,40 @@ function requestCounts(label: string, makeDatabase: DatabaseFactory): void {
       const old = new Date(NOW - 365 * 86_400_000).toISOString().slice(0, 10);
       await database.addRequests({ day, site: site.id, requests: 15, views: 12 });
       await database.addRequests({ day, site: other.id, requests: 4, views: 3 });
+      // Two days ago is summed by the sweep, the newest day is not: the move takes both along.
+      await database.addRequests({ day: new Date(NOW - 2 * 86_400_000).toISOString().slice(0, 10), site: site.id, requests: 5, views: 5 });
+      await database.sweepRunOut(NOW);
       // Counted last, so no later count drops it: only the move could take it along.
       await database.addRequests({ day: old, site: site.id, requests: 9, views: 9 });
 
       const moved = await database.giveNewId(site.id, BY_ADA);
       if (moved.kind !== "done") throw new Error("no new id was given");
+      // An id that names no site moves nobody's sums.
+      const refused = await database.giveNewId(site.id, BY_ADA);
+      const year = await database.readWeeklyViews([moved.site.id, site.id, other.id], day, 365);
+
+      const week = await database.readDailyViews([moved.site.id, site.id, other.id], day, 3);
+
+      expect([refused.kind, week.all, [...week.sites]]).toEqual([
+        "not_found",
+        [5, 0, 15],
+        [
+          [moved.site.id, [5, 0, 12]],
+          [site.id, [0, 0, 0]],
+          [other.id, [0, 0, 3]],
+        ],
+      ]);
+      expect([year.all.slice(-2), [...year.sites].map(([, counts]) => counts.slice(-2))]).toEqual([
+        [0, 20],
+        [
+          [0, 17],
+          [0, 0],
+          [0, 3],
+        ],
+      ]);
 
       expect([...(await database.readViews([moved.site.id, moved.site.id, site.id, other.id], day))]).toEqual([
-        [moved.site.id, { today: 12, week: 12 }],
+        [moved.site.id, { today: 12, week: 17 }],
         [site.id, { today: 0, week: 0 }],
         [other.id, { today: 3, week: 3 }],
       ]);

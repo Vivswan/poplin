@@ -67,6 +67,10 @@ test.each([
     lastCounts,
     108,
   ]);
+  // Once the scheduled run summed the days that are over, the stretch reads the same.
+  await install.database.sweepRunOut(clock.now);
+
+  expect(await (await opened.get(`/data/usage/visits?range=${range}`)).json()).toEqual(answer);
 });
 
 // Drift: a read costs a database row for every day of every site; a range or a list the route let through unchecked would spend a day's rows on one page.

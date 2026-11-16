@@ -9,6 +9,7 @@
 // totals       one row: how many sites there are and how much their kept versions hold
 // audit        what was done, by whom, and when; rows are added at the newest end and leave at the oldest
 // request_counts   one row per UTC day and site, and one more per day under the empty site for all sites together; a year is kept
+// view_sums        one row per site and UTC day that counted a page view, written once the day is over: the day's views and those of every day before it; a year is kept
 // declared_files   one row per UTC day: the files the uploads begun on it declared, and the times the store was written to or listed on it; the newest day and the one before it are kept
 // uploads      the staged publishes: begun, taking files, then live or given up
 // logins       the computers asking to be logged in: pending, then allowed or denied, and gone once used or ten minutes old
@@ -139,6 +140,16 @@ CREATE TABLE request_counts (
   rows_read INTEGER NOT NULL DEFAULT 0 CHECK (rows_read >= 0),
   rows_written INTEGER NOT NULL DEFAULT 0 CHECK (rows_written >= 0),
   PRIMARY KEY (day, site)
+) STRICT, WITHOUT ROWID`;
+
+/** A site's page views summed once a day is over: `views` of the day and `earlier` of every day before it, under the empty site for all sites together. The views of a stretch of days are the difference of two rows, each found by the site and a day. */
+const VIEW_SUMS = `
+CREATE TABLE view_sums (
+  site TEXT NOT NULL,
+  day TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  views INTEGER NOT NULL CHECK (views >= 0),
+  earlier INTEGER NOT NULL CHECK (earlier >= 0),
+  PRIMARY KEY (site, day)
 ) STRICT, WITHOUT ROWID`;
 
 /** The files the uploads begun on one UTC day declared, all holders together, and `writes`: the times the store was written to or listed on that day, a declared file counted when its upload begins. The newest day and the one before it are kept. */
@@ -328,7 +339,7 @@ BEGIN SELECT RAISE(ABORT, 'an entry of the audit log is never rewritten'); END`;
 /** Creates every table, index, and trigger of the first schema. */
 export const CREATE_SCHEMA: Step = {
   number: 1,
-  description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, declared_files, uploads, logins, leftovers, sweep_place, update_check, domain_check, and problems tables",
+  description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, view_sums, declared_files, uploads, logins, leftovers, sweep_place, update_check, domain_check, and problems tables",
   statements: [
     SITES,
     VERSIONS,
@@ -340,6 +351,7 @@ export const CREATE_SCHEMA: Step = {
     TOTALS_START_AT_ZERO,
     AUDIT,
     REQUEST_COUNTS,
+    VIEW_SUMS,
     DECLARED_FILES,
     UPLOADS,
     LOGINS,
@@ -350,6 +362,9 @@ export const CREATE_SCHEMA: Step = {
     PROBLEMS,
     "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
     "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
+    "CREATE INDEX sites_by_name ON sites (name, id) WHERE trashed_at IS NULL",
+    "CREATE INDEX sites_by_title ON sites (title_key, id) WHERE trashed_at IS NULL",
+    "CREATE INDEX sites_by_access ON sites (access_rank, id) WHERE trashed_at IS NULL",
     "CREATE INDEX sites_by_expiry ON sites (expires_at, id) WHERE expires_at IS NOT NULL AND trashed_at IS NULL",
     "CREATE INDEX sites_by_trashing ON sites (trashed_at, id) WHERE trashed_at IS NOT NULL",
     "CREATE INDEX earlier_ids_by_folder ON earlier_ids (folder)",

@@ -33,29 +33,14 @@ const VISITS_QUERY = v.strictObject({
 /** The longest stretch answered day by day, in days. */
 const MOST_DAILY = 90;
 
-/** How many days a week holds. */
-const WEEK = 7;
-
 /** One line of the graph: a count for every step, and the sum of every day read. */
 interface Line {
   readonly total: number;
   readonly counts: readonly number[];
 }
 
-function sum(counts: readonly number[]): number {
-  return counts.reduce((total, count) => total + count, 0);
-}
-
-/** The days each step of a stretch holds: one, or a week. The weeks end on the last day, so the first step holds the days before the first whole week and may be shorter. */
-function stepsOf(days: number): readonly (readonly [from: number, to: number])[] {
-  const length = days > MOST_DAILY ? WEEK : 1;
-  const steps = Math.ceil(days / length);
-
-  return Array.from({ length: steps }, (_step, at) => [Math.max(days - (steps - at) * length, 0), days - (steps - at - 1) * length] as const);
-}
-
-function lineOf(counts: readonly number[], steps: ReturnType<typeof stepsOf>): Line {
-  return { total: sum(counts), counts: steps.map(([from, to]) => sum(counts.slice(from, to))) };
+function lineOf(counts: readonly number[]): Line {
+  return { total: counts.reduce((total, count) => total + count, 0), counts };
 }
 
 /** The graph's data route. `range` is how many days were read, `days` holds the UTC date each step starts on, the earliest first, and `by` says what a step is; a site asked for that is no site any more is left out. */
@@ -65,14 +50,15 @@ export const visitsRoutes = new Hono<Shared>().get("/usage/visits", vValidator("
   if (!config.ok) return refused(context, config);
 
   const { range, sites: asked } = context.req.valid("query");
-  const [views, names] = await Promise.all([install.database.readDailyViews(asked, dayOf(install.now()), range), install.database.getSiteNames(asked)]);
-  const steps = stepsOf(views.days.length);
+  // A stretch answered week by week is read from the sums of its weeks, so a year costs its 53 weeks and not its 365 days.
+  const weekly = range > MOST_DAILY;
+  const today = dayOf(install.now());
+  const [views, names] = await Promise.all([weekly ? install.database.readWeeklyViews(asked, today, range) : install.database.readDailyViews(asked, today, range), install.database.getSiteNames(asked)]);
   const sites = asked.flatMap((id) => {
     const named = names.get(id);
 
-    return named === undefined ? [] : [{ id, name: named.name, ...lineOf(views.sites.get(id) ?? [], steps) }];
+    return named === undefined ? [] : [{ id, name: named.name, ...lineOf(views.sites.get(id) ?? []) }];
   });
-  const by = range > MOST_DAILY ? ("week" as const) : ("day" as const);
 
-  return context.json({ ok: true as const, range, by, days: steps.map(([from]) => views.days[from] ?? ""), all: lineOf(views.all, steps), sites });
+  return context.json({ ok: true as const, range, by: weekly ? ("week" as const) : ("day" as const), days: views.days, all: lineOf(views.all), sites });
 });

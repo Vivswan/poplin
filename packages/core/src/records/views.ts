@@ -26,6 +26,9 @@ const DAY_LENGTH = 10;
 /** Below this a sampled count says too little to name a number. */
 const FEWEST_NAMED = 10;
 
+/** How many days a week holds. */
+const WEEK = 7;
+
 /** How many digits of a count are shown; the rest are zeros. */
 const SHOWN_DIGITS = 2;
 
@@ -35,8 +38,8 @@ export const SITE_VIEWS = v.object({ today: COUNT, week: COUNT });
 /** About how many times a site's pages were opened: on the UTC day so far, and over the last seven UTC days, that day included. */
 export type SiteViews = Readonly<v.InferOutput<typeof SITE_VIEWS>>;
 
-/** Page views day by day: the days, the earliest first, and one count a day for all sites together and for each site asked for, 0 where nothing was counted. */
-export interface DailyViews {
+/** Page views over a run of days, step by step, a step being a day or a week: the day each step starts on, the earliest first, and one count a step for all sites together and for each site asked for, 0 where nothing was counted. */
+export interface CountedViews {
   readonly days: readonly string[];
   readonly all: readonly number[];
   readonly sites: ReadonlyMap<SiteId, readonly number[]>;
@@ -66,6 +69,21 @@ export function daysUpTo(day: string, count: number): string[] {
   const last = Date.parse(`${day}T00:00:00Z`);
 
   return Array.from({ length: count }, (_day, at) => dayOf(last - (count - 1 - at) * DAY_MS));
+}
+
+/**
+ * The weeks of a run of UTC days that ends on one. The weeks end on that day, so the first holds the days before the first whole week and may be shorter.
+ *
+ * @param day - a UTC date, such as `2026-11-13`
+ * @param count - how many days, that day included: a whole number from 1 to the days kept
+ * @returns the days of each week, the earliest week first
+ * @throws {RangeError} `count` is not such a number
+ */
+export function weeksUpTo(day: string, count: number): string[][] {
+  const days = daysUpTo(day, count);
+  const weeks = Math.ceil(count / WEEK);
+
+  return Array.from({ length: weeks }, (_week, at) => days.slice(Math.max(count - (weeks - at) * WEEK, 0), count - (weeks - at - 1) * WEEK));
 }
 
 /**

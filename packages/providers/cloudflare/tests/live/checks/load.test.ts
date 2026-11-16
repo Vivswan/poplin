@@ -100,7 +100,7 @@ describe("the load of a live run, against a local fake", () => {
 
       expect({ result: ran.result, failure: ran.failure, rows: ran.rows, bucket: ran.bucket }).toEqual({ result: "passed", failure: undefined, rows: plan.rows - UNCOUNTED, bucket: plan.bucket - UNMETERED });
       expect(ran.said.map((line) => line.replace(/\d+ ms/g, "N ms"))).toEqual([
-        "load: at most 432 rows written of a ceiling of 600, 60 bucket writes and lists of a ceiling of 80, and 100 visits of one visitor's 120 a minute",
+        "load: at most 453 rows written of a ceiling of 600, 60 bucket writes and lists of a ceiling of 80, and 100 visits of one visitor's 120 a minute",
         "load: publish 5 sites of one page: mean N ms, most N ms",
         "load: publish a site of 20 files: mean N ms, most N ms",
         "load: open a page: 30 in a row, mean N ms, most N ms; 50 at once in N ms; 0 refused",
@@ -113,7 +113,7 @@ describe("the load of a live run, against a local fake", () => {
   );
 
   test.each<readonly [what: string, sizes: LoadSizes, failure: string]>([
-    ["more rows than its ceiling", { ...LOAD_SIZES, sites: 20 }, "Error: The load did not start: it would write 927 rows, over its ceiling of 600."],
+    ["more rows than its ceiling", { ...LOAD_SIZES, sites: 20 }, "Error: The load did not start: it would write 993 rows, over its ceiling of 600."],
     ["more bucket writes than its ceiling", { ...LOAD_SIZES, files: 31 }, "Error: The load did not start: it would ask the bucket for 82 writes and lists, over its ceiling of 80."],
     ["more visits than one visitor's minute holds", { ...LOAD_SIZES, burst: 80 }, "Error: The load did not start: it would send 130 visits, over the 120 one visitor's minute holds."],
   ])(

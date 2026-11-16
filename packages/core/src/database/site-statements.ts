@@ -93,7 +93,9 @@ export function holding(text: string): SQL {
 /** The conditions that narrow a listing to what its query asks for: the trash or not, and each filter given. */
 function narrowing(query: SitesQuery): SQL[] {
   // The trash is named by its own column: that is the condition the index of the trash holds, which a trash listing is then read in the order of.
-  const conditions: SQL[] = [query.trash ? isNotNull(sites.trashed_at) : eq(sites.trashed, 0)];
+  // So are the sites outside it in an order other than the last change: the index of each such order holds that condition.
+  const outside = (query.sort ?? "updated") === "updated" ? eq(sites.trashed, 0) : isNull(sites.trashed_at);
+  const conditions: SQL[] = [query.trash ? isNotNull(sites.trashed_at) : outside];
 
   if (query.owner !== undefined) conditions.push(eq(sites.owner, query.owner));
 
@@ -288,8 +290,8 @@ function cursorPlace(after: NonNullable<SitesQuery["after"]>, sort: NonNullable<
 /**
  * One page of a listing as a query: one row more than the page, which shows whether another page follows. Each row names what the page is ordered by `listed_by`.
  *
- * The order by the last change is one an index holds, and its page is read as the index gives it. Any other order sorts every site of the listing, and each one sorted would cost its versions too:
- * such a page is cut first, by the sites' own columns, and only its sites are read with their versions.
+ * Outside the trash an index holds each order, and so it does the trash by when a site went there: such a page is read as its index gives it, and costs its own sites alone.
+ * The trash in any other order is sorted whole, and so are one holder's sites, and each site sorted would cost its versions too: that page is cut first, by the sites' own columns, and only its sites are read with their versions.
  *
  * @throws {RangeError} the cursor lacks what its order goes by
  */
@@ -306,7 +308,7 @@ export function pageAsked(query: SitesQuery) {
   if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
 
   const order = (by: SQL, id: SQL | SQLiteColumn): SQL[] => (descending ? [desc(by), desc(id)] : [asc(by), asc(id)]);
-  if (sort === "updated") {
+  if (sort === "updated" || (!query.trash && query.owner === undefined)) {
     const indexed = BUILD.select({ ...LISTED_FIELDS, listed_by: column.as("listed_by") }).from(sites).where(and(...conditions));
 
     return { page: indexed.orderBy(...order(column, sites.id)).limit(query.limit + 1), descending };
