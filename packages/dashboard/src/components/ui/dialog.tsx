@@ -5,6 +5,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { useUnsavedTyping } from "@/lib/unsaved"
 import { XIcon } from "lucide-react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -39,6 +40,21 @@ function DialogOverlay({
   )
 }
 
+// Drawn only while the dialog is: what is typed into it counts as unsaved until it closes.
+function DialogPopup({ onInput, ...props }: DialogPrimitive.Popup.Props) {
+  const typed = useUnsavedTyping()
+
+  return (
+    <DialogPrimitive.Popup
+      onInput={(event) => {
+        typed()
+        onInput?.(event)
+      }}
+      {...props}
+    />
+  )
+}
+
 function DialogContent({
   className,
   children,
@@ -50,7 +66,7 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Popup
+      <DialogPopup
         data-slot="dialog-content"
         className={cn(
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
@@ -75,7 +91,7 @@ function DialogContent({
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
-      </DialogPrimitive.Popup>
+      </DialogPopup>
     </DialogPortal>
   )
 }
