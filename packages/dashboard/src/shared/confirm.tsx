@@ -1,6 +1,6 @@
 // The question before a change that cannot be taken back with one press: what will happen, a button that does it, and Cancel.
 
-import { type ReactNode, type RefObject, useRef } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 
 import { thenHome } from "@/lib/focus";
 import {
@@ -46,7 +46,8 @@ function actionLook(question: Question | undefined): "destructive" | "outline" |
  * Ask a question.
  *
  * @param question - the question to show; `undefined` shows none
- * @param onAnswer - called once: `true` when the change is to be done. Cancel and Escape answer `false`. A press outside answers nothing: a question stays until it is answered. Once it has closed, a focus the change left on nothing goes home
+ * @param onAnswer - called once for each asking, whatever is pressed after the answer while the question fades: `true` when the change is to be done. Cancel and Escape answer `false`.
+ *   A press outside answers nothing: a question stays until it is answered. Once it has closed, a focus the change left on nothing goes home
  * @param returnTo - what takes the focus when the question closes, while it is still on the page: the control that asked, for a question no trigger of the dialog opens
  */
 export function Confirm({
@@ -63,9 +64,21 @@ export function Confirm({
   if (question !== undefined) last.current = question;
 
   const shown = question ?? last.current;
+  // A question is answered once: a second press of the same double click lands on a button that is still drawn while the question fades.
+  const asking = question !== undefined;
+  const answered = useRef(false);
+  useEffect(() => {
+    if (asking) answered.current = false;
+  }, [asking]);
+  const answer = (yes: boolean): void => {
+    if (answered.current) return;
+
+    answered.current = true;
+    onAnswer(yes);
+  };
 
   return (
-    <AlertDialog open={question !== undefined} onOpenChange={(open) => (open ? undefined : onAnswer(false))}>
+    <AlertDialog open={asking} onOpenChange={(open) => (open ? undefined : answer(false))}>
       <AlertDialogContent finalFocus={thenHome(returnTo)}>
         <AlertDialogHeader>
           <AlertDialogTitle>{shown?.title}</AlertDialogTitle>
@@ -74,7 +87,7 @@ export function Confirm({
         {/* A narrow screen stacks the two buttons, the last one on top: where not doing it leads, the first one is on top, so the filled button is the upper one of every question. */}
         <AlertDialogFooter className={shown?.rather === true ? "max-sm:flex-col" : undefined}>
           <AlertDialogCancel variant={shown?.rather === true ? "default" : "outline"}>{shown?.no ?? "Cancel"}</AlertDialogCancel>
-          <AlertDialogAction variant={actionLook(shown)} onClick={() => onAnswer(true)}>
+          <AlertDialogAction variant={actionLook(shown)} onClick={() => answer(true)}>
             {shown?.yes}
           </AlertDialogAction>
         </AlertDialogFooter>

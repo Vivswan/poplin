@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { thenHome } from "@/lib/focus";
+import { useOnePress } from "@/dialog/one-press";
 
 /** What the dialog is drawn from. */
 interface AskDialogProps {
@@ -51,7 +52,6 @@ interface AskDialogProps {
 export function AskDialog({ open, onOpenChange, title, says, label, hint, under, initial, takesInitial = false, returnTo, submit, onSubmit }: AskDialogProps): ReactNode {
   const [value, setValue] = useState(initial);
   const [refusal, setRefusal] = useState<string>();
-  const [busy, setBusy] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -60,22 +60,23 @@ export function AskDialog({ open, onOpenChange, title, says, label, hint, under,
     setRefusal(undefined);
   }, [open, initial]);
 
-  const send = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    setBusy(true);
+  const { press, busy } = useOnePress(async (): Promise<void> => {
     const refused = await onSubmit(value.trim());
-    setBusy(false);
     if (refused === undefined) return onOpenChange(false);
 
     setRefusal(refused);
     // The button that was pressed was off while the value was sent, which takes the focus from it: the field to correct takes it.
     field.current?.focus();
+  });
+  const send = (event: FormEvent): void => {
+    event.preventDefault();
+    press();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm" finalFocus={thenHome(returnTo)}>
-        <form onSubmit={(event) => void send(event)} className="flex flex-col gap-4">
+        <form onSubmit={send} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{says}</DialogDescription>

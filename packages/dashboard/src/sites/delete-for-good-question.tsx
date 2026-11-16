@@ -6,6 +6,7 @@ import { type UseMutationResult, useMutation, useQueryClient } from "@tanstack/r
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
 
 import {
+  AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
@@ -20,6 +21,7 @@ import { answerOf, api } from "@/lib/api";
 import { thenHome } from "@/lib/focus";
 import { sayDone, unsay } from "@/lib/notify";
 import { LONGEST_NAME, type Site, shownName } from "@/lib/sites";
+import { useOnePress } from "@/dialog/one-press";
 import { trashLine } from "@/sites/site-actions";
 import { SITES_KEY, siteKey } from "@/sites/site-queries";
 
@@ -52,8 +54,8 @@ interface AnswerProps {
   /** The delete of the screen: what it was sent for, and what became of it. */
   readonly removal: UseMutationResult<unknown, Error, Sent>;
 
-  /** Sends the delete of this asking. */
-  readonly onRemove: () => void;
+  /** Sends the delete of this asking, and answers once it is done or refused. */
+  readonly onRemove: () => Promise<unknown>;
 }
 
 /** What an open question shows: the field for the site's name, and the button that stays off until the name is typed. It is drawn anew with each asking, so each starts with an empty field. */
@@ -61,12 +63,12 @@ function Answer({ asked, asking, removal, onRemove }: AnswerProps): ReactNode {
   const { site } = asked;
   const cancel = useRef<HTMLButtonElement>(null);
   const [typed, setTyped] = useState("");
-  // What the last delete was refused with is said in the asking it was sent from alone, and a delete on its way holds that asking's button alone.
-  const own = removal.variables?.asking === asking;
-  const refusal = own ? removal.error?.message : undefined;
+  // What the last delete was refused with is said in the asking it was sent from alone.
+  const refusal = removal.variables?.asking === asking ? removal.error?.message : undefined;
+  const { press, busy } = useOnePress(onRemove);
   const remove = (event: FormEvent): void => {
     event.preventDefault();
-    if (typed === site.name && !removal.isPending) onRemove();
+    if (typed === site.name) press();
   };
 
   return (
@@ -98,7 +100,7 @@ function Answer({ asked, asking, removal, onRemove }: AnswerProps): ReactNode {
         </Field>
         <AlertDialogFooter>
           <AlertDialogCancel ref={cancel}>Cancel</AlertDialogCancel>
-          <AlertDialogAction type="submit" variant="destructive" disabled={typed !== site.name || (own && removal.isPending)}>
+          <AlertDialogAction type="submit" variant="destructive" disabled={typed !== site.name || busy}>
             Delete for good
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -129,20 +131,19 @@ export function DeleteForGoodQuestion(): ReactNode {
     },
   });
   // What only this screen does about a done delete, which the query library leaves out once the screen was left: it closes the asking the delete was sent from, and no other one that is open by then, and tells the screen that the site is gone.
-  const remove = (asked: Asked, sent: number): void =>
-    removal.mutate(
-      { site: asked.site, asking: sent },
-      {
-        onSuccess: () => {
-          if (open.current === sent) DELETE_FOR_GOOD.close();
+  const remove = (asked: Asked, sent: number): Promise<unknown> => {
+    const onSuccess = (): void => {
+      if (open.current === sent) DELETE_FOR_GOOD.close();
 
-          asked.onGone();
-        },
-      },
-    );
+      asked.onGone();
+    };
+
+    // A refusal is said at the field, from what the delete holds.
+    return removal.mutateAsync({ site: asked.site, asking: sent }, { onSuccess }).catch(() => undefined);
+  };
 
   return (
-    <AlertDialogPrimitive.Root
+    <AlertDialog
       handle={DELETE_FOR_GOOD}
       onOpenChange={(opens) => {
         open.current = opens ? asking + 1 : undefined;
@@ -150,6 +151,6 @@ export function DeleteForGoodQuestion(): ReactNode {
       }}
     >
       {({ payload: asked }) => (asked === undefined ? null : <Answer key={asking} asked={asked} asking={asking} removal={removal} onRemove={() => remove(asked, asking)} />)}
-    </AlertDialogPrimitive.Root>
+    </AlertDialog>
   );
 }

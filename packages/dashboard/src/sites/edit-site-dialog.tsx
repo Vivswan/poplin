@@ -8,6 +8,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { thenHome } from "@/lib/focus";
 import type { Site } from "@/lib/sites";
+import { useOnePress } from "@/dialog/one-press";
 
 /** What is said under each field while nothing is refused there. */
 const HINTS = {
@@ -100,7 +101,6 @@ export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDial
   const [title, setTitle] = useState(typedTitle(site));
   const [name, setName] = useState(site?.name ?? "");
   const [refusal, setRefusal] = useState<NamingRefusal>();
-  const [busy, setBusy] = useState(false);
   const fields = { title: useRef<HTMLInputElement>(null), name: useRef<HTMLInputElement>(null) };
   // Every opening starts from what the site holds: what was typed and then left by Cancel, Close, or Escape is not there the next time.
   // An opening is told by the site's id. The same site read again while the dialog is open is no opening, so what is typed stays.
@@ -125,25 +125,26 @@ export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDial
     set(value);
     setRefusal((held) => (held?.about === field ? undefined : held));
   };
-  const send = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
+  const { press, busy } = useOnePress(async (): Promise<void> => {
     if (shown === undefined) return;
 
-    setBusy(true);
     const refused = await onSave(shown, changes);
-    setBusy(false);
     if (refused === undefined) return onClose();
 
     setRefusal(refused);
     // The button that was pressed was off while the change was sent, which takes the focus from it: the refused field takes it, or the first one.
     fields[refused.about ?? "title"].current?.focus();
+  });
+  const send = (event: FormEvent): void => {
+    event.preventDefault();
+    press();
   };
   const refusalAt = (field: FieldKey): string | undefined => (refusal?.about === field ? refusal.sentence : undefined);
 
   return (
     <Dialog open={site !== undefined} onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent className="sm:max-w-sm" finalFocus={thenHome(returnTo)}>
-        <form onSubmit={(event) => void send(event)} className="flex flex-col gap-4">
+        <form onSubmit={send} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Edit the site</DialogTitle>
             <DialogDescription>The title is shown first. The name is part of the link.</DialogDescription>
