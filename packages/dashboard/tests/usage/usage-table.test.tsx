@@ -20,7 +20,7 @@ const PAGES = { requests: "https://provider.example/requests", database: "https:
 const NOON = new Date(2026, 10, 15, 12).getTime();
 
 /** A line with no setting, no link, and a number that is exact, but for what a test names. */
-function line(what: Line["what"], used: number, limit: number | null, more: Partial<Line> = {}): Line {
+function line(what: Line["what"], used: number | null, limit: number | null, more: Partial<Line> = {}): Line {
   return { what, used, limit, setting: null, about: false, link: null, ...more };
 }
 
@@ -42,7 +42,7 @@ const OWN: Usage = {
 /** What an install is answered once the host gave its own figures. */
 const OFFICIAL: Usage = {
   ...OWN,
-  official: { at: Date.UTC(2026, 10, 15, 14, 5) },
+  official: { at: Date.UTC(2026, 10, 15, 14, 5), behind: 600_000 },
   lines: [
     line("host_stored", 5_099_999, 10_000_000_000, { link: PAGES.storage }),
     line("host_requests", 1318, 100_000, { link: PAGES.requests }),
@@ -152,17 +152,17 @@ describe("the table of the Usage screen", () => {
 
   // Drift: the host's figures are exact and of the whole account; shown with "about", or under the names of the install's own lines, a person could not tell which number is whose.
   // The figure of the storage adds up the most each part held in a day: read as what the account holds, or as the most it held, it says more than the account ever had.
-  test("shows the host's own figures as exact numbers under their own names, the storage as the most it can have been, and says when they were read", async () => {
+  test("shows the host's own figures as exact numbers under their own names, the storage as the most it can have been, and says when they were read and how far behind they run", async () => {
     await draw(OFFICIAL);
 
     expect([officialLine(), tableRows().slice(1)]).toEqual([
-      `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}.`,
+      `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}. They run about 10 minutes behind.`,
       [
         ["Account storage, last 24 hours", "at most 5.1 MB", "10 GB", "0%", ""],
         ["Account requests today", "1,318", "100,000", "1%", ""],
         ["Database rows read today", "13,902", "5,000,000", "0%", ""],
-        ["Storage writes this month", "41,200", "1,000,000", "4%", ""],
-        ["Storage reads this month", "310,000", "10,000,000", "3%", ""],
+        ["Storage writes since 01 Nov UTC", "41,200", "1,000,000", "4%", ""],
+        ["Storage reads since 01 Nov UTC", "310,000", "10,000,000", "3%", ""],
       ],
     ]);
   });
@@ -174,11 +174,66 @@ describe("the table of the Usage screen", () => {
     expect([tableRows().slice(1), phoneRows(), hostLinks().map(([name]) => name), screen.getAllByRole("button", { name: /^Change/ }).map((way) => way.getAttribute("aria-label"))]).toEqual([
       [
         ["Requests on 15 Nov UTC", "1,240", "100,000", "1%", ""],
-        ["Storage reads in Nov UTC", "310,000", "10,000,000", "3%", ""],
+        ["Storage reads since 01 Nov UTC", "310,000", "10,000,000", "3%", ""],
       ],
-      ["Requests on 15 Nov UTC1,240of 100,0001%See it at Provider", "Storage reads in Nov UTC310,000of 10,000,0003%"],
+      ["Requests on 15 Nov UTC1,240of 100,0001%See it at Provider", "Storage reads since 01 Nov UTC310,000of 10,000,0003%"],
       ["Requests on 15 Nov UTC: see it at Provider", "Requests on 15 Nov UTC: see it at Provider"],
       ["Change the limit of Requests on 15 Nov UTC", "Change the limit of Requests on 15 Nov UTC"],
+    ]);
+  });
+
+  // Drift: a figure the host gave none of would read as 0, which is a quiet account; a count the account never passed would read as what it holds now; and a processing time would be written as a count with no unit.
+  test("says Not read for a figure the host gave none of, at most before what the account holds, and writes a processing time in milliseconds", async () => {
+    await draw({
+      ...OWN,
+      official: { at: Date.UTC(2026, 10, 15, 14, 5), behind: null },
+      lines: [
+        line("database_size", 1_400_000, 500_000_000, { link: PAGES.database }),
+        line("host_database_size", 2_300_001, 5_000_000_000),
+        line("host_files", 212, null),
+        line("host_uploads", null, null),
+        line("host_errors", 18, null),
+        line("host_stopped", 0, null),
+        line("host_slowest", 2.7, 10),
+        line("jobs_started", 6, null),
+        line("jobs_done", 5, null),
+        line("jobs_failed", 0, null),
+        line("jobs_running", null, 100),
+      ],
+    });
+
+    expect([officialLine(), tableRows().slice(1), phoneRows().filter((row) => row.includes("Not read")), screen.queryAllByRole("button", { name: /Requests are stopped/ }).length]).toEqual([
+      `Provider's own figures, as of ${momentIn(Date.UTC(2026, 10, 15, 14, 5))}.`,
+      [
+        ["Database size", "1.4 MB", "500 MB", "0%", ""],
+        ["Account database size", "at most 2.4 MB", "5 GB", "0%", ""],
+        ["Account files stored", "at most 212", "No limit", "", ""],
+        ["Uploads left unfinished", "Not read", "No limit", "", ""],
+        ["Account errors today", "18", "No limit", "", ""],
+        ["Requests stopped by a limit today", "0", "No limit", "", ""],
+        ["Processing time, slowest 1 in 100, today", "2.7 ms", "10 ms", "", ""],
+        ["Background jobs started today", "6", "No limit", "", ""],
+        ["Background jobs done today", "5", "No limit", "", ""],
+        ["Background jobs failed today", "0", "No limit", "", ""],
+        ["Background jobs running now", "Not read", "100", "", ""],
+      ],
+      ["Uploads left unfinishedNot readNo limit", "Background jobs running nowNot readof 100"],
+      0,
+    ]);
+  });
+
+  // Drift: the host stops a request only when it says so, and counts those on a line of their own; a slow day written as a limit passed would read as an emergency while no request was stopped.
+  test("above its limit the processing time shows a sign with a hint that names the line of the stopped requests, in words on a phone, and never the words of a limit passed", async () => {
+    await draw({ ...OWN, lines: [line("host_stopped", 0, null), line("host_slowest", 27.9, 10)] });
+    const hint = "Requests are stopped only when Provider says so: see Requests stopped by a limit.";
+
+    expect([tableRows().slice(1), screen.getAllByRole("button", { name: /Requests are stopped/ }).map((sign) => [sign.getAttribute("aria-label"), sign.tagName]), phoneRows()]).toEqual([
+      [
+        ["Requests stopped by a limit today", "0", "No limit", "", ""],
+        ["Processing time, slowest 1 in 100, today", "27.9 ms", "10 ms", "", ""],
+      ],
+      [[`Processing time, slowest 1 in 100, today: ${hint}`, "BUTTON"]],
+      ["Requests stopped by a limit today0No limit", `Processing time, slowest 1 in 100, today27.9 msof 10 ms${hint}`],
     ]);
   });
 

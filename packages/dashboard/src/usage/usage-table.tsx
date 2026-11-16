@@ -1,12 +1,14 @@
 // The table of the Usage screen: each number beside its limit, with words only once a number nears it, the way to the setting that holds the limit, and the way to the host's own page of the number.
 //
-// A number the install counted itself reads "about", since its count can read low. The account's storage reads "at most", since the host's figure of it can read high. Once the host gave its own figures, the line over the table says when.
+// A number the install counted itself reads "about", since its count can read low. What the account holds reads "at most", since the host's figure of it can read high.
+// Once the host gave its own figures, the line over the table says when, and how far behind they run.
+// A figure the host gave none of reads "Not read". The processing time stands beside a limit that stops nothing by itself, so above it the line shows a quiet sign with a hint and never the words of a limit passed.
 // A day's number is of a UTC day: its line says "today" where that is the reader's date too, and names the day where it is not.
 
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
-import { ArrowUpRightIcon, ExternalLinkIcon } from "lucide-react";
+import { ArrowUpRightIcon, ExternalLinkIcon, TriangleAlertIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { Progress } from "@/components/ui/progress";
@@ -24,32 +26,61 @@ import { raisedBytes, shareOf } from "@/usage/usage-values";
 const NAMES: Readonly<Record<Line["what"], string>> = {
   stored: "Storage, all sites",
   host_stored: "Account storage, last 24 hours",
+  database_size: "Database size",
+  host_database_size: "Account database size",
   sites: "Sites, the trash included",
   trashed: "In the trash",
   files: "Files",
+  host_files: "Account files stored",
+  host_uploads: "Uploads left unfinished",
   requests: "Requests",
   host_requests: "Account requests",
+  host_errors: "Account errors",
+  host_stopped: "Requests stopped by a limit",
+  host_slowest: "Processing time, slowest 1 in 100,",
   rows_read: "Database rows read",
   rows_written: "Database rows written",
   storage_writes: "Storage writes",
   storage_reads: "Storage reads",
+  jobs_started: "Background jobs started",
+  jobs_done: "Background jobs done",
+  jobs_failed: "Background jobs failed",
+  jobs_running: "Background jobs running now",
 };
 
-/** The lines counted over a UTC day, and those over a UTC month. */
+/** The lines counted over a UTC day, and those counted from the first day of a UTC month. */
 const OVER: Readonly<Partial<Record<Line["what"], "day" | "month">>> = {
   requests: "day",
   host_requests: "day",
+  host_errors: "day",
+  host_stopped: "day",
+  host_slowest: "day",
   rows_read: "day",
   rows_written: "day",
   storage_writes: "month",
   storage_reads: "month",
+  jobs_started: "day",
+  jobs_done: "day",
+  jobs_failed: "day",
 };
 
 /** The lines counted in bytes. */
-const IN_BYTES: ReadonlySet<Line["what"]> = new Set(["stored", "host_stored"]);
+const IN_BYTES: ReadonlySet<Line["what"]> = new Set(["stored", "host_stored", "database_size", "host_database_size"]);
 
-/** The lines whose number the account never passed and may not have reached: the host's figure of its storage adds up the most each part of it held, and the parts need not have held that at one time. They are counted in bytes. */
-const AT_MOST: ReadonlySet<Line["what"]> = new Set(["host_stored"]);
+/** The lines counted in milliseconds. */
+const IN_MILLISECONDS: ReadonlySet<Line["what"]> = new Set(["host_slowest"]);
+
+/** The lines whose number the account never passed and may not have reached: the host's figure adds up the most each part of the account held, and the parts need not have held that at one time. */
+const AT_MOST: ReadonlySet<Line["what"]> = new Set(["host_stored", "host_database_size", "host_files", "host_uploads"]);
+
+/** The lines whose limit stops nothing by itself: a number above it is a sign to look, never a limit passed. */
+const GUIDES: ReadonlySet<Line["what"]> = new Set(["host_slowest"]);
+
+/** What a line says in place of a number the host gave none of. */
+const NOT_READ = "Not read";
+
+/** A minute in milliseconds. */
+const MINUTE_MS = 60_000;
 
 /** What the line over the table ends with when the host gave no figures: the numbers under it are then the install's own. */
 const OWN_COUNT = "The numbers here are poplin's own count.";
@@ -64,14 +95,25 @@ const ACTIONS_WIDTH = 88;
 const AS_GIVEN = { key: "", descending: false } as const;
 
 function amount(line: Line, value: number): string {
-  return IN_BYTES.has(line.what) ? showBytes(value) : showCount(value);
+  if (IN_BYTES.has(line.what)) return showBytes(value);
+
+  return IN_MILLISECONDS.has(line.what) ? `${showCount(value)} ms` : showCount(value);
 }
 
-/** What a line has used: the number, "about" before one the install counted itself, and "at most" before one the account never passed. */
+/** What a line has used: the number, "about" before one the install counted itself, and "at most" before one the account never passed. A number the host gave none of says so. */
 function used(line: Line): string {
-  if (AT_MOST.has(line.what)) return `at most ${amount(line, raisedBytes(line.used))}`;
+  if (line.used === null) return NOT_READ;
+
+  if (AT_MOST.has(line.what)) return `at most ${amount(line, IN_BYTES.has(line.what) ? raisedBytes(line.used) : line.used)}`;
 
   return line.about ? `about ${amount(line, line.used)}` : amount(line, line.used);
+}
+
+/** What a number above a guide says: who stops a request, and the line that counts the stopped ones. Nothing for any other line, and for a number at or under its guide. */
+function guideHint(line: Line, host: string): string | undefined {
+  if (!GUIDES.has(line.what) || line.used === null || line.limit === null || line.used <= line.limit) return undefined;
+
+  return `Requests are stopped only when ${host} says so: see ${NAMES.host_stopped}.`;
 }
 
 /** What a line is called on the screen, by what it counts. */
@@ -83,6 +125,11 @@ interface Named {
   readonly name: string;
 }
 
+/** A named line with the name of the host whose figures and pages it shows. */
+interface Hosted extends Named {
+  readonly host: string;
+}
+
 /** What every line is called on the screen: what it counts, then the day or the month it is counted over, in the words given. */
 function namesOf(spans: ReturnType<typeof spansOf>): Names {
   return (what) => {
@@ -92,9 +139,30 @@ function namesOf(spans: ReturnType<typeof spansOf>): Names {
   };
 }
 
-/** How much of its limit a line has used: a thin bar, the percent, and words from near the limit on. Nothing for a line without a limit. */
-function ShareCell({ line, name }: Named): ReactNode {
-  const share = shareOf(line.used, line.limit);
+/** The quiet sign of a number above its guide: a button whose hint a pointer and the keyboard are shown, and whose press does nothing. Nothing for a line that has no such hint. */
+function GuideSign({ line, name, host }: Hosted): ReactNode {
+  const hint = guideHint(line, host);
+  if (hint === undefined) return null;
+
+  return (
+    <IconButton label={hint} name={`${name}: ${hint}`} className="text-warn hover:text-warn">
+      <TriangleAlertIcon />
+    </IconButton>
+  );
+}
+
+/** The hint of a number above its guide, in words, for a phone: it has no pointer to show a hint to. */
+function GuideWords({ line, host }: Pick<Hosted, "line" | "host">): ReactNode {
+  const hint = guideHint(line, host);
+
+  return hint === undefined ? null : <span className="text-[13px] text-muted-foreground">{hint}</span>;
+}
+
+/** How much of its limit a line has used: a thin bar, the percent, and words from near the limit on. Nothing for a line without a limit or without a number, and for a guide the sign alone. */
+function ShareCell({ line, name, host }: Hosted): ReactNode {
+  if (GUIDES.has(line.what)) return <GuideSign line={line} name={name} host={host} />;
+
+  const share = line.used === null ? undefined : shareOf(line.used, line.limit);
   if (share === undefined) return null;
 
   const loud = share.state !== "fine";
@@ -134,7 +202,7 @@ function hostPage(line: Line): string | undefined {
 }
 
 /** What a row of the table leads to: the host's own page of its number, in a new tab, then the setting that holds its limit. Whichever a row has, its last icon ends at the row's right edge. */
-function RowLinks({ line, name, host }: Named & { readonly host: string }): ReactNode {
+function RowLinks({ line, name, host }: Hosted): ReactNode {
   const link = hostPage(line);
 
   return (
@@ -150,7 +218,7 @@ function RowLinks({ line, name, host }: Named & { readonly host: string }): Reac
 }
 
 /** The way from a line to the host's own page of its number, in words, for a phone: it has no pointer to show a hint to. */
-function HostLink({ line, name, host }: Named & { readonly host: string }): ReactNode {
+function HostLink({ line, name, host }: Hosted): ReactNode {
   const link = hostPage(line);
   if (link === undefined) return null;
 
@@ -169,7 +237,7 @@ function HostLink({ line, name, host }: Named & { readonly host: string }): Reac
 }
 
 /** The columns of the Usage table. */
-function usageColumns(names: Names): readonly ColumnSpec<Line>[] {
+function usageColumns(names: Names, host: string): readonly ColumnSpec<Line>[] {
   return [
     { id: "what", header: "What", fixed: true, cell: (line) => names(line.what) },
     { id: "used", header: "Used", numeric: true, cell: (line) => <span className="tabular-nums">{used(line)}</span> },
@@ -179,7 +247,7 @@ function usageColumns(names: Names): readonly ColumnSpec<Line>[] {
       numeric: true,
       cell: (line) => <span className="text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : amount(line, line.limit)}</span>,
     },
-    { id: "share", header: "Share of the limit", grows: true, cell: (line) => <ShareCell line={line} name={names(line.what)} /> },
+    { id: "share", header: "Share of the limit", grows: true, cell: (line) => <ShareCell line={line} name={names(line.what)} host={host} /> },
   ];
 }
 
@@ -199,7 +267,7 @@ function PhoneList({ usage, names }: { readonly usage: Usage; readonly names: Na
               <LimitLink line={line} name={name} />
             </span>
           </span>
-          <ShareCell line={line} name={name} />
+          {GUIDES.has(line.what) ? <GuideWords line={line} host={usage.host} /> : <ShareCell line={line} name={name} host={usage.host} />}
           <HostLink line={line} name={name} host={usage.host} />
         </li>
       ))}
@@ -207,9 +275,14 @@ function PhoneList({ usage, names }: { readonly usage: Usage; readonly names: Na
   );
 }
 
+/** What the line over the table adds of figures that run behind the moment: by about how many minutes. Nothing where the host names no such time. */
+function behindWords(behind: number | null): string {
+  return behind === null ? "" : ` They run about ${showCount(Math.round(behind / MINUTE_MS))} minutes behind.`;
+}
+
 /** What the line over the table says: when the host's own figures were read, or why the kept key gave none. */
 function officialWords(official: NonNullable<Usage["official"]>, host: string): string {
-  if ("at" in official) return `${host}'s own figures, as of ${momentIn(official.at)}.`;
+  if ("at" in official) return `${host}'s own figures, as of ${momentIn(official.at)}.${behindWords(official.behind)}`;
 
   if (official.refusal === "unreachable") return `${host} did not answer. ${OWN_COUNT}`;
 
@@ -238,7 +311,7 @@ export function UsageTable({ usage, read }: { readonly usage: Usage; readonly re
   const [choice] = useTimeZoneChoice();
   const { day, month } = spansOf(usage.day, read, choice);
   const names = useMemo(() => namesOf({ day, month }), [day, month]);
-  const columns = useMemo(() => usageColumns(names), [names]);
+  const columns = useMemo(() => usageColumns(names, usage.host), [names, usage.host]);
 
   return (
     <>

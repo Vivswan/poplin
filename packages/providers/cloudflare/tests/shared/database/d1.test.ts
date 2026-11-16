@@ -966,3 +966,18 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     expect(costs).toEqual(ROWS);
   });
 });
+
+describe("D1: the size of the database", () => {
+  // Drift: the Usage screen shows this number beside the most a database may hold; a size never kept, or one kept from before the last write, would show a database that is not the install's.
+  test("a driver that was answered nothing holds no size, and after a statement it holds the bytes D1 said the database has, which grow with a write of many rows", async () => {
+    await reset();
+    const driver = new D1Driver(BINDINGS.DB);
+    const before = driver.heldBytes();
+    await driver.batch([{ sql: "CREATE TABLE sized (text TEXT NOT NULL)", params: [] }]);
+    const small = driver.heldBytes() ?? 0;
+    await driver.batch([{ sql: "INSERT INTO sized (text) WITH RECURSIVE entry(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM entry WHERE n < 2000) SELECT printf('%0200d', n) FROM entry", params: [] }]);
+    const large = driver.heldBytes() ?? 0;
+
+    expect([before, small > 0, large - small >= 400_000]).toEqual([undefined, true, true]);
+  });
+});

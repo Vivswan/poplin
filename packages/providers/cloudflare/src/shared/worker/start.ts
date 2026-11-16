@@ -37,6 +37,7 @@ import * as v from "valibot";
 import { version } from "../../../../../cli/package.json";
 import { D1Driver } from "../database/d1";
 import { workflowJobs } from "../jobs/workflow-jobs";
+import { workflowNameOf } from "../jobs/workflow-name";
 import { readKeptKey } from "../install/key/kept-key";
 import { createEndLogins } from "../install/key/logins-end";
 import { isSettled, readUploadKey } from "../install/key/upload-key";
@@ -428,7 +429,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     domain,
     key,
     ...carried,
-    usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), key: kept }),
+    usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), databaseBytes: () => driver.heldBytes(), workflow: workflowNameOf(own.value.script), key: kept }),
     version: VERSION,
     jobs: workflowJobs(env.JOBS),
     updating: { self: update, counters },
