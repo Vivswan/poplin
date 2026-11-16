@@ -64,7 +64,9 @@ Both kinds of install, with a domain and without one, show the same lines.
 | Background jobs started today, done today, failed today | the starts, good ends, and failures of every Workflow of the account on the UTC day. A job poplin stopped is in none of the last two | no line |
 | Background jobs running now | the jobs of this install's own Workflow that run at this moment, up to 100 | no line |
 
-Cloudflare's figures count the whole account: every Worker, database, bucket, and Workflow in it, poplin's or not. The free plan's limits are the account's too, so those lines stand against the limit that counts. Background jobs running now is the one exception: it counts this install's jobs alone. `at most` says the account held that much or less: two parts of it need not be at their largest at one time.
+Cloudflare's figures count the whole account: every Worker, database, bucket, and Workflow in it, poplin's or not. The free plan's limits are the account's too, so those lines stand against the limit that counts.
+
+Background jobs running now is the one exception: it counts this install's jobs alone. `at most` says the account held that much or less: two parts of it need not be at their largest at one time.
 
 Cloudflare counts a month of storage writes and reads by the account's own billing period, which the kept key cannot read. The two lines count from the first day of the UTC month and name that day, so on an account whose period starts on another day they read high or low against the free amount.
 
@@ -95,7 +97,9 @@ When the key gave no figure at all, the line over the table says why and ends in
 | the limit of a line with no setting | the free plan's, for the whole account; for Database size, for one database. No setting moves it. On the storage lines it is the free amount, and Cloudflare bills what goes past it |
 | the icon at a row's end, See it at Cloudflare on a phone | Cloudflare's own page for that number, in a new tab: Workers & Pages for requests, D1 for the database, R2 for the storage, Workflows for the jobs. It counts the whole account |
 
-poplin's own count adds no row: it rides in the write that counts the day's requests, so no request reads or writes a row for it. Cloudflare's figures are 7 questions to Cloudflare, each alone so that one that fails leaves the others standing: 6 to its analytics and 1 to the list of running jobs. They are asked when the screen opens and an instance holds no answer still kept.
+poplin's own count adds no row: it rides in the write that counts the day's requests, so no request reads or writes a row for it.
+
+Cloudflare's figures are 7 questions to Cloudflare, each alone so that one that fails leaves the others standing: 6 to its analytics and 1 to the list of running jobs. They are asked when the screen opens and an instance holds no answer still kept.
 
 From 80% of a limit on, the screen says Near the limit; the processing time alone says nothing until it is above its 10 ms. Only the database pauses an install. Once a daily limit of database rows is reached, D1 refuses until 00:00 UTC: a site shows a paused page, and the API answers `allowance_spent`.
 
