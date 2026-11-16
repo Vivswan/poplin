@@ -51,6 +51,9 @@ export const HTTPS_ALONE = "max-age=15552000";
 /** No page may show the site in a frame. */
 const FRAME_NONE = "frame-ancestors 'none'";
 
+/** A browser hands the file to no page of another origin as an image, a style, or a script. Every other site of the install is another origin, and a frame is not held back by it. */
+const OWN_PAGES_ONLY = ["Cross-Origin-Resource-Policy", "same-origin"] as const;
+
 /** The request headers the refusal of outside pages reads, so a cache keeps the answers apart. */
 const FETCH_METADATA = "Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest, Origin, Referer";
 
@@ -160,7 +163,8 @@ function frameRule(facts: FileFacts): string | undefined {
 /**
  * Build the headers of a site's file.
  *
- * @returns the content type, the hardening headers, the https rule, the cache rule, and the frame rule, with no entity tag; never an `Access-Control-Allow-*` header, so no script of another origin reads the file
+ * @returns the content type, the hardening headers, the https rule, the cache rule, and the frame rule, with no entity tag; for a site that is not `embeddable`, the rule that keeps the file out of every other origin's pages too.
+ * Never an `Access-Control-Allow-*` header, so no script of another origin reads a file it fetched
  */
 export function siteHeaders(facts: FileFacts): Headers {
   const headers = new Headers({
@@ -179,6 +183,9 @@ export function siteHeaders(facts: FileFacts): Headers {
   if (frames !== undefined) headers.set("Content-Security-Policy", frames);
 
   if (facts.settings.outside_pages === "blocked") headers.set("Vary", FETCH_METADATA);
+
+  // A browser sends a viewer's login with a request that a page of another site of the install makes, so the frame rule alone would leave a file loadable there as a script.
+  if (!facts.site.embeddable) headers.set(...OWN_PAGES_ONLY);
 
   return headers;
 }

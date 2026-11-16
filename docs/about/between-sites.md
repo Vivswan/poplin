@@ -7,7 +7,7 @@ order: 20
 
 What a page of one site, or of another domain, can ask of a site; [Security](security.md) says who may open a site.
 
-Each site is its own origin, so a page's scripts cannot read another site's pages or files. The dashboard's cookie is sent to the dashboard alone.
+Each site is its own origin, so a page's scripts cannot fetch another site's pages or files and read what comes back. A page can still run another site's script file, as the tables below say. The dashboard's cookie is sent to the dashboard alone.
 
 A browser still counts every site of the install, the dashboard, and every other hostname under the domain as one site. What a script of one site can do with that:
 
@@ -24,20 +24,30 @@ An application on another hostname of the domain that trusts a cookie by its nam
 
 | Switch | Set on | Values |
 | --- | --- | --- |
-| `embeddable` | one site | on, the default; off: no page may show the site in a frame |
+| `embeddable` | one site | on, the default; off |
 | `outside_pages` | the install | `blocked`, the default; `allowed` |
+
+| `embeddable` | The site in a frame | Its images, styles, and classic scripts |
+| --- | --- | --- |
+| on | another page may show it | another page may load them |
+| off | no page may | no page but the site's own may |
+
+The switch means the same for a private, an unlisted, and a public site, and a change of who can open a site leaves it as it is.
 
 | A page asks for | Another site of the install | A page of another domain, `blocked` | A page of another domain, `allowed` |
 | --- | --- | --- | --- |
 | a link to a site | works | works | works |
-| a site's images, styles, and classic scripts | works; never for a private site | refused with 403 | works; never for a private site |
+| a site's images, styles, and classic scripts, `embeddable` on | works | refused with 403 | works; never for a private site |
+| a site's images, styles, and classic scripts, `embeddable` off | refused by the browser | refused with 403 | refused by the browser; a private site at its login |
 | a site in a frame, `embeddable` on | works | refused | works; never for a private site |
 | a site in a frame, `embeddable` off | refused | refused | refused |
-| a site's files, read by its script | refused | refused | refused |
+| a site's files, fetched and read by its script | refused | refused | refused |
 
 - **A private site needs the viewer's login in every row.** A browser sends Access's cookie only to the private site it was set for: with a link followed from anywhere, and with a request or a frame of a page of another site of the install. It does not send it with a request or a frame of a page of another domain.
-- **A private site's files load in its own pages alone.** Every file of a private site carries `Cross-Origin-Resource-Policy: same-origin`, so a browser hands its images, styles, and scripts to no other page, a logged-in viewer's included. A frame is not held back by it.
-- **No script reads another site's files.** No response carries a header that lets another origin's script read it.
+- **A new site starts with `embeddable` on, a private one included.** Another site of the install can show it in a frame and load its files, in the browser of a viewer who may open it. A script loaded that way runs in the other page, which reads what it defines. For anything sensitive turn it off: `poplin set <site> --embeddable off`, or Allow embedding in the site's panel.
+- **Off, a site's files load in its own pages alone.** Every file of the site carries `Cross-Origin-Resource-Policy: same-origin` beside its frame rule, so a browser hands its images, styles, and scripts to no page at another address, a logged-in viewer's included.
+- **Off counts each address on its own.** A public site answers at two addresses. A page at one loads a file it names without a hostname, and not one it names by the other address in full. A browser that holds a file from before the switch went off loads it until its copy runs out, a day at most.
+- **No script fetches another site's file and reads it.** No response carries a header that lets another origin's script read what it fetched. A script file that a page loads as a script is the row above it: it runs in that page.
 - **A frame rule goes out with every file** unless the site is `embeddable` and `outside_pages` is `allowed`. For an `embeddable` site under `blocked` it names every hostname under the install's domain.
 
 The Worker decides from the request's `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, `Origin`, and `Referer` headers and reads no content. Opening an address as the top-level page always passes, and so does a request with no `Sec-Fetch-Site` header.

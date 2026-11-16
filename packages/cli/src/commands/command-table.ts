@@ -23,7 +23,7 @@ const SITE_SETTINGS: readonly FlagSpec[] = [
   { name: "--public-name", value: "<name>", about: "with --public: its public name, when not its name" },
   { name: "--title", value: "<title>", about: 'its title on your dashboard; "" is the page\'s own' },
   { name: "--search-engines", value: "on|off", about: "may search engines list it, if the install allows" },
-  { name: "--embeddable", value: "on|off", about: "may other pages show it in a frame" },
+  { name: "--embeddable", value: "on|off", about: "may other pages show it in a frame and load its files" },
   { name: "--expires", value: "<when>", about: "when it moves to the trash: 7d, 2026-12-01, never" },
 ];
 

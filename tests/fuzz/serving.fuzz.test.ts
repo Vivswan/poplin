@@ -14,6 +14,7 @@ const HTML = "text/html; charset=utf-8";
 const FILES = { LICENSE: ["terms", "text/plain"], "index.html": ["home", HTML], "about.html": ["about", HTML], "docs/index.html": ["docs", HTML], "app.js": ["let a = 1;", "text/javascript"] } as const;
 const ANSWERS = [200, 206, 302, 304, 403, 404, 405, 416];
 const SHOWN = [200, 206, 304, 416];
+const FILE_ANSWERS = [200, 206, 304];
 const AROUND_LOGIN = [404, 405];
 const MISSING_ID = "000000000000";
 const TYPED_NAMES = ["other", "abc", "a-b-c", "zzz9"];
@@ -40,9 +41,11 @@ const trashed = await install.publish({ name: "trashed", access: "unlisted", fil
 const loose = await install.publish({ name: "loose", access: "unlisted", files: { ...FILES, "404.html": ["lost", HTML] }, unlisted_files: true });
 const guided = await install.publish({ name: "guided", access: "unlisted", files: { ...FILES, "404.html": ["lost", HTML] } });
 const expired = await install.publish({ name: "expired", access: "unlisted", expires: NOW - 1, files: FILES });
+const sealed = await install.publish({ name: "sealed", access: "unlisted", embeddable: false, files: { ...FILES, "404.html": ["lost", HTML] } });
+const locked = await install.publish({ name: "locked", access: "private", embeddable: false, files: FILES });
 await install.database.trashSite(trashed.id, { by: install.owner, at: NOW });
 
-const SITES = [unlisted, hidden, shown, trashed, expired, loose, guided];
+const SITES = [unlisted, hidden, shown, trashed, expired, loose, guided, sealed, locked];
 const BY_ID = new Map(SITES.map((site) => [site.id as string, site] as const));
 const PREFIXES = SITES.map((site) => `${site.folder}/v${site.live_version}/`);
 const ALIKE_UNDER_U = [hidden.id, trashed.id, expired.id, MISSING_ID];
@@ -169,6 +172,14 @@ function cacheFacts(asked: Asked, response: Response): Record<string, boolean> {
   };
 }
 
+// What another origin's page may load: the rule goes out with every file of a site that is not embeddable, the site's own 404 page included, and with nothing else.
+function loadRule(asked: Asked, response: Response): string | null {
+  const ownPage = response.status === 404 && (response.headers.get("Content-Type") ?? "").startsWith("text/html");
+  const isFile = FILE_ANSWERS.includes(response.status) || ownPage;
+
+  return isFile && asked.site?.embeddable === false ? "same-origin" : null;
+}
+
 property(
   "any hostname, path, and headers get a published answer, read only the addressed site in three calls, open no file they do not send, show no private site without the login, and clear the cache only with a page for a request that holds another version",
   fc.asyncProperty(hosts, paths, fc.constantFrom(...METHODS), headers, settings, async (host, path, method, sent, chosen) => {
@@ -196,6 +207,19 @@ property(
     };
 
     expect(facts).toEqual({ published: true, outside: [], reads: true, openedUnsent: false, blockedShown: false, crossOriginOpened: false, broken: [] });
+  }),
+);
+
+property(
+  "every file of a site that is not embeddable, and no other answer, tells a browser to keep it out of the pages of other origins",
+  fc.asyncProperty(hosts, paths, fc.constantFrom(...METHODS), headers, settings, async (host, path, method, sent, chosen) => {
+    const address = `https://${host}${path}`;
+    fc.pre(URL.canParse(address));
+
+    const response = await serveSite(new Request(address, { method, headers: sent }), { ...install.serving, settings: chosen });
+    await response.body?.cancel();
+
+    expect(response.headers.get("Cross-Origin-Resource-Policy")).toBe(loadRule(askedOf(new URL(address), method, sent), response));
   }),
 );
 

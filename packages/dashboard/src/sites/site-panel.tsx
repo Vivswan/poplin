@@ -21,6 +21,9 @@ import { type Reveal, RevealButton, SiteLink } from "@/sites/site-columns";
 import { type Shown, useSite } from "@/sites/site-queries";
 import type { Ask } from "@/sites/site-questions";
 
+/** What stands under the switch for embedding: the two things it decides, which its label names one of. */
+const EMBEDDING_NOTE = "Other pages may show this site in a frame and load its files.";
+
 /** What the panel is drawn from. */
 interface SitePanelProps {
   /** The label of the site to show, from the address. */
@@ -243,6 +246,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
         />
         <SearchNote open={site.access === "public"} allowed={data.search_engines_allowed} />
         <PanelSwitch id="site-embeddable" label="Allow embedding" on={site.embeddable} onChange={(on) => actions.setSetting(site, "embeddable", on)} />
+        <FieldDescription className="-mt-1 text-[13px] leading-5">{EMBEDDING_NOTE}</FieldDescription>
       </PanelBlock>
       <PanelBlock>
         <div className="flex items-center gap-2">
