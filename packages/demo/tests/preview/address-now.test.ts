@@ -36,17 +36,21 @@ test("an address of a panel or of a served site with an id no site has leads to 
   const trashed = await publish(world, "draft");
   await deleteSite(world.install, world.admin, { site: trashed });
   const draft = await publish(world, "draft");
+  const open = await publish(world, "open");
+  await updateSite(world.install, world.admin, { site: open, access: "public", public_name: "open" });
   await publish(world, "twice");
   const second = await publish(world, "twice");
 
   const panels = [`/sites/report--${GONE}`, `/sites/notes--${GONE}`, `/sites/draft--${GONE}`];
-  const served = [`/served/report--${GONE}-p-poplin/`, `/served/report--${GONE}-u-poplin/a/b.html`, `/served/notes--${GONE}-p-poplin/`, `/served/draft--${GONE}-p-poplin/`];
+  const served = [`/served/report--${GONE}-p-poplin/`, `/served/report--${GONE}-u-poplin/a/b.html`, `/served/draft--${GONE}-p-poplin/`];
   const live = [`/sites/${report}`, `/sites/${renamed}`, `/sites/${trashed}`, `/sites/${second}`, `/served/${report}-p-poplin/`, `/served/${trashed}-p-poplin/`];
   const elsewhere = [`/sites/twice--${GONE}`, `/sites/absent--${GONE}`, "/sites/report", `/data/sites/report--${GONE}`, "/activity", `/served/twice--${GONE}-p-poplin/`, `/served/${GONE}-p-poplin/`, "/served/report-poplin/"];
   // A site's address without its closing slash is no site's yet: the preview adds the slash first.
   const slashless = [`/served/draft--${GONE}-p-poplin`];
-  const led = await Promise.all([...panels, ...served, ...live, ...elsewhere, ...slashless].map((path) => addressNow(world, new URL(path, ORIGIN))));
+  // Drift: the link from before "New link", or a guessed one, would lead on to the secret link of an unlisted site, or to a public one's, where the product answers that nothing is there.
+  const opened = [`/served/notes--${GONE}-u-poplin/`, `/served/notes--${GONE}-p-poplin/`, `/served/open--${GONE}-u-poplin/`, `/served/open--${GONE}-p-poplin/a.html`];
+  const led = await Promise.all([...panels, ...served, ...live, ...elsewhere, ...slashless, ...opened].map((path) => addressNow(world, new URL(path, ORIGIN))));
 
-  const now = [`/sites/${report}`, `/sites/${notes}`, `/sites/${draft}`, `/served/${report}-p-poplin/`, `/served/${report}-p-poplin/a/b.html`, `/served/${notes}-u-poplin/`, `/served/${draft}-p-poplin/`];
-  expect(led).toEqual([...now, ...Array.from({ length: live.length + elsewhere.length + slashless.length }, () => undefined)]);
+  const now = [`/sites/${report}`, `/sites/${notes}`, `/sites/${draft}`, `/served/${report}-p-poplin/`, `/served/${report}-p-poplin/a/b.html`, `/served/${draft}-p-poplin/`];
+  expect(led).toEqual([...now, ...Array.from({ length: live.length + elsewhere.length + slashless.length + opened.length }, () => undefined)]);
 });

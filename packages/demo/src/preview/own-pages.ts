@@ -140,6 +140,15 @@ export function terminalPage(printed: readonly Printed[]): Promise<string> {
 }
 
 /**
+ * Build the page the dashboard's Sign out leads to in the preview, where the product sends the browser on to the place that ends its login.
+ *
+ * @returns a page that says so, with the way back to the dashboard
+ */
+export function signedOutPage(): Promise<string> {
+  return shell("Signed out", html`<h1>Signed out</h1><p class="banner">Demo. Here the product ends this browser's login. The demo has no login, so nothing was ended.</p>`);
+}
+
+/**
  * Build the page the preview answers a path of its own with that names nothing.
  *
  * @returns a page that says so
