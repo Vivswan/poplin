@@ -82,8 +82,8 @@ const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 /** What the key's row names: the name every key of an install has at Cloudflare. */
 const KEY = INSTALL_OBJECTS.keyName;
 
-/** What the key's row says of a key the install holds and Cloudflare takes no more. */
-const KEY_REFUSED = "Cloudflare no longer takes the key the install holds";
+/** What the key's row says of a key a repair replaces: one Cloudflare takes no more, and one that works and was made before a right the install uses now. */
+const KEY_DIFFERS = { refused: "Cloudflare no longer takes the key the install holds", lacking: "the key the install holds lacks a right the install uses now" } as const;
 
 /** What the key's row says of a new key whose write onto the Worker failed, by whether it could be deleted again. */
 const KEY_UNWRITTEN = { deleted: "made, and deleted again when its write onto the Worker failed", left: "made, and left at Cloudflare for you to delete when its write onto the Worker failed" } as const;
@@ -402,7 +402,7 @@ function keyRead(state: Awaited<ReturnType<typeof readKeyState>>, variables: boo
 
   if (!state.ok) return keyFailed("", state, RIGHT.tokens);
 
-  if (state.value === "refused") return { object: "Key", state: "differs", detail: `${KEY}: ${KEY_REFUSED}` };
+  if (state.value === "refused" || state.value === "lacking") return { object: "Key", state: "differs", detail: `${KEY}: ${KEY_DIFFERS[state.value]}` };
 
   return { object: "Key", state: state.value, detail: KEY };
 }
@@ -427,11 +427,11 @@ async function mintInto(connection: Connection, placed: Placed, wanted: Wanted, 
   return { row: keyFailed(`, ${minted.left ? KEY_UNWRITTEN.left : KEY_UNWRITTEN.deleted}`, minted.kept, RIGHT.scripts), steps: [], written: minted.kept };
 }
 
-// The key and the variables are one piece of work on the Worker: a key is made only where a repair finds none that works, and then both go in one change.
+// The key and the variables are one piece of work on the Worker: a key is made only where a repair finds none that works and carries every right, and then both go in one change.
 async function workerPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, wanted: Wanted): Promise<Synced | undefined> {
   const object = (): Piece => "Worker variable";
   const state = await readKeyState(placed.key, connection, placed);
-  const made = mode === "apply" && state.ok && state.value !== "present" ? await mintInto(connection, placed, wanted, state.value === "refused") : undefined;
+  const made = mode === "apply" && state.ok && state.value !== "present" ? await mintInto(connection, placed, wanted, state.value !== "missing") : undefined;
   const written = made?.written;
   const run = written === undefined ? (): Promise<Synced> => syncVariables(connection, placed, wanted, mode) : async (): Promise<Synced> => written;
   // With no variable to write, the key's own row says everything the change came to.

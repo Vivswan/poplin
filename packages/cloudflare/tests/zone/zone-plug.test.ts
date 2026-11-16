@@ -578,6 +578,15 @@ const HELD = {
 /** An older key of the install as Cloudflare lists it. */
 const OLD_KEY = { id: "old-key", name: "poplin kept key", status: "active" };
 
+/** Every permission group the account lists, as a token's policy names one. */
+const EVERY_GROUP = emptyAccount().groups.map(({ id }) => ({ id }));
+
+/** A key that works, as Cloudflare lists it with every group. */
+const WHOLE_KEY = { ...OLD_KEY, id: "whole-key", policies: [{ effect: "allow", permission_groups: EVERY_GROUP }] };
+
+/** A key that works and was made before poplin could update itself: it lacks the right to write a Worker. */
+const EARLY_KEY = { ...OLD_KEY, id: "early-key", policies: [{ effect: "allow", permission_groups: EVERY_GROUP.filter(({ id }) => !String(id).startsWith("Workers Scripts Write")) }] };
+
 /** The one call that writes the Worker's settings. */
 const SETTINGS_WRITE = `PATCH /accounts/${ACCOUNT}/workers/scripts/poplin/settings`;
 
@@ -606,6 +615,26 @@ const keyRuns: readonly KeyRun[] = [
   { name: "a repair on a Worker with no key makes one", run: "repair", held: "none", row: "Key | created | poplin kept key", keys: 1, secrets: 1 },
   { name: "a repair on a Worker whose key Cloudflare refuses makes a new one and deletes the old", run: "repair", held: "refused", account: { tokens: [OLD_KEY] }, row: "Key | changed | poplin kept key", keys: 1, secrets: 1 },
   { name: "a repair on a Worker that gets no answer about its key makes none: a key that may still work is not replaced", run: "repair", held: "silent", row: "Key | failed | poplin kept key: no answer from Cloudflare", keys: 0, secrets: 0 },
+  {
+    name: "a check on a Worker whose key works and was made before a right was added",
+    run: "check",
+    held: "works",
+    account: { tokens: [EARLY_KEY] },
+    row: "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now",
+    keys: 1,
+    secrets: 0,
+  },
+  {
+    name: "a repair on a Worker whose key works, where Cloudflare lists no group for a right: the key is not called whole, and is left",
+    run: "repair",
+    held: "works",
+    account: { tokens: [EARLY_KEY], groups: emptyAccount().groups.filter((group) => group.name !== "Bot Management Read") },
+    row: "Key | failed | poplin kept key: Cloudflare lists no permission group named Bot Management Read",
+    keys: 1,
+    secrets: 0,
+  },
+  { name: "a repair on a Worker whose key works and was made before a right was added makes a new one and deletes the old", run: "repair", held: "works", account: { tokens: [EARLY_KEY] }, row: "Key | changed | poplin kept key", keys: 1, secrets: 1 },
+  { name: "a repair on a Worker whose key works and carries every right makes none", run: "repair", held: "works", account: { tokens: [WHOLE_KEY] }, row: "Key | present | poplin kept key", keys: 1, secrets: 0 },
   {
     name: "a repair with a token that may not make a token: the row names the right, and everything else is made",
     run: "repair",
