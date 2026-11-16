@@ -31,8 +31,8 @@ const STAMP_BRANCHES: readonly RegExp[] = [
   /["'](?:shape)["']\s+in\b/,
 ];
 
-/** Rule (c): the words code grows when it keeps a retired shape alive. `compat` spares `compatible`; `v1` must stand as its own word or camel-case part. */
-const RETIRED_WORDS: readonly RegExp[] = [/legacy/i, /deprecated/i, /backcompat/i, /backwards/i, /compat(?!ible)/i, /oldShape/i, /(?<![A-Za-z0-9])[vV]1(?![0-9])|(?<=[a-z])V1(?![0-9a-z])/, /fallback for old/i];
+/** Rule (c): the words code grows when it keeps a retired shape alive. `compat` spares `compatible` and `compatibility`, which a provider's own settings are named with; `v1` must stand as its own word or camel-case part. */
+const RETIRED_WORDS: readonly RegExp[] = [/legacy/i, /deprecated/i, /backcompat/i, /backwards/i, /compat(?!ib)/i, /oldShape/i, /(?<![A-Za-z0-9])[vV]1(?![0-9])|(?<=[a-z])V1(?![0-9a-z])/, /fallback for old/i];
 
 /** The files a retired name is looked for in: source, tests, the skill, the docs, the module, and configuration. */
 const TEXT_FILES = new Bun.Glob("**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,md,tf,hcl,yml,yaml,astro,toml}");
@@ -154,6 +154,7 @@ describe("no old shapes outside migrations/", () => {
     ["the word backcompat", "function backcompat(record: Site): Site {", "retired-shape word"],
     ["the word backwards", "// kept for backwards readers", "retired-shape word"],
     ["the word compat", "const compatSecret = record.token;", "retired-shape word"],
+    ["the word compat before a capital", "const compatMode = readMode(record);", "retired-shape word"],
     ["the word oldShape", "function fromOldShape(record: unknown): Site {", "retired-shape word"],
     ["the word v1", "type SiteV1 = { text: string };", "retired-shape word"],
     ["the word v1, lowercase", "const v1 = parseFirst(record);", "retired-shape word"],
@@ -178,6 +179,16 @@ describe("no old shapes outside migrations/", () => {
     using tree = plantedRepository({ "packages/demo/src/sites/planted.ts": `// A planted file.\n${line}\n` });
 
     expect(violations(tree.path)).toEqual([`${rule}: packages/demo/src/sites/planted.ts:2`]);
+  });
+
+  // Drift: a guard that names a provider's own setting would keep the code that states it out of the source, where its tests are.
+  test.each([
+    ["a provider's date of compatibility", 'const stated = { compatibility_date: config.compatibility_date, compatibility_flags: config.compatibility_flags };'],
+    ["the word compatible", "// The two runners are compatible: the same cases run in both."],
+  ])("names nothing for %s", (_, line) => {
+    using tree = plantedRepository({ "packages/demo/src/sites/planted.ts": `// A planted file.\n${line}\n` });
+
+    expect(violations(tree.path)).toEqual([]);
   });
 
   test("drift: an import of a migrations folder from outside one keeps a step alive after its release; every package's source is refused it, and a comment, a migrations folder, the doorway, and a test are not", () => {
