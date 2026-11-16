@@ -34,7 +34,7 @@ interface Frame extends Marked {
   /** The newer release the install knows of, or `null`. */
   readonly update: Update | null;
 
-  /** Whether an address that starts a rebuild is saved, so an update can be started from the frame. */
+  /** Whether an update can be started from the frame: the host takes a release by itself, or an address that starts a rebuild is saved. */
   readonly starts: boolean;
 
   /** What the domain needs, or `null`: nothing is wrong, nothing was ever checked, or the console has no Domain screen to act on it. */
@@ -51,6 +51,9 @@ interface Asked {
 
   /** Whether a change of the users is carried to the domain with no person, so one that waits is nothing to act on. */
   readonly selfCarried: boolean;
+
+  /** Whether the host takes a release by itself, with no saved address. */
+  readonly self: boolean;
 }
 
 /** A frame that shows nothing of the install. */
@@ -85,7 +88,7 @@ export async function frameOf(install: Install, actor: Actor, asked: Asked): Pro
   // What the domain needs marks its screen as a problem there does. A check that is only old is a reminder, and marks nothing.
   const marked = markedIn(read.problems, install.now(), { screen: asked.domain, says: domainNote === null || domainNote.quiet ? null : domainNote.sentence });
 
-  return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: read.updateAddress !== undefined, domainNote, ...marked };
+  return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: asked.self || read.updateAddress !== undefined, domainNote, ...marked };
 }
 
 /** The frame's data routes. */
@@ -93,7 +96,8 @@ export const frameRoutes = new Hono<Shared>()
   .get("/frame", async (context) => {
     const { install, actor } = context.get("asker");
 
-    const asked = { version: context.get("host").version, domain: context.get("domain") !== undefined, selfCarried: context.get("follow")?.holdsKey() === true };
+    const { version, rebuilding } = context.get("host");
+    const asked = { version, domain: context.get("domain") !== undefined, selfCarried: context.get("follow")?.holdsKey() === true, self: rebuilding.self !== undefined };
 
     return context.json({ ok: true as const, ...(await frameOf(install, actor, asked)) });
   })

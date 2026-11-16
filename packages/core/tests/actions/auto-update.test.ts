@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { startDueUpdate } from "../../src/actions/auto-update";
 import { type Asking, checkForUpdate } from "../../src/actions/check-update";
 import type { Install } from "../../src/actions/records";
-import type { Rebuilding } from "../../src/actions/start-update";
+import type { Rebuilding, SelfUpdate } from "../../src/actions/start-update";
 import { saveUpdateAddress } from "../../src/actions/update-address";
 import { OWN_SCHEMA } from "../../src/database/open";
 import type { SettingValues } from "../../src/records/settings";
@@ -241,5 +241,66 @@ describe("startDueUpdate", () => {
     await run(world.install, { rebuilding });
 
     expect([refusing.sent.length, await outcome(world, rebuilding)]).toEqual([1, { sent: 1, auto: { version: "0.3.0", at: FIRST_SEEN + 2 * WAIT + DAY, taken: "0.2.0" }, audit: [ENTRY] }]);
+  });
+});
+
+/** A host that takes a release by itself: `ready` and `put` are a refusal's code, or nothing for a step that works. It counts what it was asked for and what it put in place. */
+function host(door: { readonly ready?: string; readonly put?: string } = {}): Rebuilding & { readonly sent: string[]; readonly asked: unknown[] } {
+  const asked: unknown[] = [];
+  const sent: string[] = [];
+  const self: SelfUpdate = {
+    async ready(wanted) {
+      asked.push(wanted);
+      if (door.ready !== undefined) return { ok: false, code: door.ready } as never;
+
+      return {
+        ok: true,
+        version: wanted.version,
+        async put() {
+          sent.push(wanted.version);
+
+          return door.put === undefined ? { ok: true } : ({ ok: false, code: door.put } as never);
+        },
+      };
+    },
+  };
+
+  return { ...provider(), self, sent, asked };
+}
+
+describe("startDueUpdate, on a host that replaces the install's own code", () => {
+  const untaken = { ...TAKEN, taken: null };
+
+  // Drift: with no build between a release and the running code, this is the whole of what the install does to itself. Each row is what one day's run leaves behind: whether files were put in place, and whether the version counts as taken.
+  test.each([
+    { name: "every rule holds, and no address is saved", door: {}, expected: { sent: 1, auto: TAKEN, audit: [ENTRY] } },
+    { name: "the release could not be fetched or checked: nothing was sent, so the next day tries again", door: { ready: "release_refused" }, expected: { sent: 0, auto: untaken, audit: [] } },
+    { name: "the host did not answer before any file was put in place: the next day tries again", door: { ready: "update_unreachable" }, expected: { sent: 0, auto: untaken, audit: [] } },
+    { name: "the key lacks the right: the next day tries again", door: { ready: "lacks_right" }, expected: { sent: 0, auto: untaken, audit: [] } },
+    { name: "the host refused the new code: the next day tries again", door: { put: "version_refused" }, expected: { sent: 1, auto: untaken, audit: [ENTRY] } },
+    { name: "the host did not answer the upload, which may be in: not tried again", door: { put: "update_unreachable" }, expected: { sent: 1, auto: TAKEN, audit: [ENTRY] } },
+  ])("$name", async ({ door, expected }) => {
+    const world = await seen(SWITCHED_ON, RELEASE, false);
+    const rebuilding = host(door);
+    world.clock.now = FIRST_SEEN + WAIT;
+
+    await run(world.install, { rebuilding });
+
+    expect([await outcome(world, rebuilding), rebuilding.asked]).toEqual([expected, [{ version: "0.2.0", automatic: true }]]);
+  });
+
+  // Drift: the rules that hold a start back are the same on every host. One that asked the host first would fetch a release every quarter of an hour.
+  test.each([
+    { name: "auto_update is off", settings: {}, after: WAIT },
+    { name: "the release changes the database", settings: SWITCHED_ON, release: { ...RELEASE, schema: OWN_SCHEMA + 1 }, after: WAIT },
+    { name: "one second before the wait is over", settings: SWITCHED_ON, after: WAIT - 1000 },
+  ])("the host is asked for nothing while $name", async ({ settings, release, after }) => {
+    const world = await seen(settings, release, false);
+    const rebuilding = host();
+    world.clock.now = FIRST_SEEN + after;
+
+    await run(world.install, { rebuilding, release });
+
+    expect([await outcome(world, rebuilding), rebuilding.asked]).toEqual([NOTHING, []]);
   });
 });
