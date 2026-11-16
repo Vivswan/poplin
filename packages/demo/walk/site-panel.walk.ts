@@ -111,6 +111,12 @@ test.describe("on a phone, in a site's panel", () => {
     await openPanel(page, SAMPLE.long);
     const link = page.getByRole("dialog", { name: SAMPLE.long, exact: true }).getByTitle(/^Part of the link is hidden here/);
     await expect(link).toBeVisible();
+    // The first page of a Firefox that has just started is at times drawn with a proportional face in place of every monospace one, and the link fits one line in it. Loading the page again brings the monospace face.
+    // The address holds the open panel, so the page comes back with it.
+    if (browserName === "firefox") {
+      await page.reload();
+      await expect(link).toBeVisible();
+    }
 
     // The link's letters by the line each is drawn on; the dots of the hidden part are no letters.
     const lines = (): Promise<string[]> =>
@@ -130,15 +136,8 @@ test.describe("on a phone, in a site's panel", () => {
         return [...byTop].sort(([one], [other]) => one - other).map(([, line]) => line);
       });
 
-    // Firefox at times draws the link in the page's own narrower face, in which the whole of it fits one line: there is then no break to look at, and only there.
-    const broken = async (): Promise<string[]> => {
-      const read = await lines();
-
-      return browserName === "firefox" && read.length === 1 && read[0] === LINES.join("") ? LINES : read;
-    };
-
     // The panel slides in and its font arrives: the lines are read until they hold.
-    await expect.poll(broken).toEqual(LINES);
+    await expect.poll(lines).toEqual(LINES);
   });
 });
 
