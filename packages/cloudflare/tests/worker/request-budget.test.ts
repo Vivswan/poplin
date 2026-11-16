@@ -94,9 +94,9 @@ function statedInGuide(): (readonly [action: string, cost: ActionCost])[] {
   });
 }
 
-/** Whether what a row spends, or may spend, is over a ceiling: the queries of one invocation, the bucket calls of one request, every call of one run, or the bucket reads of one page view. */
-function overCeiling(row: BudgetRow, { queries, reads, writes }: Pick<Budget, "queries" | "reads" | "writes">): boolean {
-  const stored = reads + writes;
+/** Whether what a row spends, or may spend, is over a ceiling: the queries of one invocation, the bucket calls of one request, every call of one run, or the bucket reads of one page view. A removal is a call, though R2 bills none. */
+function overCeiling(row: BudgetRow, { queries, reads, writes, deletes = 0 }: Pick<Budget, "queries" | "reads" | "writes" | "deletes">): boolean {
+  const stored = reads + writes + deletes;
   if (row.status === undefined) return queries > MOST_QUERIES || queries + stored > MOST_RUN_CALLS;
 
   return queries > MOST_QUERIES || stored > MOST_STORE_CALLS_A_REQUEST || (row.group === "One page view of a site" && reads > MOST_STORE_CALLS);
@@ -118,8 +118,10 @@ describe("the budget of every request", () => {
     const line: CostLine = { ...cost, group: row.group, name: row.name, budget: row.budget, ...(row.known === undefined ? {} : { known: row.known }), ...(row.guide === undefined ? {} : { guide: row.guide }) };
     COSTS.push(line);
     task.meta.cost = line;
-    const spent = { queries: cost.queries, reads: cost.gets + cost.heads, writes: cost.puts + cost.lists, read: cost.read, written: cost.written };
-    const over = Object.entries(spent).filter(([what, count]) => count > (row.budget[what as keyof typeof spent] ?? Number.POSITIVE_INFINITY));
+    const spent = { queries: cost.queries, reads: cost.gets + cost.heads, writes: cost.puts + cost.lists, deletes: cost.deletes, read: cost.read, written: cost.written };
+    // A row that budgets no removals may make none.
+    const most: Budget = { deletes: 0, ...row.budget };
+    const over = Object.entries(spent).filter(([what, count]) => count > (most[what as keyof typeof spent] ?? Number.POSITIVE_INFINITY));
 
     expect(cost.status).toBe(row.status);
     expect(over).toEqual([]);
@@ -133,7 +135,7 @@ describe("the budget of every request", () => {
     const measured = ROWS.filter((row) => {
       const cost = COSTS.find((line) => line.name === row.name);
 
-      return cost !== undefined && overCeiling(row, { queries: cost.queries, reads: cost.gets + cost.heads, writes: cost.puts + cost.lists });
+      return cost !== undefined && overCeiling(row, { queries: cost.queries, reads: cost.gets + cost.heads, writes: cost.puts + cost.lists, deletes: cost.deletes });
     }).map((row) => row.name);
 
     expect([budgeted, measured]).toEqual([known, known]);

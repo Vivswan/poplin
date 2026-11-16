@@ -157,7 +157,7 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).uploads[":upload"].finish.$post({ param: { upload }, query: {} });
     },
     status: 200,
-    budget: { queries: 8, reads: 0, writes: 3 },
+    budget: { queries: 8, reads: 0, writes: 3, deletes: 1 },
   },
   {
     group,
@@ -171,7 +171,7 @@ export const PUBLISH_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).uploads[":upload"].$delete({ param: { upload }, query: {} });
     },
     status: 200,
-    budget: { queries: 5, reads: 0, writes: 2 },
+    budget: { queries: 5, reads: 0, writes: 2, deletes: 2 },
   },
   {
     group,

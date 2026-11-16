@@ -224,7 +224,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).sites[":site"].$delete({ param: { site: siteId(1) }, query: { forever: "true" } });
     },
     status: 200,
-    budget: { queries: 6, reads: 0, writes: 2 },
+    budget: { queries: 6, reads: 0, writes: 2, deletes: 2 },
   },
   {
     group,
