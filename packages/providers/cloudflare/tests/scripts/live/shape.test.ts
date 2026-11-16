@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { settleDatabase } from "../../../scripts/live/shape";
+import { holdsOwnSchema, settleDatabase } from "../../../scripts/live/shape";
 import { openRun } from "../../../scripts/live/util";
 import { withFake } from "../../shared/install/support/fake-cloudflare";
 import { type Asked, refusal, reply } from "../../shared/install/support/replies";
@@ -28,31 +28,35 @@ const INSTALLER = "ada@example.com" as Login;
 /** The calls that delete the database and make it anew. */
 const REMAKE = [`DELETE /accounts/${ACCOUNT}/d1/database/${OLD}`, `POST /accounts/${ACCOUNT}/d1/database`];
 
+/** What leaves a database this code made one schema step behind it. */
+const BEHIND = "DELETE FROM schema_steps WHERE step = (SELECT max(step) FROM schema_steps)";
+
 /** In place of a refused call: Cloudflare answers every query as not run. */
 const NO_QUERY_RUNS = "no query runs";
 
-/** One database, what a run answers of it, and the calls that changed the account. `drift` is SQL run on a database this code made, settings and all; `null` leaves the database empty. */
+/** One database, what a run answers of it, with whether the build before is left unable to answer, and the calls that changed the account. `drift` is SQL run on a database this code made, settings and all; `null` leaves the database empty. */
 type Case = readonly [what: string, drift: string | null, settled: unknown, changes: readonly string[]];
 
 const CASES: readonly Case[] = [
-  ["a database no step ran on is left for the Worker to fill", null, { id: OLD, result: "present" }, []],
-  ["a database this code made, with its settings, is left", "SELECT 1", { id: OLD, result: "present" }, []],
+  ["a database no step ran on is left for the Worker to fill", null, { id: OLD, result: "present", strandsOlder: true }, []],
+  ["a database this code made, with its settings, is left, and the build before still answers from it", "SELECT 1", { id: OLD, result: "present", strandsOlder: false }, []],
+  ["a database behind this commit by a step is left for the Worker to bring forward", BEHIND, { id: OLD, result: "present", strandsOlder: true }, []],
   [
     "a database whose settings lack a setting this code reads is made anew",
     "UPDATE settings SET value = json_remove(value, '$.max_storage_writes_per_day')",
-    { id: NEW, result: "made anew: it held settings this commit does not read" },
+    { id: NEW, result: "made anew: it held settings this commit does not read", strandsOlder: true },
     REMAKE,
   ],
   [
     "a database whose schema step another build applied is made anew",
     "UPDATE schema_steps SET fingerprint = 'of another build'",
-    { id: NEW, result: "made anew: it held schema step 1 as another build applied it" },
+    { id: NEW, result: "made anew: it held schema step 1 as another build applied it", strandsOlder: true },
     REMAKE,
   ],
   [
     "a database with a step this code does not have is made anew",
     "INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (999, 'a step of a later commit', 0, 'later')",
-    { id: NEW, result: "made anew: it held a schema step this commit does not have" },
+    { id: NEW, result: "made anew: it held a schema step this commit does not have", strandsOlder: true },
     REMAKE,
   ],
 ];
@@ -127,5 +131,27 @@ describe("the check of the test install's database, against a local fake account
     const told = await settle("UPDATE schema_steps SET fingerprint = 'of another build'", NO_QUERY_RUNS);
 
     expect(told).toEqual({ settled: { kind: "failed", what: "the database did not run a statement" }, changes: [] });
+  });
+
+  // Drift: a token's row is stored once the database "is ready", and the wait for a new deployment reads the same answer; a database the new Worker has not started on has no table for the row.
+  test.each([
+    ["a database no step ran on", null, undefined, false],
+    ["a database this code made", "SELECT 1", undefined, true],
+    ["a database a step behind this commit", BEHIND, undefined, false],
+    ["a database whose step another build applied", "UPDATE schema_steps SET fingerprint = 'of another build'", undefined, false],
+    ["a database whose queries do not run", "SELECT 1", NO_QUERY_RUNS, { kind: "failed", what: "the database did not run a statement" }],
+  ])("%s holds this commit's schema, or does not, or was not read", async (_what, drift, refuse, holds) => {
+    using _step = catchStep();
+    const driver = await databaseOf(drift);
+    let told: unknown;
+
+    await withFake(
+      (asked) => answer(driver, asked, refuse),
+      async (connection) => {
+        told = await holdsOwnSchema({ ...openRun({ CLOUDFLARE_API_TOKEN: "a-made-up-token", CLOUDFLARE_ACCOUNT_ID: ACCOUNT }), connection }, OLD);
+      },
+    );
+
+    expect(told).toEqual(holds);
   });
 });

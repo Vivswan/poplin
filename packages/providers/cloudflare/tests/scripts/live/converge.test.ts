@@ -8,13 +8,14 @@ import { basename, join } from "node:path";
 
 import type { DomainRow, DomainSettings } from "../../../../../app/src/console/domain/records";
 import type { Login } from "../../../../../core/src/auth/logins";
-import { answerOf, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../../scripts/live/converge";
+import { answerOf, awaitNewDeployment, confirmAndCap, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../../scripts/live/converge";
 import { type Found, openRun } from "../../../scripts/live/util";
 import { createDomainPlug } from "../../../src/with-domain/zone-plug";
 import { withFake } from "../../shared/install/support/fake-cloudflare";
 import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../shared/install/support/fake-install";
 import { ADDRESSES, LAYOUT } from "../../shared/install/support/layouts";
 import { type Asked, bodyOf, page, refusal, reply } from "../../shared/install/support/replies";
+import { openSqlInstall } from "../../live/support/sql-install";
 import { catchStep } from "../../live/support/step";
 
 /** The workflow that runs the live scripts. */
@@ -86,8 +87,39 @@ const FOUND = {
 /** The refusal of a call Cloudflare would not take: its words name things of the account, which no line of a run may repeat. */
 const REFUSED = { status: 400, code: 10021, message: "the-account-s-own-words" };
 
+/** The request of the wait for a new deployment, and the one that sets the caps, as the fake install is sent them. */
+const [WHOAMI, CAPS] = ["GET /api/whoami", "PATCH /api/config"];
+
 /** Where the Workers of the fake account that holds an install are asked for. */
 const SCRIPTS = `/accounts/${INSTALL_ACCOUNT}/workers/scripts`;
+
+/** Who answers one request of a wait: the new deployment, the one before, or nobody. */
+type From = "new" | "old" | "none";
+
+/** One wait: whether the deploy stranded the build before, who answers the request of each number, and what the wait comes to with the requests it sent. */
+type Wait = readonly [what: string, strandsOlder: boolean, from: (nth: number) => From, ended: unknown, requests: number];
+
+/** What a wait that never got its answers says. */
+const NEVER = "the install did not answer the run's token within 180 seconds";
+
+/** Every wait, on a clock that moves three seconds a pause. */
+const WAITS: readonly Wait[] = [
+  ["a deploy that left the build before able to answer is confirmed by one answer", false, () => "new", { answers: 1, overMs: 0, others: 0 }, 1],
+  ["the same deploy, met by two answers that are no 200, waits them out", false, (nth) => (nth < 2 ? "old" : "new"), { answers: 1, overMs: 0, others: 2 }, 3],
+  ["after a remake, the new deployment answers twelve times in a row over 33 seconds", true, () => "new", { answers: 12, overMs: 33_000, others: 0 }, 12],
+  ["after a remake, four answers of the deployment before come first and are counted", true, (nth) => (nth < 4 ? "old" : "new"), { answers: 12, overMs: 33_000, others: 4 }, 16],
+  ["an answer of the deployment before in the middle of the row starts the row over", true, (nth) => (nth === 5 ? "old" : "new"), { answers: 12, overMs: 33_000, others: 1 }, 18],
+  ["a request nobody answers starts the row over as a 503 does", true, (nth) => (nth === 11 ? "none" : "new"), { answers: 12, overMs: 33_000, others: 1 }, 24],
+  ["a deployment before that never stops answering fails the wait at three minutes", true, () => "old", { kind: "failed", what: `${NEVER} (needed in a row: 12; not a 200: 61; last status: 503)` }, 61],
+  [
+    "one answer in ten from the deployment before never lets a row of twelve end, and fails the wait",
+    true,
+    (nth) => (nth % 10 === 9 ? "old" : "new"),
+    { kind: "failed", what: `${NEVER} (needed in a row: 12; not a 200: 6; last status: 200)` },
+    61,
+  ],
+  ["an install nobody answers from fails the wait with status 0", true, () => "none", { kind: "failed", what: `${NEVER} (needed in a row: 12; not a 200: 61; last status: 0)` }, 61],
+];
 
 /** What the fake account holds, and which lists its token may read. A list that is absent is refused. */
 interface FakeAccount {
@@ -316,6 +348,78 @@ async function uploadOf(config: Record<string, unknown>, files: Readonly<Record<
   return { made, map: text.includes(MAP_PART), jobs: await workflowBindings(text), folder: text.includes(basename(folder.path)), assets: text.includes('"assets"') };
 }
 
+/** What the deployment before answers once its database is gone: the Worker's own 503. */
+function oldAnswer(): Response {
+  return new Response("Something went wrong. Try again.", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}
+
+/** Run one wait against a fake install of a kind, with a clock that moves in a pause alone, and answer what it came to with every request it sent. */
+async function wait(kind: "domain" | "account address", strandsOlder: boolean, from: (nth: number) => From, token?: string): Promise<{ readonly ended: unknown; readonly sent: readonly string[] }> {
+  const install = await openSqlInstall(kind);
+  const known = token ?? (await install.addToken("the wait"));
+  const sent: string[] = [];
+  let now = 0;
+
+  const ended = await awaitNewDeployment({
+    server: install.server,
+    token: known,
+    strandsOlder,
+    now: () => now,
+    pause: async (ms) => {
+      now += ms;
+    },
+    fetch: async (input, init) => {
+      const who = from(sent.length);
+      sent.push(`${init.method ?? "GET"} ${input} keepalive=${String(init.keepalive)} redirect=${String(init.redirect)}`);
+      if (who === "none") throw new Error("no answer");
+
+      return who === "old" ? oldAnswer() : install.fetch(input, init);
+    },
+  });
+
+  return { ended, sent };
+}
+
+/**
+ * Run the wait for the new deployment and the caps against a fake install whose database the run reaches through a fake of Cloudflare's API.
+ *
+ * @param stale - how many of the first requests the deployment before answers, with its own 503
+ * @returns what stopped the run, the lines it told, each request the install was sent, and the rows of tokens it was left with
+ */
+async function confirm(kind: Found["kind"], strandsOlder: boolean, stale: number): Promise<{ readonly stopped: unknown; readonly lines: string[]; readonly sent: string[]; readonly tokens: number }> {
+  using _step = catchStep();
+  const install = await openSqlInstall(kind);
+  const told = { stopped: undefined as unknown, lines: [] as string[], sent: [] as string[], tokens: 0 };
+  let now = 0;
+
+  await withFake(
+    async (asked) => {
+      const { sql, params } = asked.body as { readonly sql: string; readonly params: readonly string[] };
+
+      return reply([{ results: await install.sql(sql, params), success: true, meta: {} }]);
+    },
+    async (connection) => {
+      const run = { ...openRun({ CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT }), connection, say: (line: string) => void told.lines.push(line) };
+      const reached = {
+        server: install.server,
+        now: () => now,
+        pause: async (ms: number) => {
+          now += ms;
+        },
+        fetch: async (input: string, init: RequestInit) => {
+          told.sent.push(`${init.method ?? "GET"} ${new URL(input).pathname}`);
+
+          return told.sent.length <= stale ? oldAnswer() : install.fetch(input, init);
+        },
+      };
+      told.stopped = await confirmAndCap(run, reached, { id: "2".repeat(32), strandsOlder }, { pieces: [], missing: {} });
+    },
+  );
+  told.tokens = (await install.sql("SELECT id FROM tokens")).length;
+
+  return told;
+}
+
 /** Every string a parsed document holds, at any depth. */
 function stringsOf(value: unknown): string[] {
   if (typeof value === "string") return [value];
@@ -324,6 +428,54 @@ function stringsOf(value: unknown): string[] {
 
   return Object.values(value).flatMap(stringsOf);
 }
+
+describe.each(["domain", "account address"] as const)("the wait for a run's new deployment, against a local fake install on its %s", (kind) => {
+  // Drift: the checks once began right after a deploy that followed a remade database, and requests of theirs reached the build before, which answered 503.
+  test.each(WAITS)("%s", async (_what, strandsOlder, from, ended, requests) => {
+    const told = await wait(kind, strandsOlder, from);
+
+    expect({ ended: told.ended, requests: told.sent.length }).toEqual({ ended, requests });
+  });
+
+  // Drift: a request on a connection the edge kept open reaches the instance the last one reached, so a row of them would say nothing of any other.
+  test("every request asks the API who the token is, on a connection of its own, and follows no redirect", async () => {
+    const { sent } = await wait(kind, true, () => "new");
+    const server = kind === "domain" ? "https://poplin.example.com" : "https://poplin.example.workers.dev";
+
+    expect([...new Set(sent)]).toEqual([`GET ${server}/api/whoami keepalive=false redirect=manual`]);
+  });
+
+  // Drift: an answer to a token the database does not hold would pass for the new deployment's, and so would the build before on a database that never took the row.
+  test("a token whose row the install's database does not hold is never answered 200, so the wait fails", async () => {
+    const { ended } = await wait(kind, false, () => "new", "poplin_live_a-token-of-no-row");
+
+    expect(ended).toEqual({ kind: "failed", what: `${NEVER} (needed in a row: 1; not a 200: 61; last status: 401)` });
+  });
+});
+
+describe.each(["domain", "account address"] as const)("the end of the script, on a fake install on its %s: the wait for the new deployment, then the caps", (kind) => {
+  // Drift: a wait that every run paid in full would add half a minute and a dozen requests to each push; one that a remake did not pay would start the checks on the deployment before.
+  test.each([
+    ["a deploy that left the build before able to answer costs one request, then the caps", false, 0, ["New deployment: answered the run's token", "Storage and file caps: set"], [WHOAMI, CAPS]],
+    [
+      "a deploy after a remake waits out the deployment before, then twelve answers in a row, then the caps",
+      true,
+      3,
+      ["New deployment: answered the run's token 12 times in a row over 33 seconds, after 3 requests that got no 200", "Storage and file caps: set"],
+      [...Array.from({ length: 15 }, () => WHOAMI), CAPS],
+    ],
+  ])("%s, and the run's token is removed", async (_what, strandsOlder, stale, lines, sent) => {
+    expect(await confirm(kind, strandsOlder, stale)).toEqual({ stopped: undefined, lines, sent, tokens: 0 });
+  });
+
+  // Drift: caps set through the deployment before would be written to a database that is gone, and the step would end green with the checks about to meet the same instances.
+  test("a deployment before that never stops answering stops the run in a plain line: no caps are asked for, and the token is removed", async () => {
+    const told = await confirm(kind, true, Number.POSITIVE_INFINITY);
+    const what = "the install did not answer the run's token within 180 seconds (needed in a row: 12; not a 200: 61; last status: 503)";
+
+    expect({ ...told, sent: [...new Set(told.sent)] }).toEqual({ stopped: { kind: "failed", what }, lines: [], sent: [WHOAMI], tokens: 0 });
+  });
+});
 
 describe("the script that makes the test install, against a local fake account", () => {
   test.each(CASES)("%s", async (_what, account, lines, reason) => {
