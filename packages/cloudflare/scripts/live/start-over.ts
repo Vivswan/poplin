@@ -1,16 +1,17 @@
 // Take everything poplin made off the test account, on purpose, so that the run which follows makes the install from nothing.
 //
-//   Worker routes     the routes of the Worker named `poplin`
-//   DNS records       the records whose comment starts with poplin's mark
-//   Rules             the rule with poplin's ref in the redirect, the custom, and the rate limiting phase
+//   Worker routes     the routes of the Worker named `poplin`                                      an install with a domain alone
+//   DNS records       the records whose comment starts with poplin's mark                          an install with a domain alone
+//   Rules             the rule with poplin's ref in the redirect, the custom, and the rate limiting phase   an install with a domain alone
+//   Forwarders        the two Workers with poplin's tag that hand a request to the one Worker      an install without a domain alone, and before the Worker they are bound to
 //   Access            the application and the policy with poplin's names
 //   Worker            the script named `poplin`, and with it the login and the first settings it was given
 //   Database          the database named `poplin`, with every record
 //   Bucket objects    every object of the test install's bucket; the bucket itself stays
-//   Budget alert      the notification policy with poplin's name
+//   Budget alert      the notification policy with poplin's name                                   an install with a domain alone
 //   Key               every API token of the account with the name of the key an install keeps
 //
-// A record, a route, a rule, an application, a policy, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
+// A record, a route, a rule, a Worker, an application, a policy, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
 // It runs only on the test account: one that pays for nothing and holds the test install's bucket, a name no install of a person has.
 // Each kind is listed and then removed, so a run that stopped half-way is run again, and a second run removes nothing.
 
@@ -26,9 +27,11 @@ import { BaseApplications } from "cloudflare/resources/zero-trust/access/applica
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 
 import { isAccessOff } from "../../src/zone/access/access";
+import type { AccountAddresses } from "../../src/zone/address-layout";
 import { BUDGET_ALERT } from "../../src/zone/alerts/budget-alert";
-import { type CloudflareResult, callCloudflare } from "../../src/zone/client";
+import { type CloudflareResult, callCloudflare, type Zone } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
+import { removeForwarders } from "../../src/zone/forwarders/forwarders";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
 import { removeOwnRule, syncPhase } from "../../src/zone/rules/rules";
 import { applySteps } from "../../src/zone/sync";
@@ -54,18 +57,18 @@ const OWN_ACCESS = {
   policies: [INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessOpenPolicy] as readonly string[],
 };
 
-/** Every kind, in the order removed: what points at the Worker first, then the Worker, then what it kept. */
-const KINDS: readonly Kind[] = [
-  { name: "Worker routes", remove: removeRoutes, optional: false },
-  { name: "DNS records", remove: removeRecords, optional: false },
-  { name: "Rules", remove: removeRules, optional: true },
-  { name: "Access applications and policies", remove: removeAccess, optional: true },
+/** The kinds every install has, in the order removed: the Worker, then what it kept. */
+const KEPT_KINDS: readonly Kind[] = [
   { name: "Worker", remove: removeWorker, optional: false },
   { name: "Database", remove: removeDatabase, optional: false },
   { name: "Bucket objects", remove: removeObjects, optional: true },
-  { name: "Budget alert", remove: removeAlert, optional: true },
-  { name: "Key", remove: removeKeys, optional: true },
 ];
+
+/** The login in front of an install of either kind. */
+const ACCESS_KIND: Kind = { name: "Access applications and policies", remove: removeAccess, optional: true };
+
+/** The key an install of either kind keeps. */
+const KEY_KIND: Kind = { name: "Key", remove: removeKeys, optional: true };
 
 /** The variables a run reads. */
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -79,7 +82,7 @@ interface Removal {
 /** One kind of object: its name in the log, how its objects of poplin's are removed, and whether an install is made anew by a token that may not touch the kind. */
 interface Kind {
   readonly name: string;
-  readonly remove: (run: Run, found: Found) => Promise<Removal>;
+  readonly remove: (run: Run) => Promise<Removal>;
   readonly optional: boolean;
 }
 
@@ -108,20 +111,20 @@ async function removeOwn<Item>(
   return done.ok ? { removed } : stoppedAt(removed, stopOf(done, permission));
 }
 
-async function removeRoutes(run: Run, { zone }: Found): Promise<Removal> {
+async function removeRoutes(run: Run, zone: Zone): Promise<Removal> {
   const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseRoutes(api).list({ zone_id: zone.id })));
 
   return removeOwn(listed, (route) => route.script === SCRIPT, (route) => callCloudflare(run.connection, (api) => new BaseRoutes(api).delete(route.id, { zone_id: zone.id })), "Workers Routes: Edit");
 }
 
-async function removeRecords(run: Run, { zone }: Found): Promise<Removal> {
+async function removeRecords(run: Run, zone: Zone): Promise<Removal> {
   const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseRecords(api).list({ zone_id: zone.id })));
   const marked = (comment: string | undefined): boolean => comment?.startsWith(INSTALL_OBJECTS.recordMark) === true;
 
   return removeOwn(listed, (record) => marked(record.comment), (record) => callCloudflare(run.connection, (api) => new BaseRecords(api).delete(record.id, { zone_id: zone.id })), "DNS: Edit");
 }
 
-async function removeRules(run: Run, { zone }: Found): Promise<Removal> {
+async function removeRules(run: Run, zone: Zone): Promise<Removal> {
   let removed = 0;
 
   for (const { phase, refs } of OWN_RULES) {
@@ -131,6 +134,14 @@ async function removeRules(run: Run, { zone }: Found): Promise<Removal> {
   }
 
   return { removed };
+}
+
+/** The forwarders go by the product's own removal: a Worker of a forwarder's name without poplin's tag stays. */
+async function removeOwnForwarders(run: Run, layout: AccountAddresses): Promise<Removal> {
+  const done = await removeForwarders(run.connection, run.accountId, layout, "apply");
+  const removed = done.report.removed.length;
+
+  return done.ok ? { removed } : stoppedAt(removed, stopOf(done, "Workers Scripts: Edit"));
 }
 
 /** An application goes before the policy it holds. An account whose Access is off holds none. */
@@ -206,9 +217,34 @@ async function removeKeys(run: Run): Promise<Removal> {
 }
 
 /**
+ * Every kind of the install's own, in the order removed: what points at the Worker first, then the Worker, then what it kept.
+ *
+ * @returns for an install without a domain, the forwarders before the Worker they are bound to, and no kind of a zone
+ */
+function kindsOf(found: Found): readonly Kind[] {
+  if (found.kind === "account address") {
+    const { layout } = found;
+
+    return [{ name: "Forwarders", remove: (run) => removeOwnForwarders(run, layout), optional: false }, ACCESS_KIND, ...KEPT_KINDS, KEY_KIND];
+  }
+
+  const { zone } = found;
+
+  return [
+    { name: "Worker routes", remove: (run) => removeRoutes(run, zone), optional: false },
+    { name: "DNS records", remove: (run) => removeRecords(run, zone), optional: false },
+    { name: "Rules", remove: (run) => removeRules(run, zone), optional: true },
+    ACCESS_KIND,
+    ...KEPT_KINDS,
+    { name: "Budget alert", remove: removeAlert, optional: true },
+    KEY_KIND,
+  ];
+}
+
+/**
  * Find the test install, and refuse any account that is not the test account.
  *
- * @returns the install's zone, or why nothing may be removed: an account that pays for something, or one without the test install's bucket
+ * @returns where the install answers, or why nothing may be removed: an account that pays for something, or one without the test install's bucket
  */
 async function findTestInstall(run: Run, env: Environment): Promise<Found | Stop> {
   const found = await findInstall(run, env);
@@ -232,8 +268,8 @@ async function removeAll(run: Run, env: Environment, rows: string[]): Promise<St
   const found = await findTestInstall(run, env);
   if (isStop(found)) return found;
 
-  for (const kind of KINDS) {
-    const { removed, stopped } = await kind.remove(run, found);
+  for (const kind of kindsOf(found)) {
+    const { removed, stopped } = await kind.remove(run);
     const left = stopped?.kind === "skipped" && kind.optional ? stopped.needs : undefined;
     const result = left === undefined ? `removed ${removed}` : `removed ${removed}, the rest left: needs ${left}`;
     rows.push(`| ${kind.name} | ${result} |`);

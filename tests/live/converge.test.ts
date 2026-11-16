@@ -8,12 +8,12 @@ import { basename, join } from "node:path";
 
 import type { DomainRow, DomainSettings } from "../../packages/app/src/console/domain/records";
 import type { Login } from "../../packages/core/src/auth/logins";
-import { answerOf, convergeInstall, needOf, workerConfig } from "../../packages/cloudflare/scripts/live/converge";
-import { openRun } from "../../packages/cloudflare/scripts/live/util";
+import { answerOf, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../packages/cloudflare/scripts/live/converge";
+import { type Found, openRun } from "../../packages/cloudflare/scripts/live/util";
 import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
-import { ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/cloudflare/tests/zone/support/fake-install";
-import { LAYOUT } from "../../packages/cloudflare/tests/zone/support/layouts";
+import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/cloudflare/tests/zone/support/fake-install";
+import { ADDRESSES, LAYOUT } from "../../packages/cloudflare/tests/zone/support/layouts";
 import { type Asked, bodyOf, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
 import { catchStep } from "./support/step";
 
@@ -74,8 +74,24 @@ const NOT_MADE: Upload = { made: false, map: false, jobs: [], folder: false, ass
 /** A sentence a Worker that cannot start answers. */
 const REASON = "This install's database is newer than its code: update poplin.";
 
+/** The Workflow of a test install as its configuration names it: after the Worker, bound as the Worker reads it. */
+const JOBS = [{ name: "poplin-jobs", binding: "JOBS", class_name: "PoplinJobs" }];
+
+/** The install of each kind, as a run finds it on a fake account. */
+const FOUND = {
+  domain: { kind: "domain", zone: { id: ZONE.id, name: ZONE.name, plan: "free", accountId: ACCOUNT }, layout: LAYOUT, adminHost: LAYOUT.adminHostname },
+  "account address": { kind: "account address", zone: undefined, layout: ADDRESSES, adminHost: ADDRESSES.adminHost },
+} as const satisfies Record<Found["kind"], Found>;
+
+/** The refusal of a call Cloudflare would not take: its words name things of the account, which no line of a run may repeat. */
+const REFUSED = { status: 400, code: 10021, message: "the-account-s-own-words" };
+
+/** Where the Workers of the fake account that holds an install are asked for. */
+const SCRIPTS = `/accounts/${INSTALL_ACCOUNT}/workers/scripts`;
+
 /** What the fake account holds, and which lists its token may read. A list that is absent is refused. */
 interface FakeAccount {
+  readonly subdomain?: string;
   readonly zones?: readonly (Omit<typeof ZONE, "plan"> & { readonly plan: { readonly name: string; readonly price?: number } })[];
   readonly subscriptions?: readonly Record<string, unknown>[];
   readonly buckets?: readonly string[];
@@ -160,6 +176,8 @@ function answer(account: FakeAccount, asked: Asked): Response {
 
   if (pathname === `/zones/${ZONE.id}` && account.zones?.[0] !== undefined) return reply(account.zones[0]);
 
+  if (pathname === `/accounts/${ACCOUNT}/workers/subdomain` && account.subdomain !== undefined) return reply({ subdomain: account.subdomain });
+
   if (pathname === `/accounts/${ACCOUNT}/subscriptions` && account.subscriptions !== undefined) return reply(account.subscriptions);
 
   if (pathname === `/accounts/${ACCOUNT}/r2/buckets` && asked.method === "GET" && account.buckets !== undefined) {
@@ -170,13 +188,14 @@ function answer(account: FakeAccount, asked: Asked): Response {
 }
 
 /** Run the script on a fake account, with the log, the step summary, and the step's outputs caught. */
-async function converge(account: FakeAccount): Promise<Told> {
+async function converge(account: FakeAccount, kind: Found["kind"] = "domain"): Promise<Told> {
   using folder = mkdtempDisposableSync(join(tmpdir(), "poplin-live-selftest-"));
   const env = {
     CLOUDFLARE_API_TOKEN: "a-made-up-token",
     CLOUDFLARE_ACCOUNT_ID: ACCOUNT,
     GITHUB_STEP_SUMMARY: join(folder.path, "summary.md"),
     GITHUB_OUTPUT: join(folder.path, "output"),
+    POPLIN_LIVE_INSTALL: kind,
   };
   using step = catchStep(env.GITHUB_OUTPUT);
   let code = 0;
@@ -193,9 +212,73 @@ async function converge(account: FakeAccount): Promise<Told> {
   return { code, lines, summary: readFileSync(env.GITHUB_STEP_SUMMARY, "utf8"), outputs: Object.keys(step.outputs()) };
 }
 
-/** The test install's configuration, for a fake account. */
-function installConfig(): Promise<Record<string, unknown>> {
-  return workerConfig({ accountId: ACCOUNT }, { layout: LAYOUT }, { databaseId: "2".repeat(32), access: { team_domain: "team.example.com", audience: "3".repeat(64) }, login: "owner@example.com" });
+/** The test install's configuration, for a fake account that holds a domain, or for one that holds none. */
+function installConfig(kind: Found["kind"] = "domain"): Promise<Record<string, unknown>> {
+  return workerConfig({ accountId: ACCOUNT }, FOUND[kind], { databaseId: "2".repeat(32), access: { team_domain: "team.example.com", audience: "3".repeat(64) }, login: "owner@example.com" });
+}
+
+/** A Worker of a fake account beside the install's own: a forwarder, or somebody's Worker of a forwarder's name. */
+interface OtherWorker {
+  id: string;
+  tags: readonly string[];
+  bindings?: unknown;
+  enabled?: boolean;
+  previews_enabled?: boolean;
+}
+
+/** A fake account without a domain: the install's own Worker, its tokens, and its permission groups, the Workers beside it, and the one call the fake refuses. */
+interface FreeWorld {
+  readonly account: Account;
+  readonly workers: OtherWorker[];
+  readonly refuse?: string;
+}
+
+/** Answer for a fake account without a domain: the list of its Workers, each forwarder's upload, settings, and addresses, and everything else as the fake of an install's account does. */
+function answerFree(world: FreeWorld, asked: Asked): Response {
+  if (`${asked.method} ${asked.path}` === world.refuse) return refusal(REFUSED.status, REFUSED.code, REFUSED.message);
+
+  const [, name, part] = /\/workers\/scripts(?:\/([^/?]+))?(?:\/([a-z-]+))?/.exec(asked.path) ?? [];
+  if (name === undefined && asked.path.includes("/workers/scripts")) return page(asked, [{ id: "poplin", tags: [] }, ...world.workers]);
+
+  if (name === undefined || name === "poplin") return answerInstall(world.account, asked);
+
+  const at = world.workers.findIndex((worker) => worker.id === name);
+  if (asked.method === "PUT" && part === undefined) {
+    const { metadata } = asked.body as { readonly metadata: { readonly tags: string[]; readonly bindings: unknown } };
+    world.workers.splice(at < 0 ? world.workers.length : at, 1, { enabled: false, previews_enabled: true, ...world.workers[at], id: name, tags: metadata.tags, bindings: metadata.bindings });
+
+    return reply({ id: name });
+  }
+
+  const current = world.workers[at];
+  if (current === undefined) return refusal(404, 10007, "This Worker does not exist on your account.");
+
+  if (part === "settings") return reply({ bindings: current.bindings ?? [], tags: current.tags });
+
+  if (asked.method === "POST") Object.assign(current, asked.body);
+
+  return reply({ enabled: current.enabled, previews_enabled: current.previews_enabled });
+}
+
+/** Make the forwarders and the key on a fake account without a domain, once for each number given, and answer what each run stopped at, the rows it told, and what it told the suite. */
+async function settleFree(world: FreeWorld, runs = 1): Promise<{ readonly stops: unknown[]; readonly rows: string[][]; readonly missing: Record<string, string> }> {
+  const told = { stops: [] as unknown[], rows: [] as string[][], missing: {} };
+
+  await withFake(
+    (asked) => answerFree(world, asked),
+    async (connection) => {
+      for (let nth = 0; nth < runs; nth += 1) {
+        const lines: string[] = [];
+        const run = { ...openRun({ CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: INSTALL_ACCOUNT }), connection: { key: TOKEN, baseUrl: connection.baseUrl }, say: (line: string) => void lines.push(line) };
+        const progress = { pieces: [], missing: {} };
+        told.stops.push(await settleFreeAddress(run, ADDRESSES, progress));
+        told.rows.push(lines);
+        Object.assign(told.missing, progress.missing);
+      }
+    },
+  );
+
+  return told;
 }
 
 /** The Workflow bindings an upload's metadata states, read from the form as Cloudflare reads it. */
@@ -264,9 +347,105 @@ describe("the script that makes the test install, against a local fake account",
     expect(read.length).toBeGreaterThan(0);
     expect(read.filter((name) => !written.includes(name))).toEqual([]);
   });
+
+  // Drift: the second test account holds no zone. A run that still looked for one, or read a zone's plan, would stop there before it made anything, on that account alone.
+  test.each<[string, FakeAccount, string[], string]>([
+    ["a token that may not read the account's free address stops the run with the permission it needs", {}, [], "it needs the token permission Workers Scripts: Edit"],
+    [
+      "an account without a domain is found by its free address, its plans are read with no zone, and its name is in no line",
+      { subdomain: "example", subscriptions: [R2_AT_ZERO, LOGIN_AT_ZERO], buckets: ["poplin-live-sites"] },
+      ["Free address: found", "Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)", "R2 bucket: present"],
+      "it needs the token permission D1: Edit",
+    ],
+    [
+      "a free address no hostname can be made under stops the run with the rule it breaks",
+      { subdomain: "an_account" },
+      [],
+      "the account's free address is none an install can use (bad-account)",
+    ],
+  ])("without a domain: %s", async (_what, account, lines, reason) => {
+    const told = await converge(account, "account address");
+    const sentence = `The test install could not be made ready: ${reason}.`;
+
+    expect({ code: told.code, lines: told.lines }).toEqual({ code: 1, lines: [...lines, `::error::${sentence}`] });
+    expect(told.summary).toContain(`**${sentence}**`);
+  });
+
+  test("a run told a kind of install that is none stops before it asks Cloudflare anything", async () => {
+    const told = await converge({ zones: [ZONE] }, "no kind" as Found["kind"]);
+
+    expect(told.lines).toEqual(["::error::The test install could not be made ready: POPLIN_LIVE_INSTALL names no kind of install."]);
+  });
+});
+
+describe("the forwarders and the key of an install without a domain, against a local fake account", () => {
+  // Drift: the run makes both on every push. One that uploaded a forwarder or made a key each time would leave the account a new Worker version and a new token a run.
+  test("the first run makes both forwarders and the key, and a second run leaves all three", async () => {
+    const world: FreeWorld = { account: emptyAccount(), workers: [] };
+    const told = await settleFree(world, 2);
+
+    expect(told).toEqual({
+      stops: [undefined, undefined],
+      rows: [
+        ["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: created"],
+        ["Forwarders: created 0, changed 0, left 2, not poplin's 0", "Key: present"],
+      ],
+      missing: {},
+    });
+    expect([world.workers.map((worker) => worker.id), world.account.tokens.length]).toEqual([["poplin-sites", "poplin-private"], 1]);
+  });
+
+  // Drift: the first runs meet the real provider for the first time. A stop that said only "refused" would not tell the upload from the address switch, and one that quoted Cloudflare would put the account's own names in a public log.
+  test.each([
+    ["the upload of the first forwarder", `PUT ${SCRIPTS}/poplin-sites`, "Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and codes 10021", ["poplin-sites"]],
+    ["the address switch of the second forwarder", `POST ${SCRIPTS}/poplin-private/subdomain`, "Forwarders: stopped at poplin-private: Cloudflare refused with status 400 and codes 10021", ["poplin-sites", "poplin-private"]],
+  ])("a refusal of %s is told as the step, the status, and the code, with none of Cloudflare's words", async (_what, refuse, row, held) => {
+    const world: FreeWorld = { account: emptyAccount(), workers: [], refuse };
+    const told = await settleFree(world);
+
+    expect(told).toMatchObject({ stops: [{ kind: "failed", what: "Cloudflare refused with status 400 and codes 10021" }], rows: [[row]] });
+    expect(JSON.stringify(told)).not.toContain(REFUSED.message);
+    expect(world.workers.map((worker) => worker.id).filter((id) => !held.includes(id))).toEqual([]);
+  });
+
+  test("a Worker of a forwarder's name that has no tag of poplin's stays as it is and stops the run, and the other forwarder is made", async () => {
+    const world: FreeWorld = { account: emptyAccount(), workers: [{ id: "poplin-private", tags: ["somebody-s-own"] }] };
+    const told = await settleFree(world);
+
+    expect(told).toMatchObject({
+      stops: [{ kind: "failed", what: "1 of the 2 forwarders' names are held by a Worker without poplin's tag" }],
+      rows: [["Forwarders: created 1, changed 0, left 0, not poplin's 1"]],
+    });
+    expect(world.workers[0]).toEqual({ id: "poplin-private", tags: ["somebody-s-own"] });
+  });
+
+  test("a token that may not make the key is a lack the suite skips for: the forwarders are made and the run goes on", async () => {
+    const world: FreeWorld = { account: { ...emptyAccount(), refuse: `GET /accounts/${INSTALL_ACCOUNT}/tokens/permission_groups` }, workers: [] };
+    const told = await settleFree(world);
+
+    expect(told).toMatchObject({
+      stops: [undefined],
+      rows: [["Forwarders: created 2, changed 0, left 0, not poplin's 0", "Key: skipped: needs the token permission Account API Tokens: Edit"]],
+      missing: { "kept-key": "the token permission Account API Tokens: Edit" },
+    });
+  });
 });
 
 describe("the configuration the built bundle is uploaded by", () => {
+  // Drift: an install without a domain answers on the Worker's own free address alone. A configuration that left it off, or named a domain, would deploy a Worker no request reaches, on the second test account alone.
+  test("each kind of install is told where it answers: a domain with the free address off, or the account's name with it on, never a preview address, and each binds the Workflow named after its Worker", async () => {
+    const told = async (kind: Found["kind"]): Promise<unknown[]> => {
+      const config = await installConfig(kind);
+
+      return [(config.vars as { readonly ZONE: unknown }).ZONE, config.workers_dev, config.preview_urls, config.workflows];
+    };
+
+    expect([await told("domain"), await told("account address")]).toEqual([
+      [{ domain: "example.com" }, false, false, JOBS],
+      [{ account_address: "example" }, true, false, JOBS],
+    ]);
+  });
+
   // Drift: the repository's own configuration says how wrangler bundles the Worker, and the upload hands wrangler a file that is bundled already. Wrangler warns of `minify` beside `no_bundle`, on a deploy that runs against the real account alone.
   test("as wrangler reads it, the file is uploaded as it is and nothing says to minify it", async () => {
     const config = await installConfig();

@@ -9,26 +9,40 @@
 //   *-page.example.com               the same, on an install whose routes reach the public word
 //   any other hostname               no answer
 //
+// With `noDomain`, the fake is an install on an account's free address, and no rule of a zone stands in front of it:
+//
+//   poplin.example.workers.dev            the dashboard, the login, and the API, as above
+//   poplin-sites.example.workers.dev      every unlisted and public site, as a path: the install's own count of one visitor, then the real serving
+//   poplin-private.example.workers.dev    every private site, as a path: with the login in front, a redirect to the team's login from every path of it
+//
 // Every answer on a site hostname names the data center it came through, as the edge's `cf-ray` does, and `/cdn-cgi/trace` there says which address the edge saw.
 //
 // The fake's time stands still while requests are sent and moves on only in a pause, so its two limits count as the real ones do: by the minute and by ten seconds.
 
+import { createApi } from "../../../packages/app/src/api/api";
+import type { SiteAddresses } from "../../../packages/app/src/sites/addresses";
+import { pathAddresses } from "../../../packages/app/src/sites/path-addresses";
 import { serveSite } from "../../../packages/app/src/sites/serve";
-import { openApi } from "../../../packages/app/tests/api/support/install";
+import { type ApiInstall, INSTALL_VERSION, LIMITS, openApi } from "../../../packages/app/tests/api/support/install";
 import { ADDRESSES } from "../../../packages/app/tests/sites/support/layout";
 import type { Fetch } from "../../../packages/cli/src/client/client";
+import { type Hostname, parseHostname } from "../../../packages/core/src/names/hostname";
+import { type LiveAddresses, liveAddresses } from "../addresses";
 
 /** The domain the fake answers under. */
 export const FAKE_DOMAIN = "example.com";
 
-/** The admin hostname. */
-const ADMIN_HOST = `poplin.${FAKE_DOMAIN}`;
+/** The account's name in the free address the fake of an install without a domain answers under. */
+const FAKE_ACCOUNT = "example";
+
+/** The three hostnames of the fake of an install without a domain. */
+const FREE_HOSTS = { admin: `poplin.${FAKE_ACCOUNT}.workers.dev`, sites: `poplin-sites.${FAKE_ACCOUNT}.workers.dev`, private: `poplin-private.${FAKE_ACCOUNT}.workers.dev` } as const;
 
 /** What the install says to a request to its dashboard that no login stands behind. */
 const NO_LOGIN = "No login was checked for this request. Open the dashboard's address again.";
 
-/** Where the login in front of the install sends a stranger. */
-const LOGIN_PAGE = `https://team.cloudflareaccess.com/cdn-cgi/access/login/${ADMIN_HOST}`;
+/** Where the login in front of the install sends a stranger, before the hostname the stranger asked for. */
+const LOGIN_PAGE = "https://team.cloudflareaccess.com/cdn-cgi/access/login/";
 
 /** The most requests the fake's own limit lets one minute hold. */
 const OWN_LIMIT = 120;
@@ -112,15 +126,34 @@ export interface FakeSwitches {
 
   /** The install holds no key of its provider, so a change of the users reaches no login list. */
   readonly noKey?: boolean;
+
+  /** The install has no domain: it answers on three hosts of an account's free address, every site is a path, and no rule of a zone stands in front. */
+  readonly noDomain?: boolean;
+
+  /** A fault: the dashboard's hostname lets the origin a request names read its answer. */
+  readonly grantsOrigin?: boolean;
+
+  /** A fault: a site's hostname answers the API's paths as the dashboard's hostname does. */
+  readonly apiOnSiteHosts?: boolean;
 }
 
-/** A fake install: what sends a request to it, an admin's token, the login list its provider holds, and the pause that moves its time on. */
+/** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list its provider holds, and the pause that moves its time on. */
 interface Fake {
   readonly fetch: Fetch;
+  readonly addresses: LiveAddresses;
   readonly token: string;
   readonly loginList: () => Promise<readonly string[]>;
   readonly pause: (ms: number) => Promise<void>;
   readonly now: () => number;
+}
+
+/** Where a fake answers: the hostname of its dashboard, the layout of its sites, its API, the same addresses as a stranger types them, and the one host of every private site in a layout that has one. */
+interface Place {
+  readonly adminHost: string;
+  readonly sites: SiteAddresses;
+  readonly api: Pick<ApiInstall["api"], "fetch">;
+  readonly typed: LiveAddresses;
+  readonly privateHost: string | undefined;
 }
 
 /** A data center of the fake. */
@@ -143,6 +176,16 @@ function refusal(status: number, text: string, extra: Readonly<Record<string, st
   return new Response(text, { status, headers: { ...REFUSAL_HEADERS, ...extra } });
 }
 
+/** An answer of the dashboard's hostname that lets an origin read it; the answer as it is for no origin. */
+function granting(answered: Response, origin: string | null): Response {
+  if (origin === null) return answered;
+
+  const open = new Response(answered.body, answered);
+  open.headers.set("Access-Control-Allow-Origin", origin);
+
+  return open;
+}
+
 function isSetupPath(pathname: string): boolean {
   return pathname === "/setup" || pathname.startsWith("/setup/");
 }
@@ -156,6 +199,49 @@ function behindLogin(switches: FakeSwitches, pathname: string): boolean {
   return pathname === "/login" || switches.loginPathOnly !== true;
 }
 
+/** Check a hostname the fake wrote by hand; a refusal is a mistake in the fake. */
+function hostOf(raw: string): Hostname {
+  const hostname = parseHostname(raw);
+  if (!hostname.ok) throw new Error(`the fake's hostname was refused: ${hostname.refusal}`);
+
+  return hostname.value;
+}
+
+/**
+ * The place of a fake without a domain: the test install's database, store, tokens, and users behind an API that writes each site's address as a path.
+ *
+ * The hosts are written here by hand, and not taken from the addresses the checks type, so a check that typed another host would get no answer.
+ */
+function freeAddressPlace(install: ApiInstall): Place {
+  const sites = pathAddresses({ sitesHost: hostOf(FREE_HOSTS.sites), privateHost: hostOf(FREE_HOSTS.private) });
+  const api = createApi({
+    database: install.database,
+    store: install.store,
+    now: () => install.clock.now,
+    addressOf: sites.addressOf,
+    publicAddressOf: sites.publicAddressOf,
+    reservedNames: sites.reservedNames,
+    readToken: (id) => install.database.getToken(id),
+    limits: LIMITS,
+    version: INSTALL_VERSION,
+    layout: { kind: "path", sites_host: FREE_HOSTS.sites, private_host: FREE_HOSTS.private },
+    counters: install.counters,
+    visitorOf: async () => "one-visitor",
+    follow: {
+      where: "Example Cloud",
+      holdsKey: () => install.users.takes,
+      push: async (logins) => {
+        install.users.pushed.push(logins);
+
+        return install.users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
+      },
+    },
+    update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
+  });
+
+  return { adminHost: FREE_HOSTS.admin, sites, api, typed: liveAddresses({ kind: "account address", account: FAKE_ACCOUNT }), privateHost: FREE_HOSTS.private };
+}
+
 /**
  * Open a fake install with no site.
  *
@@ -165,6 +251,14 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const install = await openApi();
   const settings = await install.database.readSettings();
   if (settings === undefined) throw new Error("the fake install has no settings");
+
+  const place: Place =
+    switches.noDomain === true
+      ? freeAddressPlace(install)
+      : { adminHost: `poplin.${FAKE_DOMAIN}`, sites: ADDRESSES, api: install.api, typed: liveAddresses({ kind: "domain", domain: FAKE_DOMAIN }), privateHost: undefined };
+  // The rules of a zone: an install without a domain has no zone, so none of them stands in front of it.
+  const zone = switches.noDomain !== true;
+  const loginPage = `${LOGIN_PAGE}${place.adminHost}`;
 
   // The fake's provider takes every change of the users, unless a fault says the install holds no key: its list is then the one of the first settings for good.
   install.users.takes = switches.noKey !== true;
@@ -194,25 +288,25 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
   // The zone's rules on a site hostname: the guard rule, the bot block, the rate rule. Then the install's own count of one visitor.
   const edge = (request: Request, url: URL, path: Path): Response | undefined => {
-    const guarded = switches.noGuards !== true;
+    const guarded = zone && switches.noGuards !== true;
     if (guarded && (!READS.has(request.method) || SCANNER_PATHS.test(url.pathname))) return new Response("blocked", { status: 403 });
 
-    if (CRAWLERS.test(request.headers.get("User-Agent") ?? "")) return new Response("blocked", { status: 403 });
+    if (zone && CRAWLERS.test(request.headers.get("User-Agent") ?? "")) return new Response("blocked", { status: 403 });
 
     arrivals.push({ at: time, ...path });
-    if (switches.noRateRule !== true && arrivedIn(time - ruleLag - RULE_WINDOW_MS, time - ruleLag, path) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
+    if (zone && switches.noRateRule !== true && arrivedIn(time - ruleLag - RULE_WINDOW_MS, time - ruleLag, path) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
 
     if (switches.noOwnLimit !== true && arrivedIn(time - OWN_WINDOW_MS, time - ownLag) > OWN_LIMIT) return refusal(429, "Too many requests. Try again in 60 seconds.\n", { "Retry-After": "60" });
 
     return undefined;
   };
 
-  // The login in front of every letter p hostname: a stranger never reaches the install there.
+  // The login in front of every address of a private site: a stranger never reaches the install there. Without a domain that is one host, whatever the path.
   const login = (url: URL): Response | undefined => {
-    const addressed = ADDRESSES.resolve(url);
-    const gated = switches.access === true && addressed.kind === "site" && addressed.letter === "p";
+    const addressed = place.sites.resolve(url);
+    const privateAddress = place.privateHost === undefined ? addressed.kind === "site" && addressed.letter === "p" : url.hostname === place.privateHost;
 
-    return gated ? refusal(302, "", { Location: LOGIN_PAGE }) : undefined;
+    return switches.access === true && privateAddress ? refusal(302, "", { Location: loginPage }) : undefined;
   };
 
   const answerSite = async (request: Request, url: URL, path: Path): Promise<Response> => {
@@ -225,17 +319,17 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
       database: install.database,
       store: install.store,
       settings,
-      addresses: ADDRESSES,
+      addresses: place.sites,
       identify: async () => ({ ok: switches.leaksPrivate === true }),
       now: () => install.clock.now,
     });
   };
 
   const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
-    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return install.api.fetch(request);
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return place.api.fetch(request);
 
     // The edge answers a script's call itself, where it sends a page on to the team's login.
-    if (behindLogin(switches, url.pathname)) return request.headers.get("X-Requested-With") === "XMLHttpRequest" ? refusal(401, "Unauthorized\n") : refusal(302, "", { Location: LOGIN_PAGE });
+    if (behindLogin(switches, url.pathname)) return request.headers.get("X-Requested-With") === "XMLHttpRequest" ? refusal(401, "Unauthorized\n") : refusal(302, "", { Location: loginPage });
 
     // As the install answers its setup page once somebody has logged in: a 404 that says nothing of keeping.
     if (isSetupPath(url.pathname)) return new Response("Not found.\n", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
@@ -246,16 +340,23 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     return refusal(403, `${NO_LOGIN}\n`);
   };
 
+  // What the two faults of the hostnames and the zone's redirect rule come to, said once for every request.
+  const redirects = zone && switches.noGuards !== true;
+  const grantedOf = (request: Request): string | null => (switches.grantsOrigin === true ? request.headers.get("Origin") : null);
+  const asApi = (url: URL): boolean => switches.apiOnSiteHosts === true && url.pathname.startsWith("/api/");
+
   const fetch: Fetch = async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
-    const secured = switches.noGuards === true ? undefined : toHttps(url);
+    const secured = redirects ? toHttps(url) : undefined;
     if (secured !== undefined) return secured;
 
-    if (url.hostname === ADMIN_HOST) return answerAdmin(request, url);
+    if (url.hostname === place.adminHost) return granting(await answerAdmin(request, url), grantedOf(request));
 
-    const reached = ADDRESSES.isSiteHost(url.hostname) && !(switches.noPublicRoute === true && !url.hostname.endsWith(`-poplin.${FAKE_DOMAIN}`));
+    const reached = place.sites.isSiteHost(url.hostname) && !(switches.noPublicRoute === true && !url.hostname.endsWith(`-poplin.${FAKE_DOMAIN}`));
     if (!reached) throw new TypeError("no server answers on this hostname");
+
+    if (asApi(url)) return place.api.fetch(request);
 
     const path = route();
     const answer = await answerSite(request, url, path);
@@ -269,5 +370,5 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     time += ms;
   };
 
-  return { fetch, token: install.tokens.admin, loginList, pause, now: () => time };
+  return { fetch, addresses: place.typed, token: install.tokens.admin, loginList, pause, now: () => time };
 }

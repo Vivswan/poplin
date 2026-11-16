@@ -3,7 +3,7 @@
 import { expect } from "bun:test";
 
 import { type Bench, type Check, Skip } from "../records";
-import { GHOST_ID, isOwnAddress, labelAddress } from "../util";
+import { expectRefused, GHOST_ID } from "../util";
 
 /** The most requests the burst sends before the paced ones: past the rate rule's 300 in ten seconds. */
 const BURST = 340;
@@ -59,8 +59,11 @@ const OUTSIDE_PAGE = { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cor
 /** The window the rate rule counts in, in milliseconds. */
 const RULE_WINDOW_MS = 10_000;
 
-/** The path on which the edge itself says which address it saw a request come from. */
-const TRACE_PATH = "cdn-cgi/trace";
+/** The path on which the edge itself says which address it saw a request come from: at the root of a host, whatever the address of a site on it. */
+const TRACE_PATH = "/cdn-cgi/trace";
+
+/** What the dashboard's hostname alone answers, as a path inside a site host: the API, the dashboard's data, and the login. */
+const ADMIN_PATHS = ["api/whoami", "data/frame", "login/"];
 
 /** What the check of the rate rule needs when no data center's count stayed past the limit: the rule was not due to block, so nothing is proven. */
 const NOT_PROVEN = "one data center that takes more than 300 of the runner's requests in ten seconds";
@@ -130,7 +133,7 @@ function openRun(bench: Bench, seen: Seen = { sources: new Set(), sampled: 0 }):
 /** Ask the edge once which address it sees the runner at, and keep it for the count alone. An edge that does not say, or a request that fails, is no sample. */
 async function sample(bench: Bench, seen: Seen): Promise<void> {
   const text = await bench
-    .visit(`${labelAddress(bench.domain, GHOST_ID, "u")}${TRACE_PATH}`)
+    .visit(new URL(TRACE_PATH, bench.addresses.site(GHOST_ID, "u")).href)
     .then((response) => (response.status === 200 ? response.text() : ""))
     .catch(() => "");
   const source = /^ip=(\S+)$/m.exec(text)?.[1];
@@ -193,7 +196,7 @@ function count(run: Run, center: string, at: number): void {
 /** Ask once for a site that is not there, and keep which side answered and through which data center. */
 async function ask(bench: Bench, run: Run): Promise<void> {
   run.sent += 1;
-  const response = await bench.visit(labelAddress(bench.domain, GHOST_ID, "u"));
+  const response = await bench.visit(bench.addresses.site(GHOST_ID, "u"));
   const body = await response.text();
   const limited = response.status === 429;
   const own = limited && body.startsWith(OWN_LIMIT_TEXT) && response.headers.has("Retry-After");
@@ -280,7 +283,7 @@ async function sendBurst(bench: Bench): Promise<Met> {
  */
 function sentToTeamLogin(bench: Bench, response: Response): boolean {
   const location = response.headers.get("Location") ?? "";
-  if (response.status !== 302 || !URL.canParse(location) || isOwnAddress(bench.domain, location)) return false;
+  if (response.status !== 302 || !URL.canParse(location) || bench.addresses.isOwn(location)) return false;
 
   const { hostname, pathname } = new URL(location);
 
@@ -354,7 +357,7 @@ export const EDGE_CHECKS: readonly Check[] = [
     name: "a hostname that is no site's address answers the one 404, never cached",
     needs: [],
     run: async (bench) => {
-      const response = await bench.visit(`https://x-poplin.${bench.domain}/`);
+      const response = await bench.visit(bench.addresses.openRoot);
       expect(response.status).toBe(404);
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       expect(response.headers.get("X-Robots-Tag")).toBe("noindex");
@@ -366,7 +369,7 @@ export const EDGE_CHECKS: readonly Check[] = [
     name: "a site hostname refuses a method that changes something, before the install or in it",
     needs: [],
     run: async (bench) => {
-      const response = await bench.visit(`https://x-poplin.${bench.domain}/`, { method: "POST", body: "x" });
+      const response = await bench.visit(bench.addresses.openRoot, { method: "POST", body: "x" });
       expect(response.status).toBeOneOf([403, 405]);
       if (response.status === 405) expect(response.headers.get("Allow")).toBe("GET, HEAD");
     },
@@ -376,8 +379,49 @@ export const EDGE_CHECKS: readonly Check[] = [
     name: "a hostname beside the install's own, and one below its admin hostname, answer with no success",
     needs: [],
     run: async (bench) => {
-      expect(await answersOk(bench, `https://${bench.prefix}.${bench.domain}/`)).toBe(false);
-      expect(await answersOk(bench, `https://${bench.prefix}.poplin.${bench.domain}/`)).toBe(false);
+      for (const address of bench.addresses.beside(bench.prefix)) expect(await answersOk(bench, address)).toBe(false);
+    },
+  },
+  {
+    id: "hosts-apart",
+    name: "a site's address serves nothing of the API, the login, or the dashboard's data, and the dashboard's address serves no site",
+    needs: ["token"],
+    run: async (bench) => {
+      const { site, text } = await bench.shared("unlisted");
+      const { addresses } = bench;
+
+      for (const inside of ADMIN_PATHS) {
+        const open = await bench.visit(`${addresses.openRoot}${inside}`);
+        // Compared here and told as one word: a failure prints nothing a host answered.
+        expect([inside, open.status, (await open.text()) === "Not found\n"]).toEqual([inside, 404, true]);
+
+        // The login may stand in front of this side: its redirect is no answer of the install either.
+        const behind = await bench.visit(`${addresses.privateRoot}${inside}`);
+        expect([inside, behind.status === 404 || sentToTeamLogin(bench, behind)]).toEqual([inside, true]);
+      }
+
+      const asSite = await bench.visit(`${bench.admin}/${site.label}/`);
+      expect(asSite.status).toBeOneOf([302, 401, 403, 404]);
+      await expectRefused(addresses, asSite, text);
+    },
+  },
+  {
+    id: "data-cross-origin",
+    name: "the dashboard's data asked for by a page of a site is refused, a form's change too, and no answer lets another origin read it",
+    needs: [],
+    run: async (bench) => {
+      const origin = { Origin: new URL(bench.addresses.openRoot).origin };
+
+      // The question a browser asks before a change is answered by whatever stands in front, with any status: what counts is that no answer grants the origin.
+      for (const [what, refused, init] of [
+        ["a read", true, { headers: origin }],
+        ["a form's change", true, { method: "POST", headers: { ...origin, "Content-Type": "application/x-www-form-urlencoded" }, body: "name=x" }],
+        ["a question before a change", false, { method: "OPTIONS", headers: { ...origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" } }],
+      ] as const) {
+        const response = await bench.visit(`${bench.admin}/data/sites`, init);
+        const granted = [response.headers.get("Access-Control-Allow-Origin"), response.headers.get("Access-Control-Allow-Credentials")];
+        expect([what, refused && response.ok, granted, /"(?:sites|email|logins|recent)"/.test(await response.text())]).toEqual([what, false, [null, null], false]);
+      }
     },
   },
   {
@@ -395,7 +439,7 @@ export const EDGE_CHECKS: readonly Check[] = [
     name: "an AI crawler's user agent is stopped before the install",
     needs: ["bot-block"],
     run: async (bench) => {
-      const response = await bench.visit(labelAddress(bench.domain, GHOST_ID, "u"), { headers: { "User-Agent": CRAWLER } });
+      const response = await bench.visit(bench.addresses.site(GHOST_ID, "u"), { headers: { "User-Agent": CRAWLER } });
       expect(response.status).toBe(403);
     },
   },

@@ -5,8 +5,8 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | To                                                | Run                                                                       | Needs                                                                     |
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | check the checks themselves, against a local fake | `bun test ./tests/live`                                                   | nothing                                                                   |
-| check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, and `POPLIN_LIVE_TOKEN` for the checks that publish |
-| check the test install                            | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `with-domain-ci-tests` environment                                    |
+| check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
+| check the two test installs                       | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that a build takes a release by its digest  | a release's own run of main, then the next one: `poplin-<version>.tar.gz` on the release's page, its digest under that version in the website's `releases.json`, and `poplin: deploying <version> (was asked for latest)` in an install's build | a published release |
 | check that a release publishes its built Worker   | the same two runs: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` beside `source` in `releases.json`, and `schema` in `latest.json` | a published release |
 
@@ -17,12 +17,15 @@ Live Checks workflow
   build the Worker bundle
   packages/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
   packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
+                                                 without a domain, in the repair's place: the two forwarders and the key
                                                  `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
                                                  `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   step summary                                   one table of the install's pieces, one of the checks, one of the reset
 ```
+
+The workflow runs these steps twice, one leg after the other: `live (domain)` on the account that holds a domain, then `live (account address)` on the account that holds none. A leg that fails stops no other.
 
 ## What starts a run
 
@@ -58,6 +61,8 @@ One job touches the install at a time. The checks and the midnight reset wait in
 On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
 
 The run removes the Worker and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
+
+On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Worker, the database, every file in the bucket, and the key. A Worker of a forwarder's name without poplin's tag stays.
 
 A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
 
@@ -110,9 +115,9 @@ The owner sets these. Each test account has its own environment, and the secrets
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
 | `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow |
-| `without-domain-ci-tests` | the test account that holds no domain | no workflow                |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks` workflow |
 
-For the account the workflow reads:
+For each account:
 
 | Set                     | Where                        | For                                                                       |
 | ----------------------- | ---------------------------- | ------------------------------------------------------------------------- |
@@ -123,11 +128,49 @@ For the account the workflow reads:
 | `POPLIN_LIVE_LOGIN`     | a secret of the environment  | the login the install lets in                                             |
 | `DEMO_URL`              | a variable of the repository | the demo's whole https address, for the website; absent, it shows no link |
 
+## The test install without a domain
+
+A second install, on the test account that holds no domain. It answers on the account's free address, stays up between runs, and is put back by the same reset.
+
+| What                    | Where it answers                                 |
+| ----------------------- | ------------------------------------------------ |
+| the dashboard, the API  | `poplin.<account>.workers.dev`                   |
+| a private site          | `poplin-private.<account>.workers.dev/<label>/`  |
+| any other site          | `poplin-sites.<account>.workers.dev/<label>/`    |
+| the demo                | `poplin-sites.<account>.workers.dev/demo/`       |
+
+| Step of `converge.ts`   | Made by                                                                  | A line of its log                                           |
+| ----------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| the free address        | read from Cloudflare, never written in the repository                    | `Free address: found`                                       |
+| plans, bucket, database | as on the other account, with no zone to read                            | `R2 bucket: present`                                        |
+| the login               | `syncAccess`: the whole dashboard host, and the whole private sites' host | `Login application: created 0, changed 0, left 4, not poplin's 0` |
+| the Worker              | `wrangler deploy`, with `ZONE` set to the account's name and the free address on | `Worker: deployed`                                  |
+| the two forwarders      | `syncForwarders`                                                         | `Forwarders: created 0, changed 0, left 2, not poplin's 0`  |
+| the key                 | `mintKey` and `syncVariables`, where the Worker holds no active key      | `Key: present`                                              |
+
+A step Cloudflare refuses prints the step, the status, and the error codes, and nothing else Cloudflare said:
+
+```text
+Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and codes 10021
+```
+
+| Differs from the other install                                   | So                                                                              |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `burst-rate-rule` are skipped: needs a domain |
+| a site answers under a path                                      | `relative-file` also asks the address without its last slash, which moves to the one with it |
+| a site's address is no root of an origin                         | the demo gets no link to a sample site: `sites.json` is empty                   |
+| no budget alert                                                  | none is made, and a start-over removes none                                     |
+
+Every other check runs on both installs, at the addresses of each one's layout. No run logs in: the checks of a person stay skipped on both.
+
 ## What keeps the test account at no cost
+
+Each account has its own allowances, and every ceiling below holds for each install by itself.
+
 
 | Guard                                                                                  | Where                                         | At the limit                                                  |
 | -------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
-| the zone's plan is Free, and every subscription of the account that has not ended is at a price of 0 | `plan.ts`, before anything is made | the run stops red |
+| the zone's plan is Free, where the account holds a zone, and every subscription of the account that has not ended is at a price of 0 | `plan.ts`, before anything is made | the run stops red |
 | a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
 | bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
@@ -166,6 +209,14 @@ the plan's day           100,000 requests to the Worker, reached at about 52 suc
 
 The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests.
 
+```text
+the install without a domain
+a run, at its worst      700 (own-limit) + 69 (backup-drill) = 769: no rate rule stands in front of it, so no burst is sent
+a usual run              about 125 (own-limit, which ends at the first 429) + 69 + about 130 (the reset) and a few dozen more
+a day of 45 runs         45 x 769 = 34,605 of its own account's 100,000
+a request for a site     one request of a forwarder, which hands it to the Worker at no further request, by Cloudflare's documentation
+```
+
 ## The rows a run writes
 
 The database's free plan takes 100,000 rows written a day, every database of the account together. Past them it refuses each write until midnight UTC, and every run of that day fails.
@@ -194,18 +245,20 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   864 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the checks, as the harness counts them   866 on the local fake, a few more with the demo's check: every site they publish, change, and remove
 a reset that keeps every sample          38: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 390
 the harness's own statements             18: three tokens in and out, and the caps
-a usual run                              about 920 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
+a usual run                              about 922 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
 a day of 40 such runs                    about 42,000 of the 100,000
 ```
+
+The install without a domain writes to the database of its own account: the same checks, the same ceilings, a count line of its own in each step of its leg, and its own 100,000 a day.
 
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 864 of at most 1100
+Rows written this run: 866 of at most 1100
 ```
 
 ## The backup drill
@@ -291,6 +344,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`, `download`: the checklist below        |
+| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `burst-rate-rule` |
 
 ## The token's permissions
 
@@ -312,6 +366,8 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Notifications: Edit                                         | the account | the budget alert                                  |
 | Account API Tokens: Edit                                    | the account | the key the install keeps                         |
 
+The token of the account without a domain needs the rows whose scope is the account, without Notifications: Edit, and none of the zone. Workers Scripts: Edit also reads the account's free address and makes the two forwarders.
+
 ## What one request costs
 
 No live check reads what a request cost: no address of an install answers it, to a visitor or to a token.
@@ -330,6 +386,7 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | Check   | Do                                                                                                                                                               | Look for                                                                                                |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | login   | Open the dashboard, logged out. Enter your email and the code Cloudflare sends.                                                                                  | Cloudflare's login page first, then the dashboard. An email that is no login gets no code that works.   |
+| `login-free` | On the install without a domain, once after its first run: open a private sample site at its address under `poplin-private`, logged out, and log in. Then open the dashboard's address. | Cloudflare's login page first, then the site's page. The dashboard opens after a login, and lists the sample sites. |
 | `setup` | On a Cloudflare account with no poplin, follow `docs/start/by-hand.md` from step 1 to step 5. Then open `/setup` on the dashboard and on the Worker's own address.     | Each step works as written: in step 2 the last button of the form deploys, and the page that opens has the `workers.dev` address at its top. The setup page lists the objects it made. After the first login, `/setup` answers 404 on both addresses.|
 | `token` | Open the link "Make the token" on the setup page, or the one in step 3 of `docs/start/by-hand.md`, logged in to Cloudflare.                                            | The token form opens with the nine linked rights ticked.                                                                           |
 | `link-rights` | Install with the link's nine rights only: on a Cloudflare account with no poplin, make the token from that link, add nothing to it, and press Repair on the setup page. Log in, then publish a site and open it. | The notice counts what was repaired and names no failure. No row says failed. The redirect, guard, and rate rows say `optional`, each with the right that switches it on. So does the bot row, or `left out` on a domain with other hostnames. The login works and the site opens. |

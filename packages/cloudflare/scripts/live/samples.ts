@@ -19,7 +19,7 @@ import * as v from "valibot";
 
 import type { Io } from "../../../cli/src/commands/records";
 import { run as runCli } from "../../../cli/src/commands/run";
-import type { RealSites } from "../../../demo/src/preview/real-sites";
+import { type RealSites, readRealSites } from "../../../demo/src/preview/real-sites";
 import { type Standing, standingSites, THE_DEMO } from "../../../demo/src/preview/sample-sites";
 import type { Wanted } from "./same-site";
 import type { Stop } from "./util";
@@ -173,11 +173,11 @@ export async function publishSamples(cli: Cli, samples: readonly Sample[], kept:
     if ("kind" in site) return site;
 
     const stays = site.expires === NEVER || site.expires - site.updated > DAY_MS;
-    // The address is written as a browser writes the root of its origin, which is the one form the demo takes.
-    if (!row.trashed && stays) real[row.name] = new URL("/", site.url).href;
+    // Written as a browser writes it. The demo takes the root of an origin alone: a site that answers under a path, as every site of an install without a domain does, gets no link.
+    if (!row.trashed && stays) real[row.name] = new URL(site.url).href;
   }
 
   const names = (trashed: boolean): readonly string[] => samples.filter(({ row }) => row.trashed === trashed).map(({ row }) => row.name);
 
-  return { live: names(false), binned: names(true), versioned: { name: longest.row.name, versions: longest.versions }, real };
+  return { live: names(false), binned: names(true), versioned: { name: longest.row.name, versions: longest.versions }, real: readRealSites(real) };
 }

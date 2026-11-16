@@ -40,7 +40,7 @@ const SAMPLES = join(import.meta.dir, "..", "..", "..", "..", "demo", "samples")
 /** What the demo's site is published with, so it never runs out. */
 const NEVER = "never";
 
-/** The row of the sample table that stands for the demo itself: its name, its public name, its title, and what a publish leaves of its site. Its address is `<public name>-<public word>.<domain>`. */
+/** The row of the sample table that stands for the demo itself: its name, its public name, its title, and what a publish leaves of its site. Its address is `<public name>-<public word>.<domain>`, or `/<public name>/` on the open sites' host. */
 const DEMO = demoRow();
 
 /** The most sites one page of a listing holds. */
@@ -344,7 +344,7 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
   if (typeof token !== "string") return token;
 
   return resetInstall({
-    server: `https://${found.layout.adminHostname}`,
+    server: `https://${found.adminHost}`,
     token,
     fetch: sendLive,
     pause: (ms) => Bun.sleep(ms),
