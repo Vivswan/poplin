@@ -89,7 +89,7 @@ function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held"
 
 /** Look for an install with the token, and take what a removal can start from. */
 async function look(request: UninstallRequest, ends: InstallEnds, show: Show): Promise<Ground | Stop> {
-  const looked = await lookFor(request, ends, {
+  const looked = await lookFor({ ...request, work: "remove" }, ends, {
     looking: () => show.working(LOOKING),
     found: (found) => show.line(found.state === "whole" ? "note" : "warning", `${LOOKING} ... ${foundWords(found)}`),
   });

@@ -148,7 +148,7 @@ describe("a run", () => {
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "Account token (not shown): [secret]", `Type ${NAME} to go on:`]);
     expect(account.tokensFor).toEqual(["remove"]);
-    expect(account.finds).toEqual([{ kind: "place", name: "example.com" }]);
+    expect([account.finds, account.looks]).toEqual([[{ kind: "place", name: "example.com" }], ["remove"]]);
   });
 
   test("given its proof with --confirm asks nothing, lists nothing first, and hands the provider what was given: without this an agent cannot remove an install", async () => {

@@ -57,6 +57,9 @@ export interface Account {
   /** The place of each look, in order. */
   readonly finds: Where[];
 
+  /** The work each look was for, in order. */
+  readonly looks: string[];
+
   /** What each token a person was asked for was to be made for, in order. */
   readonly tokensFor: string[];
 
@@ -195,6 +198,7 @@ export function emptyAccount(): Account {
     installed: undefined,
     crash: undefined,
     finds: [],
+    looks: [],
     tokensFor: [],
     runs: [],
     changes: 0,
@@ -234,8 +238,9 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
 
       return factsAt(where);
     },
-    find: async (_token, where) => {
+    find: async (_token, where, _reach, work) => {
       account.finds.push(where);
+      account.looks.push(work);
       const scene = account.scenes.length > 1 ? account.scenes.shift() : account.scenes[0];
       if (scene === undefined) throw new Error("the account has no scene");
 

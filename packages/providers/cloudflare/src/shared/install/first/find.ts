@@ -6,6 +6,7 @@
 //   3  the version     of a whole install, from the tag of its latest version
 //   4  the database    `poplin`, by its name
 //   5  the bucket      `poplin-sites`, by its name; a refusal here says the token lacks the storage right, or that storage is switched off
+//                      a repair's look reads none: a repair makes no bucket, so its token is asked for no storage permission
 //   6  Access          whether the login product is switched on, which no API does
 //
 // The Worker is poplin's when `WORKER_NAME` is its own name and its bucket, database, and Workflow are bound. It is set once `ZONE` reads as an install and `ACCOUNT_ID` is there.
@@ -47,6 +48,9 @@ const VERSION_TAG = "workers/tag";
 
 /** How often a Worker that reads as not poplin's is read again, and the wait before each read, in milliseconds: the settings trail an upload by about a second. */
 const AGAIN = { times: 3, everyMs: 1_500 } as const;
+
+/** The buckets of an account as a look that reads none has them: no bucket of poplin's name is told. */
+const NO_BUCKETS: Awaited<ReturnType<typeof listBuckets>> = { ok: true, value: [] };
 
 /** A version as Cloudflare lists it, read no further than its annotations. */
 const LISTED_VERSION = v.object({ annotations: v.optional(v.record(v.string(), v.unknown())) });
@@ -98,6 +102,9 @@ interface Rights {
 
   /** The permission a token needs first for one object, as the token form names it. */
   readonly nameOf: (object: "D1 database" | "R2 bucket" | "Access application" | "Worker variable") => string;
+
+  /** Whether the look reads the account's buckets: only where the token it is made with is asked for the storage permission. */
+  readonly buckets: boolean;
 }
 
 /** What a read of the Worker answers: its bindings, `undefined` for no Worker, or why Cloudflare gave none. */
@@ -335,7 +342,7 @@ function withoutWorker(place: Place, notes: readonly Blocked[], held: { readonly
 async function standing(place: Place, started: boolean, rights: Rights): Promise<FoundHere> {
   const { connection, accountId } = place;
   const databases = await callCloudflare(connection, (api) => Array.fromAsync(new BaseDatabase(api).list({ account_id: accountId, name: INSTALL_OBJECTS.database })));
-  const buckets = await listBuckets(connection, accountId);
+  const buckets = rights.buckets ? await listBuckets(connection, accountId) : NO_BUCKETS;
   const login = await readLoginFacts(connection, accountId);
   const unanswered = [databases, buckets, login].flatMap((read) => (!read.ok && (read.failure !== "refused" || read.status >= SERVER_FAILURE) ? [read] : []))[0];
   if (unanswered !== undefined) return refusedBy(unanswered);
@@ -387,7 +394,7 @@ async function readSettled(place: Place, reach: Reach): Promise<Bindings> {
  * Look for an install with a token. It only reads.
  *
  * @param where - the place a person chose: its domain says which account, and its `account` picks one where the token shows several
- * @param rights - how a refusal for a lacking permission is told, and how the permission is named
+ * @param rights - how a refusal for a lacking permission is told, how the permission is named, and whether the token is one that may read the buckets
  * @returns what is there, as one value; a token that is refused or shows no such domain, an install that was started for another place, and an account whose storage is off or whose token lacks a needed permission, are states of their own
  */
 export async function findInstall(token: Token, where: Where, reach: Reach, rights: Rights): Promise<Found<Where, Place>> {
