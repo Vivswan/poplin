@@ -517,7 +517,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       return (measured) => data(measured, session, "/problems?days=30");
     },
     status: 200,
-    budget: { queries: 2, read: 422, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 452, reads: 0, writes: 0 },
   },
   {
     group,

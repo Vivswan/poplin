@@ -17,7 +17,10 @@ import { drawAt } from "../lib/support/router";
 const THEME_KEY = "test.theme";
 
 /** What the frame holds besides the note on the domain and the marks. */
-const FRAME = { ok: true, update: null, starts: false, recent: [] } as const;
+const FRAME = { ok: true, update: null, starts: false, back: null, recent: [] } as const;
+
+/** The way back of an install that holds its key and came to its version by an update, on the first of December 2026. */
+const BACK = { back: { to: "0.9.0", since: Date.UTC(2026, 11, 1, 12) }, starts: true } as const;
 
 /** A newer release the install knows of, on an install that holds its key. */
 const NEWER = { update: { current: BOOT.version, newest: "1.1.0", released: "2026-11-02", notes: "https://example.com/notes", database: false }, starts: true } as const;
@@ -25,8 +28,11 @@ const NEWER = { update: { current: BOOT.version, newest: "1.1.0", released: "202
 /** The marks of an install where nothing went wrong. */
 const NO_MARKS = { usage: null, domain: null, settings: null };
 
+/** What of the frame a test sets besides the note on the domain. */
+type Shown = Partial<typeof NEWER & typeof BACK> & { readonly marks?: object };
+
 /** Draw the frame around an empty screen, over a frame that holds the note given, and what else of the frame a test sets. */
-async function drawWith(domainNote: { readonly label: string; readonly sentence: string; readonly quiet: boolean } | null, more: Partial<typeof NEWER> & { readonly marks?: object } = {}): Promise<void> {
+async function drawWith(domainNote: { readonly label: string; readonly sentence: string; readonly quiet: boolean } | null, more: Shown = {}): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(FRAME_KEY, { ...FRAME, marks: NO_MARKS, ...more, domainNote });
 
@@ -141,6 +147,31 @@ describe("a try to start an update", () => {
     const asked = server.mock.calls.map(([input, init]) => `${sent(input, init).method} ${new URL(sent(input, init).url).pathname.slice(BOOT.base.length)}`);
 
     expect([before, asked]).toEqual([0, ["POST /data/update", "GET /data/frame"]]);
+  });
+});
+
+describe("the way back to the version before", () => {
+  // Drift: the button posts the version before by name. A press that sent an empty body would take the newest release, and put the install forward where a person asked to go back.
+  test("stands under the version and since when it runs, asks first, and sends the version before", async () => {
+    const sent = (input: Request | string | URL, init?: RequestInit): Request => (input instanceof Request ? input : new Request(new URL(String(input), window.location.href), init));
+    const bodies: unknown[] = [];
+    spyOn(globalThis, "fetch").mockImplementation((async (input: Request | string | URL, init?: RequestInit) => {
+      const request = sent(input, init);
+      if (request.method !== "POST") return Response.json({ ...FRAME, ...BACK, domainNote: null, marks: NO_MARKS });
+
+      bodies.push(await request.json());
+
+      return Response.json({ ok: true, to: "0.9.0" });
+    }) as typeof fetch);
+    await drawWith(null, BACK);
+    const line = screen.getAllByText(/^Running poplin/, { ignore: "[hidden] *" })[0]?.textContent;
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Go back to 0.9.0", hidden: true })[0] as HTMLElement);
+    const asked = await screen.findByRole("alertdialog", { name: "Go back to 0.9.0?" });
+    fireEvent.click(within(asked).getByRole("button", { name: "Go back to 0.9.0" }));
+    await waitFor(() => expect(bodies.length).toBe(1));
+
+    expect([line, bodies]).toEqual([`Running poplin ${BOOT.version}, since 2026-12-01`, [{ to: "0.9.0" }]]);
   });
 });
 

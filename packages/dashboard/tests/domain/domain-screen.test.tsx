@@ -55,7 +55,7 @@ function lastOf(minutes: number): Record<string, unknown> {
 function serve(alone: boolean, last: Record<string, unknown> | null, answers: { now: boolean; holds?: boolean } = { now: true }): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
-    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
+    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
 
     if (init?.method !== "POST") return Response.json({ ok: true, form: FORM, words: { thing: "the domain", line: null }, checks_alone: alone, last });
 

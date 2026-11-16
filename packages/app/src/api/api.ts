@@ -27,7 +27,7 @@ import { updateSite } from "@poplin/core/src/actions/set";
 import { getSite } from "@poplin/core/src/actions/show";
 import { showUpload } from "@poplin/core/src/actions/show-upload";
 import { type EndLogins, signEveryoneOut } from "@poplin/core/src/actions/sign-out";
-import { type SelfUpdate, startUpdate } from "@poplin/core/src/actions/start-update";
+import { type SelfUpdate, startUpdate, UPDATE_REQUEST } from "@poplin/core/src/actions/start-update";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
@@ -213,8 +213,8 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     .get("/domain", token, install, noQuery, async (context) => respond(await domainState(context.var.install, context.var.actor)))
     .get("/problems", token, install, noQuery, async (context) => respond(await listProblems(context.var.install, context.var.actor, PROBLEM_DAYS)))
 
-    .get("/update", token, install, noQuery, async (context) => respond(await answerUpdateState(context.var.install, context.var.actor, { version: deps.version, key: deps.update.holdsKey() })))
-    .post("/update", token, install, noQuery, async (context) => respond(await startUpdate(context.var.install, context.var.actor, { version: deps.version }, updating)));
+    .get("/update", token, install, noQuery, async (context) => respond(await answerUpdateState(context.var.install, context.var.actor, { version: deps.version, self: deps.update })))
+    .post("/update", token, install, queried(UPDATE_REQUEST), async (context) => respond(await startUpdate(context.var.install, context.var.actor, { version: deps.version, to: context.req.valid("query").to }, updating)));
 }
 
 /** The API of one install, as a client is typed from it: every route's method, path, query, body, and answers. */

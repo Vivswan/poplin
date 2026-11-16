@@ -6,6 +6,7 @@ import * as v from "valibot";
 import { OWN_SCHEMA } from "../database/open";
 import { isPlainVersion, UPDATE_NEWS, type UpdateCheck, type UpdateNews } from "../records/update";
 import type { SettingValues } from "../records/settings";
+import { WAY_BACK } from "./go-back";
 import { type Install, settingsOf } from "./records";
 
 /** A release newer than the running version, as an answer holds it. */
@@ -26,8 +27,8 @@ export const UPDATE_NOTICE = v.object({
   database: v.boolean(),
 });
 
-/** What an install answers about updating: the version it runs, the newer release it knows of or `null`, and whether its host holds the key an update is sent with. */
-export const UPDATE_STATE = v.object({ version: v.string(), update: v.nullable(UPDATE_NOTICE), key: v.boolean() });
+/** What an install answers about updating: the version it runs, the newer release it knows of or `null`, whether its host holds the key an update is sent with, and the version it can go back to or `null`. */
+export const UPDATE_STATE = v.object({ version: v.string(), update: v.nullable(UPDATE_NOTICE), key: v.boolean(), back: v.nullable(WAY_BACK) });
 
 /** A release newer than the running version. */
 export type Update = Readonly<v.InferOutput<typeof UPDATE_NOTICE>>;

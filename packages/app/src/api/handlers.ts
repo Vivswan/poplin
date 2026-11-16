@@ -2,10 +2,12 @@
 
 import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
 import { beginLogin, LOGIN_REQUEST } from "@poplin/core/src/actions/computer-logins";
+import { wayBack } from "@poplin/core/src/actions/go-back";
 import { issueTickets, type TICKETS_REQUEST } from "@poplin/core/src/actions/issue-tickets";
 import { tokenObject, type WHOAMI_ANSWER } from "@poplin/core/src/actions/manage-tokens";
 import { noteProblem } from "@poplin/core/src/actions/problems";
 import { type Install, type Refused, refuse } from "@poplin/core/src/actions/records";
+import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 import { type UPDATE_STATE, updateOf } from "@poplin/core/src/actions/update";
 import { uploadFile } from "@poplin/core/src/actions/upload-file";
 import { REVIEW_PAGE } from "@poplin/core/src/api/routes";
@@ -155,17 +157,19 @@ export async function beginWithAddress(install: Install, body: unknown, origin: 
 /**
  * Say what an update would start from, for an admin. Nothing is fetched and nothing is started.
  *
- * @param running - the version of poplin the install runs, and whether its host holds the key an update is sent with
- * @returns the version, the newer release the install knows of or `null`, and whether the key is held; `not_allowed` for anyone but an admin
+ * @param running - the version of poplin the install runs, and what updates it
+ * @returns the version, the newer release the install knows of or `null`, whether the key is held, and the version it can go back to or `null`; `not_allowed` for anyone but an admin
  */
 export async function answerUpdateState(
   install: Install,
   actor: Actor,
-  running: { readonly version: string; readonly key: boolean },
+  running: { readonly version: string; readonly self: Pick<SelfUpdate, "holdsKey" | "last"> },
 ): Promise<({ readonly ok: true } & v.InferOutput<typeof UPDATE_STATE>) | Refused<"not_allowed">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
-  return { ok: true, version: running.version, update: (await updateOf(install, running.version)) ?? null, key: running.key };
+  const { version, self } = running;
+
+  return { ok: true, version, update: (await updateOf(install, version)) ?? null, key: self.holdsKey(), back: wayBack(self.last, version) ?? null };
 }
 
 /**

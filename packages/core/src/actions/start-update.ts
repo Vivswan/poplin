@@ -12,12 +12,14 @@
 //
 // The audit entry is written before the files are put in place: the request after that one runs the new code, so nothing is left for the old code to write.
 // The releases are read fresh on every start. A second start in a later minute finds the new version running, and answers `no_update`.
+// A start that names one version takes that one, a lower one too: going back is such a start, and `pickRelease` refuses a lower version whose schema is another.
 // A refused start is noted as the problem `update_failed`: the refusal's code is its name, and what the refusal is about is its message.
 
 import * as v from "valibot";
 
 import type { Actor } from "../auth/scopes";
 import { AllowanceSpent } from "../database/driver";
+import { type LastUpdate, UPDATE_NEWS } from "../records/update";
 import { NEWEST, type WantedRelease } from "./pick-release";
 import { noteProblem } from "./problems";
 import { type Install, type Refused, refuse } from "./records";
@@ -30,6 +32,9 @@ const COUNT_KEY = "start_update";
 
 /** What a start answers: the files of a release are in place, the version the install ran, and the version of the release. */
 export const STARTED_UPDATE = v.object({ started: v.literal(true), from: v.string(), to: v.string() });
+
+/** What a start may name: one version to take, such as `0.2.0`, in place of the newest. A lower one than the install runs is a going back. */
+export const UPDATE_REQUEST = v.strictObject({ to: v.optional(UPDATE_NEWS.entries.version) });
 
 /** Whether a start fit into its minute. */
 type Taken = { readonly ok: true } | { readonly ok: false; readonly retryAfterSeconds: number };
@@ -56,6 +61,9 @@ export interface SelfUpdate {
 
   /** Fetches the built files of a release and checks them. Nothing of the install is changed. */
   readonly ready: (wanted: WantedRelease) => Promise<ReadyUpdate | NotTaken>;
+
+  /** The update the install last took by itself, as the host keeps it beside the code that update put in place; left out where it keeps none. */
+  readonly last?: LastUpdate | undefined;
 }
 
 /** What updating needs from the host the install runs on. */
@@ -76,7 +84,7 @@ interface Asked {
   readonly automatic?: true;
 
   /** The one version to take; the newest when left out. */
-  readonly to?: string;
+  readonly to?: string | undefined;
 }
 
 /** An update that is in place: the version the install ran, and the version of the release. */

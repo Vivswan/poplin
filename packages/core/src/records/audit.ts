@@ -9,7 +9,7 @@ import { HOLDER, type Holder, MOMENT, POSITIVE, SITE_ID, SITE_NAME } from "./fie
 /** How long an entry of the log, and a token that ended, are kept before the sweep removes them, in milliseconds: 90 days. */
 export const HISTORY_KEPT_MS = 90 * 86_400_000;
 
-/** Every action the log names, each written with the change it tells of. `login` stands alone; the three after it go with a computer's login and a domain sync, and the last with an update. */
+/** Every action the log names, each written with the change it tells of. `login` stands alone; the three after it go with a computer's login and a domain sync, and the last two with an update. */
 const AUDIT_ACTIONS = [
   "create",
   "publish",
@@ -32,6 +32,7 @@ const AUDIT_ACTIONS = [
   "login_allowed",
   "login_denied",
   "update_started",
+  "update_went_back",
 ] as const;
 
 /** The kind each action is of: what was done to a site, who or what was let in or put out, and what was set for the whole install. A key missing here does not compile. */
@@ -57,6 +58,7 @@ const KIND_OF = {
   login_allowed: "access",
   login_denied: "access",
   update_started: "settings",
+  update_went_back: "settings",
 } as const satisfies Readonly<Record<(typeof AUDIT_ACTIONS)[number], string>>;
 
 /** The kinds a reading of the log can be narrowed to. */

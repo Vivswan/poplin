@@ -452,9 +452,23 @@ describe("run", () => {
       [`7.9.0 is out; the install runs ${INSTALL_VERSION}`, "the install holds no key, so it cannot update itself: open Domain on the dashboard and press Repair", "nothing was started"],
     ]);
     expect([refused.code, refused.err]).toEqual([1, ["the install holds no key of its host, so it cannot update itself", "open Domain on the dashboard and press Repair"]]);
-    expect([jsonOf(checked), before]).toEqual([{ version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", notes }, key: true }, []]);
+    expect([jsonOf(checked), before]).toEqual([{ version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", notes }, key: true, back: null }, []]);
     expect([started.out, bench.install.host.put]).toEqual([[`the install now runs 7.9.0; it ran ${INSTALL_VERSION}`], ["7.9.0"]]);
     expect([again.code, jsonOf(again)]).toEqual([1, { error: { code: "too_many_requests", message: "the install is asked too often", about: "update", hint: "wait a minute, then try again" } }]);
+  });
+
+  // Drift: `--to` is the one way a terminal goes back after an update. A flag the command dropped would take the newest release, and a check that did not name the version before would leave a person to guess it.
+  test("update --check names the version an install can go back to, and update --to takes that version, not the newest", async () => {
+    const bench = await openBench();
+    bench.install.host.last = { from: "7.7.0", to: INSTALL_VERSION, schema: OWN_SCHEMA, at: NOW };
+    const checked = await bench.run("update --check");
+    const back = await bench.run("update --to 7.7.0");
+
+    expect([checked.out, back.out, bench.install.host.put]).toEqual([
+      [`no newer version is known; the install runs ${INSTALL_VERSION}`, "the install holds its key", "the install can go back to 7.7.0: poplin update --to 7.7.0", "nothing was started"],
+      [`the install now runs 7.7.0; it ran ${INSTALL_VERSION}`],
+      ["7.7.0"],
+    ]);
   });
 
   test.each(Object.keys(CODES))("the code %s has a sentence of its own in the one table, exits 1, and is the error object under --json", async (code) => {

@@ -1,6 +1,7 @@
 // The requests: what each command asks for once its words are read, with every argument checked.
 
 import { type Checked, parsePublicName, parseSiteName, type SiteName } from "../../../core/src/names/names";
+import { isPlainVersion } from "../../../core/src/records/update";
 import { readSiteReference, type SettledSite, type TypedSite } from "../../../core/src/sites/references";
 import type { CommandName } from "./command-table";
 import { isSettingKey, readSetting, SETTING_SAMPLES, type SettingKey } from "./install-settings";
@@ -71,8 +72,8 @@ interface Words {
 /** What `config` does: show every setting, show one, or give one a value in core's text form. */
 type ConfigAction = { readonly kind: "show-all" } | { readonly kind: "show"; readonly key: SettingKey } | { readonly kind: "change"; readonly key: SettingKey; readonly value: string };
 
-/** What `update` does: take the newest release, or say what a start would come to. */
-type UpdateAction = "start" | "check";
+/** What `update` does: take the newest release or the one version `to` names, or say what a start would come to. */
+type UpdateAction = { readonly kind: "start"; readonly to?: string } | { readonly kind: "check" };
 
 /** A publish makes a new site, named after the path unless `name` is given, or updates the site it names. */
 type PublishTarget<Site> = { readonly kind: "create"; readonly name?: SiteName } | { readonly kind: "update"; readonly site: Site };
@@ -276,7 +277,16 @@ function config(words: Words): TypedRequest | UsageError {
 }
 
 function update(words: Words): TypedRequest | UsageError {
-  return withInstall(words, (install) => ({ kind: "update", action: words.flags.has("--check") ? "check" : "start", ...install }));
+  const to = flagValue(words.flags, "--to");
+  if (to !== undefined && !isPlainVersion(to)) return usageError("--to takes a version, such as 0.2.0", "poplin update --to 0.2.0");
+
+  if (words.flags.has("--check")) {
+    if (to !== undefined) return usageError("--check starts nothing, so it takes no --to", "poplin update --check");
+
+    return withInstall(words, (install) => ({ kind: "update", action: { kind: "check" }, ...install }));
+  }
+
+  return withInstall(words, (install) => ({ kind: "update", action: to === undefined ? { kind: "start" } : { kind: "start", to }, ...install }));
 }
 
 function exportSites(words: Words): TypedRequest | UsageError {

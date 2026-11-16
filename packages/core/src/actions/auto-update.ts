@@ -50,6 +50,7 @@ function dueVersion(running: Running, now: number): string | undefined {
 function watched(self: SelfUpdate, asked: { sent: boolean }): SelfUpdate {
   return {
     holdsKey: self.holdsKey,
+    last: self.last,
     async ready(wanted) {
       const ready = await self.ready(wanted);
       if (!ready.ok) return ready;

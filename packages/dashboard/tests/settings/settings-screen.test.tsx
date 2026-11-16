@@ -53,7 +53,7 @@ function rowOf(key: string, control: Row["control"], unit = ""): Row {
 function serve({ refusedKey, refusedKeys = [], holds = false }: { readonly refusedKey?: string; readonly refusedKeys?: readonly string[]; readonly holds?: boolean } = {}): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
-    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
+    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
 
     if (init?.method !== "POST") {
       const rows = [

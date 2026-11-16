@@ -24,6 +24,7 @@ const WORDS: Readonly<Record<Exclude<AuditEntry["action"], "domain_synced">, str
   login_allowed: "Allowed a token",
   login_denied: "Denied a token",
   update_started: "Started an update",
+  update_went_back: "Went back to the version before",
 };
 
 /** What an action says when its entry holds what it set. Each answers `undefined` for an entry that holds no such thing. */
@@ -37,6 +38,7 @@ const WITH_DETAIL: Readonly<Partial<Record<keyof typeof WORDS, (detail: AuditEnt
   login_allowed: (detail) => named("Allowed the token", detail.computer),
   login_denied: (detail) => named("Denied the token", detail.computer),
   update_started: (detail) => (typeof detail.to === "string" ? `Started an update to ${detail.to}${detail.automatic === true ? " by itself" : ""}` : undefined),
+  update_went_back: (detail) => (typeof detail.from === "string" && typeof detail.to === "string" ? `Went back to ${detail.to}: the update to ${detail.from} could not change the database` : undefined),
 };
 
 function named(words: string, name: unknown): string | undefined {

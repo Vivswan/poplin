@@ -1,6 +1,8 @@
 // What an entry of the audit log says was done: the sentence the Activity screen and the downloaded file both show.
 
 import { describe, expect, test } from "bun:test";
+import { noteWentBack } from "@poplin/core/src/actions/go-back";
+import type { Database } from "@poplin/core/src/database/database";
 
 import { whatOf } from "../../src/console/activity-what";
 
@@ -25,5 +27,14 @@ describe("what an entry says", () => {
     ["domain_synced", { run: "repair", failed: ["the login page: refused", "the rules: refused"] }, "Repair failed at the login page"],
   ] as const)("%s with %j says %s", (action, detail, words) => {
     expect(whatOf({ action, detail }, "the install")).toBe(words);
+  });
+
+  // Drift: the entry of a going back is written by core and worded here, by the same two keys. With one side renamed, Activity would say only that the install went back, and name neither version.
+  test("the entry core writes when the install goes back by itself names both versions", async () => {
+    const written: Parameters<typeof whatOf>[0][] = [];
+    const database = { appendAudit: async (entry: Parameters<typeof whatOf>[0]) => void written.push(entry), noteProblem: async () => true } as unknown as Database;
+    await noteWentBack({ database, now: () => 0 }, { from: "1.1.0", to: "1.0.0" });
+
+    expect(written.map((entry) => whatOf(entry, "the install"))).toEqual(["Went back to 1.0.0: the update to 1.1.0 could not change the database"]);
   });
 });

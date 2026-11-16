@@ -17,6 +17,9 @@ const KEY = "kept-key-of-the-test";
 /** The Worker that is replaced. */
 const WORKER = { accountId: "0123456789abcdef0123456789abcdef", script: "poplin" };
 
+/** The clock of every update here. */
+const NOW = Date.UTC(2026, 11, 1, 12);
+
 /** Where the stand-in for Cloudflare's API is. */
 const API = "http://localhost/client/v4";
 
@@ -70,7 +73,7 @@ const BINDINGS = [
   { name: "KEPT_KEY", type: "secret_text" },
 ];
 
-/** The metadata of an upload of release 0.3.0 onto that Worker: every binding it has kept by name, but the one the release states whole. */
+/** The metadata of an upload of release 0.3.0 onto that Worker: every binding it has kept by name, but the one the release states whole, and the update it is, stated by the upload itself. */
 const METADATA = {
   main_module: "worker.js",
   compatibility_date: "2026-11-01",
@@ -78,6 +81,7 @@ const METADATA = {
   bindings: [
     ...["SITES", "DB", "JOBS", "WORKER_NAME", "ACCOUNT_ID", "ZONE", "ACCESS", "FIRST_SETTINGS", "KEPT_KEY"].map((name) => ({ name, type: "inherit" })),
     { type: "ratelimit", namespace_id: "1001", simple: { limit: 1_000_000, period: 60 }, name: "MINUTE_LIMITS" },
+    { name: "LAST_UPDATE", type: "json", json: { from: "0.2.0", to: "0.3.0", schema: OWN_SCHEMA, at: NOW } },
   ],
   observability: OBSERVABILITY,
   annotations: { "workers/tag": "0.3.0", "workers/message": "poplin 0.3.0, by its own update" },
@@ -111,6 +115,9 @@ interface Meets {
 
   /** The version the install runs. */
   running: string;
+
+  /** The variable the upload of the running code stated; left out on a Worker no update of its own put in place. */
+  last?: unknown;
 }
 
 /** What one update left behind. */
@@ -215,7 +222,7 @@ async function taken(meets: Meets, wanted: { readonly version: string; readonly 
   const prints = PRINTS.map((name) => spyOn(console, name).mockImplementation(() => undefined));
   const [fetched, calls, uploads]: [string[], string[], Uploaded[]] = [[], [], []];
   const key = readKeptKey(meets.secret, { baseUrl: API, fetch: apiOf(meets, calls, uploads) });
-  const self = createSelfUpdate({ key, worker: WORKER, version: meets.running, fetch: websiteOf(meets, fetched) });
+  const self = createSelfUpdate({ key, worker: WORKER, version: meets.running, last: meets.last, now: () => NOW, fetch: websiteOf(meets, fetched) });
 
   try {
     const ready = await self.ready(wanted);
@@ -361,6 +368,29 @@ describe("an update the install takes by itself", () => {
       assets: 3,
     },
     {
+      name: "a release that states the variable an upload states itself",
+      meets: async (meets) => {
+        const stating = await release("0.3.0", OWN_SCHEMA, { ...CONFIG, ratelimits: [...CONFIG.ratelimits, { name: "LAST_UPDATE", namespace_id: "1002", simple: { limit: 1, period: 60 } }] });
+        meets.pins = JSON.stringify({ "0.3.0": stating.pin });
+        meets.assets.set(address(MANIFEST_FILE), ENCODER.encode(stating.manifest));
+      },
+      ready: TAKEN,
+      put: release_refused("needs_hand"),
+      calls: [READ_CRONS, READ_BINDINGS],
+      assets: 3,
+    },
+    {
+      name: "a version below the running one whose schema is another: its code cannot read this database",
+      meets: async (meets) => {
+        Object.assign(meets, await meeting("0.2.0", OWN_SCHEMA + 1));
+        meets.running = "0.3.0";
+      },
+      wanted: { version: "0.2.0", automatic: false },
+      ready: release_refused("database"),
+      calls: [],
+      assets: 0,
+    },
+    {
       name: "bindings the API does not answer with: nothing was sent, so nothing can be in",
       meets: (meets) => {
         meets.api[READ_BINDINGS] = "down";
@@ -435,6 +465,22 @@ describe("an update the install takes by itself", () => {
 
     expect<unknown>({ put: outcome.put, calls: outcome.calls, crons: meets.script.crons, uploads: outcome.uploads.length }).toEqual({ put, calls, crons: left, uploads: 1 });
     expect(outcome.left).not.toContain(KEY);
+  });
+
+  // Drift: going back is an update to the version before, and the code it puts in place must know where it came from. A variable inherited from the update before would name 0.3.0 as the running version still.
+  test("going back to the version before is the same upload, and states the update anew: from the version that ran, to the lower one", async () => {
+    const meets = await meeting("0.2.0");
+    const last = { from: "0.2.0", to: "0.3.0", schema: OWN_SCHEMA, at: NOW - 86_400_000 };
+    Object.assign(meets, { running: "0.3.0", last, script: { ...meets.script, bindings: [...BINDINGS, { name: "LAST_UPDATE", type: "json" }] } });
+    const outcome = await taken(meets, { version: "0.2.0", automatic: false });
+    const stated = outcome.uploads.map((upload) => (upload.metadata as typeof METADATA).bindings.filter((binding) => binding.name === "LAST_UPDATE"));
+
+    expect<unknown>({ ready: outcome.ready, put: outcome.put, calls: outcome.calls, stated }).toEqual({
+      ready: { ok: true, version: "0.2.0" },
+      put: { ok: true },
+      calls: [READ_CRONS, READ_BINDINGS, UPLOAD],
+      stated: [[{ name: "LAST_UPDATE", type: "json", json: { from: "0.3.0", to: "0.2.0", schema: OWN_SCHEMA, at: NOW } }]],
+    });
   });
 
   // Drift: an upload drops every binding it does not name. One read before the files were fetched would drop a variable a repair wrote meanwhile, such as the login's.

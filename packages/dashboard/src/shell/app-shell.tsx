@@ -26,7 +26,7 @@ import { BOOT } from "@/lib/boot";
 import { useScreenFocus } from "@/lib/focus";
 import { FRAME_KEY, GET_KEY, useFrame, useStarted } from "@/lib/frame";
 import { sayDone, sayRefused, send } from "@/lib/notify";
-import { useChosenTimeZone } from "@/lib/timezone";
+import { dateIn, useChosenTimeZone } from "@/lib/timezone";
 import { problemCount } from "@/problems/problem-words";
 import { MarkedSection, useMarkedCount } from "@/problems/section-mark";
 import { Confirm, type Question } from "@/shared/confirm";
@@ -59,9 +59,13 @@ const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const
 /** What stands where the start of an update would, on an install that holds no key to send one with. */
 const NO_KEY = `poplin holds no key, so it cannot update itself.${GET_KEY}`;
 
-/** The start of an update, where one can be started: what asks before it starts. */
+/** The offer of a frame with nothing to start. */
+const NO_OFFER: Offer = { update: undefined, back: undefined };
+
+/** What can be started from the frame, each by what asks before it starts: the update to the newer release, and the way back to the version before. Either is `undefined` where there is none. */
 interface Offer {
-  readonly ask: () => void;
+  readonly update: (() => void) | undefined;
+  readonly back: (() => void) | undefined;
 }
 
 /** A section's key. */
@@ -169,13 +173,21 @@ function DemoTag(): ReactNode {
   );
 }
 
-/** The version the install runs and, when a newer one is out, its notes and the start of the update. */
-function VersionLine({ offer, started }: { readonly offer: Offer | undefined; readonly started: boolean }): ReactNode {
-  const { update, starts } = useFrame().data;
+/** The version the install runs and since when, where it came in by an update, with the way back to the version before; and, when a newer one is out, its notes and the start of the update. */
+function VersionLine({ offer, started }: { readonly offer: Offer; readonly started: boolean }): ReactNode {
+  const { update, starts, back } = useFrame().data;
 
   return (
     <div className="flex flex-col items-start gap-1.5 px-2.5 text-xs leading-5 text-faint">
-      <p>Running poplin {BOOT.version}</p>
+      <p>
+        Running poplin {BOOT.version}
+        {back === null ? "" : `, since ${dateIn(back.since)}`}
+      </p>
+      {back === null || offer.back === undefined ? null : (
+        <Button variant="ghost" size="xs" className="-ml-2" onClick={offer.back}>
+          Go back to {back.to}
+        </Button>
+      )}
       {update === null ? null : (
         <p className="text-foreground">
           {update.newest} is out.{" "}
@@ -185,11 +197,11 @@ function VersionLine({ offer, started }: { readonly offer: Offer | undefined; re
         </p>
       )}
       {update?.database === true ? (
-        <p>This release changes the database, so it never starts by itself.{offer === undefined ? "" : " Press Update now."}</p>
+        <p>This release changes the database, so it never starts by itself.{offer.update === undefined ? "" : " Press Update now."}</p>
       ) : null}
       {update !== null && !starts ? <p>{NO_KEY}</p> : null}
-      {offer === undefined ? null : (
-        <Button variant="outline" size="xs" onClick={offer.ask}>
+      {offer.update === undefined ? null : (
+        <Button variant="outline" size="xs" onClick={offer.update}>
           Update now
         </Button>
       )}
@@ -198,55 +210,78 @@ function VersionLine({ offer, started }: { readonly offer: Offer | undefined; re
   );
 }
 
-/** The question before an update is started. An update that changes the database says that no older version reads it afterwards. */
+/** The question before an update is started. An update that changes the database says that the install cannot go back from it. */
 function questionOf(newest: string, database: boolean): Question {
   const says = "poplin fetches the newest release, checks it, and puts it in place of the running code. It takes a moment, and the sites stay up meanwhile.";
 
   return {
     title: `Update to ${newest}?`,
-    says: database ? `${says} This release changes the database: no older version can read it afterwards.` : says,
+    says: database ? `${says} This release changes the database: after it, poplin cannot go back to ${BOOT.version}.` : says,
     yes: "Update now",
   };
 }
 
+/** The question before the install goes back to the version before. */
+function backQuestionOf(to: string): Question {
+  return {
+    title: `Go back to ${to}?`,
+    says: `poplin fetches release ${to}, checks it, and puts it in place of the running code. It takes a moment, and the sites stay up meanwhile.`,
+    yes: `Go back to ${to}`,
+  };
+}
+
+/** The question of what is asked about, or none while nothing is. */
+function askedOf(asking: keyof Offer | undefined, frame: Pick<ReturnType<typeof useFrame>["data"], keyof Offer>): Question | undefined {
+  if (asking === "update" && frame.update !== null) return questionOf(frame.update.newest, frame.update.database);
+
+  return asking === "back" && frame.back !== null ? backQuestionOf(frame.back.to) : undefined;
+}
+
 /**
- * Offer the start of an update where one can be started: a newer release is known and the install holds its key.
+ * Offer what can be started from the frame, on an install that holds its key: the update, where a newer release is known, and the way back, where there is one.
  *
- * @returns the offer for the controls that show it, `undefined` where there is none or one was just started, and the question to draw once
+ * @returns the offer for the controls that show it, with nothing in it where there is nothing to start or something was just started, and the question to draw once
  */
-function useOffer(): { readonly offer: Offer | undefined; readonly started: boolean; readonly question: ReactNode } {
-  const { update, starts } = useFrame().data;
-  const [asking, setAsking] = useState(false);
+function useOffer(): { readonly offer: Offer; readonly started: boolean; readonly question: ReactNode } {
+  const { update, starts, back } = useFrame().data;
+  const [asking, setAsking] = useState<keyof Offer>();
   const [started, setStarted] = useStarted();
   const client = useQueryClient();
   const answer = async (yes: boolean): Promise<void> => {
-    setAsking(false);
+    const to = asking === "back" ? back?.to : undefined;
+    setAsking(undefined);
     if (!yes) return;
 
-    const taken = await send(api.update.$post({ json: {} }));
+    const taken = await send(api.update.$post({ json: to === undefined ? {} : { to } }));
     // A try that was refused is a problem the frame marks, and one that was taken changes what the frame offers: either way it is read again.
     void client.invalidateQueries({ queryKey: FRAME_KEY });
     if (taken === undefined) return;
 
     setStarted();
-    sayDone(`Updated to ${taken.to}. Reload the page.`);
+    sayDone(to === undefined ? `Updated to ${taken.to}. Reload the page.` : `Went back to ${taken.to}. Reload the page.`);
   };
-  const question = (
-    <Confirm question={asking && update !== null ? questionOf(update.newest, update.database) : undefined} onAnswer={(yes) => void answer(yes)} />
-  );
-
+  const question = <Confirm question={askedOf(asking, { update, back })} onAnswer={(yes) => void answer(yes)} />;
   // A started update is not offered again from this page: it runs the client it was loaded with until it is loaded again.
-  return { offer: update !== null && starts && !started ? { ask: () => setAsking(true) } : undefined, started, question };
+  if (!starts || started) return { offer: NO_OFFER, started, question };
+
+  const offer = { update: update === null ? undefined : () => setAsking("update"), back: back === null ? undefined : () => setAsking("back") };
+
+  return { offer, started, question };
 }
 
 /** The sections on a phone: behind a button at the top, in a sheet that closes once a place is chosen or an update is asked about. */
-function PhoneSections({ current, offer, started }: { readonly current: Section; readonly offer: Offer | undefined; readonly started: boolean }): ReactNode {
+function PhoneSections({ current, offer, started }: { readonly current: Section; readonly offer: Offer; readonly started: boolean }): ReactNode {
   const [open, setOpen] = useState(false);
   // The question of an update is drawn over the page: the sheet makes room for it.
-  const askAndClose = (): void => {
-    setOpen(false);
-    offer?.ask();
+  const closing = (ask: (() => void) | undefined): (() => void) | undefined => {
+    if (ask === undefined) return undefined;
+
+    return () => {
+      setOpen(false);
+      ask();
+    };
   };
+  const closingOffer = { update: closing(offer.update), back: closing(offer.back) };
   const marked = useMarkedCount();
   const name = marked === 0 ? "Sections" : `Sections, ${problemCount(marked)}`;
 
@@ -272,7 +307,7 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
           </nav>
           <div className="mt-auto flex flex-col gap-2">
             <DomainNote onGo={() => setOpen(false)} />
-            <VersionLine offer={offer === undefined ? undefined : { ...offer, ask: askAndClose }} started={started} />
+            <VersionLine offer={closingOffer} started={started} />
             <Email className="px-2.5 py-1" />
           </div>
         </div>

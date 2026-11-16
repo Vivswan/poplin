@@ -7,6 +7,7 @@
 //   5  Cloudflare's API         one upload, whole or not at all; then the schedule, only when the release's differs
 //
 // Steps 1 to 3 change nothing: `ready` runs them, and what it answers runs steps 4 and 5.
+// The upload states which version it came from, so the code it puts in place knows the version it can go back to. Going back is the same five steps, to that version.
 // Where releases are read from is fixed when the Worker is built: no variable and no setting of a running install moves it.
 // No answer, and nothing this file hands on, holds the key or a text Cloudflare sent.
 
@@ -14,10 +15,11 @@ import type { Keyed } from "@poplin/app/src/console/key/records";
 import { pickRelease } from "@poplin/core/src/actions/pick-release";
 import { type Refused, refuse } from "@poplin/core/src/actions/records";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { projectReleases, type ReleaseSource } from "../deploy/release-source";
 import type { KeptKey } from "../key/kept-key";
 import { checkedBundle, type Reach } from "./bundle-files";
-import { openUpload, type Upload } from "./upload";
+import { openUpload, readLastUpdate, type Upload } from "./upload";
 
 /** What an update is about when Cloudflare gave no usable answer to a call made with the key: `update_unreachable` for an upload that may be in, `release_refused` for a read before anything was sent. */
 const HOST = "host";
@@ -38,6 +40,12 @@ interface Parts {
 
   /** The version the install runs. */
   readonly version: string;
+
+  /** The variable the upload of the running code stated, unchecked: the update that code came in with. */
+  readonly last: unknown;
+
+  /** The clock, in milliseconds since the epoch. */
+  readonly now: () => number;
 
   /** Reaches the project's website and the release's page: the platform's own `fetch`, or a stand-in. */
   readonly fetch: Reach["fetch"];
@@ -71,8 +79,8 @@ async function published(releases: ReleaseSource, wanted: Wanted, running: strin
 }
 
 /** Send the upload of a release's checked files, and answer it in the codes an update answers with. */
-async function sent(upload: Upload, bundle: Parameters<Upload["put"]>[0]): ReturnType<Ready["put"]> {
-  const answer = await upload.put(bundle);
+async function sent(upload: Upload, ...sending: Parameters<Upload["put"]>): ReturnType<Ready["put"]> {
+  const answer = await upload.put(...sending);
   if (answer.ok) return answer;
 
   if (answer.refusal === "needs_hand") return refuse("release_refused", answer.refusal);
@@ -95,6 +103,7 @@ export function createSelfUpdate(parts: Parts): SelfUpdate {
 
   return {
     holdsKey: () => parts.key !== undefined,
+    last: readLastUpdate(parts.last),
     async ready(wanted) {
       const picked = await published(releases, wanted, parts.version);
       if (!picked.ok) return picked;
@@ -105,7 +114,9 @@ export function createSelfUpdate(parts: Parts): SelfUpdate {
       const checked = await checkedBundle(reach, picked.version, picked.pin);
       if (!checked.ok) return refuse("release_refused", checked.why);
 
-      return { ok: true, version: picked.version, put: () => sent(upload.value, checked.bundle) };
+      const update = { from: parts.version, to: picked.version, schema: OWN_SCHEMA, at: parts.now() };
+
+      return { ok: true, version: picked.version, put: () => sent(upload.value, checked.bundle, update) };
     },
   };
 }

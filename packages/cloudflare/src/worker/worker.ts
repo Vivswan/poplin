@@ -12,7 +12,9 @@
 // The dashboard keeps no session of its own: the token Access puts on a request is checked on each one, and its email against the users.
 //
 // An instance starts on its first request, and every request that arrives meanwhile waits on that one start.
-// Only a start that succeeded is kept. A failed one is answered to the requests that waited on it, and the next request starts again.
+// A start that succeeded is kept. A failed one is answered to the requests that waited on it, and the next request starts again, with one exception.
+// A start whose schema step failed right after an update asks once, for the instance, to go back to the code before it, and its answer says what came of that.
+// Only where the install did go back is that failed start kept: its step is not tried again, since one that then ran would leave the code before a database it cannot read.
 //
 // A site request trusts settings and users read up to a minute ago. The dashboard reads them anew on every request,
 // so a removed user loses the dashboard at once and the private sites within the minute. A dashboard request that only reads uses that one read for all it answers.
@@ -49,6 +51,9 @@ const TRY_AGAIN = "Something went wrong. Try again.";
 /** The answer of an install whose database another build of poplin made: by a schema step that was not this code's, or with settings this code does not read. */
 const MADE_BY_ANOTHER_BUILD = "This install's database was made by another build of poplin, so its records are not the ones this build reads. Deploy the build that made it, or delete the database and poplin makes it anew.";
 
+/** What a request waits for after the install went back by itself: Cloudflare serves the code before some ten seconds after it is asked to. */
+const SOON = "Reload in a minute.";
+
 /** What a scheduled run that failed is thrown as. */
 const SWEEP_FAILED = "the sweep failed";
 
@@ -77,6 +82,9 @@ type Handlers = Required<Pick<ExportedHandler<Bindings>, "fetch" | "scheduled">>
 /** A start that failed, as apart from a Worker with nothing set, which is no failure. */
 type Stopped = Exclude<Failure, { readonly kind: "unset" }>;
 
+/** The install going back by itself, where it may: the versions it went between, or `undefined` where nothing was changed. */
+type WentBack = (failure: Extract<Failure, { readonly kind: "failed" }>) => ReturnType<typeof failure.back>;
+
 /** What stopped an instance, for whoever runs the install. It names each variable and never a value of one. */
 function failureText(failure: Stopped): string {
   if (failure.kind === "binding") {
@@ -92,8 +100,12 @@ function failureText(failure: Stopped): string {
   return "This install's database could not be brought up to date. Try again.";
 }
 
-function failureAnswer(request: Request, failure: Stopped): Response {
-  return plain(request, 503, failureText(failure));
+/** Answer a request whose instance could not start. A schema step that failed after an update is answered once the install went back, where it may. */
+async function failureAnswer(request: Request, failure: Stopped, wentBack: WentBack): Promise<Response> {
+  const went = failure.kind === "failed" ? await wentBack(failure) : undefined;
+  if (went === undefined) return plain(request, 503, failureText(failure));
+
+  return plain(request, 503, `The update to ${went.from} could not change the database. poplin went back to ${went.to}. ${SOON}`);
 }
 
 /** What the API and the dashboard hand the work they hold no answer for: the invocation is held open for it, where one is. */
@@ -166,8 +178,8 @@ async function answerAdmin(request: Request, instance: Instance, ways: Ways, ope
   return answerDashboard(request, instance, await ways.held(FRESH), open);
 }
 
-/** Run the scheduled sweep of a started instance, and note a run that failed. A Worker with nothing set has no site to sweep; any other start that failed is logged by what stopped it, and thrown. */
-async function sweep(started: Started, latest: Outside["latest"]): Promise<void> {
+/** Run the scheduled sweep of a started instance, and note a run that failed. A Worker with nothing set has no site to sweep; any other start that failed is logged by what stopped it, and thrown, after the install went back where it may. */
+async function sweep(started: Started, latest: Outside["latest"], wentBack: WentBack): Promise<void> {
   if (started.ok) {
     return runSweep(started.instance.install, latest, started.instance).catch(async (error: unknown) => {
       await noteProblem(started.instance.install, "sweep_failed", error);
@@ -179,15 +191,17 @@ async function sweep(started: Started, latest: Outside["latest"]): Promise<void>
   const { failure } = started;
   if (failure.kind === "unset") return;
 
+  if (failure.kind === "failed") await wentBack(failure);
+
   console.error(`poplin: the sweep did not run. ${failureText(failure)}`);
 
   throw new Error(SWEEP_FAILED);
 }
 
 /** One scheduled run, from the start of its instance. Cloudflare writes what a run throws into its log, message and all, with its places mapped to the source, so a run that failed throws its fault: fixed words and the places of what was caught. */
-async function scheduledRun(starting: () => Promise<Started>, latest: Outside["latest"]): Promise<void> {
+async function scheduledRun(starting: () => Promise<Started>, latest: Outside["latest"], wentBack: WentBack): Promise<void> {
   try {
-    await sweep(await starting(), latest);
+    await sweep(await starting(), latest, wentBack);
   } catch (error) {
     throw faultOf(SWEEP_FAILED, error);
   }
@@ -221,35 +235,47 @@ function outsideOf(given: Partial<Outside>): Outside {
  * Make the handlers of one Worker instance.
  *
  * @param given - the clock, the fetch of the Access keys, the fetch of setup's calls to Cloudflare, the asking for the newest version, and the fetch that starts a build; the runtime's own when absent
+ * @param starting - makes an instance ready from the Worker's bindings; the Worker's own way when absent
  * @returns `fetch`, which never throws, and `scheduled`, which throws in fixed words when the sweep could not run. A request or a sweep that failed is noted as a problem of the install, where its database still takes a note
  */
-export function createWorker(given: Partial<Outside> = {}): Handlers {
+export function createWorker(given: Partial<Outside> = {}, starting: typeof startInstance = startInstance): Handlers {
   const outside = outsideOf(given);
-  let starting: Promise<Started> | undefined;
+  let started: Promise<Started> | undefined;
   let loggedInOnce = false;
   // A read that fails means the install may have lost its settings or its key, so the instance starts again from its bindings.
   const { held, ofSite } = createHolding(outside.now, () => {
-    starting = undefined;
+    started = undefined;
   });
   let noting: Pick<Install, "database" | "now"> | undefined;
+  let goneBack: ReturnType<WentBack> | undefined;
+
+  // Asked of Cloudflare once for the instance: every later start that fails the same way is answered from that one try.
+  const wentBack: WentBack = (failure) => {
+    goneBack ??= failure.back().catch(() => undefined);
+
+    return goneBack;
+  };
 
   async function attempt(env: Bindings): Promise<Started> {
     try {
-      const started = await startInstance(env, outside, visitorOf);
-      if (!started.ok) starting = undefined;
+      const made = await starting(env, outside, visitorOf);
+      if (made.ok) return made;
 
-      return started;
+      const went = made.failure.kind === "failed" ? await wentBack(made.failure) : undefined;
+      if (went === undefined) started = undefined;
+
+      return made;
     } catch (error) {
-      starting = undefined;
+      started = undefined;
 
       throw error;
     }
   }
 
   function start(env: Bindings): Promise<Started> {
-    starting ??= attempt(env);
+    started ??= attempt(env);
 
-    return starting;
+    return started;
   }
 
   // The API counts a computer that logs in by the same key a site counts its visitors by, under the secret a site request trusts.
@@ -267,14 +293,14 @@ export function createWorker(given: Partial<Outside> = {}): Handlers {
   }
 
   async function answer(request: Request, env: Bindings, open: ExecutionContext | undefined): Promise<Response> {
-    const started = await start(env);
-    if (!started.ok) {
-      const { failure } = started;
+    const made = await start(env);
+    if (!made.ok) {
+      const { failure } = made;
 
-      return failure.kind === "unset" ? answerFirstSetup(request, failure.unset, outside.now) : failureAnswer(request, failure);
+      return failure.kind === "unset" ? answerFirstSetup(request, failure.unset, outside.now) : failureAnswer(request, failure, wentBack);
     }
 
-    const { instance } = started;
+    const { instance } = made;
     noting = instance.install;
     const { hostname } = new URL(request.url);
     const { database } = instance.install;
@@ -296,7 +322,7 @@ export function createWorker(given: Partial<Outside> = {}): Handlers {
     },
 
     async scheduled(_controller, env) {
-      await scheduledRun(() => start(env), outside.latest);
+      await scheduledRun(() => start(env), outside.latest, wentBack);
     },
 
     starting: start,

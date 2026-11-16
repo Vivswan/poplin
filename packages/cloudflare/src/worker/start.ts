@@ -4,11 +4,12 @@
 //   ZONE                            a domain, or an account's address    the kind of the install, with its hosts: every piece below that differs by kind comes from that one value
 //   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`: its setup page alone
 //   ACCESS             read and checked; absent, nobody is admitted      else `binding`
-//   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`
+//   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`, which carries the way back to the code before an update
 //   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`
 //   visitor key        stored, only while none exists
 //   KEPT_KEY           read once; absent or no key, the install holds none   never a fault, and never quoted
 //   UPLOAD_KEY         read once, as the kept key is                         never a fault, and never quoted; with one that is old enough, an upload's files go straight to the bucket
+//   LAST_UPDATE        the update the running code came in with; absent, the code was put in place another way
 
 import { createApi } from "@poplin/app/src/api/api";
 import type { Counters } from "@poplin/app/src/limits/limits";
@@ -42,6 +43,7 @@ import { isSettled, readUploadKey } from "../key/upload-key";
 import { createUsersFollow } from "../key/users-follow";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
+import { goBack } from "../update/go-back";
 import { createSelfUpdate } from "../update/self-update";
 import { accessIdentity } from "../login/access-token";
 import { accessKeys } from "../login/keys";
@@ -174,12 +176,18 @@ export interface Unset {
   readonly secrets: Pick<Held, "visitorSecret">;
 }
 
-/** Why an instance could not start. `binding` names every variable that is refused, at least one. `differs` is a database another build of poplin made. `unset` is no fault: the Worker was deployed and setup has not given it its domain and its account. */
+/**
+ * Why an instance could not start. `binding` names every variable that is refused, at least one. `differs` is a database another build of poplin made.
+ *
+ * `failed` is a schema step that could not run: `back` puts the code before an update back in place, where the install may go back by itself.
+ *
+ * `unset` is no fault: the Worker was deployed and setup has not given it its domain and its account.
+ */
 export type Failure =
   | { readonly kind: "binding"; readonly refused: readonly RefusedBinding[] }
   | { readonly kind: "newer" }
   | { readonly kind: "differs" }
-  | { readonly kind: "failed" }
+  | { readonly kind: "failed"; readonly back: () => ReturnType<typeof goBack> }
   | { readonly kind: "unset"; readonly unset: Unset };
 
 /** An instance, or why there is none. */
@@ -325,6 +333,20 @@ function readKeys(env: Bindings, accountId: string, outside: Outside): Keys {
   return { kept, uploadKey, direct };
 }
 
+/** Answer a start whose schema step failed: the step is logged, and the failure carries the way back to the code before an update, which nothing has asked for yet. */
+function failedStep(
+  opened: Extract<Awaited<ReturnType<typeof openDatabase>>, { readonly kind: "failed" }>,
+  given: { readonly env: Bindings; readonly outside: Outside; readonly worker: Parameters<typeof goBack>[0]["worker"] },
+): Started {
+  const { env, outside, worker } = given;
+  // The step's message ends in the database's own words, which can repeat a stored value: the log gets the step's number and the kind of the failure.
+  logFault(`step ${opened.step} of the database's schema failed and nothing of it was kept`, opened.failure);
+  const failed = { last: env.LAST_UPDATE, failed: { version: VERSION, stored: opened.stored }, noting: { database: opened.behind, now: outside.now } };
+  const key = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
+
+  return { ok: false, failure: { kind: "failed", back: () => goBack({ ...failed, key, worker }) } };
+}
+
 /**
  * Make one Worker instance ready to answer.
  *
@@ -343,12 +365,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const opened = await openDatabase(driver, now);
   if (opened.kind === "newer") return { ok: false, failure: { kind: "newer" } };
 
-  if (opened.kind === "failed") {
-    // The step's message ends in the database's own words, which can repeat a stored value: the log gets the step's number and the kind of the failure.
-    logFault(`step ${opened.step} of the database's schema failed and nothing of it was kept`, opened.failure);
-
-    return { ok: false, failure: { kind: "failed" } };
-  }
+  if (opened.kind === "failed") return failedStep(opened, { env, outside, worker: own.ok ? own.value : undefined });
 
   if (opened.kind !== "open") {
     console.error(`poplin: ${opened.message}`);
@@ -381,7 +398,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   };
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: driver });
   const { kept, uploadKey, direct } = readKeys(env, own.value.accountId, outside);
-  const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, fetch: outside.latest.fetch });
+  const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, last: env.LAST_UPDATE, now: outside.now, fetch: outside.latest.fetch });
   const { key, domain, rules } = hosts.sideOf({ ...own.value, kept, uploadKey, fetch: outside.cloudflare, now: outside.now });
   const carried = { follow: createUsersFollow(kept, own.value.accountId), endLogins: createEndLogins(kept, own.value.accountId), rules };
   const api = createApi({
