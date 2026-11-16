@@ -129,6 +129,7 @@ const TOLD = {
       "Workflow: made",
     ],
     mended: [
+      "Worker: left",
       "Public word: left",
       "DNS record: left",
       "DNS record: left",
@@ -169,7 +170,7 @@ const TOLD = {
   "account address": {
     found: "Free address: found",
     made: () => [...OWN_MADE, "Forwarder: made", "Forwarder: made", ...SHARED_MADE, "Budget alert: made", "Workflow: made"],
-    mended: ["Forwarder: left", "Forwarder: left", ...SHARED_LEFT, "D1 database: left", "Budget alert: left", "Workflow: left"],
+    mended: ["Worker: left", "Forwarder: left", "Forwarder: left", ...SHARED_LEFT, "D1 database: left", "Budget alert: left", "Workflow: left"],
     removed: ["Forwarder: removed", "Access application: removed", "Access policy: removed", "Budget alert: removed", "Key: removed", "Upload key: removed", "Workflow: removed", "Worker: removed"],
     stays: ["Account token: stays"],
   },

@@ -22,6 +22,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 | `stopped`                                         | the user stopped the command or the server       | the upload is given up or runs out in a day; ask before a retry      |
 | `allowance_spent`                                 | a day's allowance is used up: the database's, or the storage's writes | tell the user; do not try again before 00:00 UTC |
 | `not_set_up`                                      | the install has stored no settings               | try again; if it stays, the user runs `npx poplin doctor --repair`   |
+| `release_refused`, with a hint that names the repair | the install cannot take this release by itself | the user runs `npx poplin doctor --repair`, with their account token |
 | `no_working_login`                                | the new logins would let nobody log in           | the user keeps one email that is a login now in the list             |
 
 After `unreachable`, `timeout`, or `internal` on a publish, check the list before you repeat it. A second publish with no `site` would make a second site.

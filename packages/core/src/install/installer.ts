@@ -204,7 +204,7 @@ export interface Mend {
  * `rows` are the same objects in the same order for a dry run and the run after it, the user a repair adds among them. `ready` is true for a run that left nothing undone, and for a dry run of one that would.
  * `address` is where the install's dashboard is.
  * The second shape is a repair that changed nothing: the provider gave no answer, or refused the token at the install; the install answers at `elsewhere` than the place named;
- * its records are of `another` poplin than this one; or it `changed` since it was found, and is no whole install now.
+ * its records are of `another` poplin than this one, or it runs a newer release than the newest this one reads; or it `changed` since it was found, and is no whole install now.
  */
 export type Repaired =
   | { readonly ok: true; readonly rows: readonly Row[]; readonly steps: readonly Step[]; readonly blocked: readonly Blocked[]; readonly address: string; readonly ready: boolean }
@@ -252,6 +252,7 @@ export interface Installer<Where, Place> {
 
   /**
    * Mend an install that is set, with the token alone, or with a dry run say what a run would change. It needs no login of the install, and reads the install's own settings from its records.
+   * An install behind the newest release is brought to it first, and one that runs a newer release than this code reads is left whole.
    *
    * A user is added only once the provider took a change of who may log in from this token, in this run: a token that may only read adds nobody.
    *

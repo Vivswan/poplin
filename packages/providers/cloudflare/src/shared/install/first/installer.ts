@@ -13,13 +13,11 @@
 
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Blocked, Given, Installed, Installer, OptionRow, Question, Reach, Read, Row, Run, Startable, Step, Token } from "@poplin/core/src/install/installer";
-import { newestPinned } from "@poplin/core/src/records/release";
 import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import { homepage } from "../../../../../../cli/package.json";
-import { projectReleases } from "../../release/publish/release-source";
-import { type CheckedBundle, checkedBundle } from "../../release/update/bundle-files";
+import { newestRelease, type Release } from "../../release/update/newest-release";
 import { putCrons, putFirst, readCrons } from "../../release/update/upload";
 import { type AccountAddresses, parseAccountAddresses } from "../../../without-domain/address-layout";
 import { syncBucket } from "../pieces/bucket/bucket";
@@ -32,7 +30,6 @@ import type { Mode, Synced } from "../sync";
 import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
-import { firstBindings } from "./first-bindings";
 import { placeBinding } from "../kind/started-place";
 import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "./rows";
 import { repair } from "../upkeep/repair/repair";
@@ -89,12 +86,6 @@ const USERS = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
 /** Where the install answers, with its checked addresses. */
 type Target = { readonly kind: "domain"; readonly layout: DomainLayout } | { readonly kind: "no-domain"; readonly layout: AccountAddresses };
-
-/** A release ready to upload: its checked files, and what states the first value of each binding it keeps. */
-interface Release {
-  readonly bundle: CheckedBundle;
-  readonly first: NonNullable<ReturnType<typeof firstBindings>>;
-}
 
 /** What one run gathers. `form` is the address of the token's form, where a permission is added. */
 interface Work {
@@ -260,23 +251,14 @@ async function targetOf(place: Place, where: Where, form: string): Promise<Targe
   return { what: "no_address", words: WORDS.noAddress, address: `https://dash.cloudflare.com/${place.accountId}/workers-and-pages` };
 }
 
-/** Fetch the newest release the project published, with every digest checked. It asks the project's website and the release's page alone. */
+/** Fetch the newest release the project published, with every digest checked; a release there is none of is the block that says why. */
 async function releaseOf(reach: Reach): Promise<Release | Blocked | "unreachable"> {
-  const pins = await projectReleases({ fetch: reach.fetch }).pins();
-  if (pins === undefined) return "unreachable";
+  const release = await newestRelease(reach);
+  if (typeof release !== "string" || release === "unreachable") return release;
 
-  const version = newestPinned(pins);
-  const pin = version === undefined ? undefined : pins[version];
-  if (version === undefined || pin === undefined) return { what: "no_release", words: WORDS.noRelease, address: homepage };
+  if (release === "no_release") return { what: release, words: WORDS.noRelease, address: homepage };
 
-  const checked = await checkedBundle({ fetch: reach.fetch }, version, pin);
-  if (!checked.ok && checked.why === "unreachable") return "unreachable";
-
-  if (!checked.ok) return checked.why === "needs_hand" ? { what: "newer_release", words: WORDS.newerRelease, address: homepage } : { what: "bad_release", words: WORDS.badRelease, address: homepage };
-
-  const first = firstBindings(checked.bundle.deploy.bindings.flatMap((binding) => (binding.kind === "kept" ? [binding.name] : [])));
-
-  return first === undefined ? { what: "newer_release", words: WORDS.newerRelease, address: homepage } : { bundle: checked.bundle, first };
+  return release === "newer_release" ? { what: release, words: WORDS.newerRelease, address: homepage } : { what: release, words: WORDS.badRelease, address: homepage };
 }
 
 /** The Worker's own pieces, in order: its code, its sweep trigger, and whether its free address is switched on. Each stops the ones after it. */

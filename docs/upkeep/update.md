@@ -13,6 +13,7 @@ Nothing updates on its own while the setting `auto_update` is off, as it is in a
 | ------------- | -------------------------------------------------------------------------------------- |
 | holds its key | one press, or one command: [With the kept key](#with-the-kept-key)                     |
 | holds no key  | a repair first, which gives it one: Repair on the Domain screen, or `npx poplin doctor --repair` |
+| is refused a release it cannot take by itself | `npx poplin doctor --repair`, which takes it: [A release the install cannot take](#a-release-the-install-cannot-take) |
 
 The row `Key` of the Domain screen says whether the install holds its key. An install that holds none cannot update itself: `poplin update` answers `no_key`.
 
@@ -65,7 +66,7 @@ the install now runs 0.3.1; it ran 0.3.0
 | the website or the release's page does not answer         | `release_refused` | nothing |
 | a file whose digest or size is not the published one      | `release_refused` | nothing |
 | a manifest of another version or schema than the website names | `release_refused` | nothing |
-| a release that needs a binding the Worker does not have   | `release_refused` | nothing: the install goes on with the version it runs |
+| a release the install cannot put in place: its manifest is one the running version cannot read, or it needs a binding the Worker does not have | `release_refused` | nothing: [the repair takes it](#a-release-the-install-cannot-take) |
 | Cloudflare refuses the new code, such as code that stops as it starts | `version_refused` | nothing: the install runs the version it ran |
 | Cloudflare does not answer the upload                     | `update_unreachable`  | the update may be in: reload in a minute |
 
@@ -74,6 +75,58 @@ the install now runs 0.3.1; it ran 0.3.0
 A release that changes the database is taken when you start it, never by itself. Once it ran, an older poplin cannot read the database, so the install cannot [go back](#go-back) from it.
 
 [The kept key](../about/security.md#the-kept-key) says what the key can reach, and [Hardening](../about/security.md#hardening) what an update still trusts.
+
+## A release the install cannot take
+
+```text
+Update now, or poplin update
+        |
+The install cannot take this release by itself. To take it, run: npx poplin doctor --repair
+        |
+the repair, with an account token       the same checked files, in one upload
+        |
+the next request runs the new version
+```
+
+The repair brings an install that is behind to the newest release, with the account token you give it for that one run. It fetches and checks the release as step 1 to 3 above, uploads it once, and then mends the rest of the install as every repair does. [I cannot log in](../fix/cannot-log-in.md#the-steps) has the token and the two questions.
+
+```text
+$ npx poplin doctor --repair --dry-run
+looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
+would change     Worker                poplin: 0.2.0 to 0.3.0
+would leave      DNS record            *.example.com
+...
+ready: a run would change 1. nothing was changed
+
+$ npx poplin doctor --repair
+looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
+changed   Worker                poplin: 0.2.0 to 0.3.0
+left      DNS record            *.example.com
+...
+the install is mended.
+```
+
+The samples are cut short where the dots are. Without a domain the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`.
+
+| The install could not take the release, since            | The repair                                                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| the running version cannot read the release's manifest   | reads it with the poplin you run, and uploads the release                  |
+| the release needs a binding the Worker does not have     | states that binding in the upload, and keeps every other binding by name   |
+| the install holds no key, or one Cloudflare refuses, or one that lacks a permission | uploads with your token, then gives the install a new key |
+
+| The row `Worker` says                                    | Means                                                                      |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `left`, and `poplin, runs 0.3.0`                         | the install runs the newest release: nothing is uploaded                   |
+| `changed`, and `poplin: 0.2.0 to 0.3.0`                  | the release is in place                                                    |
+| `left`, and `its version is not read`                    | the Worker's latest version carries no release's tag, so nothing says it is behind: nothing is uploaded |
+| `stopped` or `failed`, and why                           | nothing was uploaded; the rest of the install is still mended. Do what the row says, then run the line again |
+
+| After the upload                                         | The repair                                                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| the database has steps of the new version to run         | runs them, in a row `Database steps`; the new version runs them itself where the repair could not |
+| the website names the version the install ran            | states the update in the upload, so the install can [go back](#go-back) as after its own update |
+
+An install that runs a newer release than the newest the command reads is never put back to an older one. The repair stops before it changes anything, and names the newest poplin: `npx poplin@latest doctor --repair`. It stops the same way where the newest release is one the command you ran cannot put in place.
 
 ## Go back
 
