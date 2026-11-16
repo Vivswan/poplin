@@ -3,7 +3,7 @@
 import type { InferResponseType } from "hono/client";
 
 import type { api } from "@/lib/api";
-import { dayIn, momentIn } from "@/lib/timezone";
+import { briefMomentIn, dayIn, momentIn } from "@/lib/timezone";
 
 /** A site as the data routes answer it. Times are milliseconds since the epoch. */
 export type Site = InferResponseType<(typeof api.sites)[":site"]["$get"], 200>["site"];
@@ -18,14 +18,8 @@ export const ACCESSES: readonly { readonly access: Access; readonly label: strin
   { access: "public", label: "Public", means: "Everyone, at a public link.", now: "Public now." },
 ];
 
-/** How many milliseconds a day holds. */
-const DAY_MS = 86_400_000;
-
 /** How a count is written: with its thousands set apart. */
 const COUNT_FORMAT = new Intl.NumberFormat("en");
-
-/** How a moment within a week is written: 2 days ago. */
-const RELATIVE_FORMAT = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 /** What stands between a site's name and its id in an address. A name never holds it, so a label without it holds no id. */
 const ID_SEPARATOR = "--";
@@ -45,19 +39,12 @@ export function shownName(site: Pick<Site, "name" | "title">): string {
 }
 
 /**
- * Write a moment briefly: how long ago within a week, the day in the time zone a person chose otherwise.
+ * Write a moment briefly, in the time zone a person chose: how long ago within a week, the day otherwise.
  *
  * @param now - the moment it is read at
  */
 export function shortMoment(moment: number, now: number = Date.now()): string {
-  const days = Math.round((moment - now) / DAY_MS);
-  if (Math.abs(days) >= 7) return dayIn(moment);
-
-  if (days !== 0) return RELATIVE_FORMAT.format(days, "day");
-
-  const hours = Math.round((moment - now) / 3_600_000);
-
-  return hours === 0 ? "just now" : RELATIVE_FORMAT.format(hours, "hour");
+  return briefMomentIn(moment, now);
 }
 
 /** Write a count with its thousands set apart: 38,373. */
