@@ -1,5 +1,9 @@
-// The one Access application in front of the login path and of every private site's address, and the one policy that lets the install's logins through.
-// Access keeps no mark on either, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
+// The install's two Access applications, each with the one policy it holds. Access keeps no mark on any of the four, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
+//
+//   poplin              the whole dashboard hostname and every private site's address   poplin logins: allow, the install's logins
+//   poplin open paths   the paths of the dashboard hostname a program reaches            poplin open paths policy: bypass, everyone
+//
+// Access takes the longer path first, so an open path passes to the Worker with no login, where the API checks its own token and the setup page its own.
 
 import type { Logins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
@@ -10,11 +14,17 @@ import { type CloudflareFailure, type CloudflareResult, type Connection, callClo
 import { INSTALL_OBJECTS } from "../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../sync";
 
-/** The name that marks the policy as poplin's. */
+/** The name that marks the logins' policy as poplin's. */
 const POLICY_NAME = INSTALL_OBJECTS.accessPolicy;
 
-/** The name that marks the application as poplin's. */
+/** The name that marks the guarded application as poplin's. */
 const APPLICATION_NAME = INSTALL_OBJECTS.accessApplication;
+
+/** The name that marks the policy that lets everyone through as poplin's. */
+const OPEN_POLICY_NAME = INSTALL_OBJECTS.accessOpenPolicy;
+
+/** The name that marks the application over the open paths as poplin's. */
+const OPEN_APPLICATION_NAME = INSTALL_OBJECTS.accessOpenApplication;
 
 /** What Cloudflare's refusal says on an account whose Access was never switched on. */
 export const ACCESS_NOT_ENABLED = "access.api.error.not_enabled";
@@ -57,7 +67,7 @@ interface AccountAccess {
 
 /** The login an install wants. */
 interface DesiredAccess {
-  /** The admin hostname, where the login path answers. */
+  /** The admin hostname: all of it is behind the login but its open paths. */
   readonly hostname: Hostname;
 
   /** The emails let through. */
@@ -73,38 +83,59 @@ interface LoginFacts {
   readonly audience: string;
 }
 
+/** A rule of a policy poplin writes: one email, or everyone. */
+type Rule = { readonly email: { readonly email: string } } | { readonly everyone: Readonly<Record<string, never>> };
+
+/** A policy poplin wants: its name, what it decides, and exactly whom it includes. */
+interface WantedPolicy {
+  readonly subject: typeof POLICY_NAME | typeof OPEN_POLICY_NAME;
+  readonly decision: "allow" | "bypass";
+  readonly include: readonly Rule[];
+}
+
+/** An application poplin wants: its name, its addresses in order, and the name of the one policy it holds. */
+interface WantedApplication {
+  readonly subject: typeof APPLICATION_NAME | typeof OPEN_APPLICATION_NAME;
+  readonly uris: readonly string[];
+  readonly policy: WantedPolicy["subject"];
+}
+
 /** One step of an Access plan. An application step with no `policyId` links the policy the same plan creates. */
 type AccessStep =
-  | { readonly kind: "create"; readonly subject: typeof POLICY_NAME; readonly emails: readonly string[] }
-  | { readonly kind: "change"; readonly subject: typeof POLICY_NAME; readonly id: string; readonly emails: readonly string[] }
-  | { readonly kind: "create"; readonly subject: typeof APPLICATION_NAME; readonly uris: readonly string[]; readonly policyId: string | undefined }
-  | {
-      readonly kind: "change";
-      readonly subject: typeof APPLICATION_NAME;
-      readonly id: string;
-      readonly uris: readonly string[];
-      readonly policyId: string | undefined;
-    }
+  | ({ readonly kind: "create" } & WantedPolicy)
+  | ({ readonly kind: "change"; readonly id: string } & WantedPolicy)
+  | ({ readonly kind: "create"; readonly policyId: string | undefined } & WantedApplication)
+  | ({ readonly kind: "change"; readonly id: string; readonly policyId: string | undefined } & WantedApplication)
   | { readonly kind: "leave"; readonly subject: string }
   | { readonly kind: "skip"; readonly subject: string; readonly reason: string };
 
-function emailOf(rule: unknown): string | undefined {
-  if (typeof rule !== "object" || rule === null || Object.keys(rule).join() !== "email") return undefined;
-
+function emailOf(rule: object): string | undefined {
   const email = "email" in rule ? rule.email : undefined;
   if (typeof email !== "object" || email === null || !("email" in email) || typeof email.email !== "string") return undefined;
 
   return email.email;
 }
 
-function allowsExactly(policy: AccountPolicy, emails: readonly string[]): boolean {
-  const narrowed = (policy.exclude?.length ?? 0) > 0 || (policy.require?.length ?? 0) > 0;
-  if (policy.decision !== "allow" || narrowed) return false;
+/** A rule as one text, alike for a rule poplin writes and one Cloudflare answers; `undefined` for a rule of any other kind, which no policy of poplin's holds. */
+function ruleText(rule: unknown): string | undefined {
+  if (typeof rule !== "object" || rule === null) return undefined;
 
-  const included = (policy.include ?? []).map(emailOf);
+  const kinds = Object.keys(rule).join();
+  if (kinds === "everyone") return kinds;
+
+  const email = kinds === "email" ? emailOf(rule) : undefined;
+
+  return email === undefined ? undefined : `email ${email}`;
+}
+
+function decidesExactly(policy: AccountPolicy, wanted: WantedPolicy): boolean {
+  const narrowed = (policy.exclude?.length ?? 0) > 0 || (policy.require?.length ?? 0) > 0;
+  if (policy.decision !== wanted.decision || narrowed) return false;
+
+  const included = (policy.include ?? []).map(ruleText);
   if (included.includes(undefined)) return false;
 
-  return included.length === emails.length && [...included].sort().join("\n") === emails.join("\n");
+  return included.length === wanted.include.length && [...included].sort().join("\n") === wanted.include.map(ruleText).sort().join("\n");
 }
 
 function protectsExactly(application: AccountApplication, uris: readonly string[], policyId: string): boolean {
@@ -118,35 +149,49 @@ function protectsExactly(application: AccountApplication, uris: readonly string[
   return application.type === "self_hosted" && application.domain === uris[0] && samePlaces && samePolicy && sameSession;
 }
 
-function planPolicy(policy: AccountPolicy | undefined, emails: readonly string[]): AccessStep {
-  if (policy === undefined) return { kind: "create", subject: POLICY_NAME, emails };
+function planPolicy(policy: AccountPolicy | undefined, wanted: WantedPolicy): AccessStep {
+  if (policy === undefined) return { kind: "create", ...wanted };
 
-  if (allowsExactly(policy, emails)) return { kind: "leave", subject: POLICY_NAME };
+  if (decidesExactly(policy, wanted)) return { kind: "leave", subject: wanted.subject };
 
-  return { kind: "change", subject: POLICY_NAME, id: policy.id, emails };
+  return { kind: "change", id: policy.id, ...wanted };
 }
 
-function planApplication(application: AccountApplication | undefined, uris: readonly string[], policyId: string | undefined): AccessStep {
-  if (application === undefined) return { kind: "create", subject: APPLICATION_NAME, uris, policyId };
+function planApplication(application: AccountApplication | undefined, wanted: WantedApplication, policyId: string | undefined): AccessStep {
+  if (application === undefined) return { kind: "create", policyId, ...wanted };
 
-  if (policyId !== undefined && protectsExactly(application, uris, policyId)) return { kind: "leave", subject: APPLICATION_NAME };
+  if (policyId !== undefined && protectsExactly(application, wanted.uris, policyId)) return { kind: "leave", subject: wanted.subject };
 
-  return { kind: "change", subject: APPLICATION_NAME, id: application.id, uris, policyId };
+  return { kind: "change", id: application.id, policyId, ...wanted };
+}
+
+/** The steps of one application and the policy it holds: the policy's first, so the application links one that exists. */
+function planPair(policy: WantedPolicy, application: WantedApplication, current: AccountAccess): AccessStep[] {
+  const held = current.policies.find((candidate) => candidate.name === policy.subject);
+  const made = current.applications.find((candidate) => candidate.name === application.subject);
+
+  return [planPolicy(held, policy), planApplication(made, application, held?.id)];
 }
 
 /**
  * Compute the Access changes an install needs.
  *
  * @param current - every reusable policy and application of the account as they are now
- * @returns the policy's step, then the application's, which covers the login path of the shared table and then the private sites' pattern
+ * @returns the steps of the open paths, then those of the guarded application, which covers the whole dashboard hostname and then the private sites' pattern.
+ * The open paths come first, so no moment of a run leaves the API or the setup page behind the login
  */
 export function planAccess(desired: DesiredAccess, current: AccountAccess): AccessStep[] {
   const emails = [...desired.logins].sort();
-  const uris = [`${desired.hostname}${INSTALL_OBJECTS.loginPath}`, desired.privateSites];
-  const policy = current.policies.find((candidate) => candidate.name === POLICY_NAME);
-  const application = current.applications.find((candidate) => candidate.name === APPLICATION_NAME);
+  const open = INSTALL_OBJECTS.openPaths.map((path) => `${desired.hostname}${path}`);
 
-  return [planPolicy(policy, emails), planApplication(application, uris, policy?.id)];
+  return [
+    ...planPair({ subject: OPEN_POLICY_NAME, decision: "bypass", include: [{ everyone: {} }] }, { subject: OPEN_APPLICATION_NAME, uris: open, policy: OPEN_POLICY_NAME }, current),
+    ...planPair(
+      { subject: POLICY_NAME, decision: "allow", include: emails.map((email) => ({ email: { email } })) },
+      { subject: APPLICATION_NAME, uris: [desired.hostname, desired.privateSites], policy: POLICY_NAME },
+      current,
+    ),
+  ];
 }
 
 /**
@@ -159,7 +204,7 @@ export function isAccessOff(failure: CloudflareFailure): boolean {
 }
 
 /**
- * Read what the Worker checks a login's token against: the team's domain and the audience tag of poplin's application.
+ * Read what the Worker checks a login's token against: the team's domain and the audience tag of poplin's guarded application.
  *
  * @returns the two texts, or `undefined` while the account has no such application or Cloudflare names no team or no tag for it
  */
@@ -182,7 +227,7 @@ export async function readLoginFacts(connection: Connection, accountId: string):
  * Make the account's Access match an install's login.
  *
  * @param mode - `plan` reads the policies and applications and sends no change
- * @returns what was created, changed, and left; the application is linked to the policy the same run made
+ * @returns what was created, changed, and left; an application is linked to the policy the same run made
  */
 export async function syncAccess(connection: Connection, accountId: string, desired: DesiredAccess, mode: Mode): Promise<Synced> {
   const policies = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
@@ -195,26 +240,26 @@ export async function syncAccess(connection: Connection, accountId: string, desi
     policies: policies.value.map((policy) => ({ ...policy, id: policy.id ?? "" })),
     applications: applications.value.map((application) => ({ ...application, id: application.id ?? "" })),
   };
-  let createdPolicyId = "";
+  const made = new Map<string, string>();
 
   return applySteps(planAccess(desired, current), async (step): Promise<CloudflareResult<unknown>> => {
-    if ("emails" in step) {
-      const body = { account_id: accountId, name: POLICY_NAME, decision: "allow" as const, include: step.emails.map((email) => ({ email: { email } })) };
+    if ("include" in step) {
+      const body = { account_id: accountId, name: step.subject, decision: step.decision, include: [...step.include] };
       const policy = await callCloudflare(connection, (api) =>
         step.kind === "create" ? new BasePolicies(api).create(body) : new BasePolicies(api).update(step.id, body),
       );
-      if (policy.ok) createdPolicyId = policy.value.id ?? "";
+      if (policy.ok) made.set(step.subject, policy.value.id ?? "");
 
       return policy;
     }
 
     const body = {
       account_id: accountId,
-      name: APPLICATION_NAME,
+      name: step.subject,
       type: "self_hosted" as const,
       domain: step.uris[0] ?? "",
       destinations: step.uris.map((uri) => ({ type: "public" as const, uri })),
-      policies: [{ id: step.policyId ?? createdPolicyId, precedence: 1 }],
+      policies: [{ id: step.policyId ?? made.get(step.policy) ?? "", precedence: 1 }],
       ...SESSION,
     };
 

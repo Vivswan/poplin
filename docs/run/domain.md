@@ -25,6 +25,14 @@ Check and Repair each open a dialog that asks for an account token:
 | 1    | Make an account token | press Open the account token form, or take the token you kept from [step 3](../start/by-hand.md#the-steps) |
 | 2    | Paste it              | paste the token into the box Account token, then press the dialog's Check or Repair                        |
 
+Three rows are Cloudflare's login:
+
+| Piece                | It is                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `Access application` | the login in front of every address of the dashboard and of every private site                                     |
+| `Access policy`      | who that login lets in: your users                                                                                 |
+| `Access open paths`  | the two paths of the dashboard's address that pass the login: `/api`, where a caller gives its own token, and `/setup` |
+
 The row `Key` is the key poplin keeps at Cloudflare. Repair makes one where the install has none, or one Cloudflare no longer takes: [The kept key](../about/security.md#the-kept-key).
 
 ## The last check of the domain

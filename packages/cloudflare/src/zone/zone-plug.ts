@@ -46,6 +46,9 @@ const ALWAYS_STOPPED = "also stops every method but GET and HEAD, and the paths 
 /** The subject of the bots rule, whose row carries the list above. */
 const BOTS_RULE = "bots rule";
 
+/** What the open paths' row names them by. */
+const OPEN_PATHS = INSTALL_OBJECTS.accessOpenApplication;
+
 /** What the Access rows say on an account whose Access is switched off. */
 const ACCESS_OFF = "Access is off for the account";
 
@@ -112,6 +115,7 @@ const RIGHTS = {
   "Worker route": [RIGHT.routes],
   "Access application": [RIGHT.access],
   "Access policy": [RIGHT.access],
+  "Access open paths": [RIGHT.access],
   "Worker variable": [RIGHT.scripts, RIGHT.team],
   "Redirect rule": [RIGHT.redirect, RIGHT.zoneSettings],
   "WAF rule": [RIGHT.waf],
@@ -122,13 +126,14 @@ const RIGHTS = {
   Key: [RIGHT.tokens, RIGHT.scripts],
 } as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone, readonly Right[]>>;
 
-/** What each object is for: the login guards private sites, a record or a route makes a site answer at its address. A piece with no row here does not compile. */
+/** What each object is for: the login guards the dashboard and private sites; a record, a route, or the open paths make a site or the API answer at its address. A piece with no row here does not compile. */
 const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   Zone: "rest",
   "DNS record": "reach",
   "Worker route": "reach",
   "Access application": "login",
   "Access policy": "login",
+  "Access open paths": "reach",
   "Worker variable": "login",
   "Redirect rule": "rest",
   "WAF rule": "rest",
@@ -317,12 +322,15 @@ async function piece<Answer extends Outcome>(
 }
 
 function accessObject(subject: string): Piece {
+  if (subject === OPEN_PATHS || subject === INSTALL_OBJECTS.accessOpenPolicy) return "Access open paths";
+
   return subject === INSTALL_OBJECTS.accessPolicy ? "Access policy" : "Access application";
 }
 
-// The application's row names what it stands in front of, and a policy that differs says how: it lets other emails through than the settings list.
-function accessDetail(row: Found, covered: string): Found {
-  if (row.detail === INSTALL_OBJECTS.accessApplication) return { ...row, detail: `${row.detail}: ${covered}` };
+// An application's row names what it stands in front of, or lets past the login, and a logins' policy that differs says how: it lets other emails through than the settings list.
+function accessDetail(row: Found, covered: Readonly<Record<string, string>>): Found {
+  const places = covered[row.detail];
+  if (places !== undefined) return { ...row, detail: `${row.detail}: ${places}` };
 
   if (row.object === "Access policy" && row.state === "differs") return { ...row, detail: `${row.detail}: ${OTHER_LOGINS}` };
 
@@ -348,13 +356,14 @@ async function accessPiece(progress: Progress, mode: Mode, parts: Placed, connec
   if (synced.ok || synced.failed !== undefined || !isAccessOff(synced)) {
     const before = progress.rows.length;
     await piece(progress, mode, accessObject, async () => synced);
-    const covered = `${parts.layout.adminHostname}${INSTALL_OBJECTS.loginPath}, ${privateSites}`;
+    const host = parts.layout.adminHostname;
+    const covered = { [INSTALL_OBJECTS.accessApplication]: `${host}, ${privateSites}`, [OPEN_PATHS]: INSTALL_OBJECTS.openPaths.map((path) => `${host}${path}`).join(", ") };
     progress.rows.splice(before, Number.POSITIVE_INFINITY, ...progress.rows.slice(before).map((row) => accessDetail(row, covered)));
 
     return synced.ok ? true : undefined;
   }
 
-  progress.rows.push({ object: "Access application", state: "missing", detail: ACCESS_OFF }, { object: "Access policy", state: "missing", detail: ACCESS_OFF });
+  progress.rows.push(...(["Access application", "Access policy", "Access open paths"] as const).map((object): Found => ({ object, state: "missing", detail: ACCESS_OFF })));
   progress.steps.push({ text: ACCESS_STEP, address: `https://one.dash.cloudflare.com/${parts.accountId}` });
 
   return false;

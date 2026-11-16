@@ -23,7 +23,7 @@ export interface DomainLayout {
   readonly [layoutBrand]: true;
 }
 
-/** Why a layout was refused. `domain-too-long` is a domain under which the login path or the private sites' pattern passes what Access takes. */
+/** Why a layout was refused. `domain-too-long` is a domain under which an open path of the dashboard or the private sites' pattern passes what Access takes. */
 type LayoutRefusal = "bad-domain" | "domain-too-long" | "bad-public-word";
 
 /** A layout, or the first rule it breaks. */
@@ -38,8 +38,8 @@ export function parseDomainLayout(raw: RawLayout): CheckedLayout {
   const domain = parseHostname(raw.domain);
   if (!domain.ok) return { ok: false, refusal: "bad-domain" };
 
-  const guarded = [`${ADMIN_LABEL}.${domain.value}${INSTALL_OBJECTS.loginPath}`, `${INSTALL_OBJECTS.privateSitesStart}${domain.value}`];
-  if (guarded.some((address) => address.length > MAX_ACCESS_ADDRESS)) return { ok: false, refusal: "domain-too-long" };
+  const addresses = [...INSTALL_OBJECTS.openPaths.map((path) => `${ADMIN_LABEL}.${domain.value}${path}`), `${INSTALL_OBJECTS.privateSitesStart}${domain.value}`];
+  if (addresses.some((address) => address.length > MAX_ACCESS_ADDRESS)) return { ok: false, refusal: "domain-too-long" };
 
   const publicWord = raw.public_word === undefined ? DEFAULT_PUBLIC_WORD : parsePublicWord(raw.public_word);
   if (publicWord === undefined) return { ok: false, refusal: "bad-public-word" };

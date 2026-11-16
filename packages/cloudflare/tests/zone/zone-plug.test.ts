@@ -27,8 +27,10 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker route | ${state("routes", usual)} | *-page.example.com/*`,
     `Worker route | ${state("routes", usual)} | *-poplin.example.com/*`,
     `Worker route | ${state("routes", usual)} | poplin.example.com/*`,
-    `Access application | ${state("access", usual)} | poplin: poplin.example.com/login, *-p-poplin.example.com`,
+    `Access application | ${state("access", usual)} | poplin: poplin.example.com, *-p-poplin.example.com`,
     `Access policy | ${state("access", usual)} | poplin logins`,
+    `Access open paths | ${state("access", usual)} | poplin open paths: poplin.example.com/api, poplin.example.com/setup`,
+    `Access open paths | ${state("access", usual)} | poplin open paths policy`,
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key", usual)} | poplin kept key`,
     `Redirect rule | ${state("https", usual)} | https redirect`,
@@ -94,7 +96,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(15);
+    expect(writes(asked)).toHaveLength(17);
 
     const sent = asked.length;
 
@@ -104,7 +106,7 @@ test("a repair makes every object, a check then finds all present, and a second 
   });
 });
 
-test("a repair makes the one Access application over the login path and the private sites, and the https rule only where the zone does not redirect by itself", async () => {
+test("a repair makes the open paths, then the Access application over the whole admin hostname and the private sites, and the https rule only where the zone does not redirect by itself", async () => {
   const [plain, redirecting] = [emptyAccount(), { ...emptyAccount(), zoneRedirects: true }];
 
   await withAccount(plain, async (plug) => void (await plug.repair(TOKEN, SETTINGS)));
@@ -112,7 +114,10 @@ test("a repair makes the one Access application over the login path and the priv
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed", https: "present" }));
   });
 
-  expect(plain.applications.map((application) => (application.destinations as { uri: string }[]).map((place) => place.uri))).toEqual([["poplin.example.com/login", "*-p-poplin.example.com"]]);
+  expect(plain.applications.map((application) => (application.destinations as { uri: string }[]).map((place) => place.uri))).toEqual([
+    ["poplin.example.com/api", "poplin.example.com/setup"],
+    ["poplin.example.com", "*-p-poplin.example.com"],
+  ]);
   expect([Object.keys(plain.rulesets).includes("http_request_dynamic_redirect"), Object.keys(redirecting.rulesets).includes("http_request_dynamic_redirect")]).toEqual([true, false]);
 });
 
@@ -123,7 +128,7 @@ test("a repair writes the application's audience tag and the team's domain onto 
   await withAccount(account, async (plug) => {
     expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: ready });
     expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "ACCESS", "KEPT_KEY"]);
-    expect(account.bindings.at(-2)).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications[0]?.aud } });
+    expect(account.bindings.at(-2)).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } });
     expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: [] });
 
     account.bindings = account.bindings.map((binding) => (binding.name === "ACCESS" ? { ...binding, json: JSON.stringify({ team_domain: TEAM, audience: "f".repeat(64) }) } : binding));
@@ -146,7 +151,29 @@ test("a login added to the settings: the check says the Access policy lets other
 
     await plug.repair(TOKEN, async () => added);
 
-    expect(account.policies.map((policy) => policy.include)).toEqual([[{ email: { email: "owner@example.com" } }, { email: { email: "second@example.com" } }]]);
+    expect(account.policies.map((policy) => policy.include)).toEqual([[{ everyone: {} }], [{ email: { email: "owner@example.com" } }, { email: { email: "second@example.com" } }]]);
+  });
+});
+
+// Drift: an install made while the login stood in front of `/login` alone would keep that shape, with the rest of its dashboard open at Cloudflare, until somebody made it again by hand.
+test("an install whose application covers the login path alone: the check says it differs and the open paths are missing, and one repair moves it to the whole admin hostname under its own id and audience tag", async () => {
+  const account = emptyAccount();
+  const guarded = (): Readonly<Record<string, unknown>> | undefined => account.applications.find((application) => application.name === "poplin");
+  const rows = (application: string, open: string): string[] =>
+    table({}).map((row) => row.replace("Access application | present", `Access application | ${application}`).replace("Access open paths | present", `Access open paths | ${open}`));
+
+  await withAccount(account, async (plug, asked) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const earlier = ["poplin.example.com/login", "*-p-poplin.example.com"].map((uri) => ({ type: "public", uri }));
+    account.applications = [{ ...guarded(), domain: "poplin.example.com/login", destinations: earlier }];
+    account.policies = account.policies.filter((policy) => policy.name === "poplin logins");
+    const [id, audience, sent] = [guarded()?.id, guarded()?.aud, asked.length];
+
+    expect(shown(await plug.check(TOKEN, SETTINGS))).toEqual(rows("differs", "missing"));
+    expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(rows("changed", "created"));
+    expect(writes(asked.slice(sent))).toEqual([`POST /accounts/${ACCOUNT}/access/policies`, `POST /accounts/${ACCOUNT}/access/apps`, `PUT /accounts/${ACCOUNT}/access/apps/${String(id)}`]);
+    expect([guarded()?.id, guarded()?.aud, guarded()?.domain]).toEqual([id, audience, "poplin.example.com"]);
+    expect(shown(await plug.check(TOKEN, SETTINGS))).toEqual(table({}));
   });
 });
 
@@ -260,10 +287,15 @@ test("one object taken away and one changed by hand: the check names exactly tho
   });
 });
 
-test("Access that was never switched on is no failure: both runs go on past it, mark its two rows, and hand over the one step with the address to open", async () => {
+test("Access that was never switched on is no failure: both runs go on past it, mark its three rows, and hand over the one step with the address to open", async () => {
   const account = { ...emptyAccount(), accessOff: true };
-  const off = (states: Readonly<Record<string, string>>): string[] =>
-    table(states).map((row) => row.replace(/^(Access \w+ \| missing \|) .*$/, "$1 Access is off for the account"));
+  const said = ["Access application", "Access policy", "Access open paths"].map((object) => `${object} | missing | Access is off for the account`);
+  const off = (states: Readonly<Record<string, string>>): string[] => {
+    const rows = table(states);
+    const first = rows.findIndex((row) => row.startsWith("Access "));
+
+    return [...rows.slice(0, first), ...said, ...rows.slice(first).filter((row) => !row.startsWith("Access "))];
+  };
   const steps = [{ text: "Open Zero Trust and pick a plan (Free works): that switches Access on.", address: `https://one.dash.cloudflare.com/${ACCOUNT}` }];
 
   await withAccount(account, async (plug) => {
@@ -501,9 +533,11 @@ test("Access refused as not switched on after the policy was already made is a s
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-    expect(rows.slice(6, 11)).toEqual([
-      "Access policy | created | poplin logins",
-      "Access application | failed | poplin: refused with status 403: 10000 access.api.error.not_enabled",
+    expect(rows.slice(6, 13)).toEqual([
+      "Access application | not-run | poplin: poplin.example.com, *-p-poplin.example.com",
+      "Access policy | not-run | poplin logins",
+      "Access open paths | created | poplin open paths policy",
+      "Access open paths | failed | poplin open paths: refused with status 403: 10000 access.api.error.not_enabled",
       "Worker variable | not-run | ",
       "Key | not-run | ",
       "Redirect rule | not-run | ",
@@ -513,6 +547,7 @@ test("Access refused as not switched on after the policy was already made is a s
 });
 
 // Drift: the install remembers each row by what its object is for, and raises "private sites may be locked" for the login's alone. An Access row filed under the rest would turn that alarm into "a piece is missing".
+// The open paths are what the API answers through, as a route is: without them a program meets a login.
 test("every row says what its object is for, and a row refused for a missing right carries the right's name beside its sentence", async () => {
   const account = emptyAccount();
 
@@ -526,7 +561,7 @@ test("every row says what its object is for, and a row refused for a missing rig
 
     expect([objectsOf("login"), objectsOf("reach")]).toEqual([
       ["Access application", "Access policy", "Worker variable"],
-      ["DNS record", "Worker route"],
+      ["DNS record", "Worker route", "Access open paths"],
     ]);
     expect(rows.filter((row) => row.right !== undefined).map((row) => [row.object, row.state, row.right])).toEqual([["Worker route", "failed", "Workers Routes: Edit"]]);
   });

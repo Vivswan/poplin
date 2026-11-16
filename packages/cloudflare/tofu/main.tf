@@ -45,6 +45,12 @@ locals {
   # The dashboard, the login, and the API: always `poplin` under the domain. No site hostname is that name, since each ends in a dash and a word.
   admin_host = "poplin.${local.domain}"
 
+  # The paths of the dashboard's hostname that a program reaches with no login: the API, which checks its own token, and the setup page, which checks the token it is given.
+  open_paths = ["/api", "/setup"]
+
+  # The same paths as Access takes them: the hostname, then the path, which covers everything below it.
+  open_addresses = [for path in local.open_paths : "${local.admin_host}${path}"]
+
   # The fixed word every site hostname label ends in. The Worker reads the same word, so it is no input.
   marker = "-poplin"
 

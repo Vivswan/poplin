@@ -10,7 +10,7 @@ describe("parseDomainLayout", () => {
     { name: "the public word `poplin`", raw: { domain: "example.com", public_word: "poplin" }, layout: { ...CHECKED, publicWord: "poplin" } },
     { name: "a public word of the install's own", raw: { domain: "example.com", public_word: "site" }, layout: { ...CHECKED, publicWord: "site" } },
     { name: "a domain several labels deep", raw: { domain: "tools.example.co.uk" }, layout: { ...CHECKED, domain: "tools.example.co.uk", adminHostname: "poplin.tools.example.co.uk" } },
-    { name: "a domain of 50 characters, the longest under which the login path fits the 63 characters Access takes", raw: { domain: LONGEST_DOMAIN }, layout: { ...CHECKED, domain: LONGEST_DOMAIN, adminHostname: `poplin.${LONGEST_DOMAIN}` } },
+    { name: "a domain of 50 characters, the longest under which the setup page's address fits the 63 characters Access takes", raw: { domain: LONGEST_DOMAIN }, layout: { ...CHECKED, domain: LONGEST_DOMAIN, adminHostname: `poplin.${LONGEST_DOMAIN}` } },
   ];
 
   test.each(taken)("$name is a layout whose admin hostname is `poplin` under the domain: routes, records, and the login all read that one hostname", ({ raw, layout }) => {
@@ -22,7 +22,7 @@ describe("parseDomainLayout", () => {
     { name: "a domain with a quote", raw: { domain: 'example".com' }, refusal: "bad-domain" },
     { name: "a domain with a capital", raw: { domain: "Example.com" }, refusal: "bad-domain" },
     { name: "a wildcard domain", raw: { domain: "*.example.com" }, refusal: "bad-domain" },
-    { name: "a domain of 51 characters: `poplin.<domain>/login` would be 64, one past what Access takes", raw: { domain: `${"a".repeat(47)}.com` }, refusal: "domain-too-long" },
+    { name: "a domain of 51 characters: `poplin.<domain>/setup` would be 64, one past what Access takes", raw: { domain: `${"a".repeat(47)}.com` }, refusal: "domain-too-long" },
     { name: "an empty public word", raw: { domain: "example.com", public_word: "" }, refusal: "bad-public-word" },
     { name: "a public word of one letter", raw: { domain: "example.com", public_word: "p" }, refusal: "bad-public-word" },
     { name: "a public word of ten letters", raw: { domain: "example.com", public_word: "publishing" }, refusal: "bad-public-word" },

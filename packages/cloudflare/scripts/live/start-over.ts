@@ -48,12 +48,18 @@ const OWN_RULES = [
   { phase: "http_ratelimit", refs: [INSTALL_OBJECTS.rateRef] },
 ] as const;
 
+/** The names of poplin's two applications, and of the policy each holds. */
+const OWN_ACCESS = {
+  applications: [INSTALL_OBJECTS.accessApplication, INSTALL_OBJECTS.accessOpenApplication] as readonly string[],
+  policies: [INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessOpenPolicy] as readonly string[],
+};
+
 /** Every kind, in the order removed: what points at the Worker first, then the Worker, then what it kept. */
 const KINDS: readonly Kind[] = [
   { name: "Worker routes", remove: removeRoutes, optional: false },
   { name: "DNS records", remove: removeRecords, optional: false },
   { name: "Rules", remove: removeRules, optional: true },
-  { name: "Access application and policy", remove: removeAccess, optional: true },
+  { name: "Access applications and policies", remove: removeAccess, optional: true },
   { name: "Worker", remove: removeWorker, optional: false },
   { name: "Database", remove: removeDatabase, optional: false },
   { name: "Bucket objects", remove: removeObjects, optional: true },
@@ -127,7 +133,7 @@ async function removeRules(run: Run, { zone }: Found): Promise<Removal> {
   return { removed };
 }
 
-/** The application goes before the policy it holds. An account whose Access is off holds neither. */
+/** An application goes before the policy it holds. An account whose Access is off holds none. */
 async function removeAccess(run: Run): Promise<Removal> {
   const account = { account_id: run.accountId };
   const permission = "Access: Apps and Policies: Edit";
@@ -136,7 +142,7 @@ async function removeAccess(run: Run): Promise<Removal> {
 
   const applications = await removeOwn(
     listed,
-    (application) => application.name === INSTALL_OBJECTS.accessApplication,
+    (application) => OWN_ACCESS.applications.includes(application.name ?? ""),
     (application) => callCloudflare(run.connection, (api) => new BaseApplications(api).delete(application.id ?? "", account)),
     permission,
   );
@@ -144,7 +150,7 @@ async function removeAccess(run: Run): Promise<Removal> {
 
   const policies = await removeOwn(
     await callCloudflare(run.connection, (api) => Array.fromAsync(new BasePolicies(api).list(account))),
-    (policy) => policy.name === INSTALL_OBJECTS.accessPolicy,
+    (policy) => OWN_ACCESS.policies.includes(policy.name ?? ""),
     (policy) => callCloudflare(run.connection, (api) => new BasePolicies(api).delete(policy.id ?? "", account)),
     permission,
   );

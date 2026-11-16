@@ -8,6 +8,7 @@ export const INSTALL_PIECES = {
     "Worker route": ["cloudflare_workers_route.worker"],
     "Access application": ["cloudflare_zero_trust_access_application.login"],
     "Access policy": ["cloudflare_zero_trust_access_policy.logins"],
+    "Access open paths": ["cloudflare_zero_trust_access_application.open_paths", "cloudflare_zero_trust_access_policy.open_paths"],
     "Worker variable": ["cloudflare_workers_script.poplin"],
     "Redirect rule": ["cloudflare_ruleset.https"],
     "WAF rule": ["cloudflare_ruleset.guards"],
