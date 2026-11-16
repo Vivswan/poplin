@@ -52,7 +52,6 @@
     "./src/api/routes": "./src/api/routes.ts",
     "./src/api/text-up-to": "./src/api/text-up-to.ts",
     "./src/auth/computer-logins": "./src/auth/computer-logins.ts",
-    "./src/auth/cookie": "./src/auth/cookie.ts",
     "./src/auth/logins": "./src/auth/logins.ts",
     "./src/auth/scopes": "./src/auth/scopes.ts",
     "./src/auth/tokens": "./src/auth/tokens.ts",
@@ -91,7 +90,6 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",
-    "jose": "6.2.17",
     "nanoid": "6.0.2",
     "p-map": "7.1.1",
     "pretty-bytes": "7.2.0",

@@ -468,7 +468,7 @@ export interface AuditCount {
   readonly whole: boolean;
 }
 
-/** An entry for the audit log that goes with no change, such as a login. */
+/** An entry for the audit log that goes with no change, such as a sign-out of everyone. */
 export interface AuditNote {
   readonly action: AuditAction;
   readonly site?: { readonly id: SiteId; readonly name: SiteName };
@@ -1016,14 +1016,6 @@ export interface Database {
    * @throws {RangeError} `fresh` is under 32 bytes
    */
   ensureVisitorKey(fresh: Uint8Array, at: number): Promise<VisitorKey>;
-
-  /**
-   * Replace the visitor key, which starts every visitor's minute anew. It writes one `signed_everyone_out` audit entry, which holds nothing of either key.
-   *
-   * @param fresh - at least 32 newly drawn random bytes
-   * @throws {RangeError} `fresh` is under 32 bytes
-   */
-  rotateVisitorKey(fresh: Uint8Array, signed: Signed): Promise<void>;
 
   /** The address that starts a rebuild of the install and when it was saved, `undefined` while none is. No other operation returns the address. */
   readUpdateAddress(): Promise<UpdateAddress | undefined>;

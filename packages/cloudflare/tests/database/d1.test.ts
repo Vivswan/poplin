@@ -101,7 +101,6 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "ensureVisitorKey, kept": [3, 0],
   "readVisitorKey": [1, 0],
   "readSettingsAndKey": [2, 0],
-  "rotateVisitorKey": [0, 2],
   "keepUpdateAddress": [0, 2],
   "readUpdateAddress": [1, 0],
   "forgetUpdateAddress": [1, 2],
@@ -220,16 +219,16 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeDetails": [5, 2],
   "changeDetails, the same": [5, 0],
   "listAudit": [20, 0],
-  "searchAudit, one kind, the sites named with a text": [65, 0],
+  "searchAudit, one kind, the sites named with a text": [64, 0],
   "listAudit, the oldest first": [20, 0],
-  "searchAudit, the oldest first, the next page of one kind": [27, 0],
-  "listAudit, a reading for a file": [45, 0],
+  "searchAudit, the oldest first, the next page of one kind": [26, 0],
+  "listAudit, a reading for a file": [44, 0],
   "listNamedAudit": [32, 0],
-  "searchNamedAudit, one kind, the sites named with a text": [71, 0],
-  "listNamedAudit, a reading for a file": [77, 0],
+  "searchNamedAudit, one kind, the sites named with a text": [70, 0],
+  "listNamedAudit, a reading for a file": [76, 0],
   "endOfAuditPart, of twenty entries": [21, 0],
   "countAudit": [2, 0],
-  "countAudit, one kind, the sites named with a text": [64, 0],
+  "countAudit, one kind, the sites named with a text": [63, 0],
   "countAudit, no further back than five entries, and where the log starts": [6, 0],
   "no site: getSiteByPublicName": [0, 0],
   "no site: giveNewId": [2, 0],
@@ -741,7 +740,6 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("ensureVisitorKey, kept", () => database.ensureVisitorKey(new Uint8Array(32).fill(2), NOW));
     await cost("readVisitorKey", () => database.readVisitorKey());
     await cost("readSettingsAndKey", () => database.readSettingsAndKey());
-    await cost("rotateVisitorKey", () => database.rotateVisitorKey(new Uint8Array(32).fill(3), BY_ADA));
     await cost("keepUpdateAddress", () => database.keepUpdateAddress("https://example.com/hook", BY_ADA));
     await cost("readUpdateAddress", () => database.readUpdateAddress());
     await cost("forgetUpdateAddress", () => database.forgetUpdateAddress(BY_ADA));

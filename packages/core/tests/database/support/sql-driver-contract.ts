@@ -33,7 +33,6 @@ import {
   pendingLogin,
   publish,
   REPORT,
-  SECOND_KEY,
   SETTINGS,
   storedBack,
   TODAY,
@@ -420,18 +419,16 @@ function storedRows(label: string, makeDriver: DriverFactory): void {
       const database = new SqlDatabase(driver);
       const site = await made(database, draft(REPORT, "public", DOCS));
       await database.ensureVisitorKey(FIRST_KEY, NOW);
-      await database.rotateVisitorKey(SECOND_KEY, { by: ADA, at: NOW + 2 });
       await database.deleteSite(site.id, BY_ADA);
       const audit = await rows(driver, "SELECT * FROM audit ORDER BY seq");
       const logged = JSON.stringify(audit);
 
       expect(audit.map((row) => [row.action, row.actor, row.site_id, row.site_name, row.detail])).toEqual([
         ["create", ADA, site.id, REPORT, '{"access":"public","public_name":"docs"}'],
-        ["signed_everyone_out", ADA, null, null, "{}"],
         ["delete", ADA, site.id, REPORT, "{}"],
       ]);
-      expect(["a1".repeat(32), "b2".repeat(32), "161,161", "178,178"].filter((needle) => logged.includes(needle))).toEqual([]);
-      expect(await rows(driver, "SELECT name, created_at FROM secrets")).toEqual([{ name: "visitor_key", created_at: NOW + 2 }]);
+      expect(["a1".repeat(32), "161,161"].filter((needle) => logged.includes(needle))).toEqual([]);
+      expect(await rows(driver, "SELECT name, created_at FROM secrets")).toEqual([{ name: "visitor_key", created_at: NOW }]);
       await expect(rows(driver, "INSERT INTO secrets (name, value, created_at) VALUES ('another_secret', 'x', 1)")).rejects.toThrow();
       expect(await rows(driver, "SELECT * FROM versions")).toEqual([]);
     });
@@ -516,7 +513,6 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.readSettingsAndKey();
       await database.readFrame(NOW);
       await database.ensureVisitorKey(FIRST_KEY, NOW);
-      await database.rotateVisitorKey(SECOND_KEY, BY_ADA);
       const moved = await database.giveNewId(site.id, BY_ADA);
       const id = moved.kind === "done" ? moved.site.id : site.id;
       await database.getLaterSites([site.id, NO_SITE]);

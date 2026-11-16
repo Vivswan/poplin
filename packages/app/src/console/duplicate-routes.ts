@@ -11,8 +11,8 @@ import * as v from "valibot";
 
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 
-/** The calls to the database a request makes before its route runs: the one question a host reads the logins and the key with, which a session is checked against. */
-const SESSION_CALLS = 1;
+/** The calls to the database a request makes before its route runs: the one question a host reads the users and the key with, which the request is admitted by. */
+const ADMIT_CALLS = 1;
 
 /** What names the source in a route's path: its label. */
 const ONE_SITE = v.object({ site: v.string() });
@@ -20,11 +20,11 @@ const ONE_SITE = v.object({ site: v.string() });
 /** What names an unfinished copy in a route's path: the upload its answers carry. */
 const ONE_COPY = v.object({ upload: v.string() });
 
-/** The Sites screen's routes for a copy. Each request is one call of the action, which is told what the session cost, so a request stays inside what a host lets one make. */
+/** The Sites screen's routes for a copy. Each request is one call of the action, which is told what admitting the request cost, so a request stays inside what a host lets one make. */
 export const duplicateRoutes = new Hono<Shared>()
   .post("/sites/:site/duplicate", vValidator("param", ONE_SITE, refuseInvalid), vValidator("json", DUPLICATE_REQUEST, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
-    const copied = await duplicateSite(install, actor, { ...context.req.valid("json"), site: context.req.valid("param").site }, SESSION_CALLS);
+    const copied = await duplicateSite(install, actor, { ...context.req.valid("json"), site: context.req.valid("param").site }, ADMIT_CALLS);
 
     // `site` is `null` while files are still to copy: the client then asks again with `copy.upload`.
     return copied.ok ? context.json({ ok: true as const, site: copied.site, copy: copied.copy }) : refused(context, copied);
