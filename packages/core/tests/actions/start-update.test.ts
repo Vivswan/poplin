@@ -10,7 +10,7 @@ import { ADMIN, makeWorld, NOW, OWNER, type World } from "./support/actions-fixt
 
 const HOST = "builds.provider.example";
 const ADDRESS = `https://${HOST}/hooks/3f9c2a7e5b`;
-const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://example.com/changelog/#v0-2-0", schema: OWN_SCHEMA };
+const RELEASE = { version: "0.2.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", schema: OWN_SCHEMA };
 const SET = { by: ADMIN.holder, action: "update_address_set", site: null, detail: {} };
 const [ANSWERED, NO_ANSWER] = ["the request for a rebuild was answered", "the request for a rebuild got no answer"];
 
