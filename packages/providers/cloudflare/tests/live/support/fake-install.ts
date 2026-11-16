@@ -88,6 +88,9 @@ const REFUSAL_HEADERS = { "Cache-Control": "no-store", "Content-Type": "text/pla
 /** The user agents the fake's bot block stops. */
 const CRAWLERS = /GPTBot/;
 
+/** The user agents of assistants that open one page for their user, which the fake's bot block stops where it is said to. */
+const ASSISTANTS = /ChatGPT-User|Perplexity-User/;
+
 /** The paths the fake's guard rule stops: what a scanner asks for. */
 const SCANNER_PATHS = /\.php$/;
 
@@ -152,6 +155,9 @@ export interface FakeSwitches {
 
   /** A fault: the store refuses every ticket the install hands out for it. */
   readonly storeRefuses?: boolean;
+
+  /** The zone's bot block stops an assistant that opens one page for its user, as it stops a crawler. */
+  readonly stopsAssistants?: boolean;
 
   /** The store fails on the first file it is sent, as a store that is busy for a moment does, and takes every one after it. */
   readonly storeStumbles?: boolean;
@@ -369,12 +375,15 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const ruleLag = switches.lateRule === true ? RULE_LAG_MS : 0;
   const ownLag = switches.lateCount === true ? LAG_MS : 0;
 
+  // The user agents the zone's bot block stops.
+  const stoppedAgents = switches.stopsAssistants === true ? [CRAWLERS, ASSISTANTS] : [CRAWLERS];
+
   // The zone's rules on a site hostname: the guard rule, the bot block, the rate rule. Then the install's own count of one visitor.
   const edge = (request: Request, url: URL, path: Path): Response | undefined => {
     const guarded = zone && switches.noGuards !== true;
     if (guarded && (!READS.has(request.method) || SCANNER_PATHS.test(url.pathname))) return new Response("blocked", { status: 403 });
 
-    if (zone && CRAWLERS.test(request.headers.get("User-Agent") ?? "")) return new Response("blocked", { status: 403 });
+    if (zone && stoppedAgents.some((agents) => agents.test(request.headers.get("User-Agent") ?? ""))) return new Response("blocked", { status: 403 });
 
     arrivals.push({ at: time, ...path });
     if (zone && switches.noRateRule !== true && arrivedIn(time - ruleLag - RULE_WINDOW_MS, time - ruleLag, path) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });

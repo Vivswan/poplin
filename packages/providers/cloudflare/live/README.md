@@ -179,7 +179,7 @@ Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and code
 
 | Differs from the other install                                   | So                                                                              |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `burst-rate-rule` are skipped: needs a domain |
+| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` are skipped: needs a domain |
 | a site answers under a path                                      | `relative-file` also asks the address without its last slash, which moves to the one with it |
 | a site's address is no root of an origin                         | the demo gets no link to a sample site: `sites.json` is empty                   |
 | no budget alert                                                  | none is made, and a start-over removes none                                     |
@@ -367,6 +367,21 @@ The first run after a key is made sends its files through the install: that is a
 
 The list is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The email is taken out again whatever the check met.
 
+## The check of an assistant's page
+
+`crawler` sends the user agent of a crawler that reads sites in bulk. `assistant-fetch` sends the user agents of two assistants that open one page when their user asks for it, and says what the edge answered each.
+
+| The edge answered | The line says | Result |
+| ----------------- | ------------- | ------ |
+| 403               | `stopped`     | passed |
+| anything else     | `let through` | passed |
+
+```text
+assistant-fetch: ChatGPT-User stopped (403), Perplexity-User let through (302)
+```
+
+The run's requests come from no address Cloudflare has verified as an assistant's. The bots rule reads `cf.client.bot`, which is true for a verified bot only, so it stops none of them: the answer is that of the zone's bot switches. The check is 2 requests where none is sent again, and no write to the bucket or the database.
+
 ## The check of the rate rule
 
 Cloudflare counts the rate rule in each data center for itself, and each address for itself. `burst-rate-rule` counts the same way, from the data center each answer names and the addresses the edge says it saw.
@@ -407,13 +422,13 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |
-| a plan whose bot settings the API can change                        | `crawler`                                                                |
+| a plan whose bot settings the API can change                        | `crawler`, `assistant-fetch`                                             |
 | the guard rule, the redirect rule, or the rate rule on the zone     | `L8-method`, `L8-scanner`, `L8-http`, `burst-rate-rule`                  |
 | one data center that takes more than 300 of the runner's requests in ten seconds | `burst-rate-rule`                                           |
 | a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`, `download`: the checklist below        |
-| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `burst-rate-rule` |
+| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` |
 
 ## The token's permissions
 

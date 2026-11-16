@@ -74,7 +74,7 @@ const OPENED: (() => void)[] = [];
 const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "users-follow": "skipped" } as const;
 
 /** The checks a run on an install without a domain skips: each needs a rule or a switch of a zone. */
-const ZONE_CHECKS = { crawler: "skipped", "burst-rate-rule": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
+const ZONE_CHECKS = { crawler: "skipped", "assistant-fetch": "skipped", "burst-rate-rule": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
 
 /** One fake install, what the run knows of it, and the checks that do not pass on it, by id. Skipped unless said: `L1` and `dashboard-login` behind no login, `demo` with no whole site of it, and `duplicate-job` off the midnight run. */
 type Case = readonly [
@@ -113,6 +113,7 @@ const CASES: readonly Case[] = [
     {
       ...NO_LOGIN,
       crawler: "skipped",
+      "assistant-fetch": "skipped",
       "burst-rate-rule": "skipped",
       "L8-method": "skipped",
       "L8-scanner": "skipped",
@@ -381,6 +382,35 @@ describe("the live checks, against a local fake", () => {
     if (check === undefined) throw new Error("the checks hold no direct-upload");
 
     expect({ result: (await runCheck(bench, check)).result, said, named: said.join().includes("example.") }).toEqual({ result, said: lines, named: false });
+  }, RUN_MS);
+
+  // Drift: the line is how a reader of a run learns whether the bot block also stops an assistant that opens one page for its user.
+  // One that said "let through" of a 403 would hide such a block, and a check that failed on either answer would turn a run red for a default nobody set.
+  test.each<[string, FakeSwitches, Outcome["result"], string[]]>([
+    ["a bot block that stops crawlers alone", {}, "passed", ["assistant-fetch: ChatGPT-User let through (302), Perplexity-User let through (302)"]],
+    ["a bot block that stops assistants too", { stopsAssistants: true }, "passed", ["assistant-fetch: ChatGPT-User stopped (403), Perplexity-User stopped (403)"]],
+    ["an install without a domain, which no bot block stands in front of", { noDomain: true }, "skipped", []],
+  ])("the check of an assistant's single page, on %s, passes on either answer and says one line that holds no address", async (_what, switches, result, lines) => {
+    const fake = await openFake(switches);
+    const said: string[] = [];
+    const sent: string[] = [];
+    const counted: Fetch = async (input, init) => {
+      sent.push(init.method ?? "GET");
+
+      return fake.fetch(input, init);
+    };
+    const missing: Missing = {};
+    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: counted, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY };
+    const { bench, close } = openBench({ ...parts, say: (text) => said.push(text) });
+    OPENED.push(close);
+    Object.assign(missing, await probeMissing(bench, {}));
+    sent.length = 0;
+
+    const check = CHECKS.find((one) => one.id === "assistant-fetch");
+    if (check === undefined) throw new Error("the checks hold no assistant-fetch");
+
+    // Two requests, one for each assistant, and none where the check is skipped.
+    expect({ result: (await runCheck(bench, check)).result, said, sent, named: said.join().includes("example.") }).toEqual({ result, said: lines, sent: lines.flatMap(() => ["GET", "GET"]), named: false });
   }, RUN_MS);
 
   // Drift: the edge's rule blocks with an answer, a 403, and a connection that closes before any answer says nothing of the rule.

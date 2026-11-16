@@ -38,6 +38,12 @@ const OWN_LIMIT_TEXT = "Too many requests.";
 /** A user agent of an AI crawler the bot block stops. */
 const CRAWLER = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)";
 
+/** The user agents of two assistants that open one page when their user asks for it, as each maker documents them. Neither crawls. */
+const ASSISTANTS = [
+  ["ChatGPT-User", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot"],
+  ["Perplexity-User", "Mozilla/5.0 (compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)"],
+] as const;
+
 /** What every team's login hostname ends in, and the path its login page of a hostname starts with: the edge's own redirect, which no install writes. */
 const TEAM_LOGIN = { host: ".cloudflareaccess.com", path: "/cdn-cgi/access/login/" };
 
@@ -458,6 +464,22 @@ export const EDGE_CHECKS: readonly Check[] = [
     run: async (bench) => {
       const response = await bench.visit(bench.addresses.site(GHOST_ID, "u"), { headers: { "User-Agent": CRAWLER } });
       expect(response.status).toBe(403);
+    },
+  },
+  {
+    id: "assistant-fetch",
+    name: "an assistant's user agent, opening one page for its user, gets an answer, and the run says whether the bot block stopped it",
+    needs: ["bot-block"],
+    // Either answer passes: no setting of the install names one of them as wanted, so the line is what a reader takes from the run.
+    // The request comes from no address the edge has verified as the assistant's, so the rule of verified bots never stops it: the answer is that of the zone's bot switches.
+    run: async (bench) => {
+      const answers: string[] = [];
+      for (const [name, agent] of ASSISTANTS) {
+        const { status } = await bench.visit(bench.addresses.site(GHOST_ID, "u"), { headers: { "User-Agent": agent } });
+        answers.push(`${name} ${status === 403 ? "stopped" : "let through"} (${status})`);
+      }
+
+      bench.say(`assistant-fetch: ${answers.join(", ")}`);
     },
   },
   {
