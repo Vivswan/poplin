@@ -19,7 +19,7 @@ A publish takes these flags too.
 | `poplin set report--k3f9x2ab71qz --expires 2026-12-01`  | moves it to the trash on that day                 |
 | `poplin set report--k3f9x2ab71qz --expires never`       | keeps it                                          |
 | `poplin set report--k3f9x2ab71qz --search-engines on`   | lets search engines list it, once it is public and Let search engines in is on |
-| `poplin set report--k3f9x2ab71qz --embeddable off`      | stops other pages from showing it in a frame      |
+| `poplin set report--k3f9x2ab71qz --embeddable off`      | stops other pages from showing it in a frame and from loading its files |
 
 Every other example runs the same way, with `npx` before `poplin`.
 
@@ -65,6 +65,7 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 | a Public name that is refused | says why at the field, and keeps what was typed                                  |
 | Show in search engines        | on any site, while Let search engines in is off: `Off for every site in Settings.` |
 | Show in search engines        | on a site that is not public, while it is on: `Only a public site is listed.`    |
+| Allow embedding               | on, as a new site has it: `Other pages may show this site in a frame and load its files.` Off stops both; [Between sites](../about/between-sites.md) has the rows |
 | Change, after Deletes itself  | opens a menu; a choice is saved at once, with Undo                               |
 
 | In the menu           | The site deletes itself                                                              |

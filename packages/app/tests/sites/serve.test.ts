@@ -32,6 +32,7 @@ const NO_FILE = { ...NOT_FOUND, headers: { ...NOT_FOUND.headers, "cache-control"
 const HARDENING = { "accept-ranges": "bytes", "referrer-policy": "no-referrer", "strict-transport-security": "max-age=15552000", "x-content-type-options": "nosniff" };
 const BLOCKING = { "content-security-policy": "frame-ancestors https://*.example.com", vary: "Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest, Origin, Referer" };
 const SITE_HEADERS = { ...HARDENING, ...BLOCKING, "x-robots-tag": "noindex" };
+const SEALING = { "content-security-policy": "frame-ancestors 'none'", "cross-origin-resource-policy": "same-origin" };
 
 /** The sites every case asks for. */
 interface World {
@@ -905,10 +906,10 @@ describe("headers", () => {
       { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML },
     ],
     [
-      "a page of a site that may not be framed",
+      "a page of a site that may not be embedded",
       (w) => ask(labelHost(w.sealed), "/"),
       {},
-      { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-security-policy": "frame-ancestors 'none'", "content-type": HTML },
+      { ...SITE_HEADERS, ...SEALING, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML },
     ],
     [
       "a page while outside pages are allowed",
@@ -917,10 +918,10 @@ describe("headers", () => {
       { ...HARDENING, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML, "x-robots-tag": "noindex" },
     ],
     [
-      "a page that may not be framed while outside pages are allowed",
+      "a page that may not be embedded while outside pages are allowed",
       (w) => ask(labelHost(w.sealed), "/"),
       { outside_pages: "allowed" },
-      { ...HARDENING, "cache-control": "public, max-age=300, must-revalidate", "content-security-policy": "frame-ancestors 'none'", "content-type": HTML, "x-robots-tag": "noindex" },
+      { ...HARDENING, ...SEALING, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML, "x-robots-tag": "noindex" },
     ],
     ["a page without an extension in its address", (w) => ask(labelHost(w.report), "/about"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": HTML }],
     ["a page whose stored type has spaces around it", (w) => ask(labelHost(w.report), "/padded.html"), {}, { ...SITE_HEADERS, "cache-control": "public, max-age=300, must-revalidate", "content-type": "text/html" }],
@@ -933,6 +934,119 @@ describe("headers", () => {
     const response = await serve(request(world), settingsWith(settings));
 
     expect([response.status, fixedHeaders(response)]).toEqual([200, headers]);
+  });
+});
+
+describe("the embedding switch", () => {
+  const ACCESSES = ["private", "unlisted", "public"] as const;
+  const SWITCH = [true, false] as const;
+  const OLDER_TAG = '"v0-lx2a"';
+  const FRAMES = { on: "frame-ancestors https://*.example.com", off: "frame-ancestors 'none'" };
+
+  /** One site of each access under each position of the switch, named by both. */
+  type Sites = Readonly<Record<string, Site>>;
+
+  /** The tags a request needs to hold a file of a site: the page's, the script's, and the default icon's. */
+  interface Held {
+    readonly page: string;
+    readonly script: string;
+    readonly icon: string;
+  }
+
+  /** An answer path of a served site: what is asked of it, beside the address and the login, and the status that proves the path was taken. */
+  type Path = readonly [what: string, path: string, headers: (held: Held) => Record<string, string>, method: "GET" | "HEAD", status: number];
+
+  let install: Install;
+  let sites: Sites;
+
+  const nameOf = (access: string, embeddable: boolean): string => `${access}-${embeddable ? "on" : "off"}`;
+  const none = (): Record<string, string> => ({});
+
+  const paths: readonly Path[] = [
+    ["a page", "/", none, "GET", 200],
+    ["a page, by HEAD", "/", none, "HEAD", 200],
+    ["a script", "/app.js", none, "GET", 200],
+    ["a part of a script", "/app.js", () => ({ Range: "bytes=0-3" }), "GET", 206],
+    ["a script the request holds", "/app.js", (held) => ({ "If-None-Match": held.script }), "GET", 304],
+    ["a script the request holds, by HEAD", "/app.js", (held) => ({ "If-None-Match": held.script }), "HEAD", 304],
+    ["a page of the live version the request holds", "/", (held) => ({ "If-None-Match": held.page }), "GET", 304],
+    ["a page for a request that holds another version, told to drop its files", "/", () => ({ "If-None-Match": OLDER_TAG }), "GET", 200],
+    ["the site's own 404 page", "/nothing.txt", none, "GET", 404],
+    ["the site's own 404 page, by HEAD", "/nothing.txt", none, "HEAD", 404],
+    ["poplin's icon", "/favicon.ico", none, "GET", 200],
+    ["poplin's icon the request holds", "/favicon.ico", (held) => ({ "If-None-Match": held.icon }), "GET", 304],
+  ];
+
+  const hosts = (site: Site): readonly string[] => (site.access === "public" ? [labelHost(site), `${site.name}-page.example.com`] : [labelHost(site)]);
+  const proof = (site: Site): Record<string, string> => (site.access === "private" ? install.ownerProof : {});
+  const get = (host: string, path: string, headers: Record<string, string>, method = "GET"): Promise<Response> => serveSite(ask(host, path, headers, method), install.serving);
+
+  async function heldOf(host: string, site: Site): Promise<Held> {
+    const [page = "", script = "", icon = ""] = await Promise.all(["/", "/app.js", "/favicon.ico"].map(async (path) => (await get(host, path, proof(site))).headers.get("ETag") ?? ""));
+
+    return { page, script, icon };
+  }
+
+  beforeAll(async () => {
+    install = await openInstall();
+    const files = { "index.html": ["home", HTML], "app.js": ["window.secret = 1;", SCRIPT], "404.html": ["<h1>lost</h1>", HTML] } as const;
+    const made: Record<string, Site> = {};
+    for (const access of ACCESSES) {
+      for (const embeddable of SWITCH) made[nameOf(access, embeddable)] = await install.publish({ name: nameOf(access, embeddable), access, embeddable, files });
+    }
+
+    sites = made;
+  });
+
+  const table = ACCESSES.flatMap((access) => SWITCH.map((embeddable) => [access, embeddable] as const));
+
+  // Drift: a file of a site whose switch is off would go out on one answer path without the header, and a page of another site of the install would load it for a viewer who is logged in; or the kind of site would start to decide.
+  test.each(table)("a %s site with the switch at %p answers every file, at each of its addresses, with the frame rule and the load rule of the switch alone", async (access, embeddable) => {
+    const site = sites[nameOf(access, embeddable)] as Site;
+    const rules = embeddable ? [FRAMES.on, null] : [FRAMES.off, "same-origin"];
+    const got: unknown[] = [];
+    const expected: unknown[] = [];
+
+    for (const host of hosts(site)) {
+      const held = await heldOf(host, site);
+      for (const [what, path, headers, method, status] of paths) {
+        const response = await get(host, path, { ...proof(site), ...headers(held) }, method);
+        got.push([host, what, response.status, response.headers.get("Content-Security-Policy"), response.headers.get("Cross-Origin-Resource-Policy")]);
+        expected.push([host, what, status, ...rules]);
+      }
+    }
+
+    expect(got).toEqual(expected);
+  });
+
+  // Drift: the page told to drop its files would be built apart from the other answers and lose the rule.
+  test("the page for a request that holds another version carries the signal beside the rule", async () => {
+    const site = sites["private-off"] as Site;
+    const response = await get(labelHost(site), "/", { ...install.ownerProof, "If-None-Match": OLDER_TAG });
+
+    expect([response.headers.get("Clear-Site-Data"), response.headers.get("Cross-Origin-Resource-Policy")]).toEqual(['"cache"', "same-origin"]);
+  });
+
+  // Drift: a browser checks the load rule on a redirect too, so one on the move to the other letter would break an image another site names by a site's old address.
+  test("an answer that is no file of the site carries no load rule: the move to the other letter, a refused method, and the 404 of a site with no 404 page", async () => {
+    const site = sites["unlisted-off"] as Site;
+    const bare = await install.publish({ name: "bare-off", access: "unlisted", embeddable: false, files: { "index.html": ["home", HTML] } });
+    const answers = [await get(typedHost(site, "p"), "/app.js", install.ownerProof), await get(labelHost(site), "/app.js", {}, "POST"), await get(labelHost(bare), "/nothing.txt", {})];
+
+    expect(answers.map((answer) => [answer.status, answer.headers.get("Cross-Origin-Resource-Policy")])).toEqual([
+      [302, null],
+      [405, null],
+      [404, null],
+    ]);
+  });
+
+  // Drift: the switch would start to answer for the install's setting: a site left embeddable would keep a frame rule that shuts outside pages out, or a sealed one would lose its own.
+  test.each(SWITCH)("with outside pages allowed, a site with the switch at %p keeps the rules of the switch, and an embeddable one carries no frame rule", async (embeddable) => {
+    const site = sites[nameOf("unlisted", embeddable)] as Site;
+    const response = await serveSite(ask(labelHost(site), "/app.js"), { ...install.serving, settings: { ...install.serving.settings, outside_pages: "allowed" } });
+    const rules = [response.headers.get("Content-Security-Policy"), response.headers.get("Cross-Origin-Resource-Policy"), response.headers.get("Vary")];
+
+    expect(rules).toEqual(embeddable ? [null, null, null] : [FRAMES.off, "same-origin", null]);
   });
 });
 

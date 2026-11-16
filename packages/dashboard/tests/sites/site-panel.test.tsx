@@ -1,4 +1,4 @@
-// The panel of one site: what stands under the switch for search engines while the switch changes nothing.
+// The panel of one site: what stands under the switch for search engines while the switch changes nothing, and under the one for embedding.
 
 import { clearPage } from "../lib/support/page";
 
@@ -14,6 +14,9 @@ import { drawAt } from "../lib/support/router";
 
 /** The runtime's own `fetch`, put back after each test. */
 const OWN_FETCH = globalThis.fetch;
+
+/** The line under the switch for embedding, which every site's panel carries. */
+const EMBEDDING = "Other pages may show this site in a frame and load its files.";
 
 /** A site as the server answers it. */
 const SITE = {
@@ -61,9 +64,9 @@ async function draw(access: string, allowed: boolean): Promise<void> {
   await within(document.body).findByText("Show in search engines");
 }
 
-/** The line under the switch, as it is read; `null` where none stands. No other line of this kind is in the panel. */
-function note(): string | null {
-  return document.querySelector("[data-slot='field-description']")?.textContent ?? null;
+/** The lines under the two switches, as they are read, in the panel's order. No other line of this kind is in the panel. */
+function notes(): readonly string[] {
+  return [...document.querySelectorAll("[data-slot='field-description']")].map((line) => line.textContent ?? "");
 }
 
 afterEach(() => {
@@ -72,16 +75,17 @@ afterEach(() => {
 });
 afterAll(clearPage);
 
-describe("the switch for search engines in a site's panel", () => {
+describe("the two switches in a site's panel", () => {
+  // Drift: the switch for embedding would name frames alone, as its label does, and a person would leave it on for a site whose files no other site should load.
   // Drift: a private site on an install that keeps search engines out would say only that it is not public, so making it public would look like the way to be listed; or a switch that works would carry a line.
   test.each([
-    ["a public site on an install that lets search engines in", "public", true, null],
-    ["a private site on such an install", "private", true, "Only a public site is listed."],
-    ["a public site on an install that keeps them out", "public", false, "Off for every site in Settings."],
-    ["a private site on such an install", "private", false, "Off for every site in Settings."],
-  ])("says what keeps it from working, the install's reason alone where two hold: %s", async (_what, access, allowed, said) => {
+    ["a public site on an install that lets search engines in", "public", true, []],
+    ["a private site on such an install", "private", true, ["Only a public site is listed."]],
+    ["a public site on an install that keeps them out", "public", false, ["Off for every site in Settings."]],
+    ["a private site on such an install", "private", false, ["Off for every site in Settings."]],
+  ])("say what keeps the first from working, the install's reason alone where two hold, and both things the second decides: %s", async (_what, access, allowed, said) => {
     await draw(access, allowed);
 
-    expect(note()).toBe(said);
+    expect(notes()).toEqual([...said, EMBEDDING]);
   });
 });
