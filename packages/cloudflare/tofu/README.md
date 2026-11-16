@@ -252,8 +252,8 @@ tofu apply
 | On such an install                  | Does                                                                                           |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
 | the update notice                   | shows while `update_check` is true, where [Update](../../../docs/upkeep/update.md#a-newer-version) says |
-| `poplin update --check`             | says which version is out, and whether an update link is saved                                 |
-| `poplin update`                     | answers `no_update_address` with no update link saved: the module makes no build to call |
+| `poplin update --check`             | says which version is out, and whether the install holds its key                               |
+| `poplin update`                     | answers `no_key` while the install holds no key. After a Repair gave it one, it takes the release by itself, and the next apply uploads the file at `worker_bundle_path` again: keep that file at the version the install runs |
 | the build variable `POPLIN_VERSION` | nothing: no build reads it. The tag you check out is the version                               |
 | the key a Repair made               | stays: the Worker is uploaded with `keep_bindings = ["secret_text"]`, so its secrets go on to the new version |
 

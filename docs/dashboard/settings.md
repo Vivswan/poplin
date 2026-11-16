@@ -23,7 +23,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | a warning mark after the field  | follows the number as it is typed; [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what earns one |
 | a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
 | `Use a whole number, 1 or more.` | such a sentence, for a number typed with a fraction, such as `1.5`      |
-| `Needs an update link to work.` | under Update automatically, while no update link is saved                |
+| `Needs poplin's key to work. Open Domain and press Repair.` | under Update automatically, on an install that holds no key |
 
 | Heading    | Settings                                                                                           |
 | ---------- | -------------------------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | Storage    | `max_total_size`, `max_site_size`, `max_sites`                                                     |
 | Publishing | `max_files_per_publish`, `max_files_per_day`, `max_storage_writes_per_day`                         |
 | Traffic    | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` |
-| Updates    | `update_check`, `auto_update`, and the update link                                                 |
+| Updates    | `update_check`, `auto_update`                                                                      |
 
 `logins` is the list under Access, Users: [Add a user](access.md#add-a-user).
 
@@ -51,9 +51,7 @@ A saved `search_engines_allowed` or `outside_pages` also changes its rule at Clo
 | `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
-On an install that holds no key, `poplin update` needs an update link saved in the install once: [Update the install](../upkeep/update.md#optional-update-with-one-command) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
-
-An install made with the Deploy button has a build at Cloudflare to make the update link for. One made from a terminal or with the OpenTofu module has none: with no key held and no update link saved it answers `no_update_address`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
+`poplin update` works on an install that holds its key: [Update the install](../upkeep/update.md#with-the-kept-key) shows what it does. An install that holds none answers `no_key`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
 `poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
 
