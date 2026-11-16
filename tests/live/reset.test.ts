@@ -68,8 +68,8 @@ const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, s
 /** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo of three files: 3 removals, 85 for eleven sites and their 74 files, 12 for two more versions of one, 1 move to the trash, 4 for the demo. */
 const FIRST_RESET = 105;
 
-/** The rows the same reset counts: 3 removals at 14, 12 new sites at 25, the demo among them, 2 more versions at 15, and 1 move to the trash at 9. */
-const FIRST_RESET_ROWS = 381;
+/** The rows the same reset counts: 3 removals at 14, 12 new sites at 25, the demo among them, 2 more versions at 15, and 1 move to the trash at 10. */
+const FIRST_RESET_ROWS = 382;
 
 /** The rows of a site removed for good, as the harness counts one. */
 const REMOVAL_ROWS = 14;

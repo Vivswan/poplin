@@ -1152,7 +1152,7 @@ describe("the rows the live checks count", () => {
         "a rollback": [3, 3],
         "who may open it changed": [5, 5],
         "a new name": [5, 5],
-        "to the trash": [9, 9],
+        "to the trash": [10, 10],
         "out of the trash": [9, 9],
         "a new link": [12, 12],
         "the files of a version listed": [1, 1],

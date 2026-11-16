@@ -3,7 +3,7 @@
 //   POST   /api/uploads                    a new site 25, a new version 15: the begin and its finish together
 //   POST   /api/uploads/:upload/finish     2 where the publish dropped older versions and 2 for each of them, once its answer says how many
 //   POST   /api/import/sites               a site with one version 25, and 2 for each version more
-//   DELETE /api/sites/:site                to the trash 9, for good 14
+//   DELETE /api/sites/:site                to the trash 10, for good 14
 //   POST   /api/sites/:site/new-link 12    POST /api/sites/:site/restore 9    PATCH /api/sites/:site 5    POST /api/sites/:site/rollback 3
 //   PATCH  /api/config 4                   POST /api/logins 3                 DELETE /api/uploads/:upload 3
 //   GET    /api/uploads/:upload 1          GET /api/export/sites/:site/files 1
@@ -35,7 +35,7 @@ const IMPORTED_SITE = 25;
 const IMPORTED_VERSION = 2;
 
 /** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
-const REMOVED = { trash: 9, forever: 14 } as const;
+const REMOVED = { trash: 10, forever: 14 } as const;
 
 /** The rows a visit writes that a site answered with a page or a file: the day's count of the site, and of all sites. */
 const VISIT = 2;

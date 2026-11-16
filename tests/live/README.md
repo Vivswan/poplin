@@ -189,8 +189,8 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   922 on the local fake, a few more with the demo's check: every site they publish, change, and remove
-a reset that keeps every sample          48: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
+the checks, as the harness counts them   923 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+a reset that keeps every sample          49: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 490
 the harness's own statements             18: three tokens in and out, and the caps
 a usual run                              about 1,000 counted; the sweep later drops each upload's row, 5 a publish, about 125 more
@@ -200,7 +200,7 @@ a day of 40 such runs                    about 45,000 of the 100,000
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 922 of at most 1100
+Rows written this run: 923 of at most 1100
 ```
 
 ## The backup drill
