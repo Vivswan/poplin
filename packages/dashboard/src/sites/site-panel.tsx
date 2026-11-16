@@ -3,7 +3,7 @@
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";
 import { CopyIcon, ExternalLinkIcon, PencilIcon } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect } from "react";
+import { type ReactElement, type ReactNode, useEffect, useId } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,9 +80,13 @@ function LinkBlock({ site, actions, reveal }: { readonly site: Site; readonly ac
 
 /** Who can open the site, as a choice of three. Each change is asked about first: it gives the site another link, or ends one. */
 function AccessBlock({ site, onChoose }: { readonly site: Site; readonly onChoose: (access: Access) => void }): ReactNode {
+  const meansId = useId();
+
   return (
     <PanelBlock label="Who can open it">
       <ToggleGroup
+        aria-label="Who can open it"
+        aria-describedby={meansId}
         value={[site.access]}
         onValueChange={(value) => (value[0] === undefined ? undefined : onChoose(value[0] as Access))}
         variant="outline"
@@ -95,7 +99,9 @@ function AccessBlock({ site, onChoose }: { readonly site: Site; readonly onChoos
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-      <p className="text-muted-foreground">{ACCESSES.find((entry) => entry.access === site.access)?.means}</p>
+      <p id={meansId} className="text-muted-foreground">
+        {ACCESSES.find((entry) => entry.access === site.access)?.means}
+      </p>
     </PanelBlock>
   );
 }

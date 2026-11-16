@@ -55,7 +55,7 @@ export function AccessMark({ access, className }: { readonly access: Access; rea
  */
 function HiddenId({ length }: { readonly length: number }): ReactNode {
   return (
-    <span aria-hidden="true" className="inline-flex h-[1em] max-w-full flex-wrap justify-center overflow-hidden align-middle text-faint">
+    <span role="img" aria-label="part hidden" className="inline-flex h-[1em] max-w-full flex-wrap justify-center overflow-hidden align-middle text-faint">
       {Array.from({ length }, (_, at) => at).map((at) => (
         <span key={at} className="flex h-[1em] w-[1ch] shrink-0 items-center justify-center">
           <span className="size-[3px] rounded-full bg-current" />

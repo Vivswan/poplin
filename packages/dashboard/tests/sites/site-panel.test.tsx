@@ -89,3 +89,15 @@ describe("the two switches in a site's panel", () => {
     expect(notes()).toEqual([...said, EMBEDDING]);
   });
 });
+
+describe("the choice of who can open a site", () => {
+  // Drift: the three buttons would stand in a group with no name again, and the sentence that says what the chosen one means would be tied to nothing.
+  test.each([
+    ["private", "Only users who can log in here."],
+    ["public", "Everyone, at a public link."],
+  ])("is a group named by its heading and described by what the chosen one means: %s", async (access, means) => {
+    await draw(access, true);
+
+    expect(within(document.body).getAllByRole("group", { name: "Who can open it", description: means }).length).toBe(1);
+  });
+});
