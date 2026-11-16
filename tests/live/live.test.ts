@@ -1,6 +1,7 @@
 // The live suite: every check against a deployed install, over HTTPS. It runs only with POPLIN_LIVE=1, and is told the install by the environment:
 //
 //   POPLIN_LIVE_DOMAIN    the install's domain
+//   POPLIN_LIVE_ACCOUNT_ADDRESS   in its place for an install without a domain: the account's name in its free address, the `<account>` of `poplin.<account>.workers.dev`
 //   POPLIN_LIVE_TOKEN     an admin's token of the install; absent, the checks that need one are skipped
 //   POPLIN_LIVE_LOGIN     a login the install is told to let in; absent, its logins stay as they are
 //   POPLIN_LIVE_MANY_FILES  1 to publish two thousand small files; any other value skips that check
@@ -20,6 +21,7 @@ import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/bu
 import { readLoginList } from "../../packages/cloudflare/scripts/live/login-list";
 import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { sendLive } from "../../packages/cloudflare/scripts/live/send";
+import { type LiveInstall, liveAddresses } from "./addresses";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
@@ -57,6 +59,14 @@ function providerOf(): { readonly key: string; readonly accountId: string } | un
   return key === undefined || accountId === undefined ? undefined : { key, accountId };
 }
 
+/** Where the run was told the install answers: under a domain, or under an account's free address; `undefined` for a run told neither, or both. */
+function installOf(): LiveInstall | undefined {
+  const [domain, account] = [setting("POPLIN_LIVE_DOMAIN"), setting("POPLIN_LIVE_ACCOUNT_ADDRESS")];
+  if (domain !== undefined && account === undefined) return { kind: "domain", domain };
+
+  return domain === undefined && account !== undefined ? { kind: "account address", account } : undefined;
+}
+
 /** What the run already knows the install to lack. */
 function knownMissing(): Missing {
   const known: Missing = JSON.parse(setting("POPLIN_LIVE_MISSING") ?? "{}");
@@ -76,26 +86,29 @@ describe.skipIf(!LIVE)("a deployed install", () => {
   const meter = meterBucket(sendLive, setting("POPLIN_LIVE_MANY_FILES") === "1" ? CEILINGS.manyFiles : CEILINGS.checks);
   const rows = meterRows(meter.fetch, ROW_CEILINGS.checks);
   const provider = providerOf();
-  const opened = LIVE
-    ? openBench({
-        domain: setting("POPLIN_LIVE_DOMAIN") ?? "",
-        token: setting("POPLIN_LIVE_TOKEN"),
-        run: setting("POPLIN_LIVE_RUN") ?? "local",
-        missing,
-        login: setting("POPLIN_LIVE_LOGIN"),
-        fetch: rows.fetch,
-        pause: (ms) => Bun.sleep(ms),
-        now: () => Date.now(),
-        say: (line) => console.log(line),
-        manyFiles: MANY_FILES,
-        loginList: provider === undefined ? undefined : () => readLoginList({ key: provider.key }, provider.accountId),
-      })
-    : undefined;
+  const install = installOf();
+  // A run told no install opens no bench: the checks then fail before they send anything.
+  const opened =
+    LIVE && install !== undefined
+      ? openBench({
+          addresses: liveAddresses(install),
+          token: setting("POPLIN_LIVE_TOKEN"),
+          run: setting("POPLIN_LIVE_RUN") ?? "local",
+          missing,
+          login: setting("POPLIN_LIVE_LOGIN"),
+          fetch: rows.fetch,
+          pause: (ms) => Bun.sleep(ms),
+          now: () => Date.now(),
+          say: (line) => console.log(line),
+          manyFiles: MANY_FILES,
+          loginList: provider === undefined ? undefined : () => readLoginList({ key: provider.key }, provider.accountId),
+        })
+      : undefined;
 
   beforeAll(async () => {
-    if (opened === undefined) return;
+    if (!LIVE) return;
 
-    if (opened.bench.domain === "") throw new Error("POPLIN_LIVE_DOMAIN is not set");
+    if (opened === undefined) throw new Error("the run names no install: set POPLIN_LIVE_DOMAIN, or POPLIN_LIVE_ACCOUNT_ADDRESS for an install without a domain, and never both");
 
     Object.assign(missing, await probeMissing(opened.bench, knownMissing()));
     await opened.settle();

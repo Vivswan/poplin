@@ -16,7 +16,7 @@
 import { expect } from "bun:test";
 
 import type { Check } from "../records";
-import { expectRefused, GHOST_ID, isOwnAddress, labelAddress } from "../util";
+import { expectRefused, GHOST_ID, under } from "../util";
 
 /** What a request that came around the login may carry in place of a token the login signed. */
 const FORGED: readonly (readonly [what: string, headers: Readonly<Record<string, string>>])[] = [
@@ -57,8 +57,8 @@ export const LETTER_CHECKS: readonly Check[] = [
       const response = await bench.visit(site.url);
       expect(response.status).toBeOneOf([302, 303]);
       const location = response.headers.get("Location") ?? "";
-      expect(URL.canParse(location) && !isOwnAddress(bench.domain, location)).toBe(true);
-      await expectRefused(bench.domain, response, text);
+      expect(URL.canParse(location) && !bench.addresses.isOwn(location)).toBe(true);
+      await expectRefused(bench.addresses, response, text);
     },
   },
   byHand("L2", "a private site shows another private site in a frame, in three browser engines"),
@@ -72,10 +72,10 @@ export const LETTER_CHECKS: readonly Check[] = [
       const site = await bench.publish({ access: "unlisted", text });
       expect((await bench.cli("set", site.label, "--private")).code).toBe(0);
 
-      const response = await bench.visit(`${site.url}/page?from=link`);
+      const response = await bench.visit(under(site.url, "page?from=link"));
       expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe(`${labelAddress(bench.domain, site.label, "p")}page?from=link`);
-      await expectRefused(bench.domain, response, text);
+      expect(response.headers.get("Location")).toBe(`${bench.addresses.site(site.label, "p")}page?from=link`);
+      await expectRefused(bench.addresses, response, text);
     },
   },
   byHand("L4-in", "the same link, opened logged in, lands on the site at its letter p address"),
@@ -91,7 +91,7 @@ export const LETTER_CHECKS: readonly Check[] = [
         // With no login in front, the request reaches the install, which answers the one 404.
         if (bench.missing.access !== undefined) expect(response.status, what).toBe(404);
 
-        await expectRefused(bench.domain, response, text);
+        await expectRefused(bench.addresses, response, text);
       }
     },
   },
@@ -103,7 +103,7 @@ export const LETTER_CHECKS: readonly Check[] = [
     name: "a method that changes something is stopped before the install",
     needs: ["guard-rules"],
     run: async (bench) => {
-      const response = await bench.visit(labelAddress(bench.domain, GHOST_ID, "u"), { method: "POST", body: "x" });
+      const response = await bench.visit(bench.addresses.site(GHOST_ID, "u"), { method: "POST", body: "x" });
       expect(response.status).toBe(403);
     },
   },
@@ -112,7 +112,7 @@ export const LETTER_CHECKS: readonly Check[] = [
     name: "a scanner's path is stopped before the install",
     needs: ["guard-rules"],
     run: async (bench) => {
-      const response = await bench.visit(`${labelAddress(bench.domain, GHOST_ID, "u")}wp-login.php`);
+      const response = await bench.visit(`${bench.addresses.site(GHOST_ID, "u")}wp-login.php`);
       expect(response.status).toBe(403);
     },
   },
@@ -121,7 +121,7 @@ export const LETTER_CHECKS: readonly Check[] = [
     name: "plain http is sent to https, on a site address and on the admin hostname",
     needs: ["https-redirect"],
     run: async (bench) => {
-      const site = labelAddress(bench.domain, GHOST_ID, "u");
+      const site = bench.addresses.site(GHOST_ID, "u");
 
       for (const address of [`${site}page`, `${bench.admin}/settings`]) {
         const response = await bench.visit(address.replace("https://", "http://"));

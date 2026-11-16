@@ -2,11 +2,13 @@
 
 import { createApi } from "../../../packages/app/src/api/api";
 import { MemoryCounters } from "../../../packages/app/src/limits/memory-counters";
+import { pathAddresses } from "../../../packages/app/src/sites/path-addresses";
 import { ADDRESSES } from "../../../packages/app/tests/sites/support/layout";
 import type { Fetch } from "../../../packages/cli/src/client/client";
 import type { Login } from "../../../packages/core/src/auth/logins";
 import { mintToken } from "../../../packages/core/src/auth/tokens";
 import { openDatabase } from "../../../packages/core/src/database/open";
+import { type Hostname, parseHostname } from "../../../packages/core/src/names/hostname";
 import { DEFAULT_PUBLIC_WORD } from "../../../packages/core/src/names/marker";
 import { defaultSettings, type SettingValues } from "../../../packages/core/src/records/settings";
 import { MemoryStore } from "../../../packages/core/src/storage/memory";
@@ -20,6 +22,9 @@ const TOKEN_MS = 60 * 60 * 1000;
 
 /** The hostname the fake's API answers on. */
 const ADMIN_HOST = "poplin.example.com";
+
+/** The three hostnames of a fake without a domain, on an account's free address. */
+const FREE_HOSTS = { admin: "poplin.example.workers.dev", sites: "poplin-sites.example.workers.dev", private: "poplin-private.example.workers.dev" } as const;
 
 /** The admin whose settings the install starts with. */
 const INSTALLER = "ada@example.com" as Login;
@@ -48,12 +53,21 @@ interface SqlInstall {
   readonly settings: () => Promise<SettingValues | undefined>;
 }
 
+/** Check a hostname the fake wrote by hand; a refusal is a mistake in the fake. */
+function hostOf(raw: string): Hostname {
+  const hostname = parseHostname(raw);
+  if (!hostname.ok) throw new Error(`the fake's hostname was refused: ${hostname.refusal}`);
+
+  return hostname.value;
+}
+
 /**
  * Open a fake install with no site and no token.
  *
+ * @param kind - `account address` for an install without a domain, whose every site is a path on one of two hosts
  * @throws {Error} the database did not open
  */
-export async function openSqlInstall(): Promise<SqlInstall> {
+export async function openSqlInstall(kind: "domain" | "account address" = "domain"): Promise<SqlInstall> {
   const driver = new BunSqliteDriver();
   const opened = await openDatabase(driver, FAKE_NOW);
   if (opened.kind !== "open") throw new Error(`the fake's database did not open: ${opened.kind}`);
@@ -62,17 +76,19 @@ export async function openSqlInstall(): Promise<SqlInstall> {
   await database.initSettings(defaultSettings({ installer: INSTALLER }), { by: INSTALLER, at: FAKE_NOW });
 
   const counters = new MemoryCounters();
+  const free = kind === "account address";
+  const addresses = free ? pathAddresses({ sitesHost: hostOf(FREE_HOSTS.sites), privateHost: hostOf(FREE_HOSTS.private) }) : ADDRESSES;
   const api = createApi({
     database,
     store: new MemoryStore(),
     now: () => FAKE_NOW,
-    addressOf: ADDRESSES.addressOf,
-    publicAddressOf: ADDRESSES.publicAddressOf,
-    reservedNames: ADDRESSES.reservedNames,
+    addressOf: addresses.addressOf,
+    publicAddressOf: addresses.publicAddressOf,
+    reservedNames: addresses.reservedNames,
     readToken: (id) => database.getToken(id),
     limits: LIMITS,
     version: VERSION,
-    layout: { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD },
+    layout: free ? { kind: "path", sites_host: FREE_HOSTS.sites, private_host: FREE_HOSTS.private } : { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD },
     counters,
     visitorOf: async () => "one-visitor",
     update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
@@ -81,7 +97,7 @@ export async function openSqlInstall(): Promise<SqlInstall> {
   const sql: SqlInstall["sql"] = async (statement, params = []) => (await driver.batch([{ sql: statement, params: [...params] }]))[0]?.rows ?? [];
 
   return {
-    server: `https://${ADMIN_HOST}`,
+    server: `https://${free ? FREE_HOSTS.admin : ADMIN_HOST}`,
     fetch: (input, init) => api.fetch(new Request(input, init)),
     sql,
     addToken: async (note) => {

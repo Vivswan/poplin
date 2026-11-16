@@ -15,6 +15,7 @@ import { createPreview } from "../../packages/demo/src/preview/preview";
 import { readRealSites } from "../../packages/demo/src/preview/real-sites";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
 import { type Asked, page, refusal } from "../../packages/cloudflare/tests/zone/support/replies";
+import { liveAddresses } from "./addresses";
 import { openBench } from "./bench";
 import { FAKE_DOMAIN } from "./support/fake-install";
 import { STORED_TYPE_HEADER } from "../../packages/core/src/api/routes";
@@ -59,6 +60,9 @@ const ACCOUNT = "0".repeat(32);
 
 /** The one zone of the fake Cloudflare's account. */
 const ZONE = { id: "1".repeat(32), name: FAKE_DOMAIN, account: { id: ACCOUNT }, plan: { name: "Free Website" } };
+
+/** The addresses of the fake install, which answers under that zone's name. */
+const ADDRESSES = liveAddresses({ kind: "domain", domain: FAKE_DOMAIN });
 
 /** Two computers that wait to be let in: one nobody decided on, and one allowed whose token was never collected. */
 const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, state, decided_by, created_at, expires_at) VALUES
@@ -253,7 +257,7 @@ function demoWith(page: string): Differ {
 /** One more version of a site, published by a person: a page of their own, or a sample's folder as it is. */
 function publishOnto(site: string, sample?: string): Differ {
   return async ({ install, samples }) => {
-    const { bench, close } = openBench({ domain: FAKE_DOMAIN, token: await install.addToken("a person's own"), run: "reset", missing: {}, fetch: install.fetch, pause: async () => undefined, now: () => 0, say: () => undefined, manyFiles: 1 });
+    const { bench, close } = openBench({ addresses: ADDRESSES, token: await install.addToken("a person's own"), run: "reset", missing: {}, fetch: install.fetch, pause: async () => undefined, now: () => 0, say: () => undefined, manyFiles: 1 });
     OPENED.push(close);
     const [row] = await install.sql("SELECT id FROM sites WHERE name = ?", [site]);
     const folder = sample === undefined ? bench.folder("<p>one more</p>") : join(samples, sample);
@@ -266,7 +270,7 @@ function publishOnto(site: string, sample?: string): Differ {
 /** Give a fake install three sites, one of them in the trash, a second token, and two waiting logins. */
 async function fill(install: Install): Promise<void> {
   const { bench, close } = openBench({
-    domain: FAKE_DOMAIN,
+    addresses: ADDRESSES,
     token: await install.addToken("a person's own"),
     run: "reset",
     missing: {},
@@ -420,6 +424,29 @@ describe("the reset of the test install, against a local fake", () => {
     expect(files.map((file) => JSON.parse(file))).toEqual([addresses]);
     expect(files.map((file) => readRealSites(JSON.parse(file)))).toEqual([addresses]);
     expect(Object.keys(addresses).sort()).toEqual(PUBLISHED);
+  });
+
+  // Drift: every site of an install without a domain answers under a path, which is no address the demo takes for a link. A reset that wrote the host's root there would send every link of the demo to a 404, on the second test account alone.
+  test("on an install without a domain a reset leaves the same sites, each under a path, gives the demo no link to them, and the next reset keeps every one", async () => {
+    const install = await openSqlInstall("account address");
+    const files: string[] = [];
+    const first = await reset(install, await install.addToken("the first reset"), {
+      fetch: async (input, init) => {
+        if (!input.includes(REAL_SITES_PATH)) return install.fetch(input, init);
+
+        const body = await new Response(init.body).text();
+        files.push(body);
+
+        return install.fetch(input, { ...init, body });
+      },
+    });
+    const listed = await install.fetch(`${install.server}/api/sites?limit=100`, { headers: { Authorization: `Bearer ${await install.addToken("a reader")}` } });
+    const { sites } = (await listed.json()) as { sites: readonly Listed[] };
+    const second = await reset(install, await install.addToken("the second reset"));
+
+    expect([first, files, await left(install)]).toEqual([expect.objectContaining({ ...PUT, linked: 0, demo: "published" }), ["{}"], resetState(1)]);
+    expect(sites.filter((site) => new URL(site.url).pathname === "/")).toEqual([]);
+    expect(second).toMatchObject({ kept: SAMPLES_IN_ORDER, linked: 0, demo: "kept" });
   });
 
   test("an answer of too many requests is waited out for as long as it asks, and the reset goes on", async () => {

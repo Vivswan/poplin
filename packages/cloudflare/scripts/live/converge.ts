@@ -1,24 +1,34 @@
-// Make the standing test install match main: the bucket, the database, the login, the Worker, then every object of the zone as the Domain tab's own repair makes it.
+// Make the standing test install of the run's account match main: the bucket, the database, the login, the Worker, then what its kind adds.
 //
-//   the zone -> the account's plans, all free -> bucket, database, made anew when another build made it -> the login application -> wrangler deploy of the built bundle
-//     -> the zone plug's repair -> wait for the install to answer -> the test install's caps
+//   where it answers -> the account's plans, all free -> bucket, database, made anew when another build made it -> the login application -> wrangler deploy of the built bundle
+//     with a domain      -> the zone plug's repair, which makes every object of the zone as the Domain tab does
+//     without a domain   -> the two forwarders -> the key the install keeps
+//     -> wait for the install to answer -> the test install's caps
 //
+// An install without a domain has no plug, so its forwarders, its login, and its key are made by the product's own sync of each.
 // It holds no state: every step reads what is there and changes what differs. A token that lacks a permission, or an account with a switch off, stops the piece it belongs to.
-// Every piece is printed as it is settled. A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
+// Every piece is printed as it is settled. A piece Cloudflare refused is printed with the step it stopped at, the status, and the error codes, and with nothing else Cloudflare said.
+// A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
 // Step output: `missing` (a JSON object of what the install lacks and still answers without, each with its reason, for the live suite).
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DomainRow, DomainSettings } from "@poplin/app/src/console/domain/records";
-import { parseLogins } from "@poplin/core/src/auth/logins";
+import { type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 
 import { isAccessOff, readLoginFacts, syncAccess } from "../../src/zone/access/access";
-import { callCloudflare } from "../../src/zone/client";
+import type { AccountAddresses } from "../../src/zone/address-layout";
+import { type CloudflareFailure, callCloudflare } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
+import { syncForwarders } from "../../src/zone/forwarders/forwarders";
 import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
+import { readKeyState } from "../../src/zone/key/key-state";
+import { mintKey } from "../../src/zone/key/mint";
 import { privateSitesPattern } from "../../src/zone/layout";
+import type { Report } from "../../src/zone/sync";
+import { syncVariables } from "../../src/zone/variables/variables";
 import { createDomainPlug } from "../../src/zone/zone-plug";
 import { capInstall } from "./caps";
 import { readFreePlans } from "./plan";
@@ -78,6 +88,15 @@ const ERROR_CODE = /\[code: (\d+)\]/g;
 /** The code Cloudflare refuses a token with that lacks a permission. */
 const NOT_AUTHENTICATED = "10000";
 
+/** The token permission the making of the key needs. */
+const KEY_PERMISSION = "Account API Tokens: Edit";
+
+/** What stops the key on an account whose list of permission groups lacks one of the key's rights. */
+const NO_GROUP = "Cloudflare lists no permission group for a right of the key";
+
+/** What a run says it found of an install of each kind: where it answers. */
+const FOUND_AS = { domain: "Zone", "account address": "Free address" } as const;
+
 /** What the Worker's `ACCESS` binding holds. */
 type AccessBinding = typeof NO_ACCESS;
 
@@ -101,6 +120,25 @@ interface Progress {
 function note(run: Run, progress: Progress, piece: Piece): void {
   progress.pieces.push(piece);
   run.say(piece.needs === undefined ? `${piece.piece}: ${piece.result}` : `${piece.piece}: ${piece.result}: needs ${piece.needs}`);
+}
+
+/** How many objects a sync made, changed, left, and would not touch. */
+function countsOf(report: Report): string {
+  return `created ${report.created.length}, changed ${report.changed.length}, left ${report.left.length}, not poplin's ${report.skipped.length}`;
+}
+
+/**
+ * Tell which piece a call to Cloudflare stopped, and at which step of its plan where the failure names one.
+ *
+ * @param permission - the token permission the piece needs
+ * @returns the stop, told as a row: the status and the error codes of a refusal, and nothing else Cloudflare said
+ */
+function stopAt(run: Run, progress: Progress, piece: string, failure: CloudflareFailure & { readonly failed?: string }, permission: string): Stop {
+  const stop = stopOf(failure, permission);
+  const stopped = failure.failed === undefined ? "stopped" : `stopped at ${failure.failed}`;
+  note(run, progress, stop.kind === "skipped" ? { piece, result: stopped, needs: stop.needs } : { piece, result: `${stopped}: ${stop.what}` });
+
+  return stop;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -135,6 +173,13 @@ async function ensureBucket(run: Run): Promise<Stop | "created" | "present"> {
   return created.ok ? "created" : stopOf(created, "Workers R2 Storage: Edit");
 }
 
+/** The login an install wants in front of it: its whole dashboard hostname, and every address of a private site, which without a domain is one host. */
+function loginOf(found: Found, logins: Logins): Parameters<typeof syncAccess>[2] {
+  if (found.kind === "domain") return { hostname: found.layout.adminHostname, logins, privateSites: privateSitesPattern(found.layout) };
+
+  return { hostname: found.layout.adminHost, logins, privateSites: found.layout.privateHost };
+}
+
 /** Make the login application and read what the Worker checks a login against. A login the account or the token cannot give is a skip, and the Worker is bound to no team. */
 async function ensureAccess(run: Run, found: Found, login: string, progress: Progress): Promise<AccessBinding | Stop> {
   const skip = (needs: string): AccessBinding => {
@@ -148,15 +193,12 @@ async function ensureAccess(run: Run, found: Found, login: string, progress: Pro
   const logins = parseLogins([login]);
   if (!logins.ok) return skip("a login that is an email address");
 
-  const synced = await syncAccess(
-    run.connection,
-    run.accountId,
-    { hostname: found.layout.adminHostname, logins: logins.value, privateSites: privateSitesPattern(found.layout) },
-    "apply",
-  );
+  const synced = await syncAccess(run.connection, run.accountId, loginOf(found, logins.value), "apply");
   if (!synced.ok && isAccessOff(synced)) return skip(ACCESS_OFF);
 
-  if (!synced.ok) return stopped(stopOf(synced, "Access: Apps and Policies: Edit"));
+  if (!synced.ok) return stopped(stopAt(run, progress, "Login application", synced, "Access: Apps and Policies: Edit"));
+
+  note(run, progress, { piece: "Login application", result: countsOf(synced.report) });
 
   // The applications were listed a moment ago to make the login, so a refusal here is of the team's domain.
   const facts = await readLoginFacts(run.connection, run.accountId);
@@ -173,17 +215,21 @@ async function ensureAccess(run: Run, found: Found, login: string, progress: Pro
 }
 
 /**
- * The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, zone, and login.
+ * The Worker's configuration for the test install: the repository's own, with the test account's id, bucket, database, login, and where the install answers.
+ *
+ * An install without a domain answers on the Worker's own free address, so that address is switched on for it, and off for one with a domain.
  *
  * @returns what wrangler uploads the built bundle by: the file as it is, already minified, so `minify` is left out; the map the build wrote beside it goes with it, as the repository's own configuration says
  */
 export async function workerConfig(
   run: Pick<Run, "accountId">,
-  found: Pick<Found, "layout">,
+  found: Found,
   bound: { readonly databaseId: string; readonly access: AccessBinding; readonly login: string },
 ): Promise<Record<string, unknown>> {
   const base: unknown = Bun.JSONC.parse(await Bun.file(join(PACKAGE, "..", "..", "wrangler.jsonc")).text());
   if (!isRecord(base)) throw new Error("wrangler.jsonc holds no configuration");
+
+  const zone = found.kind === "domain" ? { domain: found.layout.domain } : { account_address: found.layout.account };
 
   return {
     ...base,
@@ -192,11 +238,11 @@ export async function workerConfig(
     name: SCRIPT,
     main: join(PACKAGE, "dist", "worker.js"),
     no_bundle: true,
-    workers_dev: false,
+    workers_dev: found.kind === "account address",
     preview_urls: false,
     r2_buckets: [{ binding: "SITES", bucket_name: BUCKET }],
     d1_databases: [{ binding: "DB", database_name: INSTALL_OBJECTS.database, database_id: bound.databaseId }],
-    vars: { ZONE: { domain: found.layout.domain }, ACCESS: bound.access, FIRST_SETTINGS: { ...LIVE_SETTINGS, logins: bound.login }, ACCOUNT_ID: run.accountId, WORKER_NAME: SCRIPT },
+    vars: { ZONE: zone, ACCESS: bound.access, FIRST_SETTINGS: { ...LIVE_SETTINGS, logins: bound.login }, ACCOUNT_ID: run.accountId, WORKER_NAME: SCRIPT },
   };
 }
 
@@ -263,7 +309,7 @@ function unsettledResult(row: DomainRow): string {
 }
 
 /** Run the zone plug's repair, the same code the Domain tab runs, and sort its rows into the summary and the lacking things. */
-async function repairZone(run: Run, found: Found, login: string, progress: Progress): Promise<Stop | undefined> {
+async function repairZone(run: Run, found: Extract<Found, { readonly kind: "domain" }>, login: string, progress: Progress): Promise<Stop | undefined> {
   const logins = parseLogins([login]);
   if (!logins.ok) return { kind: "failed", what: "the first login is no email address" };
 
@@ -297,6 +343,94 @@ async function repairZone(run: Run, found: Found, login: string, progress: Progr
   return failed ?? skipped;
 }
 
+/** Make the two forwarders of an install without a domain. A Worker of a forwarder's name that is not poplin's stops the run: the sites of its kind would answer nowhere. */
+async function ensureForwarders(run: Run, layout: AccountAddresses, progress: Progress): Promise<Stop | undefined> {
+  const synced = await syncForwarders(run.connection, run.accountId, layout, "apply");
+  if (!synced.ok) return stopAt(run, progress, "Forwarders", synced, "Workers Scripts: Edit");
+
+  note(run, progress, { piece: "Forwarders", result: countsOf(synced.report) });
+  if (synced.report.skipped.length === 0) return undefined;
+
+  return { kind: "failed", what: `${synced.report.skipped.length} of the 2 forwarders' names are held by a Worker without poplin's tag` };
+}
+
+/** Whether a key was not read or not made for a call Cloudflare refused or did not answer, and not for an answer that named no group or no key. */
+function isCloudflareFailure(why: CloudflareFailure | { readonly failure: "no-group" | "no-value" }): why is CloudflareFailure {
+  return why.failure !== "no-group" && why.failure !== "no-value";
+}
+
+/** Tell what stopped the key. A token that may not make one is a lack the suite skips for, and the run goes on. */
+function keyStopped(run: Run, progress: Progress, stop: Stop): Stop | undefined {
+  if (stop.kind === "failed") {
+    note(run, progress, { piece: "Key", result: `failed: ${stop.what}` });
+
+    return stop;
+  }
+
+  note(run, progress, { piece: "Key", result: "skipped", needs: stop.needs });
+  progress.missing["kept-key"] = stop.needs;
+
+  return undefined;
+}
+
+/** Say why no key stands on the Worker after a making that did not end well: a key made and not written is a failure, whatever the write lacked. */
+function keyNotMade(minted: Extract<Awaited<ReturnType<typeof mintKey>>, { readonly ok: false }>): Stop {
+  if (minted.made) {
+    const written = stopOf(minted.kept, "Workers Scripts: Edit");
+    const why = written.kind === "failed" ? written.what : `it needs ${written.needs}`;
+
+    return { kind: "failed", what: `the key was made and not written onto the Worker, and ${minted.left ? "is still at Cloudflare" : "was deleted again"}: ${why}` };
+  }
+
+  const { why } = minted;
+  if (isCloudflareFailure(why)) return stopOf(why, KEY_PERMISSION);
+
+  return { kind: "failed", what: why.failure === "no-group" ? NO_GROUP : "Cloudflare answered no key" };
+}
+
+/**
+ * Give the Worker of an install without a domain the key it keeps, where it holds none Cloudflare lists as active.
+ *
+ * The key is made and written by the calls the zone plug's repair makes for an install with a domain; its value goes from the one to the other and is never printed.
+ */
+async function ensureKey(run: Run, progress: Progress): Promise<Stop | undefined> {
+  const worker = { accountId: run.accountId, script: SCRIPT };
+  const state = await readKeyState(undefined, run.connection, worker);
+  if (!state.ok) return keyStopped(run, progress, isCloudflareFailure(state) ? stopOf(state, state.read === "bindings" ? "Workers Scripts: Edit" : KEY_PERMISSION) : { kind: "failed", what: NO_GROUP });
+
+  if (state.value === "present") {
+    note(run, progress, { piece: "Key", result: "present" });
+
+    return undefined;
+  }
+
+  const secret = (text: string): Parameters<typeof syncVariables>[4] => ({ name: INSTALL_OBJECTS.keyBinding, text });
+  const minted = await mintKey(run.connection, { accountId: run.accountId, name: INSTALL_OBJECTS.keyName }, (value) => syncVariables(run.connection, worker, [], "apply", secret(value)));
+  if (minted.ok) {
+    const made = state.value === "missing" ? "created" : "changed";
+    note(run, progress, { piece: "Key", result: minted.stale ? `${made}, and an older key of its name may be left at Cloudflare` : made });
+
+    return undefined;
+  }
+
+  return keyStopped(run, progress, keyNotMade(minted));
+}
+
+/**
+ * Make what an install without a domain adds to its deployed Worker: the two forwarders, then the key it keeps.
+ *
+ *  progress - gathers a row for each, and the things only a zone gives, whose checks the suite is told to skip
+ *  what stopped the run, or `undefined`; a token that may not make the key stops nothing
+ */
+export async function settleFreeAddress(run: Run, layout: AccountAddresses, progress: Progress): Promise<Stop | undefined> {
+  return (await ensureForwarders(run, layout, progress)) ?? (await ensureKey(run, progress));
+}
+
+/** Make what the install's kind adds to its deployed Worker: the zone's objects by the Domain tab's repair, or the forwarders and the key of an install without a domain. */
+function settleKind(run: Run, found: Found, login: string, progress: Progress): Promise<Stop | undefined> {
+  return found.kind === "domain" ? repairZone(run, found, login, progress) : settleFreeAddress(run, found.layout, progress);
+}
+
 /**
  * Read what the install answered, for the log: its status, and the first line of a body in plain text, which is how the Worker says why it cannot start.
  *
@@ -316,7 +450,7 @@ export async function answerOf(asking: Promise<Response>): Promise<{ readonly st
 
 /** Ask the install's API until it answers as a Worker that started: a 401 to a request with no token. */
 async function waitUntilReady(found: Found): Promise<Stop | undefined> {
-  const address = `https://${found.layout.adminHostname}/api/whoami`;
+  const address = `https://${found.adminHost}/api/whoami`;
   const deadline = Date.now() + READY.withinMs;
   let last = { status: 0, told: "0" };
 
@@ -335,7 +469,7 @@ async function capTestInstall(run: Run, found: Found, databaseId: string): Promi
   const token = await seedToken(run, databaseId, Date.now());
   if (typeof token !== "string") return token;
 
-  const uncapped = await capInstall({ server: `https://${found.layout.adminHostname}`, token, fetch: sendLive });
+  const uncapped = await capInstall({ server: `https://${found.adminHost}`, token, fetch: sendLive });
   const kept = await removeTokens(run, databaseId, Date.now());
 
   return uncapped ?? kept;
@@ -346,7 +480,7 @@ async function converge(run: Run, progress: Progress, env: Environment): Promise
   const found = await findInstall(run, env);
   if (isStop(found)) return found;
 
-  note(run, progress, { piece: "Zone", result: "found" });
+  note(run, progress, { piece: FOUND_AS[found.kind], result: "found" });
 
   const paid = await checkPlans(run, found, progress);
   if (paid !== undefined) return paid;
@@ -376,7 +510,7 @@ async function converge(run: Run, progress: Progress, env: Environment): Promise
 
   note(run, progress, { piece: "Worker", result: "deployed" });
 
-  const unready = (await repairZone(run, found, login, progress)) ?? (await waitUntilReady(found));
+  const unready = (await settleKind(run, found, login, progress)) ?? (await waitUntilReady(found));
   if (unready !== undefined) return unready;
 
   const uncapped = await capTestInstall(run, found, settled.id);

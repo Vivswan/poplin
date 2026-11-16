@@ -9,7 +9,7 @@ import { createDomainPlug } from "../../packages/cloudflare/src/zone/zone-plug";
 import { withFake } from "../../packages/cloudflare/tests/zone/support/fake-cloudflare";
 import { ACCOUNT, type Account, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/cloudflare/tests/zone/support/fake-install";
 import { LAYOUT } from "../../packages/cloudflare/tests/zone/support/layouts";
-import { type Asked, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
+import { type Asked, page, refusal, reply } from "../../packages/cloudflare/tests/zone/support/replies";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { catchStep } from "./support/step";
 
@@ -43,12 +43,28 @@ const REMOVED = [
 /** What a run on an account that holds nothing of poplin's tells. */
 const NOTHING = REMOVED.map((line) => line.replace(/\d+$/, "0"));
 
-/** The fake account, with what the install's fake lacks: the test install's bucket and its objects, and whether the Worker's script is there. */
+/** The fake account, with what the install's fake lacks. */
 interface World {
+  /** What the fake of an install's account holds. */
   readonly account: Account;
+
+  /** Whether the account holds the test install's bucket. */
   bucket: boolean;
+
+  /** The keys of the bucket's objects. */
   objects: string[];
+
+  /** Whether the Worker's script is there. */
   worker: boolean;
+
+  /** The Workers beside the install's own, on an account without a domain: its forwarders, and somebody's Worker of a forwarder's name. */
+  beside?: { readonly id: string; readonly tags: readonly string[] }[];
+
+  /** The Workers removed so far, in the order removed. */
+  gone?: string[];
+
+  /** How many calls asked for a zone, or for something of one. */
+  zoneCalls?: number;
 }
 
 /** What one run left: its exit code, and its lines without the masks. */
@@ -57,10 +73,33 @@ interface Told {
   readonly lines: readonly string[];
 }
 
+/** Answer for the Workers of an account without a domain: its free address, the list of its Workers, and the removal of one beside the install's own; `undefined` for any other call. */
+function answerBeside(world: World, asked: Asked, path: string): Response | undefined {
+  const scripts = `/accounts/${ACCOUNT}/workers/scripts`;
+  if (path === `/accounts/${ACCOUNT}/workers/subdomain`) return reply({ subdomain: "example" });
+
+  if (path === scripts) return page(asked, [...(world.worker ? [{ id: "poplin", tags: [] }] : []), ...(world.beside ?? [])]);
+
+  const name = path.startsWith(`${scripts}/`) && asked.method === "DELETE" ? path.slice(scripts.length + 1) : undefined;
+  if (name === undefined) return undefined;
+
+  world.gone?.push(name);
+  if (name === "poplin") return undefined;
+
+  world.beside = world.beside?.filter((worker) => worker.id !== name);
+
+  return new Response(null, { status: 204 });
+}
+
 /** Answer what the install's fake does not hold, and hand the rest to it. */
 function answer(world: World, asked: Asked): Response {
   const [path = ""] = asked.path.split("?");
   const bucket = `/accounts/${ACCOUNT}/r2/buckets`;
+  if (path.startsWith("/zones")) world.zoneCalls = (world.zoneCalls ?? 0) + 1;
+
+  const beside = answerBeside(world, asked, path);
+  if (beside !== undefined) return beside;
+
   if (path === `/accounts/${ACCOUNT}/subscriptions`) return refusal(403, 10000, "Authentication error");
 
   if (path === bucket) return reply({ buckets: world.bucket ? [{ name: BUCKET }] : [] });
@@ -107,15 +146,15 @@ async function installed(): Promise<World> {
   return world;
 }
 
-/** Run the start-over on the fake account. */
-async function run(world: World, asking = "true"): Promise<Told> {
+/** Run the start-over on the fake account, as the run of an account with a domain, or of one without. */
+async function run(world: World, asking = "true", kind = "domain"): Promise<Told> {
   using step = catchStep();
   let told: Told = { code: 0, lines: [] };
 
   await withFake(
     (asked) => answer(world, asked),
     async (connection) => {
-      const env = { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT, POPLIN_LIVE_START_OVER: asking };
+      const env = { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT, POPLIN_LIVE_START_OVER: asking, POPLIN_LIVE_INSTALL: kind };
       const code = await startOver({ ...openRun(env), connection: { ...connection, key: TOKEN } }, env);
       told = { code, lines: step.lines.filter((line) => !line.startsWith("::add-mask::")) };
     },
@@ -195,5 +234,23 @@ describe("the start-over of the test install, against a local fake account", () 
     const told = await run(world, asking);
 
     expect([told.code, told.lines, heldBy(world)]).toEqual([1, [`::error::The test install was not started over: ${reason}.`], before]);
+  });
+
+  // Drift: a forwarder is bound to the one Worker, and the second test account holds no zone. A start-over that removed the Worker first, or asked for a zone, would stop on that account alone.
+  test("without a domain, the forwarder goes before the Worker it is bound to, a Worker of a forwarder's name without poplin's tag stays, and no kind of a zone is asked for", async () => {
+    const theirs = { id: "poplin-private", tags: ["somebody-s-own"] };
+    const world: World = { account: emptyAccount(), bucket: true, objects: ["sites/a/1/index.html"], worker: true, beside: [{ id: "poplin-sites", tags: ["poplin-forwarder"] }, theirs], gone: [] };
+    world.account.databases.push({ uuid: "database-1", name: "poplin" });
+    world.account.tokens.push({ id: "key-0", name: "poplin kept key", status: "active" }, { ...THEIRS.token });
+    const first = await run(world, "true", "account address");
+    const left = [[...(world.gone ?? [])], world.beside, world.account.tokens, world.account.databases, world.objects, world.zoneCalls];
+    const second = await run(world, "true", "account address");
+
+    expect(first).toEqual({
+      code: 0,
+      lines: ["Forwarders: removed 1", "Access applications and policies: removed 0", "Worker: removed 1", "Database: removed 1", "Bucket objects: removed 1", "Key: removed 1"],
+    });
+    expect(left).toEqual([["poplin-sites", "poplin"], [theirs], [THEIRS.token], [], [], undefined]);
+    expect(second.lines).toEqual(first.lines.map((line) => line.replace(/\d+$/, "0")));
   });
 });

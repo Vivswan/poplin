@@ -1,5 +1,8 @@
-# Checks a real install on the Cloudflare test account after a push to main that changed a file reaching it, and on a manual run.
-# Puts it back to the sample sites after each run of the checks, and at midnight UTC.
+# Checks a real install on each of the two Cloudflare test accounts after a push to main that changed a file reaching it, and on a manual run.
+# Puts each back to the sample sites after each run of the checks, and at midnight UTC.
+#
+#   with-domain-ci-tests       the account that holds a domain: an install whose every site is a hostname under it
+#   without-domain-ci-tests    the account that holds none: an install on the account's free address, after the first, whatever that came to
 #
 #   a push that changed a file of the `paths` list -> wait for that commit's `all-green` check -> build the Worker bundle
 #     -> make the standing test install match the commit -> run tests/live against it -> put the install back
@@ -8,7 +11,7 @@
 #
 #   put back: every site that is no sample and not the demo removed, each sample that differs from demo/samples and its table published anew, the demo published when its files differ, waiting logins and every token removed
 #
-# The test install stays up between runs, with its logins and its settings.
+# Each test install stays up between runs, with its logins and its settings. The two are legs of one job, so both run the same steps.
 # The environment's secrets reach the steps that call Cloudflare and no other step. Each step prints what it did.
 # A piece the install answers without, lacking a token permission or an account switch only a person can flip, is a
 # warning and a skipped row of the step summary, with what it needs. Anything else that stops a step fails the run.
@@ -73,9 +76,23 @@ concurrency:
 jobs:
   live:
     if: github.event_name != 'schedule' && github.ref == 'refs/heads/main'
+    # One leg for each test account, in this order and one at a time. A leg that fails stops no other: each ends with its own reset.
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - kind: domain
+            environment: with-domain-ci-tests
+          - kind: account address
+            environment: without-domain-ci-tests
+    name: live (${{ matrix.kind }})
     runs-on: ubuntu-latest
     timeout-minutes: 85
-    environment: with-domain-ci-tests
+    environment: ${{ matrix.environment }}
+    # Which kind of install the account of this leg holds: every script that calls Cloudflare reads it.
+    env:
+      POPLIN_LIVE_INSTALL: ${{ matrix.kind }}
     # The wait reads the commit's run of CI and the jobs of that run.
     permissions:
       contents: read
@@ -137,13 +154,25 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bun run --silent --cwd packages/cloudflare live:reset
 
-  # The midnight run. It shares the lane of the checks, so it never touches the install while they do. On an account
-  # that holds no test install it says so and ends green.
+  # The midnight run, one leg for each test account. It shares the lane of the checks, so it never touches an install
+  # while they do. On an account that holds no test install it says so and ends green.
   reset:
     if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - kind: domain
+            environment: with-domain-ci-tests
+          - kind: account address
+            environment: without-domain-ci-tests
+    name: reset (${{ matrix.kind }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: with-domain-ci-tests
+    environment: ${{ matrix.environment }}
+    env:
+      POPLIN_LIVE_INSTALL: ${{ matrix.kind }}
     concurrency:
       group: live-checks
       cancel-in-progress: false
