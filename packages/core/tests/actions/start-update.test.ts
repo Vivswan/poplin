@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { checkForUpdate } from "../../src/actions/check-update";
 import { exportSettings, exportSites } from "../../src/actions/export";
-import { type Rebuilding, startUpdate } from "../../src/actions/start-update";
+import { type Rebuilding, type SelfUpdate, startUpdate } from "../../src/actions/start-update";
 import { removeUpdateAddress, saveUpdateAddress, updateAddressState } from "../../src/actions/update-address";
 import { OWN_SCHEMA } from "../../src/database/open";
 import { dayOf } from "../../src/records/views";
@@ -203,6 +203,114 @@ describe("startUpdate", () => {
       second: { ok: false, code: "too_many_requests", about: "update" },
       later: status === 200 ? true : "update_refused",
       sent: 2,
+    });
+  });
+});
+
+/** What a host that replaces the install's own code answers, step by step: `ready` and `put` are a refusal's code and what it is about, or nothing for a step that works. */
+interface Door {
+  readonly version?: string;
+  readonly ready?: readonly [string, string?];
+  readonly put?: readonly [string, string?];
+  readonly unset?: string;
+}
+
+/** A host that takes a release by itself: it records what it was asked for, and what the log held at the moment the files were put in place. */
+function host(world: () => World, door: Door): Rebuilding & { readonly sent: unknown[][]; readonly asked: unknown[]; readonly logged: unknown[] } {
+  const asked: unknown[] = [];
+  const logged: unknown[] = [];
+  const refusal = ([code, about]: readonly [string, string?]): never => ({ ok: false, code, ...(about === undefined ? {} : { about }) }) as never;
+  const self: SelfUpdate = {
+    async ready(wanted) {
+      asked.push(wanted);
+      if (door.ready !== undefined) return refusal(door.ready);
+
+      return {
+        ok: true,
+        version: door.version ?? "0.2.0",
+        async put() {
+          logged.push(...(await entries(world())));
+          if (door.put !== undefined) return refusal(door.put);
+
+          return door.unset === undefined ? { ok: true } : { ok: true, unset: door.unset };
+        },
+      };
+    },
+  };
+
+  return { ...provider(), self, asked, logged };
+}
+
+describe("startUpdate, on a host that replaces the install's own code", () => {
+  const started = { by: ADMIN.holder, action: "update_started", site: null, detail: { from: "0.1.0", to: "0.2.0" } };
+  const done = { ok: true, started: true, from: "0.1.0", to: "0.2.0" };
+  const refused = "the update was refused:";
+
+  // Drift: the request after the upload runs the new code, so the log entry must be there when the files are put in place, and a refusal must say why in words that hold nothing of the host's key.
+  test.each<{ readonly name: string; readonly door: Door; readonly answer: unknown; readonly audit: unknown[]; readonly logged?: unknown[]; readonly noted?: string }>([
+    { name: "the release is fetched, checked, and put in place", door: {}, answer: done, audit: [started], logged: [started] },
+    { name: "nothing newer is out", door: { ready: ["no_update"] }, answer: { ok: false, code: "no_update" }, audit: [] },
+    { name: "the host holds no key", door: { ready: ["no_key"] }, answer: { ok: false, code: "no_key" }, audit: [], noted: `${refused} no_key` },
+    { name: "the host's key is refused", door: { ready: ["key_refused"] }, answer: { ok: false, code: "key_refused" }, audit: [], noted: `${refused} key_refused` },
+    {
+      name: "the host's key lacks the right",
+      door: { ready: ["lacks_right", "Workers Scripts Write"] },
+      answer: { ok: false, code: "lacks_right", about: "Workers Scripts Write" },
+      audit: [],
+      noted: `${refused} lacks_right, Workers Scripts Write`,
+    },
+    {
+      name: "the fetched files are not the published ones",
+      door: { ready: ["release_refused", "digest_differs"] },
+      answer: { ok: false, code: "release_refused", about: "digest_differs" },
+      audit: [],
+      noted: `${refused} release_refused, digest_differs`,
+    },
+    {
+      name: "the host refuses the new code",
+      door: { put: ["version_refused", "code"] },
+      answer: { ok: false, code: "version_refused", about: "code" },
+      audit: [started],
+      logged: [started],
+      noted: `${refused} version_refused, code`,
+    },
+    {
+      name: "the host does not answer the upload",
+      door: { put: ["update_unreachable", "host"] },
+      answer: { ok: false, code: "update_unreachable", about: "host" },
+      audit: [started],
+      logged: [started],
+      noted: `${refused} update_unreachable, host`,
+    },
+    { name: "the code is in and its schedule is not", door: { unset: "schedule" }, answer: done, audit: [started], logged: [started], noted: "the update is in, and its schedule could not be set" },
+  ])("$name", async ({ door, answer, audit, logged, noted }) => {
+    const world = await makeWorld();
+    const rebuilding = host(() => world, door);
+
+    expect<unknown>({ answer: await startUpdate(world.install, ADMIN, { version: "0.1.0" }, rebuilding), audit: await entries(world), logged: rebuilding.logged }).toEqual({ answer, audit, logged: logged ?? [] });
+    expect({ asked: rebuilding.asked, sent: rebuilding.sent }).toEqual({ asked: [{ version: "latest", automatic: false }], sent: [] });
+    expect((await world.install.database.listProblems(dayOf(NOW))).map(({ kind, count, message }) => [kind, count, message])).toEqual(noted === undefined ? [] : [["update_failed", 1, noted]]);
+  });
+
+  // Drift: the saved address is the other way to update. An install whose host takes a release by itself never sends to it, and needs none.
+  test("a saved address is not sent to, and only an admin starts", async () => {
+    const world = await ready(provider());
+    const rebuilding = host(() => world, {});
+    const answers = [await startUpdate(world.install, OWNER, { version: "0.1.0" }, rebuilding), await startUpdate(world.install, ADMIN, { version: "0.1.0" }, rebuilding)];
+
+    expect<unknown>({ answers, asked: rebuilding.asked.length, sent: rebuilding.sent }).toEqual({ answers: [{ ok: false, code: "not_allowed" }, done], asked: 1, sent: [] });
+  });
+
+  // Drift: two presses, or a press beside the scheduled run, would each fetch and upload the release. One start fits a minute, and the second fetches nothing.
+  test("a second press inside the minute fetches nothing", async () => {
+    const world = await makeWorld();
+    const rebuilding = host(() => world, {});
+    await startUpdate(world.install, ADMIN, { version: "0.1.0" }, rebuilding);
+    world.clock.now = NOW + 30_000;
+
+    expect<unknown>({ second: await startUpdate(world.install, ADMIN, { version: "0.1.0" }, rebuilding), asked: rebuilding.asked.length }).toEqual({
+      second: { ok: false, code: "too_many_requests", about: "update" },
+      asked: 1,
     });
   });
 });
