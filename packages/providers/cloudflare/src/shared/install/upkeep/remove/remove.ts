@@ -602,7 +602,7 @@ export async function removeInstall(found: Removable<Place>, where: Where, remov
   await removeFiles(work, { own: !stands || bound.bucket === INSTALL_OBJECTS.bucket, bound: stands, workerGone });
   await removeDatabase(work, { boundId: bound.databaseId, bound: stands, workerGone });
 
-  if (where.kind === "domain") note(work, { object: "Bot switches", state: "stay", detail: WORDS.bots });
+  if (where.kind === "domain") note(work, { object: "Bot settings", state: "stay", detail: WORDS.bots });
 
   note(work, { object: "Account token", state: "stay", detail: WORDS.token });
 

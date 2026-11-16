@@ -49,7 +49,7 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     ...SHARED.slice(0, 3),
     "Certificate alert | remove | poplin: certificates of every domain of the account",
     ...SHARED.slice(3, -1),
-    "Bot switches | stay | the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
+    "Bot settings | stay | the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
     ...SHARED.slice(-1),
   ],
   "no-domain": ["Forwarder | remove | poplin-sites, poplin-private", ...SHARED],

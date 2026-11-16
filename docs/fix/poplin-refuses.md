@@ -67,7 +67,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 | Problem           | From               | Means                                                                    | What to do                                                        |
 | ----------------- | ------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
 | `no_install`      | both               | the account holds no install; or a removal with `--keep-data` found kept data alone | make the token in the account the install is in; for kept data, run the removal without `--keep-data` |
-| `other_place`     | both               | the install is of the other kind than the line named                     | give `--domain` and its domain, or `--no-domain`, as `words` says |
+| `other_place`     | both, and `install` | the install, or one that was started and not finished, is of another place than the line named | give `--domain` and its domain, or `--no-domain`, as `words` says |
 | `changed`         | both               | the account changed between the look and the work; nothing was done      | run it again                                                      |
 | `unfinished`      | the repair         | an install was started and never set, so there is nothing to mend        | finish it: `npx poplin install cloudflare`                        |
 | `another_version` | the repair         | the install's records are of another version than this command           | `npx poplin@latest doctor --repair`                               |

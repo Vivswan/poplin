@@ -118,7 +118,7 @@ async function connect(request: { readonly server?: string }, io: Io): Promise<S
   if (request.server !== undefined && request.server !== server) return problem("wrong_server", request.server);
 
   const install = { server, token, fetch: io.fetch };
-  const client = createClient({ ...install, timeoutMs: io.timeoutMs, stopped: io.stopped, told: io.err });
+  const client = createClient({ ...install, timeoutMs: io.timeoutMs, stopped: io.stopped, told: io.err, pause: io.pause });
   const afterStop = createClient({ ...install, timeoutMs: Math.min(io.timeoutMs ?? AFTER_STOP_TIMEOUT_MS, AFTER_STOP_TIMEOUT_MS) });
 
   return { client, afterStop, io, server, layout: layoutAskedOnce(client), source: current.source };

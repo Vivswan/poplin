@@ -148,7 +148,10 @@ export async function harnessOf(account: Account, kind: Found["kind"]): Promise<
     return answered;
   };
   const release = await publish({ version: COMMIT, config: CONFIG, files: FILES });
-  const reach = { ...reachOf(release, pass), now: () => clock };
+  const sleep = async (milliseconds: number): Promise<void> => {
+    clock += milliseconds;
+  };
+  const reach = { ...reachOf(release, pass), now: () => clock, sleep };
   const opened = openRun({ CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT });
   const run: Run = {
     ...opened,
@@ -157,9 +160,6 @@ export async function harnessOf(account: Account, kind: Found["kind"]): Promise<
     annotate: (level, text) => void lines.push(`::${level}::${opened.redact(text)}`),
     summarize: () => undefined,
     output: (name, value) => void Object.assign(outputs, { [name]: opened.redact(value) }),
-  };
-  const sleep = async (milliseconds: number): Promise<void> => {
-    clock += milliseconds;
   };
 
   return { account, run, lines, sent, outputs, settings, asked: inner.asked, world: { release, ends: { reach, sleep }, fetch: install } };

@@ -61,7 +61,7 @@ const NOT_FINISHED = "This poplin is not finished.\nRun: npx poplin install clou
 const LOGOUT_PATH = "/cdn-cgi/access/logout";
 
 /** Where the variables of an install come from, for a person whose Worker lost or mistyped one. */
-const SET_THEM = "The install command writes them. In the Cloudflare dashboard they are under Workers & Pages, this Worker, Settings, Variables and Secrets.";
+const SET_THEM = "The install command writes them, and npx poplin doctor --repair writes the login's. In the Cloudflare dashboard they are under Workers & Pages, this Worker, Settings, Variables and Secrets.";
 
 /** What answers each path Access lets past its login, and everything below it. A path the list gains has no answer here until one is written, and the Worker does not build without it. */
 const OPEN: Readonly<Record<(typeof INSTALL_OBJECTS.openPaths)[number], (request: Request, instance: Instance, ways: Ways, open: ExecutionContext | undefined) => Promise<Response>>> = {

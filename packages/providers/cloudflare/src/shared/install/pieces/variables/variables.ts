@@ -1,10 +1,12 @@
 // The variables a repair writes onto the Worker itself: the values no release can know, such as the audience tag of the Access application it made, and on an install with nothing set its domain, its first login, and its account.
 // A change names every other binding as inherited, so the bucket, the database, the limiter, and the variables a person set stay as they are.
 // Every variable a run changes goes in one change: the Worker is deployed anew once, and never starts with half of them.
+// A read of the bindings that lacks the Worker's own name is a read in part: a change after it would drop every binding it did not list, so none is sent.
 // Secrets go in that same change. Cloudflare reads none back, so one is written whenever it is handed over and is never compared.
 
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
-import { type CloudflareResult, type Connection, callCloudflare } from "../../client";
+import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare } from "../../client";
+import { INSTALL_OBJECTS } from "../../install-objects";
 import { type Mode, reportOf, type Synced } from "../../sync";
 
 /** A variable's whole value: a record of texts, kept as a JSON variable, or one text, kept as a plain one. */
@@ -51,6 +53,9 @@ interface OwnWorker {
 
 /** The status Cloudflare answers for a Worker that does not exist. */
 const NO_WORKER = 404;
+
+/** The failure of a change that was not sent, since the Worker's bindings were read in part. */
+const READ_IN_PART: CloudflareFailure = { ok: false, failure: "network", message: "the Worker's settings were not read whole" };
 
 /**
  * Read a Worker as the account has it.
@@ -126,7 +131,7 @@ export function planVariables(desired: readonly DesiredVariable[], bindings: rea
  * @param mode - `plan` reads the Worker's bindings and sends no change; a Worker that does not exist yet reads as one with no binding
  * @param secrets - secrets to write in the same change, in `apply` mode alone; the report never names one
  * @returns what was created, changed, and left. Every changed variable is sent in one change, which deploys the Worker anew with every other binding as it was.
- *   When it is refused nothing was written, and the failure names the first variable as the step that failed
+ *   When it is refused, or the Worker's bindings were read without its own name, nothing was written, and the failure names the first variable as the step that failed
  */
 export async function syncVariables(connection: Connection, worker: OwnWorker, desired: readonly DesiredVariable[], mode: Mode, secrets: readonly Secret[] = []): Promise<Synced> {
   const settings = await readBindings(connection, worker);
@@ -137,15 +142,15 @@ export async function syncVariables(connection: Connection, worker: OwnWorker, d
   const written = steps.flatMap((step) => (step.kind === "leave" ? [] : [step]));
   if (mode === "plan" || written.length + secrets.length === 0) return { ok: true, report: reportOf(steps) };
 
+  const subjects = written.map((step) => step.subject);
+  const unsent = { report: reportOf(steps.filter((step) => step.kind === "leave")), failed: subjects[0] ?? "", unrun: subjects.slice(1) };
+  if (!bindings.some((binding) => binding.name === INSTALL_OBJECTS.workerBinding)) return { ...READ_IN_PART, ...unsent };
+
   const sent = [...written.map(bindingOf), ...secrets.map(({ name, text }) => ({ name, type: "secret_text", text }))];
   const kept = bindings.filter((binding) => !sent.some((changed) => changed.name === binding.name)).map((binding) => ({ name: binding.name, type: "inherit" }));
   const text = JSON.stringify({ bindings: [...kept, ...sent] });
 
   // Cloudflare reads the settings from one form field of JSON text, so the text is handed over as the request's body: given as an object, the SDK spreads it over a field per key.
   const changed = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).edit(worker.script, { account_id: worker.accountId }, { body: { settings: text } }));
-  if (changed.ok) return { ok: true, report: reportOf(steps) };
-
-  const subjects = written.map((step) => step.subject);
-
-  return { ...changed, report: reportOf(steps.filter((step) => step.kind === "leave")), failed: subjects[0] ?? "", unrun: subjects.slice(1) };
+  return changed.ok ? { ok: true, report: reportOf(steps) } : { ...changed, ...unsent };
 }

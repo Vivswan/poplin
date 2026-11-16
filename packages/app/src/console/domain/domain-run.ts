@@ -15,7 +15,7 @@ import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState,
 const HIDDEN = "[token]";
 
 /** The status of a page that holds no table. */
-export const REFUSAL_STATUS = { token: 403, unreachable: 502, no_domain: 403, allowance_spent: 503 } as const;
+export const REFUSAL_STATUS = { token: 403, unreachable: 502, allowance_spent: 503 } as const;
 
 /** Where a run a person asked for comes from, as its audit entry says it: the dashboard's Domain screen. */
 const FROM = "dashboard";

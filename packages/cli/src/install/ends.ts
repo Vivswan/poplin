@@ -2,6 +2,7 @@
 // A command of the family runs in one frame: its words read, its help and its list answered, its stops worded, every token hidden, and its lines shown for a person or as one JSON value.
 
 import { text } from "node:stream/consumers";
+import { stripVTControlCharacters } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import type { Run } from "../../../core/src/install/installer";
@@ -12,7 +13,7 @@ import { loadProviders } from "../local/providers";
 import { processScreen, type Screen, type Tone } from "../local/screen";
 import { VERSION } from "../poplin";
 import { STOPPED, TOKEN_VARIABLE } from "./ask";
-import type { InstallEnds, Next, Parsed, Provider, Stop } from "./records";
+import type { Careful, InstallEnds, Next, Parsed, Provider, Stop } from "./records";
 import { stopLines, stopValue } from "./report";
 
 /** The folder of the providers, beside the file this code is built into. */
@@ -20,6 +21,12 @@ const PROVIDERS = fileURLToPath(new URL("./providers/", import.meta.url));
 
 /** The value of `TERM` on a terminal that takes no control sequence. */
 const PLAIN_TERMINAL = "dumb";
+
+/** A run of control characters, the line break among them. */
+const CONTROL_RUN = /\p{Cc}+/gu;
+
+/** One control character that is no line break. */
+const CONTROL_BUT_BREAK = /[^\P{Cc}\n]/gu;
 
 /** The exits of a stop, as the endings the command table knows. */
 const ENDINGS = { 1: "failed", 2: "usage-error", 5: "unreachable" } as const;
@@ -44,8 +51,11 @@ export interface CommandRun<Planned> {
   /** The command as it is typed after `poplin`, such as `install`. */
   readonly name: string;
 
-  /** What runs the command again, at the provider the line got as far as: the next step of a stop that names no other. */
-  readonly again: (provider: Provider | undefined) => Next;
+  /** What runs the command again, at the provider the line got as far as and with the careful choices of the line: the next step of a stop that names no other. */
+  readonly again: (provider: Provider | undefined, careful: readonly Careful[]) => Next;
+
+  /** The careful choices the command takes, each as the word a line gives it by. */
+  readonly careful: readonly Careful[];
 
   /** Reads the words into what they ask for. */
   readonly parse: (words: readonly string[], providers: readonly Provider[], env: Io["machine"]["env"], canAsk: boolean) => Parsed<Planned>;
@@ -60,9 +70,16 @@ export interface CommandRun<Planned> {
   readonly run: (plan: Planned, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>) => Promise<number>;
 }
 
-/** Where a stop came: in which command, at which provider when the line got as far as one, and in which kind of run when it came after the plan. */
+/** A line as it was given: its command, and the careful choices among its words. */
+interface Line<Planned> {
+  readonly command: CommandRun<Planned>;
+  readonly careful: readonly Careful[];
+}
+
+/** Where a stop came: in which command, with which careful choices on its line, at which provider when the line got as far as one, and in which kind of run when it came after the plan. */
 interface StoppedAt {
   readonly command: Pick<CommandRun<never>, "name" | "again">;
+  readonly careful: readonly Careful[];
   readonly provider?: Provider | undefined;
   readonly run?: Run;
 }
@@ -70,26 +87,31 @@ interface StoppedAt {
 /**
  * The same screen and the same machine's ends, with every token taken out of each line, each question, and each choice before it is shown.
  *
+ * A provider's text may quote what somebody else wrote in the account, so no escape sequence and no other control character of it reaches the terminal:
+ * a line stays one line, and a question keeps the line breaks its list is made of. The one JSON value holds each text as it came, since JSON escapes it.
  * Stdout is left to its writers: the screen, the one JSON value written without tokens, and the help, which holds nothing a person or a variable gave.
  */
 function guarded(io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): { readonly io: Io; readonly ends: InstallEnds } {
-  const safe = (text: string): string => hide(text, secrets);
+  // A token is hidden before anything is taken out, since an escape sequence right before it ends at the token's first letter; and once more after, for a token a control character stood in.
+  const shown = (text: string, controls: RegExp, as: string): string => hide(stripVTControlCharacters(hide(text, secrets)).replace(controls, as), secrets);
+  const line = (text: string): string => shown(text, CONTROL_RUN, " ");
+  const lines = (text: string): string => shown(text, CONTROL_BUT_BREAK, "");
   const { screen } = ends;
   const hiding: Screen = {
-    line: (tone, text) => screen.line(tone, safe(text)),
-    aside: (tone, text) => screen.aside(tone, safe(text)),
-    ask: (question, secret) => screen.ask(safe(question), secret),
-    confirm: (question, initial) => screen.confirm(safe(question), initial),
+    line: (tone, text) => screen.line(tone, line(text)),
+    aside: (tone, text) => screen.aside(tone, line(text)),
+    ask: (question, secret) => screen.ask(lines(question), secret),
+    confirm: (question, initial) => screen.confirm(lines(question), initial),
     choose: (question, picks) =>
       screen.choose(
-        safe(question),
-        picks.map((pick) => ({ value: pick.value, label: safe(pick.label), hint: safe(pick.hint) })),
+        lines(question),
+        picks.map((pick) => ({ value: pick.value, label: line(pick.label), hint: line(pick.hint) })),
       ),
-    working: (text) => screen.working(safe(text)),
+    working: (text) => screen.working(line(text)),
     rest: screen.rest,
   };
 
-  return { io: { ...io, err: (line) => io.err(safe(line)) }, ends: { ...ends, screen: hiding } };
+  return { io: { ...io, err: (text) => io.err(line(text)) }, ends: { ...ends, screen: hiding } };
 }
 
 /** The ways to show for one command. With `--json` no line reaches stdout but the one value, and what is no result goes to stderr as it is. */
@@ -111,6 +133,9 @@ function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<s
 export function processEnds(io: Io): InstallEnds {
   const { env } = io.machine;
   const plain = (env.NO_COLOR ?? "") !== "" || env.TERM === PLAIN_TERMINAL;
+  const sleep = async (milliseconds: number): Promise<void> => {
+    if ((await io.pause(milliseconds)) === "interrupted") throw new Error("the command was stopped");
+  };
 
   return {
     providers: () => loadProviders(PROVIDERS),
@@ -119,10 +144,9 @@ export function processEnds(io: Io): InstallEnds {
     reach: {
       fetch: (input, init) => fetch(input, { ...init, signal: init?.signal == null ? io.stopped : AbortSignal.any([init.signal, io.stopped]) }),
       now: () => Date.now(),
+      sleep,
     },
-    sleep: async (milliseconds) => {
-      if ((await io.pause(milliseconds)) === "interrupted") throw new Error("the command was stopped");
-    },
+    sleep,
   };
 }
 
@@ -130,7 +154,7 @@ export function processEnds(io: Io): InstallEnds {
 export function stopped(stop: Stop, show: Show, at: StoppedAt): number {
   for (const line of stopLines(stop, at.provider, at.command.name)) show.aside(line.tone, line.text);
 
-  const value = stopValue(stop, at.command.again(at.provider));
+  const value = stopValue(stop, at.command.again(at.provider, at.careful));
   show.value(at.run === undefined ? value : { ...value, run: at.run, ready: false });
 
   return exitCode({ kind: ENDINGS[stop.exit] });
@@ -157,8 +181,13 @@ async function picked(providers: readonly Provider[], ends: InstallEnds): Promis
   return providers.find((one) => one.id === id);
 }
 
-/** Do what a line that was read asks for. */
-async function answered<Planned>(command: CommandRun<Planned>, parsed: Parsed<Planned>, providers: readonly Provider[], io: Io, ends: InstallEnds, secrets: Set<string>): Promise<number> {
+/**
+ * Do what a line that was read asks for.
+ *
+ * @param line - the command, and the careful choices among the line's words: a stop before the plan has no other reading of them
+ */
+async function answered<Planned>(line: Line<Planned>, parsed: Parsed<Planned>, providers: readonly Provider[], io: Io, ends: InstallEnds, secrets: Set<string>): Promise<number> {
+  const { command } = line;
   const { name } = command;
   if (parsed.kind === "help" || parsed.kind === "version") {
     io.out(parsed.kind === "help" ? command.help(providers, parsed.provider) : VERSION);
@@ -167,17 +196,17 @@ async function answered<Planned>(command: CommandRun<Planned>, parsed: Parsed<Pl
   }
 
   const show = showOf(parsed.kind === "plan" ? command.json(parsed.plan) : parsed.json, io, ends, secrets);
-  if (providers.length === 0) return stopped({ problem: "no_provider", exit: 1, lines: [`this build of poplin carries no provider to ${name} at`, `install the published package: npx poplin ${name}`] }, show, { command });
+  if (providers.length === 0) return stopped({ problem: "no_provider", exit: 1, lines: [`this build of poplin carries no provider to ${name} at`, `install the published package: npx poplin ${name}`] }, show, line);
 
   if (parsed.kind === "list") return list(command, providers, parsed.json, io);
 
-  if (parsed.kind === "stop") return stopped(parsed.stop, show, { command });
+  if (parsed.kind === "stop") return stopped(parsed.stop, show, line);
 
   if (parsed.kind === "plan") return command.run(parsed.plan, io, ends, show, secrets);
 
   const provider = await picked(providers, ends);
 
-  return provider === undefined ? stopped(STOPPED, show, { command }) : answered(command, parsed.named(provider), providers, io, ends, secrets);
+  return provider === undefined ? stopped(STOPPED, show, line) : answered(line, parsed.named(provider), providers, io, ends, secrets);
 }
 
 /**
@@ -191,15 +220,16 @@ export async function runCommand<Planned>(command: CommandRun<Planned>, words: r
   const held = rawIo.machine.env[TOKEN_VARIABLE] ?? "";
   const secrets = new Set(held === "" ? [] : [held]);
   const { io, ends } = guarded(rawIo, rawEnds, secrets);
+  const line = { command, careful: command.careful.filter((choice) => words.includes(choice)) };
 
   try {
     const providers = await ends.providers();
 
-    return await answered(command, command.parse(words, providers, io.machine.env, io.terminal.asks), providers, io, ends, secrets);
+    return await answered(line, command.parse(words, providers, io.machine.env, io.terminal.asks), providers, io, ends, secrets);
   } catch (error) {
     const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
     const said = io.stopped.aborted ? "the command was stopped. Run it again: it goes on from what stands." : `poplin ${command.name} failed in a way it has no word for: ${what}. Run it again: it goes on from what stands.`;
 
-    return stopped({ problem: io.stopped.aborted ? "stopped" : "crashed", exit: 1, words: said }, showOf(words.includes("--json"), io, ends, secrets), { command });
+    return stopped({ problem: io.stopped.aborted ? "stopped" : "crashed", exit: 1, words: said }, showOf(words.includes("--json"), io, ends, secrets), line);
   }
 }

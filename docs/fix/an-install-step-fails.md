@@ -58,7 +58,7 @@ The last line of a run that left something undone names the command that goes on
 
 | The last line says                               | The install is                                        | Run, after the fix                                         |
 | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
-| `Run this command again`                         | started, and not set yet                              | the same `npx poplin install cloudflare` line: it says `An install was started here and not finished`, and goes on |
+| `Run this command again`                         | started, and not set yet                              | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `An install was started here and not finished`, and goes on. The other place is refused |
 | `Run npx poplin doctor --repair`                 | set: its address is written, and pieces are missing   | `npx poplin doctor --repair`, with the same token          |
 
 Both go on from what stands: every piece reads before it writes. `poplin install` only makes a new install, so a second `install` on one that is set says `This account already holds poplin`, and changes nothing.
@@ -131,10 +131,11 @@ The login line is `npx poplin login`, with `--server` and your dashboard's addre
 | You see                                                    | Means                                                | Do                                                        |
 | ---------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
 | the terminal does not know `npx`                           | Node.js is not installed                             | run the LTS installer from nodejs.org, then open a new terminal |
+| on Windows, `npx` answers that running scripts is disabled on this system | the terminal is PowerShell, which does not run the script that `npx` starts with | run the same line from Command Prompt: press the Windows key, type Command Prompt, press Enter |
 | `node --version` prints a number below `v24`               | poplin runs on Node.js 24 or higher                  | run the LTS installer from nodejs.org                     |
 | the browser cannot find the dashboard                      | a new address takes a few minutes                    | wait a few minutes and reload                             |
 | the page refuses the letters you typed                     | that login is not the one your terminal began        | press Deny, and run the login line again                  |
-| `poplin doctor` says `publisher token`                     | the page was left at Own sites only                  | run the login line again, and choose Everything           |
+| `poplin doctor` says `publisher token`                     | the page was left at Own sites only: this login reaches the sites it published, and no settings | on a computer of your own, run the login line again, and choose Everything |
 | `the login was denied on the dashboard`                    | Deny was pressed; nothing was saved                  | run the login line again                                  |
 | `nobody allowed the login before it ran out`               | the code ran out before Allow; nothing was saved     | run the login line again                                  |
 | `not logged in`                                            | the login did not finish                             | run the login line again                                  |

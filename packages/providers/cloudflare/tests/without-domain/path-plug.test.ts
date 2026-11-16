@@ -25,7 +25,9 @@ const RIGHTS = ["Access: Apps and Policies: Edit", "Workers Scripts: Edit", "Acc
 
 /** An account whose one Worker answers under the free address and holds no value of a domain. */
 function deployed(): Account {
-  return { ...emptyAccount(), bindings: [{ name: "SITES", type: "r2_bucket", bucket_name: "poplin-sites" }, { name: "DB", type: "d1", id: "database-1" }, { name: "ZONE", type: "json", json: { account_address: "example" } }] };
+  const own = emptyAccount();
+
+  return { ...own, bindings: own.bindings.map((binding) => (binding.name === "ZONE" ? { ...binding, json: { account_address: "example" } } : binding)) };
 }
 
 /** The one optional right of the token, with what its piece's row says where the token lacks it. */
@@ -104,7 +106,7 @@ test("a repair makes every object in 29 calls, the forwarders bound to the one W
       ["poplin.example.workers.dev/api"],
       ["poplin.example.workers.dev", "poplin-private.example.workers.dev"],
     ]);
-    expect(account.bindings.slice(3)).toEqual([
+    expect(account.bindings.slice(4)).toEqual([
       { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === "poplin")?.aud } },
       { name: "KEPT_KEY", type: "secret_text" },
       { name: "UPLOAD_KEY", type: "secret_text" },

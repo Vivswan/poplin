@@ -29,7 +29,7 @@ The block shows an install without a domain. Under a domain, `--domain example.c
 | a terminal, and Node.js 24         | every line here: the start of [step 2 of Install](../start/install.md#2-run-the-command), up to `node --version` |
 | this computer logged in to poplin  | step 1 alone, with a login allowed with Can change: Everything. `npx poplin whoami` says whether it is; [step 5 of Install](../start/install.md#5-log-this-computer-in-and-check) logs it in |
 | the Cloudflare account             | the one the install is in. You must be able to log in at `https://dash.cloudflare.com`                |
-| an account token                   | steps 3 and 4: a removal takes the token an install takes. If yours is gone, the command prints the link that makes a new one |
+| an account token                   | steps 3 and 4, which each ask for it: a removal takes the token an install takes. If yours is gone, the command prints the link that makes a new one |
 
 ## 1. Save a copy
 
@@ -71,6 +71,8 @@ npx poplin uninstall cloudflare --no-domain --dry-run
 
 It prints the token's permissions and a link, then asks for the token without showing what you paste. The form is filled as [without a domain](../start/without-a-domain.md#the-account-token) or [under a domain](../start/install.md#3-make-the-account-token) shows.
 
+**Step 4 asks for the token again.** Cloudflare shows a new token once: leave its page open until step 4 is done. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
+
 Then it lists, and removes nothing. With `--keep-data` on the line too, it lists the data as `would keep`. Without a domain, for an install that has the budget alert:
 
 ```text
@@ -96,7 +98,7 @@ Each row is one kind of piece, with the names of its pieces. A kind the command 
 
 Under a domain, five rows stand in place of `Forwarder`: `Worker route`, `DNS record`, `Redirect rule`, `WAF rule`, and `Rate rule`. Each kind of rule has a second row for its rule set, such as `Redirect ruleset`.
 
-A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot switches` row says what stays there. A run under a domain removes 18 kinds at most.
+A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot settings` row says what stays there. A run under a domain removes 18 kinds at most.
 
 A rule set is Cloudflare's holder for rules of one kind. One that poplin made goes once no rule but poplin's is in it. One of the domain's own, which poplin only added a rule to, stays and has no row.
 
@@ -121,7 +123,7 @@ A rule set is Cloudflare's holder for rules of one kind. One that poplin made go
 
 What you type is your dashboard's address, without the `https://`. The command prints it in its question. With neither option on the line, it first asks `Your own domain (example.com), or Enter for none:`.
 
-It asks for the token again, lists the same rows, and then asks. The sample is of an install under a domain that has every optional piece, removed with a token that holds the optional permissions. It is cut short where the dots are:
+It asks for the token again, as step 3 said, lists the same rows, and then asks. The sample is of an install under a domain that has every optional piece, removed with a token that holds the optional permissions. It is cut short where the dots are:
 
 ```text
 $ npx poplin uninstall cloudflare --domain example.com
@@ -132,7 +134,7 @@ would remove  DNS record            *.example.com, poplin.example.com
 ...
 would remove  Sites' files          poplin-sites (files: 2, 15 B)
 would remove  Database              poplin (sites: 3)
-stays         Bot switches          the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set
+stays         Bot settings          the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set
 stays         Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 This removes every row above that says would remove. It cannot be undone.
 It logs no computer out. Run npx poplin logout on each one first: after the removal a logout cannot reach the install.
@@ -158,6 +160,8 @@ Each row that says stays names what is yours to do by hand.
 2 kinds were not looked for, since the token lacks an optional permission: Budget alert and Certificate alert. If the install made one, it is still there: delete it by hand, or add the permission and run this command again.
 ```
 
+The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
+
 Read the rows that say `stays`:
 
 | Stays                                   | When                                                         | Do                                                                    |
@@ -172,14 +176,12 @@ Read the rows that say `stays`:
 
 | In the list, a token named "poplin install" | Do |
 | --- | --- |
-| its resources name the account of the removed install, and under a domain that domain | delete it |
+| its resources name the account of the removed install, and under a domain that domain | delete it, and every other token this row fits |
 | its resources name another account or another domain | leave it: it is of another install |
 
-Every token made from poplin's link is named "poplin install", so the name alone does not say which install a token is of. A token of another account's install, such as the one a CI job holds, has the same name.
+Every token made from poplin's link is named "poplin install", so the name alone does not say which install a token is of. An install, a repair, and a removal may each have made one: all of them are this install's, and all can go. A token of another account's install, such as the one a CI job holds, has the same name.
 
 Cloudflare shows with each token the resources it reaches: its accounts and its domains. A token you named otherwise is told the same way.
-
-The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
 
 ## Keep the data
 
@@ -187,12 +189,26 @@ The link the command prints makes a token without the optional permissions. [The
 npx poplin uninstall cloudflare --no-domain --keep-data
 ```
 
+This is for an install of the same kind, made again in the same account over the data as it stands. It is not the way to move an install to a domain, off one, or to another account: [Move an install](back-up.md#move-an-install) has that.
+
 The list before the question says `would keep` for both, the line above the question says `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
+
+A run that left a kind undone ends `Run this command again with --keep-data`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
 
 | Then                                   | Do                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------- |
-| take the data up in a new install      | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |
+| take the data up in a new install of the same kind | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |
 | remove the data too                    | the same `uninstall` line without `--keep-data`: it asks you to type `poplin-sites` |
+
+The new install takes its users and its settings from the kept database:
+
+| The kept database holds | Who the login lets in             | `--login`                                                                          |
+| ----------------------- | --------------------------------- | ---------------------------------------------------------------------------------- |
+| users                   | those users, and nobody else      | not used. For an email that is none of them, the row `left out  First login` says so |
+| no users yet            | the email you give for `--login`  | used                                                                               |
+| records this poplin cannot read | the email you give for `--login` | used, and the row of the database says that its users were not read          |
+
+To let one more person in afterwards: `npx poplin doctor --repair --add-user you@example.com`, with their email. The row names that line too.
 
 A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 
@@ -203,6 +219,7 @@ A dry run with `--keep-data` lists the same. The kept bucket and database stay i
 | `No install is in this account. Nothing was removed.`    | the token is of an account with no install           | make the token in the account the install is in                               |
 | `Only the data is left here, and --keep-data keeps it.`  | the install is removed, and only its kept data is left | to remove the data too, run the line without `--keep-data`                  |
 | `The install in this account answers at`, and an address | the line named another place than the install's: `--no-domain` for an install under a domain, the other way round, or another domain | run it again with the install's own domain after `--domain`, or with `--no-domain` |
+| `An install was started in this account`, and a place    | an install that was never finished was started for another place than the line named | run it again with the option the line names: `--domain` and that domain, or `--no-domain` |
 | `What was typed is not this install's`                   | the address you typed is not the install's own       | run it again, and type the address the line names                             |
 | a number, then `not done`, and `Run this command again`  | a row says `stopped`, `failed`, or `not run`         | fix what the row names, then run the same line again: it removes what is left |
 | a row `stopped`, ending `Add this one:` and a name       | the token lacks the permission of that name          | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |

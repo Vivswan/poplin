@@ -46,6 +46,15 @@ const CUT_CODES: ReadonlySet<unknown> = new Set(["ECONNRESET", "UND_ERR_SOCKET"]
 /** The line told when a request is sent once more. */
 const SENT_AGAIN = "the connection to the install was cut before any answer: sending the request again";
 
+/** The codes of a request that never left this computer: no name found, or no connection opened. Bun names `ENOTFOUND` and `ConnectionRefused` on the error its `fetch` throws, Node `ENOTFOUND`, `EAI_AGAIN`, and `ECONNREFUSED` on that error's `cause`. */
+const NEVER_LEFT_CODES: ReadonlySet<unknown> = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ConnectionRefused"]);
+
+/** How long a request that never left waits before it is tried once more, in milliseconds: a name a moment old is not known everywhere at once. */
+const NEVER_LEFT_PAUSE_MS = 1000;
+
+/** The line told when a request that never left is tried once more. */
+const TRIED_AGAIN = `no connection to the install: trying once more in ${NEVER_LEFT_PAUSE_MS / 1000} s`;
+
 /** The status another place than the install answers a file it stored nothing of, because its ticket writes once and something is there, or because the bytes are not the ones the ticket binds. */
 const NOT_WRITTEN = 412;
 
@@ -97,6 +106,9 @@ interface ClientOptions {
   /** Told the one line that says a request is sent once more, each time one is. */
   readonly told?: (line: string) => void;
 
+  /** Waits so many milliseconds before a request that never left is tried once more. A client without it tries at once. */
+  readonly pause?: (ms: number) => Promise<unknown>;
+
   /** What aborts when the person stops the command: every call then fails as `stopped`, the ones on their way included. A client without it takes no stop. */
   readonly stopped?: AbortSignal;
 }
@@ -128,6 +140,9 @@ export interface Client {
 
 /** A request whose connection was cut, as the error its second sending is decided on. It holds nothing of what the `fetch` threw. */
 class Cut extends Error {}
+
+/** A request that never left this computer, as the error its second sending is decided on. It holds nothing of what the `fetch` threw. */
+class NeverLeft extends Error {}
 
 function failed(failure: Failure): { readonly ok: false; readonly failure: Failure } {
   return { ok: false, failure };
@@ -267,22 +282,34 @@ async function readDownload(response: Raw): Promise<Called<Download>> {
  * Build the client of one install.
  *
  * A call waits 30 seconds for its answer, and the upload of one file 10 minutes. A download has 10 minutes from its request to its last byte. No redirect is followed, so the token goes to the install's origin alone.
- * A GET, or a call marked `repeatable`, whose connection was cut before any answer is sent once more, and that is told. No other request is sent twice.
+ * A request that never left this computer, its name not found or no connection opened, is tried once more after a second, whatever it asks: nothing of it was sent. A file is not: its upload sends it again by its own count.
+ * A GET, or a call marked `repeatable`, whose connection was cut before any answer is sent once more. Each is told, and no request is sent more than twice. No other request that left is sent twice.
  */
 export function createClient(options: ClientOptions): Client {
   const headers = { Accept: "application/json", ...(options.token === undefined ? {} : { Authorization: `Bearer ${options.token}` }) };
 
-  const twice = (signal: AbortSignal, send: (fresh: RequestInit) => Promise<Response>): Promise<Response> => {
+  const twice = (signal: AbortSignal, repeatable: boolean, send: (fresh: RequestInit) => Promise<Response>): Promise<Response> => {
     const attempt = async (sending: number): Promise<Response> => {
       try {
         // Bun sends a request that asks for no kept connection on a new one; Node drops the cut one by itself.
         return await send(sending === 1 ? {} : { keepalive: false });
       } catch (error) {
-        throw CUT_CODES.has(codeOf(error)) ? new Cut() : error;
+        const code = codeOf(error);
+        if (NEVER_LEFT_CODES.has(code)) throw new NeverLeft();
+
+        throw CUT_CODES.has(code) ? new Cut() : error;
       }
     };
-    const again = ({ error }: { readonly error: Error }): boolean => {
-      if (!(error instanceof Cut)) return false;
+    const again = async ({ error }: { readonly error: Error }): Promise<boolean> => {
+      if (error instanceof NeverLeft) {
+        options.told?.(TRIED_AGAIN);
+        // The pause is the command's own: the library waits none.
+        await options.pause?.(NEVER_LEFT_PAUSE_MS);
+
+        return true;
+      }
+
+      if (!(error instanceof Cut) || !repeatable) return false;
 
       options.told?.(SENT_AGAIN);
 
@@ -302,11 +329,7 @@ export function createClient(options: ClientOptions): Client {
     const tooLong = AbortSignal.timeout(timeoutMs);
     const signal = options.stopped === undefined ? tooLong : AbortSignal.any([tooLong, options.stopped]);
     const once = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => options.fetch(String(input), { ...init, redirect: "manual", signal });
-    const safely = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      if (again === undefined && init?.method !== "GET") return once(input, init);
-
-      return twice(signal, (fresh) => once(input, { ...init, ...fresh }));
-    };
+    const safely = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => twice(signal, again !== undefined || init?.method === "GET", (fresh) => once(input, { ...init, ...fresh }));
     const routes = hc<Api>(options.server, { headers, fetch: safely });
 
     try {

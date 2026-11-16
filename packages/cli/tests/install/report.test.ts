@@ -93,3 +93,33 @@ describe("the next step, in the one JSON value", () => {
     expect([ran.code, jsonOf(ran).next]).toEqual([code, next]);
   });
 });
+
+describe("a careful choice of the line, in the next step", () => {
+  const refused = accountWith({ state: "refused", why: "token", words: "The host refused the token." });
+  const half = { ...accountWith(WHOLE), removed: () => removedOf(LEFT, { ready: false }) };
+
+  // Drift: a line without `--keep-data` removes the sites' files and the database, and one without `--dry-run` changes the account. A next step that dropped either sends whoever follows it past what the line before asked for.
+  test.each([
+    ["a removal that keeps the data and left a kind", `${REMOVAL} --keep-data`, half, 1, "npx poplin uninstall stand-in --keep-data"],
+    ["a removal that keeps the data and is refused its token", `${REMOVAL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --keep-data"],
+    ["a removal that keeps the data and lacks its proof, a stop that names no provider", "uninstall stand-in --no-place --keep-data --yes", accountWith(WHOLE), 2, "npx poplin uninstall --keep-data"],
+    ["a removal's dry run that keeps the data and is ready, which the run follows", `${UNINSTALL} --keep-data`, accountWith(WHOLE), 0, "npx poplin uninstall stand-in --keep-data"],
+    ["a removal's dry run that keeps the data and is refused its token", `${UNINSTALL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --keep-data --dry-run"],
+    ["a removal's dry run that is not ready", UNINSTALL, half, 1, "npx poplin uninstall stand-in --dry-run"],
+    ["an install's dry run that is refused its token", `${INSTALL} --dry-run`, refused, 1, "npx poplin install stand-in --dry-run"],
+    ["a repair's dry run that is refused its token", `${REPAIR} --dry-run`, refused, 1, "npx poplin doctor --repair --dry-run"],
+    ["a repair's dry run that is not ready", `${REPAIR} --dry-run`, { ...accountWith(WHOLE), repaired: repairedOf([UNDONE], { ready: false }) }, 1, "npx poplin doctor --repair --dry-run"],
+    ["an install told to adopt that is refused its token: the consent is given anew, as the proof of a removal is", `${INSTALL} --adopt`, refused, 1, "npx poplin install stand-in"],
+  ] as const)("%s names it", async (_name, line, account, code, command) => {
+    const ran = await runLine(`${line} --json`, account, { env: HELD });
+
+    expect([ran.code, (jsonOf(ran).next as { readonly command: string }).command]).toEqual([code, command]);
+  });
+
+  // Drift: the sentence a person reads and the value a program reads name the next step from one list, so the sentence cannot leave out what the value carries.
+  test("a removal that keeps the data and left a kind tells a person to run it again with --keep-data", async () => {
+    const ran = await runLine(`${REMOVAL} --keep-data`, half, { env: HELD });
+
+    expect([ran.code, ran.out.at(-2)]).toEqual([1, "1 not done, 1 kind removed. Run this command again with --keep-data: it removes what is left."]);
+  });
+});

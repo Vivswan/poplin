@@ -52,9 +52,6 @@ export const TOKEN = /^[A-Za-z0-9_-]{20,512}$/;
 /** The reading of a token that is not one, is refused, or does not show the install's zone in the install's account. */
 export const REFUSED: DomainReading = { ok: false, refusal: "token" };
 
-/** The reading of a good token that shows no active zone of the domain typed for an install with nothing set. */
-const NO_DOMAIN: DomainReading = { ok: false, refusal: "no_domain" };
-
 /** The reading when Cloudflare did not answer, or asked to wait. */
 export const UNREACHABLE: DomainReading = { ok: false, refusal: "unreachable" };
 
@@ -290,14 +287,13 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
  * Which install the plug is of.
  *
  * One that is set has `accountId`, the account the Worker runs in, never one a token's holder names.
- * One with nothing set has `first`, its first login: its account is the one the token shows the install in, and a repair also writes where the install answers, this login, and that account onto the Worker.
- * Where the token was already found in an account, `first.accountId` names it, and no other account is looked in.
+ * One with nothing set has `first`: its first login, and the account the token was found in, where alone it is looked for. A repair also writes where the install answers, this login, and that account onto the Worker.
  * `key` is the install's kept key as its own Worker holds it, and `uploadKeyId` the id of the upload key that Worker holds. Without `key`, how both keys stand is read at Cloudflare with the token.
  * `kept` is the kept key ready to call Cloudflare with: an install that has it checks by itself, with no token.
  */
 export type Known =
   | { readonly accountId: string; readonly first?: undefined; readonly key?: HeldKey; readonly uploadKeyId?: string | undefined; readonly kept?: KeptKey | undefined }
-  | { readonly accountId?: undefined; readonly first: { readonly login: Login; readonly accountId?: string | undefined }; readonly key?: undefined; readonly uploadKeyId?: undefined; readonly kept?: undefined };
+  | { readonly accountId?: undefined; readonly first: { readonly login: Login; readonly accountId: string }; readonly key?: undefined; readonly uploadKeyId?: undefined; readonly kept?: undefined };
 
 /** What the plug is built from. */
 type PlugParts = Known & {
@@ -869,16 +865,14 @@ export async function databasePiece(progress: Progress, mode: Mode, placed: Plac
   await piece(progress, mode, object, () => syncDatabase(connection, placed.accountId, mode));
 }
 
-/** Find the zone of the install's domain: in the install's own account, or for an install with nothing set in whichever account the token shows it in. */
+/** Find the zone of the install's domain: in the install's own account, or for an install with nothing set in the account the token was found in. */
 async function findZone(parts: PlugParts, connection: Connection): Promise<Zone | DomainReading> {
   const zones = parts.accountId === undefined ? await findZones(connection, parts.layout.domain) : await listZones(connection, parts.accountId);
   if (!zones.ok) return zones.failure === "refused" ? REFUSED : UNREACHABLE;
 
   const found = parts.first?.accountId;
   const zone = zones.value.find((candidate) => candidate.name === parts.layout.domain && (found === undefined || candidate.accountId === found));
-  if (zone !== undefined) return zone;
-
-  return parts.accountId === undefined ? NO_DOMAIN : REFUSED;
+  return zone ?? REFUSED;
 }
 
 /** The install in the account its zone is in. */
@@ -1106,7 +1100,7 @@ export async function giveKey(parts: Extract<PlugParts, { readonly accountId: st
  * Build the zone plug of an install on Cloudflare.
  *
  * @returns a plug whose `check` sends no change. Both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's domain as a zone of `accountId`.
- * With no `accountId` the account is the one the token shows the domain in as an active zone, and a token that shows none is told so. The settings are read only after that.
+ * With no `accountId` the account is the one `first` names. The settings are read only after that.
  * With `kept` the plug has `ownCheck`, which reads the same pieces with that key and no token
  */
 export function createDomainPlug(parts: PlugParts): DomainPlug {

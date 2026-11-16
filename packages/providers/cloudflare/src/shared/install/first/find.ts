@@ -2,19 +2,24 @@
 //
 //   1  the account     the one the domain's zone is in, or the one the token shows
 //   2  the Worker      `poplin`: none, poplin's own by its bindings, an install's that lost a binding, or somebody else's
+//                      one that is not set yet says where it was started for, and a place of another kind, or under another domain, is refused
 //   3  the version     of a whole install, from the tag of its latest version
 //   4  the database    `poplin`, by its name
 //   5  the bucket      `poplin-sites`, by its name; a refusal here says the token lacks the storage right, or that storage is switched off
 //   6  Access          whether the login product is switched on, which no API does
 //
 // The Worker is poplin's when `WORKER_NAME` is its own name and its bucket, database, and Workflow are bound. It is set once `ZONE` reads as an install and `ACCOUNT_ID` is there.
-// Nothing here changes anything, and no answer holds a text Cloudflare sent.
+// Until then it also carries `INSTALL_PLACE`, which its first upload states: without it nothing says which kind of install the run that made it was.
+// For about a second after an upload, Cloudflare's settings can list a Worker without the bindings its new version holds. So a Worker that reads as not poplin's is read again, three times over 4.5 seconds, before it is told as held.
+// Nothing here changes anything. Of the texts the account holds, an answer tells three, each read first: the place as a domain, the version as a released one, and an account's name on one line.
 
 import type { Blocked, Found, Question, Reach, Read, Token } from "@poplin/core/src/install/installer";
 import { newestPinned } from "@poplin/core/src/records/release";
+import { isPlainVersion } from "@poplin/core/src/records/update";
 import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseVersions } from "cloudflare/resources/workers/scripts/versions";
+import pRetry from "p-retry";
 import * as v from "valibot";
 import { projectReleases } from "../../release/publish/release-source";
 import { isAccessOff, readLoginFacts } from "../pieces/access/access";
@@ -25,6 +30,7 @@ import { INSTALL_OBJECTS } from "../install-objects";
 import { workflowNameOf } from "../../jobs/workflow-name";
 import type { DomainLayout } from "../../../with-domain/layout";
 import { type ListedBinding, readWorker } from "../pieces/variables/variables";
+import { readStartedPlace } from "../kind/started-place";
 import { type BoundInstall, readInstallBinding } from "../kind/zone-binding";
 
 /** The name of the install's Worker. */
@@ -39,6 +45,9 @@ const DASHBOARD = "https://dash.cloudflare.com";
 /** The annotation of a version that holds the release it was uploaded from. */
 const VERSION_TAG = "workers/tag";
 
+/** How often a Worker that reads as not poplin's is read again, and the wait before each read, in milliseconds: the settings trail an upload by about a second. */
+const AGAIN = { times: 3, everyMs: 1_500 } as const;
+
 /** A version as Cloudflare lists it, read no further than its annotations. */
 const LISTED_VERSION = v.object({ annotations: v.optional(v.record(v.string(), v.unknown())) });
 
@@ -49,11 +58,17 @@ const BOUND = [
   { name: INSTALL_OBJECTS.jobsBinding, type: "workflow", told: `${INSTALL_OBJECTS.jobsBinding} (Workflow ${workflowNameOf(SCRIPT)}, class ${INSTALL_OBJECTS.jobsClass})` },
 ] as const;
 
+/** What a Worker that is not set carries beside those, as a person is told it. */
+const PLACE_TOLD = `${INSTALL_OBJECTS.placeBinding} (plain text: the domain the install was started under, or none)`;
+
 /** The command that takes an install whose Worker has its bindings back, as its sentence names it. */
-const HELD_COMMANDS = { install: "poplin install again", repair: "poplin doctor --repair" } as const;
+const HELD_COMMANDS = { install: "npx poplin install cloudflare", repair: "npx poplin doctor --repair" } as const;
 
 /** A list as a sentence says it. */
 const LISTED = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+/** A run of control characters, which no line told to a person holds. */
+const CONTROL_RUN = /\p{Cc}+/gu;
 
 /** What each state is told in. */
 const WORDS = {
@@ -83,6 +98,16 @@ interface Rights {
 
   /** The permission a token needs first for one object, as the token form names it. */
   readonly nameOf: (object: "D1 database" | "R2 bucket" | "Access application" | "Worker variable") => string;
+}
+
+/** What a read of the Worker answers: its bindings, `undefined` for no Worker, or why Cloudflare gave none. */
+type Bindings = Awaited<ReturnType<typeof readWorker>>;
+
+/** A read of a Worker that is there and reads as not poplin's: what the reads again go on from. */
+class NotOwn extends Error {
+  constructor(readonly read: Bindings) {
+    super("the Worker reads as not poplin's");
+  }
 }
 
 /** What `find` answers. */
@@ -127,9 +152,14 @@ function chosen(text: string, shown: readonly Shown[]): string | undefined {
   return numbered ?? shown.find((account) => account.id === typed)?.id;
 }
 
+/** An account's name as one line of a list: each run of control characters is one space, so a name adds no line and no escape sequence to what a person is asked. */
+function oneLine(name: string): string {
+  return name.replace(CONTROL_RUN, " ").trim();
+}
+
 /** The question of which account, where a token shows several: the answer is the place with that account named. */
 function whichAccount(where: Where, shown: readonly Shown[]): Question<Where> {
-  const list = shown.map((account, index) => `  ${index + 1}) ${account.name} (${account.id})`).join("\n");
+  const list = shown.map((account, index) => `  ${index + 1}) ${oneLine(account.name)} (${account.id})`).join("\n");
 
   return {
     key: "account",
@@ -180,9 +210,12 @@ function isNamed(bindings: readonly ListedBinding[]): boolean {
   return bindings.some((binding) => binding.name === INSTALL_OBJECTS.workerBinding && binding.type === "plain_text" && binding.text === SCRIPT);
 }
 
-/** What a Worker lacks of the three things an install's Worker is bound to, each as a person is told it. */
+/** What a Worker lacks of the things an install's Worker is bound to, each as a person is told it: the three every one has, and where it was started for on one that is not set. */
 function lackedBy(bindings: readonly ListedBinding[]): string[] {
-  return BOUND.filter((mark) => !bindings.some((binding) => binding.name === mark.name && binding.type === mark.type)).map((mark) => mark.told);
+  const lacked = BOUND.filter((mark) => !bindings.some((binding) => binding.name === mark.name && binding.type === mark.type)).map((mark) => mark.told);
+  const unplaced = boundInstall(bindings) === undefined && readStartedPlace(bindings) === undefined;
+
+  return unplaced ? [...lacked, PLACE_TOLD] : lacked;
 }
 
 /**
@@ -245,13 +278,25 @@ function dashboardOf(bindings: readonly ListedBinding[]): string | undefined {
   return `https://${install.kind === "domain" ? install.layout.adminHostname : install.layout.adminHost}`;
 }
 
-/** The release a Worker runs, from the tag of its latest version; `undefined` where none can be read. */
+/** The release a Worker runs, from the tag of its latest version; `undefined` where none can be read, and for a tag that is no released version: the tag is a text anybody who may write the Worker sets. */
 async function versionOf(place: Place): Promise<string | undefined> {
   const versions = await callCloudflare(place.connection, (api) => new BaseVersions(api).list(SCRIPT, { account_id: place.accountId }));
   const latest = versions.ok ? v.safeParse(LISTED_VERSION, versions.value.result.items?.[0]) : undefined;
   const tag = latest?.success === true ? latest.output.annotations?.[VERSION_TAG] : undefined;
 
-  return typeof tag === "string" ? tag : undefined;
+  return typeof tag === "string" && isPlainVersion(tag) ? tag : undefined;
+}
+
+/** Say that an install that was started and not finished was started for another place than the one a person named; `undefined` where the two are one. */
+function startedElsewhere(bindings: readonly ListedBinding[], where: Where): string | undefined {
+  const started = readStartedPlace(bindings);
+  if (started === undefined) return undefined;
+
+  if (started.kind === "no-domain") return where.kind === "domain" ? "An install was started in this account without a domain, and not finished: give --no-domain." : undefined;
+
+  const named = where.kind === "domain" && where.layout.domain === started.domain;
+
+  return named ? undefined : `An install was started in this account under the domain ${started.domain}, and not finished: give --domain ${started.domain}.`;
 }
 
 /** A whole install: its version, and the newest release the project's website names. */
@@ -308,11 +353,42 @@ async function standing(place: Place, started: boolean, rights: Rights): Promise
 }
 
 /**
+ * Read the Worker, and one that reads as not poplin's again after a wait each time, until it reads as poplin's, as gone, or not at all.
+ *
+ * The waits are on the caller's clock, through `reach.sleep`: the library waits none. A sleep that throws, as one the person stopped does, ends the reads with that error.
+ *
+ * @returns the last read where every one read as not poplin's
+ */
+async function readSettled(place: Place, reach: Reach): Promise<Bindings> {
+  const attempt = async (): Promise<Bindings> => {
+    const read = await readWorker(place.connection, { accountId: place.accountId, script: SCRIPT });
+    if (read.ok && read.value !== undefined && !isOwn(read.value)) throw new NotOwn(read);
+
+    return read;
+  };
+  const again = async ({ error }: { readonly error: Error }): Promise<boolean> => {
+    if (!(error instanceof NotOwn)) return false;
+
+    await reach.sleep(AGAIN.everyMs);
+
+    return true;
+  };
+
+  try {
+    return await pRetry(attempt, { retries: AGAIN.times, minTimeout: 0, maxTimeout: 0, shouldRetry: again });
+  } catch (error) {
+    if (error instanceof NotOwn) return error.read;
+
+    throw error;
+  }
+}
+
+/**
  * Look for an install with a token. It only reads.
  *
  * @param where - the place a person chose: its domain says which account, and its `account` picks one where the token shows several
  * @param rights - how a refusal for a lacking permission is told, and how the permission is named
- * @returns what is there, as one value; a token that is refused or shows no such domain, and an account whose storage is off or whose token lacks a needed permission, are states of their own
+ * @returns what is there, as one value; a token that is refused or shows no such domain, an install that was started for another place, and an account whose storage is off or whose token lacks a needed permission, are states of their own
  */
 export async function findInstall(token: Token, where: Where, reach: Reach, rights: Rights): Promise<Found<Where, Place>> {
   const connection: Connection = { key: token, fetch: reach.fetch };
@@ -320,7 +396,7 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
   if (typeof accountId !== "string") return accountId;
 
   const place: Place = { connection, accountId, toJSON: () => undefined };
-  const bindings = await readWorker(connection, { accountId, script: SCRIPT });
+  const bindings = await readSettled(place, reach);
   if (!bindings.ok) return rights.lacks(bindings) ? { state: "blocked", blocked: [rightLacking(rights, "Worker variable", accountId)] } : refusedBy(bindings);
 
   if (bindings.value === undefined) return standing(place, false, rights);
@@ -328,6 +404,9 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
   if (!isOwn(bindings.value)) return { state: "held", ...heldBy(bindings.value), address: pagesOf(accountId).worker };
 
   const address = dashboardOf(bindings.value);
+  if (address !== undefined) return wholeAt(place, address, reach);
 
-  return address === undefined ? standing(place, true, rights) : wholeAt(place, address, reach);
+  const other = startedElsewhere(bindings.value, where);
+
+  return other === undefined ? standing(place, true, rights) : { state: "refused", why: "other_place", words: other };
 }

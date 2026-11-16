@@ -10,10 +10,12 @@ Poplin publishes a static site (a folder, or one HTML file) to an install: the u
 | ---- | ----------------------------------------------------- | --------------------------------------------------- |
 | 1    | Say what is about to happen, and ask                  | you                                                 |
 | 2    | Check what exists: Node.js, a saved login, an install | you                                                 |
-| 3    | Make the install, when there is none                  | one command; the user does what only a browser can  |
-| 4    | Log this computer in, when no login is saved          | you run it; the user allows it in a browser         |
+| 3    | Make the install, when there is none                  | the user: in a browser, then one command in a terminal of their own. You run the command in a script alone |
+| 4    | Log this computer in, when no login is saved          | you run it, or the user at the end of step 3; the user allows it in a browser |
 | 5    | Add the MCP server to your own configuration          | you                                                 |
 | 6    | Confirm that it works, and tell the user              | you                                                 |
+
+The user's page, [With an agent](https://github.com/Vivswan/poplin/blob/main/docs/start/with-an-agent.md), counts the same steps. Its steps 3a to 3e are parts a to e of step 3 here: name a step to the user by that number, such as "step 3d".
 
 `example.com` stands for the user's own domain, and `https://poplin.example.com` for the address of their dashboard, here and below. On an install without a domain the dashboard is at `https://poplin.your-name.workers.dev`, where `your-name` is a word of the user's account. The poplin repository and the place you read this page from are neither. `npx` may ask to download the `poplin` package the first time it runs: answer yes.
 
@@ -97,7 +99,7 @@ Ask which of the two kinds the user wants, and keep the answer. Show the table, 
 | blocking AI crawlers     | a setting of the install                                | that one setting does nothing                                |
 | two sites in one browser | kept apart                                              | sites of a kind share one browser origin: a script of one can read another, so only trusted pages belong there |
 
-The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made.
+When the user asks which to take: a domain, if they have one at Cloudflare; without one otherwise. The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made. To have the other kind later, the user backs up, installs anew, and imports: [moving the install](#when-the-user-asks-to-move-the-install).
 
 Then ask for the email of the first login: one whose inbox the user can read. It goes after `--login`.
 
@@ -142,7 +144,7 @@ The link opens Cloudflare's form with every permission chosen but one.
 | Zone Resources    | under a domain alone: chooses Include, then Specific zone, then their domain         |
 | every other field | leaves it as it is                                                                   |
 | the bottom        | presses Continue to summary, then Create Token                                       |
-| the next page     | copies the token: it is shown once                                                   |
+| the next page     | copies the token: it is shown once. They leave that page open until the install is made: parts d and e each ask for the token |
 
 That makes ten permissions under a domain, and six without one. If the form opens empty, the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#the-token-form-opens-empty) has the rows to add by hand.
 
@@ -165,6 +167,8 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. It pr
 
 Every value of a run of this command, of the repair, and of the removal names what to run next in `next`, and so does a run that stopped. Its `command` has none of the answers your line gave: add them.
 
+Where `next.step` is the command you just ran, its `command` keeps `--keep-data` of a removal, and `--dry-run` of a dry run that stopped or is not ready: leave both on the line.
+
 | `next.step` | Run next                                                        |
 | ----------- | --------------------------------------------------------------- |
 | `install`   | the line of part e                                              |
@@ -180,7 +184,7 @@ Every value of a run of this command, of the repair, and of the removal names wh
 | `ready` is false, and `blocked` has entries            | 1         | the user must act first                        | the table of blocks below, then this part again       |
 | `ready` is false, `blocked` is empty, and no `problem` | 1         | a read failed, and its row says why            | run it again in a minute                              |
 | `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`. `next.step` is `login` for an install that is as it should be: step 4. It is `repair` for the rest: part f, as `next.command` writes it |
-| `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt` |
+| `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt`. Where its database holds users, they log in: a row `First login` that was left out says `--login` was not used |
 | any other `problem`                                    | 1, 2, 5   | a stop                                         | [`refusals.md`](refusals.md)                          |
 
 Each entry of `blocked` has the address to open, and says what blocks:
@@ -201,7 +205,22 @@ Each entry of `blocked` has the address to open, and says what blocks:
 npx poplin install cloudflare --domain example.com --login you@example.com --dry-run
 ```
 
-It asks `Account token (not shown):`. The user pastes the token there and presses Enter. Ask them to copy you everything it printed: the token is in no line.
+Say how to open that terminal: a new window, beside the one you run in.
+
+```text
+Mac:      press Command and Space, type Terminal, press Enter; then press Command and N for a new window
+Windows:  press the Windows key, type Command Prompt, press Enter
+Linux:    open a new window of the program named Terminal
+```
+
+It asks `Account token (not shown):`. The user pastes the token there and presses Enter: a row of small marks shows, never the letters. Ask them to copy you everything it printed: the token is in no line.
+
+**The token is asked for twice**, by this dry run and by the run of part e, and Cloudflare shows it once. What the user copies for you takes its place on their clipboard. Say so before the dry run:
+
+| The token                     | The user                                                                                  |
+| ----------------------------- | ----------------------------------------------------------------------------------------- |
+| is still on Cloudflare's page | leaves that page open until the install is made, and copies the token from it again for part e |
+| is gone                       | opens My Profile, then API Tokens, at Cloudflare, and chooses Roll in the token's menu: it shows a new text |
 
 | Its last line starts with | Next                                                |
 | ------------------------- | --------------------------------------------------- |
@@ -226,7 +245,7 @@ npx poplin install cloudflare --domain example.com --login you@example.com --yes
 
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
 
-**When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again, prints a row for each thing it makes, and ends:
+**When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again: the user copies it from Cloudflare's page a second time, or rolls it, as part d has it. It prints a row for each thing it makes, and ends:
 
 ```text
 poplin 0.1.0 is installed.
@@ -234,7 +253,7 @@ Your dashboard: https://poplin.example.com
 Log this computer in now?
 ```
 
-Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Then run the check of step 4.
+Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Tell them the two choices of Can change first, as step 4 has them. Then run the check of step 4.
 
 The command stores the token nowhere. Afterwards the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working.
 
@@ -284,7 +303,14 @@ On a new install Cloudflare's login comes first: it asks for the user's email an
 | asked you for this login           | types the last 4 letters, then presses Allow      |
 | sees the page refuse those letters | presses Deny: that page is of some other login    |
 
-The page starts at Own sites only, which is all you need to publish and to manage the sites you publish. Do not ask the user to choose Everything.
+The page has one choice, Can change, and it starts at Own sites only. Tell the user both rows before they press Allow. The choice is theirs: you use the login they allow.
+
+| Can change     | The guide says it is for                  | You then reach                                                        | The login lasts        |
+| -------------- | ----------------------------------------- | --------------------------------------------------------------------- | ---------------------- |
+| Everything     | the user's own computer                   | every site of the install, and its settings                           | 30 days                |
+| Own sites only | a computer that should only publish       | the sites that one login published, and no other                      | until the user removes it |
+
+With Own sites only, a site another login published is refused, with `not_found` or `not_allowed`. After a new login, that holds for every site you published before it. That is why the guide says Everything on the user's own computer.
 
 If you read output as JSON, add `--json`: the first line then carries the web address and the code.
 
@@ -304,6 +330,7 @@ npx poplin doctor
 | It prints                                                | Exit code | Next                                                 |
 | -------------------------------------------------------- | --------- | ---------------------------------------------------- |
 | lines that all start with ok, then `nothing was changed` | 0         | step 5                                               |
+| the same, where the login line says publisher token, and the settings line says `not read: this token is no admin's` | 0 | the login is of Own sites only, and nothing is wrong: step 5 |
 | a line that starts with failed                           | 1         | tell the user that line, and stop until it is sorted |
 
 ## 5. Add the MCP server to your own configuration
@@ -340,8 +367,32 @@ Both are commands the user's account token runs, so the rule of part c holds: th
 | ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | nobody can log in to the dashboard          | `npx poplin doctor --repair`                     | give the user the line, and read what it printed with them: the table of part f       |
 | their mailbox is gone, or the first email was mistyped | the same, with `--add-user` and the email | add the option only with an email the user gave you for this                        |
-| remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | show the user its list first. The removal itself is the user's: they type the install's address at its question |
+| remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | give the user the line, and read its list with them: it asks for the token. The removal itself is the user's too: they type the install's address at its question |
 
 Never pass `--confirm` on your own: it is the proof that the user means this install, and a removal cannot be undone. The guide has both: [I cannot log in](https://github.com/Vivswan/poplin/blob/main/docs/fix/cannot-log-in.md) and [Remove](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/remove.md).
+
+## When the user asks to move the install
+
+No command moves an install: not to a domain, not off one, and not to another account. Say so, and say the one way: back up, install anew where they want it, and bring the data back. Do not offer `--keep-data` and `--adopt` for it: they make the same kind again over kept data.
+
+| Step | The line                                            | Who                                                     |
+| ---- | --------------------------------------------------- | ------------------------------------------------------- |
+| 1    | `npx poplin export --all-versions --out backup.zip` | you, on the user's yes, with a login of Everything      |
+| 2    | `npx poplin import backup.zip --dry-run`            | you: it checks the zip, and sends nothing               |
+| 3    | the new install. In one account, the removal of the old install comes first | the user, as step 3 and the table above have them |
+| 4    | `npx poplin import backup.zip --settings`           | you, once this computer is logged in to the new install |
+| 5    | to another account: the removal of the old install  | the user, once step 4 put every site back               |
+
+Tell the user what changes before step 1, and wait for their yes. Under another domain, or of the other kind, every site gets a new address and each link they shared stops. In one account the old install goes before the new one is made, so the zip is then the only copy.
+
+| The line                   | Carries                                                            | Without it                                        |
+| -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
+| `--all-versions`, step 1   | every kept version of each site                                    | the live version alone: the others are lost       |
+| `--settings`, step 4       | every setting but the logins                                       | the new install keeps its own settings            |
+| `--settings --logins`      | the list of users too                                              | the users are the new install's first login       |
+
+No line carries a token, a key of the install, or the activity log: each computer logs in again, and the log starts anew.
+
+Off a domain, a site with a root link, or with a public name in the form of an id, is not put back. Mend those on the old install before step 1. [Move an install](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/back-up.md#move-an-install) has every row.
 
 Nothing is published by the setup. When the user later asks you to publish, [`../SKILL.md`](../SKILL.md) holds the rules. The two that matter most: a new site is private until the user asks otherwise, and you keep the label a publish returns so the next publish updates the same site.

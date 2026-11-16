@@ -164,7 +164,7 @@ const TOLD = {
       "Workflow: removed",
       "Worker: removed",
     ],
-    stays: ["Bot switches: stays", "Account token: stays"],
+    stays: ["Bot settings: stays", "Account token: stays"],
   },
   "account address": {
     found: "Free address: found",
@@ -281,7 +281,7 @@ const CASES: readonly Case[] = [
 /** A world no run of these reaches: each stops before its first command. */
 const UNREACHED: World = {
   release: { version: COMMIT, pin: { bundle: "0".repeat(64), schema: 1 }, pages: new Map() },
-  ends: { reach: { fetch: () => Promise.reject(new Error("a command ran")), now: () => 0 }, sleep: async () => undefined },
+  ends: { reach: { fetch: () => Promise.reject(new Error("a command ran")), now: () => 0, sleep: async () => undefined }, sleep: async () => undefined },
   fetch: () => Promise.reject(new Error("the install was asked")),
 };
 
@@ -525,6 +525,16 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
       lines: [told.found, PLANS, "::error::The test install could not be made ready: the account holds no bucket that marks a test account, so nothing in it is changed."],
       changes: 0,
     });
+  });
+
+  // Drift: the repair reads the Worker a second after the run's own upload, when Cloudflare's settings can still list it with no binding. A run that took that read as final stops on its own install as on a stranger's Worker.
+  test("a Worker whose settings list no binding right after the run's upload is read again by the repair, and the run goes on to its end", async () => {
+    const standing = await standingOn(freshAccount(), kind);
+    await standing.again();
+    standing.account.trailing = { from: "upload", answers: [{ bindings: [] }] };
+    const ran = await standing.again();
+
+    expect([ran.code, ran.uploads, ran.lines.at(-1), standing.account.trailing.answers]).toEqual([0, [UPDATE_UPLOAD], ANSWERS, []]);
   });
 
   // Drift: an install that lost a piece answers nowhere until it is mended. A run that waited for its answer before the repair would time out and never reach the repair that puts the piece back.

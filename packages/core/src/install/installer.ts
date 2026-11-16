@@ -62,10 +62,11 @@ export type Read<Where> =
   | { readonly ok: false; readonly why: "open"; readonly open: readonly Question<Where>[] }
   | { readonly ok: false; readonly why: "refused"; readonly refused: string };
 
-/** What a run reaches the world through: the platform's own, or stand-ins. `now` is the clock, in milliseconds since the epoch. */
+/** What a run reaches the world through: the platform's own, or stand-ins. `now` is the clock, in milliseconds since the epoch, and `sleep` waits for so many milliseconds. */
 export interface Reach {
   readonly fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
   readonly now: () => number;
+  readonly sleep: (milliseconds: number) => Promise<void>;
 }
 
 /** Something that stops a piece until a person acts at the provider's own pages: what it is, the line that says so, and the address to open. `right_lacking` names the right the token lacks. */
@@ -81,7 +82,7 @@ export type Blocked =
  * `held` is a name the install needs, held by something that is not the product's, or by an install the provider cannot take as one, which its words say; `blocked` is a person having to act first.
  * `after` is the command its words name for once a person did what they say: the one that ran, `again`, or an install or a repair.
  * `choice` is a token that shows more than one place: the question's answer is a `Where` to find with again; `refused` is a token that is refused or shows no such domain, or a provider that gave no answer.
- * `notes` are on a state a run can go on from: what is switched off that a run does not stop for.
+ * A `refused` of `other_place` is an install begun and not finished, for another place than the one named. `notes` are on a state a run can go on from: what is switched off that a run does not stop for.
  */
 export type Found<Where, Place> =
   | { readonly state: "none"; readonly place: Place; readonly notes: readonly Blocked[] }
@@ -91,7 +92,7 @@ export type Found<Where, Place> =
   | { readonly state: "held"; readonly words: string; readonly address: string; readonly after: "again" | "install" | "repair" }
   | { readonly state: "blocked"; readonly blocked: readonly Blocked[] }
   | { readonly state: "choice"; readonly question: Question<Where> }
-  | { readonly state: "refused"; readonly why: "token" | "no_domain" | "unreachable"; readonly words: string };
+  | { readonly state: "refused"; readonly why: "token" | "no_domain" | "other_place" | "unreachable"; readonly words: string };
 
 /** What a run can go on from: nothing there, a start not finished, or data left behind that a person said to use. */
 export type Startable<Place> =
@@ -234,8 +235,8 @@ export interface Installer<Where, Place> {
   /** Read its own options and variables, once. */
   read(given: Given): Read<Where>;
 
-  /** What its form for a new token is and asks for, for an install at that place. */
-  facts(where: Where): TokenFacts;
+  /** What its form for a new token is and asks for, at that place, for the work the token is made for: a repair makes less than an install, and a removal takes away all an install made. */
+  facts(where: Where, work: "install" | "repair" | "remove"): TokenFacts;
 
   /** Look for an install with the token, in the account that place is in. It only reads. */
   find(token: Token, where: Where, reach: Reach): Promise<Found<Where, Place>>;
