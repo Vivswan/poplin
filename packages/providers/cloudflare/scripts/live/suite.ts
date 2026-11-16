@@ -16,8 +16,8 @@ import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportSt
 /** The repository's folder. */
 const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
 
-/** The variables of this process the child keeps: where its tools are, the suite's one switch, and nothing of the account. */
-const KEPT = ["PATH", "HOME", "TMPDIR", "RUNNER_TEMP", "CI", "LANG", "POPLIN_LIVE_MANY_FILES"];
+/** The variables of this process the child keeps: where its tools are, the suite's two switches, and nothing of the account. */
+const KEPT = ["PATH", "HOME", "TMPDIR", "RUNNER_TEMP", "CI", "LANG", "POPLIN_LIVE_MANY_FILES", "POPLIN_LIVE_LOAD"];
 
 /** The event of the workflow's run at midnight, as GitHub names it to every step. */
 const MIDNIGHT = "schedule";
