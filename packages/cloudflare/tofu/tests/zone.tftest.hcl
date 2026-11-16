@@ -229,6 +229,11 @@ run "worker_bindings" {
   }
 
   assert {
+    condition     = cloudflare_workers_script.poplin.keep_bindings == toset(["secret_text"])
+    error_message = "The module asks the upload to keep the secrets the Worker has: without that, an apply with a new bundle would drop the key a Repair wrote."
+  }
+
+  assert {
     condition     = cloudflare_workers_script.poplin.bindings[0].bucket_name == "poplin-sites"
     error_message = "The bucket binding names the module's bucket."
   }
