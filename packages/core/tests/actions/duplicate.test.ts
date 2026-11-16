@@ -69,13 +69,34 @@ describe("duplicateSite", () => {
     expect(copied).toMatchObject({
       before: null,
       copy: { copied: 5, files: 5 },
-      site: { name: "report", access: "private", public_name: null, title: "Q3 sales", embeddable: false, expires: "never", live_version: 1, files: 5, created: true },
+      site: { name: "report", access: "private", public_name: null, title: "Q3 sales (copy)", embeddable: false, expires: "never", live_version: 1, files: 5, created: true },
     });
     expect([copied.site.id === source, copied.site.url, named.site.label]).toEqual([false, `https://report--${copied.site.id}-p-poplin.example.com`, `report-draft--${named.site.id}`]);
     expect(await filesOf(world, await folderOf(world, copied.site.id))).toEqual(await filesOf(world, `${await folderOf(world, source)}/v2`).then((files) => Object.fromEntries(Object.entries(files).map(([path, text]) => [`v1/${path}`, text]))));
     expect(await getSite(world.install, OWNER, source)).toEqual(before);
     expect([(await world.install.database.getSite(copied.site.id))?.owner, (await world.install.database.getSite(named.site.id))?.owner]).toEqual([OWNER.holder, ADMIN.holder]);
     expect(await world.audit()).toEqual(["create", "publish", "create", "duplicate", "create", "duplicate"]);
+  });
+
+  // Drift: a copy titled as its source is a second row of the same words in every list; a mark that grew with each copy of a copy, or took a title past the longest one a site holds, would make a title nobody reads or a copy that is refused.
+  const titles: readonly { readonly name: string; readonly settings: object; readonly shows: [string | null, boolean] }[] = [
+    { name: "a typed title", settings: { title: "Q3 sales", page_title: "Report" }, shows: ["Q3 sales (copy)", true] },
+    { name: "the title of its page alone, which the copy holds as a typed one", settings: { page_title: "Report" }, shows: ["Report (copy)", true] },
+    { name: "no title, so that the copy shows its name as the site does", settings: {}, shows: [null, false] },
+    { name: "a title that ends in the mark already, which takes no second one", settings: { title: "Q3 sales (copy)" }, shows: ["Q3 sales (copy)", true] },
+    { name: "the longest title, cut so that the mark fits", settings: { title: "x".repeat(200) }, shows: [`${"x".repeat(193)} (copy)`, true] },
+    { name: "a title whose cut ends in a space, which is left out", settings: { title: `${"x".repeat(192)} yz` }, shows: [`${"x".repeat(192)} (copy)`, true] },
+    { name: "a title whose cut falls inside a surrogate pair, which is left out whole", settings: { title: `${"x".repeat(192)}\u{1F600}` }, shows: [`${"x".repeat(192)} (copy)`, true] },
+  ];
+
+  test.each(titles)("a copy of a site with $name is titled as the site shows itself, with ` (copy)` after it", async ({ settings, shows }) => {
+    const world = await makeWorld();
+    const source = await made(world, OWNER, "report", settings);
+
+    const copied = await duplicateSite(world.install, OWNER, { site: source }, ASKING, inlineJobs);
+    if (!copied.ok || copied.site === null) throw new Error("a copy was refused");
+
+    expect([copied.site.title, copied.site.title_typed]).toEqual(shows);
   });
 
   // Drift: a site too large for one request is copied over several; a copy listed or served before its last file would be a broken site with a working address.

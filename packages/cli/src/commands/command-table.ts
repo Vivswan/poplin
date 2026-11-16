@@ -126,7 +126,9 @@ export const COMMANDS = [
     flags: [{ name: "--name", value: "<name>", about: "the copy's name; the site's own without it" }, ...installFlags("the copy")],
     examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report --name report-draft"],
     notes: [
-      "The copy holds the live version's files and the site's title and settings.",
+      "The copy holds the live version's files and the site's settings.",
+      "Its title is the one the site shows, with (copy) after it.",
+      "A title that ends that way already is kept as it is.",
       "It is always private, whatever the site is, and the site is not changed.",
     ],
   },

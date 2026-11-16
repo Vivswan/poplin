@@ -33,7 +33,7 @@ Every other example runs the same way, with `npx` before `poplin`.
 | `poplin rollback report--k3f9x2ab71qz`        | makes the version before live again                           |
 | `poplin rollback report--k3f9x2ab71qz --to 3` | makes version 3 live again                                    |
 | `poplin new-link report--k3f9x2ab71qz`        | gives the site a new id; the old address stops at once        |
-| `poplin duplicate report--k3f9x2ab71qz`       | makes a private copy, with a new address                      |
+| `poplin duplicate report--k3f9x2ab71qz`       | makes a private copy, with a new address and `(copy)` after its title |
 | `poplin delete report--k3f9x2ab71qz`          | moves the site into the trash                                 |
 | `poplin restore report--k3f9x2ab71qz`         | takes it back out of the trash                                |
 | `poplin delete report--k3f9x2ab71qz --no-trash` | removes it now, after you type its label; nothing restores it |
@@ -41,4 +41,5 @@ Every other example runs the same way, with `npx` before `poplin`.
 - **Versions:** an install keeps a few per site. `poplin config versions_kept` shows how many.
 - **Trash:** a deleted site waits some days, then it is gone. `poplin config trash_days` shows how many.
 - **A new link** is for an address that reached the wrong person. A public site keeps its public name.
+- **A copy's title** is the one the site shows, with `(copy)` after it: `Q3 sales (copy)`. A title that ends that way already stays as it is, and a site with no title gives a copy with none. A long title is cut, so that both fit in 200 characters.
 - **Pages opened:** `poplin show report--k3f9x2ab71qz` says about how often a site's pages were opened, today and in the last 7 days. The numbers come from a sample, so they read `about 120`. A page a browser shows from its own copy, inside 5 minutes, is not counted.
