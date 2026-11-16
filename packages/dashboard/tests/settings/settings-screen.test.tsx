@@ -255,6 +255,38 @@ describe("the one Save", () => {
     ]);
   });
 
+  // Drift: automatic updates need the check for new versions. With the check switched off in a draft, an Undo that stores automatic updates as on again would leave the draft to save the check off alone: a pair that cannot work.
+  test("saves automatic updates off with a check switched off, also where an Undo stored them as on meanwhile, and draws their switch off and locked", async () => {
+    const page = await drawn();
+    const [check, automatic] = [page.getByRole("switch", { name: "Check for new versions" }), page.getByRole("switch", { name: "Update automatically" })];
+    await press(automatic);
+    await press(page.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saves).toHaveLength(1));
+    await press(automatic);
+    await press(page.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saves).toHaveLength(2));
+    await press(check);
+    await press(await page.findByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(stored.auto_update).toBe("on"));
+    const shown = [automatic.getAttribute("aria-checked"), automatic.hasAttribute("disabled") || automatic.getAttribute("aria-disabled") === "true" || automatic.hasAttribute("data-disabled")];
+    await press(page.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saves).toHaveLength(4));
+
+    expect([shown, saves.at(-1)]).toEqual([["false", true], { update_check: "off", auto_update: "off" }]);
+  });
+
+  // Drift: automatic updates switched on and not yet saved would stay in the draft under a check switched off, hidden while the check waits, and come back as a change of their own once the check is saved: the next Save would store them on.
+  test("sends no automatic updates switched on in the draft under a check switched off: one Save stores the check off, and nothing waits after it", async () => {
+    const page = await drawn();
+    await press(page.getByRole("switch", { name: "Update automatically" }));
+    await press(page.getByRole("switch", { name: "Check for new versions" }));
+    const waiting = bar(page);
+    await press(page.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(bar(page)).toBeNull());
+
+    expect([waiting, saves, page.getByRole("switch", { name: "Update automatically" }).getAttribute("aria-checked")]).toEqual(["1 unsaved change", [{ update_check: "off" }], "false"]);
+  });
+
   // Drift: a value typed back to the old one while a save is on its way would count as saved, the screen could be left unasked, and the other value would be stored.
   test("counts what is typed during a save against the value on its way", async () => {
     serve({ holds: true });

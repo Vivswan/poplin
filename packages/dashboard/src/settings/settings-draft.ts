@@ -5,7 +5,9 @@ import { useState } from "react";
 
 import { answerOf, api, Refused } from "@/lib/api";
 import { sayDone, sayRefused } from "@/lib/notify";
+import { isOn, switchText } from "@/settings/setting-values";
 import { type Row, SETTINGS_KEY, SETTINGS_SAVES_KEY, type Settings } from "@/settings/settings-queries";
+import { wordsOf } from "@/settings/settings-words";
 import { SITES_KEY } from "@/sites/site-queries";
 
 /** What is shown when a save fails for a reason that is no refusal. */
@@ -127,7 +129,14 @@ export function useDraft(rows: readonly Row[], onRefused: (key: string) => void)
     onSettled: () => readAfterLast(client),
   });
 
-  const shown = (row: Row): string => held[row.key] ?? row.text;
+  // A switch that does nothing without another one is off for as long as that other one is off, held or stored, whatever is held or stored for it: a pair that cannot work is never sent.
+  // What is held for it stays, and shows again once the other one is on.
+  const shown = (row: Row): string => {
+    const text = held[row.key] ?? row.text;
+    const needed = rows.find((other) => other.key === wordsOf(row.key).needs);
+
+    return needed !== undefined && !isOn(needed, held[needed.key] ?? needed.text) && isOn(row, text) ? switchText(row, false) : text;
+  };
   const onItsWay: Texts = saving.isPending ? saving.variables.texts : {};
   const pending = rows.filter((row) => shown(row) !== (onItsWay[row.key] ?? row.text));
 
