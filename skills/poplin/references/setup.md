@@ -214,7 +214,7 @@ The user opens the dashboard's address: `https://poplin.example.com` with their 
 | no code arrives                     | the email differs from part d: on the Setup page, the right email, the token, Repair |
 | the dashboard, with `No sites yet`  | the install is ready: step 4                                                        |
 
-This first login closes the Setup page for good.
+After this first login the Setup page only repairs: it takes the account token alone.
 
 ## 4. Log this computer in
 

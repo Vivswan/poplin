@@ -71,7 +71,7 @@ export interface Boot {
   /** What the side marks at each screen that holds a problem. */
   readonly marks: Marked["marks"];
 
-  /** What the setup screen starts from, on the page shown before anyone has logged in; left out on every other. */
+  /** What the setup screen starts from, on the setup page; left out on every other. */
   readonly setup?: unknown;
 }
 

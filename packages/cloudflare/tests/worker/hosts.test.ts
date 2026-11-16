@@ -140,7 +140,7 @@ describe("the hosts of each kind of install, kept apart", () => {
     ]);
     expect({ status: whoami.status, body: await whoami.json() }).toMatchObject({ status: 200, body: { layout: { kind: "path", sites_host: "poplin-sites.example.workers.dev", private_host: "poplin-private.example.workers.dev" } } });
     expect([shell.status, shell.headers.get("Set-Cookie"), data.status, (await data.json<{ sites: Published[] }>()).sites.map((site) => site.label).sort()]).toEqual([200, null, 200, [open.label, named.label, hidden.label].sort()]);
-    expect([setup.status, onAdmin.map((answer) => answer.status), adminTexts.filter((text) => /notes|docs|report<\/h1>/.test(text))]).toEqual([404, [403, 403, 200], []]);
+    expect([setup.status, onAdmin.map((answer) => answer.status), adminTexts.filter((text) => /notes|docs|report<\/h1>/.test(text))]).toEqual([200, [403, 403, 200], []]);
     expect(kept).toEqual(kept.map(() => [404, null, "Not found\n"]));
     expect(bare).toEqual([[302, `${SITES}/login/`, ""], [404, null, "Not found\n"]]);
     expect(await Promise.all(served.map(told))).toEqual([[200, null, "<p>notes</p>"], [200, null, "<p>docs</p>"], [200, null, "<p>docs</p>"], [200, null, "<h1>report</h1>"]]);

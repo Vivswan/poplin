@@ -1,6 +1,6 @@
 // The form of the setup screen, one column read top to bottom: make a token, fill in the boxes, press Repair.
 // An install with nothing set first asks its kind: under a domain of the person's own, which it is then asked with the first login, or with none, which asks the first login alone.
-// One nobody has logged in to takes an email that corrects the first login.
+// One nobody has logged in to takes an email that corrects the first login, and one somebody has logged in to takes the token alone.
 
 import type { FormEvent, ReactNode } from "react";
 
@@ -32,6 +32,7 @@ const FORMS = {
   domain: { title: "Fill in three boxes", before: [DOMAIN, FIRST_LOGIN], after: [] },
   "no-domain": { title: "Fill in two boxes", before: [FIRST_LOGIN], after: [] },
   login: { title: "Paste it", before: [], after: [OTHER_LOGIN] },
+  repair: { title: "Paste it", before: [], after: [] },
 } as const satisfies Readonly<Record<Boxes, object>>;
 
 /** The kinds of install a person chooses from, in the words of the choice. */
@@ -105,7 +106,7 @@ export function SetupForm({ start, kind, onKind, onRepair }: SetupFormProps): Re
 
   return (
     <form ref={sheet} onSubmit={onSubmit} onInput={typed} className="flex max-w-md flex-col gap-6" noValidate>
-      {boxes === "login" ? (
+      {boxes === "login" || boxes === "repair" ? (
         steps
       ) : (
         <Tabs value={kind} onValueChange={(chosen: Kind) => choose(chosen)} className="gap-6">

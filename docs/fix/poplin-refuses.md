@@ -54,7 +54,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `setup_bad_domain`      | `--domain` holds more than a domain, or one over 50 characters | the domain alone: `--domain example.com`                   |
 | `setup_bad_address`     | no `--domain`, and `--server` is not the Worker's own `workers.dev` address | give `--server` that address, or add `--domain <domain>`     |
 | `setup_bad_login`       | `--login` holds no email address                            | a new install needs `--login <email>`, and `--domain <domain>` with a domain |
-| `setup_closed`          | nothing at that address takes a setup                       | after the first login, use the dashboard's Domain screen      |
+| `setup_closed`          | nothing at that address takes a setup                       | check the address; after the first login, leave out `--check` |
 
 **Naming a site**
 
