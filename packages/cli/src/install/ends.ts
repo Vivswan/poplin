@@ -200,7 +200,7 @@ async function answered<Planned>(line: Line<Planned>, parsed: Parsed<Planned>, p
 
   if (parsed.kind === "list") return list(command, providers, parsed.json, io);
 
-  if (parsed.kind === "stop") return stopped(parsed.stop, show, line);
+  if (parsed.kind === "stop") return stopped(parsed.stop, show, { ...line, provider: parsed.provider });
 
   if (parsed.kind === "plan") return command.run(parsed.plan, io, ends, show, secrets);
 

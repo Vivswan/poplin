@@ -102,7 +102,7 @@ describe("a careful choice of the line, in the next step", () => {
   test.each([
     ["a removal that keeps the data and left a kind", `${REMOVAL} --keep-data`, half, 1, "npx poplin uninstall stand-in --keep-data"],
     ["a removal that keeps the data and is refused its token", `${REMOVAL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --keep-data"],
-    ["a removal that keeps the data and lacks its proof, a stop that names no provider", "uninstall stand-in --no-place --keep-data --yes", accountWith(WHOLE), 2, "npx poplin uninstall --keep-data"],
+    ["a removal that keeps the data and lacks its proof, a stop that comes while the line is read", "uninstall stand-in --no-place --keep-data --yes", accountWith(WHOLE), 2, "npx poplin uninstall stand-in --keep-data"],
     ["a removal's dry run that keeps the data and is ready, which the run follows", `${UNINSTALL} --keep-data`, accountWith(WHOLE), 0, "npx poplin uninstall stand-in --keep-data"],
     ["a removal's dry run that keeps the data and is refused its token", `${UNINSTALL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --keep-data --dry-run"],
     ["a removal's dry run that is not ready", UNINSTALL, half, 1, "npx poplin uninstall stand-in --dry-run"],
