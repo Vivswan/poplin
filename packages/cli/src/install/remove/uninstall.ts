@@ -10,6 +10,7 @@ import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { InstallEnds, Stop } from "../records";
+import { followed } from "../report";
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { UninstallPlan, UninstallRequest } from "./records";
@@ -78,9 +79,9 @@ function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held"
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
-  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: `${found.words} ${UNTOUCHED}` };
+  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNTOUCHED) };
 
-  return { problem: found.why === "token" ? "token_refused" : "no_domain", exit: 1, words: `${found.words} ${UNTOUCHED}` };
+  return { problem: found.why === "token" ? "token_refused" : "no_domain", exit: 1, words: followed(found.words, UNTOUCHED) };
 }
 
 /** Look for an install with the token, and take what a removal can start from. */

@@ -45,7 +45,7 @@ const INDENT = "  ";
 const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
 /** The line every stop before the first change ends in. */
-const UNCHANGED = "nothing was changed";
+export const UNCHANGED = "nothing was changed";
 
 /** The word of one state of a row in a dry run and in a run, and what kind of line it is. */
 export interface StateWords {
@@ -69,6 +69,15 @@ export interface Line {
 
 function plain(text: string): Line {
   return { tone: "plain", text };
+}
+
+/**
+ * Put the command's own words after a sentence a provider said, which ends with a full stop or without one.
+ *
+ * @returns the two with one full stop between them
+ */
+export function followed(sentence: string, tail: string): string {
+  return `${sentence.replace(/\.$/, "")}. ${tail}`;
 }
 
 /** The lines of what stops a piece until a person acts: what it is, then the address to open, under it. */
