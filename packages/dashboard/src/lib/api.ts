@@ -5,12 +5,16 @@ import { DetailedError, hc, parseResponse } from "hono/client";
 import { toast } from "sonner";
 
 import { BOOT } from "@/lib/boot";
+import { noteChange } from "@/lib/queries";
 
 /** The status of an answer to a call whose login ended: the provider's own, or the server's for a call no login stands behind. */
 const LOGGED_OUT = 401;
 
 /** What every call says of itself. The provider answers a script's call with 401 once its login ended, where it would send a page on to its login. */
 const ASKED_BY_SCRIPT = { "X-Requested-With": "XMLHttpRequest" } as const;
+
+/** The methods of a call that only reads. */
+const READS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
 
 /** What is shown when the login ended while the page holds typing that is not saved. */
 const LOG_IN_AGAIN = "Your login ended. Log in again in a new tab, then try again here.";
@@ -63,8 +67,16 @@ export class Refused extends Error {
   }
 }
 
+/** Send a call, and note a change that was done, so what any screen read before it is old. */
+async function fetchAndNote(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const answer = await fetch(input, init);
+  if (answer.ok && !READS.has((init?.method ?? "GET").toUpperCase())) noteChange();
+
+  return answer;
+}
+
 /** The data routes, called as `api.sites.$get({ query })` or `api.sites[":site"].naming.$post({ param, json })`. */
-export const api = hc<DataRoutes>(`${BOOT.base}/data`, { headers: ASKED_BY_SCRIPT });
+export const api = hc<DataRoutes>(`${BOOT.base}/data`, { headers: ASKED_BY_SCRIPT, fetch: fetchAndNote });
 
 function isRefusal(data: unknown): data is RefusalBody {
   return (

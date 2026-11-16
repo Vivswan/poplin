@@ -3,7 +3,7 @@
 import "./index.css";
 
 import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -13,6 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { noteFocus } from "@/lib/focus";
 import { IN_BROWSER, PHONE } from "@/lib/media";
 import { leaveAtPress, leaveNewest } from "@/lib/notify";
+import { QUERIES } from "@/lib/queries";
 import { Screens } from "@/screens";
 
 /** How long a pointer rests on a control before its hint shows, in milliseconds. */
@@ -23,9 +24,6 @@ const LINE_EDGES = { top: "var(--line-top)", bottom: "var(--line-bottom)" };
 
 /** The look of a line, laid over the library's own: so little room around its words that a line with a button, which has two rows, is lower than the header. On a phone its words end after two rows. */
 const LINE_LOOK = { toast: "cn-toast py-2.5! has-data-description:py-1!", title: "max-md:line-clamp-2", description: "text-xs! leading-4!" };
-
-/** Where every screen's data is kept. A refused read is not asked again by itself: the refusal is shown. */
-const QUERIES = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 /** Draw the place where every result is said. */
 function Lines(): ReactNode {
