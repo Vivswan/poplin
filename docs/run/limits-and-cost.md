@@ -71,6 +71,13 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 
 Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made. The budget alert exists only where Repair made it.
 
+**What no setting bounds.** Every request the Worker answers spends the Workers plan's requests of the day: a 404, a redirect to the login, a call of the API, and a request a limit refused with 429 too. `requests_per_day` counts the requests at the address of a live site alone.
+
+| Workers plan | One address that keeps asking | What stops it before the Worker runs |
+| --- | --- | --- |
+| free, 100000 requests a day | can use up the day: every site and the dashboard stop until midnight UTC | the rate rule, at 300 requests in 10 seconds: about 2.6 million a day, far above the plan's day |
+| paid | is billed as any request is | the same rule |
+
 ## Where a limit is counted
 
 | Limit | Counted | For a visitor whose requests reach several Cloudflare data centers |
