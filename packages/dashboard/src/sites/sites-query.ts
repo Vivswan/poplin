@@ -27,6 +27,9 @@ export const SITE_ORDERS: Orders = {
   unsorted: { key: "updated", descending: true },
 };
 
+/** How a pasted link begins, after the space, the quote, or the angle bracket a paste may carry before it. */
+const LINK = /^\s*["'<]?https?:\/\//iu;
+
 /** A filter's value. */
 export type Filter = (typeof FILTERS)[number]["value"];
 
@@ -58,11 +61,13 @@ export function filteredQuery(query: URLSearchParams, filter: Filter): URLSearch
   return queryWith(query, { view: filter === "trash" ? "trash" : "", access });
 }
 
-/** The words of a table that holds no site. */
+/** The words of a table that holds no site. A pasted link that found none is told as a link: its spelling is not what a person checks. */
 export function emptyWords(filter: Filter, search: string): { readonly title: string; readonly says: string } {
   const kind = filter === "all" || filter === "trash" ? "" : `${filter} `;
-  if (search !== "")
-    return { title: `No ${kind}sites${filter === "trash" ? " in the trash" : ""} match "${search}"`, says: "Check the spelling, or show all sites." };
+  const place = filter === "trash" ? " in the trash" : "";
+  if (LINK.test(search)) return { title: `No ${kind}site${place} at that link`, says: "Check the link, or show all sites." };
+
+  if (search !== "") return { title: `No ${kind}sites${place} match "${search}"`, says: "Check the spelling, or show all sites." };
 
   if (filter === "trash") return { title: "The trash is empty", says: "A deleted site waits here before it is gone for good." };
 
