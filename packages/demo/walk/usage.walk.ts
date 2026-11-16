@@ -16,6 +16,9 @@ const INSTALLS = [
   { name: "the install without a key", empty: true, kinds: ["host", "host setting", "setting"] },
 ] as const;
 
+/** Two texts for the list of Compare sites: one that finds some of the sample sites, which still fill the list's room on a wide screen and on a phone, and one that finds a single site. */
+const [SOME_SITES, ONE_SITE] = ["e", "pricing"];
+
 /** Three days in milliseconds: further than any time zone is from UTC. */
 const THREE_DAYS_MS = 259_200_000;
 
@@ -143,26 +146,51 @@ for (const screen of [SCREENS[0], { width: 390, height: 844 }]) {
   test.describe(`on a screen ${screen.width} px wide, the opened list of Compare sites`, () => {
     test.use({ viewport: screen });
 
-    // Drift: the list would be as high as the library makes it, which is no whole number of lines, so its last site is cut through its letters.
-    test("holds more sites than it shows, and ends on a whole line", async ({ page }) => {
+    // Drift: the list would be as high as the library makes it, which is no whole number of lines, so its last site is cut through its letters; or, ending on a whole line with no bar, it would show nothing of the sites under it.
+    test("ends on a whole line, with a bar beside it that is as long as the share of the sites in sight, and none once all are in sight", async ({ page }) => {
       await arrive(page);
       await toSection(page, "Usage");
       await page.getByRole("combobox", { name: "Compare sites", exact: true }).click();
       const list = page.getByRole("listbox", { name: "Sites", exact: true });
+      const room = page.locator('[data-slot="scroll-area"]').filter({ has: list });
+      const bar = room.locator('[data-slot="scroll-area-scrollbar"]');
       await expect(list.getByRole("option").first()).toBeVisible();
 
       // An opened list grows into place under a scale: the sizes read are those of its layout, which the scale leaves alone.
-      const read = (): Promise<{ scrolls: boolean; lines: number }> =>
+      const read = (): Promise<{ room: number; whole: number; lines: number; thumb: number }> =>
         list.evaluate((drawn) => {
+          const scrolled = drawn.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
           const line = drawn.querySelector<HTMLElement>('[role="option"]')?.offsetHeight ?? 0;
           const edges = Number.parseFloat(getComputedStyle(drawn).paddingTop) + Number.parseFloat(getComputedStyle(drawn).paddingBottom);
+          const [room, whole] = [scrolled?.clientHeight ?? 0, scrolled?.scrollHeight ?? 0];
 
-          return { scrolls: drawn.scrollHeight > drawn.clientHeight, lines: (drawn.clientHeight - edges) / line };
+          return { room, whole, lines: (room - edges) / line, thumb: scrolled?.parentElement?.querySelector<HTMLElement>('[data-slot="scroll-area-thumb"]')?.offsetHeight ?? 0 };
         });
-      await expect.poll(async () => (await read()).scrolls).toBe(true);
-      const { lines } = await read();
+      // How far the bar is from what the list calls for: as long as the share of the list in sight, to 3 px, and not drawn at all for a list that is in sight whole.
+      const off = async (): Promise<number> => {
+        const { room, whole, thumb } = await read();
 
-      expect([lines > 1, Math.round(lines * 100) / 100]).toEqual([true, Math.round(lines)]);
+        return whole > room ? Math.max(Math.abs(thumb - (room * room) / whole) - 3, 0) : thumb;
+      };
+      await expect.poll(async () => (await read()).whole > (await read()).room).toBe(true);
+      const all = await read();
+
+      expect([all.lines > 1, Math.round(all.lines * 100) / 100]).toEqual([true, Math.round(all.lines)]);
+      await expect(bar).toBeVisible();
+      await expect.poll(off).toBe(0);
+
+      // A text that finds fewer sites, which still fill the room: the room keeps its height, so the bar has only the list to follow.
+      const before = await list.getByRole("option").count();
+      await page.getByRole("combobox", { name: "Find a site", exact: true }).fill(SOME_SITES);
+      await expect(list.getByRole("option")).not.toHaveCount(before);
+      await expect.poll(off).toBe(0);
+      const some = await read();
+
+      expect([some.room, some.whole < all.whole]).toEqual([all.room, true]);
+
+      await page.getByRole("combobox", { name: "Find a site", exact: true }).fill(ONE_SITE);
+      await expect(list.getByRole("option")).toHaveCount(1);
+      await expect(bar).toBeHidden();
     });
   });
 }
