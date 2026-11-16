@@ -32,6 +32,8 @@ Repair is the button on the Domain screen, and the command `npx poplin doctor --
 
 **What no setting bounds.** Every request the Worker answers spends the Workers plan's requests of the day: a 404, a redirect to the login, a call of the API, and a request a limit refused with 429 too. `requests_per_day` counts the requests at the address of a live site alone.
 
+**A publish spends requests too.** Each file sent through the install is one request, beside the publish's start, its finish, and one more for every 100 files of a publish of over 100: a site of 5,000 files is 5,052 of the day's 100,000. With the upload key a file goes to the storage and is no request to the install.
+
 | Workers plan | One address that keeps asking | What stops it before the Worker runs |
 | --- | --- | --- |
 | free, 100000 requests a day | can use up the day: every site and the dashboard stop until midnight UTC | the rate rule, at 300 requests in 10 seconds: about 2.6 million a day, far above the plan's day |
