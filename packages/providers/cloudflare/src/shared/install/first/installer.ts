@@ -30,7 +30,7 @@ import { INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
-import { createDomainPlug, lacksRight, rightFor, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
+import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { firstBindings } from "./first-bindings";
@@ -147,13 +147,21 @@ function read(given: Given): Read<Where> {
 function tokenHelp(): string[] {
   const [domain, none] = [tokenFacts("domain", MADE_FIRST), tokenFacts("noDomain", MADE_FIRST)];
   const gap = " ".repeat(16);
+  // The link cannot choose every permission: the line under it says how many it chooses, and names the rest.
+  const chosen = (kind: "domain" | "noDomain", needed: number): string[] => {
+    const byHand = rightsByHand(kind, MADE_FIRST);
+
+    return byHand.length === 0 ? [] : [`${gap}the link chooses ${needed - byHand.length} of them: choose ${byHand.join(", ")} on the form yourself`];
+  };
 
   return [
     "The account token needs:",
     `  with a domain ${domain.tokenRights.length} permissions: ${domain.tokenRights.join(", ")}`,
     `${gap}${domain.tokenLink}`,
+    ...chosen("domain", domain.tokenRights.length),
     `  without       ${none.tokenRights.length} permissions: ${none.tokenRights.join(", ")}`,
     `${gap}${none.tokenLink}`,
+    ...chosen("noDomain", none.tokenRights.length),
     `  optional      ${domain.tokenOptional.map((optional) => optional.right).join(", ")}`,
   ];
 }

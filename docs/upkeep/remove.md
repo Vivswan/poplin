@@ -48,7 +48,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | the bucket                            | `poplin-sites`                                                                                        | the account's R2 buckets                            |
 | the budget alert, if it is there      | `poplin: usage charges reached 1 dollar`                                                              | the account's Notifications                         |
 | the two keys                          | "poplin kept key" and "poplin upload key"                                                             | Manage Account, then Account API Tokens             |
-| the Cloudflare API token of step 3    | "poplin setup", unless you named it otherwise                                                         | My Profile, then API Tokens                         |
+| the Cloudflare API token of step 3    | "poplin install", unless you named it otherwise                                                       | My Profile, then API Tokens                         |
 
 - **The three rules** are there when a Repair's token held an [optional permission](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers). The guard rules can also be there once `search_engines_allowed` or `outside_pages` was saved on an install that holds its key.
 - **A rule set** can stay behind, empty, where the domain had none before: "poplin redirect rule", "poplin guard rules", "poplin rate rule". An empty set stops nothing.

@@ -257,7 +257,7 @@ const TOKEN_FORMS = {
 } as const satisfies Readonly<Record<string, { readonly pieces: readonly Piece[]; readonly zones: string; readonly note: string; readonly for: string }>>;
 
 /** The name the form suggests for the token. */
-const TOKEN_NAME = "poplin setup";
+const TOKEN_NAME = "poplin install";
 
 /** What the form's note says before each permission the link cannot choose. */
 const BY_HAND = "The link does not choose this permission, so choose it on the form yourself";
@@ -979,6 +979,24 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], 
   return `${TOKEN_FORM}?permissionGroupKeys=${encodeURIComponent(JSON.stringify(chosen))}&accountId=%2A${zones}&name=${encodeURIComponent(TOKEN_NAME)}`;
 }
 
+/** Every permission the objects of a kind's token form use, and those of the objects named beside them, each once, in the order of the table of rights. */
+function usedRights(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[]): Right[] {
+  const asked: readonly Piece[] = TOKEN_FORMS[kind].pieces;
+  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object) || also.includes(object));
+
+  return [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
+}
+
+/**
+ * Name the permissions a token needs that no link to the form can choose, so a person chooses each on the form.
+ *
+ * @param kind - the kind of install the token is for
+ * @param also - the objects the token is to make beside the ones a repair of that kind makes
+ */
+export function rightsByHand(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): string[] {
+  return usedRights(kind, also).flatMap((right) => ("chosen" in right ? [right.name] : []));
+}
+
 /**
  * Say what Cloudflare's form for a new token is and asks for.
  *
@@ -988,12 +1006,10 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], 
  */
 export function tokenFacts(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): TokenFacts {
   const form = TOKEN_FORMS[kind];
-  const asked: readonly Piece[] = form.pieces;
-  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object) || also.includes(object));
-  const used = [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
+  const used = usedRights(kind, also);
   const needed = used.filter((right) => !("adds" in right));
   const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));
-  const byHand = needed.flatMap((right) => ("chosen" in right ? [right.name] : []));
+  const byHand = rightsByHand(kind, also);
 
   return {
     tokenRights: needed.map((right) => right.name),
