@@ -114,6 +114,18 @@ afterEach(() => {
 });
 afterAll(clearPage);
 
+describe("the button that reads the graph again", () => {
+  // Drift: the graph's days stand half an hour, and the button that reads them sooner would read nothing, or read another choice than the one drawn.
+  test("reads the days of the choice drawn once more", async () => {
+    await draw();
+    const before = [...asked];
+
+    await doing(() => fireEvent.click(within(document.body).getByRole("button", { name: "Refresh the graph" })));
+
+    expect([before, asked]).toEqual([["?range=30"], ["?range=30", "?range=30"]]);
+  });
+});
+
 describe("the Visits block", () => {
   // Drift: the total would go when a site is picked, a picked site would draw no line or lose its name, or the table a screen reader hears would hold other numbers than the lines.
   test("draws all sites alone at first, and with picked sites a line each, named under the graph with its sum, over a table of the same numbers", async () => {

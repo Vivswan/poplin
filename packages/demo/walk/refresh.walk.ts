@@ -1,8 +1,8 @@
-// The button that reads the list of sites again: it reads the list and nothing else, and says how old what it shows is.
+// The two buttons that read one thing again: the list of sites, and the visits graph. Each reads its own thing and nothing else, and says how old what it shows is.
 
 import { expect, type Page } from "@playwright/test";
 
-import { arrive, test } from "./visit";
+import { arrive, test, toSection } from "./visit";
 
 /** How long the page's clock is moved on, in milliseconds, and how long the words may take to follow it: they are written anew every ten seconds. */
 const [LATER_MS, WORDS_MS] = [3 * 60_000, 15_000] as const;
@@ -40,5 +40,14 @@ test.describe("on a wide screen", () => {
 
     expect(await askedAt(page, "Refresh the list")).toEqual(["sites"]);
     await expect(words).toHaveText("Updated just now", { timeout: WORDS_MS });
+  });
+
+  // Drift: the graph's days stand half an hour: with no button of its own there would be no way to read them sooner, and a button that read the rows under the graph too would not be the graph's.
+  test("the button of the visits graph reads the graph alone", async ({ page }) => {
+    await arrive(page);
+    await toSection(page, "Usage");
+    await expect(page.getByRole("region", { name: "Visits", exact: true }).getByText(/^Updated /)).toBeVisible();
+
+    expect(await askedAt(page, "Refresh the graph")).toEqual(["usage/visits?range=30"]);
   });
 });

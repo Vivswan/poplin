@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toggle } from "@/components/ui/toggle";
 import { IN_BROWSER, PHONE } from "@/lib/media";
 import { showCount } from "@/lib/sites";
+import { RefreshButton } from "@/shared/icon-button";
 import { LineSample, type Series, stepWords, VisitsChart } from "@/usage/visits-chart";
 import { VisitsPicker } from "@/usage/visits-picker";
 import { type Choice, RANGES, type Range, useChoice, useVisits, type Visits } from "@/usage/visits-queries";
@@ -212,7 +213,8 @@ function Graph({ visits, choice, onChoose }: { readonly visits: Visits; readonly
 /** Draw the block: its heading with the sum of all sites, the two choices, and the graph or the line that stands for it. */
 export function VisitsBlock(): ReactNode {
   const [choice, setChoice] = useChoice();
-  const { data: visits, error, isPlaceholderData: ofChoiceBefore } = useVisits(choice);
+  const read = useVisits(choice);
+  const { data: visits, error, isPlaceholderData: ofChoiceBefore } = read;
   const counted = visits !== undefined && visits.all.total > 0;
 
   // A picked site the server no longer knows is dropped from the kept choice, once the answer is the one to this choice.
@@ -236,6 +238,7 @@ export function VisitsBlock(): ReactNode {
           </p>
         ) : null}
         <div className="ml-auto flex items-center gap-2">
+          <RefreshButton label="Refresh the graph" read={read} />
           <VisitsPicker
             picked={choice.sites}
             onPick={(sites) => setChoice({ ...choice, sites, hidden: choice.hidden.filter((key) => key === ALL.key || sites.some((site) => site.id === key)) })}

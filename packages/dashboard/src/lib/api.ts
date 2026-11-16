@@ -17,8 +17,8 @@ const ASKED_BY_SCRIPT = { "X-Requested-With": "XMLHttpRequest" } as const;
 /** How long a read stands as it was made, in milliseconds. */
 const FRESH_MS = 30_000;
 
-/** How long the visits graph's days stand, in milliseconds: its read walks the most rows, and a day's count moves slowly. */
-const VISITS_FRESH_MS = 5 * 60_000;
+/** How long the visits graph's days stand, in milliseconds: its read walks the most rows, and a day's count moves slowly. The graph has a button that reads them again sooner. */
+const VISITS_FRESH_MS = 30 * 60_000;
 
 /** The key the visits graph's reads start with. */
 const VISITS_KEY: QueryKey = ["usage", "visits"];
@@ -84,7 +84,8 @@ export class Refused extends Error {
  */
 function createQueries(): QueryClient {
   const queries = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: FRESH_MS, refetchIntervalInBackground: false } } });
-  queries.setQueryDefaults(VISITS_KEY, { staleTime: VISITS_FRESH_MS });
+  // The days are kept as long as they stand: a person who leaves the graph's screen and comes back finds them, where the library would drop them after five minutes.
+  queries.setQueryDefaults(VISITS_KEY, { staleTime: VISITS_FRESH_MS, gcTime: VISITS_FRESH_MS });
 
   return queries;
 }
