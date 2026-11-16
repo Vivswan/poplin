@@ -3,6 +3,7 @@
 // A made-up site `n` has the id `000000000001`, the folder `0000000000000001`, and the name `site-1`; a made-up token `n` has the id `0000000000000001`.
 
 import { beginLogin } from "@poplin/core/src/actions/computer-logins";
+import { PROBLEM_KINDS } from "@poplin/core/src/records/problem";
 import { BINDINGS, done, OWNER } from "./install";
 import { apiOf, sql, type Stage, unmeasured } from "./budget-stage";
 
@@ -26,6 +27,9 @@ const PUTS_AT_ONCE = 250;
 
 /** The one byte every made-up file holds. */
 const BYTE = "x";
+
+/** The milliseconds of one day. */
+const DAY_MS = 86_400_000;
 
 /** The id of the made-up site of a number. */
 export function siteId(n: number): string {
@@ -148,6 +152,17 @@ export async function uploadOf(stage: Stage, token: string, asked: { readonly de
   await manyFiles(`${placed.folder}/v${placed.number}/`, asked.stored);
 
   return begun.upload.id;
+}
+
+/**
+ * Note every kind of problem once on each of the last days, today among them, through the database's own rule.
+ *
+ * @param days - how many UTC days back
+ */
+export async function manyProblems(stage: Stage, days: number): Promise<void> {
+  for (const kind of PROBLEM_KINDS) {
+    for (let ago = 0; ago < days; ago += 1) await stage.install.database.noteProblem({ kind, at: stage.w.clock.now - ago * DAY_MS, count: 1, more: false, name: null, message: null });
+  }
 }
 
 /**

@@ -59,6 +59,7 @@ const API_ROUTES: { readonly [Path in keyof Routes]: { readonly [Method in keyof
   "/api/sessions": { $delete: true },
   "/api/audit": { $get: true },
   "/api/domain": { $get: true },
+  "/api/problems": { $get: true },
   "/api/update": { $post: true },
   "/api/update/address": { $get: true, $put: true, $delete: true },
 };

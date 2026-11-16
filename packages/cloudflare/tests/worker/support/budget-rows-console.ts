@@ -5,7 +5,7 @@ import type { hc, InferRequestType } from "hono/client";
 import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";
 import { type Budget, type BudgetRow, get, type Measured, post, sessionOf, sql, type Stage, unmeasured } from "./budget-stage";
-import { endedTokens, manyEntries, manySites, manyTokens, newLinks, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
+import { endedTokens, manyEntries, manyProblems, manySites, manyTokens, newLinks, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
 
 /** The group of every row here. */
 const group = "Each dashboard screen";
@@ -406,6 +406,21 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     },
     status: 200,
     budget: { queries: 3, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "Usage screen: the problems of 30 days",
+    guide: "Open the Usage screen",
+    route: "GET /data/problems",
+    // Worst: every kind was noted on each of the 30 days kept.
+    arrange: async (stage) => {
+      await manyProblems(stage, 30);
+      const session = await sessionOf(stage);
+
+      return (measured) => data(measured, session, "/problems?days=30");
+    },
+    status: 200,
+    budget: { queries: 2, read: 302, reads: 0, writes: 0 },
   },
   {
     group,
