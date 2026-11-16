@@ -247,6 +247,16 @@ describe("publish", () => {
     expect(isDeepStrictEqual(await stateOf(bench), before)).toBe(code !== 0);
   });
 
+  // Drift: the reader exempts a page whose base points off the install, and only the install's answer says which hosts are its own. Handed none, a base on the install's own host would pass, and every link of its page would open the host's root.
+  test("a page whose base is the install's own host is refused for that base, by the hosts the install answered", async () => {
+    const bench = await openBench({ kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" });
+    const folder = folderOf("notes", { "index.html": '<base href="https://sites.example.net/"><img src="logo.png">' });
+
+    const ran = await bench.run(`${folder} --json`);
+
+    expect([ran.code, (jsonOf(ran).error as { code: string; about: string } | undefined)?.about, bench.sent]).toEqual([1, "https://sites.example.net/ in index.html", ["GET /api/whoami"]]);
+  });
+
   // Drift: reading a typed address and checking the pages both need the install's layout; asked apart, every publish to an address costs the install one request more.
   test("a publish onto a site named by its address asks the install for its layout once", async () => {
     const bench = await openBench({ kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" });

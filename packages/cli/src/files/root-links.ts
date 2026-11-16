@@ -12,9 +12,11 @@ const SRCSET = "srcset";
 const ROOT = "/";
 const OTHER_HOST = "//";
 const SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\//i;
+const PAGE_ADDRESS = "https://page.invalid/";
 const EDGE_SPACE = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
 
 const SINGLE_LINK_ATTRIBUTES: ReadonlySet<string> = new Set([HREF, "src"]);
+const BASELESS_ELEMENTS: ReadonlySet<string> = new Set(["template", "svg", "math"]);
 
 /** A link that starts at the root of its host, and the file that holds it. */
 interface RootLink {
@@ -25,8 +27,10 @@ interface RootLink {
   readonly link: string;
 }
 
-/** How far one page is read: `end` is set once its first root link is found, or once a `<base>` sent its links to another host, which leaves no link to name. */
+/** How far one page is read: `end` is set once its first root link is found, or once its base sent its links off the install, which leaves no link to name. `baseless` counts the open elements that hold no base of the page. */
 interface Reading {
+  baseSeen: boolean;
+  baseless: number;
   end: { readonly link: string | undefined } | undefined;
 }
 
@@ -39,8 +43,11 @@ function trimmed(value: string): string {
   return value.replace(EDGE_SPACE, "");
 }
 
-function namesHost(link: string): boolean {
-  return link.startsWith(OTHER_HOST) || SCHEME_AND_HOST.test(link);
+/** The host a link names as a browser reads it, in lowercase and without the port of its scheme; `undefined` for a link that names none. */
+function hostOf(link: string): string | undefined {
+  if (!link.startsWith(OTHER_HOST) && !SCHEME_AND_HOST.test(link)) return undefined;
+
+  return URL.parse(link, PAGE_ADDRESS)?.host;
 }
 
 function linksOf(attribute: string, value: string): string[] {
@@ -51,12 +58,30 @@ function linksOf(attribute: string, value: string): string[] {
   return parseSrcset(value).map((candidate) => candidate.url);
 }
 
-function readTag(name: string, attributes: Readonly<Record<string, string>>, reading: Reading): void {
+/** Read a `<base>`. Only the first with an `href`, outside any template, drawing, or formula, is the page's base, as in a browser: another changes no link and is none itself. */
+function readBase(href: string | undefined, hosts: readonly string[], reading: Reading): void {
+  if (href === undefined || reading.baseSeen || reading.baseless > 0) return;
+
+  reading.baseSeen = true;
+  const link = trimmed(href);
+  const host = hostOf(link);
+
+  // A base on another host sends every root link of the page there, where this install has no say.
+  if (host !== undefined && !hosts.includes(host)) {
+    reading.end = { link: undefined };
+
+    return;
+  }
+
+  // A base on the install's own host, or from its root, takes every link of the page out of the site: it is the link to name.
+  if (host !== undefined || isRootLink(link)) reading.end = { link };
+}
+
+function readTag(name: string, attributes: Readonly<Record<string, string>>, hosts: readonly string[], reading: Reading): void {
   if (reading.end !== undefined) return;
 
-  // A base that names a host sends every root link of the page there, where this install has no say.
-  if (name === BASE && namesHost(trimmed(attributes[HREF] ?? ""))) {
-    reading.end = { link: undefined };
+  if (name === BASE) {
+    readBase(attributes[HREF], hosts, reading);
 
     return;
   }
@@ -71,9 +96,17 @@ function readTag(name: string, attributes: Readonly<Record<string, string>>, rea
   }
 }
 
-async function rootLinkOf(page: PublishFile): Promise<string | undefined> {
-  const reading: Reading = { end: undefined };
-  const parser = new Parser({ onopentag: (name, attributes) => readTag(name, attributes, reading) });
+async function rootLinkOf(page: PublishFile, hosts: readonly string[]): Promise<string | undefined> {
+  const reading: Reading = { baseSeen: false, baseless: 0, end: undefined };
+  const parser = new Parser({
+    onopentag: (name, attributes) => {
+      readTag(name, attributes, hosts, reading);
+      if (BASELESS_ELEMENTS.has(name)) reading.baseless += 1;
+    },
+    onclosetag: (name) => {
+      if (BASELESS_ELEMENTS.has(name)) reading.baseless -= 1;
+    },
+  });
   const decoder = new TextDecoder();
   const reader = page.open().getReader();
 
@@ -96,16 +129,18 @@ async function rootLinkOf(page: PublishFile): Promise<string | undefined> {
 /**
  * Find the first link of a publish that starts at the root of its host: an `href`, a `src`, or a candidate of a `srcset` that starts with one `/`.
  *
- * Only `.html` and `.htm` files are read, as UTF-8, each up to its first such link. A page is read no further than a `<base>` whose `href` names a host, since its links go there.
+ * A base on one of the install's hosts counts as such a link, since every link of its page then starts at that host.
+ * Only `.html` and `.htm` files are read, as UTF-8, each up to its first such link. A page is read no further than a base that names a host other than the install's, since its links go there. Its base is its first `<base>` with an `href`.
  *
  * @param files - the files of a listing, in its order
+ * @param hosts - the hosts the install serves its sites on, as its layout names them: a base on one of them is named as a root link, and one on any other host exempts its page
  * @returns the first such link of the first file that holds one; `undefined` when no file does
  */
-export async function firstRootLink(files: readonly PublishFile[]): Promise<RootLink | undefined> {
+export async function firstRootLink(files: readonly PublishFile[], hosts: readonly string[]): Promise<RootLink | undefined> {
   for (const file of files) {
     if (!PAGE_FILE.test(file.path)) continue;
 
-    const link = await rootLinkOf(file);
+    const link = await rootLinkOf(file, hosts);
     if (link !== undefined) return { file: file.path, link };
   }
 

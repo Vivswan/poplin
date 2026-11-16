@@ -131,7 +131,7 @@ async function refusedByLayout(plan: PublishPlan, { layout, io }: Session): Prom
 
   if (asked.value.kind !== "path") return undefined;
 
-  const found = await firstRootLink(plan.files);
+  const found = await firstRootLink(plan.files, [asked.value.sites_host, asked.value.private_host]);
   if (found === undefined) return undefined;
 
   return { ok: false, problem: problem("root_links", `${found.link} in ${found.file}`) };
