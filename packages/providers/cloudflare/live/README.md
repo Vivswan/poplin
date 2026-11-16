@@ -16,13 +16,16 @@ Live Checks workflows, one for each kind of install
   .github/workflows/live-install.yml                       the steps below, which both workflows call
   packages/providers/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
   build the Worker bundle
-  packages/providers/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
-  packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain screen's repair, the caps
-                                                           without a domain, in the repair's place: the two forwarders, the key, the budget alert, and the Workflow
-                                                           `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
-                                                           `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
-                                                           `Upload key: created` or `Upload key: present`: the same for the key that sends files straight to the bucket
-                                                           `New deployment: answered the run's token` in its log: the install answered a token whose row the database of this run's deploy holds, so the checks may start
+  packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, then the install made to match the commit by the product's own commands, the caps
+                                                           `poplin install` where the account holds no install; the commit's build by the upload of an update, then `poplin doctor --repair`, where it holds one
+                                                           `poplin uninstall` first, on a run by hand with `start_over` ticked, and where another build made the install
+  packages/providers/cloudflare/scripts/live/commands.ts   the three commands run in the step's own process, each answered with the commit's build where it asks for the newest release
+                                                           `Install: none found, so poplin install ran` in the log: the bucket, the database, and the Worker's first upload are the command's
+                                                           `Install: found, runs <version>`: the command found the install, and read its version from Cloudflare
+                                                           `Sweep: last asked for a newer version <n> minutes ago`: the install's sweep trigger fires, since its sweep alone writes that moment
+                                                           `Key: made` or `Key: left` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
+                                                           `Upload key: made` or `Upload key: left`: the same for the key that sends files straight to the bucket
+                                                           `New deployment: answered the run's token` in its log: the install answered a token whose row the database of this run's install holds, so the checks may start
   packages/providers/cloudflare/scripts/live/suite.ts      a token for the run -> bun test packages/providers/cloudflare/live/live.test.ts -> the token removed
   packages/providers/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   packages/providers/cloudflare/scripts/live/orphans.ts    after the reset: the files of the bucket no record of the database names, removed
@@ -68,7 +71,7 @@ The files are those of the one push, first commit to last. GitHub reads the firs
 | Also                                                   | What happens                                                         |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
 | a run started by hand                                  | deploy and checks, with no wait for CI                               |
-| a run started by hand with `start_over` ticked         | first removes everything poplin made there, then the same            |
+| a run started by hand with `start_over` ticked         | first removes the install with `poplin uninstall`, then the same     |
 | a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
 | the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
@@ -83,11 +86,30 @@ One job touches a test install at a time, of either kind. The checks and the mid
 
 On GitHub: Actions, the workflow of the install (`Live Checks`, or `Live Checks (account address)`), Run workflow, tick `start_over`, Run workflow.
 
-The run removes the Worker, its Workflow, and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, the certificate alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
+```text
+tick start_over -> poplin uninstall --dry-run -> poplin uninstall --confirm <what the dry run named>
+                -> poplin install -> the checks -> the samples and the demo put back
+```
 
-On the account without a domain it removes the two forwarders first, then the Access applications and their policies, the Workflow, the Worker, the database, every file in the bucket, the budget alert, and the key. A Worker of a forwarder's name without poplin's tag stays.
+The step that makes the install match the commit removes it first, with the product's own command, the sites' files and the database with it. It removes what `poplin uninstall` removes and nothing else: `docs/upkeep/remove.md` lists it.
 
-A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
+| Stays on the account                                         | Why                                                        |
+| ------------------------------------------------------------ | ---------------------------------------------------------- |
+| the bucket `poplin-live-sites`                               | it marks a test account, and the command does not know it  |
+| everything poplin did not make, and the zone's bot switches  | the command removes its own objects alone                  |
+| a kind whose row says `stopped`, `failed`, or `not run`      | the run ends red and names it; the next start-over goes on |
+
+The same removal runs with nobody asking where another build made the install, since `poplin install` and the repair leave such a thing as it is:
+
+| What stands                                                              | The log says                                                                        |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| a database with a schema step another build applied                      | `Start over: another build made it: a database that held schema step 1 as another build applied it` |
+| a database with a schema step this commit lacks                          | `Start over: another build made it: a database that held a schema step this commit does not have` |
+| a database whose settings this commit does not read                      | `Start over: another build made it: a database that held settings this commit does not read` |
+| a Worker bound to another bucket than `poplin-sites`                     | `Start over: another build made it: a Worker bound to another bucket than the product's` |
+| a Worker of an install that was started and never finished               | `Start over: another build made it: a Worker of an install that was never finished` |
+
+On an account without the marking bucket the step makes, mends, and removes nothing: it stops red before its first command.
 
 ## The test install
 
@@ -146,6 +168,7 @@ For each account:
 | Set                     | Where                        | For                                                                       |
 | ----------------------- | ---------------------------- | ------------------------------------------------------------------------- |
 | R2 switched on          | the Cloudflare account       | the bucket                                                                |
+| a bucket named `poplin-live-sites`, empty | the Cloudflare account, made by hand | the mark of a test account: without it the step that makes the install match changes nothing, and no file is removed from the bucket. No script makes, fills, or removes it |
 | Zero Trust switched on  | the Cloudflare account       | the login                                                                 |
 | `CLOUDFLARE_API_TOKEN`  | a secret of the environment  | every step that calls Cloudflare                                          |
 | `CLOUDFLARE_ACCOUNT_ID` | a secret of the environment  | the same                                                                  |
@@ -166,19 +189,16 @@ A second install, on the test account that holds no domain. It answers on the ac
 | Step of `converge.ts`   | Made by                                                                  | A line of its log                                           |
 | ----------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
 | the free address        | read from Cloudflare, never written in the repository                    | `Free address: found`                                       |
-| plans, bucket, database | as on the other account, with no zone to read                            | `R2 bucket: present`                                        |
-| the login               | `syncAccess`: the whole dashboard host, and the whole private sites' host | `Login application: created 0, changed 0, left 4, not poplin's 0` |
-| the Worker              | `wrangler deploy`, with `ZONE` set to the account's name and the free address on | `Worker: deployed`                                  |
-| the two forwarders      | `syncForwarders`                                                         | `Forwarders: created 0, changed 0, left 2, not poplin's 0`  |
-| the key                 | `mintKey` and `syncVariables`, where the Worker holds no active key      | `Key: present`                                              |
-| the budget alert        | `syncAlert`, mailed to the run's login                                   | `Budget alert: present`                                     |
-| the Workflow            | `syncJobs`, where the deploy left none                                   | `Workflow: present`                                         |
+| the plans               | as on the other account, with no zone to read                            | `Account plans: free (...)`                                 |
+| the install, the first time | `poplin install cloudflare --no-domain`: the bucket, the database, the first upload, the free address switched on, the two forwarders, the login, the keys, the budget alert, the Workflow | `Install: none found, so poplin install ran`, then a line a row |
+| the install, every later run | the upload of an update, then `poplin doctor --repair --no-domain`, then the wait for it | `Install: found, runs <version>`, `Worker's code: this commit's build, by the upload of an update (...)`, then a line a row |
 | the new deployment      | `awaitNewDeployment`, as on the other account                            | `New deployment: answered the run's token`                  |
 
-A step Cloudflare refuses prints the step, the status, and the error codes, and nothing else Cloudflare said:
+A row prints its object and what the command did, and nothing else of it. One Cloudflare refused adds the status:
 
 ```text
-Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and codes 10021
+Forwarder: left
+Workflow: failed (refused with status 500): needs the Worker's Workflow, which Cloudflare did not make
 ```
 
 | Differs from the other install                                   | So                                                                              |
@@ -186,12 +206,13 @@ Forwarders: stopped at poplin-sites: Cloudflare refused with status 400 and code
 | no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` are skipped: needs a domain |
 | a site answers under a path                                      | `relative-file` also asks the address without its last slash, which moves to the one with it |
 | a site's address is no root of an origin                         | the demo gets no link to a sample site: `sites.json` is empty                   |
+| `poplin install` finds the account by the token                  | the token must show its account in the list of its accounts                     |
 
 Every other check runs on both installs, at the addresses of each one's layout. No run logs in: the checks of a person stay skipped on both.
 
 ## The files no record names
 
-The install finds a site's files by a record of its database. A run that makes the database anew drops every record, and the files of the database before it stay in the bucket. The reset removes them when it has put the install back.
+The install finds a site's files by a record of its database. A file whose record is gone stays in the bucket: one of a site the install was still removing, or of a database a person changed by hand. The reset removes them when it has put the install back.
 
 | A folder of the bucket                                    | The reset                      |
 | --------------------------------------------------------- | ------------------------------ |
@@ -203,7 +224,7 @@ The install finds a site's files by a record of its database. A run that makes t
 
 One run lists the bucket, a thousand files a call, and removes at most what its 300 lists and deletes reach. R2 counts a list with the writes and bills no delete. What is left waits for the next run, the midnight reset among them.
 
-It acts on a test account alone, as the start-over does, and on the bucket of the run's own install: each of the two installs has its own bucket, guard, and ceiling.
+It acts on a test account alone, as the start-over does, and on the bucket of the run's own install, `poplin-sites`: each of the two installs has its own bucket, guard, and ceiling.
 
 ```text
 Files no site owns: removed 4 folders and 298 objects, 21 folders and 1457 objects remain
@@ -215,17 +236,18 @@ Bucket lists and deletes for them: 300 of at most 300
 Cloudflare answers some requests from the deployment before for a while after a deploy is at 100 percent. `converge.ts` ends with a wait, on both installs, so that no check meets one.
 
 ```text
-the database, left or made anew -> the login -> wrangler deploy -> what the kind adds, which may deploy once more
-  -> the install answers, and its database holds this commit's schema    read through Cloudflare's API: after a database made anew or a new schema step, the new Worker alone leaves it so
+poplin install, or where an install stands the upload of an update, then poplin doctor --repair
+  -> the install answers, and its database holds this commit's schema    read through Cloudflare's API: after an install made anew or a new schema step, the new Worker alone leaves it so
+  -> poplin doctor --repair once more, where the first refused a database a schema step behind
   -> a token for the run, its row written to that database
   -> the install answers the token with 200                             `awaitNewDeployment`
   -> the caps -> the token's row removed
 ```
 
-| The deploy                                               | The wait asks for                                              | Requests              |
+| The run                                                  | The wait asks for                                              | Requests              |
 | -------------------------------------------------------- | -------------------------------------------------------------- | --------------------- |
 | left the build before able to answer                     | 1 answer of 200                                                | 1                     |
-| followed a database made anew, or a new schema step      | 12 answers of 200 in a row, 3 s apart, each on its own connection | 12, over 33 s      |
+| made the install anew, or brought a new schema step      | 12 answers of 200 in a row, 3 s apart, each on its own connection | 12, over 33 s      |
 | is met by an answer that is no 200                       | the row begins again from nothing                              | that one, and 12 more |
 | gives no such row by 3 minutes                           | nothing more: the step fails, and no check runs                | 61                    |
 
@@ -236,7 +258,7 @@ the database, left or made anew -> the login -> wrangler deploy -> what the kind
 | the build before, started anew on a database with a schema step it lacks   | 503    |
 | the build before, started earlier, on that database                        | 200    |
 
-After a database made anew, a 200 is the new deployment's. Twelve in a row say how long no request met an instance that fails; they do not say that no instance of the deployment before is left.
+After an install made anew, a 200 is the new deployment's. Twelve in a row say how long no request met an instance that fails; they do not say that no instance of the deployment before is left.
 
 ```text
 New deployment: answered the run's token
@@ -272,13 +294,13 @@ Account plans: free (2 subscriptions: 2 at a price of 0, 0 ended)
 ```
 
 ```text
-one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 150 (reset) + 301 (the files no record names, were every call a list) = 603 bucket writes and lists
+one run, at its ceilings         2 (the account's buckets listed) + 150 (checks) + 150 (reset) + 301 (the files no record names, were every call a list) = 603 bucket writes and lists
 the midnight run, at its ceilings  2 + 300 (checks, with the copy the install's job finishes) + 150 (reset) + 301 = 753, and 113 writes by the job itself
 a day of 40 such runs            40 x 603 + 753 + 113 + 451 (the midnight reset) = 25,437
 31 such days                     25,437 x 31 = 788,547 of the 1,000,000 R2 takes for free in a month
 with a bucket of 2,000 files     3 in place of the 301: 305 a run, 12,921 a day, 400,551 a month
 a run with the many-files check  2 + 2,300 + 150 + 301 = 2,753, started by hand alone
-a usual run                      about 97 (checks) + 0 (a reset that keeps every sample and the demo) + 2 (the bucket found, and listed once)
+a usual run                      about 97 (checks) + 0 (a reset that keeps every sample and the demo) + 2 (the account's buckets listed, and the install's listed once)
 the midnight run                 about 218 (checks): the copy's 113 files published, and the asks after its job
 a reset that keeps nothing       about 131
 either install                   the same sums, each against the 1,000,000 of its own account
@@ -294,18 +316,18 @@ burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few
 burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
 own-limit                about 700
 backup-drill             72, of which 34 make the install write to its bucket or list it
-the two waits            2 a usual run; 13 after a database made anew or a new schema step, and more where a row begins again; 60 + 61 = 121 at their longest
-a run, at its worst      1,140 + 700 + 72 + 121 = 2,033
-the plan's day           100,000 requests to the Worker, reached at about 49 such runs
+the waits                2 a usual run; 14 after an install made anew, where `poplin install` asks too, 13 after a new schema step, and more where a row begins again; 60 + 60 + 61 = 181 at their longest
+a run, at its worst      1,140 + 700 + 72 + 181 = 2,093
+the plan's day           100,000 requests to the Worker, reached at about 47 such runs
 ```
 
 The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests.
 
 ```text
 the install without a domain
-a run, at its worst      700 (own-limit) + 72 (backup-drill) + 121 (the two waits) = 893: no rate rule stands in front of it, so no burst is sent
+a run, at its worst      700 (own-limit) + 72 (backup-drill) + 181 (the waits) = 953: no rate rule stands in front of it, so no burst is sent
 a usual run              about 125 (own-limit, which ends at the first 429) + 72 + about 130 (the reset) and a few dozen more
-a day of 45 runs         45 x 893 = 40,185 of its own account's 100,000
+a day of 45 runs         45 x 953 = 42,885 of its own account's 100,000
 a request for a site     one request of a forwarder, which hands it to the Worker at no further request, by Cloudflare's documentation
 ```
 
@@ -455,11 +477,11 @@ a stranger's request was cut off before any answer, and was sent once more
 
 A check that cannot run is written to the step summary as skipped, with what it needs, and to the log as a warning. It never fails the run.
 
-A run that cannot make the install answer, or cannot start the checks, fails: the log's error line and the step summary say what it needs. That covers a token with no permission for the zone, the bucket, the database, the Worker, the DNS record, or the route.
+A run that cannot make the install answer, or cannot start the checks, fails: the log's error line and the step summary say what it needs. That covers a token with no permission for the zone, the bucket, the database, the Worker, the DNS record, the route, or a forwarder.
 
 | Skipped: needs                                                      | Checks                                                                   |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
+| a token permission for a rule, the bot settings, the login, or the key; an object `poplin install` or the repair left out | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `duplicate-job`                                          |
 | the Worker's Workflow, which Cloudflare did not make                | `duplicate-job`                                                          |

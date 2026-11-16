@@ -1,72 +1,39 @@
-// Whether the test install's database is one this commit's Worker reads, asked through Cloudflare's API before the Worker is deployed.
+// Whether the test install is one this commit's install would have made, asked through Cloudflare's API before anything is changed.
 //
-//   the database holds                                      the run                                   the build deployed before, once this commit's Worker started
-//   no schema step yet                                      leaves it: the Worker makes the schema    refuses it as newer when it starts anew, where one stood
-//   every step of this commit, and settings it reads        leaves it                                 answers from it as before
-//   fewer steps than this commit, and settings it reads     leaves it: the Worker applies the rest    refuses it as newer when it starts anew
+//   the account holds                                       the run                                    the build that ran before, once this commit's Worker started
+//   no database, or one with no schema step yet             goes on: the Worker makes the schema       refuses it as newer when it starts anew, where one stood
+//   every step of this commit, and settings it reads        goes on                                    answers from it as before
+//   fewer steps than this commit, and settings it reads     goes on: the Worker applies the rest       refuses it as newer when it starts anew
 //   a step another build applied, a step this commit lacks,
-//   or settings this commit does not read                   deletes it and makes it anew, empty       is bound to the deleted one, and fails
+//   or settings this commit does not read                   starts the install over                    is removed with the install
+//   a Worker bound to another bucket than the product's     starts the install over                    is removed with the install
+//   a Worker of an install that was never finished          starts the install over                    is removed with the install
 //
 // A schema step changed in place keeps its number, and a new setting changes no step at all, so the Worker of a later commit refuses the database an earlier one made.
-// Nothing is kept between runs: each run reads the database as it is.
+// Nothing is kept between runs: each run reads the account as it is.
 
 import type { SqlDriver } from "@poplin/core/src/database/driver";
 import { OWN_SCHEMA, readOpening } from "@poplin/core/src/database/open";
 import { SqlDatabase } from "@poplin/core/src/database/sql-database";
-import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import * as v from "valibot";
 
-import { callCloudflare } from "../../src/shared/install/client";
+import { ApiRefused, apiDriver } from "../../src/shared/database/api-driver";
+import { boundInstall } from "../../src/shared/install/first/find";
 import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
-import { isStop, type Run, type Stop, stopOf } from "./util";
+import { readWorker } from "../../src/shared/install/pieces/variables/variables";
+import { findDatabase } from "./tokens";
+import { isStop, type Run, SCRIPT, type Stop, stopOf } from "./util";
 
 /** The token permission the database calls need. */
 const PERMISSION = "D1: Edit";
 
-/** The database the Worker is to be bound to, and what the run did to it. */
-interface Settled {
-  /** The id of the database, hidden. */
-  readonly id: string;
-
-  /** `present`, or why the database was made anew. */
-  readonly result: string;
-
-  /** Whether an instance of the build deployed before this run fails when it starts anew, once this commit's Worker started: the database was made anew, or holds fewer schema steps than this commit applies. */
-  readonly strandsOlder: boolean;
-}
-
-/** What a reading found of a database: why this commit's Worker would refuse it, and whether it holds every schema step of this commit. */
-interface Reading {
+/** What a run found of the test install before it changes anything. */
+interface Standing {
+  /** Why this commit's install would not have made what stands, which is then started over; `undefined` for an install the run goes on with. */
   readonly drift: string | undefined;
+
+  /** Whether the database holds every schema step of this commit: where it does not, an instance of the build that ran before fails when it starts anew, once this commit's Worker started. */
   readonly current: boolean;
-}
-
-/** A statement Cloudflare did not run, with why. */
-class Unasked extends Error {
-  readonly stop: Stop;
-
-  constructor(stop: Stop) {
-    super("Cloudflare did not run a statement");
-    this.stop = stop;
-  }
-}
-
-/** The database as core reads it: one statement a batch, which is all a reading sends. */
-function readerOf(run: Run, databaseId: string): SqlDriver {
-  return {
-    batch: async (statements) => {
-      const [statement, ...others] = statements;
-      if (statement === undefined || others.length > 0) throw new Error("the reader runs one statement a batch");
-
-      const { sql, params } = statement;
-      const done = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseDatabase(api).query(databaseId, { account_id: run.accountId, sql, params: params.map(String) })));
-      if (!done.ok) throw new Unasked(stopOf(done, PERMISSION));
-
-      if (done.value.some((result) => result.success === false)) throw new Unasked({ kind: "failed", what: "the database did not run a statement" });
-
-      return [{ rows: done.value.flatMap((result) => (result.results ?? []) as Record<string, unknown>[]), changes: 0 }];
-    },
-  };
 }
 
 /**
@@ -74,7 +41,7 @@ function readerOf(run: Run, databaseId: string): SqlDriver {
  *
  * @returns no `drift` for a database the Worker opens, and `current` for one that holds every schema step of this commit
  */
-async function readDatabase(reader: SqlDriver): Promise<Reading> {
+async function readDatabase(reader: SqlDriver): Promise<Standing> {
   const standing = await readOpening(reader);
   if (standing.kind === "newer") return { drift: "a schema step this commit does not have", current: false };
 
@@ -94,12 +61,12 @@ async function readDatabase(reader: SqlDriver): Promise<Reading> {
   }
 }
 
-/** Read the database through Cloudflare's API. A statement Cloudflare did not run is answered as the stop it is. */
-async function read(run: Run, databaseId: string): Promise<Reading | Stop> {
+/** Read something of the database through Cloudflare's API, by the driver the product's own commands read it with. A call Cloudflare did not take, or a statement it did not run, is answered as the stop it is. */
+async function asked<Read>(run: Run, databaseId: string, reading: (reader: SqlDriver) => Promise<Read>): Promise<Read | Stop> {
   try {
-    return await readDatabase(readerOf(run, databaseId));
+    return await reading(apiDriver(run.connection, { accountId: run.accountId, databaseId }));
   } catch (error) {
-    if (error instanceof Unasked) return error.stop;
+    if (error instanceof ApiRefused) return stopOf(error.failure, PERMISSION);
 
     throw error;
   }
@@ -111,36 +78,58 @@ async function read(run: Run, databaseId: string): Promise<Reading | Stop> {
  * @returns `false` for a database that is behind, or that this commit's Worker would refuse; or why Cloudflare did not answer
  */
 export async function holdsOwnSchema(run: Run, databaseId: string): Promise<boolean | Stop> {
-  const found = await read(run, databaseId);
+  const found = await asked(run, databaseId, readDatabase);
 
   return isStop(found) ? found : found.drift === undefined && found.current;
 }
 
 /**
- * Leave a database this commit's Worker opens, and make any other anew: the old one is deleted with everything in it, and an empty one takes its name.
+ * Read when the install last asked the project's website for a newer version, which its scheduled sweep does once a day and nothing else of a run does.
  *
- * A run that stops between the two leaves the account without the database, and the next run makes it.
- *
- * @param databaseId - the test install's database as the account holds it now
- * @returns the database to bind, its id hidden, with `present` or why it was made anew, and whether the build before is left unable to answer; or why Cloudflare stopped the run
+ * @returns the moment, in milliseconds since the epoch; `undefined` for a database no sweep has asked from; or why Cloudflare did not answer
  */
-export async function settleDatabase(run: Run, databaseId: string): Promise<Settled | Stop> {
-  const found = await read(run, databaseId);
+export function lastAsked(run: Run, databaseId: string): Promise<number | undefined | Stop> {
+  return asked(run, databaseId, async (reader) => (await new SqlDatabase(reader).readUpdateCheck())?.checked_at);
+}
+
+/**
+ * Say what of the Worker named as the install's this commit's install would not have made, in words that quote nothing it holds.
+ *
+ * `poplin install` leaves the code of a Worker that stands, so one of an install that was never finished would go on running another build's code.
+ *
+ * @returns `undefined` for an account with no Worker of the name, and for a Worker of a finished install on the product's bucket; or why Cloudflare did not answer
+ */
+async function workerDrift(run: Run): Promise<string | undefined | Stop> {
+  const bindings = await readWorker(run.connection, { accountId: run.accountId, script: SCRIPT });
+  if (!bindings.ok) return stopOf(bindings, "Workers Scripts: Edit");
+
+  if (bindings.value === undefined) return undefined;
+
+  if (boundInstall(bindings.value) === undefined) return "a Worker of an install that was never finished";
+
+  const bucket = bindings.value.find((binding) => binding.name === INSTALL_OBJECTS.bucketBinding && binding.type === "r2_bucket");
+
+  return bucket?.bucket_name === INSTALL_OBJECTS.bucket ? undefined : "a Worker bound to another bucket than the product's";
+}
+
+/**
+ * Read what stands of the test install, and whether this commit's install would have made it.
+ *
+ * @returns what another build made of it, in words that quote nothing the account holds, and whether its database is at this commit's schema; or why Cloudflare did not answer
+ */
+export async function readStanding(run: Run): Promise<Standing | Stop> {
+  const worker = await workerDrift(run);
+  if (typeof worker === "object") return worker;
+
+  if (worker !== undefined) return { drift: worker, current: false };
+
+  const database = await findDatabase(run);
+  if (database === undefined) return { drift: undefined, current: false };
+
+  if (typeof database !== "string") return database;
+
+  const found = await asked(run, database, readDatabase);
   if (isStop(found)) return found;
 
-  const { drift } = found;
-  if (drift === undefined) return { id: databaseId, result: "present", strandsOlder: !found.current };
-
-  const deleted = await callCloudflare(run.connection, (api) => new BaseDatabase(api).delete(databaseId, { account_id: run.accountId }));
-  if (!deleted.ok) return stopOf(deleted, PERMISSION);
-
-  // Made by name at once, with no look at the account's list, which may still hold the one just deleted.
-  const made = await callCloudflare(run.connection, (api) => new BaseDatabase(api).create({ account_id: run.accountId, name: INSTALL_OBJECTS.database }));
-  if (!made.ok) return stopOf(made, PERMISSION);
-
-  if (made.value.uuid === undefined) return { kind: "failed", what: "Cloudflare named no database" };
-
-  run.hide(made.value.uuid);
-
-  return { id: made.value.uuid, result: `made anew: it held ${drift}`, strandsOlder: true };
+  return found.drift === undefined ? found : { drift: `a database that held ${found.drift}`, current: false };
 }

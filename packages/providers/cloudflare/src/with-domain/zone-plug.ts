@@ -1078,18 +1078,6 @@ export function rightFor(object: Piece): string {
 }
 
 /**
- * Mend the keys of an install as a repair does, with a token that has proven itself, and nothing else: no other object is read or changed.
- *
- * @returns a row a key: one that stands is left, one that is missing, refused, or lacks a right is made anew, and a key of either name that the install does not hold is deleted
- */
-export async function keysMended(connection: Connection, placed: KeyHolder): Promise<Extract<DomainReading, { readonly ok: true }>> {
-  const progress: Progress = { rows: [], steps: [], stopped: false };
-  await workerPiece(progress, "apply", placed, connection, []);
-
-  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object] })), steps: progress.steps };
-}
-
-/**
  * Give an install new keys, both made with a token that has proven itself, and nothing else: no other object is changed.
  *
  * @param replaces - for each key, whether the install holds one, which the new one stands in for

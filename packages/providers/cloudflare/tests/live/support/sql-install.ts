@@ -7,6 +7,7 @@ import { ADDRESSES } from "../../../../../app/tests/sites/support/layout";
 import type { Fetch } from "../../../../../cli/src/client/client";
 import type { Login } from "../../../../../core/src/auth/logins";
 import { mintToken } from "../../../../../core/src/auth/tokens";
+import type { Database } from "../../../../../core/src/database/database";
 import { openDatabase } from "../../../../../core/src/database/open";
 import { type Hostname, parseHostname } from "../../../../../core/src/names/hostname";
 import { DEFAULT_PUBLIC_WORD } from "../../../../../core/src/names/marker";
@@ -63,6 +64,34 @@ function hostOf(raw: string): Hostname {
 }
 
 /**
+ * The real API over a database, as an install of a kind answers it.
+ *
+ * @param store - the bucket the install stores its files in
+ * @returns the origin the API answers on, and what sends one request to it
+ */
+export function apiOver(database: Database, store: MemoryStore, kind: "domain" | "account address"): Pick<SqlInstall, "server" | "fetch"> {
+  const free = kind === "account address";
+  const addresses = free ? pathAddresses({ sitesHost: hostOf(FREE_HOSTS.sites), privateHost: hostOf(FREE_HOSTS.private) }) : ADDRESSES;
+  const api = createApi({
+    database,
+    store,
+    now: () => FAKE_NOW,
+    addressOf: addresses.addressOf,
+    publicAddressOf: addresses.publicAddressOf,
+    reservedNames: addresses.reservedNames,
+    readToken: (id) => database.getToken(id),
+    limits: LIMITS,
+    version: VERSION,
+    layout: free ? { kind: "path", sites_host: FREE_HOSTS.sites, private_host: FREE_HOSTS.private } : { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD },
+    counters: new MemoryCounters(),
+    visitorOf: async () => "one-visitor",
+    update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
+  });
+
+  return { server: `https://${free ? FREE_HOSTS.admin : ADMIN_HOST}`, fetch: (input, init) => api.fetch(new Request(input, init)) };
+}
+
+/**
  * Open a fake install with no site and no token.
  *
  * @param kind - `account address` for an install without a domain, whose every site is a path on one of two hosts
@@ -76,31 +105,11 @@ export async function openSqlInstall(kind: "domain" | "account address" = "domai
   const { database } = opened;
   await database.initSettings(defaultSettings({ installer: INSTALLER }), { as: "first_login", by: INSTALLER, at: FAKE_NOW });
 
-  const counters = new MemoryCounters();
-  const free = kind === "account address";
-  const addresses = free ? pathAddresses({ sitesHost: hostOf(FREE_HOSTS.sites), privateHost: hostOf(FREE_HOSTS.private) }) : ADDRESSES;
   const store = new MemoryStore();
-  const api = createApi({
-    database,
-    store,
-    now: () => FAKE_NOW,
-    addressOf: addresses.addressOf,
-    publicAddressOf: addresses.publicAddressOf,
-    reservedNames: addresses.reservedNames,
-    readToken: (id) => database.getToken(id),
-    limits: LIMITS,
-    version: VERSION,
-    layout: free ? { kind: "path", sites_host: FREE_HOSTS.sites, private_host: FREE_HOSTS.private } : { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD },
-    counters,
-    visitorOf: async () => "one-visitor",
-    update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
-  });
-
   const sql: SqlInstall["sql"] = async (statement, params = []) => (await driver.batch([{ sql: statement, params: [...params] }]))[0]?.rows ?? [];
 
   return {
-    server: `https://${free ? FREE_HOSTS.admin : ADMIN_HOST}`,
-    fetch: (input, init) => api.fetch(new Request(input, init)),
+    ...apiOver(database, store, kind),
     store,
     sql,
     addToken: async (note) => {

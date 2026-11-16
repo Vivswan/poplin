@@ -17,8 +17,8 @@ import type { BoundInstall } from "../../src/shared/install/kind/zone-binding";
 /** The Worker's name on the test account. */
 export const SCRIPT = "poplin";
 
-/** The bucket that holds the test install's sites. No install of a person has a bucket of this name. */
-export const BUCKET = "poplin-live-sites";
+/** The bucket that marks a test account, which a person made there by hand and no script makes, fills, or removes. No install of a person has a bucket of this name. */
+export const TEST_MARK = "poplin-live-sites";
 
 /** What stands where a hidden value would have been printed. */
 const HIDDEN = "[hidden]";
