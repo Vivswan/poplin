@@ -71,14 +71,21 @@ export type Stop =
   | { readonly problem: "token_refused" | "no_domain" | "stopped" | "crashed"; readonly exit: 1; readonly words: string }
   | { readonly problem: "unreachable"; readonly exit: 5; readonly words: string };
 
-/** What the command line asks for: the help, the version, the list of providers, a refusal, or a plan to run. `pick` is a line on a terminal that names no provider: `named` reads the same line for the provider the person chose. */
-export type ParsedInstall =
+/**
+ * What the words after an install command ask for: the help, the version, the list of providers, a refusal, or the command's plan to run.
+ *
+ * `pick` is a line on a terminal that names no provider: `named` reads the same line for the provider the person chose.
+ */
+export type Parsed<Planned> =
   | { readonly kind: "help"; readonly provider: Provider | undefined }
   | { readonly kind: "version" }
   | { readonly kind: "list"; readonly json: boolean }
-  | { readonly kind: "pick"; readonly json: false; readonly named: (provider: Provider) => ParsedInstall }
+  | { readonly kind: "pick"; readonly json: false; readonly named: (provider: Provider) => Parsed<Planned> }
   | { readonly kind: "stop"; readonly stop: Stop; readonly json: boolean }
-  | { readonly kind: "plan"; readonly plan: Plan };
+  | { readonly kind: "plan"; readonly plan: Planned };
+
+/** What the words after `poplin install` ask for. */
+export type ParsedInstall = Parsed<Plan>;
 
 /** What the command reaches outside its arguments, beside the machine's own ends, so a test can stand in for each. */
 export interface InstallEnds {
