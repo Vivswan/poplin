@@ -43,7 +43,7 @@ function drawn(boxes: "first" | "login", refusal?: Refused): Within {
 
     return refusal;
   };
-  render(<Held start={boxes === "login" ? { boxes, form: FORM } : { boxes, forms: { domain: FORM, "no-domain": NO_DOMAIN_FORM } }} onRepair={onRepair} />);
+  render(<Held start={boxes === "first" ? { boxes, forms: { domain: FORM, "no-domain": NO_DOMAIN_FORM } } : { boxes, form: FORM }} onRepair={onRepair} />);
 
   return within(document.body);
 }

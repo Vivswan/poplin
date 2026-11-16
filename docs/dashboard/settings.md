@@ -55,7 +55,7 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 
 `poplin update` works on an install that holds its key: [Update the install](../upkeep/update.md#with-the-kept-key) shows what it does. An install that holds none answers `no_key`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
-`poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--login`, and `--domain` under a domain: [without a domain](../start/without-a-domain.md#the-steps) it takes none. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
+`poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--login`, and `--domain` under a domain: [without a domain](../start/without-a-domain.md#the-steps) it takes none. On an install that has them, `--login` alone corrects a first login that was mistyped, until the first login. After it, the command only repairs: `--check` is refused. It needs no login. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
 
 The settings `poplin config` takes:
 

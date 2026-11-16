@@ -164,7 +164,7 @@ What guards each address:
 | the API, `/api`, which the CLI and `poplin mcp` call | the token the Worker issued; Access lets everyone through to it, so a machine needs no browser after its login |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
-| the setup page, `/setup`, until the first login | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it answers 404 for good |
+| the setup page, `/setup` | the pasted Cloudflare API token alone: it must act on the install's own account. On a Worker that has no domain yet, a token changes only what its own account holds, and reads and writes nothing this Worker keeps. Anyone may open the page and gets the form and nothing of the install; five tries a minute from one address. After the first login it only repairs: it takes the token and no other value, and corrects no login |
 | the Worker's own `workers.dev` address, on an install under a domain | it answers the setup page and nothing else: no site, no API, no login, no dashboard |
 
 Two Access applications do this, made once at install, never per site:

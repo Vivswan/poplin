@@ -11,8 +11,8 @@ export type Start = SetupStart;
 /** A kind of install a person chooses on an install with nothing set: under a domain of their own, or with none. */
 export type Kind = keyof Extract<Start, { readonly boxes: "first" }>["forms"];
 
-/** Which form the screen shows: the one of the chosen kind on an install with nothing set, or the one of an install nobody has logged in to. */
-export type Boxes = Kind | "login";
+/** Which form the screen shows: the one of the chosen kind on an install with nothing set, the one of an install nobody has logged in to, or the one that only repairs an install somebody has. */
+export type Boxes = Kind | "login" | "repair";
 
 /** The start values of the setup screen, out of the ones the page carries; `null` on every page but the setup page. */
 export const SETUP: Start | null = (BOOT as typeof BOOT & { readonly setup?: Start }).setup ?? null;
@@ -28,6 +28,6 @@ export type SetupRan = InferResponseType<typeof setupApi.repair.$post, 200>;
  *
  * @param kind - the kind of install chosen, which only an install with nothing set asks
  */
-export function shownOf(start: Start, kind: Kind): { readonly boxes: Boxes; readonly form: Extract<Start, { readonly boxes: "login" }>["form"] } {
-  return start.boxes === "login" ? { boxes: "login", form: start.form } : { boxes: kind, form: start.forms[kind] };
+export function shownOf(start: Start, kind: Kind): { readonly boxes: Boxes; readonly form: Exclude<Start, { readonly boxes: "first" }>["form"] } {
+  return start.boxes === "first" ? { boxes: kind, form: start.forms[kind] } : { boxes: start.boxes, form: start.form };
 }

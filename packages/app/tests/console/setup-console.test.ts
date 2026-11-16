@@ -21,8 +21,8 @@ interface Options {
   /** Whether the install has nothing set, so the screen asks its domain and first login. */
   readonly first?: boolean;
 
-  /** Whether the page answers; it does when left out. */
-  readonly open?: () => Promise<boolean>;
+  /** Whether anybody has logged in; nobody has when left out. */
+  readonly loggedIn?: () => Promise<boolean>;
 
   /** Where tries are counted; left out, exact counters in memory. */
   readonly counters?: Pick<Counters, "takeMinute">;
@@ -68,7 +68,7 @@ async function openSetup(options: Options = {}) {
   const setup = createSetupConsole({
     install: { database: watched, now: opened.install.now },
     domain: options.first === true ? firstRunOf(plug) : plug,
-    open: options.open ?? (async () => true),
+    loggedIn: options.loggedIn ?? (async () => false),
     counters: options.counters ?? new MemoryCounters(),
     visitorOf: async () => "203.0.113.7",
     client: CLIENT,
@@ -91,13 +91,13 @@ const FORM = {
 
 describe("the page", () => {
   // Drift: every request would ask the database twice whether anybody has logged in.
-  test.each(["/setup", "/setup/assets/app.js", "/setup/api/check"])("asks once whether it is open, for %s", async (path) => {
+  test.each(["/setup", "/setup/assets/app.js", "/setup/api/check"])("asks once whether anybody has logged in, for %s", async (path) => {
     const asked = { count: 0 };
     const { get } = await openSetup({
-      open: async () => {
+      loggedIn: async () => {
         asked.count += 1;
 
-        return true;
+        return false;
       },
     });
     await get(path);
@@ -107,10 +107,11 @@ describe("the page", () => {
 
   // Drift: the page would name the install's domain, a login, or a setting to somebody who has proven nothing, or a client's script would be blocked or let read another origin.
   test.each([
-    [false, "login"],
-    [true, "first"],
-  ] as const)("carries the boxes of its form and the token's facts, and nothing of the install (nothing set: %p)", async (first, boxes) => {
-    const { opened, get, reads, plug } = await openSetup({ first });
+    [false, false, "login"],
+    [true, false, "first"],
+    [false, true, "repair"],
+  ] as const)("carries the boxes of its form and the token's facts, and nothing of the install (nothing set: %p, somebody has logged in: %p)", async (first, entered, boxes) => {
+    const { opened, get, reads, plug } = await openSetup({ first, loggedIn: async () => entered });
     const answer = await get("/setup");
     const page = await answer.text();
 
@@ -153,12 +154,12 @@ describe("the page", () => {
     expect((await run({ token: TOKEN })).status).toBe(200);
   });
 
-  // Drift: once somebody has logged in, or when the question fails, the page would still answer, and tell a stranger that an install is here.
+  // Drift: a page that answered when it could not tell which form it has, or on a Worker that lost its values after a login, would offer a first login where one is stored.
   test.each([
-    ["answers no", async (): Promise<boolean> => false],
-    ["fails to say", async (): Promise<boolean> => Promise.reject(new Error("the database is away"))],
-  ] as const)("is shut on every path when the question %s", async (_name, open) => {
-    const { get, run, plug } = await openSetup({ open });
+    ["a set install fails to say whether anybody has logged in", false, async (): Promise<boolean> => Promise.reject(new Error("the database is away"))],
+    ["an install with nothing set says somebody has", true, async (): Promise<boolean> => true],
+  ] as const)("is shut on every path when %s", async (_name, first, loggedIn) => {
+    const { get, run, plug } = await openSetup({ first, loggedIn });
     const answers = [await get("/setup"), await get("/setup/assets/app-4f1c.js"), await run({ token: TOKEN })];
 
     expect(await Promise.all(answers.map(async (answer) => [answer.status, await answer.text()]))).toEqual(answers.map(() => [404, "Not found."]));
@@ -177,6 +178,17 @@ describe("the page", () => {
 });
 
 describe("a run", () => {
+  // Drift: the screen's press after the first login would be shut out with the page that used to be, and a locked-out person would have no button to press.
+  test("once somebody has logged in still repairs with the install's own token, and refuses another account's as before", async () => {
+    const { opened, run, reads } = await openSetup({ loggedIn: async () => true });
+    const refused = await run({ token: FOREIGN });
+    const read = reads.count;
+    const repaired = await run({ token: TOKEN });
+
+    expect([refused.status, ((await refused.json()) as Refusal).code, read]).toEqual([403, "token", 0]);
+    expect([repaired.status, ((await repaired.json()) as { readonly expects: string | null }).expects]).toEqual([200, opened.owner]);
+  });
+
   // Drift: a stranger's token would learn something of the install, or cost it a read.
   test("with a token of another account is refused at the token's box, reads no setting, and writes nothing", async () => {
     const { opened, run, reads } = await openSetup();

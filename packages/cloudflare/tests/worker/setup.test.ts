@@ -79,8 +79,9 @@ afterEach(() => {
 });
 
 describe("the setup page", () => {
-  // Drift: the page is the one way in before anyone can log in; left open after that, it is a door beside the login for whoever holds a token of the account.
-  test("answers on the admin hostname and on the Worker's own address until somebody logs in, and never again: not on a new instance, not its client's files, and not to a run", async () => {
+  // Drift: the page is the one way in before anyone can log in, and the one way back in when the login in front of the dashboard breaks.
+  // Shut after the first login it leaves no door; open as more than a repair it is a second dashboard behind a token.
+  test("answers on both addresses before and after the first login; after it the form takes a token alone and names nothing of the install, the account's token repairs, and a check and another account's token get nothing", async () => {
     const worker = instance(w, cloudflareOf(account, asked));
     const before = [await ask(worker, `${ADMIN}/setup`), await ask(worker, `${OWN}/setup`), await ask(worker, `${OWN}/`)];
     const opened = await readShell((await before[1]?.text()) ?? "");
@@ -88,14 +89,24 @@ describe("the setup page", () => {
     const file = await ask(worker, `${OWN}${script}`);
     await logIn(worker, w);
     const after = [await ask(worker, `${ADMIN}/setup`), await ask(worker, `${OWN}/setup`), await ask(instance(w), `${ADMIN}/setup`), await ask(worker, `${OWN}/`), await ask(worker, `${OWN}${script}`)];
+    const pages = await Promise.all(after.slice(0, 3).map((answer) => answer.text()));
+    const boxes = await Promise.all(pages.map(async (text) => ((await readShell(text)).boot as SetupBoot).setup.boxes));
+    const checked = await check(worker, `${ADMIN}/setup`, { token: TOKEN });
+    const quiet = asked.length;
+    const stranger = await repair(worker, `${OWN}/setup`, { token: OTHER_TOKEN });
+    const strangerAsked = [...new Set(asked.map((entry) => entry.path.split("?")[0]))];
     const posted = await repair(worker, `${ADMIN}/setup`, { token: TOKEN });
+    const ran = await posted.json<Ran>();
 
     expect(before.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[200, null], [200, null], [302, "/setup"]]);
     // Drift: the page is the one place a token of the whole account is typed into; under a looser policy a script of another origin could read it.
     expect([before[0]?.headers.get("Content-Security-Policy"), before[0]?.headers.get("Cache-Control")]).toEqual([POLICY, "no-store"]);
     expect([(opened.boot as SetupBoot).setup.boxes, script.startsWith("/setup/assets/"), file.status, file.headers.get("Content-Type")]).toEqual(["login", true, 200, "text/javascript;charset=utf-8"]);
-    expect([...after, posted].map((answer) => answer.status)).toEqual([404, 404, 404, 404, 404, 404]);
-    expect(asked).toEqual([]);
+    expect(after.map((answer) => answer.status)).toEqual([200, 200, 200, 404, 200]);
+    expect([boxes, pages.some((text) => text.includes(OWNER) || text.includes(new URL(ADMIN).hostname))]).toEqual([["repair", "repair", "repair"], false]);
+    expect([checked.status, await checked.text(), quiet]).toEqual([404, "Not found.", 0]);
+    expect([stranger.status, ((await stranger.json()) as { code: string }).code, strangerAsked]).toEqual([403, "token", ["/zones"]]);
+    expect([posted.status, ran.expects, writes().length > 0]).toEqual([200, OWNER, true]);
   });
 
   // Drift: the Worker's own address is beside every route and every rule of the zone, and in front of no Access application: anything of the install answered there would be reached around all of them.
@@ -110,7 +121,7 @@ describe("the setup page", () => {
   });
 
   // Drift: the page is asked for by anyone, before any login: a check that read the audit log a page at a time would cost more with every run of setup, and past the database's cap of queries for one request the page would shut on the person setting up.
-  test("stays open through its own runs and costs the same database calls after 250 of them as after none, then shuts at a login", async () => {
+  test("stays open through its own runs and costs the same database calls after 250 of them as after none, and no more once somebody has logged in", async () => {
     const tally = { calls: 0 };
     const counted = countedBindings(tally);
     const worker = instance(w, cloudflareOf(account, asked));
@@ -126,9 +137,15 @@ describe("the setup page", () => {
     const open = await ask(worker, `${ADMIN}/setup`, {}, counted);
     const after = tally.calls;
     await database.appendAudit({ action: "login", detail: {} }, { by: OWNER, at: w.clock.now });
+    tally.calls = 0;
+    const entered = await ask(worker, `${ADMIN}/setup`, {}, counted);
+    const first = tally.calls;
+    tally.calls = 0;
+    await ask(worker, `${ADMIN}/setup`, {}, counted);
 
-    expect([open.status, after, (await ask(worker, `${ADMIN}/setup`, {}, counted)).status]).toEqual([200, fresh, 404]);
-    expect(fresh).toBeGreaterThan(0);
+    expect([open.status, after, entered.status, first]).toEqual([200, fresh, 200, fresh]);
+    // An instance that saw a login asks for it no more.
+    expect([fresh > 0, tally.calls]).toEqual([true, fresh - 1]);
   });
 
   // Drift: a check that wrote would repair behind the owner's back, and a token of another account that passed would set up somebody else's zone from this page.
