@@ -7,7 +7,7 @@ order: 20
 
 What a page of one site, or of another domain, can ask of a site; [Security](security.md) says who may open a site.
 
-Each site is its own origin, so a page's scripts cannot fetch another site's pages or files and read what comes back. A page can still run another site's script file, as the tables below say. The cookie of the dashboard's login is sent to the dashboard alone.
+Under a domain each site is its own origin, so a page's scripts cannot fetch another site's pages or files and read what comes back; [Without a domain](#without-a-domain) says what differs on an install that has none. A page can still run another site's script file, as the tables below say. The cookie of the dashboard's login is sent to the dashboard alone.
 
 A browser still counts every site of the install, the dashboard, and every other hostname under the domain as one site. What a script of one site can do with that:
 
