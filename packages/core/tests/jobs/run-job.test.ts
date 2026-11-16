@@ -181,6 +181,14 @@ describe("runJob", () => {
         return runJob(world.install, job);
       },
     ],
+    [
+      "a site the database refuses at the finish ends the last round",
+      async (world: World, job: Job): Promise<unknown> => {
+        using refusing = spyOn(world.install.database, "publishUploadAsSite").mockResolvedValue({ kind: "name_taken" });
+
+        return [await runJob(world.install, job), await runJob(world.install, job), refusing.mock.calls.length];
+      },
+    ],
   ])("%s: the copy's files are removed, the problem `copy_failed` is noted, and an ask is answered that the copy is gone", async (_case, end) => {
     const world = await makeWorld();
     const host = backgroundJobs();
