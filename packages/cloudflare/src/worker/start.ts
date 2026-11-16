@@ -41,6 +41,7 @@ import { readZoneBinding } from "../zone/zone-binding";
 import { createFirstRun } from "../zone/first-run";
 import { createDomainPlug, giveKey } from "../zone/zone-plug";
 import type { Bindings } from "./bindings";
+import { logFault } from "./fault";
 import { derivedSecret, type Held } from "./held";
 import { readOwnWorker } from "./own-worker";
 
@@ -315,7 +316,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     limits: API_LIMITS,
     version: VERSION,
     publicWord: layout.publicWord,
-    report: (error) => console.error("poplin: an API request failed", error),
+    report: (error) => logFault("an API request failed", error),
     counters,
     visitorOf: (request) => visitorOf(request, database),
     rebuild,
