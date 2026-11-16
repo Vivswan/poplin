@@ -60,9 +60,24 @@ Cloudflare keeps a history of the install's database, named `poplin`, and calls 
 
 ### Before the install is used again
 
-The restore also undoes what was removed after the moment it goes back to. Go through this list first.
+The restore also undoes what was removed after the moment it goes back to, and it winds each site's version numbers back while the bucket keeps its files. Go through this list first.
 
 | After the restore                                             | So                                                         | Do                                                                           |
 | ------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | a token removed after that moment is a token again            | it works again, unless it ran out since                    | Access, Tokens: remove it again. It is in the list above Removed tokens      |
 | a user removed after that moment is a user again              | their email is in `logins` again                           | Access, Users: remove them again, before the next Repair                     |
+| a site published after that moment can get a used number      | its next publish can say it worked and serve old files     | do not publish to it before the three steps below                            |
+
+A publish stores each file under its site's folder and version number, and skips a file the bucket already holds there at the same size. After the restore a site's next number can be one whose files are still in the bucket: a changed page of the same size then keeps its old bytes, and the publish reports no fault.
+
+Do this for each site that was published after that moment, and for every site if you cannot tell which:
+
+| Step | Example                                                 | Does                                                             |
+| ---- | ------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1    | `poplin export report--k3f9x2ab71qz --out restored.zip` | downloads the site as the restored records list it               |
+| 2    | `poplin delete report--k3f9x2ab71qz --forever`          | removes the site and every file under its folder                 |
+| 3    | `poplin import restored.zip`                            | puts it back under its address, in a new folder with no old file |
+
+- **Stop if step 1 fails.** The files of the restored version are gone from the bucket then, and step 2 would remove what is left. Publish the folder as a new site, or undo the restore with its bookmark.
+- **Step 2 removes the newer versions for good.** The versions published after that moment are in the bucket and in no record, so no zip holds them.
+- **Name a zip that is not there yet.** `--all-versions` adds the other versions the restored records list.
