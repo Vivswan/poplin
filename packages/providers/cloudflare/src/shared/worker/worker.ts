@@ -121,6 +121,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held,
   const dashboard = createConsole({
     install: { ...instance.install, store: meter.store, ...known },
     version: instance.version,
+    layout: instance.hosts.layout,
     admit: async (headers) => {
       const who = await admit(headers, { identify: instance.identify, logins: held.logins, now });
       if (who.ok) return who;

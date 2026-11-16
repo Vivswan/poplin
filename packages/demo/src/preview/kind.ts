@@ -30,6 +30,9 @@ const HOST_ADDRESS = new RegExp(`(https://)?(?<![%@\\w.-])([a-z0-9-]+)${DOMAIN_E
 /** The scheme every address of an install begins with. */
 const HTTPS = "https://";
 
+/** An address written with its scheme. */
+const WITH_SCHEME = /^https?:\/\//i;
+
 /** The three origins a preview of an install without a domain answers at, each as a browser on this machine writes it, such as `http://sites.localhost:4400`. Their hostnames are three different ones, of two labels or more. */
 export interface LocalOrigins {
   /** Where the dashboard and the API answer. */
@@ -67,6 +70,9 @@ export interface Kind {
 
   /** The address of the dashboard's first page as a page at the root of a public site links to it: a whole address where the dashboard has an origin of its own, else the way up from the place the site is served at. */
   readonly homeFromSite: string;
+
+  /** Reads a site's address on this machine, pasted into a search, back to the install's own; any other text stays as it is. `origin` is the one the browser asked. */
+  readonly ownAddress: (pasted: string, origin: string) => string;
 
   /** Rewrites every address of the install that a text holds outside an attribute as the one that works here. `origin` is the one the browser asked; `real` gives the address a site's own leads to instead, by the site's hostname. */
   readonly localText: (text: string, origin: string, real: ReadonlyMap<string, string>) => string;
@@ -113,6 +119,20 @@ function withDomain(): Kind {
     return written.replaceAll(ADMIN_ORIGIN, origin).replaceAll(new URL(ADMIN_ORIGIN).hostname, host);
   }
 
+  // A site is served under the dashboard's origin, after whatever path the demo itself sits under: its address is read from `/served/` on.
+  function ownAddress(pasted: string, origin: string): string {
+    const text = pasted.trim();
+    const here = new URL(origin);
+    const url = URL.parse(WITH_SCHEME.test(text) ? text : `${here.protocol}//${text}`);
+    const at = url?.pathname.indexOf(`${SERVED_PREFIX}/`) ?? -1;
+    if (url === null || url.host !== here.host || at < 0) return pasted;
+
+    // The label is taken as it was written, with no slash after it too: one that is no label names no site to the app.
+    const [label = "", ...rest] = url.pathname.slice(at + SERVED_PREFIX.length + 1).split("/");
+
+    return label === "" ? pasted : `${HTTPS}${label}${DOMAIN_ENDING}/${rest.join("/")}`;
+  }
+
   return {
     addresses,
     layout: { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD },
@@ -123,6 +143,7 @@ function withDomain(): Kind {
     home: () => "/",
     // A site is served two folders under the dashboard, whatever path the demo itself sits under.
     homeFromSite: "../../",
+    ownAddress,
     localText,
   };
 }
@@ -146,6 +167,8 @@ function withoutDomain(origins: LocalOrigins): Kind {
     siteRoot: (hostname) => (hostname === privates.hostname ? privates.origin : sites.origin),
     home: (asked) => (addresses.isSiteHost(asked.hostname) ? `${admin.origin}/` : "/"),
     homeFromSite: `${admin.origin}/`,
+    // The layout names the two site hosts as a browser here asks them, so a pasted address is the install's own already.
+    ownAddress: (pasted) => pasted,
     localText: (text) =>
       text.replace(hostAddress, (...[whole = "", scheme, hostname = ""]: string[]) => {
         const origin = here.get(hostname);

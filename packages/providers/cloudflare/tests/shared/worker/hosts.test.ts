@@ -258,6 +258,31 @@ describe("what a request costs, by the kind of install", () => {
   });
 });
 
+describe("the search of the Sites list, by the kind of install", () => {
+  // Drift: the dashboard reads a pasted address with the layout the start hands it. Handed to one kind alone, or not at all, a link copied from the list would find nothing there; and a lookup made to read it would cost every search a query.
+  test.each([KINDS.domain, KINDS.account])("on an install with $kind, a public and a private site's own address each find that one site, for the queries the whole list costs", async (at) => {
+    const tally = { calls: 0 };
+    const worker = instance(w);
+    const counted = { ...countedBindings(tally), ZONE: at.bindings.ZONE } as Bindings;
+    // The instance starts on the counted bindings, so every query after it is counted.
+    await ask(worker, `${at.admin}/api/whoami`, {}, counted);
+    const calls = callsOf(worker, await tokenOf(w, "publisher"), at);
+    const open = await publish(worker, await tokenOf(w, "publisher"), { name: "docs", access: "public", public_name: "manual" }, [page("<p>docs</p>")], calls);
+    const hidden = await publish(worker, await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")], calls);
+    const owner = await accessHeaders(w);
+    const found: (readonly [readonly string[], number])[] = [];
+    for (const typed of ["", open.addresses.public ?? "", hidden.addresses.site, `${new URL(hidden.addresses.site).href}a/b.html?c=d`]) {
+      tally.calls = 0;
+      const answer = await ask(worker, `${at.admin}/data/sites?q=${encodeURIComponent(typed)}`, { headers: owner }, counted);
+      const { sites } = await done<{ sites: readonly { name: string }[] }>(answer);
+      found.push([sites.map((site) => site.name).sort(), tally.calls]);
+    }
+    const [[, whole] = [[], 0]] = found;
+
+    expect([whole > 0, found]).toEqual([true, [[["docs", "report"], whole], [["docs"], whole], [["report"], whole], [["report"], whole]]]);
+  });
+});
+
 describe("the upload key, by the kind of install", () => {
   // Drift: the upload key is read once at the start, whatever the kind. Handed to one kind alone, an install without a domain would send every file through its Worker with a key that works, or one with a domain would.
   test.each([KINDS.domain, KINDS.account])("on an install with $kind, a begun publish is handed a ticket for the bucket where the Worker holds an upload key, and one of the install's own route where it holds none", async (at) => {

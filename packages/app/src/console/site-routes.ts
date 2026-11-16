@@ -1,6 +1,7 @@
 // The data of the Sites screen: one page of the table, one site, and each change of a site.
 //
 //   GET  /sites                    one page; ?view=trash, ?q=, ?access=, ?sort= with ?dir=, ?after=
+//                                  ?q= is a text, or what names one site: its id, its label, its link, or its whole address
 //   GET  /sites/<label>            one site, and whether the install lets search engines in
 //                                  both with the names of the logins there are, for whoever published a version
 //   GET  /public-address?name=     the address a site made public under that name answers at
@@ -10,13 +11,15 @@ import { vValidator } from "@hono/valibot-validator";
 import { SITE_CHANGES } from "@poplin/core/src/actions/changes";
 import { readConfig } from "@poplin/core/src/actions/config";
 import { deleteSite } from "@poplin/core/src/actions/delete";
-import { listSitesWithNames } from "@poplin/core/src/actions/list";
+import { listSitesWithNames, MAX_NAMED } from "@poplin/core/src/actions/list";
 import { newLink } from "@poplin/core/src/actions/new-link";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
 import { updateSite } from "@poplin/core/src/actions/set";
 import { getSite, getSiteWithNames } from "@poplin/core/src/actions/show";
+import { keptPublicNames, readHostLabel } from "@poplin/core/src/names/marker";
 import { parsePublicName } from "@poplin/core/src/names/names";
+import { mayBeOfInstall, readSiteReference, settleSite } from "@poplin/core/src/sites/references";
 import { Hono } from "hono";
 import * as v from "valibot";
 
@@ -28,13 +31,16 @@ const PAGE_SIZE = 25;
 /** The place a page of the list ended, as the address carries it: the change time, a dash, the id, and after a tilde the name, the access, or the key of the title of a table ordered by one; that key may be empty. */
 const CURSOR_PATTERN = /^([0-9]{1,16})-([0-9a-z]{12})(?:~([\s\S]{0,40}))?$/u;
 
+/** The most characters of a search the route reads: an address with its path and its query fits. */
+const MAX_TYPED = 2048;
+
 /** The accesses a table can be narrowed to, from the most private on. */
 const ACCESSES = ["private", "unlisted", "public"] as const;
 
 /** What the table's address may ask of the listing. */
 const PAGE_QUERY = v.object({
   view: v.optional(v.picklist(["trash"])),
-  q: v.optional(v.string()),
+  q: v.optional(v.pipe(v.string(), v.maxLength(MAX_TYPED))),
   access: v.optional(v.picklist(ACCESSES)),
   sort: v.optional(v.picklist(["updated", "name", "access", "title"])),
   dir: v.optional(v.picklist(["asc", "desc"])),
@@ -62,6 +68,33 @@ type Row = Extract<Awaited<ReturnType<typeof listSitesWithNames>>, { ok: true }>
 /** What the listing is asked. */
 type Listing = NonNullable<Parameters<typeof listSitesWithNames>[2]>;
 
+/** The install as it reads an address: its origin, and the layout of its site addresses. */
+type Reading = Parameters<typeof settleSite>[1];
+
+/** The public name a typed word is the link of, where a public site's link is its name before the install's public word, as `docs-page` is of `docs`; else the word itself. */
+function linkedName(word: string, layout: Reading["layout"]): string {
+  if (layout.kind !== "hostname") return word;
+
+  const parts = readHostLabel(word, { publicWord: layout.public_word, reserved: keptPublicNames(layout.public_word) });
+
+  return parts.kind === "public-name" ? parts.name : word;
+}
+
+/**
+ * What the listing looks for, from what a person typed or pasted: the id or the public name of the site a link or an address of this install names, else the text as it stands.
+ * The text is cut to what the listing takes only here, after an address was read whole.
+ */
+function soughtFor(typed: string, reading: Reading): string {
+  const read = readSiteReference(typed);
+  const site = read.ok && mayBeOfInstall(read.value, reading.server) ? settleSite(read.value, reading) : undefined;
+  if (site !== undefined && site.kind !== "public-name") return site.id;
+
+  if (site?.under !== undefined) return site.name;
+
+  // A text with no address of this install around it may be what the Link column shows of a public site, in any case and of any length.
+  return linkedName(site?.name ?? typed.trim().toLowerCase(), reading.layout).slice(0, MAX_NAMED);
+}
+
 /** Read the place a page ended from the address: what the listing's own `after` takes under the table's order. A cursor of another order lacks what that order goes by, and the listing refuses it. */
 function placeOf(cursor: string | undefined, sort: Listing["sort"]): Pick<Listing, "after"> {
   const [, updated, id, by] = CURSOR_PATTERN.exec(cursor ?? "") ?? [];
@@ -86,10 +119,11 @@ function cursorOf(next: NonNullable<Listing["after"]>): string {
 async function sitesPage(
   { install, actor }: Shared["Variables"]["asker"],
   query: v.InferOutput<typeof PAGE_QUERY>,
+  reading: Reading,
 ): Promise<
   { readonly ok: true; readonly sites: readonly Row[]; readonly next: string | null; readonly logins: Readonly<Record<string, string>> } | Extract<Awaited<ReturnType<typeof listSitesWithNames>>, { ok: false }>
 > {
-  const named = (query.q ?? "").trim().toLowerCase();
+  const named = soughtFor(query.q ?? "", reading);
   const narrowed = { trash: query.view === "trash", ...(named === "" ? {} : { named }), ...(query.access === undefined ? {} : { access: query.access }) };
   const ordered = { ...(query.sort === undefined ? {} : { sort: query.sort }), ...(query.dir === undefined ? {} : { dir: query.dir }) };
   const listed = await listSitesWithNames(install, actor, { ...narrowed, ...ordered, ...placeOf(query.after, query.sort), limit: PAGE_SIZE });
@@ -101,7 +135,8 @@ async function sitesPage(
 /** The Sites screen's data routes. Each change calls one action with the site's label from the address, and answers the site after it. */
 export const siteRoutes = new Hono<Shared>()
   .get("/sites", vValidator("query", PAGE_QUERY, refuseInvalid), async (context) => {
-    const page = await sitesPage(context.get("asker"), context.req.valid("query"));
+    const reading = { server: new URL(context.req.url).origin, layout: context.get("host").layout };
+    const page = await sitesPage(context.get("asker"), context.req.valid("query"), reading);
 
     return page.ok ? context.json(page) : refused(context, page);
   })

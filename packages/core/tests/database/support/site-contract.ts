@@ -657,7 +657,8 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: a listed site shows its title above its name, and a public one its public name in its link. A search of the name alone would miss the site a person reads, and one of a title the listing hides would list a site with no hit to see.
-    describe("a text finds a site by its name, by the title it is listed with, or by its public name", () => {
+    // Without the whole id, the pasted link of a private site would find nothing; with a part of one, two typed letters would list sites with no hit to see.
+    describe("a text finds a site by its name, by the title it is listed with, by its public name, or by its whole id", () => {
       const stocked = async (): Promise<Database> => {
         const database = await opened(makeDatabase, mintFrom("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc", "dddddddddddd", "eeeeeeeeeeee", "ffffffffffff"));
         const drafts: readonly (readonly [name: string, title: string | null, pageTitle?: string])[] = [
@@ -699,6 +700,11 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
         ["a title of the trash, looked for outside it", { named: "archive" }, [[]]],
         ["a title of the trash", { named: "archive", trash: true }, [["old"]]],
         ["the trash, which holds one site the text is in", { named: "report", trash: true }, [["old"]]],
+        ["a whole id", { named: "bbbbbbbbbbbb" }, [["notes"]]],
+        ["a whole id, with capitals typed", { named: "BBBBBBBBBBBB" }, [["notes"]]],
+        ["a part of an id", { named: "bbbbbbbbbbb" }, [[]]],
+        ["an id of the trash, looked for outside it", { named: "ffffffffffff" }, [[]]],
+        ["an id of the trash", { named: "ffffffffffff", trash: true }, [["old"]]],
       ] as const)("%s", async (_what, query, pages) => {
         expect<unknown>(await walked(await stocked(), query)).toEqual(pages);
       });

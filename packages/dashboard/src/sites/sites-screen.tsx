@@ -30,8 +30,8 @@ import { emptyWords, FILTERS, type Filter, filteredQuery, filterOf, SORTS, sorte
 import { ColumnsMenu, DataTable } from "@/table/data-table";
 import { useTableLayout } from "@/table/layout";
 
-/** The most characters the list is searched for: as many as the server's listing takes. */
-const MAX_SEARCH = 40;
+/** The most characters the search takes: as many as the server reads, so a pasted link or address is sent whole. */
+const MAX_SEARCH = 2048;
 
 /** How a site's name looks in its row. */
 const NAME_LOOK = "rounded-sm py-0.5 font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";

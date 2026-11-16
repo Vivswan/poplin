@@ -245,6 +245,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
   const dashboard = createConsole({
     install: world.install,
     version: host.version,
+    layout: world.kind.layout,
     admit: admitOf(world),
     // No login happens here, so Activity gains no line of one.
     entered: async () => undefined,

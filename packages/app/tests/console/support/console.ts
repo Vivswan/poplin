@@ -12,7 +12,7 @@ import type { RulesFollow } from "../../../src/console/settings/rules-follow";
 import type { UsageHost } from "../../../src/console/usage/records";
 import { admit, type Identify } from "../../../src/login/admit";
 import { createEntries } from "../../../src/login/entries";
-import { codeCounts, FREE_LIMITS, LOGIN_HEADER, ORIGIN, openOwned, USAGE_HOST, VERSION } from "./install";
+import { codeCounts, FREE_LIMITS, KINDS, LOGIN_HEADER, ORIGIN, openOwned, USAGE_HOST, VERSION } from "./install";
 import { hostUpdate, type UpdateHost, updateHost } from "../../api/support/update-host";
 
 /** The header the stand-in reads the moment a login began from, in milliseconds since the epoch; left out, the login began an hour before the request. */
@@ -72,8 +72,19 @@ const identify: Identify<string> = async (headers, now) => {
   return { ok: true, value: email.value, since: Number(headers.get(SINCE_HEADER) ?? now - HOUR_MS) };
 };
 
+/** What a test console is opened with, each part as `openConsole` says it. */
+interface Parts {
+  readonly base: string;
+  readonly domain?: DomainPlug;
+  readonly usage: UsageHost;
+  readonly follow?: UsersFollow;
+  readonly rules?: RulesFollow;
+  readonly jobs?: Jobs;
+  readonly kind: (typeof KINDS)[keyof typeof KINDS];
+}
+
 /**
- * Open a console over a fresh install with one login.
+ * Open a console over a fresh install with one login, whose sites are hostnames.
  *
  * @param base - the path the console sits under; the root when left out
  * @param domain - the provider's side of the install; left out, the console has no Domain screen
@@ -83,7 +94,16 @@ const identify: Identify<string> = async (headers, now) => {
  * @param jobs - the host's background work; left out, a host that has none
  */
 export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST, follow?: UsersFollow, rules?: RulesFollow, jobs?: Jobs): Promise<Opened> {
-  const opened = await openOwned();
+  return openWith({ base, usage, kind: KINDS.hostname, ...(domain === undefined ? {} : { domain }), ...(follow === undefined ? {} : { follow }), ...(rules === undefined ? {} : { rules }), ...(jobs === undefined ? {} : { jobs }) });
+}
+
+/** Open a console at the root over a fresh install of one kind, with one login and no provider's side. */
+export async function openConsoleOf(kind: Parts["kind"]): Promise<Opened> {
+  return openWith({ base: "", usage: USAGE_HOST, kind });
+}
+
+async function openWith({ base, domain, usage, follow, rules, jobs, kind }: Parts): Promise<Opened> {
+  const opened = await openOwned(kind.addresses);
   const { database } = opened.install;
 
   // As a host would: the users are read on every request.
@@ -101,6 +121,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
   const built = createConsole({
     install: opened.install,
     version: VERSION,
+    layout: kind.layout,
     admit: admitOf,
     entered: createEntries(opened.install, () => undefined),
     base,

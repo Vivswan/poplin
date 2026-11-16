@@ -17,6 +17,7 @@ import { wayBack } from "@poplin/core/src/actions/go-back";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
+import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -91,6 +92,9 @@ interface ConsoleParts extends CodeTries {
   /** The version of poplin the install runs. */
   readonly version: string;
 
+  /** The layout of the install's site addresses, as the API says it to a client: an address pasted into a search is read with it. */
+  readonly layout: AddressLayout;
+
   /** The path every route of the console starts with; empty for the root. */
   readonly base: string;
 
@@ -146,7 +150,7 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("endLogins", parts.endLogins);
       context.set("rules", parts.rules);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
-      context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, version: parts.version, usage: parts.usage, jobs: parts.jobs ?? inlineJobs });
+      context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, version: parts.version, usage: parts.usage, jobs: parts.jobs ?? inlineJobs, layout: parts.layout });
 
       return next();
     }

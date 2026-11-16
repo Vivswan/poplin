@@ -6,6 +6,7 @@ import type { Updating } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
+import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
 import type { Context, TypedResponse } from "hono";
 import * as v from "valibot";
 
@@ -52,6 +53,9 @@ interface Host {
 
   /** What runs the rounds of a copy after its first request's. */
   readonly jobs: Jobs;
+
+  /** The layout of the install's site addresses, which an address pasted into a search is read with. */
+  readonly layout: AddressLayout;
 }
 
 /** What the handlers of one request share. */

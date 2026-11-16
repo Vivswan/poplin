@@ -6,8 +6,7 @@ import { createConsole } from "../../../app/src/console/console";
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
 import { answered, NOW, ORIGIN } from "../../../app/tests/api/support/install";
 import { CLIENT } from "../../../app/tests/console/support/console";
-import { FREE_LIMITS, USAGE_HOST } from "../../../app/tests/console/support/install";
-import { ADDRESSES } from "../../../app/tests/sites/support/layout";
+import { FREE_LIMITS, KINDS, USAGE_HOST } from "../../../app/tests/console/support/install";
 import type { Login as Email } from "../../../core/src/auth/logins";
 import { type Bench, cleanUp, jsonOf, openBench, type Ran } from "./support/harness";
 
@@ -79,8 +78,9 @@ async function openDesk(): Promise<Desk> {
   const credentials = new Set<string>();
 
   const dashboard = createConsole({
-    install: { database, store, now: () => clock.now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
+    install: { database, store, now: () => clock.now, addressOf: KINDS.hostname.addresses.addressOf, publicAddressOf: KINDS.hostname.addresses.publicAddressOf, reservedNames: KINDS.hostname.addresses.reservedNames },
     version: "1.0.0",
+    layout: KINDS.hostname.layout,
     admit: async (headers) => (headers.get("Test-Login") === AS_ADA["Test-Login"] ? { ok: true, actor: { scope: "admin", holder: ADA }, since: 0 } : { ok: false, refusal: "no-proof" }),
     entered: async () => undefined,
     base: "",

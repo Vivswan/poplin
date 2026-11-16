@@ -13,7 +13,7 @@ order: 10
 | Copy the link                 | copies the whole link, a hidden id included                |
 | Open the site                 | opens the site in a new tab                                |
 
-Find a site, over the list, keeps the sites whose title, name, or public name holds the text anywhere in it. The letters A to Z match in either case.
+Find a site, over the list, keeps the sites whose title, name, or public name holds the text anywhere in it. The letters A to Z match in either case. A site's link, its whole address, or its id, pasted there, finds that one site.
 
 In a window a little too narrow for the table, the name in a site's link is cut short. The dots of the id and the three buttons after it stay.
 

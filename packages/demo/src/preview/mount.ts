@@ -6,6 +6,9 @@
 //   the browser gets   "url": "http://127.0.0.1:4400/served/<a site's host label>/"    Location: /served/<a site's host label>/
 //   a site with a real address, where the host has one: "url": "https://<its address on a real install>/"
 //
+//   the browser asks   http://127.0.0.1:4400/data/sites?q=http://127.0.0.1:4400/served/<a site's host label>/
+//   the app is asked   https://poplin.example.com/data/sites?q=https://<a site's host label>.example.com/
+//
 // Where a site's address is on this machine is the kind's to say: `kind.ts` holds both layouts.
 //
 // Only addresses are rewritten: in an HTML page, in the `Location` header, and the install's own origins in a JSON answer.
@@ -19,6 +22,9 @@ export const SERVED_PREFIX = "/served";
 
 /** The query keys that speak to the preview and never reach the app, each with the request header that carries its value on. */
 const PREVIEW_KEYS = { as: "Preview-As", "preview-visitor": "Preview-Visitor" } as const;
+
+/** The query key a screen's search is sent under: a site's address on this machine, pasted there, reaches the app as the install's own. */
+const SEARCH_KEY = "q";
 
 /** No site with a real address. */
 const NO_REAL: ReadonlyMap<string, string> = new Map();
@@ -133,8 +139,8 @@ function rewrittenBody(response: Response, here: Mount): Body | undefined {
   return type.startsWith("text/plain") && response.status >= 400 ? "plain" : undefined;
 }
 
-/** The request as the piece expects it: at its own origin, with its own origin as the sender, and the preview's keys moved into headers. */
-async function appRequest(request: Request, here: Mount): Promise<Request> {
+/** The request as the piece expects it: at its own origin, with its own origin as the sender, the preview's keys moved into headers, and an address pasted into a search written as the install's own. */
+async function appRequest(request: Request, here: Mount, kind: Kind): Promise<Request> {
   const asked = new URL(request.url);
   const url = new URL(`${here.origin}${here.base}${asked.pathname.slice(here.prefix.length)}${asked.search}`);
   const headers = new Headers(request.headers);
@@ -147,6 +153,9 @@ async function appRequest(request: Request, here: Mount): Promise<Request> {
     headers.delete(header);
     if (value !== null) headers.set(header, value);
   }
+
+  const searched = url.searchParams.get(SEARCH_KEY);
+  if (searched !== null) url.searchParams.set(SEARCH_KEY, kind.ownAddress(searched, asked.origin));
 
   // The body is read whole first: a host may hand a request whose stream a second request cannot carry on.
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
@@ -170,7 +179,7 @@ export function previewValue(headers: { readonly get: (name: string) => string |
  * @returns the piece's response with its addresses rewritten; a site's page, and a body that is no page or JSON, goes out as the piece's own stream
  */
 export async function askMount(request: Request, here: Mount, look: Look): Promise<Response> {
-  const response = await here.answer(await appRequest(request, here));
+  const response = await here.answer(await appRequest(request, here, look.kind));
   const headers = new Headers(response.headers);
   const location = headers.get("Location");
   if (location !== null) headers.set("Location", localAddress(location, { here, kind: look.kind, real: look.real }));

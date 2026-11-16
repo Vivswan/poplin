@@ -1,15 +1,24 @@
-// The Sites screen's routes: what one site is answered with beside itself.
+// The Sites screen's routes: what one site is answered with beside itself, and what a search of the list finds.
 
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import { fileKey, sitePrefix } from "@poplin/core/src/actions/files";
 
 import { NOW } from "../sites/support/install";
-import { LOGIN_HEADER } from "./support/install";
-import { openConsole } from "./support/console";
+import { KINDS, LOGIN_HEADER } from "./support/install";
+import { openConsole, openConsoleOf } from "./support/console";
 
 /** A day in milliseconds. */
 const DAY_MS = 86_400_000;
+
+/** A text longer than the listing looks for, and the title that holds it. */
+const LONG_WORDS = "a title of more letters than the listing looks for";
+
+/** What one page of the list answers, as far as these tests read it. */
+interface Listed {
+  readonly code?: string;
+  readonly sites?: readonly { readonly name: string; readonly url: string; readonly id: string }[];
+}
 
 /** What a change of a site answers, as far as these tests read it. */
 interface Changed {
@@ -136,4 +145,68 @@ test.each([
   const after = (await (await opened.get(`/data/sites/${label}`)).json()) as Changed;
 
   expect([loggedOut.status, elsewhere.status, after.site?.expires, (await opened.base.audit()).length]).toEqual([401, 403, "never", entries]);
+});
+
+// Drift: the Link column shows a public site by its public name and its install's ending, and any other site by its id alone. A search that read no address would find nothing for what a person copies there, under one kind of install or under both.
+describe.each([
+  ["hostnames", KINDS.hostname, { elsewhere: (label: string) => `https://${label}-p-poplin.example.org/`, otherKind: (label: string) => `https://poplin-sites.example.net/${label}/` }],
+  ["paths", KINDS.path, { elsewhere: (label: string) => `https://sites.example.org/${label}/`, otherKind: (label: string) => `https://${label}-p-poplin.example.org/` }],
+] as const)("the list of an install whose sites are %s, searched for", (_kind, kind, { elsewhere, otherKind }) => {
+  const stocked = async (): Promise<{ readonly found: (typed: string) => Promise<readonly string[] | string>; readonly links: Readonly<Record<string, string>>; readonly ids: Readonly<Record<string, string>> }> => {
+    const opened = await openConsoleOf(kind);
+    for (const [name, access] of [["guide", "private"], ["notes", "unlisted"], ["shelf", "public"], ["guide-two", "private"]] as const) await opened.base.publish(name, access);
+    const shelf = (await opened.base.audit()).find((entry) => entry.site?.name === "shelf")?.site;
+    await opened.change(`/data/sites/shelf--${shelf?.id}/access`, { access: "public", public_name: "open-shelf" });
+    await opened.change(`/data/sites/guide-two--${(await opened.base.audit()).find((entry) => entry.site?.name === "guide-two")?.site?.id}/naming`, { title: LONG_WORDS });
+    const asked = async (typed: string): Promise<Listed> => (await (await opened.get(`/data/sites?q=${encodeURIComponent(typed)}`)).json()) as Listed;
+    const all = (await asked("")).sites ?? [];
+
+    return {
+      found: async (typed) => {
+        const page = await asked(typed);
+
+        return page.sites?.map((site) => site.name).sort() ?? page.code ?? "";
+      },
+      links: Object.fromEntries(all.map((site) => [site.name, site.url])),
+      ids: Object.fromEntries(all.map((site) => [site.name, site.id])),
+    };
+  };
+
+  test("a link, an address, a label or an id of one site: that site alone, whatever stands around the address", async () => {
+    const { found, links, ids } = await stocked();
+    const [guide = "", notes = "", shelf = ""] = [links.guide, links.notes, links.shelf];
+    const typed = [
+      guide,
+      guide.replace("https://", ""),
+      new URL("chapter/one.html?page=2#top", guide).href,
+      ` <${guide}> `,
+      guide.toUpperCase().replace("HTTPS://", "https://").replace(/\/GUIDE--[0-9A-Z]+\/$/, (path) => path.toLowerCase()),
+      notes,
+      shelf,
+      shelf.replace("https://", "").replace(/\/$/, ""),
+      `guide--${ids.guide}`,
+      ids.guide ?? "",
+      // The first label of each address: what the Link column shows of a site whose address is a hostname.
+      new URL(guide).hostname.split(".")[0] ?? "",
+      new URL(shelf).hostname.split(".")[0] ?? "",
+      (new URL(shelf).hostname.split(".")[0] ?? "").toUpperCase(),
+    ];
+    const lists: (readonly string[] | string)[] = [];
+    for (const text of typed) lists.push(await found(text));
+
+    // Where a site is a path, the first label is the host's, which names no site.
+    const byLabel = kind.layout.kind === "hostname" ? [["guide"], ["shelf"], ["shelf"]] : [[], [], []];
+
+    expect(lists).toEqual([["guide"], ["guide"], ["guide"], ["guide"], ["guide"], ["notes"], ["shelf"], ["shelf"], ["guide"], ["guide"], ...byLabel]);
+  });
+
+  test("a text, as before: a name, a title, a public name, with capitals or cut to what the listing takes; and nothing for an address that is no site's here", async () => {
+    const { found, links, ids } = await stocked();
+    const label = `guide--${ids.guide}`;
+    const typed = ["guide", "GUIDE", "open-sh", LONG_WORDS, `${LONG_WORDS} and more that no title holds`, "v1.2", elsewhere(label), otherKind(label), (links.guide ?? "").replace(ids.guide ?? "", "zzzzzzzzzzzz"), "x".repeat(2049)];
+    const lists: (readonly string[] | string)[] = [];
+    for (const text of typed) lists.push(await found(text));
+
+    expect(lists).toEqual([["guide", "guide-two"], ["guide", "guide-two"], ["shelf"], ["guide-two"], ["guide-two"], [], [], [], [], "bad_argument"]);
+  });
 });

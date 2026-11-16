@@ -602,7 +602,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       // The two token lists walk the tokens that were not removed, and the sweep walks the logins, which the room keeps few. An import walks the list of versions it was given, and a new login the visitors its own count gave: neither is a table.
       // The ledger holds one row a step. A count of the log walks its newest entries, as many as it is told, and then what it read of them.
       // A search of the log by a site reads the sites once: the log holds no title, and a text finds a site by the one it has now. Each earlier id is read once with them, through its index.
-      const holds = '(instr("sites"."name", lower(?)) > 0 OR instr(lower(coalesce("sites"."title", "sites"."page_title")), lower(?)) > 0 OR instr("sites"."public_name", lower(?)) > 0)';
+      const holds = '(instr("sites"."name", lower(?)) > 0 OR instr(lower(coalesce("sites"."title", "sites"."page_title")), lower(?)) > 0 OR instr("sites"."public_name", lower(?)) > 0 OR "sites"."id" = lower(?))';
       const earlier = `select "earlier_ids"."id" from "earlier_ids" inner join "sites" on "sites"."folder" = "earlier_ids"."folder" where ${holds}`;
       const about = `(instr("audit"."site_name", lower(?)) > 0 OR "audit"."site_id" IN (select "id" from "sites" where ${holds}) OR "audit"."site_id" IN (${earlier}))`;
       const newest = '(SELECT max("audit"."seq") FROM "audit")';
