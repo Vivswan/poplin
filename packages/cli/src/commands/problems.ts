@@ -101,7 +101,7 @@ const LOCAL_ROWS = {
   setup_bad_login: { sentence: "--login takes an email address", hint: "an install with nothing set yet needs --login <email>, and --domain <domain> when it has a domain", exit: "failed" },
   setup_closed: {
     sentence: "nothing at that address takes a setup",
-    hint: "an install's setup closes for good once somebody has logged in: from then on its dashboard's Domain screen checks and repairs",
+    hint: "check the address; once somebody has logged in to an install, its setup takes a repair alone, and its dashboard's Domain screen checks",
     exit: "failed",
   },
   file_exists: { sentence: "a file is already there", hint: "to replace it: --overwrite; to write another: --out <file>", exit: "failed" },

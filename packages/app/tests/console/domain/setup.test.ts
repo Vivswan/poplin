@@ -1,5 +1,5 @@
-// The setup's own handler: the two runs a program calls, the repair of which the setup screen sends too, on an install nobody can log in to yet.
-// What it must keep: nothing of the install before a proven token, tries counted before the plug is asked, a shut setup that says nothing, a token in no answer and no stored row, and a first login only its owner can correct.
+// The setup's own handler: the two runs a program calls, the repair of which the setup screen sends too, on an install nobody can log in to yet, or no longer.
+// What it must keep: nothing of the install before a proven token, tries counted before the plug is asked, a shut setup that says nothing, a token in no answer and no stored row, a first login only its owner can correct, and after a login a repair alone.
 
 import { expect, test } from "bun:test";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
@@ -59,8 +59,8 @@ interface Options {
   /** The plug; left out, one that takes the install's own token alone. */
   readonly plug?: FakePlug;
 
-  /** Whether the setup answers; it does when left out. */
-  readonly open?: () => Promise<boolean>;
+  /** Whether anybody has logged in; nobody has when left out. */
+  readonly loggedIn?: () => Promise<boolean>;
 
   /** Where tries are counted; left out, exact counters in memory. */
   readonly counters?: Pick<Counters, "takeMinute">;
@@ -95,7 +95,7 @@ async function openSetup(options: Options = {}) {
   const setup = createSetup({
     install: { database: watched, now: opened.install.now },
     domain: plug,
-    open: options.open ?? (async () => true),
+    loggedIn: options.loggedIn ?? (async () => false),
     counters: options.counters ?? new MemoryCounters(),
     visitorOf: async () => address.value,
   });
@@ -113,7 +113,7 @@ async function openSetup(options: Options = {}) {
 function openFirstSetup(origin: string = ORIGIN) {
   const plug = usualPlug();
   const first = firstRunOf(plug);
-  const setup = createSetup({ install: { database: NO_DATABASE, now: () => 1_700_000_000_000 }, domain: first, open: async () => true, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7" });
+  const setup = createSetup({ install: { database: NO_DATABASE, now: () => 1_700_000_000_000 }, domain: first, loggedIn: async () => false, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7" });
   const call = (run: string, body: object): Promise<Response> =>
     setup.fetch(new Request(`${origin}/setup/api/${run}`, { method: "POST", headers: { "Content-Type": JSON_TYPE }, body: JSON.stringify(body) }));
 
@@ -257,9 +257,8 @@ test("counters that cannot answer shut the setup: a try is refused, never let th
   expect([await told(await call("check", { token: OWN })), plug.calls]).toEqual([TOO_MANY, []]);
 });
 
-// Drift: once somebody has logged in the setup is a door beside the login; one that still answered, or answered when it could not tell, would take a token from whoever finds it.
+// Drift: a setup that cannot tell whether anybody has logged in cannot tell which form it has; one that answered all the same would take a first login's correction on an install somebody uses.
 test.each([
-  ["answers no", async (): Promise<boolean> => false],
   ["fails to say", async (): Promise<boolean> => Promise.reject(new Error("the database is down"))],
   [
     "throws before it makes a promise",
@@ -267,12 +266,44 @@ test.each([
       throw new Error("the question threw");
     },
   ],
-] as const)("a setup whose open question %s answers 404 to everything, says nothing, and asks the plug nothing", async (_name, open) => {
-  const { ask, call, plug } = await openSetup({ open });
+] as const)("a setup whose question whether anybody has logged in %s answers 404 to everything, says nothing, and asks the plug nothing", async (_name, loggedIn) => {
+  const { ask, call, plug } = await openSetup({ loggedIn });
   const answers = [await call("check", { token: OWN }), await call("repair", { token: OWN }), await call("check", "x".repeat(20_000)), await call("check", "", "text/plain"), await ask("/setup"), await ask("/")];
 
   expect(await Promise.all(answers.map(told))).toEqual(answers.map(() => NOT_FOUND));
   expect(plug.calls).toEqual([]);
+});
+
+// Drift: with the login in front of the whole dashboard, a setup shut after the first login leaves no door when that login breaks; and one that did more than repair would be a second dashboard behind a token.
+test("once somebody has logged in, a repair with the install's own token still runs and is kept, a check is a 404 the plug never sees, and an email beside the token is not read", async () => {
+  const { opened, plug, call, logins } = await openSetup({ loggedIn: async () => true });
+  const checked = [await call("check", { token: OWN }), await call("check", "x".repeat(20_000)), await call("check", "", "text/plain")];
+  const repaired = await call("repair", { token: OWN, login: "nobody" });
+  const pasted = await call("repair", { token: OWN, login: `${OWN}@example.com` });
+
+  expect(await Promise.all(checked.map(told))).toEqual(checked.map(() => NOT_FOUND));
+  expect([await told(repaired), pasted.status]).toEqual([[200, { ok: true, rows: [{ ...PIECE, state: "created" }], steps: [], expects: opened.owner }], 200]);
+  expect<unknown>([plug.calls.map((made) => [made.run, made.settings?.logins]), await logins()]).toEqual([
+    [
+      ["repair", [opened.owner]],
+      ["repair", [opened.owner]],
+    ],
+    [opened.owner],
+  ]);
+  expect((await opened.audit())[0]).toMatchObject({ action: "domain_synced", by: opened.owner, detail: { run: "repair", from: "setup" } });
+});
+
+// Drift: the door that stays open after the first login is found by anyone; it must keep each guard of the first-run page, or it is the weakest way into an install that is in use.
+test("once somebody has logged in, a token of another account is answered byte for byte as before a login and reads no setting, the sixth try of a minute is refused, and counters that cannot answer refuse the first", async () => {
+  const before = await openSetup();
+  const after = await openSetup({ loggedIn: async () => true });
+  const refused = [await emitted(await before.call("repair", { token: FOREIGN })), await emitted(await after.call("repair", { token: FOREIGN }))];
+  for (let attempt = 0; attempt < 4; attempt += 1) await after.call("repair", { token: FOREIGN });
+  const sixth = await after.call("repair", { token: OWN });
+  const broken = await openSetup({ loggedIn: async () => true, counters: { takeMinute: async () => Promise.reject(new Error("the counters are down")) } });
+
+  expect([refused[0] === refused[1], after.reads.count, await told(sixth), after.plug.calls.length]).toEqual([true, 0, TOO_MANY, 5]);
+  expect([await told(await broken.call("repair", { token: OWN })), broken.plug.calls]).toEqual([TOO_MANY, []]);
 });
 
 // Drift: the run is kept after the plug has answered, so a database that takes no more today fails it there; answered as a plain failure, a program would ask again all day.

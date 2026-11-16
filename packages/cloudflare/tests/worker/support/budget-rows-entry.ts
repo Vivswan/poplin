@@ -228,7 +228,7 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
   {
     group: SCREEN,
     name: "open the dashboard right after a login: the first login of an install",
-    // The first login is what shuts the setup page. Its line is written to the log by the first page it opens, as every login's is: the users, the line, the frame.
+    // The first login is what leaves the setup page a repair alone. Its line is written to the log by the first page it opens, as every login's is: the users, the line, the frame.
     arrange: async (stage) => {
       const headers = await accessHeaders(stage.w);
 
@@ -274,10 +274,36 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
   {
     group: SCREEN,
     name: "the setup page, open",
-    // Open is asked on every request until somebody has logged in: one entry of the log, found by its index.
+    // Whether anybody has logged in is asked on every request until somebody has: one entry of the log, found by its index.
     arrange: async () => (measured) => get(measured, `${ADMIN}/setup`),
     status: 200,
     budget: { queries: 2, reads: 0, writes: 0 },
+  },
+  {
+    group: SCREEN,
+    name: "the setup page, after the first login, new instance",
+    start: "new",
+    // The way back in is opened when the dashboard is not: by an instance that has not seen the login yet.
+    arrange: async (stage) => {
+      await sessionOf(stage);
+
+      return (measured) => get(measured, `${ADMIN}/setup`);
+    },
+    status: 200,
+    budget: { queries: 4, reads: 0, writes: 0 },
+  },
+  {
+    group: SCREEN,
+    name: "the setup page: repair after the first login",
+    // Worst: the login was removed at Cloudflare, so the repair makes its pieces anew and keeps the run.
+    arrange: async (stage) => {
+      await sessionOf(stage);
+      stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
+
+      return (measured) => post(measured, "/setup/data/repair", { token: TOKEN }, {});
+    },
+    status: 200,
+    budget: { queries: 5, reads: 0, writes: 0 },
   },
   setupRun("the setup page: check with a token", { queries: 5, reads: 0, writes: 0 }, "/setup/api/check", { token: TOKEN }),
   // Worst: nothing of the domain is made yet, so the page's own repair makes every piece.

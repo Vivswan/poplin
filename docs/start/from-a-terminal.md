@@ -15,7 +15,7 @@ bun install --cwd poplin
 bun run --cwd poplin deploy
 ```
 
-**Step 4, without the page.** `poplin setup` sends the same three values and prints the same rows. It works only until the first login. It answers the first five lines of [step 4's table](../fix/an-install-step-fails.md#step-4-the-page-shows-something-else) with a code each: the table Setting up an install of [When poplin refuses](../fix/poplin-refuses.md) lists the codes.
+**Step 4, without the page.** `poplin setup` sends the same three values and prints the same rows. After the first login it only repairs. It answers the first five lines of [step 4's table](../fix/an-install-step-fails.md#step-4-the-page-shows-something-else) with a code each: the table Setting up an install of [When poplin refuses](../fix/poplin-refuses.md) lists the codes.
 
 ```sh
 export POPLIN_SETUP_TOKEN="paste the account token here"

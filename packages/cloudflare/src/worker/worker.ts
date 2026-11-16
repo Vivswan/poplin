@@ -1,7 +1,7 @@
 // The Worker: every request and every scheduled run enters here.
 //
 //   <admin host>/api and below       the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
-//   <admin host>/setup and below     the setup page, which answers only until somebody has logged in
+//   <admin host>/setup and below     the setup page, which takes a token alone once somebody has logged in
 //   <admin host>/...                 the dashboard: the Access token and the users, on every request
 //   any other hostname               the Access token under `p`, the limits, then serving; one that is no site's gets serving's own 404
 //
@@ -61,14 +61,14 @@ const SET_THEM = "Setup writes them, and so does the OpenTofu module. In the Clo
 /** What answers each path Access lets past its login, and everything below it. A path the list gains has no answer here until one is written, and the Worker does not build without it. */
 const OPEN: Readonly<Record<(typeof INSTALL_OBJECTS.openPaths)[number], (request: Request, instance: Instance, ways: Ways, open: ExecutionContext | undefined) => Promise<Response>>> = {
   "/api": async (request, instance, _ways, open) => instance.api.fetch(request, laterOf(open)),
-  "/setup": async (request, instance, ways) => answerSetup(request, instance, () => ways.held(FRESH), ways.setupOpen),
+  "/setup": async (request, instance, ways) => answerSetup(request, instance, () => ways.held(FRESH), ways.loggedIn),
 };
 
-/** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, the same for a site request, and whether the setup page is open. */
+/** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, the same for a site request, and whether anybody has ever logged in. */
 interface Ways {
   readonly held: (lifetime: number) => Promise<Held>;
   readonly siteHeld: SiteHeld;
-  readonly setupOpen: () => Promise<boolean>;
+  readonly loggedIn: () => Promise<boolean>;
 }
 
 /** What one Worker instance answers through: its two handlers, and `starting`, which answers the instance those two run on, for the steps of a job. */
@@ -144,11 +144,11 @@ async function answerDashboard(request: Request, instance: Instance, held: Held,
   }
 }
 
-/** The Worker's own address, on an install with a domain, answers setup alone: the page itself, the way to it from any other path while it is open, and nothing after. */
+/** The Worker's own address, on an install with a domain, answers setup alone: the page itself, and the way to it from any other path until somebody has logged in. */
 async function answerOwnAddress(request: Request, instance: Instance, ways: Ways): Promise<Response> {
-  if (isSetupPath(new URL(request.url).pathname)) return answerSetup(request, instance, () => ways.held(FRESH), ways.setupOpen);
+  if (isSetupPath(new URL(request.url).pathname)) return answerSetup(request, instance, () => ways.held(FRESH), ways.loggedIn);
 
-  if (await ways.setupOpen()) return new Response(null, { status: 302, headers: { "Cache-Control": "no-store", Location: SETUP } });
+  if (!(await ways.loggedIn())) return new Response(null, { status: 302, headers: { "Cache-Control": "no-store", Location: SETUP } });
 
   return plain(request, 404, "Not found.");
 }
@@ -260,10 +260,10 @@ export function createWorker(given: Partial<Outside> = {}): Handlers {
   }
 
   // A login is never undone, so an instance that saw one asks the database no more.
-  async function setupOpen(database: Database): Promise<boolean> {
+  async function loggedIn(database: Database): Promise<boolean> {
     if (!loggedInOnce) loggedInOnce = await database.hasLoggedIn();
 
-    return !loggedInOnce;
+    return loggedInOnce;
   }
 
   async function answer(request: Request, env: Bindings, open: ExecutionContext | undefined): Promise<Response> {
@@ -278,7 +278,7 @@ export function createWorker(given: Partial<Outside> = {}): Handlers {
     noting = instance.install;
     const { hostname } = new URL(request.url);
     const { database } = instance.install;
-    const ways: Ways = { held: (lifetime) => held(database, lifetime), siteHeld: ofSite(database), setupOpen: () => setupOpen(database) };
+    const ways: Ways = { held: (lifetime) => held(database, lifetime), siteHeld: ofSite(database), loggedIn: () => loggedIn(database) };
     const part = instance.hosts.partOf(hostname);
     if (part === "site") return answerSite(request, instance, ways.siteHeld);
 

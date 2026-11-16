@@ -1,4 +1,4 @@
-// The setup screen: what a person sees before anyone has logged in. One form takes a token, and on an install with nothing set the kind of install and its first login; one press of Repair makes every piece.
+// The setup screen: what a person sees before anyone has logged in, and after that when the login is broken. One form takes a token, and on an install with nothing set the kind of install and its first login; one press of Repair makes every piece.
 //
 // It has no sections at its side and shows nothing of the install until a run's token is proven.
 
@@ -18,6 +18,7 @@ const LEADS: Readonly<Record<Boxes, string>> = {
   domain: "Make an account token, fill in three boxes, press Repair.",
   "no-domain": "Make an account token, fill in two boxes, press Repair.",
   login: "Make an account token, paste it, press Repair.",
+  repair: "Locked out? Make an account token, paste it, press Repair.",
 };
 
 /** What a repair left: the line that counts the pieces, which logins the install expects, the steps only a person can do, and one row per piece. */

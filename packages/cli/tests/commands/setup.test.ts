@@ -14,11 +14,11 @@ const ENV = { POPLIN_SETUP_TOKEN: TOKEN };
 const SETUP = `setup --server ${ORIGIN}`;
 
 /** Put the install's real setup page in front of a bench, over a plug the test wrote. */
-function withSetup(bench: Bench, plug: ReturnType<typeof fakePlug>, open = true): void {
+function withSetup(bench: Bench, plug: ReturnType<typeof fakePlug>, shut = false): void {
   const setup = createSetup({
     install: { database: bench.install.database, now: () => bench.install.clock.now },
     domain: plug,
-    open: async () => open,
+    loggedIn: async () => (shut ? Promise.reject(new Error("the database is away")) : false),
     counters: new MemoryCounters(),
     visitorOf: async () => "203.0.113.7",
   });
@@ -132,16 +132,16 @@ describe("poplin setup", () => {
     expect<unknown>((await bench.install.database.readSettings())?.logins).toEqual(["meant@example.com"]);
   });
 
-  const refused: readonly { readonly name: string; readonly reading?: DomainReading; readonly open?: boolean; readonly code: number; readonly says: string }[] = [
+  const refused: readonly { readonly name: string; readonly reading?: DomainReading; readonly shut?: boolean; readonly code: number; readonly says: string }[] = [
     { name: "a token the provider refuses", reading: { ok: false, refusal: "token" }, code: 1, says: "the account token was refused, or it is not of the install's own account" },
     { name: "a provider that does not answer", reading: { ok: false, refusal: "unreachable" }, code: 5, says: "the install got no answer from its provider" },
     { name: "a database that takes no more for the day", reading: { ok: false, refusal: "allowance_spent" }, code: 1, says: "a day's allowance of the install is used up until 00:00 UTC" },
-    { name: "a setup that is shut", open: false, code: 1, says: "nothing at that address takes a setup" },
+    { name: "a setup that is shut", shut: true, code: 1, says: "nothing at that address takes a setup" },
   ];
 
-  test.each(refused)("$name is said in its own sentence and prints no row", async ({ reading, open, code, says }) => {
+  test.each(refused)("$name is said in its own sentence and prints no row", async ({ reading, shut, code, says }) => {
     const bench = await openBench();
-    withSetup(bench, fakePlug(() => reading ?? { ok: true, rows: [], steps: [] }), open ?? true);
+    withSetup(bench, fakePlug(() => reading ?? { ok: true, rows: [], steps: [] }), shut);
 
     const ended = await bench.run(SETUP, { env: ENV });
 
@@ -153,7 +153,7 @@ describe("poplin setup", () => {
     const bench = await openBench();
     const plug = usualPlug();
     const first = firstRunOf(plug);
-    const setup = createSetup({ install: { database: bench.install.database, now: () => bench.install.clock.now }, domain: first, open: async () => true, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7" });
+    const setup = createSetup({ install: { database: bench.install.database, now: () => bench.install.clock.now }, domain: first, loggedIn: async () => false, counters: new MemoryCounters(), visitorOf: async () => "203.0.113.7" });
     bench.hook = (request) => setup.fetch(request);
 
     const repaired = await bench.run(`${SETUP} --domain example.com --login Owner@example.com`, { env: ENV });
@@ -224,6 +224,6 @@ describe("poplin setup", () => {
 
     const stopped = await bench.run(SETUP, { env: ENV });
 
-    expect([stopped.code, stopped.out, stopped.err]).toEqual([1, [], ["the command was stopped", "the install may have had the request all the same; poplin setup --check shows what is left"]]);
+    expect([stopped.code, stopped.out, stopped.err]).toEqual([1, [], ["the command was stopped", "the install may have had the request all the same; run it again, and a repair changes only what is left"]]);
   });
 });

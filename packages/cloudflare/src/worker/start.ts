@@ -2,7 +2,7 @@
 //
 //   ZONE, ACCOUNT_ID, WORKER_NAME   read and checked                     else `binding`, naming every one that is refused
 //   ZONE                            a domain, or an account's address    the kind of the install, with its hosts: every piece below that differs by kind comes from that one value
-//   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`: its setup page alone, until somebody has logged in
+//   ZONE or ACCOUNT_ID absent       a Worker with nothing set            `unset`: its setup page alone
 //   ACCESS             read and checked; absent, nobody is admitted      else `binding`
 //   DB                 opened, its pending schema steps applied           else `newer`, `differs`, or `failed`
 //   settings           stored from FIRST_SETTINGS over the defaults, only while none exist  else `binding`; stored ones this build cannot read are `differs`

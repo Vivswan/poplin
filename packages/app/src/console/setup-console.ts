@@ -1,4 +1,4 @@
-// The setup screen: the first-run page in the console's look, shown before anyone has logged in. One page loads the client, and the client sends its run as JSON.
+// The setup screen: the first-run page in the console's look, and once somebody has logged in the way back in when the login is broken. One page loads the client, and the client sends its run as JSON.
 //
 //   GET  <at>                the page that loads the client; it carries which boxes the form has and what a token must hold, and nothing of the install
 //   GET  <at>/assets/<file>  the console's icon and the client's script, stylesheet, and fonts, which a browser keeps for good
@@ -6,13 +6,13 @@
 //   anything else            the setup's own handler, which answers the two paths a program calls
 //
 // The run is a program's repair, sent by the page: it is counted against the sender's address, refused when the counter cannot answer, and reads nothing of the install before the token is proven.
-// The token is in the body of its one request and nowhere else. While the page is shut every path answers 404 and says nothing.
+// The token is in the body of its one request and nowhere else. A page that is shut answers 404 on every path and says nothing.
 
 import { mediaTypeOf } from "@poplin/core/src/api/media-type";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 
-import { createSetup, kindSent } from "./domain/setup";
+import { createSetup, kindSent, type SetupForm, setupForm } from "./domain/setup";
 import type { DomainReading, FirstRun, TokenFacts } from "./domain/records";
 import { POLICY } from "./console";
 import { runDone, runRefusal } from "./domain-answers";
@@ -40,9 +40,9 @@ interface SetupConsoleParts extends SetupParts {
   readonly at?: string;
 }
 
-/** What the handlers of one request share: the setup's own handler, which runs a program's call, and what a token for a run's body must be made for. */
+/** What the handlers of one request share: the form the setup has for it, the setup's own handler, which runs a program's call, and what a token for a run's body must be made for. */
 interface SetupShared {
-  Variables: { runs: (request: Request) => Promise<Response>; tokenFor: (body: unknown) => string };
+  Variables: { form: SetupForm; runs: (request: Request) => Promise<Response>; tokenFor: (body: unknown) => string };
 }
 
 /** What a token must hold and where one is made, as the page shows it. */
@@ -76,9 +76,15 @@ function formOf({ tokenRights, tokenLink, tokenOptional, tokenNote }: TokenFacts
   return { tokenRights, tokenLink, tokenOptional, tokenNote };
 }
 
-/** What the page hands its client to start from: on an install with nothing set a token's form for each kind of install a person can choose, and on one nobody has logged in to the one form of its kind. */
-function startOf(domain: SetupParts["domain"]): { readonly boxes: "first"; readonly forms: Readonly<Record<keyof FirstRun["forms"], ShownForm>> } | { readonly boxes: "login"; readonly form: ShownForm } {
-  if (!("plugFor" in domain)) return { boxes: "login", form: formOf(domain) };
+/**
+ * What the page hands its client to start from: on an install with nothing set a token's form for each kind of install a person can choose, and on a set one the one form of its kind.
+ * `repair` is the page of an install somebody has logged in to, and says that one thing of it.
+ */
+function startOf(
+  domain: SetupParts["domain"],
+  form: SetupForm,
+): { readonly boxes: "first"; readonly forms: Readonly<Record<keyof FirstRun["forms"], ShownForm>> } | { readonly boxes: "login" | "repair"; readonly form: ShownForm } {
+  if (!("plugFor" in domain)) return { boxes: form === "repair" ? "repair" : "login", form: formOf(domain) };
 
   return { boxes: "first", forms: { domain: formOf(domain.forms.domain), "no-domain": formOf(domain.forms["no-domain"]) } };
 }
@@ -112,25 +118,22 @@ export type SetupRoutes = typeof setupRoutes;
 /**
  * Build the setup screen over the setup's own handler.
  *
- * @returns a handler for the page, the client's files, and the run; every other request goes to the setup's own handler. While `open` answers `false`, or fails to say, every path is a 404 that says nothing
+ * @returns a handler for the page, the client's files, and the run; every other request goes to the setup's own handler. A setup that is shut, as `setupForm` says, is a 404 on every path that says nothing
  */
 export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: (request: Request) => Promise<Response> } {
-  // The gate below asks whether the page is open, once a request, before anything reaches the page's own handler: that one is told yes.
-  const setup = createSetup({ ...parts, open: async () => true });
   const at = parts.at ?? SETUP_PATH;
-  const start = startOf(parts.domain);
   const { domain } = parts;
   const tokenFor = (body: unknown): string => ("plugFor" in domain ? domain.forms[kindSent(body)].tokenFor : domain.tokenFor);
   const app = new Hono<SetupShared>();
 
   const gate: MiddlewareHandler<SetupShared> = async (context, next) => {
-    // Asked inside a promise, so a question that throws before it answers is a shut page too.
-    const open = await Promise.resolve()
-      .then(() => parts.open())
-      .catch(() => false);
-    if (!open) return notFound();
+    const form = await setupForm(parts);
+    if (form === undefined) return notFound();
 
-    context.set("runs", setup.fetch);
+    // Whether anybody has logged in is asked once a request, here: the setup's own handler is told what was answered.
+    const loggedIn = form === "repair";
+    context.set("form", form);
+    context.set("runs", createSetup({ ...parts, loggedIn: async () => loggedIn }).fetch);
     context.set("tokenFor", tokenFor);
     await next();
     // A file of the client says itself how long a browser keeps it; nothing else is kept.
@@ -140,7 +143,7 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
   app.use(secureHeaders({ contentSecurityPolicy: POLICY, xFrameOptions: "DENY", referrerPolicy: "same-origin" }), gate);
 
   app.get(at, async (context) =>
-    context.html(shellPage({ base: at, email: "", title: TITLE, version: "", update: null, starts: false, demo: null, domain: false, domainNote: null, ...NOTHING_MARKED, setup: start }, await parts.client.entry())),
+    context.html(shellPage({ base: at, email: "", title: TITLE, version: "", update: null, starts: false, demo: null, domain: false, domainNote: null, ...NOTHING_MARKED, setup: startOf(domain, context.get("form")) }, await parts.client.entry())),
   );
   app.get(`${at}/assets/:name`, async (context) => {
     const asset = await assetOf(parts.client, context.req.param("name"));
@@ -149,7 +152,7 @@ export function createSetupConsole(parts: SetupConsoleParts): { readonly fetch: 
     return context.body(asset.body, 200, { "Content-Type": asset.type, "Cache-Control": KEPT_FOR_GOOD });
   });
   app.route(`${at}/data`, setupRoutes);
-  app.all("*", (context) => setup.fetch(context.req.raw));
+  app.all("*", (context) => context.get("runs")(context.req.raw));
 
   return { fetch: async (request) => app.fetch(request) };
 }
