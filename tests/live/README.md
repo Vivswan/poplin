@@ -6,13 +6,14 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | check the checks themselves, against a local fake | `bun test ./tests/live`                                                   | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
-| check the two test installs                       | the `Live Checks` workflow: after a push to main that reaches it, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
+| check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that a build takes a release by its digest  | a release's own run of main, then the next one: `poplin-<version>.tar.gz` on the release's page, its digest under that version in the website's `releases.json`, and `poplin: deploying <version> (was asked for latest)` in an install's build | a published release |
 | check that a release publishes its built Worker   | the same two runs: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` beside `source` in `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
-Live Checks workflow
-  the `paths` list of the workflow                the files of the push -> a run, or none
+Live Checks workflows, one for each kind of install
+  the `paths` list of each workflow               the files of the push -> a run of that kind, or none
+  .github/workflows/live-install.yml             the steps below, which both workflows call
   packages/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
   build the Worker bundle
   packages/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
@@ -27,22 +28,40 @@ Live Checks workflow
   step summary                                   one table of the install's pieces, one of the checks, one of the reset
 ```
 
-The workflow runs these steps twice, one leg after the other: `live (domain)` on the account that holds a domain, then `live (account address)` on the account that holds none. A leg that fails stops no other.
+| Workflow                        | File                                                | Install                                  | Checks on the run                                             |
+| ------------------------------- | --------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| `Live Checks`                   | `.github/workflows/live-checks.yml`                 | on the account that holds a domain       | `live (domain) / checks`, `live (domain) / reset`             |
+| `Live Checks (account address)` | `.github/workflows/live-checks-account-address.yml` | on the account that holds none           | `live (account address) / checks`, `live (account address) / reset` |
+
+Each workflow runs the same steps on its own install. A push starts the one whose install its files reach, or both. One that fails stops no other.
 
 ## What starts a run
 
 | A push to main that changed                                                                  | Deploy and checks |
 | -------------------------------------------------------------------------------------------- | ----------------- |
-| `packages/**`, tests included                                                                | run               |
-| `demo/**`, `tests/live/**`                                                                   | run               |
-| `wrangler.jsonc`, the root `package.json`, `bun.lock`, `.bun-version`, `tsconfig*`           | run               |
-| `.github/workflows/live-checks.yml`, `.github/actions/setup/**`, `.gitattributes`            | run               |
-| a file no `!` line of the workflow's `paths` list names                                       | run               |
+| only files of an install with a domain                                                       | that install      |
+| only files of an install without a domain                                                    | that install      |
+| any other file of `packages/**`, tests included                                              | both installs     |
+| `demo/**`, `tests/live/**`                                                                   | both installs     |
+| `wrangler.jsonc`, the root `package.json`, `bun.lock`, `.bun-version`, `tsconfig*`           | both installs     |
+| `.github/workflows/live-install.yml`, `.github/actions/setup/**`, `.gitattributes`           | both installs     |
+| the workflow file of one kind                                                                | that install      |
+| a file no `!` line of either `paths` list names                                              | both installs     |
 | only `website/**`, `docs/**`, `brand/**`, `skills/**`, `*.md` at the root                    | no run            |
 | only the rest of `.github/**`, the root test guards, `tests/{fuzz,support}/**`               | no run            |
 | only the settings of lint, review, hook, and release tools at the root                       | no run            |
 
-The `paths` list of `.github/workflows/live-checks.yml` holds every row. The files are those of the one push, first commit to last. GitHub reads the first 3,000 changed files of a push, and a push of more than 1,000 commits always starts a run.
+| The files of one kind of install alone                                                                                                    | Kind             |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `packages/cloudflare/{src,tests}/zone/{bots,dns,routes,rules}/**`                                                                         | with a domain    |
+| `packages/cloudflare/{src,tests}/zone/forwarders/**`                                                                                      | without a domain |
+| `packages/cloudflare/src/zone/path-plug.ts` and its test                                                                                  | without a domain |
+
+A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/cloudflare/scripts/live`.
+
+The `paths` list of each workflow holds every row: the two lists are the same, and each ends with the files of the other kind, taken out. `tests/live/workflow.test.ts` holds the two kinds' files once and reads both lists beside them.
+
+The files are those of the one push, first commit to last. GitHub reads the first 3,000 changed files of a push, and a push of more than 1,000 commits always starts a run.
 
 | Also                                                   | What happens                                                         |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
@@ -51,16 +70,16 @@ The `paths` list of `.github/workflows/live-checks.yml` holds every row. The fil
 | a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
 | the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
-| a newer push while an older push's run has not started | the older run is cancelled, the newer one deploys both               |
+| a newer push while an older push's run of the same workflow has not started | that older run is cancelled, and the newer one deploys the commits of both pushes |
 | 00:00 UTC                                              | deploy and checks of main, with the copy the install's job finishes, and the reset; each waits its turn and replaces no run |
 
 The install is made from the commit of the push, the one whose `all-green` check ended green. Running a red run again makes the install from that same commit.
 
-One job touches the install at a time. The checks and the midnight reset wait in one lane that keeps every waiting job, so neither takes the other's place.
+One job touches a test install at a time, of either kind. The checks and the midnight reset wait in one lane that keeps every waiting job, so neither takes the other's place.
 
 ## Start the test install over
 
-On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
+On GitHub: Actions, the workflow of the install (`Live Checks`, or `Live Checks (account address)`), Run workflow, tick `start_over`, Run workflow.
 
 The run removes the Worker, its Workflow, and its routes, poplin's DNS records, rules, two Access applications and their policies, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make.
 
@@ -118,7 +137,7 @@ The owner sets these. Each test account has its own environment, and the secrets
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
 | `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks` workflow |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow |
 
 For each account:
 
@@ -288,7 +307,7 @@ a usual run                              about 922 counted; the sweep later drop
 a day of 40 such runs                    about 42,000 of the 100,000
 ```
 
-The install without a domain writes to the database of its own account: the same checks, the same ceilings, a count line of its own in each step of its leg, and its own 100,000 a day.
+The install without a domain writes to the database of its own account: the same checks, the same ceilings, a count line of its own in each step of its workflow, and its own 100,000 a day.
 
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 

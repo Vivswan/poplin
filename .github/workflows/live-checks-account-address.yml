@@ -1,0 +1,89 @@
+# Checks the real install on the Cloudflare test account that holds no domain: an install on the account's free address, after a push to main that changed a file reaching it, at midnight UTC, and on a manual run.
+# Puts it back to the sample sites after each run of the checks, and at midnight UTC. live-checks.yml does the same for the account that holds a domain.
+#
+#   a push that changed a file of the `paths` list -> the steps of live-install.yml on the `without-domain-ci-tests` account
+#   a push that changed no such file, or only files of the other kind of install -> GitHub starts no run here
+#
+# The steps, the wait for the commit's `all-green` check, and the reset are in live-install.yml, written once for both kinds.
+# It is its own workflow, not a job of post-green.yml: the release leg waits on that hook, and a path filter belongs to a push.
+
+name: Live Checks (account address)
+
+on:
+  # A push to this repository's main. A pull request and a fork's branch start nothing here.
+  # A file in no line below starts a run: the list opens with every file, and each `!` line takes files out.
+  # The last lines take out the files of the other kind of install alone. tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
+  push:
+    branches: [main]
+    paths:
+      - "**"
+      - "!website/**"
+      - "!docs/**"
+      - "!brand/**"
+      - "!skills/**"
+      - "!*.md"
+      - "!.github/**"
+      - ".github/workflows/live-checks-account-address.yml"
+      - ".github/workflows/live-install.yml"
+      - ".github/actions/setup/**"
+      - "!tests/*.test.ts"
+      - "!tests/fuzz/**"
+      - "!tests/support/**"
+      - "!.editorconfig"
+      - "!.gitignore"
+      - "!.gitleaks.toml"
+      - "!.repo-platform.yml"
+      - "!.typography-allow"
+      - "!.yamllint"
+      - "!biome.json"
+      - "!biome.local.jsonc"
+      - "!knip.json"
+      - "!lefthook.yml"
+      - "!.release-please-manifest.json"
+      - "!release-please-config.json"
+      - "!packages/cloudflare/src/zone/bots/**"
+      - "!packages/cloudflare/src/zone/dns/**"
+      - "!packages/cloudflare/src/zone/routes/**"
+      - "!packages/cloudflare/src/zone/rules/**"
+      - "!packages/cloudflare/tests/zone/bots/**"
+      - "!packages/cloudflare/tests/zone/dns/**"
+      - "!packages/cloudflare/tests/zone/routes/**"
+      - "!packages/cloudflare/tests/zone/rules/**"
+  # Midnight UTC. A schedule runs the default branch's own file and nothing a pull request or a fork wrote; a fork's
+  # schedule has none of this repository's secrets.
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      many_files:
+        description: Also publish two thousand small files (thousands of requests on the test account)
+        type: boolean
+        default: false
+      start_over:
+        description: First remove everything poplin made on the test account, then make the install from nothing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One waiting run of this workflow for each event: a newer push takes the place of an older push that waits, and never of the midnight run.
+concurrency:
+  group: live-checks-account-address-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: live (account address)
+    # The wait of the called job reads the commit's run of CI and the jobs of that run.
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: account address
+      environment: without-domain-ci-tests
+      many_files: ${{ inputs.many_files == true }}
+      start_over: ${{ inputs.start_over == true }}
+    # The called jobs name the environment, and read its secrets under that name: none is named here.
+    secrets: inherit # zizmor: ignore[secrets-inherit]
