@@ -76,10 +76,11 @@ The files are those of the one push, first commit to last. GitHub reads the firs
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
 | a newer push while an older push's run of the same workflow has not started | that older run is cancelled, and the newer one deploys the commits of both pushes |
 | 00:00 UTC                                              | deploy and checks of main, with the copy the install's job finishes, and the reset; each waits its turn and replaces no run |
+| a run of the other kind at the same time               | both go on side by side: each kind has an account and a lane of its own |
 
 The install is made from the commit of the push, the one whose `all-green` check ended green. Running a red run again makes the install from that same commit.
 
-One job touches a test install at a time, of either kind. The checks and the midnight reset wait in one lane that keeps every waiting job, so neither takes the other's place.
+One job touches a test install at a time. Each kind has a lane of its own, since the two installs are on two accounts: a run of one kind never waits for the other, and the two run side by side. Inside a lane the checks and the midnight reset each wait their turn, and every waiting job is kept.
 
 ## Start the test install over
 
