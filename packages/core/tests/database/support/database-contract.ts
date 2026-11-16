@@ -247,6 +247,17 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       ]);
     });
 
+    // Drift: a check nobody pressed only renews what the install remembers. One that wrote its line would fill Activity each time a screen opened, and one that kept nothing would leave the screen on an old run.
+    test("a check kept with no detail replaces the run kept before and writes no audit entry", async () => {
+      const database = await opened(makeDatabase);
+      const pieces: DomainCheck["pieces"] = [{ piece: "Record", detail: "every site", part: "reach", state: "ok" }];
+
+      await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [] }, { run: "check" });
+      await database.keepDomainCheck({ ran_at: NOW + 5, by: ADA, run: "check", pieces }, null);
+
+      expect([(await database.readDomainCheck())?.ran_at, (await database.readDomainCheck())?.pieces, (await auditTrail(database)).map(({ action, at }) => ({ action, at }))]).toEqual([NOW + 5, pieces, [{ action: "domain_synced", at: NOW }]]);
+    });
+
     // Drift: the domain's login lets in the users of the last repair. A change that no row remembered, or that a check or a repair of other users cleared, would leave Domain saying nothing is left to do while a new user cannot log in.
     test("a user added or removed waits until a repair that carried the stored logins, and began no earlier than the change, settles it; a login left as it was changes nothing", async () => {
       const database = await opened(makeDatabase);

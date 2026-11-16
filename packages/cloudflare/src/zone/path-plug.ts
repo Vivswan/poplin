@@ -5,19 +5,20 @@
 // With no zone to show, a token proves itself by the account: the one whose free address is the one in the install's own hostnames. Any other token is refused before anything is read.
 // Each piece is the one an install with a domain is made of. No record, route, or rule is read or written: the free address has none of them.
 // So no setting is carried by a repair, and the one whose whole effect is at a zone, `block_bots`, is said to do nothing here.
+// An install that holds its key checks by itself, with no token: the same pieces are read with the key, in the account the Worker runs in.
 
 import type { DomainPlug, DomainReading, ReadSettings } from "@poplin/app/src/console/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import type { BaseCloudflare } from "cloudflare/client";
 import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
+import type { KeptKey } from "../key/kept-key";
 import type { AccountAddresses } from "./address-layout";
 import { type Connection, callCloudflare } from "./client";
-import { syncDatabase } from "./database/database";
 import { syncForwarders } from "./forwarders/forwarders";
 import { syncJobs } from "./jobs/jobs";
 import type { Mode } from "./sync";
-import { accessPiece, firstValues, type Known, keyGiven, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "./zone-plug";
+import { accessPiece, databasePiece, firstValues, type Known, keyGiven, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "./zone-plug";
 
 /** How many accounts a token of an install with nothing set is looked through for the install's: one call each, inside what one request of a Worker may send. */
 const MAX_ACCOUNTS = 10;
@@ -81,10 +82,15 @@ async function prove(parts: PathParts, token: string): Promise<{ readonly connec
   const accountId = await findAccount(parts, connection);
   if (typeof accountId !== "string") return accountId;
 
+  return { connection, placed: placedIn(parts, accountId) };
+}
+
+/** The install in the account it answers under. */
+function placedIn(parts: PathParts, accountId: string): Placed {
   const { layout } = parts;
   const firsts = firstValues(parts, { account_address: layout.account }, accountId);
 
-  return { connection, placed: { script: parts.script, accountId, zoneId: undefined, key: parts.key, uploadKeyId: parts.uploadKeyId, now: parts.now, adminHost: layout.adminHost, privateSites: layout.privateHost, firstValues: firsts } };
+  return { script: parts.script, accountId, zoneId: undefined, key: parts.key, uploadKeyId: parts.uploadKeyId, now: parts.now, adminHost: layout.adminHost, privateSites: layout.privateHost, firstValues: firsts };
 }
 
 /**
@@ -97,18 +103,13 @@ function forwarderRow(row: Progress["rows"][number], answers: Readonly<Record<st
   return row.state === "left-out" ? { ...row, state: "failed" } : row;
 }
 
-async function read(parts: PathParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
-  const proven = await prove(parts, token);
-  if ("ok" in proven) return proven;
-
-  const { connection, placed } = proven;
-
-  // The token is proven: only now is anything of the install read.
+/** Read every piece of the install, or make each match. The settings are read here and no earlier: a token has proven itself by now. */
+async function readPieces(parts: PathParts, mode: Mode, found: { readonly connection: Connection; readonly placed: Placed }, progress: Progress, readSettings: ReadSettings): Promise<DomainReading> {
+  const { connection, placed } = found;
   const settings = await readSettings();
   const parsed = parseLogins(settings.logins);
   const { layout } = parts;
   const answers = { [layout.sitesWorker]: `https://${layout.sitesHost} (unlisted and public sites)`, [layout.privateWorker]: `https://${layout.privateHost} (private sites)` };
-  const progress: Progress = { rows: [], steps: [], stopped: false };
 
   await piece(
     progress,
@@ -118,12 +119,7 @@ async function read(parts: PathParts, mode: Mode, token: string, readSettings: R
   );
   progress.rows.splice(0, Number.POSITIVE_INFINITY, ...progress.rows.map((row) => forwarderRow(row, answers)));
   await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, parsed.ok ? parsed.value : undefined));
-  await piece(
-    progress,
-    mode,
-    () => "D1 database",
-    () => syncDatabase(connection, placed.accountId, mode),
-  );
+  await databasePiece(progress, mode, placed, connection);
   // The Workflow comes last, as on an install with a domain: nothing else of the install waits for it.
   await piece(
     progress,
@@ -133,6 +129,18 @@ async function read(parts: PathParts, mode: Mode, token: string, readSettings: R
   );
 
   return readingOf(progress);
+}
+
+async function read(parts: PathParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
+  const proven = await prove(parts, token);
+  if ("ok" in proven) return proven;
+
+  return readPieces(parts, mode, proven, { rows: [], steps: [], stopped: false }, readSettings);
+}
+
+/** Check an install with the key it holds, in the account its Worker runs in: no token is proven, so no account is looked for. */
+function readOwn(parts: PathParts, accountId: string, kept: KeptKey, readSettings: ReadSettings): Promise<DomainReading> {
+  return readPieces(parts, "plan", { connection: kept.connection, placed: placedIn(parts, accountId) }, { rows: [], steps: [], stopped: false, own: { kept } }, readSettings);
 }
 
 /**
@@ -152,9 +160,12 @@ export async function givePathKey(parts: Extract<PathParts, { readonly accountId
  * Build the plug of an install without a domain on Cloudflare.
  *
  * @returns a plug whose `check` sends no change. Both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's free address as the one of `accountId`.
- * With no `accountId` the account is the one the token shows that address in. The settings are read only after that
+ * With no `accountId` the account is the one the token shows that address in. The settings are read only after that.
+ * With `kept` the plug has `ownCheck`, which reads the same pieces with that key and no token
  */
 export function createPathPlug(parts: PathParts): DomainPlug {
+  const { accountId, kept } = parts;
+
   return {
     ...tokenFacts("noDomain"),
     words: { thing: "the install", line: NO_DOMAIN },
@@ -162,5 +173,6 @@ export function createPathPlug(parts: PathParts): DomainPlug {
     idleSettings: { block_bots: NEEDS_DOMAIN },
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),
+    ...(accountId === undefined || kept === undefined ? {} : { ownCheck: (settings: ReadSettings) => readOwn(parts, accountId, kept, settings) }),
   };
 }

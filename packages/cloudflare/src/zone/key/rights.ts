@@ -27,7 +27,7 @@ const BUCKET_SCOPE = "com.cloudflare.edge.r2.bucket";
 const NO_JURISDICTION = "default";
 
 /** Every policy of the kept key, in the order a key carries them: the scope its groups have in Cloudflare's list, its rights, and what they are allowed on, or nothing for a place the install has none of. */
-const KEPT_POLICIES: readonly Policy[] = [
+const KEPT_POLICIES = [
   {
     scope: ACCOUNT_SCOPE,
     rights: [USAGE_RIGHT, "Access: Apps and Policies Write", "Access: Organizations, Identity Providers, and Groups Read", "Notifications Write", "Workers Scripts Write"],
@@ -38,7 +38,7 @@ const KEPT_POLICIES: readonly Policy[] = [
     rights: ["Zone Read", "Zone Settings Read", "DNS Read", "Workers Routes Read", "Zone WAF Write", "Dynamic URL Redirects Read", "Bot Management Read"],
     resource: (place) => (place.zoneId === undefined ? undefined : `com.cloudflare.api.account.zone.${place.zoneId}`),
   },
-];
+] as const satisfies readonly Policy[];
 
 /** The one policy of the upload key. Cloudflare takes its resource at the top of the policy, never under the account's. */
 const UPLOAD_POLICIES: readonly Policy[] = [
@@ -54,6 +54,9 @@ export interface Bucket {
   readonly name: string;
   readonly jurisdiction?: string | undefined;
 }
+
+/** A right of the kept key, in the name Cloudflare's list of permission groups gives it. */
+export type KeyRight = (typeof KEPT_POLICIES)[number]["rights"][number];
 
 /** Where a key acts: the install's account, its zone on an install that has one, and its bucket for a key of the bucket. */
 export interface KeyPlace {

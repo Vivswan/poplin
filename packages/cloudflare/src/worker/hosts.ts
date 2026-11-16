@@ -110,7 +110,7 @@ function domainHosts(layout: DomainLayout): InstallHosts {
     const placed = { ...placedOf(own), layout };
     const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
 
-    return { key, domain: createDomainPlug({ ...placed, key }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
+    return { key, domain: createDomainPlug({ ...placed, key, kept: own.kept }), rules: createRulesFollow(own.kept, { accountId: own.accountId, layout }) };
   }
 
   return { kind: "domain", adminHost: layout.adminHostname, addresses: hostnameAddresses(layout), layout: { kind: "hostname", public_word: layout.publicWord }, partOf, sideOf };
@@ -121,7 +121,7 @@ function accountHosts(layout: AccountAddresses): InstallHosts {
     const placed = { ...placedOf(own), layout };
     const key: ReturnType<typeof createInstallKey> = createInstallKey(own.kept, own.accountId, (authorisation) => givePathKey({ ...placed, key }, authorisation));
 
-    return { key, domain: createPathPlug({ ...placed, key }), rules: NO_RULES };
+    return { key, domain: createPathPlug({ ...placed, key, kept: own.kept }), rules: NO_RULES };
   }
 
   return {

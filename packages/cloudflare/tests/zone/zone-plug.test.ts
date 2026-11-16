@@ -8,8 +8,8 @@ import type { HeldKey } from "../../src/zone/key/key-state";
 import { createDomainPlug, giveKey } from "../../src/zone/zone-plug";
 import { withFake } from "./support/fake-cloudflare";
 import type { Asked } from "./support/replies";
-import { ACCOUNT, type Account, answer, emptyAccount, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "./support/fake-install";
-import { LAYOUT } from "./support/layouts";
+import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "./support/fake-install";
+import { LAYOUT, layoutOf } from "./support/layouts";
 
 const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" };
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
@@ -1176,6 +1176,196 @@ describe("the keys an install keeps", () => {
 
         expect([await giveKey(parts, "short"), await giveKey(parts, OTHER_TOKEN)]).toEqual([REFUSED, REFUSED]);
         expect([...new Set(asked.map((entry) => `${entry.method} ${entry.path.split("?")[0]}`))]).toEqual(["GET /zones"]);
+      },
+    );
+  });
+});
+
+describe("a check the install makes with the key it holds", () => {
+  /** How an optional piece that is not set up reads, as a token without its right reads it. */
+  const OPTIONAL = {
+    redirect: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself. To switch this on, add this right to the account token and press Repair: Single Redirect: Edit",
+    waf: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin. To switch this on, add this right to the account token and press Repair: Zone WAF: Edit",
+    bots: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says. To switch this on, add this right to the account token and press Repair: Bot Management: Edit",
+    alert: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. To switch this on, add this right to the account token and press Repair: Notifications: Edit",
+  } as const;
+
+  /** The database's row in such a check, which no call reads. */
+  const DATABASE = "D1 database | present | poplin: the install is running on it";
+
+  /** Run a test against an account at the fake API, with the plug of an install that holds `key`. */
+  async function withKey(account: Account, run: (plug: ReturnType<typeof createDomainPlug>, own: () => Promise<DomainReading>, asked: readonly Asked[]) => Promise<void>, holdsUpload = true): Promise<void> {
+    await withFake(
+      (asked) => answer(account, asked),
+      async (connection, asked) => {
+        const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl, uploadKeyId: holdsUpload ? "held-upload-key" : undefined, kept: { connection: { key: KEPT, baseUrl: connection.baseUrl } } });
+        const own = plug.ownCheck;
+        if (own === undefined) throw new Error("a plug with a key has no check of its own");
+
+        await run(plug, () => own(SETTINGS), asked);
+      },
+    );
+  }
+
+  // Drift: the count is what one request of a Worker spends each time the Domain screen opens on a check that is old. A call to the databases or the tokens is one the key is refused, and its row would fail on every healthy install.
+  test("every piece a repair made reads as present in 21 calls, each a read sent with the key, none to the databases or the tokens, and the database's row says the install runs on it", async () => {
+    const account = emptyAccount();
+
+    await withKey(account, async (plug, own, asked) => {
+      await plug.repair(TOKEN, SETTINGS);
+      const sent = asked.length;
+      const rows = shown(await own());
+      const calls = asked.slice(sent);
+
+      expect(rows).toEqual(table({}).map((row) => (row.startsWith("D1 database") ? DATABASE : row)));
+      expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens)(\/|\?|$)/.test(call.path))]).toEqual([21, [`GET Bearer ${KEPT}`], []]);
+    });
+  });
+
+  // Drift: the key can see that an optional piece is absent, and no token says the person wants it. Read as missing, every install set up with the needed rights alone would rest on a count to repair that a repair with its own token cannot clear.
+  test("on an account with nothing in it the needed pieces read missing and each optional piece reads optional, in the words a token without its right is told, and nothing is sent but reads", async () => {
+    const account = emptyAccount();
+    const before = structuredClone(account);
+
+    await withKey(account, async (_plug, own, asked) => {
+      const reading = await own();
+
+      expect(shown(reading)).toEqual([
+        ...table({ all: "missing" }).slice(0, 11),
+        "Key | present | poplin kept key",
+        "Upload key | present | poplin upload key",
+        `Redirect rule | optional | https redirect: ${OPTIONAL.redirect}`,
+        `WAF rule | optional | bots rule: ${OPTIONAL.waf}`,
+        `WAF rule | optional | outside pages rule: ${OPTIONAL.waf}`,
+        `Rate rule | optional | rate rule: ${OPTIONAL.waf}`,
+        `Bot settings | optional | zone bot switches: ${OPTIONAL.bots}`,
+        DATABASE,
+        `Budget alert | optional | poplin: usage charges reached 1 dollar: ${OPTIONAL.alert}`,
+        "Workflow | missing | poplin-jobs",
+      ]);
+      expect([writes(asked), account]).toEqual([[], before]);
+    });
+  });
+
+  const lacking = [
+    { name: "the records", refuse: "/zones/zone-1/dns_records", row: "DNS record | failed | the key the install holds lacks this right: DNS Read. Press Repair.", right: "DNS Read", unread: ["Rate rule | not-run | ", "Bot settings | not-run | "] },
+    { name: "the routes", refuse: "/zones/zone-1/workers/routes", row: "Worker route | failed | the key the install holds lacks this right: Workers Routes Read. Press Repair.", right: "Workers Routes Read", unread: [] },
+    {
+      name: "the zone's own https switch",
+      refuse: "/zones/zone-1/settings/always_use_https",
+      row: "Redirect rule | failed | the zone's own https switch: the key the install holds lacks this right: Zone Settings Read. Press Repair.",
+      right: "Zone Settings Read",
+      unread: [],
+    },
+    { name: "the bot switches", refuse: "/zones/zone-1/bot_management", row: "Bot settings | failed | the key the install holds lacks this right: Bot Management Read. Press Repair.", right: "Bot Management Read", unread: [] },
+    { name: "the budget alert", refuse: `/accounts/${ACCOUNT}/alerting/v3/policies`, row: "Budget alert | failed | the key the install holds lacks this right: Notifications Write. Press Repair.", right: "Notifications Write", unread: [] },
+  ];
+
+  // Drift: a key made before a right was added lacks it. A check that stopped there, or said nothing of the key, would hide every other piece behind one row and leave the person with no word that a repair makes a new key.
+  test.each(lacking)("a key that lacks the right to read $name fails that row alone, names the right, and says the key is one a repair replaces: the other pieces are still read", async ({ refuse, row, right, unread }) => {
+    const account = emptyAccount();
+    const kindOf = (line: string): string => line.split(" | ")[0] ?? "";
+
+    await withKey(account, async (plug, own) => {
+      await plug.repair(TOKEN, SETTINGS);
+      account.refuse = `GET ${refuse}`;
+      const reading = await own();
+      const changed = [row, ...unread, "Key", "D1 database"].map(kindOf);
+      const expected = [...table({}).filter((line) => !changed.includes(kindOf(line))), DATABASE, "Key | differs | poplin kept key: the key the install holds lacks a right the install uses now", row, ...unread];
+
+      expect(shown(reading).sort()).toEqual(expected.sort());
+      expect(reading.ok ? reading.rows.flatMap((found) => (found.right === undefined ? [] : [found.right])) : []).toEqual([right]);
+    });
+  });
+
+  // Drift: a key deleted at Cloudflare answers every call 401. A check that showed that as a missing right, or as an install with nothing wrong, would never send the person to the repair that makes a new key.
+  test("a key Cloudflare no longer knows reads nothing: one row says the key was refused, the key's row says so too, and no setting is read", async () => {
+    let read = 0;
+
+    await withFake(
+      (asked) => answer(emptyAccount(), asked),
+      async (connection, asked) => {
+        const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl, kept: { connection: { key: "key-nobody-has-0123456789", baseUrl: connection.baseUrl } } });
+        const reading = await plug.ownCheck?.(async () => {
+          read += 1;
+
+          return STORED;
+        });
+
+        expect(reading === undefined ? [] : shown(reading)).toEqual(["Zone | failed | Cloudflare refused the key the install holds. Press Repair.", "Key | differs | poplin kept key: Cloudflare refused the key the install holds"]);
+        expect([read, asked.length]).toEqual([0, 1]);
+      },
+    );
+  });
+
+  // Drift: no token is scrubbed from the rows of a check that was given none. A row that carried Cloudflare's own words would carry whatever those words quote, the key among them.
+  test("a call Cloudflare answers with anything else fails its row in fixed words and stops the check: no row holds the key or a word of the answer", async () => {
+    const account = { ...emptyAccount(), refuse: "GET /zones/zone-1/workers/routes", refuseAs: { status: 400, code: 1004 } };
+
+    await withKey(account, async (_plug, own) => {
+      const reading = await own();
+      const rows = shown(reading).filter((row) => ["Worker route", "Key", "Access application"].some((kind) => row.startsWith(kind)));
+
+      expect(rows).toEqual(["Worker route | failed | no usable answer from Cloudflare", "Access application | not-run | ", "Key | not-run | "]);
+      expect([JSON.stringify(reading).includes(KEPT), JSON.stringify(reading).includes("Authentication error")]).toEqual([false, false]);
+    });
+  });
+
+  // Drift: a zone that left the account, or a key made for another zone, shows no zone of the install's domain. Read on with no zone, every call would be sent to nothing.
+  test("a key that shows no zone of the install's domain says the zone is missing and reads no piece", async () => {
+    await withFake(
+      (asked) => answer(emptyAccount(), asked),
+      async (connection, asked) => {
+        const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: layoutOf({ domain: "example.org" }), baseUrl: connection.baseUrl, kept: { connection: { key: KEPT, baseUrl: connection.baseUrl } } });
+        const reading = await plug.ownCheck?.(SETTINGS);
+
+        expect(reading === undefined ? [] : shown(reading)).toEqual(["Zone | missing | example.org"]);
+        expect(asked.every((call) => call.path.startsWith("/zones?"))).toBe(true);
+      },
+    );
+  });
+
+  // Drift: the key reads no token of the account, so it cannot ask about the upload key. A row that said nothing of an install made before it had one would leave publishing without its key and no word to repair.
+  test("the upload key's row says only whether the install holds one: missing on an install that holds none, with no call about it", async () => {
+    const account = emptyAccount();
+
+    await withKey(
+      account,
+      async (_plug, own, asked) => {
+        const rows = shown(await own()).filter((row) => row.startsWith("Upload key"));
+
+        expect([rows, asked.filter((call) => call.path.includes("/tokens"))]).toEqual([["Upload key | missing | poplin upload key"], []]);
+      },
+      false,
+    );
+  });
+
+  // Drift: first setup, and an install the OpenTofu module made, hold no key. A check of their own would call Cloudflare with nothing, and the screen would stop asking for the token they need.
+  test("an install that holds no key has no check of its own, which is what the console asks its token by", () => {
+    expect(createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT }).ownCheck).toBeUndefined();
+  });
+
+  // Drift: a record in the install's way is found by a read Cloudflare answered. Said as no answer from Cloudflare, the row would lose the one thing the person can do about the record.
+  test("a piece that stops itself over what Cloudflare answered says why in its own words, as a check with a token does", async () => {
+    const account = emptyAccount();
+    account.records.push({ id: "theirs", name: "*.example.com", type: "A", content: "192.0.2.1", proxied: false });
+    const records = (rows: readonly string[]): string[] => rows.filter((row) => row.startsWith("DNS record"));
+
+    await withKey(account, async (plug, own) => {
+      const [byKey, byToken] = [records(shown(await own())), records(shown(await plug.check(TOKEN, SETTINGS)))];
+
+      expect([byKey, byKey.some((row) => row.includes("failed"))]).toEqual([byToken, true]);
+    });
+  });
+
+  // Drift: the login is read before its piece has rows, outside the call the key's answers are read from. An answer cut short there would end the whole check with an error and no row.
+  test("an answer about the login that is cut short fails the login's row in fixed words, and the check still answers its rows", async () => {
+    await withFake(
+      (asked) => (asked.path.includes("/access/policies") ? new Response("{", { headers: { "Content-Type": "application/json" } }) : answer(emptyAccount(), asked)),
+      async (connection) => {
+        const reading = await createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl, kept: { connection: { key: KEPT, baseUrl: connection.baseUrl } } }).ownCheck?.(SETTINGS);
+
+        expect(reading === undefined ? [] : shown(reading).filter((row) => row.startsWith("Access"))).toEqual(["Access application | failed | no usable answer from Cloudflare"]);
       },
     );
   });

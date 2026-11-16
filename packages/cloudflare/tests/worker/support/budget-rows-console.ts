@@ -629,6 +629,21 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
+    name: "Domain screen: a check the screen runs on opening, with the kept key",
+    route: "POST /data/domain/check",
+    // The run asks Cloudflare with the key the install holds: what it found is kept in one row, with no audit entry.
+    arrange: async (stage) => {
+      stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
+      stage.keptKey = TOKEN;
+      const session = await sessionOf(stage);
+
+      return (measured) => post(measured, "/data/domain/check", { unasked: true }, session);
+    },
+    status: 200,
+    budget: { queries: 4, reads: 0, writes: 0 },
+  },
+  {
+    group,
     name: "Domain screen: repair",
     route: "POST /data/domain/repair",
     // Worst: nothing of the domain is made yet, so the run makes every piece, and keeps what it did in one row with its audit entry.

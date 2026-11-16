@@ -7,10 +7,21 @@
 // A check is the repair's own code with the changes left unsent, so the two cannot disagree on what a repair would do.
 // The link to the token form carries every permission an install needs. A piece that needs one of the others is no failure without it: its row says which to add.
 // The plug of an install without a domain is made of the same pieces: the rows, the login, the Worker's variables with its keys, and the token form are exported for it.
+//
+// An install that holds its key checks by itself, with no token: the same pieces are read with the key, each under one of the key's own rights.
+//
+//   the key reads a piece                  its row, as a token's check says it; an optional piece that is not set up reads `optional`, as a token without its right reads it
+//   the key lacks the right of a piece     that row names the right and says to press Repair; the other pieces are still read
+//   Cloudflare refuses the key             the row says so and the check stops; the key's row says to repair
+//   the database, the keys' own rights     not asked: the key holds no right to either; the upload key's row says only whether the install holds one
+//
+// No row of such a check holds a text Cloudflare sent.
 
 import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, ReadSettings, TokenFacts } from "@poplin/app/src/console/domain/records";
+import type { KeyRefusal } from "@poplin/app/src/console/key/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
+import { type KeptKey, keyed } from "../key/kept-key";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "./access/access";
 import { syncBudgetAlert } from "./alerts/budget-alert";
 import { syncZoneBots } from "./bots/bots";
@@ -25,6 +36,7 @@ import { uploadKeyText } from "../key/upload-key";
 import { type HeldKey, type HeldKeys, type KeyRead, readBucket, readKeyStates } from "./key/key-state";
 import { type Minted, mintKeys, removeKeys, type WantedKey } from "./key/mint";
 import { type Bucket, keyPolicies, uploadKeyPolicies } from "./key/rights";
+import type { KeyRight } from "./key/rights";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
@@ -104,6 +116,22 @@ const KEY_UNWRITTEN = { deleted: "made, and deleted again when its write onto th
 /** What the upload key's row says on a Worker that is bound to no bucket. */
 const NO_BUCKET = "the Worker is bound to no bucket";
 
+/** What a row says of a piece the install's own key could not read, by what came of the call. */
+const KEY_SAYS: Readonly<Record<Exclude<KeyRefusal, "no_key">, string>> = {
+  lacks_right: "the key the install holds lacks this right",
+  key_refused: "Cloudflare refused the key the install holds",
+  unreachable: "no usable answer from Cloudflare",
+};
+
+/** What stands for the answer of a call that threw in a check the install makes by itself: its row then says Cloudflare gave no usable answer. */
+const NO_ANSWER = { ok: false, failure: "network", message: "" } as const;
+
+/** What such a row tells the person to do: a repair makes a new key where the install's is refused or lacks a right. */
+const PRESS_REPAIR = "Press Repair.";
+
+/** What the database's row says in a check the install makes by itself, after the database's name. */
+const OWN_DATABASE = "the install is running on it";
+
 /** Every permission the plug's calls use, in Cloudflare's own name: one an install needs, with its key as Cloudflare's page on token template links names it, or an optional one, which that page names no key for. */
 const RIGHT = {
   zone: { name: "Zone: Read", key: "zone", type: "read" },
@@ -141,6 +169,27 @@ const RIGHTS = {
   "Upload key": [RIGHT.tokens, RIGHT.scripts],
   Forwarder: [RIGHT.scripts],
 } as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone | keyof typeof INSTALL_PIECES.noDomain, readonly Right[]>>;
+
+/** The right of the key each object is read under in a check the install makes by itself. The database and the two keys are read with no call. A piece with no row here does not compile. */
+const KEY_RIGHT: Readonly<Record<Piece, KeyRight | undefined>> = {
+  Zone: "Zone Read",
+  "DNS record": "DNS Read",
+  "Worker route": "Workers Routes Read",
+  "Access application": "Access: Apps and Policies Write",
+  "Access policy": "Access: Apps and Policies Write",
+  "Access open paths": "Access: Apps and Policies Write",
+  "Worker variable": "Workers Scripts Write",
+  "Redirect rule": "Dynamic URL Redirects Read",
+  "WAF rule": "Zone WAF Write",
+  "Rate rule": "Zone WAF Write",
+  "Bot settings": "Bot Management Read",
+  "D1 database": undefined,
+  "Budget alert": "Notifications Write",
+  Key: undefined,
+  "Upload key": undefined,
+  Forwarder: "Workers Scripts Write",
+  Workflow: "Workers Scripts Write",
+};
 
 /** What each object is for: the login guards the dashboard and private sites; a record, a route, or the open paths make a site or the API answer at its address. A piece with no row here does not compile. */
 const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
@@ -201,10 +250,11 @@ const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "rem
  * One that is set has `accountId`, the account the Worker runs in, never one a token's holder names.
  * One with nothing set has `first`, its first login: its account is the one the token shows the install in, and a repair also writes where the install answers, this login, and that account onto the Worker.
  * `key` is the install's kept key as its own Worker holds it, and `uploadKeyId` the id of the upload key that Worker holds. Without `key`, how both keys stand is read at Cloudflare with the token.
+ * `kept` is the kept key ready to call Cloudflare with: an install that has it checks by itself, with no token.
  */
 export type Known =
-  | { readonly accountId: string; readonly first?: undefined; readonly key?: HeldKey; readonly uploadKeyId?: string | undefined }
-  | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined; readonly uploadKeyId?: undefined };
+  | { readonly accountId: string; readonly first?: undefined; readonly key?: HeldKey; readonly uploadKeyId?: string | undefined; readonly kept?: KeptKey | undefined }
+  | { readonly accountId?: undefined; readonly first: { readonly login: Login }; readonly key?: undefined; readonly uploadKeyId?: undefined; readonly kept?: undefined };
 
 /** What the plug is built from. */
 type PlugParts = Known & {
@@ -307,11 +357,12 @@ interface Stopped {
 /** What one piece of the install answered. */
 type Outcome = { readonly ok: true; readonly report: Report } | Stopped;
 
-/** The rows of a run so far, and whether a failure has stopped it. */
+/** The rows of a run so far, and whether a failure has stopped it. `own` is on a check the install makes by itself: the key it reads with, and the worst Cloudflare said of that key so far. */
 export interface Progress {
   readonly rows: Found[];
   readonly steps: DomainStep[];
   stopped: boolean;
+  readonly own?: { readonly kept: KeptKey; fault?: "refused" | "lacking" };
 }
 
 function failureText(stopped: Stopped): string {
@@ -390,8 +441,73 @@ function rowsOf(outcome: Outcome, mode: Mode, objectOf: (subject: string) => Pie
   return rows.sort((left, right) => (left.detail < right.detail ? -1 : 1));
 }
 
+/** The right of the key a piece is read under: of an object read in two calls, the second's where the step that failed is the one that reads with it. */
+function keyRight(object: Piece, failed: string): KeyRight | undefined {
+  if (failed === HTTPS_SWITCH) return "Zone Settings Read";
+
+  if (failed === TEAM_DOMAIN) return "Access: Organizations, Identity Providers, and Groups Read";
+
+  return KEY_RIGHT[object];
+}
+
+/** A row of a check the install makes by itself: an optional piece a repair would make or change reads as a token without its right reads it, since the key alone does not say the person wants it. */
+function asOptional(row: Found): Found {
+  const right = row.object === "Public word" ? undefined : RIGHTS[row.object][0];
+  if (right === undefined || !("adds" in right) || (row.state !== "missing" && row.state !== "differs")) return row;
+
+  return { object: row.object, state: "optional", detail: `${row.detail}: ${right.adds} ${SWITCH_ON}: ${right.name}` };
+}
+
+/** A piece Cloudflare stopped, as the one call the key's answers are read from; `undefined` for a piece that stopped itself, such as one that found a record in its way: Cloudflare answered it, and its own words say why. */
+function asFailure(stopped: Stopped): CloudflareFailure | undefined {
+  if (stopped.failure === "refused") return { ok: false, failure: "refused", status: stopped.status ?? 0, errors: stopped.errors ?? [] };
+
+  if (stopped.failure === "rate-limited") return { ok: false, failure: "rate-limited" };
+
+  return stopped.failure === "network" ? { ok: false, failure: "network", message: "" } : undefined;
+}
+
+/**
+ * Make a call a piece reads from before it has its rows. In a check the install makes by itself, one that throws is no answer, as it is for a call made through `keyed`.
+ *
+ * @param none - what stands for the answer of a call that threw
+ */
+async function answered<Value>(progress: Progress, call: () => Promise<Value>, none: Value): Promise<Value> {
+  return progress.own === undefined ? call() : call().catch(() => none);
+}
+
+/**
+ * Read one piece with the install's own key.
+ *
+ * @returns what the piece answered, `undefined` for a call that threw, and its rows: a piece the key could not read says which of the key's answers it got, in fixed words, and for a missing right names it
+ */
+async function ownPiece<Answer extends Outcome>(own: NonNullable<Progress["own"]>, objectOf: (subject: string) => Piece, run: () => Promise<Answer>): Promise<{ readonly outcome: Answer | undefined; readonly rows: Found[] }> {
+  const held: { outcome?: Answer } = {};
+  const told = await keyed(own.kept, "", async () => {
+    held.outcome = await run();
+
+    return (held.outcome.ok ? undefined : asFailure(held.outcome)) ?? { ok: true, value: undefined };
+  });
+  const { outcome } = held;
+  // A piece Cloudflare answered says its rows as any check does, the ones of a piece that stopped itself among them.
+  if (told.ok || told.refusal === "no_key") return { outcome, rows: outcome === undefined ? [] : rowsOf(outcome, "plan", objectOf).map(asOptional) };
+
+  const rows = outcome === undefined ? [] : rowsOf({ ok: true, report: outcome.report }, "plan", objectOf).map(asOptional);
+  const failed = outcome?.ok === false ? (outcome.failed ?? "") : "";
+  const object = objectOf(failed);
+  const what = failed === "" ? "" : `${failed}: `;
+  if (told.refusal === "unreachable") return { outcome, rows: [...rows, { object, state: "failed", detail: `${what}${KEY_SAYS.unreachable}` }] };
+
+  const right = told.refusal === "lacks_right" ? keyRight(object, failed) : undefined;
+  own.fault = told.refusal === "key_refused" ? "refused" : (own.fault ?? "lacking");
+  const says = right === undefined ? KEY_SAYS[told.refusal] : `${KEY_SAYS.lacks_right}: ${right}`;
+
+  return { outcome, rows: [...rows, { object, state: "failed", detail: `${what}${says}. ${PRESS_REPAIR}`, ...(right === undefined ? {} : { right }) }] };
+}
+
 // One piece of the install: its rows are added, and a failure stops every piece after it, so nothing is built on a state half made.
 // A piece refused for a permission the token lacks, before it changed anything, leaves nothing half made, and the pieces after it need other permissions: the run goes on.
+// A check the install makes by itself reads the piece with its own key.
 export async function piece<Answer extends Outcome>(
   progress: Progress,
   mode: Mode,
@@ -404,9 +520,9 @@ export async function piece<Answer extends Outcome>(
     return undefined;
   }
 
-  const outcome = await run();
-  progress.rows.push(...rowsOf(outcome, mode, objectOf));
-  if (!outcome.ok && !(outcome.report.changedNothing && lacksRight(outcome))) progress.stopped = true;
+  const { outcome, rows } = progress.own === undefined ? await run().then((answer) => ({ outcome: answer, rows: rowsOf(answer, mode, objectOf) })) : await ownPiece(progress.own, objectOf, run);
+  progress.rows.push(...rows);
+  if (outcome === undefined || (!outcome.ok && !(outcome.report.changedNothing && lacksRight(outcome)))) progress.stopped = true;
 
   return outcome;
 }
@@ -441,7 +557,7 @@ export async function accessPiece(progress: Progress, mode: Mode, placed: Placed
   }
 
   const { adminHost: host, privateSites } = placed;
-  const synced = await syncAccess(connection, placed.accountId, { hostname: host, logins, privateSites }, mode);
+  const synced = await answered(progress, () => syncAccess(connection, placed.accountId, { hostname: host, logins, privateSites }, mode), { ...NO_ANSWER, report: reportOf([]) });
   // A refusal after a step was done is a failure of the run: its rows keep what was made.
   if (synced.ok || synced.failed !== undefined || !isAccessOff(synced)) {
     const before = progress.rows.length;
@@ -483,6 +599,13 @@ function keyFailed(kind: KeyKind, what: string, failure: CloudflareFailure | { r
   if (right === undefined || !lacksRight(stopped)) return { object, state: "failed", detail: why };
 
   return { object, state: "failed", detail: `${why}. ${ADD_RIGHT}: ${right.name}`, right: right.name };
+}
+
+/** The row of a key in a check the install makes by itself: the kept key stands, since the check is read with it, and the upload key is there where the install holds one. Cloudflare is not asked about either: the kept key reads no token of the account. */
+function heldRow(kind: KeyKind, placed: KeyHolder): Found {
+  const { object, name } = KEYS[kind];
+
+  return { object, state: kind === "kept" || placed.uploadKeyId !== undefined ? "present" : "missing", detail: name };
 }
 
 /**
@@ -602,13 +725,14 @@ async function mendKeys(connection: Connection, placed: KeyHolder, wanted: Wante
 async function workerPiece(progress: Progress, mode: Mode, placed: KeyHolder, connection: Connection, wanted: Wanted): Promise<Synced | undefined> {
   const object = (): Piece => "Worker variable";
   const held: HeldKeys | undefined = placed.key === undefined ? undefined : { kept: placed.key, uploadId: placed.uploadKeyId };
-  const states = await readKeyStates(held, connection, placed);
-  const mended = mode === "apply" ? await mendKeys(connection, placed, wanted, states) : undefined;
+  // A key answers nothing about its own rights and reads no token of the account, so a check made with it reads neither key at Cloudflare.
+  const states = progress.own === undefined ? await readKeyStates(held, connection, placed) : undefined;
+  const mended = mode === "apply" && states !== undefined ? await mendKeys(connection, placed, wanted, states) : undefined;
   const written = mended?.written;
   const run = written === undefined ? (): Promise<Synced> => syncVariables(connection, placed, wanted, mode) : async (): Promise<Synced> => written;
   // With no variable to write, the keys' own rows say everything the change came to.
   const synced = wanted.length === 0 ? written : await piece(progress, mode, object, run);
-  progress.rows.push(...KEY_KINDS.map((kind) => mended?.rows[kind] ?? keyRead(kind, states[kind], wanted.length > 0)));
+  progress.rows.push(...KEY_KINDS.map((kind) => mended?.rows[kind] ?? (states === undefined ? heldRow(kind, placed) : keyRead(kind, states[kind], wanted.length > 0))));
   progress.steps.push(...(mended?.steps ?? []));
 
   return synced;
@@ -625,7 +749,7 @@ async function wantedVariables(progress: Progress, mode: Mode, placed: Placed, c
     return undefined;
   }
 
-  const facts = accessReady ? await readLoginFacts(connection, placed.accountId) : ({ ok: true, value: undefined } as const);
+  const facts = accessReady ? await answered(progress, () => readLoginFacts(connection, placed.accountId), NO_ANSWER) : ({ ok: true, value: undefined } as const);
   if (!facts.ok) {
     await piece(progress, mode, object, async (): Promise<Outcome> => ({ ...facts, report: reportOf([]), failed: TEAM_DOMAIN }));
 
@@ -666,6 +790,18 @@ async function alertPiece(progress: Progress, mode: Mode, placed: Placed, connec
   await piece(progress, mode, object, () => syncBudgetAlert(connection, placed.accountId, first, mode));
 }
 
+/** The database's piece. A check the install makes by itself asks Cloudflare nothing of it: the key holds no right to a database, and the install read its settings from its own for this very check. */
+export async function databasePiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection): Promise<void> {
+  const object = (): Piece => "D1 database";
+  if (progress.own !== undefined && !progress.stopped) {
+    progress.rows.push({ object: object(), state: "present", detail: `${INSTALL_OBJECTS.database}: ${OWN_DATABASE}` });
+
+    return;
+  }
+
+  await piece(progress, mode, object, () => syncDatabase(connection, placed.accountId, mode));
+}
+
 /** Find the zone of the install's domain: in the install's own account, or for an install with nothing set in whichever account the token shows it in. */
 async function findZone(parts: PlugParts, connection: Connection): Promise<Zone | DomainReading> {
   const zones = parts.accountId === undefined ? await findZones(connection, parts.layout.domain) : await listZones(connection, parts.accountId);
@@ -677,6 +813,15 @@ async function findZone(parts: PlugParts, connection: Connection): Promise<Zone 
   return parts.accountId === undefined ? NO_DOMAIN : REFUSED;
 }
 
+/** The install in the account its zone is in. */
+function placedIn(parts: PlugParts, zone: Zone): Placed {
+  const { layout } = parts;
+  const { accountId, id: zoneId } = zone;
+  const firsts = firstValues(parts, { domain: layout.domain }, accountId);
+
+  return { script: parts.script, accountId, zoneId, key: parts.key, uploadKeyId: parts.uploadKeyId, now: parts.now, adminHost: layout.adminHostname, privateSites: privateSitesPattern(layout), firstValues: firsts };
+}
+
 /** Prove a token: one that is malformed, refused, or shows no zone of the install's domain where the install is gets its refusal, and nothing of the install is read with it. */
 async function prove(parts: PlugParts, token: string): Promise<{ readonly connection: Connection; readonly zone: Zone; readonly placed: Placed } | DomainReading> {
   if (!TOKEN.test(token)) return REFUSED;
@@ -685,12 +830,15 @@ async function prove(parts: PlugParts, token: string): Promise<{ readonly connec
   const zone = await findZone(parts, connection);
   if ("ok" in zone) return zone;
 
-  const { layout } = parts;
-  const { accountId, id: zoneId } = zone;
-  const firsts = firstValues(parts, { domain: layout.domain }, accountId);
-  const placed: Placed = { script: parts.script, accountId, zoneId, key: parts.key, uploadKeyId: parts.uploadKeyId, now: parts.now, adminHost: layout.adminHostname, privateSites: privateSitesPattern(layout), firstValues: firsts };
+  return { connection, zone, placed: placedIn(parts, zone) };
+}
 
-  return { connection, zone, placed };
+/** The rows of a check the install made by itself, with the key's row as the pieces were answered: a key Cloudflare refused, or one that lacks a right, is one a repair replaces. */
+function keySettled(rows: readonly Found[], fault: "refused" | "lacking"): Found[] {
+  const key: Found = { object: "Key", state: "differs", detail: `${KEYS.kept.name}: ${fault === "refused" ? KEY_SAYS.key_refused : KEY_DIFFERS.lacking}` };
+  if (!rows.some((row) => row.object === "Key")) return [...rows, key];
+
+  return rows.map((row) => (row.object === "Key" ? key : row));
 }
 
 /**
@@ -699,16 +847,14 @@ async function prove(parts: PlugParts, token: string): Promise<{ readonly connec
  * @returns every row with what its object is for, and the steps only a person can do
  */
 export function readingOf(progress: Progress): DomainReading {
-  return { ok: true, rows: progress.rows.map((row) => ({ ...row, part: PART[row.object], ...(HOLDS_USERS.includes(row.object) ? { users: true as const } : {}) })), steps: progress.steps };
+  const rows = progress.own?.fault === undefined ? progress.rows : keySettled(progress.rows, progress.own.fault);
+
+  return { ok: true, rows: rows.map((row) => ({ ...row, part: PART[row.object], ...(HOLDS_USERS.includes(row.object) ? { users: true as const } : {}) })), steps: progress.steps };
 }
 
-async function read(parts: PlugParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
-  const proven = await prove(parts, token);
-  if ("ok" in proven) return proven;
-
-  const { connection, zone, placed } = proven;
-
-  // The token is proven: only now is anything of the install read.
+/** Read every piece of an install whose zone is found, or make each match. The settings are read here and no earlier: a token has proven itself by now. */
+async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connection: Connection; readonly zone: Zone; readonly placed: Placed }, progress: Progress, readSettings: ReadSettings): Promise<DomainReading> {
+  const { connection, zone, placed } = found;
   const settings = await readSettings();
   const parsed = parseLogins(settings.logins);
   const logins = parsed.ok ? parsed.value : undefined;
@@ -716,8 +862,7 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
   const { layout } = parts;
   const { plan } = zone;
   // The public word is a fact of the install, set once: its row only shows it.
-  const word: Found = { object: "Public word", state: "present", detail: `${layout.publicWord} (public sites answer at <name>-${layout.publicWord}.${layout.domain})` };
-  const progress: Progress = { rows: [word], steps: [], stopped: false };
+  progress.rows.push({ object: "Public word", state: "present", detail: `${layout.publicWord} (public sites answer at <name>-${layout.publicWord}.${layout.domain})` });
 
   const dns = await piece(
     progress,
@@ -726,8 +871,14 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => syncDns(connection, zone.id, layout, mode),
   );
   // The records say whether a hostname of the install is somebody else's, and whether the zone has hostnames of its own: unread, for whatever reason, nothing is built on the zone.
-  if (dns?.ok !== true) progress.stopped = true;
+  // A check the install makes by itself builds nothing, so it reads on, and leaves out the two pieces whose plan is made from the records.
+  const recordsRead = dns?.ok === true;
+  if (!recordsRead && progress.own === undefined) progress.stopped = true;
   const sharesZone = dns?.ok === true && dns.sharesZone;
+  const fromRecords = async (object: Piece, run: () => Promise<Synced>): Promise<void> => {
+    if (recordsRead || progress.stopped) await piece(progress, mode, () => object, run);
+    else progress.rows.push({ object, state: "not-run", detail: "" });
+  };
 
   await piece(
     progress,
@@ -750,24 +901,9 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
     () => syncGuards(connection, zone.id, { layout, plan, outsidePages: settings.outside_pages, searchEnginesAllowed: settings.search_engines_allowed }, mode),
   );
   progress.rows.splice(guardsFrom, Number.POSITIVE_INFINITY, ...progress.rows.slice(guardsFrom).map((row) => (row.detail === BOTS_RULE ? { ...row, detail: `${BOTS_RULE}: ${ALWAYS_STOPPED}` } : row)));
-  await piece(
-    progress,
-    mode,
-    () => "Rate rule",
-    () => syncWaf(connection, zone.id, { layout, plan, sharesZone, rateRule: defaultRateRule(plan) }, mode),
-  );
-  await piece(
-    progress,
-    mode,
-    () => "Bot settings",
-    () => syncZoneBots(connection, zone.id, { blockBots: settings.block_bots, plan, sharesZone }, mode),
-  );
-  await piece(
-    progress,
-    mode,
-    () => "D1 database",
-    () => syncDatabase(connection, placed.accountId, mode),
-  );
+  await fromRecords("Rate rule", () => syncWaf(connection, zone.id, { layout, plan, sharesZone, rateRule: defaultRateRule(plan) }, mode));
+  await fromRecords("Bot settings", () => syncZoneBots(connection, zone.id, { blockBots: settings.block_bots, plan, sharesZone }, mode));
+  await databasePiece(progress, mode, placed, connection);
   await alertPiece(progress, mode, placed, connection, logins);
   // The Workflow comes last: nothing else of the install waits for it. Only a copy too large for one request needs it.
   await piece(
@@ -778,6 +914,36 @@ async function read(parts: PlugParts, mode: Mode, token: string, readSettings: R
   );
 
   return readingOf(progress);
+}
+
+async function read(parts: PlugParts, mode: Mode, token: string, readSettings: ReadSettings): Promise<DomainReading> {
+  const proven = await prove(parts, token);
+  if ("ok" in proven) return proven;
+
+  return readPieces(parts, mode, proven, { rows: [], steps: [], stopped: false }, readSettings);
+}
+
+/** Check an install with the key it holds: its zone is found among the account's zones, as a token's is, and every piece is then read with the key. A zone the key does not show is said to be missing, and nothing more is read. */
+async function readOwn(parts: PlugParts, accountId: string, kept: KeptKey, readSettings: ReadSettings): Promise<DomainReading> {
+  const progress: Progress = { rows: [], steps: [], stopped: false, own: { kept } };
+  const { connection } = kept;
+  const shown: { zones?: readonly Zone[] } = {};
+  await piece(progress, "plan", (): Piece => "Zone", async (): Promise<Outcome> => {
+    const listed = await listZones(connection, accountId);
+    if (!listed.ok) return { ...listed, report: reportOf([]) };
+
+    shown.zones = listed.value;
+
+    return { ok: true, report: reportOf([]) };
+  });
+  const zone = shown.zones?.find((candidate) => candidate.name === parts.layout.domain);
+  if (zone === undefined) {
+    if (shown.zones !== undefined) progress.rows.push({ object: "Zone", state: "missing", detail: parts.layout.domain });
+
+    return readingOf(progress);
+  }
+
+  return readPieces(parts, "plan", { connection, zone, placed: placedIn(parts, zone) }, progress, readSettings);
 }
 
 // The form reads the permissions as a JSON list of `{ key, type }`.
@@ -850,9 +1016,12 @@ export async function giveKey(parts: Extract<PlugParts, { readonly accountId: st
  * Build the zone plug of an install on Cloudflare.
  *
  * @returns a plug whose `check` sends no change. Both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's domain as a zone of `accountId`.
- * With no `accountId` the account is the one the token shows the domain in as an active zone, and a token that shows none is told so. The settings are read only after that
+ * With no `accountId` the account is the one the token shows the domain in as an active zone, and a token that shows none is told so. The settings are read only after that.
+ * With `kept` the plug has `ownCheck`, which reads the same pieces with that key and no token
  */
 export function createDomainPlug(parts: PlugParts): DomainPlug {
+  const { accountId, kept } = parts;
+
   return {
     ...tokenFacts("domain"),
     words: { thing: "the domain", line: null },
@@ -860,5 +1029,6 @@ export function createDomainPlug(parts: PlugParts): DomainPlug {
     idleSettings: {},
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),
+    ...(accountId === undefined || kept === undefined ? {} : { ownCheck: (settings: ReadSettings) => readOwn(parts, accountId, kept, settings) }),
   };
 }

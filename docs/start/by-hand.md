@@ -94,7 +94,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
    | keep the token       | keep its note where you keep passwords, such as a password manager                           |
    | delete it            | at Cloudflare, My Profile, then API Tokens. The install and every site keep working          |
 
-   A token is asked for again only by Check and Repair on the dashboard's [Domain](../dashboard/domain.md) screen, such as after you add a permission. With none left, make a new one with the same link. If you lose the note, Cloudflare makes the token's text anew: [Roll](../fix/an-install-step-fails.md#step-4-the-page-shows-something-else).
+   A token is asked for again only by Repair on the dashboard's [Domain](../dashboard/domain.md) screen, such as after you add a permission. With none left, make a new one with the same link. If you lose the note, Cloudflare makes the token's text anew: [Roll](../fix/an-install-step-fails.md#step-4-the-page-shows-something-else).
 
    **If the form opens empty**, [When a step fails](../fix/an-install-step-fails.md#step-3-the-form-opens-empty) has the rows to add by hand.
 
