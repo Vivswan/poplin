@@ -65,6 +65,7 @@ const WORDS = {
   lacks: LACKS,
   refusedLater: "Cloudflare refused the token before the install was finished",
   notUsed: "it is not used, and an install needs a database of this name",
+  unchecked: "its code was there before this run, and this run did not check it",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
@@ -277,7 +278,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
   const uploaded = await workerPiece(
     work,
-    { object: "Worker", detail: made.standing ? SCRIPT : `${SCRIPT}, runs ${bundle.version}` },
+    { object: "Worker", detail: made.standing ? `${SCRIPT}: ${WORDS.unchecked}` : `${SCRIPT}, runs ${bundle.version}` },
     made.standing ? async () => ({ ok: true, value: true }) : undefined,
     async () => (made.databaseId === undefined ? { ok: false, failure: "no-id" } : putFirst(connection, worker, bundle, release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: made.databaseId }))),
   );

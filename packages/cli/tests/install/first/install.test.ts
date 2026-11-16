@@ -246,6 +246,16 @@ describe("what a look finds", () => {
     expect(account.runs[0]?.found.state).toBe("started");
   });
 
+  // Drift: a run that goes on with a program that was there uploads nothing, so it names no release. A last line that still read as this run's own install would vouch for code nobody checked.
+  test("a run that names no release ends by saying the program's code was not this run's: the last line and the JSON value both", async () => {
+    const account = accountWith({ state: "started", place: PLACE, notes: [] });
+    account.installed = { ...installedOf(FRESH), release: undefined };
+    const ran = await runLine(`${RUN} --no-wait`, account, { env: HELD });
+    const said = await runLine(`${RUN} --no-wait --json`, { ...account, runs: [] }, { env: HELD });
+
+    expect([ran.code, ran.out.at(-4), jsonOf(said).release]).toEqual([0, "poplin is installed. Its code was there before this run, and this run did not check it against a release.", null]);
+  });
+
   test.each([
     ["a held name", { state: "held", words: "A program named poplin is in this account and is not poplin's. Rename or delete it, then run this again.", address: "https://host.example.com/programs" }, 1, "name_held"],
     ["a block", { state: "blocked", blocked: [{ what: "storage_off", words: "Storage is not switched on for this account", address: "https://host.example.com/storage" }] }, 1, "blocked"],
