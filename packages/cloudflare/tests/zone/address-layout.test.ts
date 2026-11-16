@@ -41,6 +41,7 @@ describe("parseAddressLayout", () => {
     { name: "an account's name with a wildcard", account: "*", worker: "poplin", refusal: "bad-account" },
     { name: "an account's name that ends in a dash", account: "example-", worker: "poplin", refusal: "bad-account" },
     { name: "a Worker's name with an underscore, which no hostname holds", account: "example", worker: "my_poplin", refusal: "bad-worker" },
+    { name: "a Worker's name with a dot, whose hosts would sit a level below the free address", account: "example", worker: "my.poplin", refusal: "bad-worker" },
     { name: "a Worker's name of 56 characters: its private forwarder's name would be 64, one past a hostname's label", account: "example", worker: "p".repeat(56), refusal: "bad-worker" },
     { name: "an account's name of 37 characters: `poplin-private.<account>.workers.dev` would be 64, one past what Access takes", account: "a".repeat(37), worker: "poplin", refusal: "account-too-long" },
     { name: "an account's name of 36 characters under a Worker's name one longer than `poplin`", account: LONGEST_ACCOUNT, worker: "poplins", refusal: "account-too-long" },

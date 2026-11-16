@@ -51,7 +51,7 @@ export interface AddressLayout {
   readonly [addressBrand]: true;
 }
 
-/** Why a layout was refused. `bad-worker` is a Worker's name no hostname can start with, and `account-too-long` an account's name under which the private sites' hostname or an open path of the dashboard passes what Access takes. */
+/** Why a layout was refused. `bad-worker` is a Worker's name that is no single label of a hostname, or whose forwarder's name is none. `account-too-long` is an account's name under which an address passes what Access takes. */
 type AddressRefusal = "bad-account" | "bad-worker" | "account-too-long";
 
 /** A layout, or the first rule it breaks. */
@@ -70,7 +70,8 @@ export function parseAddressLayout(raw: RawAddressLayout, worker: string): Check
   const sitesWorker = `${worker}${SITES_ENDING}`;
   const privateWorker = `${worker}${PRIVATE_ENDING}`;
   const [adminHost, sitesHost, privateHost] = [worker, sitesWorker, privateWorker].map((name) => parseHostname(`${name}.${raw.account_address}.${FREE_ADDRESS}`));
-  if (!adminHost?.ok || !sitesHost?.ok || !privateHost?.ok) return { ok: false, refusal: "bad-worker" };
+  // A Worker's name is one label too: with a dot in it, each host would sit a level deeper than the free address gives.
+  if (worker.includes(".") || !adminHost?.ok || !sitesHost?.ok || !privateHost?.ok) return { ok: false, refusal: "bad-worker" };
 
   const addresses = [...INSTALL_OBJECTS.openPaths.map((path) => `${adminHost.value}${path}`), privateHost.value];
   if (addresses.some((address) => address.length > MAX_ACCESS_ADDRESS)) return { ok: false, refusal: "account-too-long" };
