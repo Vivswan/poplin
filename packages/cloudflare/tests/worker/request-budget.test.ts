@@ -61,8 +61,7 @@ const API_ROUTES: { readonly [Path in keyof Routes]: { readonly [Method in keyof
   "/api/audit": { $get: true },
   "/api/domain": { $get: true },
   "/api/problems": { $get: true },
-  "/api/update": { $post: true },
-  "/api/update/address": { $get: true, $put: true, $delete: true },
+  "/api/update": { $get: true, $post: true },
 };
 
 /** The heading of the guide's table of what an action costs. */

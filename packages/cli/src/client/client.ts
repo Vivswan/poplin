@@ -13,7 +13,7 @@ import type { Ticket } from "../../../core/src/storage/tickets";
 /** How long a call that carries JSON, or nothing, may take: 30 seconds. */
 const CALL_TIMEOUT_MS = 30_000;
 
-/** How long the upload or the download of one file may take: 10 minutes. */
+/** How long the upload or the download of one file, or a call the install answers only once its work is done, may take: 10 minutes. */
 const FILE_TIMEOUT_MS = 600_000;
 
 /** The most bytes of an answer that are read: 16 MB, far above a page of a hundred sites. */
@@ -118,7 +118,7 @@ type Answering<Done> = Promise<Raw & { json(): Promise<Done | ApiError> }>;
  * `download` asks for one stored file of one version of a site. Its bytes are not read here: the caller reads the stream to its end or cancels it, and a read that breaks off throws there.
  */
 export interface Client {
-  readonly call: <Form extends v.GenericSchema>(form: Form, ask: (api: ApiCalls) => Answering<v.InferOutput<Form>>, again?: "repeatable") => Promise<Called<v.InferOutput<Form>>>;
+  readonly call: <Form extends v.GenericSchema>(form: Form, ask: (api: ApiCalls) => Answering<v.InferOutput<Form>>, how?: "repeatable" | "long") => Promise<Called<v.InferOutput<Form>>>;
   readonly send: (ticket: Ticket, body: ReadableStream<Uint8Array> | Uint8Array) => Promise<Called<undefined>>;
   readonly download: (file: { readonly site: string; readonly version: number; readonly path: string }) => Promise<Called<Download>>;
 }
@@ -304,7 +304,7 @@ export function createClient(options: ClientOptions): Client {
     }
   };
 
-  const call: Client["call"] = (form, send, again) => ask(CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response), again);
+  const call: Client["call"] = (form, send, how) => ask(how === "long" ? FILE_TIMEOUT_MS : CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response), how === "repeatable" ? how : undefined);
 
   const send: Client["send"] = (ticket, body) => {
     // A ticket names a whole address, or a path of the install, which is read against the address the install is reached at.

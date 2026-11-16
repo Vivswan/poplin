@@ -1,4 +1,4 @@
-// The Settings screen's routes: the control each setting gets from its type, the one unit an amount is typed in, what a row says, what a save changes and refuses, the update link that no answer holds, and the sign-out.
+// The Settings screen's routes: the control each setting gets from its type, the one unit an amount is typed in, what a row says, what a save changes and refuses, and the sign-out.
 
 import { describe, expect, test } from "bun:test";
 
@@ -7,7 +7,7 @@ import * as v from "valibot";
 
 import type { DomainPlug } from "../../src/console/domain/records";
 import { CONTROL_KINDS, controlOf } from "../../src/console/setting-controls";
-import { openConsole, REBUILD_HOST } from "./support/console";
+import { openConsole } from "./support/console";
 
 /** One setting as the route answers it. */
 interface Row {
@@ -22,7 +22,6 @@ interface Row {
 /** What the route answers. */
 interface Settings {
   readonly rows: readonly Row[];
-  readonly updateAddress: { readonly set: boolean; readonly since: number | null };
 }
 
 async function settingsOf(opened: Awaited<ReturnType<typeof openConsole>>): Promise<Settings> {
@@ -178,38 +177,6 @@ describe("a save", () => {
       max_files_per_publish: `Use a whole number from 1 to ${MOST_FILES_PER_PUBLISH.toLocaleString("en-US")}.`,
       site_share_of_day: "Use a whole number from 1 to 100.",
     });
-  });
-});
-
-describe("the update link", () => {
-  // Drift: the address is a credential, and an answer or the log would hand it to whoever reads them.
-  test("is saved, told only as set since a moment, and removed, with no answer holding it", async () => {
-    const opened = await openConsole();
-    const address = `https://${REBUILD_HOST}/start/a-long-secret-part`;
-    const saved = await (await opened.change("/data/settings/update-address", { address })).text();
-    const shown = await (await opened.get("/data/settings")).text();
-    const removed = await (await opened.change("/data/settings/update-address/remove", {})).text();
-    const { now } = opened.base.clock;
-
-    expect([JSON.parse(saved), (JSON.parse(shown) as Settings).updateAddress, JSON.parse(removed)]).toEqual([
-      { ok: true, set: true, since: now },
-      { set: true, since: now },
-      { ok: true, set: false, since: null },
-    ]);
-    expect(`${saved}${shown}${removed}${JSON.stringify(await opened.base.audit())}`).not.toContain("a-long-secret-part");
-    expect((await settingsOf(opened)).updateAddress).toEqual({ set: false, since: null });
-  });
-
-  // Drift: an address the host starts no rebuild at would be kept, and the next update would send the admin nowhere.
-  test.each(["https://elsewhere.example.com/start/x", `http://${REBUILD_HOST}/start/x`, "not an address"])("refuses %s at its field and keeps none", async (address) => {
-    const opened = await openConsole();
-    const response = await opened.change("/data/settings/update-address", { address });
-
-    expect([response.status, await response.json()]).toEqual([
-      400,
-      { ok: false, code: "bad_argument", about: "address", sentence: "That is not an update link of the host. Paste the whole link, starting with https://." },
-    ]);
-    expect((await settingsOf(opened)).updateAddress).toEqual({ set: false, since: null });
   });
 });
 

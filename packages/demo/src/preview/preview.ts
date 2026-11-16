@@ -20,7 +20,7 @@ import type { ClientFiles } from "../../../app/src/console/shell";
 import { serveSite } from "../../../app/src/sites/serve";
 import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
 import type { EndLogins } from "../../../core/src/actions/sign-out";
-import type { Rebuilding } from "../../../core/src/actions/start-update";
+import type { SelfUpdate } from "../../../core/src/actions/start-update";
 import { parseLoginSecret } from "../../../core/src/auth/computer-logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
 import { OWN_SCHEMA } from "../../../core/src/database/open";
@@ -60,12 +60,6 @@ const USAGE_HOST = {
 
 /** When the sample release the seeded install knows of came out, where its notes are (the page of the project's releases), and its schema, which is the install's own. No such release exists. */
 const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", schema: OWN_SCHEMA } as const;
-
-/** The address the seeded install keeps as the one that starts its rebuild. Nothing is there, and nothing is ever sent to it. */
-const SAMPLE_REBUILD = "https://provider.example/rebuilds/sample";
-
-/** The stand-in for the provider's rebuild: it takes the sample address alone and answers every start as taken, without a request. */
-const REBUILD: Omit<Rebuilding, "counters"> = { accepts: (address) => address.href === SAMPLE_REBUILD, fetch: async () => new Response(null, { status: 204 }) };
 
 /** The stand-in for the provider's way to end every login: no login is kept here, so it answers every press as done. */
 const END_LOGINS: EndLogins = async () => ({ ok: true });
@@ -171,6 +165,18 @@ interface Scene {
   readonly mounts: readonly Mount[];
 }
 
+/** The stand-in for the host's update: it holds a key, and answers a start as the release the install knows of put in place. Nothing is fetched, and no code is replaced. */
+function sampleUpdate(world: World): SelfUpdate {
+  return {
+    holdsKey: () => true,
+    ready: async () => {
+      const news = (await world.install.database.readUpdateCheck())?.news ?? null;
+
+      return news === null ? { ok: false, code: "no_update" } : { ok: true, version: news.version, put: async () => ({ ok: true }) };
+    },
+  };
+}
+
 /** What counts the tries of the preview's pages: every visitor is one, but the one called `flooded`, who is always refused. */
 function countsOf(world: World): Pick<Parameters<typeof createConsole>[0], "counters" | "visitorOf"> {
   return {
@@ -214,7 +220,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
     client: host.client,
     freeLimits: FREE_LIMITS,
     usage: USAGE_HOST,
-    rebuild: REBUILD,
+    update: sampleUpdate(world),
     demo: { reset: `${base}${RESET_PATH}` },
     domain: changingPlug(world.kind.provider),
     endLogins: END_LOGINS,
@@ -226,7 +232,7 @@ function dashboardMount(world: World, prefix: string, host: Host): Mount {
 function apiMount(world: World, version: string): Mount {
   const { database } = world.install;
   const said = { version, layout: world.kind.layout, report: (error: unknown) => console.error("preview: an API request failed", error) };
-  const api = createApi({ ...world.install, ...said, readToken: (id) => database.getToken(id), limits: API_LIMITS, rebuild: REBUILD, endLogins: END_LOGINS, ...countsOf(world) });
+  const api = createApi({ ...world.install, ...said, readToken: (id) => database.getToken(id), limits: API_LIMITS, update: sampleUpdate(world), endLogins: END_LOGINS, ...countsOf(world) });
 
   return { prefix: "/api", origin: world.kind.adminOrigin, base: "/api", holds: "json", answer: api.fetch };
 }
@@ -274,9 +280,8 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   const seeded = await openWorld(host.openDriver(), kind, { ...kept(), ...(resumed ? {} : { since: Date.now() - SEEDED_DAYS * DAY_MS }) });
   const empty = await openWorld(host.openDriver(), kind, kept());
   const { token } = resumed ? { token: "" } : await seedWorld(seeded, host.samples);
-  // The seeded install alone learns of a newer version and keeps an address to update at: the empty one shows a dashboard with no notice.
+  // The seeded install alone learns of a newer version: the empty one shows a dashboard with no notice.
   if (!resumed) await checkForUpdate(seeded.install, { fetch: sampleLatest(host.version) });
-  if (!resumed) await seeded.install.database.keepUpdateAddress(SAMPLE_REBUILD, { by: seeded.admin.holder, at: seeded.install.now() });
   const pages = dashboardMount(seeded, "", host);
   const computers = keepLoginsWaiting(seeded, resumed ? (host.secrets ?? []) : []);
   // A login runs out ten minutes after the seed: a visitor who comes later still finds one to review.

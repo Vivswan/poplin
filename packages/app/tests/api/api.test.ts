@@ -13,7 +13,7 @@ import type { ExtractSchema } from "hono/types";
 
 import type { Api } from "../../src/api/api";
 import { ADDRESSES } from "../sites/support/layout";
-import { type Answered, type ApiClient, type ApiInstall, answered, bytes, INSTALL_VERSION, LIMITS, NOW, ORIGIN, openApi, REBUILD_ADDRESS, VISITOR_HEADER } from "./support/install";
+import { type Answered, type ApiClient, type ApiInstall, answered, bytes, INSTALL_VERSION, LIMITS, NOW, ORIGIN, openApi, VISITOR_HEADER } from "./support/install";
 
 /** Every path the API declares, each with the methods it takes. */
 type Declared = ExtractSchema<Api>;
@@ -121,10 +121,8 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "GET /api/audit": 2,
   "GET /api/domain": 2,
   "GET /api/problems": 2,
+  "GET /api/update": 3,
   "POST /api/update": 5,
-  "GET /api/update/address": 2,
-  "PUT /api/update/address": 2,
-  "DELETE /api/update/address": 2,
 };
 
 /** How long a test that copies a thousand files may take, in milliseconds: it passes alone in under a second, and a busy machine takes it past the runner's five. */
@@ -171,10 +169,8 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Send
     "GET /api/audit": (api) => api.audit.$get({ query: {} }),
     "GET /api/domain": (api) => api.domain.$get({ query: {} }),
     "GET /api/problems": (api) => api.problems.$get({ query: {} }),
-    "POST /api/update": (api) => api.update.$post({ query: { anyway: "true" } }),
-    "GET /api/update/address": (api) => api.update.address.$get({ query: {} }),
-    "PUT /api/update/address": (api) => api.update.address.$put({ json: { address: REBUILD_ADDRESS }, query: {} }),
-    "DELETE /api/update/address": (api) => api.update.address.$delete({ query: {} }),
+    "GET /api/update": (api) => api.update.$get({ query: {} }),
+    "POST /api/update": (api) => api.update.$post({ query: {} }),
   };
 }
 
@@ -387,59 +383,42 @@ describe("createApi", () => {
     const restored = part(await done((api) => api.import.sites.$post({ json: { format: 1, site: backup as never, files }, query: {} })), "upload").id as string;
     for (const [path, text] of Object.entries(PAGES)) await sendFile(restored, `v1/${path}`, text);
     expect(part(await finish(restored), "site")).toMatchObject({ id: first.id, label, created: true, live_version: 1 });
-    expect((await done((api) => api.update.address.$put({ json: { address: REBUILD_ADDRESS }, query: {} }))).body).toEqual({ set: true, since: NOW });
-    expect((await done((api) => api.update.$post({ query: { anyway: "true" } }))).body).toEqual({ started: true, from: INSTALL_VERSION, to: null });
-    expect([(await done((api) => api.update.address.$get({ query: {} }))).body, install.provider.sent]).toEqual([{ set: true, since: NOW }, [["POST", "manual", "no body", REBUILD_ADDRESS]]]);
-    expect((await done((api) => api.update.address.$delete({ query: {} }))).body).toEqual({ set: false, since: null });
+    expect((await done((api) => api.update.$get({ query: {} }))).body).toEqual({ version: INSTALL_VERSION, update: null, key: true });
+    expect([(await done((api) => api.update.$post({ query: {} }))).body, install.host.put]).toEqual([{ started: true, from: INSTALL_VERSION, to: "7.9.0" }, ["7.9.0"]]);
     await done((api) => api.token.$delete({ query: {} }), install.as(install.tokens.stranger));
 
     expect((await install.as(install.tokens.stranger).whoami.$get({ query: {} })).status).toBe(401);
     expect([[...walked].sort(), over]).toEqual([[...ROUTE_KEYS].sort(), []]);
   });
 
-  // Drift: the update link is typed once and is a credential from then on. A route that echoed it, in an answer, a refusal, a header, the log, or a backup, would hand it to every admin token and every reader of a backup.
-  test("no route hands a typed update link back, kept or refused", async () => {
+
+  // Drift: the CLI words a failed start by its code and what it is about. Each row is one start and what the API must answer, with what the host put in place.
+  test.each<{ readonly name: string; readonly host: Partial<ApiInstall["host"]>; readonly pressed?: true; readonly answer: unknown[]; readonly put: number }>([
+    { name: "the host holds no key", host: { key: false }, answer: [409, "no_key", undefined], put: 0 },
+    { name: "no newer version is out", host: { release: null }, answer: [409, "no_update", undefined], put: 0 },
+    { name: "the fetched files are not the published ones", host: { refusal: { ok: false, code: "release_refused", about: "digest_differs" } }, answer: [502, "release_refused", "digest_differs"], put: 0 },
+    { name: "a second start inside the minute", host: {}, pressed: true, answer: [429, "too_many_requests", "update"], put: 1 },
+  ])("a start is refused by its code: $name", async ({ host, pressed, answer, put }) => {
     const install = await openApi();
-    const site = await published(install, { name: "report" });
-    const upload = await staged(install, { site });
-    const refused = await answered(install.routes.update.address.$put({ json: { address: "https://example.com/hooks/typed-and-refused" }, query: {} }));
-    const asKey = await answered(install.routes.update.address.$put({ json: { address: REBUILD_ADDRESS, [`${REBUILD_ADDRESS}/typed-as-a-key`]: true } as never, query: {} }));
-    const said: string[] = [JSON.stringify(refused.body), JSON.stringify(asKey.body)];
-    await install.routes.update.address.$put({ json: { address: REBUILD_ADDRESS }, query: {} });
-    const routes = Object.entries(samples(site, upload)) as [TokenRoute, Send][];
-    for (const [route, send] of routes.filter(([route]) => route !== "DELETE /api/token" && route !== "DELETE /api/update/address" && route !== "DELETE /api/sessions")) {
-      const { response } = await answered(send(install.routes));
-      said.push(route, await response.text(), JSON.stringify([...response.headers]));
-    }
+    Object.assign(install.host, host);
+    if (pressed === true) await install.routes.update.$post({ query: {} });
 
-    expect(said.filter((text) => text.includes("3f9c2a7e5b") || text.includes("builds.provider.example") || text.includes("typed-and-refused"))).toEqual([]);
-    expect([asKey.status, refused.status, refused.body, (await install.database.readUpdateAddress())?.address, install.provider.sent.length]).toEqual([
-      400,
-      400,
-      { error: { code: "bad_argument", message: "an argument is missing, unknown, or of the wrong form", about: "address" } },
-      REBUILD_ADDRESS,
-      1,
-    ]);
-  });
-
-  // Drift: the CLI and the dashboard word a failed start by its code and status. Each row is a press of the button and what the API must answer, with what reached the provider.
-  test.each([
-    { name: "no address is saved", saved: false, answer: [409, "no_update_address", undefined], sent: 0 },
-    { name: "no newer version is known", saved: true, answer: [409, "no_update", undefined], sent: 0 },
-    { name: "the provider refuses", saved: true, anyway: true, provider: 403, answer: [502, "update_refused", "403"], sent: 1 },
-    { name: "the provider redirects", saved: true, anyway: true, provider: 307, answer: [502, "update_refused", "307"], sent: 1 },
-    { name: "a second press inside the minute", saved: true, anyway: true, pressed: true, answer: [429, "too_many_requests", "update"], sent: 1 },
-  ])("a start is refused by its code: $name", async ({ saved, anyway, provider, pressed, answer, sent }) => {
-    const install = await openApi();
-    const query = anyway === undefined ? {} : { anyway: String(anyway) };
-    if (saved) await install.routes.update.address.$put({ json: { address: REBUILD_ADDRESS }, query: {} });
-    if (pressed === true) await install.routes.update.$post({ query });
-
-    install.provider.status = provider ?? 200;
-    const started = await answered(install.routes.update.$post({ query }));
+    const started = await answered(install.routes.update.$post({ query: {} }));
     const error = part(started, "error");
 
-    expect<unknown>([[started.status, error.code, error.about], install.provider.sent.length]).toEqual([answer, sent]);
+    expect<unknown>([[started.status, error.code, error.about], install.host.put.length]).toEqual([answer, put]);
+  });
+
+  // Drift: `poplin update --check` says what a start would come to from this one read. An answer that left the key out, or named a release the install does not know of, would promise an update that is then refused.
+  test("the read before a start says the version, the newer release, and whether the key is held, and starts nothing", async () => {
+    const install = await openApi();
+    install.host.key = false;
+    await install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", schema: OWN_SCHEMA } });
+
+    expect([(await answered(install.routes.update.$get({ query: {} }))).body, install.host.put]).toEqual([
+      { version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", database: false }, key: false },
+      [],
+    ]);
   });
 
   // Drift: the cursor of a listing crosses the wire as two query keys; a key renamed on one side alone would hand every page the first sites again.
@@ -576,10 +555,8 @@ describe("createApi", () => {
       ["GET /api/audit", 403, "not_allowed"],
       ["GET /api/domain", 403, "not_allowed"],
       ["GET /api/problems", 403, "not_allowed"],
+      ["GET /api/update", 403, "not_allowed"],
       ["POST /api/update", 403, "not_allowed"],
-      ["GET /api/update/address", 403, "not_allowed"],
-      ["PUT /api/update/address", 403, "not_allowed"],
-      ["DELETE /api/update/address", 403, "not_allowed"],
     ]);
     expect(await stateOf(install)).toEqual(before);
     expect((await install.as(install.tokens.owner).uploads[":upload"].finish.$post({ param: { upload }, query: {} })).status).toBe(200);

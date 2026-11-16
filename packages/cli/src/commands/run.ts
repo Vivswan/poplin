@@ -69,13 +69,13 @@ function guarded(io: Io, tokens: ReadonlySet<string>): Io {
 }
 
 /**
- * The tokens this machine holds: the three the environment may hold, the login's, the one `poplin setup` sends, and the address `poplin update` saves, and the one of the saved login, whichever the command uses.
+ * The tokens this machine holds: the two the environment may hold, the login's and the one `poplin setup` sends, and the one of the saved login, whichever the command uses.
  *
  * A login that cannot be read gives no token here, and is refused where the command looks for it.
  */
 async function knownTokens(io: Io): Promise<ReadonlySet<string>> {
   const tokens = new Set<string>();
-  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN", "POPLIN_UPDATE_ADDRESS"]) {
+  for (const variable of ["POPLIN_TOKEN", "POPLIN_SETUP_TOKEN"]) {
     const inEnvironment = io.machine.env[variable];
     if (inEnvironment !== undefined && inEnvironment !== "") tokens.add(inEnvironment);
   }

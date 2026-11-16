@@ -1,16 +1,13 @@
-// The data of the Settings screen: every setting as a row, a save of some of them, the address that starts a rebuild, and the sign-out of every browser.
+// The data of the Settings screen: every setting as a row, a save of some of them, and the sign-out of every browser.
 //
-//   GET  /settings                         every setting with its control, its text, its default, and the free limits it can be put above; and whether a rebuild address is saved
+//   GET  /settings                         every setting with its control, its text, its default, and the free limits it can be put above
 //   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting.
 //                                          A saved setting the domain's rules are written from is then carried to them, on an install that holds a key
-//   POST /settings/update-address          save the address that starts a rebuild
-//   POST /settings/update-address/remove   remove it
 //   POST /settings/sign-everyone-out       end every login of the dashboard at the provider; a refusal says why they are not known to have ended
 
 import { vValidator } from "@hono/valibot-validator";
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
-import { removeUpdateAddress, saveUpdateAddress, UPDATE_ADDRESS_REQUEST, updateAddressState } from "@poplin/core/src/actions/update-address";
 import { defaultSettings, RULE_SETTINGS, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, sizeBytes } from "@poplin/core/src/records/settings";
 import { Hono } from "hono";
 import * as v from "valibot";
@@ -114,12 +111,9 @@ export const settingsRoutes = new Hono<Shared>()
     const config = await readConfig(install, actor);
     if (!config.ok) return refused(context, config);
 
-    const address = await updateAddressState(install, actor);
-    if (!address.ok) return refused(context, address);
-
     const rows = rowsOf(config.values, { freeLimits: context.get("host").freeLimits, domain: context.get("domain") !== undefined, carries: context.get("rules")?.holdsKey() === true });
 
-    return context.json({ ok: true as const, rows, updateAddress: { set: address.set, since: address.since } });
+    return context.json({ ok: true as const, rows });
   })
   .post("/settings", vValidator("json", SAVE, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
@@ -143,18 +137,6 @@ export const settingsRoutes = new Hono<Shared>()
     if (held.some((key) => isCarried(key, true))) await carryRules(context, install, context.get("rules"));
 
     return context.json({ ok: true as const });
-  })
-  .post("/settings/update-address", vValidator("json", UPDATE_ADDRESS_REQUEST, refuseInvalid), async (context) => {
-    const { install, actor } = context.get("asker");
-    const saved = await saveUpdateAddress(install, actor, context.req.valid("json").address, context.get("host").rebuilding.accepts);
-
-    return saved.ok ? context.json({ ok: true as const, set: saved.set, since: saved.since }) : refused(context, saved);
-  })
-  .post("/settings/update-address/remove", vValidator("json", NOTHING, refuseInvalid), async (context) => {
-    const { install, actor } = context.get("asker");
-    const removed = await removeUpdateAddress(install, actor);
-
-    return removed.ok ? context.json({ ok: true as const, set: removed.set, since: removed.since }) : refused(context, removed);
   })
   .post("/settings/sign-everyone-out", vValidator("json", NOTHING, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

@@ -6,15 +6,13 @@ import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";
 import { adminToken, apiOf, type BudgetRow, endsLogins, get, sql, type Stage, unmeasured } from "./budget-stage";
 import { manyEntries, manyProblems, manySites, manyTokens, siteId, siteWithFiles, tokenId, waitingLogins } from "./budget-seeds";
+import { OWN_KEY, ownRelease } from "./own-release";
 
 /** The group of every row here. */
 const group = "CLI / agent actions";
 
 /** A release newer than any build, as the install keeps it once it has learned of one. */
 const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://example.com/changelog/#v999-0-0", schema: OWN_SCHEMA + 1 };
-
-/** An address the provider starts a rebuild at, in the form Cloudflare gives a Deploy Hook. */
-const HOOK = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
 /** The largest page a listing of the API answers. */
 const LARGEST_PAGE = 100;
@@ -25,10 +23,9 @@ const KEPT = 3;
 /** The owner as the rule book's actor. */
 const ADMIN_ACTOR = { scope: "admin", holder: OWNER } as const;
 
-/** Keep a newer release and the address a rebuild starts at, so every route that names either has both to read. */
+/** Keep a newer release, so every route that names one has it to read. */
 async function knownUpdate(stage: Stage): Promise<void> {
   await stage.install.database.keepUpdateCheck({ checked_at: stage.w.clock.now, news: NEWER });
-  await stage.install.database.keepUpdateAddress(HOOK, { by: OWNER, at: stage.w.clock.now });
 }
 
 export const API_ROWS: readonly BudgetRow[] = [
@@ -425,60 +422,34 @@ export const API_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
-    name: "start an update",
-    route: "POST /api/update",
-    // Worst: an address is saved and a newer release is known, so the build is started and the start written to the log.
+    name: "say what an update would come to",
+    route: "GET /api/update",
+    // Worst: a newer release is known, which is read beside the settings.
     arrange: async (stage) => {
       await knownUpdate(stage);
-      stage.outside.rebuild = async () => new Response(null, { status: 204 });
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).update.$get({ query: {} });
+    },
+    status: 200,
+    budget: { queries: 3, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "start an update",
+    route: "POST /api/update",
+    // Worst: the install holds its key and a newer release is out, so its files are fetched, checked, and put in place, and the start is written to the log.
+    arrange: async (stage) => {
+      const release = await ownRelease(NEWER.version);
+      stage.outside.cloudflare = release.cloudflare;
+      stage.outside.latest = release.latest;
+      stage.keptKey = OWN_KEY;
       const token = await adminToken(stage);
 
       return (measured) => apiOf(measured, token).update.$post({ query: {} });
     },
     status: 200,
     budget: { queries: 5, reads: 0, writes: 0 },
-  },
-  {
-    group,
-    name: "read whether a rebuild address is saved",
-    route: "GET /api/update/address",
-    // Worst: one is saved.
-    arrange: async (stage) => {
-      await knownUpdate(stage);
-      const token = await adminToken(stage);
-
-      return (measured) => apiOf(measured, token).update.address.$get({ query: {} });
-    },
-    status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
-  },
-  {
-    group,
-    name: "save a rebuild address",
-    route: "PUT /api/update/address",
-    // Worst: another address is saved already, which the new one replaces.
-    arrange: async (stage) => {
-      await knownUpdate(stage);
-      const token = await adminToken(stage);
-
-      return (measured) => apiOf(measured, token).update.address.$put({ query: {}, json: { address: `${HOOK.slice(0, -1)}1` } });
-    },
-    status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
-  },
-  {
-    group,
-    name: "remove the rebuild address",
-    route: "DELETE /api/update/address",
-    // Worst: one is saved, so it is removed and the removal written to the log.
-    arrange: async (stage) => {
-      await knownUpdate(stage);
-      const token = await adminToken(stage);
-
-      return (measured) => apiOf(measured, token).update.address.$delete({ query: {} });
-    },
-    status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
   },
   {
     group,

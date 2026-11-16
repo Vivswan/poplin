@@ -56,17 +56,15 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   no_domain: "The account token shows no domain of that name.",
   bad_domain: "Type a domain alone, such as example.com.",
   bad_login: "Type an email address, such as name@example.com.",
-  no_update_address: "No update link is saved, so no update was started. Save one in Settings, under Updates.",
   no_update: "No newer version is known, so no update was started.",
-  too_many_requests: "An update was started in this minute already. Wait a minute.",
-  update_unreachable: "The update link did not answer. The update may have started all the same: wait a minute, then try again.",
-  update_refused: "The update link refused the request, so no update was started. Check the link in Settings, under Updates.",
+  too_many_requests: "An update was tried in this minute already. Wait a minute.",
   no_key: "poplin holds no key, so it cannot update itself. Open Domain and press Repair.",
   key_refused: "The host no longer takes poplin's key, so nothing was updated. Open Domain and press Repair.",
   lacks_right: "poplin's key may not replace the install's code, so nothing was updated. Open Domain and press Repair: it makes a key that may.",
   release_refused: "The release could not be taken. Nothing was changed.",
   version_refused: "The host refused the new version, so the install runs the version it ran before.",
   logins_not_ended: "This install has no way to end logins, so nobody was logged out.",
+  update_unreachable: "The host did not answer. The update may be in all the same: reload in a minute.",
 };
 
 /** What a code says when what it is about gives it another meaning: `too_large` about a limit is a copy that does not fit it, `not_found` about an upload a copy, `logins_not_ended` the reason. `other` stands for any limit not named. */
@@ -82,7 +80,6 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   bad_argument: {
     expires: "Pick a day that is still ahead.",
     title: "Use one line of 200 characters at most.",
-    address: "That is not an update link of the host. Paste the whole link, starting with https://.",
     default_expires: "Use a whole number, 1 or more.",
     default_search_engines: "Use on or off.",
     versions_kept: "Use a whole number, 1 or more.",
@@ -126,9 +123,6 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   },
   version_refused: {
     code: "The host refused the new version: its code stops as it starts. The install runs the version it ran before. Tell the project.",
-  },
-  update_unreachable: {
-    host: "The host did not answer. The update may be in all the same: reload in a minute.",
   },
 };
 

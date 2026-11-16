@@ -12,7 +12,7 @@
 
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/sign-out";
-import type { Rebuilding } from "@poplin/core/src/actions/start-update";
+import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -93,8 +93,8 @@ interface ConsoleParts extends CodeTries {
   /** The host's side of the Usage screen: the free plan's limits no setting holds, the host's own pages of figures, and those figures where the host reads them. */
   readonly usage: UsageHost;
 
-  /** How the provider starts a rebuild of the install: which addresses it takes, and what sends the one request. The starts are counted in `counters`. */
-  readonly rebuild: Omit<Rebuilding, "counters">;
+  /** What takes a release and puts it in place of the running code. The starts are counted in `counters`. */
+  readonly update: SelfUpdate;
 
   /** Set by a host that shows sample data: the path a POST resets the data at. */
   readonly demo?: { readonly reset: string };
@@ -130,7 +130,7 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("endLogins", parts.endLogins);
       context.set("rules", parts.rules);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
-      context.set("host", { freeLimits: parts.freeLimits, rebuilding: { ...parts.rebuild, counters: parts.counters }, version: parts.version, usage: parts.usage });
+      context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, version: parts.version, usage: parts.usage });
 
       return next();
     }
@@ -203,7 +203,7 @@ export function createConsole(parts: ConsoleParts): Console {
   app.get("*", async (context) => {
     const { install, actor } = context.get("asker");
     await parts.entered({ email: context.get("email"), since: context.get("since") });
-    const asked = { version: parts.version, domain: parts.domain !== undefined, selfCarried: parts.follow?.holdsKey() === true, self: parts.rebuild.self !== undefined };
+    const asked = { version: parts.version, domain: parts.domain !== undefined, selfCarried: parts.follow?.holdsKey() === true, keyed: parts.update.holdsKey() };
     const frame = await frameOf(install, actor, asked);
 
     const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };

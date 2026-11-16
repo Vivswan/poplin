@@ -27,6 +27,7 @@ import {
   ADMIN, type Answer, type ApiCalls, accessHeaders, ask, api, awayFromMinuteEnd, BINDINGS, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER,
   PATHS, type Published, page, publish, send, sendFile, spentDatabase, tokenOf, type World, under, wait, world,
 } from "./support/install";
+import { OWN_KEY, ownRelease } from "./support/own-release";
 
 /** This repository's own guard against a library pulled in whole: Cloudflare takes a Worker of up to 64 MiB as it is, on every plan. The bundle is about 1,812,000 bytes, the dashboard's built client in it as strings. */
 const MOST_BUNDLE_BYTES = 3_000_000;
@@ -114,12 +115,7 @@ const EVERY_ROUTE: { readonly [Path in keyof Routes]: { readonly [Method in keyo
   "/api/audit": { $get: (calls) => calls.audit.$get({ query: SITE.param }) },
   "/api/domain": { $get: (calls) => calls.domain.$get({ query: {} }) },
   "/api/problems": { $get: (calls) => calls.problems.$get({ query: {} }) },
-  "/api/update": { $post: (calls) => calls.update.$post({ query: {} }) },
-  "/api/update/address": {
-    $get: (calls) => calls.update.address.$get({ query: {} }),
-    $put: (calls) => calls.update.address.$put({ query: {}, json: UNREAD }),
-    $delete: (calls) => calls.update.address.$delete({ query: {} }),
-  },
+  "/api/update": { $get: (calls) => calls.update.$get({ query: {} }), $post: (calls) => calls.update.$post({ query: {} }) },
 };
 
 /** What a browser and `poplin setup` call on the setup page before anybody can log in: the page, its one change, and a program's two runs. */
@@ -1411,30 +1407,27 @@ describe("a computer's login", () => {
     expect(statuses.filter(([, status]) => status !== 401)).toEqual([]);
   });
 
-  // Drift: the Worker is where the address check and the count of starts are joined to a real request. Wired without either, a pasted address of any host would be sent to, or a script could queue builds without end.
-  test("an admin saves only a Deploy Hook, one start sends it one POST that follows no redirect, and a second start in the minute sends nothing", async () => {
-    const hook = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-    const sent: unknown[][] = [];
-    const worker = instance(w, undefined, undefined, async (address, init) => {
-      sent.push([address, init.method, init.redirect, "body" in init]);
-
-      return Response.json({ success: true });
-    });
+  // Drift: the Worker is where the kept key and the count of starts are joined to a real request. Wired without either, an install with no key would promise an update it cannot make, or a script could upload the release without end.
+  test("an admin's start on an install with no key is refused and says so, one with the key uploads the release once, and a second start in the minute uploads nothing", async () => {
+    const release = await ownRelease("999.0.0");
     const token = await tokenOf(w, "admin");
-    const start = (): Promise<Answer> => api(worker, token).update.$post({ query: { anyway: "true" } });
+    const keyed = instance(w, release.cloudflare, release.latest);
+    const calls = (worker: ReturnType<typeof instance>, bindings: Bindings): ApiCalls => api(worker, token, (input, init) => ask(worker, input, init, bindings));
+    const withKey = calls(keyed, { ...BINDINGS, KEPT_KEY: OWN_KEY });
+    const without = calls(instance(w, release.cloudflare, release.latest), BINDINGS);
 
     await awayFromMinuteEnd();
 
-    const elsewhere = await api(worker, token).update.address.$put({ query: {}, json: { address: "https://example.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4" } });
-    const unsaved = await start();
-    const saved = await done<{ set: boolean }>(await api(worker, token).update.address.$put({ query: {}, json: { address: hook } }));
-    const first = await done<{ started: boolean; to: string | null }>(await start());
-    const second = await start();
-    const state = await api(worker, token).update.address.$get({ query: {} });
+    const state = await done<{ key: boolean }>(await without.update.$get({ query: {} }));
+    const refused = await without.update.$post({ query: {} });
+    wait(w, 1 / 60);
+    const held = await done<{ key: boolean }>(await withKey.update.$get({ query: {} }));
+    const first = await done<{ started: boolean; to: string }>(await withKey.update.$post({ query: {} }));
+    const second = await withKey.update.$post({ query: {} });
 
-    expect([elsewhere.status, unsaved.status, saved.set, first, second.status]).toEqual([400, 409, true, { started: true, from: JSON.parse(manifest).version, to: null }, 429]);
-    expect(sent).toEqual([[hook, "POST", "manual", false]]);
-    expect(await state.text()).not.toContain("a1b2c3d4");
+    expect([state.key, refused.status, ((await refused.json()) as { error: { code: string } }).error.code]).toEqual([false, 409, "no_key"]);
+    expect([held.key, first, second.status]).toEqual([true, { started: true, from: JSON.parse(manifest).version, to: "999.0.0" }, 429]);
+    expect(release.uploads).toEqual([release.upload]);
   });
 
   // Drift: one key for everyone would let one computer silence every terminal, a share as large as the whole would let one address refuse every login, and no count of the install would let a few addresses spend a day's writes.

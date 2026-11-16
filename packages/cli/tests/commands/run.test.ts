@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Code } from "../../../app/src/api/respond";
 import type { Login as Email } from "../../../core/src/auth/logins";
 import { OWN_SCHEMA } from "../../../core/src/database/open";
-import { answered, INSTALL_VERSION, NOW, ORIGIN, REBUILD_ADDRESS } from "../../../app/tests/api/support/install";
+import { answered, INSTALL_VERSION, NOW, ORIGIN } from "../../../app/tests/api/support/install";
 import { saveLogin } from "../../src/local/login-file";
 import type { Login } from "../../src/local/login";
 import { VERSION } from "../../src/poplin";
@@ -39,9 +39,7 @@ const CODES: Readonly<Record<Code, true>> = {
   no_working_login: true,
   already_a_login: true,
   not_a_login: true,
-  no_update_address: true,
   no_update: true,
-  update_refused: true,
   update_unreachable: true,
   no_key: true,
   key_refused: true,
@@ -373,38 +371,29 @@ describe("run", () => {
     expect([replaced.code, replaced.err[0], (await bench.run("config logins")).out]).toEqual([1, "the change would leave no login that works: logins", ["ada@example.com,second@example.com"]]);
   });
 
-  // Drift: the update link is a credential a person pastes once. Each row is one `poplin update` line, what it prints, what the install then keeps, and what reached the provider: the address is in no line, even when the install hands it back.
-  test("update saves the update link from the environment alone, says only that one is saved, starts one update, and never prints the link", async () => {
+  // Drift: `poplin update` is the one command that replaces the install's own code. A check that started an update, or a start that did not say why it was refused, would leave a person guessing.
+  test("update --check says what a start would come to and starts nothing, an install with no key is told where to get one, and update takes the release once a minute", async () => {
     const bench = await openBench();
-    const login = { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.admin };
-    const withAddress = { env: { ...login, POPLIN_UPDATE_ADDRESS: REBUILD_ADDRESS } };
-    await bench.install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes: "https://example.com/changelog/#v7-9-0", schema: OWN_SCHEMA } });
+    const notes = "https://example.com/changelog/#v7-9-0";
+    await bench.install.database.keepUpdateCheck({ checked_at: NOW, news: { version: "7.9.0", released: "2026-12-01", notes, schema: OWN_SCHEMA } });
 
-    const none = await bench.run("update");
-    const empty = await bench.run("update --save-address");
-    const other = await bench.run("update --save-address", { env: { ...login, POPLIN_UPDATE_ADDRESS: "https://example.com/hooks/elsewhere" } });
-    const saved = await bench.run("update --save-address", withAddress);
-    const checked = await bench.run("update --check", withAddress);
-    const started = await bench.run("update", withAddress);
-    const again = await bench.run("update --json", withAddress);
-    bench.hook = (request) => (request.url.endsWith("/update/address") ? answer(200, { set: true, since: NOW, address: REBUILD_ADDRESS.replace(".example", ".example:443") }) : undefined);
-    const echoed = await bench.run("update --check --json", withAddress);
-    bench.hook = undefined;
-    const forgotten = await bench.run("update --forget-address", withAddress);
-    const printed = [none, empty, other, saved, checked, started, again, echoed, forgotten].flatMap((ran) => [...ran.out, ...ran.err]);
+    bench.install.host.key = false;
+    const keyless = await bench.run("update --check");
+    const refused = await bench.run("update");
+    bench.install.host.key = true;
+    const checked = await bench.run("update --check --json");
+    const before = [...bench.install.host.put];
+    const started = await bench.run("update");
+    const again = await bench.run("update --json");
 
-    expect([none.code, none.err]).toEqual([1, ["the install has no update link", "put the update link in POPLIN_UPDATE_ADDRESS, then: poplin update --save-address"]]);
-    expect([empty.code, empty.err[0], other.code, other.err[0]]).toEqual([1, "POPLIN_UPDATE_ADDRESS holds no update link", 1, "an argument is missing, unknown, or of the wrong form: POPLIN_UPDATE_ADDRESS"]);
-    expect([saved.out, checked.out, started.out]).toEqual([
-      ["the update link is saved; to update: poplin update"],
-      [`7.9.0 is out; the install runs ${INSTALL_VERSION}`, "an update link is saved, since 2023-11-14", "nothing was started"],
-      [`a build of the install has started; 7.9.0 is the newest version, and the install runs ${INSTALL_VERSION} until the build is done`],
+    expect([keyless.code, keyless.out]).toEqual([
+      0,
+      [`7.9.0 is out; the install runs ${INSTALL_VERSION}`, "the install holds no key, so it cannot update itself: open Domain on the dashboard and press Repair", "nothing was started"],
     ]);
+    expect([refused.code, refused.err]).toEqual([1, ["the install holds no key of its host, so it cannot update itself", "open Domain on the dashboard and press Repair"]]);
+    expect([jsonOf(checked), before]).toEqual([{ version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", notes }, key: true }, []]);
+    expect([started.out, bench.install.host.put]).toEqual([[`the install now runs 7.9.0; it ran ${INSTALL_VERSION}`], ["7.9.0"]]);
     expect([again.code, jsonOf(again)]).toEqual([1, { error: { code: "too_many_requests", message: "the install is asked too often", about: "update", hint: "wait a minute, then try again" } }]);
-    expect(jsonOf(echoed).address).toEqual({ set: true, since: NOW });
-    expect([forgotten.out, await bench.install.database.readUpdateAddress()]).toEqual([["the update link is removed"], undefined]);
-    expect(bench.install.provider.sent).toEqual([["POST", "manual", "no body", REBUILD_ADDRESS]]);
-    expect(printed.filter((line) => line.includes("3f9c2a7e5b") || line.includes("elsewhere") || line.includes("builds.provider"))).toEqual([]);
   });
 
   test.each(Object.keys(CODES))("the code %s has a sentence of its own in the one table, exits 1, and is the error object under --json", async (code) => {

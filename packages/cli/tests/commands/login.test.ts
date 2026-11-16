@@ -87,7 +87,7 @@ async function openDesk(): Promise<Desk> {
     client: CLIENT,
     freeLimits: FREE_LIMITS,
     usage: USAGE_HOST,
-    rebuild: { accepts: () => false, fetch: async () => new Response(null, { status: 204 }) },
+    update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
     counters: new MemoryCounters(),
     visitorOf: async () => "the-admin",
   });

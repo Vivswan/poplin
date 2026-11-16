@@ -101,10 +101,6 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "ensureVisitorKey, kept": [3, 0],
   "readVisitorKey": [1, 0],
   "readSettingsAndKey": [2, 0],
-  "keepUpdateAddress": [0, 2],
-  "readUpdateAddress": [1, 0],
-  "forgetUpdateAddress": [1, 2],
-  "forgetUpdateAddress, none kept": [0, 0],
   "keepUpdateCheck": [2, 1],
   "readUpdateCheck": [1, 0],
   "keepAutoStart": [1, 1],
@@ -219,16 +215,16 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeDetails": [5, 2],
   "changeDetails, the same": [5, 0],
   "listAudit": [20, 0],
-  "searchAudit, one kind, the sites named with a text": [64, 0],
+  "searchAudit, one kind, the sites named with a text": [62, 0],
   "listAudit, the oldest first": [20, 0],
-  "searchAudit, the oldest first, the next page of one kind": [26, 0],
-  "listAudit, a reading for a file": [44, 0],
+  "searchAudit, the oldest first, the next page of one kind": [24, 0],
+  "listAudit, a reading for a file": [42, 0],
   "listNamedAudit": [32, 0],
-  "searchNamedAudit, one kind, the sites named with a text": [70, 0],
-  "listNamedAudit, a reading for a file": [76, 0],
+  "searchNamedAudit, one kind, the sites named with a text": [68, 0],
+  "listNamedAudit, a reading for a file": [74, 0],
   "endOfAuditPart, of twenty entries": [21, 0],
   "countAudit": [2, 0],
-  "countAudit, one kind, the sites named with a text": [63, 0],
+  "countAudit, one kind, the sites named with a text": [61, 0],
   "countAudit, no further back than five entries, and where the log starts": [6, 0],
   "no site: getSiteByPublicName": [0, 0],
   "no site: giveNewId": [2, 0],
@@ -634,9 +630,9 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
         return Response.json({ version: "0.2.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases/tag/v0.2.0", schema: 1 });
       },
     };
-    const unbuilt = { accepts: () => false, fetch: () => Promise.reject(new Error("the test asked for a build")), counters: { takeMinute: async () => ({ ok: true as const }) } };
     const keyless = { holdsKey: () => false, push: async () => ({ ok: false as const, refusal: "no_key" as const }) };
-    const running = { version: "0.1.0", rebuilding: unbuilt, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
+    const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
+    const running = { version: "0.1.0", updating, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
     await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
     rows.read = 0;
     rows.written = 0;
@@ -740,10 +736,6 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("ensureVisitorKey, kept", () => database.ensureVisitorKey(new Uint8Array(32).fill(2), NOW));
     await cost("readVisitorKey", () => database.readVisitorKey());
     await cost("readSettingsAndKey", () => database.readSettingsAndKey());
-    await cost("keepUpdateAddress", () => database.keepUpdateAddress("https://example.com/hook", BY_ADA));
-    await cost("readUpdateAddress", () => database.readUpdateAddress());
-    await cost("forgetUpdateAddress", () => database.forgetUpdateAddress(BY_ADA));
-    await cost("forgetUpdateAddress, none kept", () => database.forgetUpdateAddress(BY_ADA));
     await cost("keepUpdateCheck", () => database.keepUpdateCheck({ checked_at: NOW, news: null }));
     await cost("readUpdateCheck", () => database.readUpdateCheck());
     await cost("keepAutoStart", () => database.keepAutoStart({ version: "0.2.0", at: NOW, taken: "0.2.0" }));

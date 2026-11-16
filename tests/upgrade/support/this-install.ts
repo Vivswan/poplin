@@ -6,6 +6,7 @@ import { hostnameAddresses } from "../../../packages/app/src/sites/hostname-addr
 import { serveSite } from "../../../packages/app/src/sites/serve";
 import { issueToken } from "../../../packages/core/src/actions/manage-tokens";
 import type { Install } from "../../../packages/core/src/actions/records";
+import type { SelfUpdate } from "../../../packages/core/src/actions/start-update";
 import { type Login, parseLogins } from "../../../packages/core/src/auth/logins";
 import type { SqlDriver } from "../../../packages/core/src/database/driver";
 import { openDatabase } from "../../../packages/core/src/database/open";
@@ -29,8 +30,8 @@ const KEY_BYTES = 32;
 /** What one request to the API may carry. */
 const API_LIMITS = { fileBytes: 100_000_000, files: 10_000, manifestBytes: 2_000_000 } as const;
 
-/** The stand-in for a provider's rebuild: it takes every address, and answers a start as taken without a request. */
-const REBUILD = { accepts: () => true, fetch: async () => new Response(null, { status: 204 }) };
+/** The stand-in for a host's update: it holds its key, as a tree's own preview does, and no release is out for it to take. */
+const UPDATE: SelfUpdate = { holdsKey: () => true, ready: async () => ({ ok: false, code: "no_update" }) };
 
 /** An install of this code, running. */
 export interface Running {
@@ -79,7 +80,7 @@ export async function openInstall(driver: SqlDriver, store: ObjectStore): Promis
   const { database } = opened;
   const install: Install = { database, store, now, addressOf: layout.addressOf, publicAddressOf: layout.publicAddressOf, reservedNames: layout.reservedNames };
   const counted = { counters: new MemoryCounters(), visitorOf: async () => "local" };
-  const api = createApi({ ...install, ...counted, readToken: (id) => database.getToken(id), limits: API_LIMITS, version: VERSION, layout: { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD }, rebuild: REBUILD });
+  const api = createApi({ ...install, ...counted, readToken: (id) => database.getToken(id), limits: API_LIMITS, version: VERSION, layout: { kind: "hostname", public_word: DEFAULT_PUBLIC_WORD }, update: UPDATE });
 
   const served: Running["served"] = async (hostLabel, path) => {
     const settings = await database.readSettings();

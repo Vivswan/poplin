@@ -1,13 +1,13 @@
 // What a visitor's request, a login, the setup page, an instance's start, and a scheduled run may cost.
 
 import { reset } from "cloudflare:test";
-import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import { vi } from "vitest";
 import { emptyAccount, TOKEN } from "../../zone/support/fake-install";
 import { ADMIN, accessHeaders, cloudflareOf, instance, OWNER, page, shortPages, sweep, type TestFile, under } from "./install";
 import { type Budget, type BudgetRow, get, type Group, type Measured, post, published, sessionOf, sql, type Stage, type Step, unmeasured } from "./budget-stage";
 import { manyEntries, manyFiles, manySites, siteFolder } from "./budget-seeds";
+import { OWN_KEY, ownRelease } from "./own-release";
 
 /** The group of a visitor's requests. */
 const VIEW: Group = "One page view of a site";
@@ -20,12 +20,6 @@ const BACKGROUND: Group = "Background work";
 
 /** The milliseconds of one UTC day. */
 const DAY_MS = 86_400_000;
-
-/** A release newer than any build that changes no database, which an install with `auto_update` on starts by itself. */
-const NEWER = { version: "999.0.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases/tag/v999.0.0", schema: OWN_SCHEMA };
-
-/** An address the provider starts a rebuild at, in the form Cloudflare gives a Deploy Hook. */
-const HOOK = "https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
 /** The entries one file of the log holds. */
 const FILE_ENTRIES = 2000;
@@ -158,19 +152,18 @@ function run(short: boolean): Step {
 /** Seed the costliest run there is: the first of a day, on which an update is due, with five sites past their days in the trash that each take a whole removal. */
 async function costliestRun(stage: Stage): Promise<void> {
   const { database } = stage.install;
-  const latest = { fetch: async (): Promise<Response> => Response.json(NEWER) };
-  const rebuild = async (): Promise<Response> => new Response(null, { status: 204 });
+  const release = await ownRelease("999.0.0");
   await database.changeSettings({ auto_update: true }, { by: OWNER, at: stage.w.clock.now });
-  await database.keepUpdateAddress(HOOK, { by: OWNER, at: stage.w.clock.now });
   stage.w.clock.now = Math.ceil(stage.w.clock.now / DAY_MS) * DAY_MS;
   // The run that learns of the release: an update is started three days after it was first seen.
-  await sweep(instance(stage.w, undefined, latest, rebuild), stage.w);
+  await sweep(instance(stage.w, undefined, release.latest), stage.w);
   await manySites(stage, STEP_SITES, { trashed: true });
   for (let site = 1; site <= STEP_SITES; site += 1) await manyFiles(`${siteFolder(site)}/v1/`, WHOLE_REMOVAL);
 
   stage.w.clock.now += 8 * DAY_MS;
-  stage.outside.latest = latest;
-  stage.outside.rebuild = rebuild;
+  stage.outside.latest = release.latest;
+  stage.outside.cloudflare = release.cloudflare;
+  stage.keptKey = OWN_KEY;
 }
 
 export const ENTRY_ROWS: readonly BudgetRow[] = [

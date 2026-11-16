@@ -96,7 +96,6 @@ function pathsOf({ site, upload, trash, limit, forever }: Named): Readonly<Recor
     "/api/domain": [ROUTES.domain.$path()],
     "/api/problems": [ROUTES.problems.$path()],
     "/api/update": [ROUTES.update.$path()],
-    "/api/update/address": [ROUTES.update.address.$path()],
   };
 }
 
