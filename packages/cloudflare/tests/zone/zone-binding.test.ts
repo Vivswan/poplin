@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SETTING_VALUES, settingsFromText } from "@poplin/core/src/records/settings";
-import { readInstallBinding, readZoneBinding } from "../../src/zone/zone-binding";
+import { readInstallBinding } from "../../src/zone/zone-binding";
 
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
 const MODULE = join(ROOT, "packages", "cloudflare", "tofu");
@@ -51,32 +51,6 @@ function wholeNumberSettings(): { readonly key: string; readonly most: bigint }[
   return found;
 }
 
-describe("readZoneBinding", () => {
-  test("the domain alone is the layout the routes and rules are written from: the admin hostname is `poplin` under it and the public word `page`, or the word the binding names", () => {
-    expect<unknown>([readZoneBinding(BOUND), readZoneBinding({ ...BOUND, public_word: "poplin" })]).toEqual([
-      { ok: true, value: READ },
-      { ok: true, value: { ...READ, publicWord: "poplin" } },
-    ]);
-  });
-
-  const refused: readonly { readonly name: string; readonly binding: unknown; readonly refusal: string }[] = [
-    { name: "no binding at all", binding: undefined, refusal: "absent" },
-    { name: "null", binding: null, refusal: "bad-shape" },
-    { name: "the binding still as JSON text", binding: JSON.stringify(BOUND), refusal: "bad-shape" },
-    { name: "a list", binding: [BOUND], refusal: "bad-shape" },
-    { name: "the domain left out", binding: { public_word: "page" }, refusal: "bad-shape" },
-    { name: "a key beyond the two", binding: { ...BOUND, note: "the main zone" }, refusal: "bad-shape" },
-    { name: "an admin hostname of the install's own: it is no setting", binding: { ...BOUND, admin_hostname: "dashboard.example.com" }, refusal: "bad-shape" },
-    { name: "a value that is no text", binding: { domain: 7 }, refusal: "bad-shape" },
-    { name: "a domain that is one label", binding: { domain: "example" }, refusal: "bad-domain" },
-    { name: "a public word with a dash", binding: { ...BOUND, public_word: "my-page" }, refusal: "bad-public-word" },
-  ];
-
-  test.each(refused)("$name is refused as $refusal and nothing throws: the Worker shows the reason instead of failing on every request", ({ binding, refusal }) => {
-    expect<unknown>(readZoneBinding(binding)).toEqual({ ok: false, refusal });
-  });
-});
-
 describe("readInstallBinding", () => {
   const ADDRESSES = {
     account: "example",
@@ -99,6 +73,13 @@ describe("readInstallBinding", () => {
 
   const refused: readonly { readonly name: string; readonly binding: unknown; readonly refusal: string }[] = [
     { name: "no binding at all", binding: undefined, refusal: "absent" },
+    { name: "null", binding: null, refusal: "bad-shape" },
+    { name: "a list", binding: [BOUND], refusal: "bad-shape" },
+    { name: "the domain left out", binding: { public_word: "page" }, refusal: "bad-shape" },
+    { name: "a key beyond a domain's two", binding: { ...BOUND, note: "the main zone" }, refusal: "bad-shape" },
+    { name: "an admin hostname of the install's own: it is no setting", binding: { ...BOUND, admin_hostname: "dashboard.example.com" }, refusal: "bad-shape" },
+    { name: "a domain that is no text", binding: { domain: 7 }, refusal: "bad-shape" },
+    { name: "a public word with a dash", binding: { ...BOUND, public_word: "my-page" }, refusal: "bad-public-word" },
     { name: "a value holding both a domain and an account's address", binding: { ...BOUND, account_address: "example" }, refusal: "bad-shape" },
     { name: "a value holding neither", binding: {}, refusal: "bad-shape" },
     { name: "an account's address beside a public word, which only a domain has", binding: { account_address: "example", public_word: "page" }, refusal: "bad-shape" },
@@ -144,9 +125,9 @@ describe("the bindings the module gives the Worker", () => {
     expect(rules).toContain(`var.${key} <= ${most}`);
   });
 
-  test("the ZONE binding the module's test pins is read as a layout", () => {
-    const read = readZoneBinding(literalAfter("tests/zone.tftest.hcl", "bindings[3].json) == {"));
+  test("the ZONE binding the module's test pins is read as an install with a domain", () => {
+    const read = readInstallBinding(literalAfter("tests/zone.tftest.hcl", "bindings[3].json) == {"), "poplin");
 
-    expect<unknown>(read).toEqual({ ok: true, value: READ });
+    expect<unknown>(read).toEqual({ ok: true, value: { kind: "domain", layout: READ } });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseAddressLayout } from "../../src/zone/address-layout";
+import { parseAccountAddresses } from "../../src/zone/address-layout";
 
 const LONGEST_ACCOUNT = "a".repeat(36);
 const CHECKED = {
@@ -12,7 +12,7 @@ const CHECKED = {
   privateHost: "poplin-private.example.workers.dev",
 };
 
-describe("parseAddressLayout", () => {
+describe("parseAccountAddresses", () => {
   const taken: readonly { readonly name: string; readonly account: string; readonly worker: string; readonly layout: object }[] = [
     { name: "an account's name under the Worker `poplin`", account: "example", worker: "poplin", layout: CHECKED },
     {
@@ -30,7 +30,7 @@ describe("parseAddressLayout", () => {
   ];
 
   test.each(taken)("$name is a layout of three hosts on the free address, each within what a hostname's label and Access take", ({ account, worker, layout }) => {
-    expect(parseAddressLayout({ account_address: account }, worker)).toEqual({ ok: true, value: layout as never });
+    expect(parseAccountAddresses({ account_address: account }, worker)).toEqual({ ok: true, value: layout as never });
   });
 
   const refused: readonly { readonly name: string; readonly account: string; readonly worker: string; readonly refusal: string }[] = [
@@ -48,6 +48,6 @@ describe("parseAddressLayout", () => {
   ];
 
   test.each(refused)("$name is refused as $refusal: an address that got through would be written into a Worker's name and the login's application", ({ account, worker, refusal }) => {
-    expect(parseAddressLayout({ account_address: account }, worker)).toEqual({ ok: false, refusal: refusal as never });
+    expect(parseAccountAddresses({ account_address: account }, worker)).toEqual({ ok: false, refusal: refusal as never });
   });
 });
