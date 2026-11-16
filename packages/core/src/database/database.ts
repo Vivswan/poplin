@@ -629,11 +629,13 @@ export interface Database {
   listDueSites(due: DueSites, limit: number): Promise<readonly SiteId[]>;
 
   /**
-   * Move a site into the trash only while it is live and its expiry is at or before `signed.at`: the check and the move are one step.
+   * Move sites into the trash, each only while it is live and its expiry is at or before `signed.at`, and each with its audit entry: the check and the move of a site are one step, and all of them one query.
    *
-   * @returns `not_due` for a site that is gone, in the trash already, or given a later expiry or none
+   * @param ids - the sites, at most 100
+   * @returns how many went; a site that is gone, in the trash already, or given a later expiry or none stays, and is not counted
+   * @throws {RangeError} more than 100 sites are named
    */
-  trashExpiredSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_due">>;
+  trashExpiredSites(ids: readonly SiteId[], signed: Signed): Promise<number>;
 
   /** Take a site out of the trash. An expiry that is not after `signed.at` becomes `"never"` in the same step, so the site is served again and no sweep trashes it for that expiry. */
   restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">>;
@@ -646,11 +648,13 @@ export interface Database {
   deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">>;
 
   /**
-   * Remove a site for good, as `deleteSite` does, only while it sits in the trash since `trashedBy` or before: the check and the removal are one step.
+   * Remove sites for good, as `deleteSite` removes one, each only while it sits in the trash since `trashedBy` or before: the check and the removal of a site are one step, and all of them one query.
    *
-   * @returns `not_due` for a site that is gone, was restored, or went to the trash later
+   * @param ids - the sites, at most 100
+   * @returns each site that went, as it was, whose folder the caller empties and then forgets; a site that is gone, was restored, or went to the trash later stays, and is not among them
+   * @throws {RangeError} more than 100 sites are named
    */
-  deleteSatOutSite(id: SiteId, signed: Signed, trashedBy: number): Promise<Done | Refused<"not_due">>;
+  deleteSatOutSites(ids: readonly SiteId[], signed: Signed, trashedBy: number): Promise<readonly Site[]>;
 
   /**
    * One page of the leftovers: the folders of removed sites that are not known to be empty. A folder a site is stored into again is no leftover.
@@ -660,8 +664,13 @@ export interface Database {
    */
   listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage>;
 
-  /** Forget a leftover, once the bucket holds nothing under the folder. A folder that is none changes nothing. */
-  forgetLeftover(folder: SiteFolder): Promise<void>;
+  /**
+   * Forget leftovers, once the bucket holds nothing under their folders, all in one query. A folder that is none changes nothing, and no folder asks nothing of the database.
+   *
+   * @param folders - the folders, at most 100
+   * @throws {RangeError} more than 100 folders are named
+   */
+  forgetLeftovers(folders: readonly SiteFolder[]): Promise<void>;
 
   /** Set aside the next version number of a site. No two calls get the same number; a number never used is simply skipped. It writes no audit entry: nothing a reader of the site sees has changed. */
   reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">>;

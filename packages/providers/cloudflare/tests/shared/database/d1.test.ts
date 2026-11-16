@@ -160,7 +160,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "deleteSite": [13, 6],
   "listLeftovers": [1, 0],
   "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [27, 21],
-  "forgetLeftover": [1, 1],
+  "forgetLeftovers": [1, 1],
   "addUpload, a new site": [8, 5],
   "getUpload": [1, 0],
   "getUploadFile": [1, 0],
@@ -792,7 +792,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload", () => storedBack(database, removed.site));
     await database.trashSite(fourth.id, BY_ADA);
     await database.deleteSite(fourth.id, BY_ADA);
-    await cost("forgetLeftover", () => database.forgetLeftover(fourth.folder));
+    await cost("forgetLeftovers", () => database.forgetLeftovers([fourth.folder]));
 
     const begun = await cost("addUpload, a new site", () => begunSite(database, site(SITES + 3)));
     await cost("getUpload", () => database.getUpload(begun.id));

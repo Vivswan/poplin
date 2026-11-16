@@ -8,8 +8,8 @@
 //   either carried        6 for the users, 5 for the rules: that read once, then 2 x (the mark set with what is stored read, the settling), a problem noted   12 and 10: 2 x 6 and 2 x 5 to Cloudflare   18, 15
 //   an update             5: the try, the audit entry, and the try taken back or a problem      11: the release read,   16
 //                            noted                                                               fetched, and put in place
-//   one step, at most    12: a listing of what is due, 5 x (a change, a leftover gone),          150: 5 x 30 to the bucket   162
-//                            and the day's count of writes to the bucket, read before a run's first listing of it
+//   one step over sites   4: a listing of what is due, its 5 sites changed in one call, their folders forgotten in one, the count of bucket writes   150: 5 x 30 to the bucket   154
+//   one step, at most    12: over the uploads: a listing, 5 x (an upload given up, its record removed), and the count of bucket writes            150: 5 x 30 to the bucket   162
 //   a step over uploads   1 more: a copy nobody finished, noted as a problem                     0                      1
 //   a walk, nothing due   5: a listing each of the expired sites, the sat-out ones, the old      0                      5
 //                            uploads, and the leftovers, and the logins that ran out removed
@@ -51,6 +51,9 @@ const NOTE_CALLS = 1;
 
 /** The most calls one run makes, which leaves an instance that starts first 10 of an invocation's 50 to the database and of its 300 in all. */
 const RUN_CALLS = { database: 40, all: 290 } as const;
+
+/** The most sites, uploads, and folders one run changes: three steps' worth. A site removed for good writes about 11 rows, so the 96 runs of a day that each find a full trash write a sixth of the day's 100,000. */
+const RUN_ITEMS = 15;
 
 /** The database calls a run makes after its steps, which a step must leave room for: the write of the day's count and the write of the place. */
 const CLOSING_CALLS = 2;
@@ -189,7 +192,7 @@ async function carryWaiting(install: Install, running: Pick<Running, "follow" | 
 /**
  * Run the sweep for one scheduled invocation: go on where the run before stopped, and keep where this one stops.
  *
- * The place is kept in the database, since Cloudflare may start a new instance for every run. Only what is due is looked at: a run takes 5 due items when each takes a whole removal, and 25 when each takes one change.
+ * The place is kept in the database, since Cloudflare may start a new instance for every run. Only what is due is looked at: a run takes 15 due items, and 5 when each takes a whole removal of files.
  * The first run of a UTC day also writes which version of poplin is the newest and may start an update, and the run that begins the day repairs the login: each leaves the steps fewer calls.
  *
  * @param asking - what sends the day's one request for the newest version, and where to
@@ -215,12 +218,14 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   await carryWaiting(watched, running, tally);
 
   let place: Place = start.place ?? START;
+  let changed = 0;
 
   try {
-    while (place !== undefined && fitsAnotherStep(tally, place)) {
-      const swept = await sweepExpired(watched, SWEEPER, { limit: STEP_ITEMS, from: place });
+    while (place !== undefined && changed < RUN_ITEMS && fitsAnotherStep(tally, place)) {
+      const swept = await sweepExpired(watched, SWEEPER, { limit: Math.min(STEP_ITEMS, RUN_ITEMS - changed), from: place });
       if (!swept.ok) throw new Error(`the sweep was refused: ${swept.code}`);
 
+      changed += swept.trashed + swept.deleted + swept.uploads + swept.emptied;
       place = swept.next;
     }
   } finally {
