@@ -1,6 +1,7 @@
 // The scheduled run, driven as Cloudflare's cron trigger drives it. Nothing else ever moves an expired site to the trash or empties the trash.
 
 import { reset } from "cloudflare:test";
+import { noteProblem } from "@poplin/core/src/actions/problems";
 import { publishSite } from "@poplin/core/src/actions/publish";
 import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
@@ -10,6 +11,7 @@ import { dayOf } from "@poplin/core/src/records/views";
 import { sha256Of } from "@poplin/core/src/storage/storage";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { INSTALL_OBJECTS } from "../../../src/shared/install/install-objects";
+import { runSweep } from "../../../src/shared/worker/sweep";
 import { ACCOUNT, emptyAccount, TEAM, TOKEN } from "../install/support/fake-install";
 import type { Asked } from "../install/support/replies";
 import { ADMIN, api, ask, BINDINGS, cloudflareOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER, page, problemsOf } from "./support/install";
@@ -113,6 +115,50 @@ describe("the scheduled run", () => {
 
     expect([await problemsOf(w), asked.filter((entry) => entry.method !== "GET"), account.applications]).toEqual([problems, [], []]);
     expect(await states()).toEqual({ live: 0, trash: 1 });
+  });
+
+  // Drift: the install's own repair keeps no run of the domain, so the problem of a day its key was refused would stay marked through the day the repair came through, with advice nobody needs to take.
+  test("the run that begins a day and repairs the login ends the problem the day before's refused repair left, and one of another kind stays", async () => {
+    const account = emptyAccount();
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    const worker = instance(w, cloudflareOf(account, []));
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    account.refuse = `GET /accounts/${ACCOUNT}/access/policies`;
+    account.refuseAs = { status: 403, code: 10_000 };
+    await sweep(worker, w, keyed);
+    await database.noteProblem({ kind: "api_failed", at: w.clock.now, count: 1, more: false, name: null, message: null });
+    const [dayBefore, kinds] = [dayOf(w.clock.now), async (): Promise<string[]> => (await database.listProblems(dayBefore)).map((problem) => problem.kind).sort()];
+    const refused = await kinds();
+
+    account.refuse = [];
+    wait(w, 24);
+    await sweep(worker, w, keyed);
+
+    expect([refused, await kinds()]).toEqual([["api_failed", "login_not_repaired"], ["api_failed"]]);
+  });
+
+  // Drift: a request notes a login it could not check once an hour, and remembers that it did under the install's database.
+  // A run that ended the problem under another object would leave that memory, and the same problem seen again in the hour would show nowhere.
+  test("a login that could not be checked, ended by the run's repair and seen again in the same hour by the same instance, is noted again at once", async () => {
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const install = await installOf(w);
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    const keyless = { holdsKey: () => false, push: async () => ({ ok: false as const, refusal: "no_key" as const }) };
+    const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
+    const login = { holdsKey: () => true, repair: async () => ({ wrote: [], users: false, calls: 0, refusal: undefined }) };
+    const running = { version: "0.1.0", updating, login, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
+    const kinds = async (): Promise<string[]> => (await install.database.listProblems(dayOf(w.clock.now))).map((problem) => problem.kind);
+    await noteProblem(install, "login_unchecked");
+    const noted = await kinds();
+
+    await runSweep(install, { fetch: async () => Response.json({}) }, running);
+    const ended = await kinds();
+    w.clock.now += 60_000;
+    await noteProblem(install, "login_unchecked");
+
+    expect([noted, ended, await kinds()]).toEqual([["login_unchecked"], [], ["login_unchecked"]]);
   });
 
   // Drift: a repair that stopped half way wrote four objects at Cloudflare; left out of Activity, nothing in the install would say they were made.

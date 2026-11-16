@@ -26,7 +26,7 @@
 
 import { startDueUpdate } from "@poplin/core/src/actions/auto-update";
 import { type Asking, checkForUpdate } from "@poplin/core/src/actions/check-update";
-import { meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
+import { endProblems, meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
 import { signedBy } from "@poplin/core/src/actions/reach";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Updating } from "@poplin/core/src/actions/start-update";
@@ -127,9 +127,10 @@ function beginsDay(now: number): boolean {
  * A repair that stopped is noted as a problem, but for one Cloudflare gave no answer to: the next day's run tries again.
  *
  * @param logins - the users the login is made to let through, as the run read them
+ * @returns whether a repair came through, which leaves the login standing
  */
-async function repairLogin(install: Install, running: Pick<Running, "login" | "follow">, tally: Tally, logins: SettingValues["logins"]): Promise<void> {
-  if (!running.login.holdsKey()) return;
+async function repairLogin(install: Install, running: Pick<Running, "login" | "follow">, tally: Tally, logins: SettingValues["logins"]): Promise<boolean> {
+  if (!running.login.holdsKey()) return false;
 
   const { wrote, users, calls, refusal } = await running.login.repair(logins);
   tally.web += calls;
@@ -142,6 +143,8 @@ async function repairLogin(install: Install, running: Pick<Running, "login" | "f
   if (wrote.length > 0) await install.database.appendAudit({ action: "domain_synced", detail: { run: "repair", from: "sweep", changed: [...wrote] } }, signedBy(SWEEPER, install.now()));
 
   if (refusal !== undefined && refusal !== "unreachable") await noteProblem(install, "login_not_repaired", new Error(refusal));
+
+  return refusal === undefined;
 }
 
 /** Carry to Cloudflare what still waits there, where the install holds a key to carry it with: a change of the users, and a changed setting of the guard rules. A refusal leaves the change waiting for the next run. */
@@ -181,7 +184,11 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   const taking = running.updating.self;
   const self = { ...taking, ready: counted({ ready: taking.ready }, tally, "web", SELF_UPDATE_REQUESTS).ready };
   if (learned !== undefined) await startDueUpdate(watched, { ...learned, version: running.version }, { ...running.updating, self });
-  if (beginsDay(install.now()) && start.settings !== undefined) await repairLogin(watched, running, tally, start.settings.logins);
+  if (beginsDay(install.now()) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings.logins))) {
+    // What a broken login was noted as ends with a repair that came through. It is ended under the install's own database, which is what a request of this instance noted it under, so the call is counted here.
+    tally.database += 1;
+    await endProblems(install, ["login_stands"]);
+  }
   await carryWaiting(watched, running, tally);
 
   let place: Place = start.place ?? START;

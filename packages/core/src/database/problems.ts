@@ -1,12 +1,12 @@
-// The statements that note what went wrong, list it, and forget its old days.
+// The statements that note what went wrong, list it, end what was mended, and forget its old days.
 //
 // A kind is written once per hour of the clock, and that rule is in the statement itself: of every instance that notes a kind in one hour, only the first writes a row.
 
-import { gte, lt, sql as fragment } from "drizzle-orm";
+import { and, gte, inArray, lt, sql as fragment } from "drizzle-orm";
 import * as v from "valibot";
 
 import { MOMENT, POSITIVE } from "../records/fields";
-import { MOST_MESSAGE_LENGTH, MOST_NAME_LENGTH, ONCE_A_DAY, PROBLEM, PROBLEM_DAYS_KEPT, PROBLEM_KINDS, type Problem } from "../records/problem";
+import { endedBy, type Mend, MOST_MESSAGE_LENGTH, MOST_NAME_LENGTH, ONCE_A_DAY, PROBLEM, PROBLEM_DAYS_KEPT, PROBLEM_KINDS, type Problem } from "../records/problem";
 import { dayOf, daysUpTo } from "../records/views";
 import type { Statement, StatementResult } from "./driver";
 import { problems } from "./schema";
@@ -69,6 +69,20 @@ export function problemsForgotten(now: number): Statement {
   const [first] = daysUpTo(dayOf(now), PROBLEM_DAYS_KEPT);
 
   return built(BUILD.delete(problems).where(lt(problems.day, first ?? dayOf(now))));
+}
+
+/**
+ * Build the statement that ends the problems some mends end: the rows of their kinds of the UTC day of a moment and of the day before, which are the days a screen marks from. Earlier days stay as they are.
+ *
+ * @returns one `DELETE`, or `undefined` where the mends end no kind, so nothing is asked
+ */
+export function problemsEnded(mends: readonly Mend[], now: number): Statement | undefined {
+  const kinds = endedBy(mends);
+  if (kinds.length === 0) return undefined;
+
+  const [yesterday] = daysUpTo(dayOf(now), 2);
+
+  return built(BUILD.delete(problems).where(and(gte(problems.day, yesterday ?? dayOf(now)), inArray(problems.kind, kinds))));
 }
 
 /**

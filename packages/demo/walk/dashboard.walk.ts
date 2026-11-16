@@ -1401,7 +1401,7 @@ test("a section whose screen holds a problem says so at the side, Usage lists wh
   await expect(rows(page, true, "Problems").getByRole("button", { name: "Details of A request failed", exact: true })).toBeFocused();
 
   await toSection(page, "Domain");
-  await expect(page.getByRole("group", { name: "The login could not be checked", exact: true }).getByRole("button", { name: "Copy the details", exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "A change of the users did not reach the login page", exact: true }).getByRole("button", { name: "Copy the details", exact: true })).toBeVisible();
 });
 
 // Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.

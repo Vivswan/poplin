@@ -14,7 +14,7 @@ import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow, HISTORY_KEPT_MS } from "../records/audit";
 import type { CarriedRules, CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
 import { computerLoginFromRow } from "../records/computer-login";
-import type { Problem } from "../records/problem";
+import type { Mend, Problem } from "../records/problem";
 import { LOGIN, SITE_ID } from "../records/fields";
 import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
 import { visitorKeyFromRow, visitorKeyToText } from "../records/secret";
@@ -83,7 +83,7 @@ import type {
 } from "./database";
 import { domainCheckAsked, domainCheckIn, domainCheckKept, rulesCarried, rulesClaimed, rulesReplaced, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
-import { type ProblemNote, problemNoted, problemsAsked, problemsForgotten, problemsIn } from "./problems";
+import { type ProblemNote, problemNoted, problemsAsked, problemsEnded, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
 import { filesUnderKeys, fileUnderKey, MANIFEST_KEY, manifestFromText, manifestKey, manifestToText } from "./manifest";
 import {
@@ -1119,6 +1119,11 @@ export class SqlDatabase implements Database {
     return changed(noted);
   }
 
+  async endProblems(mends: readonly Mend[], now: number): Promise<void> {
+    const ended = problemsEnded(mends, now);
+    if (ended !== undefined) await this.#driver.batch([ended]);
+  }
+
   async listProblems(since: string): Promise<readonly Problem[]> {
     const [read] = await this.#driver.batch([problemsAsked(since)]);
 
@@ -1185,10 +1190,11 @@ export class SqlDatabase implements Database {
     return domainCheckIn(read);
   }
 
-  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>> | null, carried?: CarriedUsers): Promise<void> {
+  async keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>> | null, carried?: CarriedUsers, mends: readonly Mend[] = []): Promise<void> {
     const settling = carried === undefined ? [] : [usersCarried(carried, check.ran_at)];
     const entry = detail === null ? [] : [auditPlain({ by: check.by, at: check.ran_at }, "domain_synced", detail)];
-    await this.#driver.batch([domainCheckKept(check), ...entry, ...settling]);
+    const ended = problemsEnded(mends, check.ran_at);
+    await this.#driver.batch([domainCheckKept(check), ...entry, ...settling, ...(ended === undefined ? [] : [ended])]);
   }
 
   async claimUsers(at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly mark: number | undefined }> {

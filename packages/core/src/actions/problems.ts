@@ -1,4 +1,4 @@
-// What the install remembers of what went wrong: noting a problem, and listing the problems of the last days.
+// What the install remembers of what went wrong: noting a problem, ending one that was mended, and listing the problems of the last days.
 //
 //   the first of a kind in an hour of the clock    one statement: the day's row is made or added to
 //   every later one, in the same instance          nothing is asked: it is counted here and added by the next write
@@ -13,7 +13,8 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import type { Database } from "../database/database";
 import { AllowanceSpent } from "../database/driver";
-import { PROBLEM, PROBLEM_DAYS_KEPT, type ProblemKind } from "../records/problem";
+import { type CarriedUsers, type CheckedPiece, type DomainCheck, keptPieces, mendsOf } from "../records/domain-check";
+import { endedBy, type Mend, PROBLEM, PROBLEM_DAYS_KEPT, type ProblemKind } from "../records/problem";
 import { problemDetail } from "../records/problem-detail";
 import { dayOf, daysUpTo } from "../records/views";
 import { meterStore } from "../storage/metered";
@@ -72,6 +73,40 @@ export async function noteProblem(install: Pick<Install, "database" | "now">, ki
   if (written || since?.hour !== hour) return;
 
   kinds.set(kind, { hour, missed: since.missed + 1 + missed });
+}
+
+/** Forget, in this instance, that the kinds some mends end were noted in this hour: their rows are gone, so the next of them writes one. */
+function forgetEnded(database: Database, mends: readonly Mend[]): void {
+  for (const kind of endedBy(mends)) NOTED.get(database)?.delete(kind);
+}
+
+/**
+ * End the problems some mends end, of today and the day before, where no run of the domain is kept with them. `endedBy` says which kinds each mend ends.
+ *
+ * @throws whatever the database rejects with
+ */
+export async function endProblems(install: Pick<Install, "database" | "now">, mends: readonly Mend[]): Promise<void> {
+  await install.database.endProblems(mends, install.now());
+  forgetEnded(install.database, mends);
+}
+
+/**
+ * Keep a run of the domain as the last check, and end the problems it shows as mended, in one step of the database.
+ *
+ * @param run - the run with every piece it read: what it mends is told from all of them, and the pieces are cut to what is kept after that
+ * @param detail - what the audit entry says of the run; `null` writes no entry
+ * @param carried - for a repair that wrote the users to the domain: what it came to, as `keepDomainCheck` takes it
+ * @throws whatever the database rejects with
+ */
+export async function keepDomainRun(
+  install: Pick<Install, "database">,
+  run: Omit<DomainCheck, "pieces"> & { readonly pieces: readonly CheckedPiece[] },
+  detail: Readonly<Record<string, unknown>> | null,
+  carried?: CarriedUsers,
+): Promise<void> {
+  const mends = mendsOf(run);
+  await install.database.keepDomainCheck({ ...run, pieces: keptPieces(run.pieces) }, detail, carried, mends);
+  forgetEnded(install.database, mends);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { runDomain } from "../../../src/console/domain/domain-run";
+import { markedIn } from "../../../src/console/problems-routes";
 import { openOwned } from "../support/install";
 import type { DomainRow } from "../../../src/console/domain/records";
 import { fakePlug, TOKEN } from "../support/fake-plug";
@@ -109,6 +110,25 @@ test.each([
   const remembered = await kept();
 
   expect([remembered?.run, remembered?.users_changed_at === null]).toEqual([run, !waits]);
+});
+
+// Drift: the problem of a login that could not be checked says "press Check". Left standing after a check that found the login in order, the Domain screen and its mark in the side menu would go on asking for a day for what was just done.
+test("a check that finds the login standing takes the login's problem out of what the frame marks, at once, and leaves a problem no check mends", async () => {
+  const { opened, asked } = await openRun();
+  const { database, now } = opened.install;
+  for (const kind of ["login_unchecked", "sweep_failed"] as const) await database.noteProblem({ kind, at: now(), count: 1, more: false, name: null, message: null });
+  const marked = async (): Promise<unknown> => {
+    const { recent, marks } = markedIn((await database.readFrame(now())).problems, now(), { screen: true, says: null });
+
+    return [marks.domain, recent.map((problem) => problem.kind).sort()];
+  };
+  const before = await marked();
+  await runDomain(fakePlug(() => ({ ok: true, rows: [{ object: "Login application", state: "present", detail: "the dashboard's login", part: "login" }], steps: [] })), opened.install, asked);
+
+  expect([before, await marked()]).toEqual([
+    [{ count: 1, says: "The login could not be checked" }, ["login_unchecked", "sweep_failed"]],
+    [null, ["sweep_failed"]],
+  ]);
 });
 
 // Drift: the token is a key to the whole account at the provider, and the kept run is answered to every admin who asks. A plug that hands the token back in any text, however long, must leave no byte of it in what the install stores.

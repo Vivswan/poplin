@@ -67,6 +67,7 @@ A daily limit of files or of storage writes is noted once the day has none left.
 | ------------------- | --------------------------------------------------------------------------------------------------- |
 | What is kept        | one entry per kind and UTC day: how often, the first and the last time, the failure's name and message |
 | For how long        | 30 days                                                                                             |
+| What ends sooner    | of today and the day before: `login_unchecked` and `login_not_repaired` once a check or a repair finds the login standing; `users_not_carried`, `rules_not_carried`, and `direct_upload_refused` once a repair leaves nothing to repair |
 | What is never kept  | the address asked, headers, bodies, tokens, emails, visitors' addresses, files                      |
 | The message         | only its plain words and short numbers; everything else reads `...`, and it is cut to 200 characters |
 | Where it is kept    | in the install's own database; nothing is read from Cloudflare's logs, and nothing is sent anywhere |

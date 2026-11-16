@@ -89,5 +89,22 @@ export const PROBLEM_WORDS: Readonly<Record<ProblemKind, ProblemWords>> = {
   requests_limit_reached: { sentence: "The daily limit of requests was reached", todo: AFTER_MIDNIGHT, home: "usage", setting: "requests_per_day" },
 };
 
+/** What a run of the domain can show that ends a problem: the login stands as the install needs it, or a repair left nothing to repair. */
+export type Mend = "login_stands" | "repaired";
+
+/** What ends a kind at once, before its day is forgotten. A kind that is not here is ended by nothing: it says what happened, and stays. */
+const ENDED_BY: Readonly<Partial<Record<ProblemKind, Mend>>> = {
+  login_unchecked: "login_stands",
+  login_not_repaired: "login_stands",
+  users_not_carried: "repaired",
+  rules_not_carried: "repaired",
+  direct_upload_refused: "repaired",
+};
+
 /** The kinds noted once a day, whatever follows: a limit that was reached stays reached until midnight. */
 export const ONCE_A_DAY: ReadonlySet<ProblemKind> = new Set(["files_limit_reached", "writes_limit_reached", "requests_limit_reached"]);
+
+/** The kinds some mends end, in the order of the kinds. */
+export function endedBy(mends: readonly Mend[]): readonly ProblemKind[] {
+  return PROBLEM_KINDS.filter((kind) => mends.some((mend) => ENDED_BY[kind] === mend));
+}

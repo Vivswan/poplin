@@ -1,8 +1,9 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
 import { removeFiles } from "../../src/actions/files";
-import { listProblems, meterNoted, noteProblem } from "../../src/actions/problems";
+import { endProblems, keepDomainRun, listProblems, meterNoted, noteProblem } from "../../src/actions/problems";
 import { AllowanceSpent } from "../../src/database/driver";
+import type { CheckedPiece } from "../../src/records/domain-check";
 import { dayOf } from "../../src/records/views";
 import { ADMIN, DAY, makeWorld, OWNER } from "./support/actions-fixture";
 
@@ -106,6 +107,48 @@ describe("noteProblem", () => {
     await noteProblem(world.install, "writes_limit_reached");
 
     expect([refusing.mock.calls.length, (await world.install.database.listProblems(dayOf(DAY_START))).map(({ count, more }) => ({ count, more }))]).toEqual([2, [{ count: 1, more: false }]]);
+  });
+});
+
+/** A piece of a run, by what it is for and how the run left it. */
+function pieceOf(part: CheckedPiece["part"], state: "ok" | "needs_repair" | "not_set_up"): CheckedPiece {
+  return { piece: "Piece", detail: `${part} ${state}`, part, state };
+}
+
+describe("a problem that was mended", () => {
+  // Drift: a run that mended nothing, or another thing, would take away a problem that still stands; or one that mended it would leave it marked for a day, with advice that was taken already.
+  test.each([
+    ["a check that found the login standing ends what the login alone mends", "check", [pieceOf("login", "ok"), pieceOf("reach", "needs_repair")], ["users_not_carried"]],
+    ["a check that found the login broken ends nothing", "check", [pieceOf("login", "needs_repair"), pieceOf("reach", "ok")], ["login_unchecked", "users_not_carried"]],
+    ["a check that read no piece of the login ends nothing", "check", [pieceOf("reach", "ok")], ["login_unchecked", "users_not_carried"]],
+    ["a check that found nothing to repair ends no more than the login's", "check", [pieceOf("login", "ok"), pieceOf("rest", "ok")], ["users_not_carried"]],
+    ["a repair that left a piece undone ends the login's alone", "repair", [pieceOf("login", "ok"), pieceOf("rest", "needs_repair")], ["users_not_carried"]],
+    ["a repair that left nothing to repair ends all a repair mends, a piece left out by choice or not", "repair", [pieceOf("login", "ok"), pieceOf("reach", "ok"), pieceOf("rest", "not_set_up")], []],
+    // More pieces than a kept run holds: the ones that stand give way to the ones to act on, so the kept run holds no piece of the login.
+    ["a check of more pieces than are kept, the login's standing among them, ends the login's", "check", [...Array.from({ length: 200 }, () => pieceOf("reach", "needs_repair")), pieceOf("login", "ok")], ["users_not_carried"]],
+  ] as const)("%s", async (_what, run, pieces, left) => {
+    const world = await worldAtMidnight();
+    for (const kind of ["login_unchecked", "users_not_carried"] as const) await noteProblem(world.install, kind);
+
+    await keepDomainRun(world.install, { ran_at: DAY_START + 1, by: ADMIN.holder, run, pieces }, null);
+
+    expect((await world.install.database.listProblems(dayOf(DAY_START))).map((problem) => problem.kind).sort()).toEqual([...left]);
+  });
+
+  // Drift: an instance writes a kind once an hour and remembers that it did. A problem that comes back in the hour it was ended in would be counted in memory alone, and show nowhere until the next hour.
+  test.each([
+    ["a kept run", (world: Awaited<ReturnType<typeof worldAtMidnight>>) => keepDomainRun(world.install, { ran_at: world.clock.now, by: ADMIN.holder, run: "check", pieces: [pieceOf("login", "ok")] }, null)],
+    ["the word that the login stands", (world: Awaited<ReturnType<typeof worldAtMidnight>>) => endProblems(world.install, ["login_stands"])],
+  ] as const)("a kind ended by %s and seen again in the same hour is written again at once", async (_what, end) => {
+    const world = await worldAtMidnight();
+    await noteProblem(world.install, "login_unchecked");
+    world.clock.now += 60_000;
+    await end(world);
+    const ended = (await world.install.database.listProblems(dayOf(DAY_START))).length;
+    world.clock.now += 60_000;
+    await noteProblem(world.install, "login_unchecked");
+
+    expect([ended, (await world.install.database.listProblems(dayOf(DAY_START))).map(({ kind, count, first_at }) => [kind, count, first_at])]).toEqual([0, [["login_unchecked", 1, DAY_START + 120_000]]]);
   });
 });
 

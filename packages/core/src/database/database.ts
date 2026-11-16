@@ -12,7 +12,7 @@ import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
 import type { CarriedRules, CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
 import type { Holder } from "../records/fields";
-import type { Problem } from "../records/problem";
+import type { Mend, Problem } from "../records/problem";
 import type { SiteId } from "../sites/ids";
 import type { SettingValues } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
@@ -869,6 +869,14 @@ export interface Database {
   noteProblem(note: ProblemNote): Promise<boolean>;
 
   /**
+   * End the problems some mends end, where no run of the domain is kept with them: the rows of their kinds of the UTC day of a moment and of the day before. One row is written for each problem ended, and none where there is none.
+   * An instance that noted such a kind in this hour does not know its row is gone: `endProblems` and `keepDomainRun` of the problems' actions tell it, and are what every caller uses.
+   *
+   * @param mends - what was shown, such as that the login stands; `endedBy` says which kinds each ends
+   */
+  endProblems(mends: readonly Mend[], now: number): Promise<void>;
+
+  /**
    * List the problems from a UTC day on, the kind last seen first.
    *
    * @param since - the first day listed, such as `2026-11-13`
@@ -913,9 +921,10 @@ export interface Database {
    * @param check - the run; its `by` and `ran_at` sign the audit entry
    * @param detail - what the audit entry says of the run; `null` writes no entry, for a check nobody pressed: one row written
    * @param carried - for a repair that wrote the users to the domain: what it came to, with the moment it began. The change of the users is settled as `settleUsers` settles it, in the same step. Left out, a change that waits keeps waiting
+   * @param mends - what the run showed that ends problems, as `endProblems` ends them, in the same step: one more row written for each problem ended. Left out, the run ends none
    * @throws {Error} a value breaks its rule
    */
-  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>> | null, carried?: CarriedUsers): Promise<void>;
+  keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>> | null, carried?: CarriedUsers, mends?: readonly Mend[]): Promise<void>;
 
   /**
    * Begin a try to carry the users to the domain: mark them as waiting, with a mark later than every one before it, and read the logins to carry, in one step.

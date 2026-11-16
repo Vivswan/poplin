@@ -123,6 +123,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "noteProblem, a later hour": [1, 1],
   "noteProblem, once a day": [1, 1],
   "noteProblem, once a day and noted": [1, 0],
+  "keepDomainCheck, a check that ends a problem": [4, 2],
+  "keepDomainCheck, a check that could end a problem and finds none": [3, 1],
+  "endProblems, none to end": [2, 0],
   "listProblems, 7 days of 16 kinds": [112, 0],
   "sweepRunOut, 18 problems past the days kept": [29, 18],
   "keepSweepPlace": [1, 1],
@@ -922,6 +925,11 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("noteProblem, a later hour", () => database.noteProblem({ ...note, at: MIDNIGHT + 3_600_000 }));
     await cost("noteProblem, once a day", () => database.noteProblem({ ...limit, at: MIDNIGHT }));
     await cost("noteProblem, once a day and noted", () => database.noteProblem({ ...limit, at: MIDNIGHT + 3_600_000 }));
+    await database.noteProblem({ ...note, kind: "login_unchecked", at: MIDNIGHT });
+    const stands = { piece: "Login", detail: "the login", part: "login", state: "ok" } as const;
+    await cost("keepDomainCheck, a check that ends a problem", () => database.keepDomainCheck({ ran_at: MIDNIGHT + 1, by: BY_ADA.by, run: "check", pieces: [stands] }, null, undefined, ["login_stands"]));
+    await cost("keepDomainCheck, a check that could end a problem and finds none", () => database.keepDomainCheck({ ran_at: MIDNIGHT + 2, by: BY_ADA.by, run: "check", pieces: [stands] }, null, undefined, ["login_stands"]));
+    await cost("endProblems, none to end", () => database.endProblems(["login_stands"], MIDNIGHT + 2));
     for (const kind of PROBLEM_KINDS) {
       for (let day = 1; day <= 7; day += 1) await database.noteProblem({ ...note, kind, at: MIDNIGHT + day * 86_400_000 });
     }
