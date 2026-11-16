@@ -1,8 +1,8 @@
-// The search over the Sites list: what a person copies from a row's link, pasted there, lists the site it is of.
+// The search over the Sites list: what a person copies from a row's link, or from the browser's bar while a site's panel is open, lists the site it is of when pasted there.
 
 import { expect } from "@playwright/test";
 
-import { arrive, siteNames, test } from "./visit";
+import { arrive, openPanel, siteNames, test } from "./visit";
 
 /** A public and a private sample site, each by what the list calls it. */
 const SITES = { public: "Lisbon, four days", private: "Q3 sales report" } as const;
@@ -39,4 +39,31 @@ test("a private link, a public link, each also with angle brackets or quotes aro
     await page.keyboard.insertText(pasted);
     await expect(siteNames(page)).toHaveText([name]);
   }
+});
+
+// Drift: the address in the browser's bar while a site's panel is open is the dashboard's own, which the server knows no site by, so the search would find nothing by it.
+// And a link that finds no site would be told to check its spelling, with the whole link said back.
+test("the address of an open panel, pasted into Find a site with or without angle brackets, lists that panel's site, and a link with an id no site has says that no site is at that link", async ({ page }) => {
+  await arrive(page);
+  const find = page.getByRole("searchbox", { name: "Find a site", exact: true });
+  await openPanel(page, SITES.private);
+  await expect(page.getByRole("dialog", { name: SITES.private, exact: true })).toBeVisible();
+  const address = page.url();
+  await page.keyboard.press("Escape");
+  // Without it the paste below would be of no panel.
+  expect(address).toMatch(/\/sites\/[0-9a-z-]+--[0-9a-z]{12}$/);
+
+  for (const pasted of [address, `<${address}>`]) {
+    // Another site is found first, so a list left as it was fails.
+    await find.fill(SITES.public);
+    await expect(siteNames(page)).toHaveText([SITES.public]);
+    await find.fill("");
+    await page.keyboard.insertText(pasted);
+    await expect(siteNames(page)).toHaveText([SITES.private]);
+  }
+
+  await find.fill("");
+  await page.keyboard.insertText(address.replace(/[0-9a-z]{12}$/, "0".repeat(12)));
+  await expect(page.locator('[data-slot="empty-title"]')).toHaveText("No site at that link");
+  await expect(page.getByText("Check the link, or show all sites.", { exact: true })).toBeVisible();
 });

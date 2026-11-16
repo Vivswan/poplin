@@ -1,4 +1,4 @@
-// The Sites screen's list: where it stands when another page of it is shown, and what a row offers while the trash is read.
+// The Sites screen's list: where it stands when another page of it is shown, what a row offers while the trash is read, and what its empty place says.
 
 import { clearPage } from "../lib/support/page";
 
@@ -9,6 +9,7 @@ import { cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BOOT } from "@/lib/boot";
+import { emptyWords } from "@/sites/sites-query";
 import { SitesScreen } from "@/sites/sites-screen";
 
 import { drawAt } from "../lib/support/router";
@@ -145,5 +146,20 @@ describe("the buttons after a site's link", () => {
       .map((button) => button.getAttribute("aria-label"));
 
     expect(names.toSorted()).toEqual(["Copy the link of Trip notes", "Copy the link of Trip notes", "Open the site Trip notes", "Open the site Trip notes"]);
+  });
+});
+
+describe("a table with no site", () => {
+  // Drift: a pasted link that finds no site would be told "Check the spelling" again, with the whole link said back, where a link has no spelling a person checks.
+  test.each([
+    ["all", "report", 'No sites match "report"', "Check the spelling, or show all sites."],
+    ["private", "report", 'No private sites match "report"', "Check the spelling, or show all sites."],
+    ["all", "https://report--k3f9x2ab71qz-p-poplin.example.com/", "No site at that link", "Check the link, or show all sites."],
+    ["all", " <http://sites.example.net/report--k3f9x2ab71qz/>", "No site at that link", "Check the link, or show all sites."],
+    ["public", '"HTTPS://docs-page.example.com"', "No public site at that link", "Check the link, or show all sites."],
+    ["trash", "https://docs-page.example.com", "No site in the trash at that link", "Check the link, or show all sites."],
+    ["all", "report https://example.com", 'No sites match "report https://example.com"', "Check the spelling, or show all sites."],
+  ] as const)("under %s, for the search %j, is titled %s and says %s", (filter, search, title, says) => {
+    expect(emptyWords(filter, search)).toEqual({ title, says });
   });
 });
