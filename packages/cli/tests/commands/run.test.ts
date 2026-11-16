@@ -641,14 +641,17 @@ describe("run", () => {
   });
 
   // Drift: the install remembers what its last check of the domain left broken, and this row is where a person at a terminal hears of it. A row with nothing to say would teach them to skip it, and a missing one would leave locked private sites unsaid.
+  // An install that keeps its sites at paths has no domain, and a row that spoke of one would send its owner looking for it.
   test.each([
     { name: "a broken login", state: "needs_repair", part: "login", ago: 0, line: "The login for private sites is missing or changed, so private sites may be locked. Open Domain and press Repair.", code: "login_broken" },
-    { name: "a broken record", state: "needs_repair", part: "reach", ago: 0, line: "A record or route of the domain is missing or changed, so sites may not open. Open Domain and press Repair.", code: "sites_unreachable" },
+    { name: "a broken record", state: "needs_repair", part: "reach", ago: 0, line: "The Sample piece is missing or changed, so sites may not open. Open Domain and press Repair.", code: "sites_unreachable" },
     { name: "another broken piece", state: "needs_repair", part: "rest", ago: 0, line: "A piece of the domain is missing or changed. Open Domain and press Repair.", code: "needs_repair" },
     { name: "a broken login found 31 days ago", state: "needs_repair", part: "login", ago: 31, line: "The last check of the domain is over 30 days old. Open Domain and press Check.", code: "check_again" },
+    { name: "another broken piece, with no domain", layout: PATHS, state: "needs_repair", part: "rest", ago: 0, line: "A piece of the install is missing or changed. Open Domain and press Repair.", code: "needs_repair" },
+    { name: "a broken login found 31 days ago, with no domain", layout: PATHS, state: "needs_repair", part: "login", ago: 31, line: "The last check of the install is over 30 days old. Open Domain and press Check.", code: "check_again" },
     { name: "every piece ok", state: "ok", part: "login", ago: 0, line: undefined, code: undefined },
-  ] as const)("doctor says what the last check of the domain left to act on, in one row and not as a failure: $name", async ({ state, part, ago, line, code }) => {
-    const bench = await openBench();
+  ] as const)("doctor says what the last check of the domain left to act on, in one row and not as a failure: $name", async ({ layout, state, part, ago, line, code }) => {
+    const bench = await openBench(layout);
     const before = jsonOf(await bench.run("doctor --json"));
     const ran_at = bench.install.clock.now - ago * 86_400_000;
     await bench.install.database.keepDomainCheck({ ran_at, by: "ada@example.com" as Email, run: "check", pieces: [{ piece: "Sample piece", detail: "sample", part, state }] }, {});

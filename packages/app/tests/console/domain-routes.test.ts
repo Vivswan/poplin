@@ -175,13 +175,14 @@ describe("a run", () => {
     expect(emitted).toContain("Record [token]");
   });
 
-  // Drift: a refusal would lose its status, its sentence, or the box it belongs at, or would write an audit entry for a run that read nothing.
+  // Drift: a refusal would lose its status, its sentence, or the box it belongs at, would write an audit entry for a run that read nothing, or would ask an install without a domain for a token made for one.
   test.each([
-    ["token", 403, "token", "Account token refused: paste the whole account token, made for this account and this domain."],
-    ["unreachable", 502, null, "No answer from the provider. Try again."],
-    ["allowance_spent", 503, null, "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC."],
-  ] as const)("that reads no table is the refusal %s: status %i, about %p", async (refusal, status, about, sentence) => {
-    const opened = await openConsole("", fakePlug(() => ({ ok: false, refusal })));
+    ["token", 403, "token", "Account token refused: paste the whole account token, made for this account and this domain.", "this account and this domain"],
+    ["unreachable", 502, null, "No answer from the provider. Try again.", "this account"],
+    ["allowance_spent", 503, null, "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC.", "this account"],
+    ["token", 403, "token", "Account token refused: paste the whole account token, made for this account.", "this account"],
+  ] as const)("that reads no table is the refusal %s: status %i, about %p", async (refusal, status, about, sentence, tokenFor) => {
+    const opened = await openConsole("", { ...fakePlug(() => ({ ok: false, refusal })), tokenFor });
     const before = (await opened.base.audit()).length;
     const answer = await opened.change("/data/domain/check", { token: TOKEN });
 

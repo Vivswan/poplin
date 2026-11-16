@@ -12,7 +12,7 @@ import { drawAt } from "../lib/support/router";
 
 /** An entry about a site, as the server answers it. */
 function entryAbout(site: Entry["site"]): Entry {
-  return { seq: 7, at: 1_700_000_000_000, by: "mira@example.com", action: "details", detail: {}, site } as Entry;
+  return { seq: 7, at: 1_700_000_000_000, by: "mira@example.com", action: "details", what: "Changed the site's settings", detail: {}, site } as Entry;
 }
 
 afterEach(cleanup);

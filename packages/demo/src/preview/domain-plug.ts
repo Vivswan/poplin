@@ -30,6 +30,7 @@ export const WITH_DOMAIN: Provider = {
     tokenLink: "https://provider.example/tokens/new",
     tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods before they reach a site." }],
     tokenNote: "On the form, choose the account and the domain the account token is for.",
+    tokenFor: "this account and this domain",
   },
   says: { words: { thing: "the domain", line: null }, carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"], idleSettings: {} },
 };
@@ -47,6 +48,7 @@ export const WITHOUT_DOMAIN: Provider = {
     tokenLink: "https://provider.example/tokens/new",
     tokenOptional: [],
     tokenNote: "On the form, choose the account the account token is for.",
+    tokenFor: "this account",
   },
   says: { words: { thing: "the install", line: "No domain: your sites answer at the provider's free address." }, carriedSettings: [], idleSettings: { block_bots: "Needs a domain." } },
 };

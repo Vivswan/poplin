@@ -27,7 +27,7 @@ const WORDS: Readonly<Record<Exclude<AuditEntry["action"], "domain_synced">, str
 };
 
 /** What an action says when its entry holds what it set. Each answers `undefined` for an entry that holds no such thing. */
-const WITH_DETAIL: Readonly<Partial<Record<AuditEntry["action"], (detail: AuditEntry["detail"]) => string | undefined>>> = {
+const WITH_DETAIL: Readonly<Partial<Record<keyof typeof WORDS, (detail: AuditEntry["detail"]) => string | undefined>>> = {
   publish: (detail) => (typeof detail.version === "number" ? `Published version ${detail.version}` : undefined),
   live_version: (detail) => (typeof detail.version === "number" ? `Made version ${detail.version} live` : undefined),
   access: (detail) => (typeof detail.access === "string" ? `Made it ${detail.access}` : undefined),
@@ -37,7 +37,6 @@ const WITH_DETAIL: Readonly<Partial<Record<AuditEntry["action"], (detail: AuditE
   login_allowed: (detail) => named("Allowed the token", detail.computer),
   login_denied: (detail) => named("Denied the token", detail.computer),
   update_started: (detail) => (typeof detail.to === "string" ? `Started an update to ${detail.to}${detail.automatic === true ? " by itself" : ""}` : undefined),
-  domain_synced: domainWords,
 };
 
 function named(words: string, name: unknown): string | undefined {
@@ -51,20 +50,23 @@ function expiryWords(detail: AuditEntry["detail"]): string | undefined {
   return detail.expires === "never" ? "Set it to never delete itself" : "Set when it deletes itself";
 }
 
-/** A run on the domain says which it was, and a repair with a failure names the first step that failed: the run may have gone on past it. */
-function domainWords(detail: AuditEntry["detail"]): string {
-  if (detail.run !== "repair") return "Checked the domain";
+/** A run at the provider says which it was, and a repair with a failure names the first step that failed: the run may have gone on past it. */
+function runWords(detail: AuditEntry["detail"], thing: string): string {
+  if (detail.run !== "repair") return `Checked ${thing}`;
 
   const [failed] = Array.isArray(detail.failed) ? detail.failed : [];
-  if (typeof failed !== "string") return "Repaired the domain";
+  if (typeof failed !== "string") return `Repaired ${thing}`;
 
   return `Repair failed at ${failed.split(": ")[0]}`;
 }
 
-/** Say what an entry of the log did, with what it set where the entry holds it. */
-export function whatOf(entry: Pick<AuditEntry, "action" | "detail">): string {
-  const detailed = WITH_DETAIL[entry.action]?.(entry.detail);
-  if (detailed !== undefined) return detailed;
+/**
+ * Say what an entry of the log did, with what it set where the entry holds it.
+ *
+ * @param thing - what a sentence calls the install's side at the provider, such as `the domain`, which a run there is said of
+ */
+export function whatOf(entry: Pick<AuditEntry, "action" | "detail">, thing: string): string {
+  if (entry.action === "domain_synced") return runWords(entry.detail, thing);
 
-  return entry.action === "domain_synced" ? domainWords(entry.detail) : WORDS[entry.action];
+  return WITH_DETAIL[entry.action]?.(entry.detail) ?? WORDS[entry.action];
 }

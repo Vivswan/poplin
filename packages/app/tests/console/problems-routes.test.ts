@@ -121,7 +121,7 @@ describe("what the frame marks at the side", () => {
     const piece = { piece: "DNS record", detail: "poplin.example.com", part: "reach", state: "needs_repair" } as const;
     await install.database.keepDomainCheck({ ran_at: install.now() - 31 * DAY_MS, by: owner, run: "check", pieces: [piece] }, { run: "check", from: "dashboard" });
 
-    const needsFixing = "A record or route of the domain is missing or changed, so sites may not open. Open Domain and press Repair.";
+    const needsFixing = "The DNS record is missing or changed, so sites may not open. Open Domain and press Repair.";
     expect([found, both, await domain()]).toEqual([{ count: 1, says: needsFixing }, { count: 2, says: needsFixing }, { count: 1, says: "The login could not be checked" }]);
   });
 });

@@ -37,7 +37,7 @@ async function ran(context: Context<Shared, string, { out: { json: v.InferOutput
   try {
     const reading = await runDomain(plug, install, { run, token: context.req.valid("json").token, settings: async () => config.values, by: actor.holder, from: "dashboard" });
 
-    if (!reading.ok) return context.json(runRefusal(reading.refusal), REFUSAL_STATUS[reading.refusal]);
+    if (!reading.ok) return context.json(runRefusal(reading.refusal, plug.tokenFor), REFUSAL_STATUS[reading.refusal]);
 
     const kept = await domainState(install, actor);
 
@@ -46,7 +46,7 @@ async function ran(context: Context<Shared, string, { out: { json: v.InferOutput
     // The run is kept after the plug has answered: a database that takes no more today refuses it, whatever the plug did.
     if (!(error instanceof AllowanceSpent)) throw error;
 
-    return context.json(runRefusal("allowance_spent"), REFUSAL_STATUS.allowance_spent, { "Retry-After": String(secondsToNextDay(install.now())) });
+    return context.json(runRefusal("allowance_spent", plug.tokenFor), REFUSAL_STATUS.allowance_spent, { "Retry-After": String(secondsToNextDay(install.now())) });
   }
 }
 

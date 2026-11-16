@@ -55,7 +55,7 @@ describe("the frame", () => {
       null,
       {
         label: "Domain needs fixing",
-        sentence: "A record or route of the domain is missing or changed, so sites may not open. Open Domain and press Repair.",
+        sentence: "The DNS record is missing or changed, so sites may not open. Open Domain and press Repair.",
         quiet: false,
       },
       null,
@@ -73,6 +73,25 @@ describe("the frame", () => {
     await install.database.keepDomainCheck({ ran_at: install.now() - days * DAY_MS, by: owner, run: "check", pieces: [piece] }, { run: "check", from: "dashboard" });
 
     expect(await (await opened.get("/data/frame")).json()).toMatchObject({ domainNote: note });
+  });
+
+  // Drift: an install without a domain would be told of "the domain" it has not, or of a record where its own piece is another.
+  test("words the note by what the plug calls its side, and names the piece sites answer through", async () => {
+    const opened = await openConsole("", { ...usualPlug(), words: { thing: "the install", line: null } });
+    const { install, owner } = opened.base;
+    const sentence = async (): Promise<unknown> => ((await (await opened.get("/data/frame")).json()) as { readonly domainNote: { readonly sentence: string } }).domainNote.sentence;
+    const kept = async (days: number, part: "reach" | "rest"): Promise<unknown> => {
+      const piece = { piece: "Forwarder", detail: "poplin-sites", part, state: "needs_repair" } as const;
+      await install.database.keepDomainCheck({ ran_at: install.now() - days * DAY_MS, by: owner, run: "check", pieces: [piece] }, { run: "check", from: "dashboard" });
+
+      return sentence();
+    };
+
+    expect([await kept(0, "reach"), await kept(0, "rest"), await kept(31, "rest")]).toEqual([
+      "The Forwarder is missing or changed, so sites may not open. Open Domain and press Repair.",
+      "A piece of the install is missing or changed. Open Domain and press Repair.",
+      "The last check of the install is over 30 days old. Open Domain and press Check.",
+    ]);
   });
 
   // Drift: the page would start from other values than the route answers, and the side would change on its first read.

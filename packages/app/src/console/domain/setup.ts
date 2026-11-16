@@ -93,6 +93,21 @@ function typedDomain(sent: Sent): string {
   return sent.domain.trim().toLowerCase();
 }
 
+/** The kind a run on an install with nothing set is for, from what it sent: an install under the domain it names, or one without a domain when it names none. */
+function kindOf(sent: Sent): FirstChoice["kind"] {
+  return typedDomain(sent) === "" ? "no-domain" : "domain";
+}
+
+/**
+ * Say which kind of install a run on an install with nothing set is for.
+ *
+ * @param body - the run's body as it was sent, of any shape
+ * @returns `domain` for a body that names one, and `no-domain` for any other
+ */
+export function kindSent(body: unknown): FirstChoice["kind"] {
+  return kindOf(v.parse(SENT, body));
+}
+
 /**
  * Read the settings a run on a set install is made to match, with the first login corrected where an email was sent.
  *
@@ -136,8 +151,7 @@ async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent, host: stri
   const login = parseLogin(sent.login);
   if (!login.ok) return { ok: false, refusal: "bad_login" };
 
-  const typed = typedDomain(sent);
-  const first: FirstChoice = typed === "" ? { kind: "no-domain", host, login: login.value } : { kind: "domain", domain: typed, login: login.value };
+  const first: FirstChoice = kindOf(sent) === "no-domain" ? { kind: "no-domain", host, login: login.value } : { kind: "domain", domain: typedDomain(sent), login: login.value };
   const plug = domain.plugFor(first);
   if (plug === undefined) return { ok: false, refusal: first.kind === "domain" ? "bad_domain" : "bad_address" };
 

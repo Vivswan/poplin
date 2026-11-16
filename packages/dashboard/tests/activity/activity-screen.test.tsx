@@ -19,7 +19,7 @@ const OWN_FETCH = globalThis.fetch;
 /** A page of the log with a page after it, as the server answers it. */
 const PAGE = {
   ok: true,
-  entries: [{ seq: 12, at: 1_700_000_000_000, by: "mira@example.com", action: "login", detail: {}, site: null }],
+  entries: [{ seq: 12, at: 1_700_000_000_000, by: "mira@example.com", action: "login", what: "Logged in", detail: {}, site: null }],
   logins: {},
   of: null,
   next: "12",
@@ -112,6 +112,15 @@ afterEach(() => {
   answered.page = PAGE;
 });
 afterAll(clearPage);
+
+// Drift: the screen would word an entry by itself, apart from the file, and say "the domain" of an install that has none.
+test("each row says what was done in the sentence the server sent", async () => {
+  answered.page = { ...PAGE, entries: [{ seq: 12, at: 1_700_000_000_000, by: "mira@example.com", action: "domain_synced", what: "Checked the install", detail: {}, site: null }] };
+  await draw("/activity");
+
+  expect(within(document.body).getAllByText("Checked the install").length).toBeGreaterThan(0);
+  expect(within(document.body).queryByText("Checked the domain")).toBeNull();
+});
 
 describe("the order of the log", () => {
   // Drift: a turned log would go on from a place of the order before and skip every entry between, or a third press would leave the log in no order the server knows.

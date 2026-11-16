@@ -65,6 +65,9 @@ export interface DomainPlug {
   /** What else the provider's form asks of the person, in one sentence, such as which account the token is for. */
   readonly tokenNote: string;
 
+  /** What a token must be made for, as a refusal of one says it, such as `this account and this domain`. */
+  readonly tokenFor: string;
+
   /** How the screens speak of the install's side at the provider: `thing` is what a sentence calls it, such as `the domain`, and `line` is one sentence said first on its screen, or `null`. */
   readonly words: { readonly thing: string; readonly line: string | null };
 
@@ -82,7 +85,7 @@ export interface DomainPlug {
 }
 
 /** What the provider's form for a new token is and asks for, as both pages show it. */
-export type TokenFacts = Pick<DomainPlug, "tokenRights" | "tokenLink" | "tokenOptional" | "tokenNote">;
+export type TokenFacts = Pick<DomainPlug, "tokenRights" | "tokenLink" | "tokenOptional" | "tokenNote" | "tokenFor">;
 
 /**
  * What a person chose for an install with nothing set, with its first login.

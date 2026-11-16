@@ -2,12 +2,13 @@
 
 import type * as v from "valibot";
 
-import { DOMAIN_SENTENCES, DOMAIN_STATE } from "../../../core/src/actions/domain-state";
+import { DOMAIN_STATE, domainSentence } from "../../../core/src/actions/domain-state";
 import { PROBLEMS_LISTED } from "../../../core/src/actions/problems";
 import { LISTED_SITES } from "../../../core/src/actions/list";
 import { REVOKED_TOKEN, WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import { SETTINGS_ANSWER } from "../../../core/src/actions/store-settings";
 import { settingsToText } from "../../../core/src/records/settings";
+import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import type { Called, Failure } from "../client/client";
 import { clearLogin } from "../local/login-file";
 import { VERSION } from "../poplin";
@@ -24,6 +25,9 @@ const LOGINS_STEP = "one more step: on the dashboard's Domain tab, paste an acco
 
 /** What follows the two versions of an install and a command that differ, in the words the list of problems has for them. */
 const TWO_VERSIONS = "the install and this poplin are of two versions; update the older one";
+
+/** What a sentence calls the install's side at its provider, by how the install lays out its addresses: one under a domain of its own, or one on paths with none. */
+const THINGS = { hostname: "the domain", path: "the install" } as const satisfies Record<AddressLayout["kind"], string>;
 
 /** The commands this module runs, as the parser read them. */
 type InstallRequest = RequestOf<"whoami" | "logout" | "config" | "doctor">;
@@ -147,12 +151,12 @@ function updateCheck(update: { readonly current: string; readonly newest: string
  * What the last check of the domain left to act on: the note for `--json`, `null` when it was not read, and its line of the report.
  * There is no line while nothing is left, and none for a token that is no admin's. It is a finding, not a failure: it is what that check found, not the state now.
  */
-function domainFinding(domain: Called<{ readonly note: DomainNote }>): { readonly note: DomainNote | null; readonly checks: Check[] } {
+function domainFinding(domain: Called<{ readonly note: DomainNote }>, thing: string): { readonly note: DomainNote | null; readonly checks: Check[] } {
   if (!domain.ok) return { note: null, checks: domain.failure.kind === "refused" && domain.failure.code === "not_allowed" ? [] : [checkOf("domain", domain.failure, "")] };
 
   const { note } = domain.value;
 
-  return { note, checks: note === "none" ? [] : [{ check: "domain", ok: true, detail: DOMAIN_SENTENCES[note.code] }] };
+  return { note, checks: note === "none" ? [] : [{ check: "domain", ok: true, detail: domainSentence(note, thing) }] };
 }
 
 /**
@@ -183,11 +187,11 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const who = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
   if (!who.ok) return failed(who.failure);
 
-  const { token, version, update } = who.value;
+  const { token, version, update, layout } = who.value;
   const settings = await client.call(SETTINGS_ANSWER, (api) => api.config.$get());
   const sites = await client.call(LISTED_SITES, (api) => api.sites.$get());
   const trash = await client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true" } }));
-  const domain = domainFinding(await client.call(DOMAIN_STATE, (api) => api.domain.$get()));
+  const domain = domainFinding(await client.call(DOMAIN_STATE, (api) => api.domain.$get()), THINGS[layout.kind]);
   const noted = await notedProblems(client, token.scope);
   const kept = settings.ok ? `${Object.keys(settings.value.values).length} settings read` : "";
   const live = sites.ok ? `${countText(sites.value.sites.length, "site")}${sites.value.next === undefined ? "" : " and more"}` : "";

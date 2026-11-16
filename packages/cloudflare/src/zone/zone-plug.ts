@@ -160,17 +160,19 @@ const HOLDS_USERS: readonly (Piece | "Public word")[] = ["Access policy", "Budge
 /** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
 const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
 
-/** The token form of each kind of install: the objects whose permissions it asks for, the zones its link names, and what it still asks of the person once its permissions are chosen. */
+/** The token form of each kind of install: the objects whose permissions it asks for, the zones its link names, what it still asks of the person once its permissions are chosen, and what a token must be made for. */
 const TOKEN_FORMS = {
   domain: {
     pieces: { ...INSTALL_PIECES.repair, ...INSTALL_PIECES.repairAlone },
     zones: "&zoneId=all",
     note: "On the form, choose your account under Account Resources and your domain under Zone Resources, then create the account token and copy it.",
+    for: "this account and this domain",
   },
   noDomain: {
     pieces: INSTALL_PIECES.noDomain,
     zones: "",
     note: "On the form, choose your account under Account Resources, then create the account token and copy it.",
+    for: "this account",
   },
 } as const;
 
@@ -684,6 +686,7 @@ export function tokenFacts(kind: keyof typeof TOKEN_FORMS): TokenFacts {
     tokenLink: tokenLink(needed, form.zones),
     tokenOptional: optional,
     tokenNote: form.note,
+    tokenFor: form.for,
   };
 }
 

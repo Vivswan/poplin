@@ -175,10 +175,12 @@ export function keptAnswer(kept: Kept): Last | null {
  * Write a refusal of a run as the client reads it.
  *
  * @param code - why the run read no table, or why it was never begun, such as `too_many_tries`
+ * @param tokenFor - what a token of this install must be made for, which a refused token is told
  * @returns the refusal with its sentence, about the box of the form it names: `token`, `domain`, or `login`; `null` for one about no box
  */
-export function runRefusal(code: string): RunRefused {
-  const sentence = Object.hasOwn(RUN_SENTENCES, code) ? RUN_SENTENCES[code] : undefined;
+export function runRefusal(code: string, tokenFor: string): RunRefused {
+  const sentences: Readonly<Record<string, string>> = { ...RUN_SENTENCES, token: `Account token refused: paste the whole account token, made for ${tokenFor}.` };
+  const sentence = Object.hasOwn(sentences, code) ? sentences[code] : undefined;
 
   return { ok: false, code, about: Object.hasOwn(ABOUT, code) ? (ABOUT[code] ?? null) : null, sentence: sentence ?? refusalSentence(code) };
 }
