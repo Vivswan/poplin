@@ -20,6 +20,18 @@ async function textAt(world: World, key: string): Promise<string | undefined> {
   return new Response(read.body).text();
 }
 
+/** A file of four bytes whose every opening is counted and throws: a publish that opens it has read a file. */
+function unreadable(path: string, opened: { count: number }): ReturnType<typeof file> {
+  return {
+    ...file(path, "page"),
+    open: () => {
+      opened.count += 1;
+
+      throw new Error(`${path} cannot be read`);
+    },
+  };
+}
+
 async function siteCount(world: World): Promise<number> {
   const listed = await listSites(world.install, ADMIN);
 
@@ -444,5 +456,59 @@ describe("publishSite", () => {
     expect(third).toMatchObject({ ok: true, left: [], site: { live_version: 3, versions: [{ number: 2 }, { number: 3 }] } });
     expect(fourth).toMatchObject({ ok: true, left: [`${folder}/v2/`], site: { live_version: 4, versions: [{ number: 3 }, { number: 4 }] } });
     expect((await world.keys()).map((key) => key.split("/")[1])).toEqual(["v2", "v2", "v3", "v3", "v4", "v4"]);
+  });
+
+  // Drift: the one-call publish hashed every file before anything was checked. A folder with no entry page, or one of ten thousand and one files, had every file read whole, and a file that could not be read threw where the answer was a plain refusal.
+  test.each([
+    ["with no entry page", (opened: { count: number }) => [unreadable("other.html", opened)], { ok: false, code: "no_index" }],
+    ["of more files than a publish may hold", (opened: { count: number }) => Array.from({ length: 10_001 }, (_file, at) => unreadable(at === 0 ? "index.html" : `pages/${at}.html`, opened)), { ok: false, code: "too_large", about: "max_files_per_publish" }],
+    ["with a path no site can serve", (opened: { count: number }) => [unreadable("index.html", opened), unreadable("../up.html", opened)], { ok: false, code: "bad_path", about: "../up.html" }],
+  ])("a publish %s is refused before any file is opened, and nothing is recorded", async (_what, files, refusal) => {
+    const world = await makeWorld();
+    const opened = { count: 0 };
+
+    const answer = await publishSite(world.install, OWNER, { files: files(opened), name: "report" });
+
+    expect<unknown>([answer, opened.count, (await world.install.database.listUploads({ before: NOW + DAY, limit: 5 })).uploads, await world.keys()]).toEqual([refusal, 0, [], []]);
+  });
+
+  // Drift: an upload recorded before its files were hashed stays pending for a day when a file cannot be read, and holds its place among the holder's uploads and the day's files.
+  test("a publish whose file cannot be read to be hashed throws, and no upload is recorded", async () => {
+    const world = await makeWorld();
+    const opened = { count: 0 };
+
+    await expect(publishSite(world.install, OWNER, { files: [file("index.html", "home"), unreadable("css/site.css", opened)], name: "report" })).rejects.toThrow("cannot be read");
+    expect<unknown>([opened.count, (await world.install.database.listUploads({ before: NOW + DAY, limit: 5 })).uploads, await world.keys()]).toEqual([1, [], []]);
+  });
+
+  // Drift: a version number set aside before the files were read was lost when one could not be read, so every failed update left a gap in a site's versions.
+  test("an update whose file cannot be read sets no version number aside: the next update is version 2", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "report");
+
+    await expect(publishSite(world.install, OWNER, { files: [unreadable("index.html", { count: 0 })], site: id })).rejects.toThrow("cannot be read");
+    const next = await publishSite(world.install, OWNER, { files: pages("again"), site: id });
+
+    expect(next.ok && next.site.live_version).toBe(2);
+  });
+
+  // Drift: a publish is planned, its files are read, and only then recorded. One planned before midnight UTC and recorded after it was counted on the day that had ended, so the new day's limit let another through.
+  test("a publish planned before midnight and recorded after it counts on the day it is recorded on", async () => {
+    const world = await makeWorld({ max_files_per_day: 1 });
+    const midnight = Math.ceil(NOW / DAY) * DAY;
+    world.clock.now = midnight - 1000;
+    const slow = {
+      ...file("index.html", "page"),
+      open: () => {
+        world.clock.now = midnight + 1000;
+
+        return new Blob(["page"]).stream();
+      },
+    };
+
+    const first = await publishSite(world.install, OWNER, { files: [slow], name: "late" });
+    const second = await publishSite(world.install, OWNER, { files: [file("index.html", "page")], name: "early" });
+
+    expect<unknown>([first.ok, second]).toEqual([true, { ok: false, code: "too_large", about: "max_files_per_day" }]);
   });
 });

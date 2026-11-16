@@ -226,7 +226,7 @@ async function publish(input: InputOf<"publish_site">, host: Host): Promise<Outc
   if (isProblem(settings)) return refused(settings);
 
   const path = resolve(asked);
-  const plan = (to: Target): ReturnType<typeof planPublish> => planPublish({ kind: "publish", path, target: to, settings, dryRun: false, json: false });
+  const plan = (to: Target): ReturnType<typeof planPublish> => planPublish({ kind: "publish", path, target: to, settings, dryRun: false, json: false }, host.stopped);
   const sent = await (target.kind === "unread" ? sendToAddress(host, target.address, plan) : sendPlanned(host, target, plan));
   if (!sent.ok) return sent;
 

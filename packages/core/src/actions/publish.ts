@@ -2,13 +2,15 @@
 
 import type { Actor } from "../auth/scopes";
 import { abandonPublish } from "./abandon-publish";
-import { beginPublish } from "./begin-publish";
+import { type beginPublish, planUpload, recordUpload } from "./begin-publish";
 import type { SiteChanges } from "./changes";
 import { finishPublish } from "./finish-publish";
-import type { ManifestFile } from "../records/upload";
 import type { Install, Refused } from "./records";
 import { sha256Of } from "../storage/storage";
 import { uploadFile } from "./upload-file";
+
+/** The hash a file is planned under before its bytes are read: the SHA-256 of no bytes, in the form every hash has. No upload is recorded with it. */
+const UNREAD_HASH = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
 
 /** One file of a publish. `open` starts a new read from the first byte, and the stream holds exactly `size` bytes. */
 interface PublishFile {
@@ -49,7 +51,7 @@ async function giveUp(install: Install, actor: Actor, upload: string, cause?: un
 /**
  * Publish files as a new site, or as the next version of a site, and make them live.
  *
- * Nothing is written before the arguments, the file list, and the limits pass. A site needs an `index.html` at its top.
+ * No file is opened and nothing is written before the arguments, the file list, and the limits pass. A site needs an `index.html` at its top.
  *
  * @returns the site with `created`, the site as it was before (`null` for a new site), or a refusal that left no file and no change behind
  * @throws {Error} the store or the database failed; the message says when files were left behind
@@ -64,14 +66,16 @@ export async function publishSite(install: Install, actor: Actor, request: Publi
     listed.push({ path, size, contentType, open: () => file.open() });
   }
 
-  // Each file is read once more to be hashed, one whole file in memory at a time: the store holds the bytes sent after it to that hash.
-  const manifest: ManifestFile[] = [];
-  for (const { path, size, contentType, open } of listed) {
-    const bytes = new Uint8Array(await new Response(open()).arrayBuffer());
-    manifest.push({ path, size, content_type: contentType, sha256: await sha256Of(bytes) });
-  }
+  // Everything that needs no file's bytes is checked first, under a stand-in hash: a publish that is refused opens no file.
+  const declared = listed.map(({ path, size, contentType }) => ({ path, size, content_type: contentType, sha256: UNREAD_HASH }));
+  const planned = await planUpload(install, actor, { ...asked, files: declared });
+  if (!planned.ok) return planned;
 
-  const begun = await beginPublish(install, actor, { ...asked, files: manifest });
+  // Each file is then read to be hashed, one whole file in memory at a time, and the upload is recorded only once every file was.
+  const hashes: string[] = [];
+  for (const file of listed) hashes.push(await sha256Of(new Uint8Array(await new Response(file.open()).arrayBuffer())));
+
+  const begun = await recordUpload(install, actor, planned, hashes);
   if (!begun.ok) return begun;
 
   const upload = begun.upload.id;

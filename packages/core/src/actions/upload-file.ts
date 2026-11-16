@@ -6,7 +6,7 @@ import type { Actor } from "../auth/scopes";
 import { COUNT } from "../records/fields";
 import { type ManifestFile, parseUploadId, type Upload } from "../records/upload";
 import { dayOf } from "../records/views";
-import { HashMismatch, type ObjectKey } from "../storage/storage";
+import { HashMismatch, type ObjectInfo, type ObjectKey } from "../storage/storage";
 import { noteProblem } from "./problems";
 import { type Install, type Refused, refuse } from "./records";
 import { isKeptVersion, isWithinReach, uploadKey, uploadObject } from "./uploads";
@@ -66,9 +66,14 @@ async function countLostWrite(install: Install, upload: Upload): Promise<boolean
   return true;
 }
 
+/** Whether an object is the file as it was declared: it holds a hash, and its hash, its size, and its type are the declared ones. An object that holds no hash is never the file, whatever the record names. */
+function isDeclared(info: ObjectInfo, file: ManifestFile): boolean {
+  return info.sha256 !== undefined && info.sha256 === file.sha256 && info.size === file.size && info.contentType === file.content_type;
+}
+
 /**
  * Write a file's bytes at its key, unless the store holds the file already: an upload's writes are counted once, when it begins, so a file sent again costs no second one.
- * The store holds the file already only when its own hash of the object at the key is the declared one, under the declared type. An object of the declared size alone is written over: it may be another file's bytes.
+ * The store holds the file already only when the object at the key has a hash of the store's own, and its hash, size, and type are the declared ones. Any other object is written over: it may be another file's bytes.
  *
  * @returns `stored`, or the refusal of bytes that are not the declared length or not of the declared hash, or of a write the day has no room to count
  * @throws {Error} the store failed, or the body broke off
@@ -80,7 +85,7 @@ async function storeOnce(
 ): Promise<"stored" | Refused<"size_mismatch" | "hash_mismatch" | "allowance_spent">> {
   const { upload, file, key } = placed;
   const held = await install.store.head(key);
-  if (held.kind === "found" && held.info.sha256 === file.sha256 && held.info.contentType === file.content_type) {
+  if (held.kind === "found" && isDeclared(held.info, file)) {
     await body.cancel();
 
     return "stored";
@@ -108,7 +113,7 @@ async function storeOnce(
 
 /**
  * Store one file of a pending upload under `<folder>/v<number>/<path>`. An import names each file `v<number>/<path>`, which is its place under the folder.
- * A file the store already holds under the declared hash and type is not stored again, so a file sent twice costs no second write. No visitor reads these keys before the upload is finished.
+ * A file the store already holds under the declared hash, size, and type is not stored again, so a file sent twice costs no second write. No visitor reads these keys before the upload is finished.
  *
  * @returns the path and the size stored. `not_found` about `upload` for an upload that is gone, given up, run out, another publisher's, or the copy of a site, and about `path` for a path the manifest does not name.
  * A file whose upload is given up while its bytes come in is answered as stored, and goes with the upload's other files at the sweep.
