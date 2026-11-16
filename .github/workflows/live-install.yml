@@ -1,0 +1,150 @@
+# The steps of the live checks, for the one test install a caller names. Each of the two callers is a workflow of one kind
+# of install, with its own list of the files that start it:
+#
+#   live-checks.yml                    kind `domain`             environment with-domain-ci-tests
+#   live-checks-account-address.yml    kind `account address`    environment without-domain-ci-tests
+#
+#   a push -> wait for that commit's `all-green` check -> build the Worker bundle
+#     -> make the standing test install match the commit -> run tests/live against it -> put the install back
+#   a run by hand with `start_over` ticked -> everything poplin made on the test account removed -> the same steps, from nothing
+#   midnight UTC -> the same steps for main as it is, with one check more: a copy too large for one request, which the install's job finishes
+#
+#   put back: every site that is no sample and not the demo removed, each sample that differs from demo/samples and its table published anew, the demo published when its files differ, waiting logins and every token removed
+#
+# The test install stays up between runs, with its logins and its settings.
+# Each job names the environment, so the environment's secrets are the ones its steps read, under the names declared below.
+# They reach the steps that call Cloudflare and no other step. Each step prints what it did.
+# A piece the install answers without, lacking a token permission or an account switch only a person can flip, is a
+# warning and a skipped row of the step summary, with what it needs. Anything else that stops a step fails the run.
+
+name: Live Install
+
+on:
+  workflow_call:
+    inputs:
+      kind:
+        description: "The kind of install the account holds: `domain` or `account address`"
+        type: string
+        required: true
+      environment:
+        description: The environment that holds the test account's secrets
+        type: string
+        required: true
+      many_files:
+        description: Also publish two thousand small files
+        type: boolean
+        default: false
+      start_over:
+        description: First remove everything poplin made on the test account
+        type: boolean
+        default: false
+    # The names the steps read. A caller must hand each name over, and the value may be empty: the one a step reads is the secret of the job's environment.
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        description: The token of the test account
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        description: The test account
+        required: true
+      POPLIN_LIVE_LOGIN:
+        description: The email the test install lets in
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    environment: ${{ inputs.environment }}
+    # Which kind of install the account holds: every script that calls Cloudflare reads it.
+    env:
+      POPLIN_LIVE_INSTALL: ${{ inputs.kind }}
+    # The wait reads the commit's run of CI and the jobs of that run.
+    permissions:
+      contents: read
+      actions: read
+    # One lane for every job that touches a test install, of either kind. `queue: max` keeps each waiting job: none takes another's place.
+    concurrency:
+      group: live-checks
+      cancel-in-progress: false
+      queue: max
+    steps:
+      # The commit of the push, the one whose gate the next step waits for.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # The gate is the `all-green` job of the commit's own CI run, the one a push to main started. A job after the gate stops nothing here.
+      # The step's own timeout is above the script's ceiling of 30 minutes, so the wait ends with its own line.
+      - name: Wait for this commit's all-green check
+        if: github.event_name == 'push'
+        timeout-minutes: 32
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun packages/cloudflare/scripts/live/gate.ts
+      - name: Build the Worker bundle
+        run: bun run --cwd packages/cloudflare build
+      # Only a run started by hand with the box ticked: a push and the midnight run have no such input.
+      - name: Start the test install over
+        if: inputs.start_over
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_START_OVER: ${{ inputs.start_over }}
+        run: bun run --silent --cwd packages/cloudflare live:start-over
+      - name: Make the test install match the commit
+        id: converge
+        timeout-minutes: 12
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+        run: bun run --silent --cwd packages/cloudflare live:converge
+      - name: Run the live checks
+        timeout-minutes: 25
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+          POPLIN_LIVE_MANY_FILES: ${{ inputs.many_files && '1' || '0' }}
+          MISSING: ${{ steps.converge.outputs.missing }}
+        run: bun run --silent --cwd packages/cloudflare live:suite "$MISSING"
+      # Whatever the checks came to, so the owner finds the samples and the demo. It removes every token, and with them
+      # the row of a suite step that was killed before it could remove its own.
+      - name: Put the test install back
+        if: always() && steps.converge.outcome == 'success'
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun run --silent --cwd packages/cloudflare live:reset
+
+  # The midnight reset, beside the checks of that night. It shares their lane, so it never touches an install while they
+  # do, and it puts an install back when they stopped before their own reset. On an account that holds no test install it
+  # says so and ends green.
+  reset:
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    env:
+      POPLIN_LIVE_INSTALL: ${{ inputs.kind }}
+    concurrency:
+      group: live-checks
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Put the test install back
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun run --silent --cwd packages/cloudflare live:reset
