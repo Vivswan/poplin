@@ -43,7 +43,7 @@ With none found, Show all activity stands beside Search further. With the oldest
 | the name the site had when the entry was written | yes   |
 | a public site's public name                      | yes   |
 
-- **The text is matched** as [Find a site](../sites/manage.md#in-the-dashboard) matches it: `Sales` finds `q3-sales`.
+- **The text is matched** as [Find a site](sites.md) matches it: `Sales` finds `q3-sales`.
 - **The Site column shows the title the site has now**, as a link to the site. A site with no title shows the name it had then.
 - **An entry from before a site's New link** shows its site the same way.
 - **A site that is gone for good** stays in grey, under the name it had then.

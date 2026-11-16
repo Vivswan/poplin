@@ -1,49 +1,11 @@
 ---
-title: Limits and cost
+title: Limits
 order: 20
 ---
 
-# Limits and cost
+# Limits
 
-What can cost money, what an install caps or protects, what a day counts, the day's database rows, and the graph of visits; none of the limits is a cap on what Cloudflare bills.
-
-## What can cost money
-
-```text
-billed by use on an install        R2, the storage that holds the sites' files
-everything else an install uses    a free plan with a limit, until the account's owner buys another plan
-```
-
-Cloudflare's pricing page for R2 names what a month takes for free: 10 GB stored, 1,000,000 writes and listings, 10,000,000 reads. Past that, on an account with a payment method, Cloudflare bills. Cloudflare has no setting that stops R2 at an amount.
-
-The other way to a bill is a plan the account's owner buys. Poplin, its setup, and its OpenTofu module buy nothing and change no plan.
-
-**What poplin does.** Three settings bound what an install asks of R2, and poplin refuses what would pass one: `max_total_size`, `max_storage_writes_per_day`, and `requests_per_day`. [What is capped or protected](#what-is-capped-or-protected) lists every limit and what happens at it.
-
-On the free Workers plan, a month at the settings a new install starts with stays inside R2's free writes, listings, and reads. [What a day counts](#what-a-day-counts) has the arithmetic.
-
-**What poplin cannot do.** It cannot stop Cloudflare from billing. Every limit is a refusal by the Worker, from poplin's own count, and Cloudflare's count decides the bill. Outside poplin's count:
-
-- the files of an upload that was given up, until the sweep removes them
-- a setting raised above a free allowance: it is taken, with a warning beside it
-- what reaches the storage without the Worker
-
-Cloudflare's changelog of 2026-11-13 describes spend limits for Workers and Durable Objects. It does not name R2, and it says recorded spend can exceed a limit.
-
-**The warning** is a budget alert in your Cloudflare account. It pauses nothing.
-
-```text
-when     the account's usage charges for the billing period reach 1 US dollar
-who      Cloudflare emails your first user
-made by  Repair, with an account token that also holds Notifications: Edit
-```
-
-| Install | Gets the alert |
-| --- | --- |
-| by the Deploy button or by hand | once you add the permission to the account token and press Repair: [Domain](../../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) |
-| by the OpenTofu module | the same way. The module makes no budget alert |
-
-Without the permission, Repair makes no alert and fails nothing. You can also make one by hand: Manage Account, then Billing, then Billable Usage, then Create budget alert.
+What an install caps or protects, and what a day counts; none of the limits is a cap on what Cloudflare bills.
 
 ## What is capped or protected
 
@@ -109,73 +71,3 @@ On the free Workers plan, a month at the settings a new install starts with stay
 | reads                 | 10,000,000   | 9,765,000                           |
 
 A finish, a look at an upload, a delete, a copy, and a backup's list of files each list the storage. At the limit they answer `allowance_spent` until 00:00 UTC; a delete still removes the site, and its files go later.
-
-## What one action costs
-
-Each action as the tests measure it on a Worker that is already running: a full page of the list, the longest file, a site that keeps every version it may. The queries and the storage calls are the most the action makes. The rows read are those of the measured case.
-
-```text
-Cloudflare's free plan     one request: 50 database queries
-                           one day: 5,000,000 rows read, 100,000 rows written
-```
-
-| Action | Requests | Database queries | Rows read | Rows written | Storage reads | Storage writes and listings |
-| --- | --- | --- | --- | --- | --- | --- |
-| A visitor opens a page of a public site | 1 | 2 | 4 | 2 | 1 | 0 |
-| A visitor opens a page of a private site | 1 | 2 | 4 | 2 | 1 | 0 |
-| Publish a site of one page | 3 | 10 | 31 | 19 | 1 | 2 |
-| Open the Sites screen | 1 | 2 | 651 | 0 | 0 | 0 |
-| Open the Access screen | 3 | 5 | 257 | 0 | 0 | 0 |
-| Open the Activity screen | 2 | 4 | 607 | 0 | 0 | 0 |
-| Open the Usage screen | 3 | 8 | 37,718 | 0 | 0 | 0 |
-| Open the Settings screen | 1 | 2 | 3 | 0 | 0 | 0 |
-| Open the Domain screen | 1 | 2 | 3 | 0 | 0 | 0 |
-| Copy a site of 112 files | 1 | 8 | 31 | 21 | 112 | 114 |
-| Download a file of the Activity log | 1 | 4 | 2,003 | 0 | 0 | 0 |
-
-- **A screen** counts its own requests. The frame around every screen is one more, of 2 queries.
-- **A publish** is three requests: its start, its one file, its finish.
-- **A copy** of up to 112 files is one request. A larger one takes several, each with a read and a write for every file it copies and a listing for every 1,000 files of the site.
-- **A search or a sort** reads every row it passes over, so a list reads more rows on an install with more sites.
-- **A page view** is measured on a Worker that served the site a moment before. A request for a site after a minute without one costs up to 3 queries.
-- **The day's count** is written for every request of a day's first 2,000, then for 1 in 2, then 1 in 3, and so on down to 1 in 50 from 98,000 on. A request that is not counted writes no row, and is 1 query on a Worker that served the site a moment before.
-- **The storage** is read once for a page view. A path that names no file reads it up to 3 times.
-- **A Worker that starts** with a request asks 2 queries more for it.
-- **The Usage screen** reads the most rows when its graph shows a year of 50 sites, and the Activity screen when it is narrowed to a site or a kind: it then looks at up to 5,000 entries.
-
-## Database rows by day
-
-The dashboard's Usage screen sets the day's database rows beside what Cloudflare's free plan takes:
-
-```text
-What                           Used               Limit       Share of the limit
-Requests today                 1,240              100,000     1%
-Database rows read today       about 12,400       5,000,000   0%
-Database rows written today    about 310          100,000     0%
-```
-
-| On the screen | Is |
-| --- | --- |
-| Database rows read today, Database rows written today | poplin's own count of the rows its database read and wrote on the UTC day. D1 counts its daily allowance in the same rows |
-| `about` | the count can read low, never high. What an instance of the Worker counted and had not written when it ended, or when the day ended, is missing: on a busy day about 1 in 100 rows, on a quiet day up to a few thousand rows |
-| the limit | the free plan's, for every database of the account together. No setting moves it |
-| the icon at a row's end, See it at Cloudflare on a phone | Cloudflare's own page for that number, in a new tab: Workers & Pages for requests, D1 for the database, R2 for the storage. Its figures are the exact ones, and they count the whole account |
-
-The count costs nothing: it rides in the write that counts the day's requests, so no request reads or writes a row for it. From 80% of a limit on, the screen says Near the limit. Once a limit is reached, D1 refuses until 00:00 UTC: a site shows a paused page, and the API answers `allowance_spent`.
-
-## Visits by day
-
-The dashboard's Usage screen draws a graph under Visits: how often pages were opened, day by day.
-
-| Choice        | Offers                                                                       |
-| ------------- | ---------------------------------------------------------------------------- |
-| Days shown    | 30 days, 60 days, 90 days, 180 days, 1 year                                  |
-| Compare sites | up to 50 sites, each drawn as a line beside All sites                        |
-| Select all    | in the list of Compare sites: ticks every site the list shows, up to the 50  |
-| Clear         | in the same list: unticks every site                                         |
-
-- **A point** is one UTC day in a graph of up to 90 days, and one week in a longer one, where the first point may hold fewer days.
-- **A year is kept:** the counts of 365 UTC days, today included. A day with no count shows 0, and so does every day before the install was made.
-- **The numbers are estimates.** A count is exact while the install's day is under 2,000 requests. Past that the day is counted from a sample, and a count moves in steps of up to 50. A sum reads `about 1,200`, or `under 10`.
-
-[Manage sites](../../sites/manage.md#look-go-back-re-link-delete) says which opens count, and where one site's count shows.

@@ -5,7 +5,7 @@ order: 60
 
 # Settings
 
-The settings of an install, the users who can log in, and the login this computer keeps; a site's own settings are in [Manage sites](../sites/manage.md#other-settings-of-a-site).
+The settings of an install; a site's own settings are in [Manage sites](../sites/manage.md#other-settings-of-a-site).
 
 ## Change a setting
 
@@ -20,7 +20,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | ------------------------------- | ------------------------------------------------------------------------ |
 | `(Default: 9,000 MB)`           | the setting's default                                                    |
 | Reset                           | beside a default the row differs from: puts it back                      |
-| a warning mark after the field  | follows the number as it is typed; [Limits and cost](../upkeep/cost/limits.md) says what earns one |
+| a warning mark after the field  | follows the number as it is typed; [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what earns one |
 | a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
 | `Use a whole number, 1 or more.` | such a sentence, for a number typed with a fraction, such as `1.5`      |
 | `Needs an update link to work.` | under Update automatically, while no update link is saved                |
@@ -34,7 +34,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | Traffic    | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` |
 | Updates    | `update_check`, `auto_update`, and the update link                                                 |
 
-`logins` is the list under Access, Users: [Add a user](#add-a-user).
+`logins` is the list under Access, Users: [Add a user](access.md#add-a-user).
 
 ## The install
 
@@ -71,71 +71,3 @@ The settings `poplin config` takes:
 | `auto_update`                                                                           | whether the install starts an update by itself: off in a new install, [Update](../upkeep/update.md#optional-update-by-itself) |
 
 Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install.
-
-## Add a user
-
-A user is an email in `logins`, which can log in to the dashboard. Cloudflare's login page keeps its own list, and poplin writes every change into it by itself, with [the key it keeps](../about/security.md#the-kept-key).
-
-| Where                        | Do                                                           |
-| ---------------------------- | ------------------------------------------------------------ |
-| the dashboard, Access, Users | press Add a user, type the email, and press Add a user again |
-
-The line that follows says how the change went:
-
-| The line says                                           | Cloudflare's list                                | Do                                                    |
-| ------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
-| `Added.` or `Removed.`                                  | has the change: a new user can log in            | nothing                                               |
-| `... was not reached; it is tried again by itself.`     | gave no answer                                   | nothing: poplin tries again within 15 minutes         |
-| `... Open Domain and press Repair.`                     | is as it was: the install holds no key, Cloudflare refused the key, or the list is missing | on Domain, press Repair, paste an account token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
-
-The change is saved in every case. `poplin config logins` shows the same list.
-
-To remove another user, choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
-
-A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
-
-Sign everyone out, on the same tab, replaces the install's stored key: every visitor's limit starts again, and nobody is logged out. [Security](../about/security.md#hardening) says what it ends and what it leaves.
-
-## This computer
-
-| Example                                              | Does                                                          |
-| ---------------------------------------------------- | ------------------------------------------------------------- |
-| `poplin login --server https://poplin.example.com`   | logs this computer in: you allow it in your browser           |
-| `poplin login --publisher --name ci-runner`          | saves a publisher's login, for a computer that should only publish            |
-| `poplin login --no-browser`                          | prints the address and opens no browser                       |
-| `poplin whoami`                                      | prints the install, the role, and when the login runs out     |
-| `poplin logout`                                      | revokes the login and forgets it                              |
-
-```text
-$ poplin login --server https://poplin.example.com
-  ->  prints an address and a short code
-  ->  you open the address, type the last 4 letters of the code, and allow it
-  ->  the login is saved on this computer
-```
-
-An install begins two logins a minute from one address, and eight a minute for all addresses together. In a minute that is full, `poplin login` is told how long to wait, waits, and asks again.
-
-The page that allows a login starts at Own sites only, whatever the computer asked for. Choose Everything there for a computer that changes settings or sees every site.
-
-A computer keeps one saved login: a new `poplin login` replaces it. An agent on the computer uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
-
-`POPLIN_CONFIG_DIR` in the environment names another folder for the saved login, read when the two names above are not set. Set for an agent's tools alone, it gives the agent a login of its own, which shows under its own name: [the skill's page](../../skills/poplin/references/mcp-server.md#optional-a-login-of-your-own) has the step.
-
-## Tokens
-
-A computer's login is a token. The dashboard lists them under Access, Tokens.
-
-| In the list                    | Shows                                                                      |
-| ------------------------------ | -------------------------------------------------------------------------- |
-| a token that works             | its name, what it can change, when it was allowed, when it runs out        |
-| Remove, in the menu of its row | ends it at once                                                            |
-| Removed tokens, folded         | the 50 that ended last, each with `Removed by` and who did it, `Logged out`, or `Ran out` |
-
-A removed token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. [Security](../about/security.md#hardening) says what the install stores of a token.
-
-`--publisher` is for a computer or a script that should only publish, such as a build server or a shared machine.
-
-| A publisher's login | What                                                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| can                 | publish, and for the sites it published: list, show, update, change who can open, roll back, re-link, copy, delete, and restore |
-| cannot              | reach a site another login published, or the install's settings, logins, backups, and updates                                   |

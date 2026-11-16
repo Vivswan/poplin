@@ -29,7 +29,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 | a Cloudflare account            | the Free plan is enough                                                                                  |
 | a domain on that account        | every site gets an address under it. It is on the account when Cloudflare's home page lists it as Active |
 | an email inbox you can read     | Cloudflare's login sends its code there in step 5                                                        |
-| a payment method on the account | step 1 asks for one. [What can cost money](../upkeep/cost/limits.md#what-can-cost-money) says when it is charged      |
+| a payment method on the account | step 1 asks for one. [What can cost money](../upkeep/cost/what-can-cost-money.md) says when it is charged      |
 | a GitHub account                | free. Step 2 puts a copy of poplin's code there                                                          |
 | Node.js, on your own computer   | version 24 or higher, for step 6 alone                                                                   |
 | an agent, to publish by asking  | an AI tool that runs in a terminal on your computer, such as Claude Code or Codex. You install it yourself, it may cost money, and poplin brings none. A chat in a browser cannot run commands |
@@ -38,7 +38,7 @@ Two words the steps use: a **Worker** is the program Cloudflare runs for you, an
 
 ## The steps
 
-1. **Switch on two things in Cloudflare.** Open the address below and log in. Each asks for a payment method, and each shows a price of 0: Zero Trust's Free plan, and R2, which bills by use past its free allowance. [What can cost money](../upkeep/cost/limits.md#what-can-cost-money) says what poplin does to stay inside it, and what it cannot do.
+1. **Switch on two things in Cloudflare.** Open the address below and log in. Each asks for a payment method, and each shows a price of 0: Zero Trust's Free plan, and R2, which bills by use past its free allowance. [What can cost money](../upkeep/cost/what-can-cost-money.md) says what poplin does to stay inside it, and what it cannot do.
 
    ```text
    https://dash.cloudflare.com
