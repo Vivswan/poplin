@@ -369,11 +369,11 @@ A run that asks nothing logs no computer in unless `--log-in` says so. It ends b
 
 With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave. Where `next` names the same command again, the `command` keeps `--dry-run` of a dry run that stopped or is not ready, and a removal's keeps `--keep-data`.
 
-A repair that found kept data and no install names `npx poplin install cloudflare --adopt` in `command`: the install that takes the data up, with what it holds. One that found an install started for another place names the install with that place's option.
+A consent is never in `command`: `--adopt` is yours to add, as the line above the value says. A place is, where the stop names one: a repair that found an install started for another place names the install with that place's option.
 
 | `next.step` | Run next                                                                    |
 | ----------- | --------------------------------------------------------------------------- |
-| `install`   | `npx poplin install cloudflare`, with the same answers. Where the `command` holds a place or `--adopt`, run it as written, and add the rest |
+| `install`   | `npx poplin install cloudflare`, with the same answers. Where the `command` holds a place, run it as written, and add the rest |
 | `repair`    | the repair, as `command` writes it: `npx poplin doctor --repair`, the newest poplin's, or with `--add-user` after an install that kept its users and did not use `--login` |
 | `login`     | `npx poplin login`, with `--server` and the install's address               |
 | `uninstall` | `npx poplin uninstall cloudflare`: a removal's dry run, one that left a kind, or one whose token could not look for a kind |

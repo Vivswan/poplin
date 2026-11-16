@@ -14,7 +14,7 @@ const INDENT = "  ";
 /** The problem each of the provider's own refusals of a repair is, as the command's JSON names it, where the same command goes on from it. */
 const PROBLEMS = { elsewhere: "other_place", changed: "changed" } as const;
 
-/** The option of an install that takes up what an earlier install left behind. */
+/** The option of an install that takes up what an earlier install left behind: a consent, which the sentence names and no next step carries. */
 const ADOPT = "--adopt";
 
 /** What each end of a repair that left nothing undone is called. */
@@ -48,7 +48,8 @@ export function foundWords(found: Whole<unknown>): string {
  * @param provider - the provider, which the line that names `poplin install` names
  * @param careful - the careful choices of the repair's line, kept where the repair itself goes on
  * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one.
- *   Where data was left behind, or the install was started for another place, the sentence and the next step name one line: the install with the option that takes it
+ *   Where the install was started for another place, the sentence and the next step name one line: the install at that place.
+ *   Where data was left behind, the sentence names `--adopt` and the next step is the install without it: the consent is a person's to add
  */
 export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[]): Stop {
   const next = NEXT.install(provider);
@@ -56,11 +57,7 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
 
   if (found.state === "none") return { problem: "no_install", exit: 1, words: `No install is in this account. To make one: ${install}`, next };
 
-  if (found.state === "leftover") {
-    const adopt = NEXT.install(provider, [], [ADOPT]);
-
-    return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${adopt.command}`), next: adopt };
-  }
+  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${install} ${ADOPT}`), next };
 
   if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
 
