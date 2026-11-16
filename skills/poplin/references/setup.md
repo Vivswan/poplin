@@ -165,6 +165,8 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. It pr
 
 Every value of a run of this command, of the repair, and of the removal names what to run next in `next`, and so does a run that stopped. Its `command` has none of the answers your line gave: add them.
 
+Where `next.step` is the command you just ran, its `command` keeps `--keep-data` of a removal, and `--dry-run` of a dry run that stopped or is not ready: leave both on the line.
+
 | `next.step` | Run next                                                        |
 | ----------- | --------------------------------------------------------------- |
 | `install`   | the line of part e                                              |

@@ -250,7 +250,7 @@ describe("what a look finds", () => {
       "nothing was changed",
     ]);
     expect(dry.code).toBe(1);
-    expect(jsonOf(dry)).toEqual({ ok: false, problem: "leftover", next: AGAIN, words: LEFTOVER.words, address: LEFTOVER.address, run: "dry-run", ready: false });
+    expect(jsonOf(dry)).toEqual({ ok: false, problem: "leftover", next: { ...AGAIN, command: `${AGAIN.command} --dry-run` }, words: LEFTOVER.words, address: LEFTOVER.address, run: "dry-run", ready: false });
     expect(account.runs).toEqual([]);
   });
 

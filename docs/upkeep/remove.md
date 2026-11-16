@@ -189,6 +189,8 @@ npx poplin uninstall cloudflare --no-domain --keep-data
 
 The list before the question says `would keep` for both, the line above the question says `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
 
+A run that left a kind undone ends `Run this command again with --keep-data`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
+
 | Then                                   | Do                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------- |
 | take the data up in a new install      | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |

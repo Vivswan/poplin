@@ -327,7 +327,7 @@ npx poplin install cloudflare --no-domain --login you@example.com --yes
 
 A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line.
 
-With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave.
+With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave. Where `next` names the same command again, the `command` keeps `--dry-run` of a dry run that stopped or is not ready, and a removal's keeps `--keep-data`.
 
 | `next.step` | Run next                                                                    |
 | ----------- | --------------------------------------------------------------------------- |

@@ -7,7 +7,7 @@ import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run
 import type { TokenFacts } from "../../../core/src/install/token-facts";
 import { columns, countText } from "../commands/text";
 import type { Tone } from "../local/screen";
-import type { Next, Provider, Stop } from "./records";
+import type { Careful, Next, Provider, Stop } from "./records";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
 const STATES: Readonly<Record<RowState, StateWords>> = {
@@ -56,11 +56,11 @@ export const UNCHANGED = "nothing was changed";
 /** What every dry run of the three commands exits with, as each help says it. */
 export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
 
-/** Every step a command can name as the next, with its command line. A command of a provider names it where the line got as far as one, and a repair may be the newest poplin's. */
+/** Every step a command can name as the next, with its command line. A command of a provider names it where the line got as far as one, a repair may be the newest poplin's, and each careful choice given is kept at the line's end. */
 export const NEXT = {
-  install: (provider: Provider | undefined): Next => ({ step: "install", command: provider === undefined ? "npx poplin install" : `npx poplin install ${provider.id}` }),
-  repair: (poplin: "this" | "newest" = "this"): Next => ({ step: "repair", command: poplin === "newest" ? "npx poplin@latest doctor --repair" : "npx poplin doctor --repair" }),
-  uninstall: (provider: Provider | undefined): Next => ({ step: "uninstall", command: provider === undefined ? "npx poplin uninstall" : `npx poplin uninstall ${provider.id}` }),
+  install: (provider: Provider | undefined, careful: readonly Careful[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id], careful) }),
+  repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = []): Next => ({ step: "repair", command: lineOf([poplin === "newest" ? "npx poplin@latest doctor --repair" : "npx poplin doctor --repair"], careful) }),
+  uninstall: (provider: Provider | undefined, careful: readonly Careful[] = []): Next => ({ step: "uninstall", command: lineOf(["npx poplin uninstall", provider?.id], careful) }),
   login: (address: string): Next => ({ step: "login", command: `npx poplin login --server ${address}` }),
   none: (): Next => ({ step: "none", command: null }),
 } satisfies Readonly<Record<Next["step"], (...given: never[]) => Next>>;
@@ -100,15 +100,36 @@ export function followed(sentence: string, tail: string): string {
 }
 
 /**
+ * The careful choices a command named next keeps after a run that worked through its rows.
+ *
+ * @param ready - whether the run left nothing undone, or a dry run says a run would leave nothing
+ * @returns every choice, but for `--dry-run` once a dry run is ready: the run is what follows it
+ */
+export function carried(careful: readonly Careful[], ready: boolean): readonly Careful[] {
+  return ready ? careful.filter((choice) => choice !== "--dry-run") : careful;
+}
+
+/** The careful choice of a line by how its run goes: `--dry-run` of a dry run, and none of a run. */
+export function carefulOf(run: Run): readonly Careful[] {
+  return run === "dry-run" ? ["--dry-run"] : [];
+}
+
+/** Say `this command again` with each careful choice the line carried, so the sentence names what the next step's command line holds. */
+export function againWords(careful: readonly Careful[]): string {
+  return careful.length === 0 ? "this command again" : `this command again with ${careful.join(" and ")}`;
+}
+
+/**
  * The stop of a name the install needs that another thing holds, with the command the provider's sentence names as its next step.
  *
- * @param again - what runs the command that stopped again
+ * @param again - what runs the command that stopped again, with the careful choices of its line: it is also the next step where the sentence names this same command
  * @param provider - the provider, which an install's command line names
  */
 export function heldStop(found: Extract<Found<unknown, unknown>, { readonly state: "held" }>, again: Next, provider: Provider): Stop {
   const named = { again, install: NEXT.install(provider), repair: NEXT.repair() };
+  const next = named[found.after];
 
-  return { problem: "name_held", exit: 1, words: found.words, address: found.address, next: named[found.after] };
+  return { problem: "name_held", exit: 1, words: found.words, address: found.address, next: next.step === again.step ? again : next };
 }
 
 /** Name the poplin an install runs: with its version, or with the words for one that could not be read. */
@@ -119,9 +140,13 @@ export function runningWords(version: string | undefined): string {
 /** The problem a look that the provider refused stops with, by why it was refused. */
 export const REFUSED_AS = { token: "token_refused", no_domain: "no_domain", other_place: "other_place" } as const;
 
-/** What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again. */
-export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>): Next {
-  return NEXT.repair(refused.why === "another" ? "newest" : "this");
+/**
+ * What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again.
+ *
+ * @param careful - the careful choices of the repair's own line; none where another command names the repair
+ */
+export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[] = []): Next {
+  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful);
 }
 
 /** How many objects a run changed, or with a dry run would. */
@@ -132,6 +157,11 @@ export function changesIn(rows: readonly Row[]): number {
 /** The lines of what stops a piece until a person acts: what it is, then the address to open, under it. */
 export function blockedLines(blocked: readonly Blocked[]): Line[] {
   return blocked.flatMap((one) => [{ tone: "warning", text: one.words }, plain(`${INDENT}${one.address}`)]);
+}
+
+/** One command line: its words, a provider's id among them where the line got as far as one, then each careful choice. */
+function lineOf(words: readonly (string | undefined)[], careful: readonly Careful[]): string {
+  return [...words.filter((word) => word !== undefined), ...careful].join(" ");
 }
 
 /** Name what to run next in a sentence: the command that just ran as `this command again`, and another by its line. */

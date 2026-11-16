@@ -4,8 +4,8 @@
 import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/installer";
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
-import type { Next, Provider, Stop } from "../records";
-import { changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
+import type { Careful, Next, Provider, Stop } from "../records";
+import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -31,7 +31,7 @@ function indented(lines: readonly string[]): string[] {
 function nextOf(repaired: Mended, run: Run): Next {
   const mended = repaired.ready && (run === "apply" || changesIn(repaired.rows) === 0);
 
-  return mended ? NEXT.login(repaired.address) : NEXT.repair();
+  return mended ? NEXT.login(repaired.address) : NEXT.repair("this", carried(carefulOf(run), repaired.ready));
 }
 
 /** Say which install a look found: its version where it could be read, and where its dashboard is. */
@@ -43,9 +43,10 @@ export function foundWords(found: Whole<unknown>): string {
  * The stop of a look that found no whole install.
  *
  * @param provider - the provider, which the line that names `poplin install` names
+ * @param careful - the careful choices of the repair's line, kept where the repair itself goes on
  * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one
  */
-export function stopOf(found: NotWhole, provider: Provider): Stop {
+export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[]): Stop {
   const next = NEXT.install(provider);
   const install = next.command;
 
@@ -55,7 +56,7 @@ export function stopOf(found: NotWhole, provider: Provider): Stop {
 
   if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
 
-  if (found.state === "held") return heldStop(found, NEXT.repair(), provider);
+  if (found.state === "held") return heldStop(found, NEXT.repair("this", careful), provider);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -64,14 +65,14 @@ export function stopOf(found: NotWhole, provider: Provider): Stop {
   return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
 }
 
-/** The stop of a repair that changed nothing, in the provider's own words. */
-export function unmended(repaired: Extract<Repaired, { readonly ok: false }>): Stop {
+/** The stop of a repair that changed nothing, in the provider's own words. The repair that goes on from records of another version keeps the careful choices of the line. */
+export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[]): Stop {
   const words = followed(repaired.words, UNCHANGED);
   if (repaired.why === "unreachable") return { problem: "unreachable", exit: 5, words };
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
 
-  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired) };
+  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired, careful) };
 
   return { problem: PROBLEMS[repaired.why], exit: 1, words };
 }

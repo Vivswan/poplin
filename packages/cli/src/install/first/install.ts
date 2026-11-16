@@ -14,8 +14,8 @@ import { lookFor, STOPPED, settle } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
-import type { InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
-import { changesIn, dryRunLines, followed, heldStop, NEXT, REFUSED_AS, repairAfter, rowLine, runLines, runValue, UNCHANGED } from "../report";
+import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
+import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, NEXT, REFUSED_AS, repairAfter, rowLine, runLines, runValue, UNCHANGED } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -32,8 +32,8 @@ const FOUND_WORDS: Readonly<Record<Found<unknown, unknown>["state"], string>> = 
   refused: "no",
 };
 
-/** The command as it is typed after `poplin`, and what runs it again. */
-const COMMAND = { name: "install", again: NEXT.install } as const;
+/** The command as it is typed after `poplin`, what runs it again, and the careful choice it takes. `--adopt` is none: it is a consent, given anew as a removal's proof is, and a line without it changes nothing. */
+const COMMAND = { name: "install", again: NEXT.install, careful: ["--dry-run"] } as const;
 
 /** What follows the name of a run that named no release: it went on with a program that was there, and uploaded none. */
 const UNCHECKED = "Its code was there before this run, and this run did not check it against a release.";
@@ -69,8 +69,8 @@ async function standing(found: Whole<unknown>, where: unknown, request: InstallR
 }
 
 /** The stop a look that found no ground to start from is, and no install either. */
-function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>, provider: Provider): Stop {
-  if (found.state === "held") return heldStop(found, NEXT.install(provider), provider);
+function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>, provider: Provider, careful: readonly Careful[]): Stop {
+  if (found.state === "held") return heldStop(found, NEXT.install(provider, careful), provider);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -130,7 +130,7 @@ async function look(request: InstallRequest, ends: InstallEnds, show: Show): Pro
     return standing(found, where, request, ends);
   }
 
-  if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found, request.provider);
+  if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found, request.provider, carefulOf(request.mode.mode));
 
   const ground = await grounded(found, request, ends, show);
 
@@ -184,7 +184,7 @@ async function waited(installed: Extract<Installed, { readonly ok: true }>, mode
  */
 async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, ends: InstallEnds): Promise<Next> {
   const { provider } = request;
-  if (request.mode.mode === "dry-run") return NEXT.install(provider);
+  if (request.mode.mode === "dry-run") return NEXT.install(provider, carried(carefulOf("dry-run"), installed.ready));
 
   if (installed.ready) return installed.address === undefined ? NEXT.none() : NEXT.login(installed.address);
 
@@ -226,7 +226,8 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
 async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
   const ground = await look(request, ends, show);
-  if ("problem" in ground) return stopped(ground, show, { command: COMMAND, provider, run: mode.mode });
+  const at = { command: COMMAND, careful: carefulOf(mode.mode), provider, run: mode.mode };
+  if ("problem" in ground) return stopped(ground, show, at);
 
   if (ground.found.state === "started") show.line("note", "An install was started here and not finished: this run goes on with it.");
 
@@ -239,7 +240,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
     show.working(doing);
   });
 
-  if (!installed.ok) return stopped({ problem: "unreachable", exit: 5, words: installed.words }, show, { command: COMMAND, provider, run: mode.mode });
+  if (!installed.ok) return stopped({ problem: "unreachable", exit: 5, words: installed.words }, show, at);
 
   const { code, value } = await ended(installed, ground, request, io, ends, show);
   show.value(value);
@@ -250,7 +251,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: Plan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const request = await settle(plan, ends);
-  if ("problem" in request) return stopped(request, show, { command: COMMAND, provider: plan.provider, run: plan.mode.mode });
+  if ("problem" in request) return stopped(request, show, { command: COMMAND, careful: carefulOf(plan.mode.mode), provider: plan.provider, run: plan.mode.mode });
 
   secrets.add(request.token);
 
