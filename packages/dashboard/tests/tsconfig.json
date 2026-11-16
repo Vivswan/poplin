@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["vite/client", "bun"]
   },
-  "include": ["."]
+  "include": [".", "../scripts", "../vite.config.ts"]
 }
