@@ -56,9 +56,9 @@ export const UNCHANGED = "nothing was changed";
 /** What every dry run of the three commands exits with, as each help says it. */
 export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
 
-/** Every step a command can name as the next, with its command line. A command of a provider names it where the line got as far as one, a repair may be the newest poplin's, and each careful choice given is kept at the line's end. */
+/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` a stop's own sentence names as the way on, then each careful choice. A repair may be the newest poplin's. */
 export const NEXT = {
-  install: (provider: Provider | undefined, careful: readonly Careful[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id], careful) }),
+  install: (provider: Provider | undefined, careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id, ...named], careful) }),
   repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = []): Next => ({ step: "repair", command: lineOf([poplin === "newest" ? "npx poplin@latest doctor --repair" : "npx poplin doctor --repair"], careful) }),
   uninstall: (provider: Provider | undefined, careful: readonly Careful[] = []): Next => ({ step: "uninstall", command: lineOf(["npx poplin uninstall", provider?.id], careful) }),
   login: (address: string): Next => ({ step: "login", command: `npx poplin login --server ${address}` }),
