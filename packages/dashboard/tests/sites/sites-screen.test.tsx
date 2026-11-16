@@ -49,15 +49,18 @@ const PAGE = {
 /** Every read of the sites the screen made, as the query it asked. */
 const asked: string[] = [];
 
+/** The same page with its site in the trash, which it leaves a week after it was updated. */
+const TRASH = { ...PAGE, sites: PAGE.sites.map((site) => ({ ...site, state: "trash", gone_on: site.updated + 604_800_000 })) };
+
 /** Draw the screen at an address, with the sites answered by one page whatever is asked, and wait for the site that page draws. */
-async function draw(address: string): Promise<void> {
+async function draw(address: string, page: typeof PAGE = PAGE): Promise<void> {
   globalThis.fetch = (async (input: Request | string | URL) => {
     const { pathname, search } = new URL(input instanceof Request ? input.url : input, window.location.href);
     if (pathname !== `${BOOT.base}/data/sites`) return Response.json({ ok: false, code: "refused", about: null, sentence: "Refused." }, { status: 400 });
 
     asked.push(search);
 
-    return Response.json(PAGE);
+    return Response.json(page);
   }) as typeof fetch;
 
   await drawAt(
@@ -122,6 +125,14 @@ describe("a row under the trash's filter", () => {
     await draw("/?view=trash");
 
     expect(within(document.body).queryAllByRole("button", { name: /^Restore/ }).length).toBe(0);
+  });
+
+  // Drift: a phone's row of the trash would say no day again: not when the site was updated, which no longer matters, and not when it is gone for good, which does.
+  test("says on a phone the day its site leaves the trash, beside the way back", async () => {
+    await draw("/?view=trash", TRASH);
+    const row = within(within(document.body).getByRole("list", { name: "Sites" })).getByRole("listitem");
+
+    expect([/Leaves the trash on 2[12] Nov 2023$/.test(row.querySelector("div")?.textContent ?? ""), within(row).getAllByRole("button", { name: "Restore Trip notes" }).length]).toEqual([true, 1]);
   });
 });
 
