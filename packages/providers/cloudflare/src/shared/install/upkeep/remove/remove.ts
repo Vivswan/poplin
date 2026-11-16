@@ -2,7 +2,7 @@
 //
 //   1  what sends visitors to the Worker    routes, records, and the three kinds of rule, or the two forwarders
 //   2  the login                            the Access applications, then the policies they hold
-//   3  the budget alert
+//   3  the alerts                           the notification policies of poplin's names
 //   4  the two keys                         before the Worker that holds them
 //   5  the Workflow                         before the Worker whose code it runs
 //   6  the Worker                           with its triggers, its variables, and its secrets
@@ -59,6 +59,9 @@ const OWN_ACCESS = {
   policies: [INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessOpenPolicy] as readonly string[],
 };
 
+/** The notification policies an install makes, in the order of their rows, each with the name its policy has. */
+const OWN_ALERTS = [{ object: "Budget alert", name: BUDGET_ALERT }] as const;
+
 /** The two keys of an install, in the order of their rows, each with the name every key of its kind has. */
 const OWN_KEYS = [
   { object: "Key", name: INSTALL_OBJECTS.keyName },
@@ -90,7 +93,7 @@ const WORDS = {
 } as const;
 
 /** The object of each row, as the table of rights names it. The Worker and its Workflow need the permission its variables need. */
-type Kind = "Worker route" | "DNS record" | (typeof OWN_RULES)[number]["object"] | "Forwarder" | "Access application" | "Access policy" | "Budget alert" | "Key" | "Upload key" | "Workflow" | "Worker" | "Sites' files" | "Database";
+type Kind = "Worker route" | "DNS record" | (typeof OWN_RULES)[number]["object"] | "Forwarder" | "Access application" | "Access policy" | (typeof OWN_ALERTS)[number]["object"] | "Key" | "Upload key" | "Workflow" | "Worker" | "Sites' files" | "Database";
 
 /** What one run gathers. `zoneId` is of an install under a domain alone, and `form` is where a permission is added to the token. */
 interface Work {
@@ -278,18 +281,21 @@ async function removeAccess(work: Work): Promise<void> {
   settled(work, "Access policy", policies);
 }
 
-async function removeAlert(work: Work): Promise<void> {
+/** Every notification policy of one of poplin's names, on an install of either kind. Each is made only with an optional permission, so a list the token may not read leaves its row as one that stays. */
+async function removeAlerts(work: Work): Promise<void> {
   const { connection, accountId } = work.place;
   const account = { account_id: accountId };
   const listed = await callCloudflare(connection, (api) => Array.fromAsync(new BaseAlerts(api).list(account)));
-  const taken = await removeOwn(
-    work,
-    listed,
-    (policy) => (policy.name === BUDGET_ALERT ? policy.name : undefined),
-    (policy) => callCloudflare(connection, (api) => new BaseAlerts(api).delete(policy.id ?? "", account)),
-  );
 
-  settled(work, "Budget alert", taken, {}, true);
+  for (const { object, name } of OWN_ALERTS) {
+    const taken = await removeOwn(
+      work,
+      listed,
+      (policy) => (policy.name === name ? name : undefined),
+      (policy) => callCloudflare(connection, (api) => new BaseAlerts(api).delete(policy.id ?? "", account)),
+    );
+    settled(work, object, taken, {}, true);
+  }
 }
 
 /** Every token of the account with the name of one of the two keys, ended ones too: a key of the name that ran out is still an object an install made. */
@@ -510,8 +516,7 @@ export async function removeInstall(found: Removable<Place>, where: Where, remov
   const work: Work = { mode: removal.run === "apply" ? "apply" : "plan", place, data: removal.run === "apply" ? removal.data : "remove", kind: where.kind, zoneId: zone.value, form, rows: [], say };
   await removeReach(work);
   await removeAccess(work);
-  if (where.kind === "domain") await removeAlert(work);
-
+  await removeAlerts(work);
   await removeKeys(work);
   await removeWorkflow(work);
   const workerGone = await removeWorker(work, stands);
