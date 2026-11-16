@@ -36,7 +36,4 @@ describe("the upgrade from the last release", () => {
 
   test.skip("the MCP tools of the last release's command against this code's install: needs an MCP client among the root package's own dependencies", () =>
     undefined);
-
-  test.skip("an argument of the module changed so that a plan replaces a resource: needs a plan over a state the last release's module made, and the provider plans nothing without an account", () =>
-    undefined);
 });

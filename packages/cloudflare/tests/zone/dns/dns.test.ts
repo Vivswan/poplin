@@ -95,7 +95,7 @@ describe("planDns", () => {
     ]);
   });
 
-  test("a marked record whose comment is not the one for its name is changed to it: the OpenTofu module writes that comment, and would otherwise plan a change on every run", () => {
+  test("a marked record whose comment is not the one for its name is changed to it: the comment is what tells the zone's owner what the record is for", () => {
     const records = [own("p0", "*.example.com"), { ...own("p1", "poplin.example.com"), comment: "poplin: the admin" }];
 
     expect(planDns(LAYOUT, records)).toEqual([

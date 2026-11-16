@@ -19,19 +19,16 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | the day's requests for sites, counted from a sample: about 100000 | the setting `requests_per_day` | a site's visitors get status 429 until the next UTC day |
 | one site's and one visitor's requests in a minute | the settings `site_requests_per_minute` and `visitor_requests_per_minute` | status 429, with the seconds to wait |
 | the versions a publish leaves a site, and the days in the trash | the settings `versions_kept` and `trash_days` | a publish that goes live deletes the versions past the count, and the Worker's sweep deletes a site past its days in the trash, each with its files |
-| one address at one Cloudflare location: 300 requests in 10 seconds, [counted in each data center](#where-a-limit-is-counted) | Repair: Rate rule, skipped on a Free plan domain with other hostnames and where the plan has no room for it. Module: `cloudflare_ruleset.rate`, unless `rate_rule` is `off` | Cloudflare blocks the address for 10 seconds, before the Worker runs |
-| verified bots, methods other than GET and HEAD, and scanner paths, on site addresses. Search engines pass while `search_engines_allowed` is on | Repair: WAF rule, skipped where the plan has no room for it. Module: `cloudflare_ruleset.guards`, unless `guard_rules` is false | Cloudflare blocks the request before the Worker runs |
-| AI crawlers: while `block_bots` is `auto`, on a domain with no other hostnames; while it is `on`, on any domain | Repair: Bot settings. Module: `cloudflare_bot_management.zone` | Cloudflare blocks them on the whole domain |
-| plain http | Repair: Redirect rule. Module: `cloudflare_ruleset.https`. The Worker does the same | the request is sent to https |
-| the dashboard and private sites | Repair: Access application and Access policy. Module: `cloudflare_zero_trust_access_application.login` and its policy | Cloudflare's login, for the `logins` alone |
-| the bucket's public address | Module: `cloudflare_r2_managed_domain.sites`. A bucket [step 2](../../start/by-hand.md#the-steps) made has none | it stays off: files are read through the Worker alone |
-| uploads in parts that nobody finished | Module: `cloudflare_r2_bucket_lifecycle.sites`, after one day. A bucket step 2 made has Cloudflare's own rule, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
-| every file of an install that only tests | Module alone: `test_install_file_days`, not set by default | the bucket deletes every file at that age, a live site's included |
-| the account's usage charges of a billing period: 1 US dollar | Repair: Budget alert, with the optional permission Notifications: Edit. The module makes none | Cloudflare emails the first user. Nothing is stopped |
-| R2's bytes stored, write operations, and read operations | Module alone, and off until `usage_alert_percents` is set: `cloudflare_notification_policy.usage`. It needs the Notifications permission. Cloudflare's API does not list the product names the alerts are made with, so they are unconfirmed | Cloudflare emails the logins at each share of the free allowance the list names. Nothing is stopped |
-| the domain's plan | Module alone: `paid_plan_allowed` | an apply on a plan other than Free stops with an error, unless the input is true |
+| one address at one Cloudflare location: 300 requests in 10 seconds, [counted in each data center](#where-a-limit-is-counted) | Repair: Rate rule, skipped on a Free plan domain with other hostnames and where the plan has no room for it. | Cloudflare blocks the address for 10 seconds, before the Worker runs |
+| verified bots, methods other than GET and HEAD, and scanner paths, on site addresses. Search engines pass while `search_engines_allowed` is on | Repair: WAF rule, skipped where the plan has no room for it. | Cloudflare blocks the request before the Worker runs |
+| AI crawlers: while `block_bots` is `auto`, on a domain with no other hostnames; while it is `on`, on any domain | Repair: Bot settings | Cloudflare blocks them on the whole domain |
+| plain http | Repair: Redirect rule. The Worker does the same | the request is sent to https |
+| the dashboard and private sites | Repair: Access application and Access policy | Cloudflare's login, for the `logins` alone |
+| the bucket's public address | the bucket [step 2](../../start/by-hand.md#the-steps) makes has none | files are read through the Worker alone |
+| uploads in parts that nobody finished | Cloudflare's own rule on the bucket, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
+| the account's usage charges of a billing period: 1 US dollar | Repair: Budget alert, with the optional permission Notifications: Edit | Cloudflare emails the first user. Nothing is stopped |
 
-Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](../../start/with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made. The budget alert exists only where Repair made it.
+Repair is the button on the setup page and the Domain screen. The budget alert exists only where Repair made it.
 
 **What no setting bounds.** Every request the Worker answers spends the Workers plan's requests of the day: a 404, a redirect to the login, a call of the API, and a request a limit refused with 429 too. `requests_per_day` counts the requests at the address of a live site alone.
 

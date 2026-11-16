@@ -29,7 +29,6 @@ import { type CloudflareFailure, type Connection, findZones, listZones, type Zon
 import { syncDatabase } from "./database/database";
 import { syncDns } from "./dns/dns";
 import { INSTALL_OBJECTS } from "./install-objects";
-import { INSTALL_PIECES } from "./install-pieces";
 import { syncJobs } from "./jobs/jobs";
 import { HTTPS_SWITCH, syncHttps } from "./https/https";
 import { uploadKeyText } from "../key/upload-key";
@@ -40,7 +39,7 @@ import type { KeyRight } from "./key/rights";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./routes/routes";
 import { syncGuards } from "./rules/guards";
-import { defaultRateRule, syncWaf } from "./rules/waf";
+import { syncWaf } from "./rules/waf";
 import { type Mode, type Report, reportOf, type Synced } from "./sync";
 import { syncVariables } from "./variables/variables";
 
@@ -149,7 +148,7 @@ const RIGHT = {
   tokens: { name: "Account API Tokens: Edit", key: "account_api_tokens", type: "edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
-/** The permissions the calls of each object use, the one its changes use first. A piece with no row here, or with none in the list the OpenTofu module is held to, does not compile. */
+/** The permissions the calls of each object use, the one its changes use first. */
 const RIGHTS = {
   Zone: [RIGHT.zone],
   "DNS record": [RIGHT.dns],
@@ -168,7 +167,7 @@ const RIGHTS = {
   Key: [RIGHT.tokens, RIGHT.scripts],
   "Upload key": [RIGHT.tokens, RIGHT.scripts],
   Forwarder: [RIGHT.scripts],
-} as const satisfies Readonly<Record<keyof typeof INSTALL_PIECES.repair | keyof typeof INSTALL_PIECES.repairAlone | keyof typeof INSTALL_PIECES.noDomain, readonly Right[]>>;
+} as const satisfies Readonly<Record<string, readonly Right[]>>;
 
 /** The right of the key each object is read under in a check the install makes by itself. The database and the two keys are read with no call. A piece with no row here does not compile. */
 const KEY_RIGHT: Readonly<Record<Piece, KeyRight | undefined>> = {
@@ -222,18 +221,35 @@ const TOKEN_FORM = "https://dash.cloudflare.com/profile/api-tokens";
 /** The token form of each kind of install: the objects whose permissions it asks for, the zones its link names, what it still asks of the person once its permissions are chosen, and what a token must be made for. */
 const TOKEN_FORMS = {
   domain: {
-    pieces: { ...INSTALL_PIECES.repair, ...INSTALL_PIECES.repairAlone },
+    pieces: [
+      "Zone",
+      "DNS record",
+      "Worker route",
+      "Access application",
+      "Access policy",
+      "Access open paths",
+      "Worker variable",
+      "Redirect rule",
+      "WAF rule",
+      "Rate rule",
+      "Bot settings",
+      "D1 database",
+      "Workflow",
+      "Budget alert",
+      "Key",
+      "Upload key",
+    ],
     zones: "&zoneId=all",
     note: "On the form, choose your account under Account Resources and your domain under Zone Resources, then create the account token and copy it.",
     for: "this account and this domain",
   },
   noDomain: {
-    pieces: INSTALL_PIECES.noDomain,
+    pieces: ["Forwarder", "Access application", "Access policy", "Access open paths", "Worker variable", "D1 database", "Workflow", "Key", "Upload key"],
     zones: "",
     note: "On the form, choose your account under Account Resources, then create the account token and copy it.",
     for: "this account",
   },
-} as const;
+} as const satisfies Readonly<Record<string, { readonly pieces: readonly Piece[]; readonly zones: string; readonly note: string; readonly for: string }>>;
 
 /** The name the form suggests for the token. */
 const TOKEN_NAME = "poplin setup";
@@ -901,7 +917,7 @@ async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connec
     () => syncGuards(connection, zone.id, { layout, plan, outsidePages: settings.outside_pages, searchEnginesAllowed: settings.search_engines_allowed }, mode),
   );
   progress.rows.splice(guardsFrom, Number.POSITIVE_INFINITY, ...progress.rows.slice(guardsFrom).map((row) => (row.detail === BOTS_RULE ? { ...row, detail: `${BOTS_RULE}: ${ALWAYS_STOPPED}` } : row)));
-  await fromRecords("Rate rule", () => syncWaf(connection, zone.id, { layout, plan, sharesZone, rateRule: defaultRateRule(plan) }, mode));
+  await fromRecords("Rate rule", () => syncWaf(connection, zone.id, { layout, plan, sharesZone }, mode));
   await fromRecords("Bot settings", () => syncZoneBots(connection, zone.id, { blockBots: settings.block_bots, plan, sharesZone }, mode));
   await databasePiece(progress, mode, placed, connection);
   await alertPiece(progress, mode, placed, connection, logins);
@@ -961,7 +977,8 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], 
  */
 export function tokenFacts(kind: keyof typeof TOKEN_FORMS): TokenFacts {
   const form = TOKEN_FORMS[kind];
-  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => Object.hasOwn(form.pieces, object));
+  const asked: readonly Piece[] = form.pieces;
+  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object));
   const used = [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
   const needed = used.flatMap((right) => ("key" in right ? [right] : []));
   const optional = used.flatMap((right) => ("adds" in right ? [{ right: right.name, adds: right.adds }] : []));

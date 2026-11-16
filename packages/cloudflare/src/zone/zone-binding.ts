@@ -1,4 +1,4 @@
-// The Worker's `ZONE` binding: where an install answers, as the OpenTofu module binds it and as setup stores it. It holds one of two values, and never both:
+// The Worker's `ZONE` binding: where an install answers, as setup stores it. It holds one of two values, and never both:
 //
 //   { domain, public_word? }    an install with a domain
 //   { account_address }         an install without one, on the account's free address

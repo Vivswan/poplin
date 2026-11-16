@@ -34,14 +34,14 @@ const STAMP_BRANCHES: readonly RegExp[] = [
 /** Rule (c): the words code grows when it keeps a retired shape alive. `compat` spares `compatible` and `compatibility`, which a provider's own settings are named with; `v1` must stand as its own word or camel-case part. */
 const RETIRED_WORDS: readonly RegExp[] = [/legacy/i, /deprecated/i, /backcompat/i, /backwards/i, /compat(?!ib)/i, /oldShape/i, /(?<![A-Za-z0-9])[vV]1(?![0-9])|(?<=[a-z])V1(?![0-9a-z])/, /fallback for old/i];
 
-/** The files a retired name is looked for in: source, tests, the skill, the docs, the module, and configuration. */
-const TEXT_FILES = new Bun.Glob("**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,md,tf,hcl,yml,yaml,astro,toml}");
+/** The files a retired name is looked for in: source, tests, the skill, the docs, and configuration. */
+const TEXT_FILES = new Bun.Glob("**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,md,yml,yaml,astro,toml}");
 
 /** What is not read of them: what is installed or built, a folder whose name starts with a dot but for `.github`, and a `.d.ts` file, which is written from the configuration that is read itself. */
 const UNREAD = /(?:^|\/)(?:node_modules|dist|\.(?!github\/)[^/]+)\/|\.d\.ts$/;
 
-/** The setting `gallery` as it was written: given a value, declared to the module, or named to `poplin config`. The word alone is the preview's page of its samples. */
-const GALLERY_SETTING = /\bgallery["']?\s*[:=]\s*(?:["'](?:on|off)["']|true\b|false\b|onOff\(|v\.boolean\(|var\.)|variable "gallery"|\bvar\.gallery\b|\bconfig gallery\b/;
+/** The setting `gallery` as it was written: given a value, or named to `poplin config`. The word alone is the preview's page of its samples. */
+const GALLERY_SETTING = /\bgallery["']?\s*[:=]\s*(?:["'](?:on|off)["']|true\b|false\b|onOff\(|v\.boolean\()|\bconfig gallery\b/;
 
 /** The gallery's address as it was written: the kind an address resolved to, the handler serving took, the name kept back from sites, and its hostname. */
 const GALLERY_ADDRESS = /\bkind(?::| ===) ["']gallery["']|\bgallery\??: (?:async )?\(|\bGALLERY_NAME\b|\[["']gallery["']\]|\bgallery-(?:page\b|poplin\b|<)/;
@@ -64,8 +64,6 @@ const NAMED_ON_PURPOSE: readonly { readonly path: string; readonly name?: RegExp
   { path: "tests/no-old-shapes.test.ts" },
   // The test that the binding refuses the old key.
   { path: "packages/cloudflare/tests/zone/zone-binding.test.ts", name: /admin_hostname/ },
-  // A run named after the admin hostname, which is no setting.
-  { path: "packages/cloudflare/tofu/tests/zone.tftest.hcl", name: /zone_record_under_the_admin_hostname/ },
   // The preview's page of its own samples, which it calls its gallery and switches by an option of that name.
   { path: "tests/preview.test.ts", name: /gallery: false/ },
 ];
@@ -228,13 +226,11 @@ describe("no old shapes outside migrations/", () => {
     );
   });
 
-  // Drift: a retired name lives on longest where no compiler reads it: a test that still passes, a page of the skill, a variable of the module.
+  // Drift: a retired name lives on longest where no compiler reads it: a test that still passes, a page of the skill, a page of the docs.
   test.each([
     ["a test", "packages/demo/tests/planted.test.ts", 'expect(settings.private_sites).toBe("single-file");'],
     ["a page of the skill", "skills/demo/references/planted.md", "Run `poplin config gallery on` to list the public sites."],
     ["a page of the docs", "docs/planted.md", "| `zone_bots` | the zone's bot switches |"],
-    ["a variable of the module", "packages/demo/tofu/variables.tf", 'variable "gallery" {'],
-    ["a value of the module", "packages/demo/tofu/main.tf", '    gallery = var.gallery ? "on" : "off"'],
     ["the Worker's first settings", "packages/demo/wrangler.jsonc", '      "private_sites": "single-file",'],
   ])("names a retired name in %s", (_, path, line) => {
     using tree = plantedRepository({ [path]: `A planted file.\n${line}\n` });

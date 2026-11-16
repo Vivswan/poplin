@@ -39,7 +39,7 @@ Five rows read otherwise in a check made with the key:
 | `Key`                                | `present` while Cloudflare takes the key, and `differs` once Cloudflare refused it or a piece lacked a right     |
 | `Upload key`                         | `present` where the install holds one, and `missing` where it holds none. The key reads no token of the account, so Cloudflare is not asked |
 
-An install that holds no key says `Not checked yet` before any run, and its Check opens the same dialog as Repair. The OpenTofu module makes such an install: it holds a key after a Repair on this screen.
+An install that holds no key says `Not checked yet` before any run, and its Check opens the same dialog as Repair. It holds a key after a Repair on this screen.
 
 Cloudflare's login page keeps its own list of users. After a user is added or removed, under Access or [another way](access.md#add-a-user), poplin writes the new list there by itself, with [the key it keeps](../about/security.md#the-kept-key).
 
@@ -117,10 +117,7 @@ The install works without this part. Cloudflare can stop unwanted requests befor
 
 A rule the domain lacks is made, and one its plan has no room for is left out. No permission is added for it, and no Repair is pressed.
 
-| An install                         | Holds its key                                                                                         |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| set up on the setup page           | from its first Repair: Account API Tokens: Edit is one of the nine permissions, and the key holds the right to write WAF rules whatever else the token held |
-| made by the OpenTofu module        | only after a Repair on this screen. Until then its rules are the module's, written at an apply        |
+An install holds its key from its first Repair: Account API Tokens: Edit is one of the nine permissions, and the key holds the right to write WAF rules whatever else the token held.
 
 An install [without a domain](../start/without-a-domain.md) has none of the five rules: no Repair and no saved setting makes one.
 

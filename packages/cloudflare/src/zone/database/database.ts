@@ -1,4 +1,4 @@
-// The account's D1 database, which holds every record. D1 keeps no mark on a database, so poplin's is the one with its fixed name, which the OpenTofu module gives it too.
+// The account's D1 database, which holds every record. D1 keeps no mark on a database, so poplin's is the one with its fixed name.
 // Nothing here applies a schema: the Worker brings the database up to its own when it opens it.
 
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";

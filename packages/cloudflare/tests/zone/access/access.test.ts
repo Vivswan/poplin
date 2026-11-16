@@ -197,7 +197,7 @@ describe("planAccess", () => {
 });
 
 describe("syncAccess", () => {
-  // Drift: setup would make an application the OpenTofu module's next apply rewrites, or one per run. Two policies in one application would also need two precedences, which Cloudflare refuses alike.
+  // Drift: setup would make one application per run. Two policies in one application would also need two precedences, which Cloudflare refuses alike.
   test("two runs against one account: the first creates each policy and then its application, linked to that policy's new id at precedence 1; the second sends no change", async () => {
     const policies: Record<string, unknown>[] = [];
     const applications: Record<string, unknown>[] = [{ id: "app-0", name: "the owner's own application", type: "self_hosted", domain: "wiki.example.com" }];

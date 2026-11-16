@@ -14,7 +14,6 @@ Nothing updates on its own while the setting `auto_update` is off, as it is in a
 | holds its key             | one press, or one command: [With the kept key](#with-the-kept-key)  |
 | was made with the button of step 2 | three clicks at Cloudflare: [Build again](#build-again)    |
 | was made from a terminal  | two commands in its folder: [From a terminal](#from-a-terminal)     |
-| was made with the OpenTofu module | a new bundle and an apply: [With OpenTofu](../start/with-opentofu.md) |
 
 The row `Key` of the Domain screen says whether the install holds its key. An install that holds none cannot update itself: `poplin update` answers `no_key`. Press Repair on the Domain screen to give it one, or update it the way it was made.
 

@@ -272,7 +272,7 @@ describe("an instance's first request", () => {
     expect([started.status, tally.calls]).toEqual([401, 2]);
   });
 
-  // Drift: a later apply of the module changes FIRST_SETTINGS; an instance that read the binding again would overwrite what the dashboard set.
+  // Drift: FIRST_SETTINGS stays on the Worker after its first start; an instance that read the binding again would overwrite what the dashboard set.
   test("an instance that starts on stored settings never reads FIRST_SETTINGS: it starts without the binding and leaves the settings as they are", async () => {
     await ask(instance(w), `${ADMIN}/api/whoami`);
     const later = withBindings({ FIRST_SETTINGS: undefined });
@@ -1481,7 +1481,7 @@ describe("the built bundle", () => {
   // The bundle is minified and names no file, so the files it was built from are read from the map written beside it.
   const modules = (JSON.parse(bundleMap) as { sources: string[] }).sources;
 
-  // Drift: the file the OpenTofu module uploads is built from the entry's imports, so one import of a test helper or a whole library would ship to every install.
+  // Drift: the bundle is built from the entry's imports, so one import of a test helper or a whole library would ship to every install.
   test("is one module of the entry and what it imports, but for the two modules Cloudflare's runtime holds, under the size caps as it is and gzipped, with no test or fixture file in it", async () => {
     expect(modules).toContain("../src/worker/worker.ts");
     expect(modules.filter((path) => /(^|\/)tests\/|\.test\.|\/support\/|vitest|fixtures/.test(path))).toEqual([]);

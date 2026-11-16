@@ -1,4 +1,4 @@
-// The install's two Access applications, each with the one policy it holds. Access keeps no mark on any of the four, so poplin's are the ones with its fixed names, which the OpenTofu module gives them too.
+// The install's two Access applications, each with the one policy it holds. Access keeps no mark on any of the four, so poplin's are the ones with its fixed names.
 //
 //   poplin              the whole dashboard hostname and every private site's address   poplin logins: allow, the install's logins
 //   poplin open paths   the paths of the dashboard hostname a program reaches            poplin open paths policy: bypass, everyone

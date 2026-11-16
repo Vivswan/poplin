@@ -30,7 +30,6 @@ after:   https://poplin.your-name.workers.dev                               your
 | junk traffic                  | stopped by Cloudflare's rules first      | no rule runs first: the Worker's own limits per visitor and per site count every request |
 | the `block_bots` setting      | blocks AI crawlers on the domain         | does nothing: it needs a domain                               |
 | the account token             | nine permissions, account and domain     | five permissions, account alone                               |
-| installing with OpenTofu      | the module makes it                      | the module makes an install under a domain alone              |
 
 ## What you need
 

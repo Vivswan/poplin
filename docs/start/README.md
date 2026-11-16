@@ -19,4 +19,3 @@ Under a domain, a browser keeps every site apart. Without one, the sites of a ki
 | [By hand](by-hand.md)                   | the six steps, under a domain                            |
 | [Without a domain](without-a-domain.md) | the steps that differ, at the address Cloudflare gives   |
 | [From a terminal](from-a-terminal.md)   | the terminal form of two of the steps                    |
-| [With OpenTofu](with-opentofu.md)       | installing with the module, under a domain               |

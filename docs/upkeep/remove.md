@@ -74,15 +74,3 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | from a terminal           | the folder `poplin` that `git clone` made                     | delete the folder                                      |
 
 The button also gave Cloudflare access to your GitHub account. GitHub's settings list it: remove it there if nothing else of yours builds through it.
-
-## An install the module made
-
-Run the module's own destroy, in the folder that holds the `module "poplin"` block:
-
-```sh
-tofu destroy
-```
-
-It removes the objects [the module's page](../../packages/cloudflare/tofu/README.md#what-it-creates) lists, the bucket and the database included, but for one: the domain's bot switches stay as they are set, as above. If it stops at a bucket that still holds files, empty the bucket at Cloudflare and run it again.
-
-The first table of this page applies as it is: the logins and the agent's entry are on your computers.

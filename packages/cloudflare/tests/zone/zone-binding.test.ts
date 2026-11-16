@@ -1,55 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { SETTING_VALUES, settingsFromText } from "@poplin/core/src/records/settings";
 import { readInstallBinding } from "../../src/zone/zone-binding";
 
-const ROOT = join(import.meta.dir, "..", "..", "..", "..");
-const MODULE = join(ROOT, "packages", "cloudflare", "tofu");
-const SETTING_KEYS = Object.keys(SETTING_VALUES.entries).sort();
 const BOUND = { domain: "example.com" };
 const READ = { domain: "example.com", adminHostname: "poplin.example.com", publicWord: "page" };
-
-/** The `key = "text"` lines of the object literal that follows `opening` in a file of the module. */
-function literalAfter(file: string, opening: string): Record<string, string> {
-  const text = readFileSync(join(MODULE, file), "utf8");
-  const start = text.indexOf(opening);
-  if (start < 0) throw new Error(`${file} holds no ${opening}`);
-
-  const body = text.slice(start + opening.length, text.indexOf("}", start + opening.length));
-  const pairs = [...body.matchAll(/^\s*(\w+)\s*=\s*"(.*)"$/gm)];
-
-  return Object.fromEntries(pairs.map(([, key = "", value = ""]) => [key, value]));
-}
-
-/** Every setting the Worker's reader takes as a whole number, bare or as a percent, with the largest one it takes. */
-function wholeNumberSettings(): { readonly key: string; readonly most: bigint }[] {
-  const pinned = literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {");
-  const found: { readonly key: string; readonly most: bigint }[] = [];
-
-  for (const key of SETTING_KEYS) {
-    const unit = pinned[key]?.endsWith("%") ? "%" : "";
-    const taken = (count: bigint): boolean => {
-      const read = settingsFromText({ ...pinned, [key]: `${count}${unit}` });
-
-      return read.ok && typeof (read.values as Record<string, unknown>)[key] === "number";
-    };
-    if (!taken(1n)) continue;
-
-    // Halving between a number that is taken and one that is not ends on the largest taken.
-    let most = 1n;
-    let refused = 2n ** 64n;
-    while (refused - most > 1n) {
-      const middle = (most + refused) / 2n;
-      if (taken(middle)) most = middle;
-      else refused = middle;
-    }
-
-    found.push({ key, most });
-  }
-
-  return found;
-}
 
 describe("readInstallBinding", () => {
   const ADDRESSES = {
@@ -99,35 +52,5 @@ describe("readInstallBinding", () => {
       { ok: false, refusal: "bad-worker" },
       { ok: true, value: { kind: "domain", layout: READ } },
     ]);
-  });
-});
-
-describe("the bindings the module gives the Worker", () => {
-  test("FIRST_SETTINGS in the module, and the literal its test pins, carry exactly the keys of the stored settings: a key missing would stop the Worker storing any", () => {
-    const written = [...readFileSync(join(MODULE, "main.tf"), "utf8").matchAll(/^ +(\w+) += .*$/gm)].map(([, key = ""]) => key);
-    const first = written.slice(written.indexOf("default_expires"), written.indexOf("auto_update") + 1);
-    const pinned = literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {");
-
-    expect(first.sort()).toEqual(SETTING_KEYS);
-    expect(Object.keys(pinned).sort()).toEqual(SETTING_KEYS);
-  });
-
-  test("the first settings the module's test pins are read by the reader the Worker stores them with", () => {
-    const read = settingsFromText(literalAfter("tests/zone.tftest.hcl", "bindings[4].json) == {"));
-
-    expect(read).toMatchObject({ ok: true, values: { search_engines_allowed: true, block_bots: "auto" } });
-  });
-
-  test.each(wholeNumberSettings())("$key: the module refuses a number above $most, the most the Worker's reader takes; one more would leave every first setting unread", ({ key, most }) => {
-    const variables = readFileSync(join(MODULE, "variables.tf"), "utf8").replaceAll(/ +/g, " ");
-    const [, rules = ""] = new RegExp(`^variable "${key}" \\{\\n(.*?)^\\}`, "ms").exec(variables) ?? [];
-
-    expect(rules).toContain(`var.${key} <= ${most}`);
-  });
-
-  test("the ZONE binding the module's test pins is read as an install with a domain", () => {
-    const read = readInstallBinding(literalAfter("tests/zone.tftest.hcl", "bindings[3].json) == {"), "poplin");
-
-    expect<unknown>(read).toEqual({ ok: true, value: { kind: "domain", layout: READ } });
   });
 });

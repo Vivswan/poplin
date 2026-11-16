@@ -67,7 +67,7 @@ describe("the guard expressions", () => {
     expect([expressions.filter((expression) => expression.includes("http.host eq")), siteEndings(layout).filter((ending) => layout.adminHostname.endsWith(ending))]).toEqual([[], []]);
   });
 
-  // Drift: the module writes one term bare and two in brackets; a client that wrote one otherwise would change the module's rule on every run, and two terms without brackets would bind the `and` to the last ending alone.
+  // Drift: two terms without brackets would bind the `and` to the last ending alone.
   test("a layout whose public word is `poplin` has one ending, written without brackets; any other has two inside brackets", () => {
     expect([outsidePagesExpression(ONE_WORD).startsWith(`${ONE_ENDING} and any(`), botsExpression(ONE_WORD, false).startsWith(`${ONE_ENDING} and ${OFF_THE_EDGE} and (`), botsExpression(LAYOUT, false).startsWith(`${SITES} and `)]).toEqual([
       true,

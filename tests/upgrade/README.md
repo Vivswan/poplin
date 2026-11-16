@@ -29,7 +29,6 @@ Both run on every push, inside `bun run test`, and again in `release-gate.yml` o
 | login file                   | `login.json`                                    | `whoami` reads it                                                                                                                              |
 | this command on that install | its API                                         | every site action is done, or refused with a hint to update                                                                                    |
 | that command on this install | its `poplin`                                    | the same                                                                                                                                       |
-| module                       | the inputs and resource addresses of the module | each is still declared, or named in a `moved` or `removed` block                                                                               |
 
 `upgrade.test.ts` lists what is not checked as skipped tests, each with what it needs.
 
