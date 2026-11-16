@@ -302,11 +302,11 @@ function usersAt(account: Account): { readonly login: string[]; readonly alerts:
 
 describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the data an uninstall kept, %s", (kind) => {
   const [first, second] = KEPT_USERS;
-  const unused = `First login | leave-out | ${LOGIN}: not used. The database holds its 2 users already, and they are who logs in: ${first} and ${second}. To let this person in too: npx poplin doctor --repair --add-user ${LOGIN}`;
+  const unused = `First login | leave-out | ${LOGIN}: not used. The database holds its 2 users already, and they are who logs in: ${first} and ${second}.`;
   const alerts = kind === "domain" ? [first, first] : [first];
 
   // Drift: the Worker stores its first settings only in a database that holds none. Mended to the first login a person typed, Cloudflare would let in an email the install turns away, and send no code to the users it knows.
-  test("the login, the alerts, and the rules are mended to the users and the settings the database holds, a row says that --login was not used, and a repair then finds nothing to change", async () => {
+  test("the login, the alerts, and the rules are mended to the users and the settings the database holds, a row and the answer say that --login was not used, and a repair then finds nothing to change", async () => {
     const account = await keptData();
     const dry = await installed(account, kind, DRY);
     const run = await installed(account, kind, APPLY);
@@ -316,6 +316,8 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     expect([shown(dry.done), dry.calls.writes.filter((call) => !call.endsWith("/query"))]).toEqual([rows, []]);
     expect(rows.slice(0, 3)).toEqual(["R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)", unused]);
     expect([usersAt(account), run.done.ok && run.done.ready]).toEqual([{ login: [first, second], alerts }, true]);
+    // The command ends with the repair that lets the person in, and offers no login, by this: the dry run says it as the run does.
+    expect([dry.done, run.done].map((done) => done.ok && done.unused)).toEqual([LOGIN, LOGIN]);
     expect(account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json).toEqual({ logins: first });
     // The stored settings say to leave the bot switches alone and to let outside pages in: the defaults would set the one and write a rule for the other.
     const followed = kind === "domain" ? ["Bot settings | leave-out | zone bot switches: the zone-wide bot switches are set to off"] : [];
@@ -339,22 +341,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
 
     const named = `${first}, ${second}, third@example.com, fourth@example.com, fifth@example.com, and 2 more`;
 
-    expect(rows).toEqual([`First login | leave-out | ${LOGIN}: not used. The database holds its 7 users already, and they are who logs in: ${named}. To let this person in too: npx poplin doctor --repair --add-user ${LOGIN}`]);
-  });
-
-  // Drift: the line is one a person pastes into a shell. An email with an apostrophe or a dollar sign, pasted bare, opens a quote that never closes or names a variable, and the repair adds nobody or somebody else.
-  test.each([
-    ["o'brien@example.com", "'o'\\''brien@example.com'"],
-    ["pay$roll&co@example.com", "'pay$roll&co@example.com'"],
-    ["first.last+tag@example.com", "first.last+tag@example.com"],
-  ])("the line that lets %s in too writes the email as one word of a POSIX shell: %s", async (email, word) => {
-    const account = await keptData();
-    const world = await worldOf(account);
-    const { where } = KINDS[kind];
-    const done = await installer.install(startable(await installer.find(KEY, where, world.reach, "install")), where, loginOf(email), DRY, world.reach, () => undefined);
-    const row = shown(done).find((line) => line.startsWith("First login"));
-
-    expect(row?.slice(row.indexOf("npx"))).toBe(`npx poplin doctor --repair --add-user ${word}`);
+    expect(rows).toEqual([`First login | leave-out | ${LOGIN}: not used. The database holds its 7 users already, and they are who logs in: ${named}.`]);
   });
 
   // Drift: a person who types their own email again is a user already, and the database may hold others somebody else put there. With no row, the run lets them in and names nobody.
@@ -366,7 +353,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
 
     const told = `First login | leave | ${second}: a user already. The database holds its 2 users already, and they are who logs in: ${first} and ${second}.`;
 
-    expect([shown(done).filter((row) => row.startsWith("First login")), usersAt(account)]).toEqual([[told], { login: [first, second], alerts }]);
+    expect([shown(done).filter((row) => row.startsWith("First login")), usersAt(account), done.ok && done.unused]).toEqual([[told], { login: [first, second], alerts }, undefined]);
   });
 
   // Drift: a run that stopped after its upload is found as one that was started, with no word that its database was kept. Finished to the typed login, it would be the same wrong install by two runs.

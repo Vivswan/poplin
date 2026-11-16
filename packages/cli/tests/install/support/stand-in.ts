@@ -183,7 +183,7 @@ export function accountQuestion(where: Where, ask = "Which account? 1) First  2)
 
 /** What a run of the fresh rows comes to. */
 export function installedOf(rows: readonly Row[], more: Partial<Pick<Extract<Installed, { readonly ok: true }>, "blocked" | "steps" | "ready">> = {}): Extract<Installed, { readonly ok: true }> {
-  return { ok: true, rows, steps: more.steps ?? [], blocked: more.blocked ?? [], release: "0.1.0", address: ADDRESS, ready: more.ready ?? true, proof: "reads" };
+  return { ok: true, rows, steps: more.steps ?? [], blocked: more.blocked ?? [], release: "0.1.0", address: ADDRESS, ready: more.ready ?? true, proof: "reads", unused: undefined };
 }
 
 /** What a repair of some rows comes to. */

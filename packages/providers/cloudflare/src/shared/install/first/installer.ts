@@ -84,9 +84,6 @@ const OWN_ROWS: ReadonlySet<string> = new Set(["D1 database"]);
 /** How many users of a database a row names before it counts the rest. */
 const NAMED_USERS = 5;
 
-/** A word a POSIX shell reads as it is written, with no quote around it. */
-const PLAIN_WORD = /^[A-Za-z0-9@%+=:,./_-]+$/;
-
 /** How the users a row names are joined: `a and b`, `a, b, and 2 more`. */
 const USERS = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
@@ -365,11 +362,11 @@ async function finish(work: Work, target: Target, login: Login, kept: SettingVal
 }
 
 /** What a run came to, from what it gathered. Each permission a row names as lacking is a block too, once. */
-function done(work: Work, known: { readonly release?: string; readonly address?: string }): Installed {
+function done(work: Work, known: { readonly release?: string; readonly address?: string; readonly unused?: Login | undefined }): Installed {
   const blocked = [...work.blocked, ...lackingOf(work.rows, work.form)];
   const ready = blocked.length === 0 && !work.rows.some((row) => UNDONE.has(row.state));
 
-  return { ok: true, rows: work.rows, steps: work.steps, blocked, release: known.release, address: known.address, ready, proof: "reads" };
+  return { ok: true, rows: work.rows, steps: work.steps, blocked, release: known.release, address: known.address, ready, proof: "reads", unused: known.unused };
 }
 
 /** Read what a run is made from, before it makes anything: where the install answers, and the release. A block of either ends the run with nothing changed. */
@@ -426,24 +423,25 @@ function namedUsers(logins: readonly Login[]): string {
   return USERS.format(more > 0 ? [...logins.slice(0, NAMED_USERS), `${more} more`] : logins);
 }
 
-/** Write a word so a POSIX shell reads it as that one word: as it is, or in single quotes with each one inside written `'\''`. */
-function shellWord(word: string): string {
-  return PLAIN_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+/** The first login a person gave, where the database holds users already and it is none of them; `undefined` where the login is used, or is a user already. */
+function unusedLogin(login: Login, kept: SettingValues | undefined): Login | undefined {
+  return kept === undefined || kept.logins.includes(login) ? undefined : login;
 }
 
 /**
  * The row of the first login a person gave, where the database holds users already; `undefined` where it holds none, and the login is used.
  *
  * It names the users the login is mended to, whether the person is one of them or not: the database may be one somebody else left under poplin's name, and they are who logs in from then on.
+ * The command says how a person who is none of them is let in: the run's answer names that login as unused.
  */
 function keptUsersRow(login: Login, kept: SettingValues | undefined): Row | undefined {
   if (kept === undefined) return undefined;
 
   const users = kept.logins.length === 1 ? "its user" : `its ${kept.logins.length} users`;
   const held = `The database holds ${users} already, and they are who logs in: ${namedUsers(kept.logins)}.`;
-  if (kept.logins.includes(login)) return { object: "First login", state: "leave", detail: `${login}: a user already. ${held}` };
+  if (unusedLogin(login, kept) === undefined) return { object: "First login", state: "leave", detail: `${login}: a user already. ${held}` };
 
-  return { object: "First login", state: "leave-out", detail: `${login}: not used. ${held} To let this person in too: npx poplin doctor --repair --add-user ${shellWord(login)}` };
+  return { object: "First login", state: "leave-out", detail: `${login}: not used. ${held}` };
 }
 
 /**
@@ -486,7 +484,7 @@ async function install(found: Startable<Place>, where: Where, login: Login, run:
   const made = await madeFirst(work, target, release, login, { standing, adopted: found.state === "adopted" });
   if (made === false) return done(work, known);
 
-  return (await finish(work, target, login, made.kept, reach)) ? done(work, known) : UNREACHABLE;
+  return (await finish(work, target, login, made.kept, reach)) ? done(work, { ...known, unused: unusedLogin(login, made.kept) }) : UNREACHABLE;
 }
 
 /** Cloudflare, as the command works through it. */

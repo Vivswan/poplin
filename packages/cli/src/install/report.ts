@@ -3,6 +3,7 @@
 //   a dry run    would make   <object>   <detail>
 //   a run        made         <object>   <detail>
 
+import type { Login } from "../../../core/src/auth/logins";
 import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
 import { columns, countText } from "../commands/text";
@@ -50,6 +51,9 @@ const INDENT = "  ";
 /** How some parts are joined into one phrase: `a and b`, `a, b, and c`. */
 const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
+/** A word a POSIX shell reads as it is written, with no quote around it. */
+const PLAIN_WORD = /^[A-Za-z0-9@%+=:,./_-]+$/;
+
 /** The line every stop before the first change ends in. */
 export const UNCHANGED = "nothing was changed";
 
@@ -59,7 +63,10 @@ export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run afte
 /** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` a stop's own sentence names as the way on, then each careful choice. A repair may be the newest poplin's. */
 export const NEXT = {
   install: (provider: Provider | undefined, careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id, ...named], careful) }),
-  repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = []): Next => ({ step: "repair", command: lineOf([poplin === "newest" ? "npx poplin@latest doctor --repair" : "npx poplin doctor --repair"], careful) }),
+  repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({
+    step: "repair",
+    command: lineOf([poplin === "newest" ? "npx poplin@latest doctor --repair" : "npx poplin doctor --repair", ...named], careful),
+  }),
   uninstall: (provider: Provider | undefined, careful: readonly Careful[] = []): Next => ({ step: "uninstall", command: lineOf(["npx poplin uninstall", provider?.id], careful) }),
   login: (address: string): Next => ({ step: "login", command: `npx poplin login --server ${address}` }),
   none: (): Next => ({ step: "none", command: null }),
@@ -72,7 +79,7 @@ export interface StateWords {
   readonly tone: Tone;
 }
 
-/** How the last lines of a run are worded: what a run that left nothing undone is called, what goes on from what stands after one that did not, and what runs the same command again. */
+/** How the last lines of a run are worded: what a run that left nothing undone is called, what to run after it, which goes on from what stands where something is undone, and what runs the same command again. */
 export interface Ending {
   readonly done: string;
   readonly next: Next;
@@ -147,6 +154,29 @@ export const REFUSED_AS = { token: "token_refused", no_domain: "no_domain", othe
  */
 export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[] = []): Next {
   return NEXT.repair(refused.why === "another" ? "newest" : "this", careful);
+}
+
+/** Write a word so a POSIX shell reads it as that one word: as it is, or in single quotes with each one inside written `'\''`. */
+function shellWord(word: string): string {
+  return PLAIN_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+}
+
+/**
+ * The repair that lets one more person log in, as the next step of an install that kept the users its records hold.
+ *
+ * @param login - the first login the run did not use, which its line holds as one word of a POSIX shell
+ */
+export function letInNext(login: Login): Next {
+  return NEXT.repair("this", [], ["--add-user", shellWord(login)]);
+}
+
+/**
+ * Say how the person of a first login the run did not use is let in: the line such a run ends with.
+ *
+ * @param next - the repair that lets them in, whose command the sentence names
+ */
+export function unusedLine(login: Login, next: Next): Line {
+  return plain(`To let ${login} log in too: ${next.command}`);
 }
 
 /** How many objects a run changed, or with a dry run would. */
@@ -249,7 +279,7 @@ export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: tr
  * @param answers - whether the install answered at its address once it was made; `null` for a run that did not wait
  * @param ending - what a run that left nothing undone is called, what to run after one that did, and what runs this command again
  * @returns the last lines: what the run is called and the dashboard's address, what is not done and what only a person can do, or that nothing was changed by a run with no row.
- *   A run that never learned its address names none. One whose address gave no answer is told what to run once it does, and what to run if it does not
+ *   A run that never learned its address names none. One whose address gave no answer is told to log in once it does, and what to run if it does not, where the login is what follows it
  */
 export function runLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "steps" | "blocked" | "address" | "ready">, provider: Provider, answers: boolean | null, ending: Ending): Line[] {
   const { address } = installed;
@@ -259,7 +289,7 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
   const stored = plain(`The token was used for this run and is stored nowhere. You can delete it at ${provider.name}.`);
 
   if (installed.ready && answers === false && address !== undefined) {
-    const later = [`Once it answers, log in: ${NEXT.login(address).command}`, `If it still does not: ${NEXT.repair().command}`];
+    const later = ending.next.step === "login" ? [`Once it answers, log in: ${ending.next.command}`, `If it still does not: ${NEXT.repair().command}`] : [];
 
     return [...answer, { tone: "warning", text: ending.done }, ...dashboard, ...later.map(plain), stored];
   }
