@@ -31,7 +31,8 @@ function loginIn(request: unknown): Login | Refused<"bad_argument"> {
  * Let one more email log in.
  *
  * @param request - `{ login }`, the email as typed; anything is taken and checked
- * @returns the login in its normal form and every setting after the change. `bad_argument` about `login` for text that is no email, and `already_a_login` for one that is a login already, which changes nothing
+ * @returns the login in its normal form and every setting after the change. `bad_argument` about `login` for text that is no email, and `already_a_login` for one that is a login already.
+ *   `not_allowed` for a token whose user was removed while it asked. A refusal changes nothing
  */
 export async function addLogin(install: Install, actor: Actor, request: unknown): Promise<Changed | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "already_a_login">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
@@ -40,11 +41,11 @@ export async function addLogin(install: Install, actor: Actor, request: unknown)
   if (typeof login !== "string") return login;
 
   const added = await install.database.addLogin(login, { by: actor.holder, at: install.now() });
-  if (added.kind === "not_set_up") return refuse("not_set_up");
+  if (added.kind === "done") return { ok: true, login, values: added.values };
 
   if (added.kind === "unchanged") return refuse("already_a_login", "login");
 
-  return { ok: true, login, values: added.values };
+  return refuse(added.kind === "signer_gone" ? "not_allowed" : "not_set_up");
 }
 
 /**
@@ -53,7 +54,8 @@ export async function addLogin(install: Install, actor: Actor, request: unknown)
  * A login that works always stays: an admin who is a login cannot remove their own email, and a token cannot remove the last login.
  *
  * @param request - `{ login }`, the email as typed; anything is taken and checked
- * @returns the login in its normal form and every setting after the change. `bad_argument` about `login` for text that is no email, `not_a_login` for an email that is no login, and `no_working_login` when no login that works would stay
+ * @returns the login in its normal form and every setting after the change. `bad_argument` about `login` for text that is no email, `not_a_login` for an email that is no login, and `no_working_login` when no login that works would stay.
+ *   `not_allowed` for a token whose user was removed while it asked
  */
 export async function removeLogin(install: Install, actor: Actor, request: unknown): Promise<Changed | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "not_a_login" | "no_working_login">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
@@ -65,6 +67,8 @@ export async function removeLogin(install: Install, actor: Actor, request: unkno
   if (removed.kind === "done") return { ok: true, login, values: removed.values };
 
   if (removed.kind === "not_set_up") return refuse("not_set_up");
+
+  if (removed.kind === "signer_gone") return refuse("not_allowed");
 
   return refuse(removed.kind === "unchanged" ? "not_a_login" : "no_working_login", "login");
 }

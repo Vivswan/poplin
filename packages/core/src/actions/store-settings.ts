@@ -42,18 +42,21 @@ export async function storeFirstLogin(install: Pick<Install, "database" | "now">
   if (await install.database.hasLoggedIn()) return refuse("no_working_login", "logins");
 
   const changed = await install.database.changeSettings({ logins: [login] }, { by: login, at: install.now() });
-  if (changed.kind === "not_set_up") return refuse("not_set_up");
+  if (changed.kind === "done" || changed.kind === "unchanged") return { ok: true, values: changed.values };
 
-  return { ok: true, values: changed.values };
+  if (changed.kind === "signer_gone") throw new Error("the first login signs as itself, and was taken for a token");
+
+  return refuse("not_set_up");
 }
 
 /**
  * Store a change of the settings an action has checked.
  *
  * @param changes - the new typed values; each key given is replaced whole
- * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_login` about `logins` for new logins with no login that works among them, which changes nothing
+ * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_login` about `logins` for new logins with no login that works among them.
+ *   `not_allowed` for a token whose user was removed while it asked. A refusal changes nothing
  */
-export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>): Promise<Stored | Refused<"not_set_up" | "no_working_login">> {
+export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>): Promise<Stored | Refused<"not_set_up" | "no_working_login" | "not_allowed">> {
   if (changes.logins !== undefined) {
     const stored = await install.database.readSettings();
     if (stored === undefined) return refuse("not_set_up");
@@ -62,7 +65,7 @@ export async function storeSettings(install: Install, actor: Actor, changes: Par
   }
 
   const changed = await install.database.changeSettings(changes, { by: actor.holder, at: install.now() });
-  if (changed.kind === "not_set_up") return refuse("not_set_up");
+  if (changed.kind === "done" || changed.kind === "unchanged") return { ok: true, values: changed.values };
 
-  return { ok: true, values: changed.values };
+  return refuse(changed.kind === "signer_gone" ? "not_allowed" : "not_set_up");
 }

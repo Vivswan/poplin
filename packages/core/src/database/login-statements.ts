@@ -11,7 +11,7 @@ import { TOKEN_ID } from "../records/fields";
 import type { Signed } from "./database";
 import type { Statement } from "./driver";
 import { audit, logins, settings, tokens } from "./schema";
-import { BUILD, built, insertFrom } from "./statements";
+import { BUILD, built, CHANGED, insertFrom } from "./statements";
 
 /** The columns a token is written with. */
 export const TOKEN_COLUMNS = [tokens.id, tokens.hash, tokens.scope, tokens.note, tokens.created_at, tokens.expires_at, tokens.allowed_by];
@@ -56,7 +56,7 @@ export function isUser(column: SQL): SQL {
   return fragment`EXISTS (SELECT 1 FROM ${settings}, json_each(${settings.value}, '$.logins') AS j WHERE ${settings.id} = 1 AND j.value = ${column})`;
 }
 
-/** Whether who signs a new token may still make one: a token that signs was not removed, and the user behind it is a user still, whether or not the token has run out since it was let in. */
+/** Whether who signs may still write: a token that signs was not removed, and the user behind it is a user still, whether or not the token has run out since it was let in. */
 export function signerStands(by: string): SQL {
   const gone = fragment`${SIGNER.removed_at} IS NOT NULL OR NOT ${isUser(fragment`${SIGNER.allowed_by}`)}`;
 
@@ -72,31 +72,40 @@ export function userTokenCounts(now: number): Statement {
  * End every token that works and whose user leaves, each with a `token_revoked` audit entry that names the user. A token that ran out stays as it ended.
  *
  * @param leaves - true of a token row whose user is no login once the batch is through
+ * @param after - `change` for a batch where the entries follow the one audit entry of the change that makes the user leave: nothing is written where that entry was not
  * @returns the entries, then the marks: two statements that read the same rows
  */
-function endTokensWhere(leaves: SQL, signed: Signed): readonly [Statement, Statement] {
+function endTokensWhere(leaves: SQL, signed: Signed, after?: "change"): readonly [Statement, Statement] {
   const ends = and(worksAt(signed.at), leaves);
   const named = fragment`json_object('token', ${tokens.id}, 'scope', ${tokens.scope}, 'note', ${tokens.note}, 'user', ${tokens.allowed_by})`;
-  const entries = fragment`SELECT ${signed.at}, ${signed.by}, 'token_revoked', ${named} FROM ${tokens} WHERE ${ends} ORDER BY ${tokens.created_at}, ${tokens.id}`;
+  // The entries follow one entry written, and the marks follow the entries: as many as the tokens that end.
+  const [entered, marked] = after === undefined ? [ends, ends] : [and(ends, CHANGED), and(ends, fragment`changes() > 0`)];
+  const entries = fragment`SELECT ${signed.at}, ${signed.by}, 'token_revoked', ${named} FROM ${tokens} WHERE ${entered} ORDER BY ${tokens.created_at}, ${tokens.id}`;
 
   return [
     insertFrom(audit, [audit.at, audit.actor, audit.action, audit.detail], entries),
-    built(BUILD.update(tokens).set({ removed_at: signed.at, removed_by: signed.by, user_removed: 1 }).where(ends)),
+    built(BUILD.update(tokens).set({ removed_at: signed.at, removed_by: signed.by, user_removed: 1 }).where(marked)),
   ];
 }
 
-/** End the tokens of one user, once the stored logins no longer hold that user: it goes after the removal in a batch, and does nothing where the removal was refused. */
+/** End the tokens of one user: it goes right after the audit entry of that user's removal in a batch, and does nothing where the removal was refused. */
 export function endTokensOfRemoved(login: string, signed: Signed): readonly [Statement, Statement] {
-  const stays = fragment`EXISTS (SELECT 1 FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${login})`;
-
-  return endTokensWhere(fragment`${tokens.allowed_by} = ${login} AND EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND NOT ${stays})`, signed);
+  return endTokensWhere(fragment`${tokens.allowed_by} = ${login}`, signed, "change");
 }
 
-/** End the tokens of every user a new list of logins leaves out: it goes before the list replaces the stored logins in a batch, since it reads who was a login. */
+/**
+ * End the tokens of every user a new list of logins leaves out, for a signer who stands: it goes before the list replaces the stored logins in a batch, since it reads who was a login.
+ * The token that signs is left to `endSignerLeftOut`, so it stands for every statement up to the replacement.
+ */
 export function endTokensOfDropped(next: readonly string[], signed: Signed): readonly [Statement, Statement] {
   const dropped = fragment`(SELECT was.value FROM ${settings}, json_each(${settings.value}, '$.logins') AS was WHERE ${settings.id} = 1 AND was.value NOT IN (SELECT value FROM json_each(${JSON.stringify(next)})))`;
 
-  return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped}`, signed);
+  return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped} AND ${tokens.id} <> ${signed.by} AND ${signerStands(signed.by)}`, signed);
+}
+
+/** End the token that signs a list of logins which leaves its own user out: it goes right after the audit entry of the list's change in a batch, and does nothing where the list was refused. */
+export function endSignerLeftOut(signed: Signed): readonly [Statement, Statement] {
+  return endTokensWhere(fragment`${tokens.id} = ${signed.by} AND NOT ${isUser(fragment`${tokens.allowed_by}`)}`, signed, "change");
 }
 
 /** The token with the given id, unless it was removed. */

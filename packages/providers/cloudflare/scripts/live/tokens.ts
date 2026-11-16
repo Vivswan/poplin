@@ -2,7 +2,7 @@
 //
 // The token is never written to a file or a step output. Its row runs out after an hour, so a row a killed run left behind dies by itself.
 
-import { mintToken } from "@poplin/core/src/auth/tokens";
+import { mintToken, type TokenRecord } from "@poplin/core/src/auth/tokens";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 
 import { callCloudflare } from "../../src/shared/install/client";
@@ -62,7 +62,18 @@ export function removeTokens(run: Run, databaseId: string, now: number): Promise
 }
 
 /**
- * Make an admin token for this run and store its hash in the install's database. No user allowed it, so the row names the run in that place, and no user's removal ends it.
+ * Build the statement that stores a live run's token. The user behind it is the install's first login, so it ends when that login is removed.
+ * An install with no settings stored refuses the row.
+ */
+export function tokenRow(record: Pick<TokenRecord, "id" | "hash" | "note">, now: number): { readonly sql: string; readonly params: readonly string[] } {
+  const firstLogin = "(SELECT json_extract(value, '$.logins[0]') FROM settings WHERE id = 1)";
+  const sql = `INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ${now}, ${now + LIFETIME_MS}, ${firstLogin})`;
+
+  return { sql, params: [record.id, record.hash, record.note] };
+}
+
+/**
+ * Make an admin token for this run and store its hash in the install's database.
  *
  * @returns the token, hidden before it is handed back, or why it could not be stored
  */
@@ -70,8 +81,8 @@ export async function seedToken(run: Run, databaseId: string, now: number): Prom
   const { token, record } = await mintToken({ scope: "admin", note: `${NOTE_PREFIX}${run.id}`, now });
   run.hide(token);
 
-  const sql = `INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ${now}, ${now + LIFETIME_MS}, ?)`;
-  const stopped = await runSql(run, databaseId, sql, [record.id, record.hash, record.note, record.note]);
+  const row = tokenRow(record, now);
+  const stopped = await runSql(run, databaseId, row.sql, row.params);
 
   return stopped ?? token;
 }
