@@ -96,7 +96,7 @@ Each row is one kind of piece, with the names of its pieces. A kind the command 
 
 Under a domain, five rows stand in place of `Forwarder`: `Worker route`, `DNS record`, `Redirect rule`, `WAF rule`, and `Rate rule`. Each kind of rule has a second row for its rule set, such as `Redirect ruleset`.
 
-A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot switches` row says what stays there. A run under a domain removes 18 kinds at most.
+A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot settings` row says what stays there. A run under a domain removes 18 kinds at most.
 
 A rule set is Cloudflare's holder for rules of one kind. One that poplin made goes once no rule but poplin's is in it. One of the domain's own, which poplin only added a rule to, stays and has no row.
 
@@ -132,7 +132,7 @@ would remove  DNS record            *.example.com, poplin.example.com
 ...
 would remove  Sites' files          poplin-sites (files: 2, 15 B)
 would remove  Database              poplin (sites: 3)
-stays         Bot switches          the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set
+stays         Bot settings          the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set
 stays         Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 This removes every row above that says would remove. It cannot be undone.
 It logs no computer out. Run npx poplin logout on each one first: after the removal a logout cannot reach the install.
@@ -189,10 +189,22 @@ npx poplin uninstall cloudflare --no-domain --keep-data
 
 The list before the question says `would keep` for both, the line above the question says `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
 
+A run that left a kind undone ends `Run this command again with --keep-data`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
+
 | Then                                   | Do                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------- |
 | take the data up in a new install      | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |
 | remove the data too                    | the same `uninstall` line without `--keep-data`: it asks you to type `poplin-sites` |
+
+The new install takes its users and its settings from the kept database:
+
+| The kept database holds | Who the login lets in             | `--login`                                                                          |
+| ----------------------- | --------------------------------- | ---------------------------------------------------------------------------------- |
+| users                   | those users, and nobody else      | not used. For an email that is none of them, the row `left out  First login` says so |
+| no users yet            | the email you give for `--login`  | used                                                                               |
+| records this poplin cannot read | the email you give for `--login` | used, and the row of the database says that its users were not read          |
+
+To let one more person in afterwards: `npx poplin doctor --repair --add-user you@example.com`, with their email. The row names that line too.
 
 A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 
@@ -203,6 +215,7 @@ A dry run with `--keep-data` lists the same. The kept bucket and database stay i
 | `No install is in this account. Nothing was removed.`    | the token is of an account with no install           | make the token in the account the install is in                               |
 | `Only the data is left here, and --keep-data keeps it.`  | the install is removed, and only its kept data is left | to remove the data too, run the line without `--keep-data`                  |
 | `The install in this account answers at`, and an address | the line named another place than the install's: `--no-domain` for an install under a domain, the other way round, or another domain | run it again with the install's own domain after `--domain`, or with `--no-domain` |
+| `An install was started in this account`, and a place    | an install that was never finished was started for another place than the line named | run it again with the option the line names: `--domain` and that domain, or `--no-domain` |
 | `What was typed is not this install's`                   | the address you typed is not the install's own       | run it again, and type the address the line names                             |
 | a number, then `not done`, and `Run this command again`  | a row says `stopped`, `failed`, or `not run`         | fix what the row names, then run the same line again: it removes what is left |
 | a row `stopped`, ending `Add this one:` and a name       | the token lacks the permission of that name          | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |

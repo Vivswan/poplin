@@ -65,7 +65,7 @@ the install now runs 0.3.1; it ran 0.3.0
 | the website or the release's page does not answer         | `release_refused` | nothing |
 | a file whose digest or size is not the published one      | `release_refused` | nothing |
 | a manifest of another version or schema than the website names | `release_refused` | nothing |
-| a release that needs a binding the Worker does not have   | `release_refused` | nothing |
+| a release that needs a binding the Worker does not have   | `release_refused` | nothing: the install goes on with the version it runs |
 | Cloudflare refuses the new code, such as code that stops as it starts | `version_refused` | nothing: the install runs the version it ran |
 | Cloudflare does not answer the upload                     | `update_unreachable`  | the update may be in: reload in a minute |
 

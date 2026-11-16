@@ -5,8 +5,8 @@
 
 import type { RemovalRow, RemovalState, Removed, Run } from "../../../../core/src/install/installer";
 import { countText } from "../../commands/text";
-import type { Next, Provider } from "../records";
-import { blockedLines, type Line, NEXT, type StateWords, wordedRow } from "../report";
+import type { Careful, Next, Provider } from "../records";
+import { againWords, blockedLines, type Line, NEXT, type StateWords, wordedRow } from "../report";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
 const STATES: Readonly<Record<RemovalState, StateWords>> = {
@@ -113,13 +113,14 @@ export function warningLines(listed: Listed, data: "remove" | "keep"): Line[] {
  * Word what a run came to.
  *
  * @param provider - the provider, whose name says where the token can be deleted
+ * @param careful - the careful choices of the run's line, which the sentence of a run that left a kind names as the next step's command line holds them
  * @returns the last lines: that the install is removed, how many kinds stay and which the token could not look for, and what a logout says now; or what is not done
  */
-export function removedLines(removed: Listed, provider: Provider): Line[] {
+export function removedLines(removed: Listed, provider: Provider, careful: readonly Careful[]): Line[] {
   const stored = plain(`The token was used for this run and is stored nowhere. You can delete it at ${provider.name}.`);
   const left = count(removed, UNDONE);
   const kinds = countText(count(removed, ["remove", "gone"]), "kind");
-  if (!removed.ready) return [...blockedLines(removed.blocked), { tone: "error", text: `${left} not done, ${kinds} removed. Run this command again: it removes what is left.` }, stored];
+  if (!removed.ready) return [...blockedLines(removed.blocked), { tone: "error", text: `${left} not done, ${kinds} removed. Run ${againWords(careful)}: it removes what is left.` }, stored];
 
   const stays = count(removed, ["stay"]);
   const unlooked = unlookedLines(removed, "apply");
@@ -135,14 +136,14 @@ export function removedLines(removed: Listed, provider: Provider): Line[] {
  * The JSON value of a dry run or a run that worked through its rows.
  *
  * @param found - what the look for an install found, which the run went on from
- * @param provider - the provider, which the command line of the next step names
+ * @param again - what runs this command again, with the careful choices the next step keeps
  * @returns the same value for both, but for `run` and the key of each row's state: `will` in a dry run, `did` in a run. `ok` is whether the command exits with 0, and `next` names this command until a run removed all it was to.
  *   `unlooked` names each kind the token could not look for, which may still be there
  */
-export function removalValue(removed: Listed, run: Run, found: string, provider: Provider): Readonly<Record<string, unknown>> {
+export function removalValue(removed: Listed, run: Run, found: string, again: Next): Readonly<Record<string, unknown>> {
   const key = run === "dry-run" ? "will" : "did";
   const rows = removed.rows.map(({ object, state, detail, ...held }) => ({ object, [key]: state, detail, ...held }));
-  const next: Next = run === "apply" && removed.ready ? NEXT.none() : NEXT.uninstall(provider);
+  const next: Next = run === "apply" && removed.ready ? NEXT.none() : again;
 
   return { ok: removed.ready, run, ready: removed.ready, found: { state: found }, confirm: removed.confirm, rows, blocked: removed.blocked, unlooked: unlookedOf(removed), next };
 }

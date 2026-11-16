@@ -10,15 +10,15 @@ import { exitCode } from "../../commands/exit-codes";
 import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
-import type { InstallEnds, Provider, Stop } from "../records";
-import { followed, heldStop, NEXT } from "../report";
+import type { Careful, InstallEnds, Provider, Stop } from "../records";
+import { carefulOf, carried, followed, heldStop, NEXT, REFUSED_AS, runningWords } from "../report";
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
-import type { UninstallPlan, UninstallRequest } from "./records";
+import type { RemovalMode, UninstallPlan, UninstallRequest } from "./records";
 import { listedLines, removalLine, removalValue, removedLines, unlookedWords, warningLines } from "./report";
 
-/** The command as it is typed after `poplin`, and what runs it again. */
-const COMMAND = { name: "uninstall", again: NEXT.uninstall } as const;
+/** The command as it is typed after `poplin`, what runs it again, and the careful choices it takes. */
+const COMMAND = { name: "uninstall", again: NEXT.uninstall, careful: ["--keep-data", "--dry-run"] } as const;
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -44,6 +44,11 @@ interface Ground {
 /** A removal that worked through its rows. */
 type Listed = Extract<Removed, { readonly ok: true }>;
 
+/** The careful choices of a run, as its line gave them: that the data stays, and that nothing is removed. */
+function choicesOf(mode: RemovalMode<unknown>): readonly Careful[] {
+  return [...(mode.data === "keep" ? (["--keep-data"] as const) : []), ...carefulOf(mode.mode)];
+}
+
 /** Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks. The proof is asked for later, once the list was shown. */
 async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<UninstallRequest | Stop> {
   const { provider, json } = plan;
@@ -57,14 +62,14 @@ async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<Uninstal
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
   if (where === undefined) return ENDED;
 
-  const token = plan.token ?? (await askToken(provider, where.where, ends.screen));
+  const token = plan.token ?? (await askToken(provider, where.where, ends.screen, "remove"));
 
   return token === undefined ? ENDED : { provider, json, asking: "terminal", mode: plan.mode, where: where.where, token };
 }
 
 /** What a look found, in the line that says so. */
 function foundWords(found: Found<unknown, unknown>): string {
-  if (found.state === "whole") return `found: poplin${found.version === undefined ? "" : ` ${found.version}`}, at ${found.address}`;
+  if (found.state === "whole") return `found: ${runningWords(found.version)}, at ${found.address}`;
 
   const words = { none: "none that is whole", leftover: "none, but something was left behind", started: "one that was started and not finished", held: "a name is held", blocked: "blocked", choice: "more than one place", refused: "no" } as const;
 
@@ -72,14 +77,14 @@ function foundWords(found: Found<unknown, unknown>): string {
 }
 
 /** The stop a look that found nothing a removal can start from is. */
-function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held" | "blocked" | "refused" }>, provider: Provider): Stop {
-  if (found.state === "held") return heldStop(found, NEXT.uninstall(provider), provider);
+function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held" | "blocked" | "refused" }>, provider: Provider, careful: readonly Careful[]): Stop {
+  if (found.state === "held") return heldStop(found, NEXT.uninstall(provider, careful), provider);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
   if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNTOUCHED) };
 
-  return { problem: found.why === "token" ? "token_refused" : "no_domain", exit: 1, words: followed(found.words, UNTOUCHED) };
+  return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNTOUCHED) };
 }
 
 /** Look for an install with the token, and take what a removal can start from. */
@@ -92,7 +97,7 @@ async function look(request: UninstallRequest, ends: InstallEnds, show: Show): P
 
   const { found, where } = looked;
 
-  return found.state === "whole" || found.state === "started" || found.state === "leftover" || found.state === "none" ? { found, where } : stopOf(found, request.provider);
+  return found.state === "whole" || found.state === "started" || found.state === "leftover" || found.state === "none" ? { found, where } : stopOf(found, request.provider, choicesOf(request.mode));
 }
 
 /**
@@ -131,17 +136,18 @@ async function typedProof(listed: Listed, data: "remove" | "keep", ends: Install
 }
 
 function ended(removed: Listed, run: Run, ground: Ground, request: UninstallRequest, show: Show): number {
-  const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, request.provider);
+  const careful = choicesOf(request.mode);
+  const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, request.provider, careful);
   for (const line of lines) show.line(line.tone, line.text);
 
-  show.value(removalValue(removed, run, ground.found.state, request.provider));
+  show.value(removalValue(removed, run, ground.found.state, NEXT.uninstall(request.provider, carried(careful, removed.ready))));
 
   return exitCode({ kind: removed.ready ? "done" : "failed" });
 }
 
 async function work(request: UninstallRequest, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
-  const at = { command: COMMAND, provider, run: mode.mode };
+  const at = { command: COMMAND, careful: choicesOf(mode), provider, run: mode.mode };
   const ground = await look(request, ends, show);
   if ("problem" in ground) return stopped(ground, show, at);
 
@@ -167,7 +173,7 @@ async function work(request: UninstallRequest, ends: InstallEnds, show: Show): P
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: UninstallPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const request = await settled(plan, ends);
-  if ("problem" in request) return stopped(request, show, { command: COMMAND, provider: plan.provider, run: plan.mode.mode });
+  if ("problem" in request) return stopped(request, show, { command: COMMAND, careful: choicesOf(plan.mode), provider: plan.provider, run: plan.mode.mode });
 
   secrets.add(request.token);
 

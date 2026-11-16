@@ -44,7 +44,7 @@ Three commands work with the user's account token: `npx poplin install cloudflar
 | `no_domain`              | the token shows no active domain of that name              | check the domain with the user, and the token's Zone Resources    |
 | `unreachable`, `crashed` | no answer, or a failure with no word for it                | run it again in a minute                                          |
 | `no_install`             | the repair or the removal found no install in the account; or a removal with `--keep-data` found kept data alone | tell the user what its sentence says: a token of another account, or kept data that a removal without `--keep-data` removes |
-| `other_place`            | the install is of the other kind than the line named       | give `--domain` and its domain, or `--no-domain`, as the sentence says |
+| `other_place`            | the install, or one started and not finished, is of another place than the line named | give `--domain` and its domain, or `--no-domain`, as the sentence says |
 | `unfinished`             | the repair found an install that was started and never set | finish it with the install command: part e of [`setup.md`](setup.md) |
 | `another_version`        | the install's records are of another version than this command | run the repair as `npx poplin@latest`                         |
 | `not_confirmed`          | the removal was given an address that is not the install's; nothing was removed | tell the user; the address is theirs to give |

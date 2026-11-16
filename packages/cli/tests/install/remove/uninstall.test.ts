@@ -147,6 +147,7 @@ describe("a run", () => {
 
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "Account token (not shown): [secret]", `Type ${NAME} to go on:`]);
+    expect(account.tokensFor).toEqual(["remove"]);
     expect(account.finds).toEqual([{ kind: "place", name: "example.com" }]);
   });
 
@@ -271,6 +272,14 @@ describe("what stops a removal before it starts", () => {
     const ran = await runLine("uninstall stand-in --no-place --dry-run", account, { env: HELD });
 
     expect([ran.code, ran.err.at(-1), account.changes]).toEqual([code, line, 0]);
+  });
+
+  // Drift: a program reads the problem, not the sentence. Told as a token that shows no such domain, it would send a person to the token's form in place of the option to give.
+  test("an install that was started for another place than the one named stops the removal as other_place, with the provider's sentence, and nothing is removed", async () => {
+    const account: Account = { ...emptyAccount(), scenes: [{ state: "refused", why: "other_place", words: "An install was started here for another place." }], removed: () => removedOf(WHOLE) };
+    const ran = await runLine("uninstall stand-in --no-place --dry-run --json", account, { env: HELD });
+
+    expect([ran.code, jsonOf(ran), account.changes]).toMatchObject([1, { ok: false, problem: "other_place", words: "An install was started here for another place. Nothing was removed." }, 0]);
   });
 
   test("a name the install needs that something else holds is said with its page, and nothing is asked of the provider's removal: without this a stranger's object is listed as poplin's", async () => {

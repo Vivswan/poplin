@@ -133,6 +133,7 @@ export function reachOf(published: Published, pass: Reach["fetch"]): Reach {
       return page === undefined ? pass(input, init) : new Response(page);
     },
     now: Date.now,
+    sleep: (milliseconds) => Bun.sleep(milliseconds),
   };
 }
 

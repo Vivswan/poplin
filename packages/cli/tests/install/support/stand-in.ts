@@ -3,6 +3,7 @@
 // The provider is no real one: its options, its words, and its token's form are its own, so the command is proven to work through the interface alone.
 
 import type { Login } from "../../../../core/src/auth/logins";
+import type { TokenFacts } from "../../../../core/src/install/token-facts";
 import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, Whole } from "../../../../core/src/install/installer";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
@@ -56,6 +57,9 @@ export interface Account {
   /** The place of each look, in order. */
   readonly finds: Where[];
 
+  /** What each token a person was asked for was to be made for, in order. */
+  readonly tokensFor: string[];
+
   /** What each call of `install` was handed. */
   readonly runs: { readonly found: Startable<Place>; readonly where: Where; readonly login: Login; readonly run: Run }[];
 
@@ -97,6 +101,17 @@ interface Options {
 
   /** The providers the package carries, in place of the one made-up provider. */
   readonly providers?: readonly Installer<unknown, unknown>[];
+}
+
+/** What the stand-in's form for a new token asks for at a place. */
+function factsAt(where: Where): TokenFacts {
+  return {
+    tokenRights: where.kind === "place" ? ["Places: Read", "Programs: Edit"] : ["Programs: Edit"],
+    tokenLink: "https://host.example.com/tokens/new?rights=chosen",
+    tokenOptional: [{ right: "Rules: Edit", adds: "a guard rule" }],
+    tokenNote: "The form asks which account the token is for.",
+    tokenFor: where.kind === "place" ? "this account and this place" : "this account",
+  };
 }
 
 /**
@@ -180,6 +195,7 @@ export function emptyAccount(): Account {
     installed: undefined,
     crash: undefined,
     finds: [],
+    tokensFor: [],
     runs: [],
     changes: 0,
     removed: undefined,
@@ -213,13 +229,11 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
     tokenHelp: ["The account token needs:", "  with a place   two permissions: Places: Read, Programs: Edit", "  without        one permission: Programs: Edit"],
     token: (text) => (/^tok_[a-z0-9]{8}$/.test(text) ? (text as Token) : undefined),
     read: readGiven,
-    facts: (where) => ({
-      tokenRights: where.kind === "place" ? ["Places: Read", "Programs: Edit"] : ["Programs: Edit"],
-      tokenLink: "https://host.example.com/tokens/new?rights=chosen",
-      tokenOptional: [{ right: "Rules: Edit", adds: "a guard rule" }],
-      tokenNote: "The form asks which account the token is for.",
-      tokenFor: where.kind === "place" ? "this account and this place" : "this account",
-    }),
+    facts: (where, work) => {
+      account.tokensFor.push(work);
+
+      return factsAt(where);
+    },
     find: async (_token, where) => {
       account.finds.push(where);
       const scene = account.scenes.length > 1 ? account.scenes.shift() : account.scenes[0];
@@ -309,6 +323,10 @@ export async function runLine(line: string, account: Account, options: Options =
   const typed = [...(options.typed ?? [])];
   const statuses = [...(options.statuses ?? [401])];
   let clock = 0;
+  const sleep = async (milliseconds: number): Promise<void> => {
+    ran.slept.push(milliseconds);
+    clock += milliseconds;
+  };
   const ends: InstallEnds = {
     providers: async () => options.providers ?? [standIn(account) as Installer<unknown, unknown>],
     screen: screenOf(ran, typed),
@@ -321,11 +339,9 @@ export async function runLine(line: string, account: Account, options: Options =
         return new Response(null, { status: statuses.length > 1 ? statuses.shift() : statuses[0] });
       },
       now: () => clock,
+      sleep,
     },
-    sleep: async (milliseconds) => {
-      ran.slept.push(milliseconds);
-      clock += milliseconds;
-    },
+    sleep,
   };
   const io: Io = {
     out: (text) => {

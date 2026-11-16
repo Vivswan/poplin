@@ -154,7 +154,7 @@ Log this computer in now?
 | ----------------- | ----------------------------------------------------------------------- |
 | `made`, `changed` | the thing was not there, or differed, and now is as it should be        |
 | `left`            | it was there already, as it should be                                   |
-| `left out`        | it is optional and was not made: the token lacks its permission, or the domain or its plan has no room for it. Nothing is wrong |
+| `left out`        | it is optional and was not made: the token lacks its permission, or the domain or its plan has no room for it. Nothing is wrong. `First login` is left out where a kept database holds its own users and the email is none of them |
 | `stopped`         | it cannot be made until you act: the lines under the rows say where. A dry run writes `blocked` |
 | `failed`          | it could not be made, and the row says why                              |
 | `not run`         | an earlier row stopped the run before it                                |
@@ -278,7 +278,7 @@ would make       Worker                poplin, runs 0.1.0
 would make       DNS record            poplin.example.com
 would make       Access application    poplin: poplin.example.com, *-p-poplin.example.com
 the token's permissions: each read was allowed, and a write is proven by the run
-ready: a run would make 26 and change 1. nothing was changed
+ready: a run would make 27 and change 1. nothing was changed
 ```
 
 | The last line starts with | Means                                                                              | Exit code |
@@ -321,13 +321,13 @@ npx poplin install cloudflare --no-domain --login you@example.com --yes
 | ------------- | ---------------------------------------------------------------------------------------- |
 | `--yes`       | asks nothing. A missing answer stops the run before any change, and is named             |
 | `--json`      | prints one JSON value, and nothing else on standard output                               |
-| `--adopt`     | uses a bucket or a database named like poplin's that no install holds, with what it holds |
+| `--adopt`     | uses a bucket or a database named like poplin's that no install holds, with what it holds. Where the database holds users, they log in, and [`--login` is not used](../upkeep/remove.md#keep-the-data) |
 | `--log-in`    | logs this computer in when the install is made; `--no-log-in` does not, and does not ask |
 | `--no-wait`   | does not wait for the new install to answer                                              |
 
 A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line.
 
-With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave.
+With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave. Where `next` names the same command again, the `command` keeps `--dry-run` of a dry run that stopped or is not ready, and a removal's keeps `--keep-data`.
 
 | `next.step` | Run next                                                                    |
 | ----------- | --------------------------------------------------------------------------- |

@@ -57,11 +57,15 @@ export type Plan = { readonly provider: Provider; readonly json: boolean } & (
 export type InstallRequest = { readonly provider: Provider; readonly json: boolean; readonly where: unknown; readonly login: Login; readonly token: Token } & Asking;
 
 /**
- * What to run after a command ended: the step as one word for a program, and its command line, without the answers the line before it gave.
+ * What to run after a command ended: the step as one word for a program, and its command line.
  *
+ * The line holds none of the answers the line before it gave: no token, no place, no proof, no consent. It keeps each careful choice of that line where the same command goes on.
  * `install`, `repair`, and `uninstall` are the three commands; `login` logs a computer in to an install that is whole; `none` is an end with nothing left to run.
  */
 export type Next = { readonly step: "install" | "repair" | "uninstall" | "login"; readonly command: string } | { readonly step: "none"; readonly command: null };
+
+/** A choice of a line that makes its run do less: keep the data, or change nothing. A line that goes on without it would remove or change what the line before left alone. */
+export type Careful = "--keep-data" | "--dry-run";
 
 /** Whether an install that is there needs mending, as a repair's dry run read it; `unread` where the provider refused that read, with the sentence it refused in. */
 type Mending = { readonly mend: "nothing" | "something" } | { readonly mend: "unread"; readonly unread: string };

@@ -44,12 +44,10 @@ export interface DomainStep {
 
 /**
  * Every object of the install, or why none was read: `token` for a key that is malformed, refused, or of another account, all alike; `unreachable` when the provider did not answer.
- *
- * `no_domain` is of an install with nothing set: a token that shows no such domain.
  */
 export type DomainReading =
   | { readonly ok: true; readonly rows: readonly DomainRow[]; readonly steps: readonly DomainStep[] }
-  | { readonly ok: false; readonly refusal: "token" | "unreachable" | "no_domain" };
+  | { readonly ok: false; readonly refusal: "token" | "unreachable" };
 
 /** The provider's side of an install, with what its form for a new token is and asks for. Neither method keeps the token past its own call, and neither throws for anything the provider answers. */
 export interface DomainPlug extends TokenFacts {

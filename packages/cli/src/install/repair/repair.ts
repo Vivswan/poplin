@@ -9,16 +9,16 @@ import { exitCode } from "../../commands/exit-codes";
 import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor, STOPPED } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
-import type { InstallEnds, Stop } from "../records";
-import { NEXT, rowLine } from "../report";
+import type { Careful, InstallEnds, Provider, Stop } from "../records";
+import { carefulOf, NEXT, rowLine } from "../report";
 import { parseRepair, REPAIR_COMMAND, type RepairPlan } from "./parse";
 import { foundWords, repairedLines, repairedValue, repairHelp, stopOf, unmended } from "./report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
 
-/** The command as it is typed after `poplin`, and what runs it again. */
-const COMMAND = { name: REPAIR_COMMAND, again: () => NEXT.repair() } as const;
+/** The command as it is typed after `poplin`, what runs it again, and the careful choice it takes. */
+const COMMAND = { name: REPAIR_COMMAND, again: (_provider: Provider | undefined, careful: readonly Careful[]) => NEXT.repair("this", careful), careful: ["--dry-run"] } as const;
 
 /** A plan with every answer in: where the install is, and the token. */
 interface Request {
@@ -38,7 +38,7 @@ async function settled(plan: RepairPlan, ends: InstallEnds): Promise<Request | S
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
   if (where === undefined) return STOPPED;
 
-  const token = plan.token ?? (await askToken(plan.provider, where.where, ends.screen));
+  const token = plan.token ?? (await askToken(plan.provider, where.where, ends.screen, "repair"));
 
   return token === undefined ? STOPPED : { plan, where: where.where, token };
 }
@@ -58,13 +58,13 @@ async function look(request: Request, ends: InstallEnds, show: Show): Promise<{ 
   });
   if ("problem" in looked) return looked;
 
-  return looked.found.state === "whole" ? { found: looked.found, where: looked.where } : stopOf(looked.found, plan.provider);
+  return looked.found.state === "whole" ? { found: looked.found, where: looked.where } : stopOf(looked.found, plan.provider, carefulOf(plan.run));
 }
 
 /** Settle a plan's open answers, find the install, and mend it or say what a run would change. The token is hidden from the moment it is read. */
 async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const { provider, run } = plan;
-  const at = { command: COMMAND, provider, run };
+  const at = { command: COMMAND, careful: carefulOf(run), provider, run };
   const request = await settled(plan, ends);
   if ("problem" in request) return stopped(request, show, at);
 
@@ -80,7 +80,7 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
     show.line(tone, text);
     show.working(doing);
   });
-  if (!repaired.ok) return stopped(unmended(repaired), show, at);
+  if (!repaired.ok) return stopped(unmended(repaired, at.careful), show, at);
 
   for (const line of repairedLines(repaired, run, provider)) show.line(line.tone, line.text);
 
