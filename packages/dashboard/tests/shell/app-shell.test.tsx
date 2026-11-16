@@ -58,11 +58,11 @@ afterAll(clearPage);
 
 describe("the way out of the login", () => {
   // Drift: the console sends a browser on from one path of its own to where the provider ends a login. A link to any other place, or one the router answers with a screen, would leave the browser logged in.
-  test("is named Log out, beside the email at the foot of the side, and leads to the console's own way out", async () => {
+  test("is named Sign out, beside the email at the foot of the side, and leads to the console's own way out", async () => {
     await drawWith(null);
-    const out = screen.getByRole("button", { name: "Log out" });
+    const out = screen.getByRole("button", { name: "Sign out" });
 
-    expect([out.getAttribute("href"), out.parentElement?.textContent]).toEqual([`${BOOT.base}/out`, `${BOOT.email}Log out`]);
+    expect([out.getAttribute("href"), out.parentElement?.textContent]).toEqual([`${BOOT.base}/out`, `${BOOT.email}Sign out`]);
   });
 });
 

@@ -86,7 +86,7 @@ describe("the shell page", () => {
 });
 
 describe("the way out", () => {
-  // Drift: the dashboard's Log out and the page of an email that is no user both lead here. An answer that asked who is there would shut out the one person who needs it, and one a browser kept would hide a later change of the provider's address.
+  // Drift: the dashboard's Sign out and the page of an email that is no user both lead here. An answer that asked who is there would shut out the one person who needs it, and one a browser kept would hide a later change of the provider's address.
   test.each(["", "mallory@example.com", "keys-down", "owner"])("sends a request with %p where the login goes on to the address the provider ends a login at, kept by nobody, and reads nothing of who asks", async (login) => {
     const opened = await openConsole("/next");
     const answer = await opened.fetch(new Request(`${DASHBOARD}/next/out`, { headers: { [LOGIN_HEADER]: login === "owner" ? opened.base.owner : login } }));

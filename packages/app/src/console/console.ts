@@ -52,7 +52,7 @@ const REFUSALS = {
 /** What the page of an email that is no user says before the address that ends this browser's login. */
 const OTHER_EMAIL = "To log in with another email, open";
 
-/** The console's path that sends a browser on to where the provider ends its login. The dashboard's Log out leads here. */
+/** The console's path that sends a browser on to where the provider ends its login. The dashboard's Sign out leads here. */
 const OUT_PATH = "/out";
 
 /** How long a client waits before it asks again after a login that could not be checked, in seconds. */
