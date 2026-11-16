@@ -202,23 +202,9 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
-    name: "Access screen: find a login by its code",
-    route: "GET /data/logins/find",
-    // Worst: as many logins wait as may. The one is found by its code, and the try is counted against the visitor's minute, which is no query.
-    arrange: async (stage) => {
-      const [code = ""] = await waitingLogins(stage, MOST_WAITING);
-      const session = await sessionOf(stage);
-
-      return (measured) => data(measured, session, `/logins/find?code=${code}`);
-    },
-    status: 200,
-    budget: { queries: 2, reads: 0, writes: 0 },
-  },
-  {
-    group,
     name: "Access screen: one waiting login",
     route: "GET /data/logins/:login",
-    // Worst: the login is looked for among every one that waits, 50 at the most.
+    // Worst: as many logins wait as may. The one is read by its id.
     arrange: async (stage) => {
       await waitingLogins(stage, MOST_WAITING);
       const session = await sessionOf(stage);
@@ -233,12 +219,12 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     group,
     name: "Access screen: allow a login",
     route: "POST /data/logins/decide",
-    // Worst: as many logins wait as may, and the one is allowed as the admin it asked to be: the login is read first to see that it asked, then written with its audit entry.
+    // Worst: as many logins wait as may, and the one is allowed as the admin it asked to be: the login is read first, for its code and what it asked, then written with its audit entry.
     arrange: async (stage) => {
-      const [code = ""] = await waitingLogins(stage, MOST_WAITING, "admin");
+      const [login = { id: "", code: "" }] = await waitingLogins(stage, MOST_WAITING, "admin");
       const session = await sessionOf(stage);
 
-      const decision: Decision = { code, allow: true, confirm: true, scope: "admin" };
+      const decision: Decision = { login: login.id, allow: true, scope: "admin", letters: login.code.slice(-4) };
 
       return (measured) => post(measured, "/data/logins/decide", decision, session);
     },

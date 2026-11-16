@@ -1,5 +1,6 @@
 // Anyone can begin a login, ask for its token, and send the dashboard any decision, as JSON or as a form, from any origin.
-// Across any order of those steps, a token must come out only for a login the admin allowed in a JSON request under their session, once, to the holder of its secret, and no secret or token may show up anywhere else.
+// Across any order of those steps, a token must come out only for a login the admin allowed in a JSON request under their session with the letters its terminal shows, once, to the holder of its secret.
+// No secret or token may show up anywhere else, and the letters a person types may show up in nothing the dashboard answers.
 
 import { expect } from "bun:test";
 import fc from "fast-check";
@@ -32,12 +33,14 @@ const NAME_BREAKERS = [[0x00, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x61c, 0x61c],
 type Step =
   | { readonly kind: "begin"; readonly scope: "admin" | "publisher"; readonly computer: string }
   | { readonly kind: "ask"; readonly login: number; readonly secret: string | undefined }
-  | { readonly kind: "look"; readonly login: number; readonly code: string | undefined }
-  | { readonly kind: "decide"; readonly login: number; readonly allow: boolean; readonly ticked: boolean; readonly session: boolean; readonly json: boolean; readonly origin: string }
+  | { readonly kind: "look"; readonly login: number; readonly named: string | undefined }
+  | { readonly kind: "decide"; readonly login: number; readonly allow: boolean; readonly typed: "terminal" | "other" | "none"; readonly session: boolean; readonly json: boolean; readonly origin: string }
   | { readonly kind: "wait"; readonly seconds: number };
 
 /** What the test itself knows of a login, kept apart from anything the install answers. */
 interface Known {
+  readonly id: string;
+  readonly address: string;
   readonly code: string;
   readonly secret: string;
   readonly scope: string;
@@ -93,18 +96,19 @@ function breaksName(text: string): boolean {
 const property = fuzzTarget(import.meta.file);
 const secrets = hostile(fc.stringMatching(/^poplin_login_[0-9a-f]{16}_[0-9a-f]{64}$/));
 const names = hostile(fc.constantFrom("laptop", "Ada's laptop (studio)", "\u05de\u05d7\u05e9\u05d1 ci", "build \u{1f4bb} 2", "x".repeat(MOST_NAME_LENGTH)));
+const ids = hostile(fc.stringMatching(/^[0-9a-f]{16}$/));
 const codes = hostile(fc.stringMatching(/^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/));
 const picks = fc.nat({ max: 7 });
 const steps: fc.Arbitrary<Step> = fc.oneof(
   { arbitrary: fc.record({ kind: fc.constant("begin" as const), scope: fc.constantFrom("admin" as const, "publisher" as const), computer: fc.constantFrom("laptop", "", "ci-runner") }), weight: 3 },
   { arbitrary: fc.record({ kind: fc.constant("ask" as const), login: picks, secret: fc.oneof({ arbitrary: fc.constant(undefined), weight: 3 }, { arbitrary: secrets, weight: 1 }) }), weight: 5 },
-  { arbitrary: fc.record({ kind: fc.constant("look" as const), login: picks, code: fc.oneof({ arbitrary: fc.constant(undefined), weight: 2 }, { arbitrary: codes, weight: 1 }) }), weight: 2 },
+  { arbitrary: fc.record({ kind: fc.constant("look" as const), login: picks, named: fc.oneof({ arbitrary: fc.constant(undefined), weight: 2 }, { arbitrary: fc.oneof(codes, ids), weight: 1 }) }), weight: 2 },
   {
     arbitrary: fc.record({
       kind: fc.constant("decide" as const),
       login: picks,
       allow: fc.boolean(),
-      ticked: fc.oneof({ arbitrary: fc.constant(true), weight: 3 }, { arbitrary: fc.constant(false), weight: 1 }),
+      typed: fc.oneof({ arbitrary: fc.constant("terminal" as const), weight: 3 }, { arbitrary: fc.constantFrom("other" as const, "none" as const), weight: 1 }),
       session: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
       json: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
       origin: fc.constantFrom(ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "null"),
@@ -203,7 +207,10 @@ function guarded(step: Extract<Step, { kind: "decide" }>): number | undefined {
 }
 
 async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "decide" }>): Promise<void> {
-  const decision = { code: login.code, allow: step.allow, ...(step.allow ? { scope: login.scope } : {}), ...(step.ticked ? { confirm: true } : {}) };
+  // What a person has to type with: the terminal's own letters, letters that are surely others, or nothing.
+  const other = `${login.code.slice(-4, -1)}${login.code.endsWith("B") ? "C" : "B"}`;
+  const letters = { terminal: { letters: login.code.slice(-4) }, other: { letters: other }, none: {} }[step.typed];
+  const decision = { login: login.id, allow: step.allow, ...(step.allow ? { scope: login.scope, ...letters } : {}) };
   const body = step.json ? JSON.stringify(decision) : new URLSearchParams(Object.entries(decision).map(([key, value]) => [key, String(value)])).toString();
 
   const headers = new Headers({ Origin: step.origin, "Sec-Fetch-Site": step.origin === ORIGIN ? "same-origin" : "cross-site", "Content-Type": step.json ? JSON_TYPE : FORM });
@@ -215,25 +222,25 @@ async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "dec
   const refusal = guarded(step);
   if (refusal !== undefined) expect(answer.status).toBe(refusal);
 
-  // A page of another origin is refused whatever it sends, and a page with no origin of its own, which sends `null`, is one. The session, the dashboard's own page, and the media type are the whole guard; the box is the admin's word that the codes match.
-  const taken = refusal === undefined && (step.ticked || !step.allow);
+  // A page of another origin is refused whatever it sends, and a page with no origin of its own, which sends `null`, is one. The session, the dashboard's own page, and the media type guard the request; the letters are what only the terminal's reader has.
+  const taken = refusal === undefined && (step.typed === "terminal" || !step.allow);
   if (taken && login.state === "pending" && desk.install.clock.now < login.expiresAt) login.state = step.allow ? "allowed" : "denied";
 }
 
-async function look(desk: Desk, login: Known, code: string | undefined): Promise<void> {
-  const asked = new URLSearchParams({ code: code ?? login.code });
-  const page = await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/allow?${asked}`, { headers: { Cookie: SESSION } }));
-  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/data/logins/find?${asked}`, { headers: { Cookie: SESSION } }));
+async function look(desk: Desk, login: Known, named: string | undefined): Promise<void> {
+  // A lone surrogate does not survive an address, so the name is read as the address carries it.
+  const asked = (named ?? login.id).toWellFormed();
+  const page = await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/review/${encodeURIComponent(asked)}`, { headers: { Cookie: SESSION } }));
+  const answer = await desk.dashboard.fetch(new Request(`${ORIGIN}/data/logins/${encodeURIComponent(asked)}`, { headers: { Cookie: SESSION } }));
   const found = await answer.text();
   desk.texts.push(await page.text(), found);
 
-  // A lone surrogate does not survive an address, so the code is read as the address carries it.
-  const typed = parseUserCode((code ?? login.code).toWellFormed());
-  const shown = desk.known.find((other) => parseUserCode(other.code) === typed && other.state === "pending" && desk.install.clock.now < other.expiresAt);
+  const shown = desk.known.find((other) => other.id === asked && other.state === "pending" && desk.install.clock.now < other.expiresAt);
 
-  // The address a terminal prints answers the dashboard's one page, and the login under its code is read as data.
+  // The address a terminal prints answers the dashboard's one page, and the login it names is read as data: by its id alone, never by a code, and with no part of its code.
   expect(page.status).toBe(200);
-  expect([answer.status, JSON.parse(found)]).toMatchObject(shown === undefined ? [400, { ok: false, code: "no_such_login" }] : [200, { ok: true, login: { code: shown.code, scope: shown.scope } }]);
+  if (shown === undefined) expect([answer.ok, JSON.parse(found)]).toMatchObject([false, { ok: false }]);
+  else expect([answer.status, JSON.parse(found)]).toEqual([200, { ok: true, login: { id: shown.id, scope: shown.scope, computer: expect.any(String), asked: expect.any(Number), expires: expect.any(Number) } }]);
 }
 
 async function take(desk: Desk, step: Step): Promise<void> {
@@ -250,7 +257,8 @@ async function take(desk: Desk, step: Step): Promise<void> {
 
     desk.texts.pop();
     desk.credentials.add(String(begun.body.secret));
-    desk.known.push({ code: String(begun.body.code), secret: String(begun.body.secret), scope: step.scope, expiresAt: desk.install.clock.now + Number(begun.body.expires_in) * 1000, state: "pending" });
+    const { secret, code, verify_url: address, expires_in: seconds } = begun.body;
+    desk.known.push({ id: String(secret).split("_")[2] ?? "", address: String(address), code: String(code), secret: String(secret), scope: step.scope, expiresAt: desk.install.clock.now + Number(seconds) * 1000, state: "pending" });
 
     return;
   }
@@ -260,16 +268,18 @@ async function take(desk: Desk, step: Step): Promise<void> {
 
   if (step.kind === "ask") return ask(desk, login, step.secret);
 
-  if (step.kind === "look") return look(desk, login, step.code);
+  if (step.kind === "look") return look(desk, login, step.named);
 
   return decide(desk, login, step);
 }
 
 property(
-  "over any order of steps a token comes out only for a login the admin allowed in a JSON request under their session, once, and no secret or token is in any other answer, page, or audit entry",
+  "over any order of steps a token comes out only for a login the admin allowed in a JSON request under their session with its terminal letters, once, and no secret, token, or half of a code is in any other answer, page, address, or audit entry",
   fc.asyncProperty(fc.array(steps, { minLength: 1, maxLength: 40 }), async (taken) => {
     const desk = await openDesk();
     const tokensBefore = (await desk.install.database.listTokens()).length;
+    // The page as it is before any login: four letters that stand in it by chance say nothing of a code.
+    const blank = await (await desk.dashboard.fetch(new Request(`${ORIGIN}/tokens/list`, { headers: { Cookie: SESSION } }))).text();
 
     for (const step of taken) await take(desk, step);
 
@@ -284,9 +294,10 @@ property(
       allowed: actions("login_allowed"),
       denied: actions("login_denied"),
       leaked: [...desk.credentials].filter((credential) => everything.includes(credential)),
+      typed: desk.known.flatMap((login) => [login.code.slice(0, 4), login.code.slice(-4)]).filter((half) => !blank.includes(half) && (everything.includes(half) || desk.known.some((other) => other.address.includes(half)))),
       shaped: everything.match(CREDENTIAL),
       reported: desk.install.reported.length,
-    }).toEqual({ tokens: states("collected"), added: states("collected"), allowed: states("allowed", "collected"), denied: states("denied"), leaked: [], shaped: null, reported: 0 });
+    }).toEqual({ tokens: states("collected"), added: states("collected"), allowed: states("allowed", "collected"), denied: states("denied"), leaked: [], typed: [], shaped: null, reported: 0 });
   }),
 );
 

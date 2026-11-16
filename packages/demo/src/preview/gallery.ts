@@ -2,9 +2,10 @@
 //
 // A screen that only a program's call reaches is a stage: an address under `/state/` that makes the call itself and leads to the screen.
 
-import { beginLogin } from "../../../core/src/actions/computer-logins";
 import { listSites } from "../../../core/src/actions/list";
 import type { SiteObject } from "../../../core/src/actions/site-object";
+import { REVIEW_PAGE } from "../../../core/src/api/routes";
+import { showUserCode } from "../../../core/src/auth/computer-logins";
 import { AUDIT_WINDOW } from "../../../core/src/database/database";
 import { PLUG_STATES, type PlugState } from "./domain-plug";
 import { ADMIN_ORIGIN, localAddress } from "./mount";
@@ -19,8 +20,8 @@ const HOME = { prefix: "", origin: ADMIN_ORIGIN, base: "" };
 /** Where a site that is not there would be: its panel in the dashboard, and the path of a public name no site holds. */
 const NO_PLACE: Place = { page: "/sites/nothing--000000000000", served: "/served/nobody-page/", open: "/served/nobody-page/" };
 
-/** A code no login waits under. */
-const NO_CODE = "WDJB-MJHT";
+/** An id no login waits under. */
+const NO_LOGIN = "0000000000000000";
 
 /** What the install holds in each state of the plug before Repair is pressed, in the index's words. */
 const SETUP_WORDS: Readonly<Record<PlugState, string>> = {
@@ -63,17 +64,27 @@ export interface Entry {
   readonly status?: number;
 }
 
-/** What a stage works with: the seeded install. */
+/** What a stage works with. */
 interface Stage {
+  /** The seeded install. */
   readonly world: World;
+
+  /** The ids of the logins the sample computers began and still hold the secrets of. */
+  readonly samples: readonly string[];
 }
 
-/** Begin a login as a computer would, and lead to the screen that allows it. */
-async function waitingLogin(stage: Stage): Promise<Response> {
-  const begun = await beginLogin(stage.world.install, { scope: "publisher", computer: "studio-laptop" }, "preview");
-  if (!begun.ok) return new Response(`The preview's login was refused: ${begun.code}.\n`, { status: 500 });
+/** What the terminal of a computer that began a login shows: the address of the page that allows it, and the code, which no page of the dashboard shows whole. `computer` is the name it gave. */
+export interface Printed {
+  readonly computer: string;
+  readonly address: string;
+  readonly code: string;
+}
 
-  return new Response(null, { status: 303, headers: { Location: `/tokens/allow?${new URLSearchParams({ code: begun.code })}` } });
+/** Answer what the terminal of each sample computer that waits shows: the preview stands in for those terminals, since no computer is behind a sample login. A login a real terminal began is left out: its code is that terminal's alone. */
+async function waitingLogins({ world, samples }: Stage): Promise<readonly Printed[]> {
+  const waiting = await world.install.database.listWaitingComputerLogins(world.install.now());
+
+  return waiting.filter((login) => samples.includes(login.id)).map((login) => ({ computer: login.computer, address: `${REVIEW_PAGE}/${login.id}`, code: showUserCode(login.code) }));
 }
 
 /** Add more logins to the log than a narrowed page looks at, and lead to the page of what happened to sites: it stops before it finds an entry, and says so. A reset takes the logins away. */
@@ -115,8 +126,8 @@ function runOut(to: (place: Place) => string): (stage: Stage) => Promise<Respons
 }
 
 /** Every stage, by its address. */
-export const STAGES: Readonly<Record<string, (stage: Stage) => Promise<Response>>> = {
-  "/state/allow/waiting": waitingLogin,
+export const STAGES: Readonly<Record<string, (stage: Stage) => Promise<Response | readonly Printed[]>>> = {
+  "/state/allow/waiting": waitingLogins,
   "/state/activity/long": longLog,
   "/state/expired/panel": runOut((place) => place.page),
   "/state/expired/admin": runOut((place) => place.served),
@@ -131,8 +142,8 @@ function dashboardEntries(): Entry[] {
     { group: "Dashboard", name: "Activity: what happened to sites", path: "/activity?kind=sites" },
     { group: "Dashboard", name: "Activity: a long log, searched in parts", path: "/state/activity/long" },
     { group: "Dashboard", name: "No such screen", path: "/nothing" },
-    { group: "Access: allow this computer", name: "Waiting for a decision", path: "/state/allow/waiting" },
-    { group: "Access: allow this computer", name: "Code not found, decided, or run out", path: `/tokens/allow?code=${NO_CODE}` },
+    { group: "Access: allow this computer", name: "The logins that wait: what each terminal prints", path: "/state/allow/waiting" },
+    { group: "Access: allow this computer", name: "Login not found, decided, or run out", path: `${REVIEW_PAGE}/${NO_LOGIN}` },
     { group: "The login", name: "No session: the way to the login", path: "/settings?as=visitor" },
     { group: "The login", name: "Login refused", path: "/login?preview-login=refused", status: 403 },
   ];

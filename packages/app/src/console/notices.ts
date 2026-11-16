@@ -38,15 +38,14 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   upload_finished: "The copy is finished already: it is a site of its own now, in the list of sites.",
   stale_version: "A newer publish went live first.",
   id_taken: "A site here already has that id.",
-  not_confirmed: "Type the last letters of the code first.",
+  not_confirmed: "Those are not the last letters of this login's code.",
   not_json: "The request was not sent as JSON, so nothing was changed.",
   too_large: "The request was too large, so nothing was changed.",
   no_page: "There is no such page.",
   too_many_tries: "Too many tries. Wait a minute.",
-  no_such_login: "No login waits under that code. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
+  no_such_login: "That login is no longer waiting. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
   no_working_login: "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out.",
   token_gone: "That token is gone already.",
-  login_gone: "That login is no longer waiting. Run poplin login again.",
   already_a_login: "That email can log in already.",
   not_a_login: "That email is not in the list. It may have been removed already.",
   allowance_spent: "The storage takes no more writes today: max_storage_writes_per_day is reached. It works again after midnight UTC.",
@@ -142,10 +141,10 @@ type ActionCode =
 type RunRefusal = Extract<DomainReading, { readonly ok: false }>["refusal"];
 
 /** The codes of the dashboard's own refusals: a request it cannot take, or one it does not answer. */
-type OwnCode = "not_confirmed" | "not_json" | "too_large" | "no_page" | "too_many_tries" | "no_more_writing" | "no_more_reading" | AccessCode | RunRefusal;
+type OwnCode = "not_json" | "too_large" | "no_page" | "too_many_tries" | "no_more_writing" | "no_more_reading" | AccessCode | RunRefusal;
 
-/** The codes of the Access screen's own refusals: a token or a waiting login that is gone. */
-type AccessCode = "token_gone" | "login_gone";
+/** The code of the Access screen's own refusal: a token that is gone. */
+type AccessCode = "token_gone";
 
 /** The sentence of a code whose meaning hangs on what it is about; none for a code that has one meaning, or is about nothing. */
 function sentenceAbout(code: string, about: string | undefined): string | undefined {

@@ -19,6 +19,7 @@ import { logIn } from "../../../app/src/login/login";
 import { serveSite } from "../../../app/src/sites/serve";
 import { type Asking, checkForUpdate } from "../../../core/src/actions/check-update";
 import type { Rebuilding } from "../../../core/src/actions/start-update";
+import { parseLoginSecret } from "../../../core/src/auth/computer-logins";
 import { importSessionKey } from "../../../core/src/auth/cookie";
 import { parseLogins } from "../../../core/src/auth/logins";
 import type { SqlDriver } from "../../../core/src/database/driver";
@@ -28,7 +29,7 @@ import { changingPlug, PLUG_STATES, type PlugState, previewFirstRun, previewPlug
 import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { ADMIN_ORIGIN, askMount, type Mount, previewValue, SERVED_PREFIX, siteOrigin } from "./mount";
-import { galleryPage, loginPage, missingPage, plainPage } from "./own-pages";
+import { galleryPage, loginPage, missingPage, plainPage, terminalPage } from "./own-pages";
 import { panelNow } from "./panel-now";
 import { type RealSites, realAddresses } from "./real-sites";
 import { keepLoginsWaiting, SEEDED_DAYS, type Samples, seedWorld } from "./seed";
@@ -334,6 +335,16 @@ function redirectOf(url: URL): Response | undefined {
   return undefined;
 }
 
+/** Play the stage at a path over a scene: its own answer, the page of what the sample computers' terminals print, or `undefined` for a path of no stage. Only the logins the sample computers hold the secrets of are printed. */
+async function stagedAt(path: string, scene: Scene): Promise<Response | undefined> {
+  const stage = stageAt(path);
+  if (stage === undefined) return undefined;
+
+  const staged = await stage({ world: scene.seeded, samples: scene.secrets().flatMap((secret) => parseLoginSecret(secret) ?? []) });
+
+  return staged instanceof Response ? staged : new Response(await terminalPage(staged), { headers: OWN_HEADERS });
+}
+
 /**
  * Build the preview: seed its installs and wire every piece.
  *
@@ -365,10 +376,10 @@ export async function createPreview(host: Host): Promise<Preview> {
     const redirect = redirectOf(url);
     if (redirect !== undefined) return redirect;
 
-    const stage = stageAt(url.pathname);
-    if (stage === undefined) return own(await missingPage(), 404);
+    const staged = await stagedAt(url.pathname, scene);
+    if (staged === undefined) return own(await missingPage(), 404);
 
-    return stage({ world: scene.seeded });
+    return staged;
   }
 
   return {

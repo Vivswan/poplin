@@ -1,6 +1,6 @@
 // Which screen the address names: the routes of the console. A new screen is added here, and its section in the frame is then given its path.
 
-import { ALLOW_PAGE } from "@poplin/core/src/api/routes";
+import { REVIEW_PAGE } from "@poplin/core/src/api/routes";
 import { CatchBoundary, createLazyRoute, createRootRoute, createRoute, createRouter, RouterProvider, useNavigate } from "@tanstack/react-router";
 import { lazy, type ReactNode, Suspense } from "react";
 
@@ -63,8 +63,7 @@ const ROUTES = ROOT.addChildren([
   ACCESS.addChildren([
     createRoute({ getParentRoute: () => ACCESS, path: "/tokens" }),
     createRoute({ getParentRoute: () => ACCESS, path: "/tokens/list" }),
-    createRoute({ getParentRoute: () => ACCESS, path: "/tokens/review/$login" }),
-    createRoute({ getParentRoute: () => ACCESS, path: ALLOW_PAGE }),
+    createRoute({ getParentRoute: () => ACCESS, path: `${REVIEW_PAGE}/$login` }),
   ]),
   ACTIVITY,
   USAGE,

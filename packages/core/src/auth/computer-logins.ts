@@ -1,6 +1,6 @@
 // A computer's login: asked for from a terminal, then allowed or denied by an admin on the dashboard.
 //
-//   the code     WDJB-MJHT, shown in the terminal and on the dashboard, so a person can see the two match; it proves nothing
+//   the code     WDJB-MJHT, shown in the terminal alone; the dashboard is given no part of it and asks for its last letters, so only one who sees the terminal allows the login
 //   the secret   poplin_login_<id>_<256 random bits>, held by the terminal alone; only its SHA-256 is stored
 
 import { RANDOM_SHAPES, randomText } from "../records/random-text";
@@ -11,6 +11,7 @@ import { randomHex, sameText, sha256Hex } from "./util";
 const SECRET_PREFIX = "poplin_login_";
 const ID_BYTES = 8;
 const SECRET_BYTES = 32;
+const ID_PATTERN = new RegExp(`^[0-9a-f]{${ID_BYTES * 2}}$`);
 const SECRET_PATTERN = new RegExp(`^${SECRET_PREFIX}([0-9a-f]{${ID_BYTES * 2}})_[0-9a-f]{${SECRET_BYTES * 2}}$`);
 const { alphabet: CODE_ALPHABET, length: CODE_LENGTH } = RANDOM_SHAPES["login-code"];
 const CODE_PATTERN = new RegExp(`^[${CODE_ALPHABET}]{${CODE_LENGTH}}$`);
@@ -61,6 +62,28 @@ export function parseUserCode(typed: string): UserCode | undefined {
   const code = typed.replace(CODE_SEPARATORS, "").replace(SMALL_LETTERS, (letter) => letter.toUpperCase());
 
   return CODE_PATTERN.test(code) ? (code as UserCode) : undefined;
+}
+
+/**
+ * Read the id of a login out of an address or a request.
+ *
+ * @returns the id, or `undefined` for any text that is not shaped like one
+ */
+export function parseLoginId(text: string): LoginId | undefined {
+  return ID_PATTERN.test(text) ? (text as LoginId) : undefined;
+}
+
+/**
+ * Decide whether what a person typed is the second half of a code, or the whole of it.
+ *
+ * @param typed - as typed: ASCII capitals, dashes, and spaces are the typist's to choose
+ */
+export function endsUserCode(typed: string, code: UserCode): boolean {
+  if (typed.length > MAX_TYPED_LENGTH) return false;
+
+  const letters = typed.replace(CODE_SEPARATORS, "").replace(SMALL_LETTERS, (letter) => letter.toUpperCase());
+
+  return letters === code || letters === code.slice(CODE_LENGTH / 2);
 }
 
 /** Write a code for a person: two groups of four, such as `WDJB-MJHT`. */

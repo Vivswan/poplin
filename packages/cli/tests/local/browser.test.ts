@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { openBrowser } from "../../src/local/browser";
 import type { Machine } from "../../src/local/login-file";
 
-const ADDRESS = "https://poplin.example.com/tokens/allow?code=WDJB-MJHT";
+const ADDRESS = "https://poplin.example.com/tokens/review/0123456789abcdef";
 
 /** What was handed to the browser. */
 function recorder(): { readonly started: string[][]; readonly start: NonNullable<Parameters<typeof openBrowser>[2]> } {

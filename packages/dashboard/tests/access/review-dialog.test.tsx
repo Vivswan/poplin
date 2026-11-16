@@ -14,7 +14,6 @@ import { ReviewDialog } from "@/access/review-dialog";
 /** A login that asked to publish. */
 const PUBLISHER = {
   id: "cd45ee5db1827382",
-  code: "WDJB-MJHT",
   scope: "publisher",
   computer: "studio-laptop",
   asked: 1_794_700_000_000,
@@ -33,18 +32,24 @@ const TITLE = "Allow this login?";
 /** How the words a person who came by a link is told begin. */
 const LINK_WORDS = /^Anyone can start a login and send its link\./;
 
-/** The last letters of the code of every login here, as its terminal shows them. */
+/** The code of every login here, as its terminal alone shows it: the page is given no part of it. */
+const CODE = "WDJB-MJHT";
+
+/** The last letters of that code, which a person types. */
 const LETTERS = "MJHT";
+
+/** What the server says of letters that are not the code's last. */
+const WRONG_LETTERS = "Those are not the last letters of this login's code.";
 
 /** Every decision the dialog sent. */
 const sent: Parameters<AccessActions["decide"]>[1][] = [];
 
-/** The changes of the screen, with a decision that is done as sent. */
+/** The changes of the screen, with a decision that answers as the server does: it alone knows the letters, and lets no computer in without them. */
 const ACTIONS = {
   decide: async (_login: Review, decision: Parameters<AccessActions["decide"]>[1]): Promise<Decided> => {
     sent.push(decision);
 
-    return { kind: "done" };
+    return decision.allow && decision.letters.replace(/[\s-]/g, "").toUpperCase() !== LETTERS ? { kind: "letters", sentence: WRONG_LETTERS } : { kind: "done" };
   },
 } as AccessActions;
 
@@ -115,7 +120,7 @@ describe("the review", () => {
     await decide("Allow");
 
     expect([began, asked]).toEqual([starts, asks]);
-    expect([sent, closed]).toEqual([[{ allow: true, confirm: true, scope }], 1]);
+    expect([sent, closed]).toEqual([[{ allow: true, letters: LETTERS, scope }], 1]);
   });
 
   // Drift: keeping a computer out would ask for the letters that only letting one in needs.
@@ -124,23 +129,39 @@ describe("the review", () => {
     render(<Reviewing login={ADMIN} onClose={() => (closed += 1)} />);
     await decide("Deny");
 
-    expect([sent, closed]).toEqual([[{ allow: false, confirm: false, scope: "publisher" }], 1]);
+    expect([sent, closed]).toEqual([[{ allow: false, letters: "", scope: "publisher" }], 1]);
   });
 
-  // Drift: the code would be shown whole again, so a person who never saw a terminal could copy its letters from the page; or Allow would work with nothing typed.
+  // Drift: Allow would be sent with nothing typed, or the page would say a part of a code again, which is the whole answer for a code whose halves are the same.
   test.each([
-    ["nothing", "", true, 0],
-    ["fewer letters than asked", "JHT", true, 0],
-    ["the letters the page itself shows", "WDJB", true, 1],
-    ["the last four letters", "MJHT", false, 0],
-    ["the last four letters in small letters, with a space", " mj ht", false, 0],
-    ["the whole code", "wdjb-mjht", false, 0],
-  ])("shows the code's start alone, and Allow is off until its last letters are typed: %s", (_case, letters, off, refusals) => {
+    ["nothing", "", true],
+    ["fewer letters than asked", "JHT", true],
+    ["three letters, a space, and a dash", "J H-T", true],
+    ["four letters", "MJHT", false],
+    ["four letters the page cannot know to be wrong", "BBBB", false],
+    ["the whole code", "wdjb-mjht", false],
+  ])("says no part of a code, and Allow is off until four letters are typed: %s", (_case, letters, off) => {
     render(<Reviewing login={PUBLISHER} />);
+    const page = document.body.innerHTML.toUpperCase();
     if (letters !== "") type(letters);
-    const text = within(document.body).getByRole("dialog").textContent ?? "";
 
-    expect([text.includes(PUBLISHER.code), text.includes("It starts WDJB-."), allowIsOff(), dialog().queryAllByRole("alert").length]).toEqual([false, !off || refusals === 0, off, refusals]);
+    expect([CODE.split("-").filter((half) => page.includes(half)), allowIsOff(), sent]).toEqual([[], off, []]);
+  });
+
+  // Drift: letters the server refused would close the review as if done, or the refusal would show away from the field, or stay after the person typed again.
+  test("keeps open when the server refuses the letters, says so at the field with the focus there, and takes the next try", async () => {
+    let closed = 0;
+    render(<Reviewing login={PUBLISHER} onClose={() => (closed += 1)} />);
+    type("BBBB");
+    await decide("Allow");
+    const field = dialog().getByRole("textbox");
+    const refused = [closed, dialog().getByRole("alert").textContent, document.activeElement === field];
+    type(LETTERS);
+    const cleared = dialog().queryAllByRole("alert").length;
+    sent.length = 0;
+    await decide("Allow");
+
+    expect([refused, cleared, sent, closed]).toEqual([[0, WRONG_LETTERS, true], 0, [{ allow: true, letters: LETTERS, scope: "publisher" }], 1]);
   });
 });
 
@@ -187,7 +208,7 @@ describe("a review opened by a link", () => {
       asks: fact("Asks for"),
       starts: pressed(),
       told: dialog().queryByText(LINK_WORDS) !== null,
-      code: (named.textContent ?? "").includes(PHISHING.code),
+      code: CODE.split("-").some((half) => document.body.innerHTML.toUpperCase().includes(half)),
       allowOff: allowIsOff(),
     }).toEqual({
       title: TITLE,

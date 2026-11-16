@@ -1,11 +1,19 @@
-// The Access screen's data: what the waiting logins, the people, and the tokens answer, what each change refuses, and that a login's code is counted and never listed.
+// The Access screen's data: what the waiting logins, the people, and the tokens answer, what each change refuses, and that the end of a login's code is in no answer and is tried a counted number of times.
 
 import { describe, expect, test } from "bun:test";
 import { listAudit } from "@poplin/core/src/actions/audit-log";
 import { beginLogin } from "@poplin/core/src/actions/computer-logins";
+import { mintComputerLogin, parseLoginSecret, showUserCode, type UserCode } from "@poplin/core/src/auth/computer-logins";
 import { issueToken } from "@poplin/core/src/actions/manage-tokens";
 
 import { openConsole } from "./support/console";
+import { ORIGIN } from "./support/install";
+
+/** What a browser sends with a request made by a page of a site of the same install: the site's origin, and that it is another origin of the same site. */
+const SIBLING_PAGE = { Origin: "https://docs--k3v9x2q7m4t8-u-poplin.example.com", "Sec-Fetch-Site": "same-site", "Content-Type": "application/x-www-form-urlencoded" };
+
+/** The code of a planted login, and four letters that are not its last: a code drawn by chance would, once in many runs, end in the letters a test calls wrong, or stand in a page by chance. */
+const PLANTED = { code: "WDJBQXZK" as UserCode, wrong: "BBBB" } as const;
 
 /** One day, in milliseconds. */
 const DAY_MS = 86_400_000;
@@ -16,13 +24,28 @@ type Opened = Awaited<ReturnType<typeof openConsole>>;
 /** What a route answers, read loosely: each test names the keys it holds. */
 type Answer = Readonly<Record<string, unknown>>;
 
-/** Begin a login as one visitor, a moment after the one before, and answer its code. */
-async function begin(opened: Opened, computer: string, scope: "publisher" | "admin" = "publisher", visitor = "a-visitor"): Promise<string> {
+/** A login begun: its id, and the code its terminal alone shows. */
+interface Begun {
+  readonly id: string;
+  readonly code: string;
+}
+
+/** Begin a login as one visitor, a moment after the one before. */
+async function begin(opened: Opened, computer: string, scope: "publisher" | "admin" = "publisher", visitor = "a-visitor"): Promise<Begun> {
   opened.base.clock.now += 1000;
   const begun = await beginLogin(opened.base.install, { scope, computer }, visitor);
   if (!begun.ok) throw new Error("the login was not begun");
 
-  return begun.code;
+  return { id: parseLoginSecret(begun.secret) ?? "", code: begun.code };
+}
+
+/** Put a waiting login of a known code into the install, as `beginLogin` stores one. */
+async function plant(opened: Opened, computer: string, scope: "publisher" | "admin" = "publisher"): Promise<Begun> {
+  opened.base.clock.now += 1000;
+  const { login } = await mintComputerLogin({ scope, computer, visitor: "a-visitor", now: opened.base.clock.now });
+  await opened.base.install.database.addComputerLogin({ ...login, code: PLANTED.code }, { perVisitor: 3, all: 50 });
+
+  return { id: login.id, code: showUserCode(PLANTED.code) };
 }
 
 async function read(response: Response): Promise<Answer> {
@@ -30,8 +53,8 @@ async function read(response: Response): Promise<Answer> {
 }
 
 describe("the waiting logins", () => {
-  // Drift: a login's code would reach the list, where a glance over the shoulder reads it, or an eleventh login would be listed or lost without a count.
-  test("are listed newest first, ten at most, the rest counted, and never with a code", async () => {
+  // Drift: an eleventh login would be listed or lost without a count.
+  test("are listed newest first, ten at most, the rest counted", async () => {
     const opened = await openConsole();
     for (let nth = 1; nth <= 12; nth += 1) await begin(opened, `computer-${nth}`, "publisher", `visitor-${nth}`);
 
@@ -43,61 +66,94 @@ describe("the waiting logins", () => {
     expect(logins.every((login) => Object.keys(login).sort().join() === "asked,computer,id,scope")).toBe(true);
   });
 
-  // Drift: the review step would open without the code to check against the terminal, or a login that was decided would still open.
-  test("open for review by their id with the code, and a decided one is said to be gone", async () => {
+  // Drift: the review would be sent a part of the code, or a login that was decided would still open.
+  test("open for review by their id with no part of the code, and a decided one is said to be gone", async () => {
     const opened = await openConsole();
-    const code = await begin(opened, "studio-laptop");
-    const [{ id }] = (await read(await opened.get("/data/logins"))).logins as readonly [{ readonly id: string }];
+    const { id } = await begin(opened, "studio-laptop");
     const shown = await read(await opened.get(`/data/logins/${id}`));
-    await opened.change("/data/logins/decide", { code, allow: false });
+    await opened.change("/data/logins/decide", { login: id, allow: false });
     const after = await opened.get(`/data/logins/${id}`);
 
-    expect(shown.login).toMatchObject({ id, code, computer: "studio-laptop", scope: "publisher" });
-    expect([after.status, (await read(after)).code]).toEqual([400, "login_gone"]);
+    expect(shown.login).toEqual({ id, computer: "studio-laptop", scope: "publisher", asked: expect.any(Number), expires: expect.any(Number) });
+    expect([after.status, (await read(after)).code]).toEqual([400, "no_such_login"]);
   });
 
-  // Drift: a wrong code from a terminal's address would tell which logins do wait.
-  test("found by a code that names none answer a refusal and nothing of the logins that wait", async () => {
+  // Drift: a route that took a code would be back, and an address that holds a code would again lead to the login it names: whoever is sent it would need no terminal.
+  test.each([
+    ["the path that looked a login up by its code", (code: string) => `/data/logins/find?code=${code}`],
+    ["the code where an id goes", (code: string) => `/data/logins/${code}`],
+    ["the code's letters where an id goes", (code: string) => `/data/logins/${code.replace("-", "")}`],
+  ])("%s answers no login", async (_case, path) => {
     const opened = await openConsole();
-    await begin(opened, "studio-laptop");
-    const found = await read(await opened.get("/data/logins/find?code=WDJB-MJHT"));
+    const { code } = await begin(opened, "studio-laptop");
+    const found = await opened.get(path(code));
+    const body = await read(found);
 
-    expect(Object.keys(found).sort()).toEqual(["about", "code", "ok", "sentence"]);
-    expect(found.code).toBe("no_such_login");
+    expect([found.status, body.code, Object.keys(body).sort()]).toEqual([400, "no_such_login", ["about", "code", "ok", "sentence"]]);
+  });
+
+  // Drift: the letters a person types to allow a login would be in something the page is sent, so a page could show them, and a person who was sent the address could copy them.
+  test("no answer about a waiting login holds either half of its code: the list, the review, each page, each refusal, and the decision", async () => {
+    const opened = await openConsole();
+    const { id, code } = await plant(opened, "studio-laptop", "admin");
+    const { wrong } = PLANTED;
+    const answers = [
+      await opened.get("/data/logins"),
+      await opened.get(`/data/logins/${id}`),
+      await opened.get("/tokens/list"),
+      await opened.get(`/tokens/review/${id}`),
+      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", letters: wrong }),
+      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", letters: "" }),
+      await opened.change("/data/logins/decide", { login: id, allow: true, letters: wrong }),
+      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", letters: code.slice(-4) }),
+      await opened.get("/data/tokens"),
+    ];
+    const texts = await Promise.all(answers.map(async (answer) => `${answer.headers.get("Location") ?? ""}\n${await answer.text()}`));
+
+    expect(answers.map((answer) => answer.status)).toEqual([200, 200, 200, 200, 400, 400, 400, 200, 200]);
+    expect(texts.map((text) => [code.slice(0, 4), code.slice(-4)].some((half) => text.toUpperCase().includes(half)))).toEqual(answers.map(() => false));
   });
 });
 
 describe("a decision", () => {
-  // Drift: a computer would be let in without the word that the codes match, with more than it asked, or with what it asked because the caller named no scope; or a lowered scope would not reach the token.
+  // Drift: a computer would be let in without the letters of its terminal, with more than it asked, or with what it asked because the caller named no scope; or a lowered scope would not reach the token.
   test.each([
-    ["allowed with the box ticked", "publisher", { allow: true, confirm: true, scope: "publisher" }, { ok: true, allowed: true, scope: "publisher" }, 0],
-    ["allowed for less than it asked", "admin", { allow: true, confirm: true, scope: "publisher" }, { ok: true, allowed: true, scope: "publisher" }, 0],
-    ["allowed for all it asked, by name", "admin", { allow: true, confirm: true, scope: "admin" }, { ok: true, allowed: true, scope: "admin" }, 0],
-    ["allowed with no scope named, when it asked for everything", "admin", { allow: true, confirm: true }, { ok: false, code: "bad_argument", about: "scope" }, 1],
-    ["allowed with no scope named, when it asked to publish", "publisher", { allow: true, confirm: true }, { ok: false, code: "bad_argument", about: "scope" }, 1],
-    ["allowed without the box ticked", "publisher", { allow: true, scope: "publisher" }, { ok: false, code: "not_confirmed", about: "confirm" }, 1],
-    ["allowed for more than it asked", "publisher", { allow: true, confirm: true, scope: "admin" }, { ok: false, code: "bad_argument", about: "scope" }, 1],
-    ["denied, which needs no tick", "publisher", { allow: false }, { ok: true, allowed: false }, 0],
-  ] as const)("%s", async (_case, asked, decision, answer, waiting) => {
+    ["allowed with the letters", "publisher", { allow: true, scope: "publisher" }, "last", { ok: true, allowed: true, scope: "publisher" }, 0],
+    ["allowed for less than it asked", "admin", { allow: true, scope: "publisher" }, "last", { ok: true, allowed: true, scope: "publisher" }, 0],
+    ["allowed for all it asked, by name", "admin", { allow: true, scope: "admin" }, "last", { ok: true, allowed: true, scope: "admin" }, 0],
+    ["allowed with no scope named, when it asked for everything", "admin", { allow: true }, "last", { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["allowed with no scope named, when it asked to publish", "publisher", { allow: true }, "last", { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["allowed with no letters sent", "publisher", { allow: true, scope: "publisher" }, "none", { ok: false, code: "bad_argument", about: "letters" }, 1],
+    ["allowed with other letters", "publisher", { allow: true, scope: "publisher" }, "wrong", { ok: false, code: "not_confirmed", about: "letters", sentence: "Those are not the last letters of this login's code." }, 1],
+    ["allowed with the word a page could send in their place", "publisher", { allow: true, scope: "publisher", confirm: true }, "none", { ok: false, code: "bad_argument", about: "letters" }, 1],
+    ["allowed for more than it asked", "publisher", { allow: true, scope: "admin" }, "last", { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["denied, which needs no letters", "publisher", { allow: false }, "none", { ok: true, allowed: false }, 0],
+  ] as const)("%s", async (_case, asked, decision, typed, answer, waiting) => {
     const opened = await openConsole();
-    const code = await begin(opened, "studio-laptop", asked);
-    const decided = await read(await opened.change("/data/logins/decide", { code, ...decision }));
+    const { id, code } = await plant(opened, "studio-laptop", asked);
+    const letters = { last: { letters: code.slice(-4) }, wrong: { letters: PLANTED.wrong }, none: {} }[typed];
+    const decided = await read(await opened.change("/data/logins/decide", { login: id, ...decision, ...letters }));
     const listed = await read(await opened.get("/data/logins"));
 
     expect(decided).toMatchObject(answer);
     expect(listed.logins).toHaveLength(waiting);
   });
 
-  // Drift: codes could be guessed without end through the new screen, or a guess here would not count against the minute the dashboard's own page counts.
-  test.each([
-    ["looking a code up", (opened: Opened) => opened.get("/data/logins/find?code=WDJB-MJHT")],
-    ["deciding", (opened: Opened) => opened.change("/data/logins/decide", { code: "WDJB-MJHT", allow: false })],
-  ])("by %s is refused after twenty tries in a minute, and listing is not", async (_case, attempt) => {
+  // Drift: the letters could be guessed without end, or a request that is no decision would spend the tries of the person whose session it rides on.
+  test("is refused after twenty tries in a minute, which a request that is no decision does not spend, and listing is not", async () => {
     const opened = await openConsole();
+    const { id } = await plant(opened, "studio-laptop");
+    const attempt = (): Promise<Response> => opened.change("/data/logins/decide", { login: id, allow: true, scope: "publisher", letters: PLANTED.wrong });
+    for (let nth = 0; nth < 30; nth += 1) await opened.change("/data/logins/decide", { login: id, allow: true });
+    // A page of a site of the same install rides on the person's session: what it can send is no decision, and spends nothing.
+    const forged: number[] = [];
+    for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.change("/data/logins/decide", `login=${id}&allow=true&scope=admin&letters=BBBB`, SIBLING_PAGE)).status);
+    for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.fetch(new Request(`${ORIGIN}/data/logins/find?code=BBBB-BBBB`, { headers: { Cookie: opened.base.cookie, ...SIBLING_PAGE } }))).status);
     const statuses: number[] = [];
-    for (let nth = 0; nth < 21; nth += 1) statuses.push((await attempt(opened)).status);
-    const last = await attempt(opened);
+    for (let nth = 0; nth < 21; nth += 1) statuses.push((await attempt()).status);
+    const last = await attempt();
 
+    expect([...new Set(forged.slice(0, 30)), ...new Set(forged.slice(30))]).toEqual([403, 400]);
     expect([...new Set(statuses.slice(0, 20)), statuses[20]]).toEqual([400, 429]);
     expect((await read(last)).sentence).toBe("Too many tries. Wait a minute.");
     expect((await opened.get("/data/logins")).status).toBe(200);

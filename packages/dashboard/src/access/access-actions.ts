@@ -26,15 +26,15 @@ interface Decision {
   /** Whether the computer is let in. */
   readonly allow: boolean;
 
-  /** Whether the person typed the code's last letters, which says the login is their own. */
-  readonly confirm: boolean;
+  /** What the person typed as the last letters of the code: the server alone knows them, and lets no computer in without. */
+  readonly letters: string;
 
   /** What an allowed computer may change. */
   readonly scope: Review["scope"];
 }
 
-/** How a decision ended: `gone` is a login that no longer waits, `refused` any other refusal. Both were said in a line. */
-export type Decided = { readonly kind: "done" | "gone" | "refused" };
+/** How a decision ended. `letters` is a refusal of what was typed, with its sentence to say at the field; `gone` a login that no longer waits; `refused` any other refusal. The last two were said in a line. */
+export type Decided = { readonly kind: "done" | "gone" | "refused" } | { readonly kind: "letters"; readonly sentence: string };
 
 /** The changes of the Access screen. */
 export interface AccessActions {
@@ -93,12 +93,14 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
   return {
     removePerson,
     decide: async (login, decision) => {
-      const { allow, confirm, scope } = decision;
+      const { allow, letters, scope } = decision;
 
       try {
-        await answerOf(api.logins.decide.$post({ json: allow ? { code: login.code, allow, confirm, scope } : { code: login.code, allow } }));
+        await answerOf(api.logins.decide.$post({ json: allow ? { login: login.id, allow, scope, letters } : { login: login.id, allow } }));
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
+
+        if (error.code === "not_confirmed") return { kind: "letters", sentence: error.message };
 
         sayRefused(error.message);
         if (error.code !== "no_such_login") return { kind: "refused" };
