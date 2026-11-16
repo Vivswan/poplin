@@ -5,7 +5,7 @@ order: 40
 
 # Limits and cost
 
-What can cost money, what an install caps or protects, what a day counts, and the graph of visits; none of the limits is a cap on what Cloudflare bills.
+What can cost money, what an install caps or protects, what a day counts, the day's database rows, and the graph of visits; none of the limits is a cap on what Cloudflare bills.
 
 ## What can cost money
 
@@ -142,6 +142,26 @@ Cloudflare's free plan     one request: 50 database queries
 - **The storage** is read once for a page view. A path that names no file reads it up to 3 times.
 - **A Worker that starts** with a request asks 4 queries more for it.
 - **The Usage screen** reads the most rows when its graph shows a year of 50 sites, and the Activity screen when the log holds 10,000 entries or more.
+
+## Database rows by day
+
+The dashboard's Usage screen sets the day's database rows beside what Cloudflare's free plan takes:
+
+```text
+What                           Used               Limit       Share of the limit
+Requests today                 1,240              100,000     1%
+Database rows read today       about 12,400       5,000,000   0%
+Database rows written today    about 310          100,000     0%
+```
+
+| On the screen | Is |
+| --- | --- |
+| Database rows read today, Database rows written today | poplin's own count of the rows its database read and wrote on the UTC day. D1 counts its daily allowance in the same rows |
+| `about` | the count can read low, never high. What an instance of the Worker counted and had not written when it ended, or when the day ended, is missing: on a busy day about 1 in 100 rows, on a quiet day up to a few thousand rows |
+| the limit | the free plan's, for every database of the account together. No setting moves it |
+| the icon at a row's end, See it at Cloudflare on a phone | Cloudflare's own page for that number, in a new tab: Workers & Pages for requests, D1 for the database, R2 for the storage. Its figures are the exact ones, and they count the whole account |
+
+The count costs nothing: it rides in the write that counts the day's requests, so no request reads or writes a row for it. From 80% of a limit on, the screen says Near the limit. Once a limit is reached, D1 refuses until 00:00 UTC: a site shows a paused page, and the API answers `allowance_spent`.
 
 ## Visits by day
 
