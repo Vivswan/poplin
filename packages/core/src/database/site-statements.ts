@@ -1,17 +1,17 @@
 // The statements that read and change sites and their kept versions, and the conditions a listing of sites is narrowed and ordered by.
 
-import { and, eq, exists, gt, isNotNull, isNull, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, isNotNull, isNull, ne, notExists, or, type SQL, sql as fragment } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 
 import type { PublicName } from "../names/names";
 import { SITE_ID, SITE_NAME } from "../records/fields";
-import { type NEW_SITE, type SiteAccess, type SiteFolder, TITLE } from "../records/site";
+import { type NEW_SITE, type SiteAccess, type SiteFolder, siteFromRow, TITLE } from "../records/site";
 import type { SiteId } from "../sites/ids";
 import type { UploadId } from "../records/upload";
 import { SITE_VIEWS, viewDays } from "../records/views";
-import type { Signed, SiteDetails, SitesQuery, SitesShown } from "./database";
-import type { Statement } from "./driver";
+import type { Signed, SiteDetails, SitesPage, SitesQuery, SitesShown } from "./database";
+import type { Statement, StatementResult } from "./driver";
 import { earlierIds, requestCounts, sites, tokens, uploads, versions } from "./schema";
 import { BUILD, CHANGED, ONE, built, insertFrom, qualified, written } from "./statements";
 
@@ -57,10 +57,10 @@ export const SITE_FIELDS = {
 };
 
 /** A site as a listing reads it: with the key a listing by title goes by. */
-export const LISTED_FIELDS = { ...SITE_FIELDS, title_key: sites.title_key };
+const LISTED_FIELDS = { ...SITE_FIELDS, title_key: sites.title_key };
 
 /** What a listing by title goes by, as the `title_key` column of a row holds it. */
-export const TITLE_KEY = v.object({ title_key: v.string() });
+const TITLE_KEY = v.object({ title_key: v.string() });
 
 /** The id, the name and the listed title of a site, as `getSiteNames` reads them. */
 export const NAMED_SITE = v.object({ id: SITE_ID, name: SITE_NAME, title: v.nullable(TITLE) });
@@ -78,7 +78,7 @@ export const LATER_FIELDS = { earlier: fragment<string>`${qualified(earlierIds.i
 const ACCESS_RANKS = { private: 0, unlisted: 1, public: 2 } as const;
 
 /** The direction a listing takes when none is asked: the last change first, a name, an access and a title from the start. */
-export const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc", title: "asc" } as const;
+const DEFAULT_DIRECTIONS = { updated: "desc", name: "asc", access: "asc", title: "asc" } as const;
 
 /**
  * A site whose name holds a text, or whose title does: the typed one, else the page's own, which is the one a listing shows; or whose public name does, which the link of a public site shows.
@@ -91,7 +91,7 @@ export function holding(text: string): SQL {
 }
 
 /** The conditions that narrow a listing to what its query asks for: the trash or not, and each filter given. */
-export function narrowing(query: SitesQuery): SQL[] {
+function narrowing(query: SitesQuery): SQL[] {
   const conditions: SQL[] = [eq(sites.trashed, query.trash ? 1 : 0)];
 
   if (query.owner !== undefined) conditions.push(eq(sites.owner, query.owner));
@@ -272,7 +272,7 @@ export function dropOldVersions(folder: SQL, keep: number): Statement {
 }
 
 /** A cursor carries what its listing goes by: a listing by name the last site's name, one by access its access, one by title the title it stands under. */
-export function requireCursor(query: SitesQuery): void {
+function requireCursor(query: SitesQuery): void {
   const { after, sort } = query;
   if (after === undefined || sort === undefined || sort === "updated") return;
 
@@ -280,8 +280,44 @@ export function requireCursor(query: SitesQuery): void {
 }
 
 /** What a cursor holds of the column its listing goes by; `requireCursor` has seen that it holds it. */
-export function cursorPlace(after: NonNullable<SitesQuery["after"]>, sort: NonNullable<SitesQuery["sort"]>): string | number {
+function cursorPlace(after: NonNullable<SitesQuery["after"]>, sort: NonNullable<SitesQuery["sort"]>): string | number {
   return { updated: after.updated_at, name: after.name ?? "", access: ACCESS_RANKS[after.access ?? "private"], title: after.title ?? "" }[sort];
+}
+
+/**
+ * One page of a listing as a query: one row more than the page, which shows whether another page follows. Each row names what the page is ordered by `listed_by`.
+ *
+ * @throws {RangeError} the cursor lacks what its order goes by
+ */
+export function pageAsked(query: SitesQuery) {
+  requireCursor(query);
+
+  // The trash is listed by when each site went there, the sites by when their content last changed.
+  const moment = query.trash ? sites.trashed_at : sites.updated_at;
+  const sort = query.sort ?? "updated";
+  const descending = (query.dir ?? DEFAULT_DIRECTIONS[sort]) === "desc";
+  const column = { updated: fragment`${moment}`, name: fragment`${sites.name}`, access: fragment`${sites.access_rank}`, title: fragment`${sites.title_key}` }[sort];
+  const conditions = narrowing(query);
+
+  if (query.after !== undefined) conditions.push(fragment`(${column}, ${sites.id}) ${descending ? fragment`<` : fragment`>`} (${cursorPlace(query.after, sort)}, ${query.after.id})`);
+
+  const fields = { ...LISTED_FIELDS, listed_by: column.as("listed_by") };
+  const page = BUILD.select(fields).from(sites).where(and(...conditions)).orderBy(descending ? desc(column) : asc(column), descending ? desc(sites.id) : asc(sites.id)).limit(query.limit + 1);
+
+  return { page, descending };
+}
+
+/** The page a listing's statement answered: its sites, and where the page after it starts when one follows. */
+export function pageIn(listed: StatementResult | undefined, query: SitesQuery): SitesPage {
+  const rows = (listed?.rows ?? []).slice(0, query.limit);
+  const listedSites = rows.map(siteFromRow);
+  const last = listedSites.at(-1);
+  if (last === undefined || (listed?.rows.length ?? 0) <= query.limit) return { sites: listedSites };
+
+  // The key is read as the engine holds it: cut and lowered here, it could differ from the one the order goes by.
+  const listedBy = { updated: {}, name: { name: last.name }, access: { access: last.access }, title: { title: v.parse(TITLE_KEY, rows.at(-1)).title_key } }[query.sort ?? "updated"];
+
+  return { sites: listedSites, next: { updated_at: last.state === "trash" ? last.trashed_at : last.updated_at, id: last.id, ...listedBy } };
 }
 
 /** The public name an access carries, as the `public_name` column stores it: none for a site that is not public. */

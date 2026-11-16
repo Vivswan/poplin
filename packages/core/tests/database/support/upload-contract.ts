@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Database, NewUpload } from "../../../src/database/database";
-import type { PublicName } from "../../../src/names/names";
+import type { PublicName, SiteName } from "../../../src/names/names";
 import { mintSiteFolder, type Site } from "../../../src/records/site";
 import type { SiteId } from "../../../src/sites/ids";
 import { mintUploadId, type UploadId } from "../../../src/records/upload";
@@ -339,6 +339,24 @@ export function uploads(label: string, makeDatabase: DatabaseFactory): void {
       await database.setUploadDropped(pending, [1]);
 
       expect([(await database.getUpload(finished))?.upload.dropped, (await database.getUpload(pending))?.upload.dropped]).toEqual([[], []]);
+    });
+
+    // Drift: a copy's second audit entry, which names the site it was copied from, was written after the site was made: a failure between the two left a copy that the log does not call one.
+    test("a copy is made with its two audit entries in one step, the second naming the site it was copied from, and an upload that makes no site writes neither", async () => {
+      const database = await opened(makeDatabase);
+      const source = await made(database, draft(REPORT));
+      const upload = await begunSite(database, draft("copy" as SiteName));
+      const copy = await database.publishUploadAsSite(upload.id, upload.site, BY_BO_LATER, { copiedFrom: source.id });
+      const again = await database.publishUploadAsSite(upload.id, upload.site, BY_BO_LATER, { copiedFrom: source.id });
+      const copied = copy.kind === "done" ? copy.site.id : undefined;
+
+      expect([copy.kind, again.kind]).toEqual(["done", "not_pending"]);
+      expect((await auditTrail(database)).map((entry) => [entry.action, entry.site?.id, entry.detail])).toEqual([
+        ["create", source.id, { access: "private", public_name: null }],
+        ["create", copied, { access: "private", public_name: null }],
+        ["duplicate", copied, { from: source.id }],
+      ]);
+      expect((await database.getUpload(upload.id))?.upload.state).toBe("finished");
     });
 
     // Drift: a site made by an admin finishing a publisher's upload must stay the publisher's, or the publisher loses the site it uploaded.

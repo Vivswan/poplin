@@ -198,6 +198,12 @@ export interface SweepStart {
   readonly place: SweepPlace | undefined;
 }
 
+/** What a site is made with beside its record: what its first version holds, and the site it is a copy of. */
+export interface MadeWith {
+  readonly contents?: VersionContents;
+  readonly copiedFrom?: SiteId;
+}
+
 /** One page of every site, the trash included, in ascending order of id. `next` is the id to pass as `after`, absent on the last page. */
 export interface ExportPage {
   readonly sites: readonly Site[];
@@ -603,6 +609,15 @@ export interface Database {
    */
   changeDetails(id: SiteId, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash">>;
 
+  /**
+   * Set who may open a site and its details together, in one step: the details change only once the site has the access asked, so a refused access leaves all of it as it was.
+   * Each of the two that changes writes its own audit entry.
+   *
+   * @returns `unchanged` when the site already has the access and the details; the refusals as in `changeAccess`
+   * @throws {Error} a detail breaks its field rule
+   */
+  changeAccessAndDetails(id: SiteId, access: SiteAccess, details: SiteDetails, signed: Signed): Promise<Done | Unchanged | Refused<"not_found" | "in_trash" | "name_taken">>;
+
   /** Give a site a new id. The old id names no site from then on, and is kept as an earlier id of the site; the public name, the folder, the request counts of the year up to `signed.at`, and everything else stay with the site. */
   giveNewId(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "in_trash">>;
 
@@ -719,11 +734,12 @@ export interface Database {
    * Make a pending upload's site, at version 1 under a fresh id, and mark the upload finished, in one step. The site belongs to whoever began the upload, whoever finishes it.
    *
    * @param draft - the site, whose folder is the upload's
-   * @param contents - what version 1 holds, worked out from the upload's manifest; nothing is known of it when left out
+   * @param made - `contents` is what version 1 holds, worked out from the upload's manifest; nothing is known of it when left out.
+   *   `copiedFrom` is the site a copy was made of: it writes one `duplicate` audit entry more about the new site, in the same step
    * @returns `not_pending` when the upload is finished, abandoned, gone, or of another folder; `name_taken` as in `createSite`
    * @throws {Error} the draft breaks a field rule, or its folder is already a site's
    */
-  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, contents?: VersionContents): Promise<Done | Refused<"name_taken" | "not_pending">>;
+  publishUploadAsSite(id: UploadId, draft: NewSite, signed: Signed, made?: MadeWith): Promise<Done | Refused<"name_taken" | "not_pending">>;
 
   /**
    * Record a pending upload as the next version of the site in its folder and make it live, with the settings asked with it, and mark the upload finished with the versions dropped.

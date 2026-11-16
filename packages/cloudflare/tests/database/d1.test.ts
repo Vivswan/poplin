@@ -202,6 +202,9 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "changeAccess": [8, 5],
   "changeAccess, the same": [7, 0],
   "changeAccess, name taken": [7, 0],
+  "changeAccessAndDetails": [10, 4],
+  "changeAccessAndDetails, the same": [10, 0],
+  "publishUploadAsSite, a copy": [17, 20],
   "changeDetails": [6, 4],
   "changeDetails, the same": [6, 0],
   "listAudit": [20, 0],
@@ -851,6 +854,10 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     }
     await cost("listProblems, 7 days of 10 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
     await cost("sweepRunOut, 12 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
+    await cost("changeAccessAndDetails", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
+    await cost("changeAccessAndDetails, the same", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
+    const copy = await begunSite(database, site(900));
+    await cost("publishUploadAsSite, a copy", () => database.publishUploadAsSite(copy.id, { ...copy.site, bytes: 1000, files: 2 }, BY_ADA, { copiedFrom: first.id }));
 
     // The logins change after every read of the log, so that the entries they write are read by no page of it above.
     const person = "bo@example.com" as Login;

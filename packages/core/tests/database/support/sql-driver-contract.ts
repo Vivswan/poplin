@@ -459,6 +459,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.listSites({ trash: true, owner: ADA, limit: 10, after: { updated_at: NOW, id: site.id } });
       await database.listSites({ trash: false, limit: 10, after: { updated_at: NOW, id: site.id } });
       await database.changeAccess(site.id, { access: "unlisted" }, BY_ADA);
+      await database.changeAccessAndDetails(site.id, { access: "private" }, { title: "T" }, BY_ADA);
       await database.changeDetails(site.id, { title: "T", search_engines: true, embeddable: false, expires: NOW }, BY_ADA);
       await database.reserveVersion(site.id);
       await database.addVersion(site.id, publish(2, 3), BY_ADA);

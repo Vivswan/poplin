@@ -201,9 +201,9 @@ export function asksNothing(changes: CheckedChanges): boolean {
 }
 
 /**
- * Apply checked changes to a site: the access first, then the details, each as its own step with its own audit entry.
+ * Apply checked changes to a site in one step: the access, and the details only once the site has it. Each of the two that changes writes its own audit entry.
  *
- * @returns the site after the changes. A refused access leaves the site as it was. When both are asked, `not_found` or `in_trash` on the details means the site went between the two steps, with its access already changed
+ * @returns the site after the changes. A refused access leaves the site as it was, its details too
  */
 export async function applyChanges(
   database: Database,
@@ -211,16 +211,10 @@ export async function applyChanges(
   changes: CheckedChanges,
   signed: Signed,
 ): Promise<{ readonly ok: true; readonly site: Site } | Refused<"not_found" | "in_trash" | "name_taken">> {
-  if (changes.access !== undefined) {
-    const changed = await database.changeAccess(id, changes.access, signed);
-    if (changed.kind === "name_taken") return refuse("name_taken", "public_name");
+  const { access, details } = changes;
+  const changed = access === undefined ? await database.changeDetails(id, details, signed) : await database.changeAccessAndDetails(id, access, details, signed);
+  if (changed.kind === "name_taken") return refuse("name_taken", "public_name");
 
-    if (changed.kind !== "done" && changed.kind !== "unchanged") return refuse(changed.kind);
-
-    if (Object.keys(changes.details).length === 0) return { ok: true, site: changed.site };
-  }
-
-  const changed = await database.changeDetails(id, changes.details, signed);
   if (changed.kind !== "done" && changed.kind !== "unchanged") return refuse(changed.kind);
 
   return { ok: true, site: changed.site };
