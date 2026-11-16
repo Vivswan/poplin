@@ -133,13 +133,20 @@ function SearchedSoFar({ searched, busy, onSearch }: { readonly searched: string
   );
 }
 
+/**
+ * The words of a page that stopped looking with none found.
+ *
+ * @param query - the address the page was read at
+ * @returns `nothing`, how far it looked, with no full stop, and `left`, the sentence of the entries it has not looked at
+ */
+export function nothingSoFarWords(query: URLSearchParams): { readonly nothing: string; readonly left: string } {
+  return { nothing: `Nothing in ${searchedWords(query)}`, left: `${unsearched(query)} entries are not searched yet.` };
+}
+
 /** What the words of a page that stopped looking with none found are drawn from. */
 interface NothingSoFarProps {
-  /** How far the page has looked, as `searchedWords` says it. */
-  readonly searched: string;
-
-  /** The entries it has not looked at, as `unsearched` names them. */
-  readonly left: string;
+  /** How far the page has looked, and the entries it has not looked at, as `nothingSoFarWords` says them. */
+  readonly words: ReturnType<typeof nothingSoFarWords>;
 
   /** Whether the page is being replaced. */
   readonly busy: boolean;
@@ -152,12 +159,12 @@ interface NothingSoFarProps {
 }
 
 /** Say that a narrowed page stopped looking with no entry found: this is what the page holds, with the way to look further first and the way to every entry beside it. */
-function NothingSoFar({ searched, left, busy, onSearch, onShowAll }: NothingSoFarProps): ReactNode {
+function NothingSoFar({ words, busy, onSearch, onShowAll }: NothingSoFarProps): ReactNode {
   return (
     <Empty className="flex-none py-16">
       <EmptyHeader>
-        <EmptyTitle>{`Nothing in ${searched}.`}</EmptyTitle>
-        <EmptyDescription>{`${left} entries are not searched yet.`}</EmptyDescription>
+        <EmptyTitle>{`${words.nothing}.`}</EmptyTitle>
+        <EmptyDescription>{words.left}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="flex-row justify-center max-sm:flex-col">
         <Button disabled={busy} onClick={onSearch} {...PAGE_WAY}>
@@ -209,7 +216,7 @@ export function ActivityFoot({ query, page, total, size, onSize, onMove, busy = 
   // While another page is on its way the address is ahead of the page: the words are those of the address the page shown was read at.
   const read = new URLSearchParams(useShownPlace(query.toString(), !busy));
   const words = searchedWords(read);
-  if (rows === 0) return stopped === undefined ? null : <NothingSoFar searched={words} left={unsearched(read)} busy={busy} onSearch={further} onShowAll={onShowAll} />;
+  if (rows === 0) return stopped === undefined ? null : <NothingSoFar words={nothingSoFarWords(read)} busy={busy} onSearch={further} onShowAll={onShowAll} />;
 
   const searched = stopped === undefined ? null : <SearchedSoFar searched={words} busy={busy} onSearch={further} />;
 
