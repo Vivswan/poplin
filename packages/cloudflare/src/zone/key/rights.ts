@@ -45,6 +45,15 @@ interface KeyPolicy {
 }
 
 /**
+ * Say that Cloudflare lists no group for some rights of a key, as a failed step is told.
+ *
+ * @param missing - the name of every such right
+ */
+export function noGroup(missing: readonly string[]): { readonly ok: false; readonly failure: "no-group"; readonly message: string } {
+  return { ok: false, failure: "no-group", message: `Cloudflare lists no permission group named ${missing.join(", ")}` };
+}
+
+/**
  * Write the policies of a key for one install.
  *
  * @param groups - every permission group Cloudflare lists for the account
