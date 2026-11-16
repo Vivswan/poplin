@@ -107,11 +107,19 @@ The install works without this part. Cloudflare can stop unwanted requests befor
 
 | Rule                     | Stops                                                         | Made                                                                                      |
 | ------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| the bots rule            | verified bots and scanner paths                               | by a Repair with Zone WAF: Edit, or when one of two settings is saved                     |
+| the bots rule            | verified bots, crawlers among them, and scanner paths         | by a Repair with Zone WAF: Edit, or when one of two settings is saved                     |
 | the outside pages rule   | pages of other domains, while `outside_pages` is `blocked`    | the same two ways                                                                         |
 | the rate rule            | floods                                                        | by a Repair with Zone WAF: Edit                                                           |
 | the redirect             | plain http, which it sends to https                           | by a Repair with Single Redirect: Edit                                                    |
 | the block of AI crawlers | AI crawlers on the whole domain, as `block_bots` says         | by a Repair with Bot Management: Edit                                                     |
+
+**An assistant passes the bots rule.** Cloudflare gives each verified bot a kind, and the rule reads it:
+
+| Kind of verified bot                                                                  | The bots rule                                         |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `AI Assistant`: opens one page when a person asks, as a chat assistant's fetch does    | lets it through                                       |
+| `Search Engine Crawler`                                                               | lets it through while `search_engines_allowed` is on  |
+| any other: a crawler that reads sites in bulk to train a model or for an AI search    | stops it                                              |
 
 **A saved setting makes two of them.** On an install that holds its key, saving `search_engines_allowed` or `outside_pages` writes the bots rule, and the outside pages rule while `outside_pages` is `blocked`. Saving `outside_pages` as `allowed` removes the outside pages rule and keeps the bots rule.
 

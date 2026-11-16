@@ -68,7 +68,7 @@ What a private site costs:
 | Switch for search engines | Set on | Off, the default | On |
 | --- | --- | --- | --- |
 | `search_engines` | one public site | its files carry `X-Robots-Tag: noindex` | they do not |
-| `search_engines_allowed` | the install | every site's files carry `X-Robots-Tag: noindex`; the bots rule at Cloudflare's edge stops the crawlers Cloudflare has verified | the rule lets the crawlers of search engines pass |
+| `search_engines_allowed` | the install | every site's files carry `X-Robots-Tag: noindex`; the bots rule at Cloudflare's edge stops the crawlers Cloudflare has verified, and lets through an assistant that opens one page for a person | the rule lets the crawlers of search engines pass |
 
 A public site is without `noindex` only when both are on. The bots rule is one of the [optional edge rules](#optional-edge-rules).
 
@@ -266,7 +266,7 @@ Two of the rules need no added permission. On an install with a domain that hold
 
 | Rule | After the save |
 | --- | --- |
-| the bots rule | there; the crawlers of search engines pass it while `search_engines_allowed` is on |
+| the bots rule | there; an assistant that opens one page for a person passes it, and the crawlers of search engines pass it while `search_engines_allowed` is on |
 | the outside pages rule | there while `outside_pages` is `blocked`, and removed while it is `allowed` |
 
 A rule the domain lacks is made, and one its plan has no room for is left out. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says which install holds a key.

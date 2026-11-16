@@ -38,6 +38,15 @@ const OWN_LIMIT_TEXT = "Too many requests.";
 /** A user agent of an AI crawler the bot block stops. */
 const CRAWLER = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)";
 
+/** The user agents of two assistants that open one page when their user asks for it, as each maker documents them. Neither crawls. */
+const ASSISTANTS = [
+  ["ChatGPT-User", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot"],
+  ["Perplexity-User", "Mozilla/5.0 (compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)"],
+] as const;
+
+/** What the line of the assistants' check ends with: which of the two things at the edge answered, and where the other is proved. */
+const UNVERIFIED = "a run is no verified bot, so the bot switches answered, and the bots rule's pass for a verified assistant is held by the test of its expression";
+
 /** What every team's login hostname ends in, and the path its login page of a hostname starts with: the edge's own redirect, which no install writes. */
 const TEAM_LOGIN = { host: ".cloudflareaccess.com", path: "/cdn-cgi/access/login/" };
 
@@ -458,6 +467,25 @@ export const EDGE_CHECKS: readonly Check[] = [
     run: async (bench) => {
       const response = await bench.visit(bench.addresses.site(GHOST_ID, "u"), { headers: { "User-Agent": CRAWLER } });
       expect(response.status).toBe(403);
+    },
+  },
+  {
+    id: "assistant-fetch",
+    name: "an assistant's user agent, opening one page for its user, is not stopped by the bot block that stops a crawler's",
+    needs: ["bot-block"],
+    // The request comes from no address the edge has verified as the assistant's, so the bots rule never reads it: the answer is that of the zone's bot switches.
+    run: async (bench) => {
+      const answers: string[] = [];
+      const stopped: string[] = [];
+      for (const [name, agent] of ASSISTANTS) {
+        const { status } = await bench.visit(bench.addresses.site(GHOST_ID, "u"), { headers: { "User-Agent": agent } });
+        answers.push(`${name} ${status === 403 ? "stopped" : "let through"} (${status})`);
+        if (status === 403) stopped.push(name);
+      }
+
+      const line = `assistant-fetch: ${answers.join(", ")}; ${UNVERIFIED}`;
+      expect(stopped, line).toEqual([]);
+      bench.say(line);
     },
   },
   {
