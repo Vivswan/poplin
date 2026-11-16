@@ -253,7 +253,7 @@ describe("the Visits block", () => {
     const marks = [...document.querySelectorAll("svg .visx-axis-left text")].map((mark) => mark.textContent);
 
     expect([lines(), paths.map((path) => path.length), heights.every(Number.isFinite), Math.min(...heights) < Math.max(...heights) / 2, marks.includes("NaN")]).toEqual([
-      [...drawn].sort(),
+      [...(drawn as string[])].sort(),
       drawn.map(() => DAYS.length),
       true,
       reaches,

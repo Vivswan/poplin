@@ -1,6 +1,6 @@
 // The Settings screen: the one page with every setting under its block's heading, the one Save for everything changed, the refusal that comes back at its field, Discard, and the Undo of a done save.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -84,7 +84,7 @@ function serve({ refusedKey, refusedKeys = [], holds = false }: { readonly refus
 }
 
 /** Draw the screen and wait for its rows. */
-async function drawn(address = "/settings"): Promise<ReturnType<typeof within>> {
+async function drawn(address = "/settings"): Promise<Within> {
   await drawAt(
     address,
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -111,22 +111,22 @@ async function press(target: HTMLElement): Promise<void> {
 }
 
 /** The switch of the search engines of new sites. */
-function engines(page: ReturnType<typeof within>): HTMLElement {
+function engines(page: Within): HTMLElement {
   return page.getByRole("switch", { name: "Show in search engines" });
 }
 
 /** The field of a count, by the name of its setting. */
-function field(page: ReturnType<typeof within>, name: string): HTMLInputElement {
+function field(page: Within, name: string): HTMLInputElement {
   return page.getByRole("textbox", { name }) as HTMLInputElement;
 }
 
 /** Type a count into a field. */
-function type(page: ReturnType<typeof within>, name: string, text: string): void {
+function type(page: Within, name: string, text: string): void {
   fireEvent.change(field(page, name), { target: { value: text } });
 }
 
 /** What the bar says, or `null` while there is none. */
-function bar(page: ReturnType<typeof within>): string | null {
+function bar(page: Within): string | null {
   return page.queryByRole("region", { name: "Unsaved changes" })?.querySelector("p")?.textContent ?? null;
 }
 
@@ -180,8 +180,8 @@ describe("the address of one setting", () => {
 describe("the update link", () => {
   // Drift: Escape would do nothing in the field the link is pasted into, where it closes every other thing that was opened, or it would leave the focus on the page itself.
   test.each([
-    ["Escape in the field", (page: ReturnType<typeof within>) => fireEvent.keyDown(page.getByPlaceholderText("Paste the update link"), { key: "Escape" })],
-    ["Cancel", (page: ReturnType<typeof within>) => fireEvent.click(page.getByRole("button", { name: "Cancel" }))],
+    ["Escape in the field", (page: Within) => fireEvent.keyDown(page.getByPlaceholderText("Paste the update link"), { key: "Escape" })],
+    ["Cancel", (page: Within) => fireEvent.click(page.getByRole("button", { name: "Cancel" }))],
   ] as const)("%s drops what was pasted, closes the field, and gives the focus back to the button that opened it", async (_way, leave) => {
     const page = await drawn();
     await press(page.getByRole("button", { name: "Add" }));

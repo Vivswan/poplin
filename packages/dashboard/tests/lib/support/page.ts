@@ -6,12 +6,16 @@
 
 import { afterAll, afterEach, beforeEach } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { BoundFunctions, queries } from "@testing-library/react";
 
 /** The start values every component test runs under. */
 const TEST_BOOT = { base: "/next", email: "mira@example.com", title: "poplin", version: "1.0.0", update: null, starts: false, demo: null, domain: true, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } };
 
 /** What of the runtime the page must not replace: the tests that run after it call these. */
 const OWN = { fetch: globalThis.fetch, Request: globalThis.Request, Response: globalThis.Response, Headers: globalThis.Headers };
+
+/** The queries of one part of the page. The library's own type of what `within` gives names no query, so what a query finds would have no type. */
+export type Within = BoundFunctions<typeof queries>;
 
 function keptKeys(): readonly string[] {
   return [window.localStorage, window.sessionStorage].flatMap((store) => [...Array(store.length).keys()].map((at) => store.key(at) ?? ""));

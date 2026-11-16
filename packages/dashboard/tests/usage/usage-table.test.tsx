@@ -130,7 +130,7 @@ describe("the table of the Usage screen", () => {
   test("names each way to the host's page by its line, as an icon in the table and in words on a phone, and opens the page of that line in a new tab", async () => {
     await draw(OWN);
 
-    const named = [
+    const named: readonly (readonly [string, string])[] = [
       ["Storage, all sites: see it at Provider", PAGES.storage],
       ["Requests today: see it at Provider", PAGES.requests],
       ["Database rows read today: see it at Provider", PAGES.database],

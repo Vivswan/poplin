@@ -1,6 +1,6 @@
 // The dialog of a run: the box that holds a token only until its run is sent, where a refusal is said, and when the dialog may close.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Dialog as DialogParts } from "@base-ui/react/dialog";
@@ -29,7 +29,7 @@ const runs: { run: string; sent: Sent }[] = [];
 const handle = DialogParts.createHandle<"check" | "repair">();
 
 /** Draw a button that opens the dialog with one run, over an answer; open it, and hand back the page's queries once the dialog holds the focus. */
-async function opened(run: "check" | "repair", answer: () => Promise<Refused | undefined>): Promise<ReturnType<typeof within>> {
+async function opened(run: "check" | "repair", answer: () => Promise<Refused | undefined>): Promise<Within> {
   const onRun = (kind: "check" | "repair", sent: Sent): Promise<Refused | undefined> => {
     runs.push({ run: kind, sent });
 
@@ -50,11 +50,11 @@ async function opened(run: "check" | "repair", answer: () => Promise<Refused | u
   return page;
 }
 
-function tokenBox(page: ReturnType<typeof within>): HTMLInputElement {
+function tokenBox(page: Within): HTMLInputElement {
   return page.getByLabelText("Account token") as HTMLInputElement;
 }
 
-async function press(page: ReturnType<typeof within>, name: string): Promise<void> {
+async function press(page: Within, name: string): Promise<void> {
   await act(async () => {
     fireEvent.click(page.getByRole("button", { name }));
   });
@@ -132,7 +132,7 @@ describe("the dialog", () => {
 
   // Drift: the caller's close after a done run would be held back as a person's is, since the run still counts as on its way: the dialog stayed open over the new result.
   test("closes when its caller closes it at the end of a run", async () => {
-    const page = await opened("repair", async () => handle.close());
+    const page = await opened("repair", async () => void handle.close());
     fireEvent.change(tokenBox(page), { target: { value: TOKEN } });
     await press(page, "Repair");
 
