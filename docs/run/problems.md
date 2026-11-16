@@ -53,6 +53,8 @@ failed  problems  2 kinds today: request_failed, sweep_failed
 
 A full minute of requests is never noted: it is the limit at work. A database whose free allowance for the day is used up is not noted either: it takes no note, and the dashboard says so itself.
 
+A daily limit of files or of storage writes is noted once the day has none left. A publish too large for what is left is refused, names the limit, and is not noted: a smaller one still goes through.
+
 ## What is kept
 
 | Question            | Answer                                                                                              |

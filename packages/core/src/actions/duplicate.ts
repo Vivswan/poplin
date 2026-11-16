@@ -179,7 +179,7 @@ async function beginCopy(
   };
   const upload = { id: mintUploadId(), folder, number: 1, owner: actor.holder, plan, manifest, created_at: asked.now };
   const added = await install.database.addUpload(upload, roomUnder(settings, { makesSite: true, writes: manifest.length * COPY_CALLS }, asked.now));
-  if (added.kind !== "done") return refuseFull(install, added.kind);
+  if (added.kind !== "done") return refuseFull(install, added);
 
   return { ok: true, upload: { ...upload, state: "pending", bytes: listed.bytes, files: manifest.length, dropped: [] }, missing: manifest.map((file) => file.path) };
 }

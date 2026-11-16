@@ -125,6 +125,7 @@ describe("finishPublish", () => {
 
     const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
     const over = await beginPublish(world.install, OWNER, { name: "two", files: pages(["index.html", "about.html"]) });
+    const early = await world.install.database.listProblems(dayOf(world.clock.now));
     const last = await beginPublish(world.install, OWNER, { name: "two", files: [PAGE] });
     const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
     world.clock.now += DAY;
@@ -136,7 +137,8 @@ describe("finishPublish", () => {
       { ok: false, code: "too_large", about: "max_files_per_day" },
     ]);
     expect([copied.ok, last.ok, tomorrow.ok]).toEqual([true, true, true]);
-    // The day's limit is noted once, on the day it was reached, however many uploads it refused.
+    // An upload too large for the one file the day had left is no problem of the install: a smaller one still fit. The limit is noted once, by the first upload refused when no file was left.
+    expect(early).toEqual([]);
     expect((await world.install.database.listProblems(dayOf(world.clock.now - DAY))).map(({ day, kind, count }) => [day, kind, count])).toEqual([[dayOf(world.clock.now - DAY), "files_limit_reached", 1]]);
   });
 
@@ -151,6 +153,7 @@ describe("finishPublish", () => {
     const copied = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
     const four = await beginPublish(world.install, OWNER, { name: "four", files: pages(4) });
     const copy = await duplicateSite(world.install, OWNER, { site: report.site.id }, 1);
+    const early = await world.install.database.listProblems(day);
     const three = await beginPublish(world.install, OWNER, { name: "three", files: pages(3) });
     const one = await beginPublish(world.install, OWNER, { name: "one", files: pages(1) });
     const counted = await world.install.database.readStorageWrites(day);
@@ -160,6 +163,8 @@ describe("finishPublish", () => {
     const spent = { ok: false, code: "allowance_spent", about: "max_storage_writes_per_day" };
     expect<unknown>([copied.ok, four, copy, three.ok, one, tomorrow.ok]).toEqual([true, spent, spent, true, spent, true]);
     expect(counted).toEqual({ writes: 9, most: 9 });
+    // The two refused while three writes were left noted nothing: the limit is noted by the one refused when none was left.
+    expect(early).toEqual([]);
     expect((await world.install.database.listProblems(day)).map(({ day: noted, kind, count }) => [noted, kind, count])).toEqual([[day, "writes_limit_reached", 1]]);
   });
 

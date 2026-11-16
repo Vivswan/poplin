@@ -359,20 +359,22 @@ export function declaredFiles(label: string, makeDatabase: DatabaseFactory): voi
     test("the files of every upload begun on a day count against that day, an upload given up gives none back, the next day begins at none, and one begun late for the day before still counts against it", async () => {
       const database = await opened(makeDatabase);
       const site = await made(database, draft(REPORT));
-      const room = { ...ROOMY, dayFiles: 4 };
-      const begin = async (number: number, day: string): Promise<{ readonly id: UploadId; readonly kind: string }> => {
+      const begin = async (number: number, day: string, dayFiles = 4): Promise<{ readonly id: UploadId; readonly added: Awaited<ReturnType<Database["addUpload"]>> }> => {
         const id = mintUploadId();
-        const added = await database.addUpload({ id, folder: site.folder, number, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW }, { ...room, day });
+        const added = await database.addUpload({ id, folder: site.folder, number, owner: ADA, plan: { kind: "update", details: {} }, manifest: MANIFEST, created_at: NOW }, { ...ROOMY, dayFiles, day });
 
-        return { id, kind: added.kind };
+        return { id, added };
       };
 
       const first = await begin(2, TODAY);
       await database.abandonUpload(first.id);
-      const kinds = [first.kind];
-      for (const [number, day] of [[3, TODAY], [4, TODAY], [5, TOMORROW], [6, TODAY], [7, TOMORROW], [8, TOMORROW]] as const) kinds.push((await begin(number, day)).kind);
+      const kinds = [first.added.kind];
+      for (const [number, day] of [[3, TODAY], [4, TODAY], [5, TOMORROW], [6, TODAY], [7, TOMORROW], [8, TOMORROW]] as const) kinds.push((await begin(number, day)).added.kind);
+      const refused = [await begin(9, TODAY), await begin(9, TODAY, 5), await begin(9, TODAY, 1)].map(({ added }) => added);
 
       expect(kinds).toEqual(["done", "done", "day_full", "done", "day_full", "done", "day_full"]);
+      // A refusal says how many files the day has left, so its caller tells a day used up from an upload too large for the rest.
+      expect(refused).toEqual([{ kind: "day_full", left: 0 }, { kind: "day_full", left: 1 }, { kind: "day_full", left: 0 }]);
     });
   });
 }
@@ -391,11 +393,12 @@ export function storageWrites(label: string, makeDatabase: DatabaseFactory): voi
       const most = SETTINGS.max_storage_writes_per_day;
       await database.initSettings(SETTINGS, BY_ADA);
 
-      const kinds = [(await begin(2, { writes: 4, dayWrites: 9 })).kind];
+      const added = [await begin(2, { writes: 4, dayWrites: 9 })];
       await database.addStorageWrites(TODAY, 3);
-      kinds.push((await begin(3, { writes: 3, dayWrites: 9 })).kind, (await begin(4, { writes: 2, dayWrites: 9 })).kind, (await begin(5, { writes: 3, dayWrites: 9, day: TOMORROW })).kind);
+      added.push(await begin(3, { writes: 3, dayWrites: 9 }), await begin(4, { writes: 2, dayWrites: 9 }), await begin(5, { writes: 3, dayWrites: 9, day: TOMORROW }), await begin(6, { writes: 1, dayWrites: 9 }));
 
-      expect(kinds).toEqual(["done", "writes_full", "done", "done"]);
+      // The refusals say how many writes the day has left: two for an upload of three, and none once the day is used up.
+      expect(added).toEqual([{ kind: "done" }, { kind: "writes_full", left: 2 }, { kind: "done" }, { kind: "done" }, { kind: "writes_full", left: 0 }]);
       expect([await database.readStorageWrites(TODAY), await database.readStorageWrites(TOMORROW)]).toEqual([{ writes: 9, most }, { writes: 3, most }]);
     });
 
