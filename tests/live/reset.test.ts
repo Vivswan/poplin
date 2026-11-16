@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import { CEILINGS } from "../../packages/cloudflare/scripts/live/budget";
 import { resetInstall, runReset } from "../../packages/cloudflare/scripts/live/reset";
+import { ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { openRun } from "../../packages/cloudflare/scripts/live/util";
 import { BunSqliteDriver } from "../../packages/core/tests/database/support/bun-sqlite-driver";
 import { readSamples } from "../../packages/demo/scripts/samples";
@@ -66,6 +67,15 @@ const WAITING = `INSERT INTO logins (id, code, hash, scope, computer, visitor, s
 
 /** The bucket writes and lists of a reset that removes three sites and publishes the samples and a new demo of three files: 3 removals, 85 for eleven sites and their 74 files, 12 for two more versions of one, 1 move to the trash, 4 for the demo. */
 const FIRST_RESET = 105;
+
+/** The rows the same reset counts: 3 removals at 14, 12 new sites at 25, the demo among them, 2 more versions at 19, and 1 move to the trash at 9. */
+const FIRST_RESET_ROWS = 389;
+
+/** The rows of a site removed for good, as the harness counts one. */
+const REMOVAL_ROWS = 14;
+
+/** The rows of a new version of a site: what a reset that keeps every sample and updates the demo's site counts. */
+const DEMO_UPDATE_ROWS = 19;
 
 /** Every sample site, in the table's order: what a reset that finds each as its row ends says it kept. */
 const SAMPLES_IN_ORDER = ["handbook", "sales-report", "old-notes", "launch-deck", "team-site", "lisbon-trip", "winter-offer", "pricing", "spring-offer", "status-board", "checkout"];
@@ -149,6 +159,7 @@ interface Front {
   readonly fetch?: Install["fetch"];
   readonly pauses?: number[];
   readonly ceiling?: number;
+  readonly rowCeiling?: number;
   readonly samples?: string;
   readonly buildDemo?: (out: string) => Promise<void>;
 }
@@ -290,6 +301,7 @@ function reset(install: Install, token: string, front: Front = {}): ReturnType<t
     samples,
     buildDemo: front.buildDemo ?? buildDemo,
     ceiling,
+    rowCeiling: front.rowCeiling ?? ROW_CEILINGS.reset,
   });
 }
 
@@ -326,7 +338,7 @@ describe("the reset of the test install, against a local fake", () => {
     const demo = await install.sql("SELECT id FROM sites WHERE public_name = 'demo'");
 
     expect({ ended: first, left: await left(install), settings: await install.settings() }).toEqual({
-      ended: { ...PUT, removed: 2, trashed: 1, demo: "published", operations: FIRST_RESET },
+      ended: { ...PUT, removed: 2, trashed: 1, demo: "published", operations: FIRST_RESET, rows: FIRST_RESET_ROWS },
       left: resetState(1),
       settings,
     });
@@ -336,7 +348,7 @@ describe("the reset of the test install, against a local fake", () => {
     const second = await reset(install, await install.addToken("the second reset"));
 
     expect({ ended: second, left: await left(install), demo: await install.sql("SELECT id FROM sites WHERE public_name = 'demo'") }).toEqual({
-      ended: { ...PUT, kept: SAMPLES_IN_ORDER, removed: 0, trashed: 0, demo: "updated", operations: DEMO_UPDATE },
+      ended: { ...PUT, kept: SAMPLES_IN_ORDER, removed: 0, trashed: 0, demo: "updated", operations: DEMO_UPDATE, rows: DEMO_UPDATE_ROWS },
       left: resetState(2),
       demo,
     });
@@ -424,7 +436,7 @@ describe("the reset of the test install, against a local fake", () => {
 
     // The request that was told to wait is asked again, and both are counted.
     expect({ ended, pauses, left: await left(install) }).toEqual({
-      ended: { ...PUT, removed: 2, trashed: 1, demo: "published", operations: FIRST_RESET + 1 },
+      ended: { ...PUT, removed: 2, trashed: 1, demo: "published", operations: FIRST_RESET + 1, rows: FIRST_RESET_ROWS + REMOVAL_ROWS },
       pauses: [7000],
       left: resetState(1),
     });
@@ -445,18 +457,17 @@ describe("the reset of the test install, against a local fake", () => {
     });
   });
 
-  test("a reset that would pass its ceiling of bucket writes and lists stops red with that as its reason, and still removes every token and waiting login", async () => {
+  test.each([
+    ["bucket writes and lists", { ceiling: 10 }, "the reset passed its ceiling of 10 bucket writes and lists"],
+    ["rows written to the database", { rowCeiling: 100 }, "the reset passed its ceiling of 100 rows written to the database"],
+  ])("a reset that would pass its ceiling of %s stops red with that as its reason, and still removes every token and waiting login", async (_what, front, what) => {
     const install = await openSqlInstall();
     await fill(install);
 
-    const ended = await reset(install, await install.addToken("a reset"), { ceiling: 10 });
+    const ended = await reset(install, await install.addToken("a reset"), front);
     const after = await left(install);
 
-    expect({ ended, tokens: after.tokens, logins: after.logins }).toEqual({
-      ended: { kind: "failed", what: "the reset passed its ceiling of 10 bucket writes and lists" },
-      tokens: 0,
-      logins: 0,
-    });
+    expect({ ended, tokens: after.tokens, logins: after.logins }).toEqual({ ended: { kind: "failed", what }, tokens: 0, logins: 0 });
   });
 
   test("on an account that holds no test install the script says so as a notice and ends green", async () => {

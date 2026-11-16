@@ -8,7 +8,7 @@
 // A site that is kept costs the database no row and the bucket no write: a reset after checks that left the samples alone writes nothing but its own token.
 // The demo's site is updated where it stands, so its address always answers. The logins, the settings, and the install itself stay.
 // Every request is one site or one page of a listing, sent one after another, and an answer of "too many requests" is waited out as the CLI waits.
-// The bucket writes and lists it asks for are counted, and a reset that would pass their ceiling stops red.
+// The bucket writes and lists it asks for are counted, and the rows it makes the database write, and a reset that would pass either ceiling stops red.
 // The token is made in memory and never written to a file or a step output. Its row goes with every other token when the reset ends, however it ends.
 
 import { mkdtempDisposableSync, writeFileSync } from "node:fs";
@@ -27,6 +27,7 @@ import { buildDemo } from "../../../demo/scripts/build";
 import { REAL_SITES_FILE, type RealSites } from "../../../demo/src/preview/real-sites";
 import { standingSites, THE_DEMO } from "../../../demo/src/preview/sample-sites";
 import { CEILINGS, meterBucket } from "./budget";
+import { meterRows, ROW_CEILINGS } from "./rows";
 import { isSameSite, type Wanted } from "./same-site";
 import { type Cli, publishSamples, type Sample, sampleSites, wantedOf } from "./samples";
 import { findDatabase, runSql, seedToken } from "./tokens";
@@ -81,6 +82,9 @@ interface ResetEnds {
 
   /** The most bucket writes and lists the reset may ask the install for. */
   readonly ceiling: number;
+
+  /** The most rows the reset may make the install write to its database. */
+  readonly rowCeiling: number;
 }
 
 /** What a reset did. */
@@ -111,6 +115,9 @@ interface Tally {
 
   /** The bucket writes and lists it asked for. */
   readonly operations: number;
+
+  /** The rows it made the database write, at most, by the price of each request. */
+  readonly rows: number;
 }
 
 /** One page of a listing. */
@@ -264,7 +271,7 @@ async function checkSites(client: Client, io: Io, put: Pick<Tally, "live" | "bin
 }
 
 /** Every step that needs the token, in order. */
-async function putBack(ends: ResetEnds, scratch: string): Promise<Omit<Tally, "operations"> | Stop> {
+async function putBack(ends: ResetEnds, scratch: string): Promise<Omit<Tally, "operations" | "rows"> | Stop> {
   const said: string[] = [];
   const io = ioOf(ends, scratch, said);
   const cli: Cli = { io, said };
@@ -308,17 +315,18 @@ async function forget(ends: ResetEnds): Promise<Stop | undefined> {
 export async function resetInstall(ends: ResetEnds): Promise<Tally | Stop> {
   using scratch = mkdtempDisposableSync(join(tmpdir(), "poplin-live-reset-"));
   const meter = meterBucket(ends.fetch, ends.ceiling);
+  const rows = meterRows(meter.fetch, ends.rowCeiling);
   let ended: Tally | Stop = { kind: "failed", what: "the reset broke off" };
 
   try {
-    const put = await putBack({ ...ends, fetch: meter.fetch }, scratch.path);
-    ended = isStop(put) ? put : { ...put, operations: meter.spent() };
+    const put = await putBack({ ...ends, fetch: rows.fetch }, scratch.path);
+    ended = isStop(put) ? put : { ...put, operations: meter.spent(), rows: rows.written() };
   } finally {
     const forgotten = await forget(ends);
     if (!isStop(ended) && forgotten !== undefined) ended = forgotten;
   }
 
-  const stopped = meter.stopped();
+  const stopped = meter.stopped() ?? rows.stopped();
 
   return stopped === undefined ? ended : { kind: "failed", what: `the reset ${stopped}` };
 }
@@ -346,6 +354,7 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
       await buildDemo({ out });
     },
     ceiling: CEILINGS.reset,
+    rowCeiling: ROW_CEILINGS.reset,
   });
 }
 
@@ -370,6 +379,7 @@ function tell(run: Run, ended: Tally | Stop | undefined): number {
     ["The demo's site", ended.demo],
     ["Sample sites the demo links to", String(ended.linked)],
     ["Bucket writes and lists", `${ended.operations} of at most ${CEILINGS.reset}`],
+    ["Rows written this run", `${ended.rows} of at most ${ROW_CEILINGS.reset}`],
     ["Waiting logins and tokens", "removed"],
   ];
   for (const [what, result] of rows) run.say(`${what}: ${result}`);

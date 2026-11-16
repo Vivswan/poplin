@@ -127,6 +127,7 @@ For the account the workflow reads:
 | a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
 | bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
+| rows written to the database: 1,100 by the checks, 600 by a reset | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
 | the sample sites and the demo: 12 sites, 120 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
@@ -159,7 +160,45 @@ a run, at its worst      1,140 + 700 + 64 = 1,904
 the plan's day           100,000 requests to the Worker, reached at about 52 such runs
 ```
 
-The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more.
+The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests.
+
+## The rows a run writes
+
+The database's free plan takes 100,000 rows written a day, every database of the account together. Past them it refuses each write until midnight UTC, and every run of that day fails.
+
+| One request of a run                      | Rows, at most | Which are                                                                  |
+| ----------------------------------------- | ------------- | -------------------------------------------------------------------------- |
+| a new site, from its begin to its finish  | 25            | the site 12, the upload 7, the day's counts 2, the version 2, the log 2    |
+| a new version                             | 19            | 15 while it drops no older version                                         |
+| a site put back from a backup             | 25            | and 2 for each version more                                                |
+| a site removed for good                   | 14            | with three versions and a day's count; 9 to the trash, 9 out of it         |
+| a new link 12, a setting of a site 5      |               | a rollback 3, a setting of the install 4, a computer's login 3             |
+| a listing of the bucket                   | 1             | the files of a version, and what an upload lacks                           |
+| a page or a file a site answered          | 2             | the day's count of the site, and of all sites                              |
+
+The database counts an index entry and a row a trigger writes as rows, so the one row of a new site is 12. `rows.ts` holds the prices, and a test in the Workers pool sends each kind of request to a Worker on D1 and compares the two counts.
+
+A product change that moves a row cost turns that test red, with the database's count beside the harness's for each kind of request.
+
+| To measure the prices again | Then |
+| --- | --- |
+| `bun run --cwd packages/cloudflare build`, then `bunx vitest run tests/worker/worker.test.ts -t "the rows the live checks count"` there | set each price in `rows.ts` to the first number of its pair, and the pair in the test |
+| `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
+
+```text
+the checks, as the harness counts them   934 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+a reset that keeps every sample          48: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
+a reset that keeps none                  about 495
+the harness's own statements             18: three tokens in and out, and the caps
+a usual run                              about 1,000 counted; the sweep later drops each upload's row, 5 a publish, about 125 more
+a day of 40 such runs                    about 45,000 of the 100,000
+```
+
+The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
+
+```text
+Rows written this run: 934 of at most 1100
+```
 
 ## The backup drill
 

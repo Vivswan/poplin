@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { buildDemo } from "../../packages/demo/scripts/build";
 import { CEILINGS } from "../../packages/cloudflare/scripts/live/budget";
 import { capInstall, LIVE_CAPS } from "../../packages/cloudflare/scripts/live/caps";
+import { ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { resetInstall } from "../../packages/cloudflare/scripts/live/reset";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { defaultSettings, sizeBytes } from "../../packages/core/src/records/settings";
@@ -55,6 +56,7 @@ function reset(install: Install, token: string): ReturnType<typeof resetInstall>
       await buildDemo({ out });
     },
     ceiling: CEILINGS.reset,
+    rowCeiling: ROW_CEILINGS.reset,
   });
 }
 
