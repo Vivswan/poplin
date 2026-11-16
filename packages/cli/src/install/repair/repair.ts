@@ -38,7 +38,7 @@ async function settled(plan: RepairPlan, ends: InstallEnds): Promise<Request | S
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
   if (where === undefined) return STOPPED;
 
-  const token = plan.token ?? (await askToken(plan.provider, where.where, ends.screen));
+  const token = plan.token ?? (await askToken(plan.provider, where.where, ends.screen, "repair"));
 
   return token === undefined ? STOPPED : { plan, where: where.where, token };
 }

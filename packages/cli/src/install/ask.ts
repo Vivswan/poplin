@@ -60,10 +60,11 @@ async function askLogin(screen: Screen): Promise<Login | undefined> {
  * Say what the token needs and where it is made, then ask for it without showing it.
  *
  * @param where - the provider's own answer of where the install is, which says what the token needs
+ * @param work - what the token is made for, which says it too: a repair needs less than an install or a removal
  * @returns the token, or `undefined` once the person ended the question
  */
-export async function askToken(provider: Provider, where: unknown, screen: Screen): Promise<Token | undefined> {
-  for (const line of factsLines(provider.facts(where))) screen.aside("plain", line);
+export async function askToken(provider: Provider, where: unknown, screen: Screen, work: Parameters<Provider["facts"]>[1]): Promise<Token | undefined> {
+  for (const line of factsLines(provider.facts(where, work))) screen.aside("plain", line);
 
   for (;;) {
     const typed = await screen.ask("Account token (not shown):", "secret");
@@ -148,7 +149,7 @@ export async function settle(plan: Plan, ends: Pick<InstallEnds, "screen" | "inp
   const login = plan.login ?? (await askLogin(ends.screen));
   if (login === undefined) return STOPPED;
 
-  const token = plan.token ?? (await askToken(provider, where.where, ends.screen));
+  const token = plan.token ?? (await askToken(provider, where.where, ends.screen, "install"));
   if (token === undefined) return STOPPED;
 
   return { provider, json, asking: "terminal", mode: plan.mode, where: where.where, login, token };

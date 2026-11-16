@@ -169,6 +169,8 @@ describe("a repair with the account token", () => {
     const ran = await runLine("doctor --repair", account, { asks: true, typed: ["example.com", TOKEN] });
 
     expect([ran.code, ran.asked]).toEqual([0, ["Your own place (example.com), or Enter for none:", "Account token (not shown): [secret]"]]);
+    // A repair makes less than an install, so the token it asks for is told as a repair's.
+    expect(account.tokensFor).toEqual(["repair"]);
     expect<unknown>(account.repairs[0]?.where).toEqual({ kind: "place", name: "example.com" });
   });
 });

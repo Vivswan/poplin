@@ -234,8 +234,8 @@ export interface Installer<Where, Place> {
   /** Read its own options and variables, once. */
   read(given: Given): Read<Where>;
 
-  /** What its form for a new token is and asks for, for an install at that place. */
-  facts(where: Where): TokenFacts;
+  /** What its form for a new token is and asks for, at that place, for the work the token is made for: a repair makes less than an install, and a removal takes away all an install made. */
+  facts(where: Where, work: "install" | "repair" | "remove"): TokenFacts;
 
   /** Look for an install with the token, in the account that place is in. It only reads. */
   find(token: Token, where: Where, reach: Reach): Promise<Found<Where, Place>>;

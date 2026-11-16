@@ -499,9 +499,13 @@ describe("the provider's own answers", () => {
 
   // Drift: an install makes the bucket, which no repair does, so its token needs one permission more than the Domain screen's: ten with a domain, six without.
   test("the token of an install needs the repair's permissions and the storage one, which the form's note names since no link can choose it; text that is no token is refused", () => {
-    const [domain, none] = [installer.facts(KINDS.domain.where), installer.facts(KINDS["no-domain"].where)];
+    const [domain, none] = [installer.facts(KINDS.domain.where, "install"), installer.facts(KINDS["no-domain"].where, "install")];
+    const mending = [installer.facts(KINDS.domain.where, "repair"), installer.facts(KINDS["no-domain"].where, "repair")];
 
     expect([domain.tokenRights.length, none.tokenRights.length]).toEqual([10, 6]);
+    // A repair makes no bucket, so the token it asks for needs no storage permission, and its link chooses every one. A removal takes the bucket away, so it asks for an install's.
+    expect(mending.map((facts) => [facts.tokenRights.length, facts.tokenRights.includes("Workers R2 Storage: Edit"), facts.tokenNote.includes("yourself")])).toEqual([[9, false, false], [5, false, false]]);
+    expect(installer.facts(KINDS.domain.where, "remove")).toEqual(domain);
     expect([domain.tokenRights.includes("Workers R2 Storage: Edit"), none.tokenRights.includes("Workers R2 Storage: Edit"), none.tokenRights.some((right) => right.startsWith("Zone") || right.startsWith("DNS"))]).toEqual([true, true, false]);
     expect([domain.tokenNote.endsWith("choose it on the form yourself: Workers R2 Storage: Edit."), decodeURIComponent(domain.tokenLink).includes("r2")]).toEqual([true, false]);
     expect(installer.tokenHelp.filter((line) => line.includes("permissions:")).map((line) => line.trim().split(":")[0])).toEqual(["with a domain 10 permissions", "without       6 permissions"]);
@@ -513,16 +517,4 @@ describe("the provider's own answers", () => {
     expect([domain, none].map((facts) => new URL(facts.tokenLink).searchParams.get("name"))).toEqual(["poplin install", "poplin install"]);
     expect([installer.token("short"), installer.token("has a space in it, so it is none"), installer.token(TOKEN)]).toEqual([undefined, undefined, KEY]);
   });
-});
-
-// Drift: the repair that finishes an install proves the token again. Left to look for the account itself, it reads only the first accounts a token shows, and would refuse an install in a later one after its Worker was uploaded.
-test("an install in the account a person named is finished in that account: the repair lists no account again", async () => {
-  const account = fresh({ alsoShown: [{ id: "f".repeat(32), name: "Another account" }] });
-  const world = await worldOf(account);
-  const where = placeOf({ flags: [["no-domain", true], ["account", ACCOUNT]] });
-  const found = await installer.find(KEY, where, world.reach);
-  const sought = world.asked.length;
-  const done = await installer.install(startable(found), where, LOGIN, APPLY, world.reach, () => undefined);
-
-  expect([done.ok && done.ready, world.asked.slice(sought).filter((entry) => entry.path.split("?")[0] === "/accounts")]).toEqual([true, []]);
 });

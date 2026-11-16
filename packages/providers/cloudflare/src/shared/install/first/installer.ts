@@ -472,7 +472,7 @@ export const installer: Installer<Where, Place> = {
   tokenHelp: tokenHelp(),
   token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
   read,
-  facts: (where) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST),
+  facts: (where, work) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST),
   find: (token, where, reach) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor }),
   install,
   remove: (found, where, removal, _reach, say) => removeInstall(found, where, removal, tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST).tokenLink, say),

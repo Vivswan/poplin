@@ -56,7 +56,7 @@ const BOUND = [
 const PLACE_TOLD = `${INSTALL_OBJECTS.placeBinding} (plain text: the domain the install was started under, or none)`;
 
 /** The command that takes an install whose Worker has its bindings back, as its sentence names it. */
-const HELD_COMMANDS = { install: "poplin install again", repair: "poplin doctor --repair" } as const;
+const HELD_COMMANDS = { install: "npx poplin install cloudflare", repair: "npx poplin doctor --repair" } as const;
 
 /** A list as a sentence says it. */
 const LISTED = new Intl.ListFormat("en", { style: "long", type: "conjunction" });

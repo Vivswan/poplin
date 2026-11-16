@@ -147,6 +147,7 @@ describe("a run", () => {
 
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "Account token (not shown): [secret]", `Type ${NAME} to go on:`]);
+    expect(account.tokensFor).toEqual(["remove"]);
     expect(account.finds).toEqual([{ kind: "place", name: "example.com" }]);
   });
 

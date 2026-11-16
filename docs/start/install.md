@@ -278,7 +278,7 @@ would make       Worker                poplin, runs 0.1.0
 would make       DNS record            poplin.example.com
 would make       Access application    poplin: poplin.example.com, *-p-poplin.example.com
 the token's permissions: each read was allowed, and a write is proven by the run
-ready: a run would make 26 and change 1. nothing was changed
+ready: a run would make 27 and change 1. nothing was changed
 ```
 
 | The last line starts with | Means                                                                              | Exit code |

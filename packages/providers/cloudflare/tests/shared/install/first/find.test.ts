@@ -98,7 +98,7 @@ describe("the states of an account", () => {
       "a set install whose Worker lost its Workflow",
       [...MARKS.filter((mark) => mark.name !== "JOBS"), ...SET],
       "A Worker named poplin is in this account. It carries poplin's name and lacks JOBS (Workflow poplin-jobs, class PoplinJobs): it looks like an install that was deployed again by hand. " +
-        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run poplin doctor --repair.",
+        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin doctor --repair.",
       "repair",
     ],
     [
@@ -106,14 +106,14 @@ describe("the states of an account", () => {
       MARKS.slice(3),
       "A Worker named poplin is in this account. It carries poplin's name and lacks SITES (R2 bucket poplin-sites), DB (D1 database poplin), JOBS (Workflow poplin-jobs, class PoplinJobs), " +
         "and INSTALL_PLACE (plain text: the domain the install was started under, or none): it looks like an install that was deployed again by hand. " +
-        "Keep it: it may hold the install's keys. Put the bindings back on the Worker's Bindings page in your browser, then run poplin install again.",
+        "Keep it: it may hold the install's keys. Put the bindings back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare.",
       "install",
     ],
     [
       "a Worker that is not set and does not say where it was started for",
       MARKS,
       "A Worker named poplin is in this account. It carries poplin's name and lacks INSTALL_PLACE (plain text: the domain the install was started under, or none): it looks like an install that was deployed again by hand. " +
-        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run poplin install again.",
+        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare.",
       "install",
     ],
     ["a Worker with none of poplin's name", MARKS.slice(0, 3), "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again.", "again"],

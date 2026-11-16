@@ -11,7 +11,7 @@ import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { InstallEnds, Provider, Stop } from "../records";
-import { followed, heldStop, NEXT, REFUSED_AS } from "../report";
+import { followed, heldStop, NEXT, REFUSED_AS, runningWords } from "../report";
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { UninstallPlan, UninstallRequest } from "./records";
@@ -57,14 +57,14 @@ async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<Uninstal
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
   if (where === undefined) return ENDED;
 
-  const token = plan.token ?? (await askToken(provider, where.where, ends.screen));
+  const token = plan.token ?? (await askToken(provider, where.where, ends.screen, "remove"));
 
   return token === undefined ? ENDED : { provider, json, asking: "terminal", mode: plan.mode, where: where.where, token };
 }
 
 /** What a look found, in the line that says so. */
 function foundWords(found: Found<unknown, unknown>): string {
-  if (found.state === "whole") return `found: poplin${found.version === undefined ? "" : ` ${found.version}`}, at ${found.address}`;
+  if (found.state === "whole") return `found: ${runningWords(found.version)}, at ${found.address}`;
 
   const words = { none: "none that is whole", leftover: "none, but something was left behind", started: "one that was started and not finished", held: "a name is held", blocked: "blocked", choice: "more than one place", refused: "no" } as const;
 

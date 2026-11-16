@@ -61,18 +61,19 @@ An **account token** is a long password that lets a program change your Cloudfla
 
    ```text
    Your own domain (example.com), or Enter for none:
-   The account token needs 6 permissions, for this account:
+   The account token needs 5 permissions, for this account:
      Access: Apps and Policies: Edit, Workers Scripts: Edit, ...
    Optional:
      Notifications: Edit: Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.
    This link opens the form with each one chosen that a link can choose:
      https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
+   On the form, choose your account under Account Resources, then create the account token and copy it.
    Account token (not shown):
    ```
 
    With `--domain example.com` or `--no-domain` on the line, the first question is not asked.
 
-2. **Make the account token.** Open the link the command printed above its second question, and fill the form as the table of your kind shows: [under a domain](../start/install.md#3-make-the-account-token), or [without a domain](../start/without-a-domain.md#the-account-token). The form names the token "poplin install", since a repair takes the same token as an install. An older token of that name in Cloudflare's list can stay.
+2. **Make the account token.** Open the link the command printed above its second question, and fill the form as the table of your kind shows: [under a domain](../start/install.md#3-make-the-account-token), or [without a domain](../start/without-a-domain.md#the-account-token). Skip the row that table adds by hand: a repair needs no Workers R2 Storage: Edit. The form names the token "poplin install". An older token of that name can stay.
 
 3. **Paste the token at the question, and press Enter.** Its letters do not show. Nothing keeps it: not the command, and not your terminal's history.
 
@@ -151,11 +152,11 @@ The dashboard's Activity lists the new user as `Changed the settings`, by `docto
 
 | The run                | Needs                                                                                              |
 | ---------------------- | -------------------------------------------------------------------------------------------------- |
-| under a domain         | the 10 permissions of an install, on the account and the domain                                    |
-| without a domain       | the 6 permissions of an install, on the account                                                    |
+| under a domain         | 9 permissions, on the account and the domain: an install's 10 without Workers R2 Storage: Edit     |
+| without a domain       | 5 permissions, on the account: an install's 6 without Workers R2 Storage: Edit                     |
 | `--add-user`, on both  | the same token. Of its permissions, Access: Apps and Policies: Edit is the one that lets a person in |
 
-The link the command prints chooses every permission but one. Workers R2 Storage: Edit is chosen by hand, as the form's table shows. The optional permissions the command lists are not needed. `npx poplin doctor --repair --help` lists the permissions and both links.
+The link the command prints chooses every one of them. A token you kept from the install has one permission more, and works too. The optional permissions the command lists are not needed. `npx poplin doctor --repair --help` lists the permissions of an install's token and both of its links.
 
 **Why `--add-user` wants that one.** Whoever may change the login page at Cloudflare could let a person in there by hand. So the command first writes the list of emails at Cloudflare, with your token. The email is stored in the install only after Cloudflare took that write. A token that may only read adds nobody.
 

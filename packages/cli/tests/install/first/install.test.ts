@@ -491,6 +491,7 @@ describe("on a terminal", () => {
 
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "Your email, the first login:", "Account token (not shown): [secret]", "Log this computer in now? [Y/n]"]);
+    expect(account.tokensFor).toEqual(["install"]);
     expect(ran.err).toEqual([
       "The account token needs 2 permissions, for this account and this place:",
       "  Places: Read, Programs: Edit",

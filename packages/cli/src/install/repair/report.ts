@@ -5,7 +5,7 @@ import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/i
 import { columns } from "../../commands/text";
 import { TOKEN_HELP } from "../ask";
 import type { Next, Provider, Stop } from "../records";
-import { changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, UNCHANGED } from "../report";
+import { changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -36,7 +36,7 @@ function nextOf(repaired: Mended, run: Run): Next {
 
 /** Say which install a look found: its version where it could be read, and where its dashboard is. */
 export function foundWords(found: Whole<unknown>): string {
-  return `found: poplin ${found.version ?? "(version not read)"}, at ${found.address}`;
+  return `found: ${runningWords(found.version)}, at ${found.address}`;
 }
 
 /**

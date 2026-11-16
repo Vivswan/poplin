@@ -9,8 +9,6 @@
 
 import type { DomainPlug, DomainReading, ReadSettings } from "@poplin/app/src/console/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
-import type { BaseCloudflare } from "cloudflare/client";
-import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import type { KeptKey } from "../shared/install/key/kept-key";
 import type { AccountAddresses } from "./address-layout";
@@ -19,9 +17,6 @@ import { syncForwarders } from "./pieces/forwarders/forwarders";
 import { syncJobs } from "../shared/install/pieces/jobs/jobs";
 import type { Mode } from "../shared/install/sync";
 import { accessPiece, alertPiece, databasePiece, firstValues, type Known, keyGiven, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "../with-domain/zone-plug";
-
-/** How many accounts a token of an install with nothing set is looked through for the install's: one call each, inside what one request of a Worker may send. */
-const MAX_ACCOUNTS = 10;
 
 /** What the Domain screen says first on an install of this kind. */
 const NO_DOMAIN = "No domain: your sites answer at Cloudflare's free address.";
@@ -47,32 +42,17 @@ type PathParts = Known & {
   readonly now?: (() => number) | undefined;
 };
 
-/** The ids of the first accounts a token shows, from the first page of the list alone: no further page is asked for. */
-async function firstAccounts(api: BaseCloudflare): Promise<string[]> {
-  const page = await new BaseAccounts(api).list({ per_page: MAX_ACCOUNTS });
-
-  return page.result.slice(0, MAX_ACCOUNTS).map((account) => account.id);
-}
-
 /**
- * Find the account the install answers under: the install's own, the one the token was already found in, or for an install with nothing set whichever account the token shows.
+ * Prove that the account is the one the install answers under: the install's own, or for an install with nothing set the one the token was found in.
  *
- * @returns the id of the account whose free address is the install's; a token that shows no such account is refused, alike whatever it does show
+ * @returns the account's id where its free address is the install's; a token that may not read it, and an account with another free address or none, are refused alike
  */
 async function findAccount(parts: PathParts, connection: Connection): Promise<string | DomainReading> {
-  const known = parts.accountId ?? parts.first?.accountId;
-  const shown = known === undefined ? await callCloudflare(connection, (api) => firstAccounts(api)) : ({ ok: true, value: [known] } as const);
-  if (!shown.ok) return shown.failure === "refused" ? REFUSED : UNREACHABLE;
+  const known = parts.first === undefined ? parts.accountId : parts.first.accountId;
+  const address = await callCloudflare(connection, (api) => new BaseSubdomains(api).get({ account_id: known }));
+  if (address.ok && address.value.subdomain === parts.layout.account) return known;
 
-  for (const id of shown.value) {
-    const address = await callCloudflare(connection, (api) => new BaseSubdomains(api).get({ account_id: id }));
-    if (address.ok && address.value.subdomain === parts.layout.account) return id;
-
-    // An account the token may not read, or one with no free address, is not the install's: the next one is asked.
-    if (!address.ok && address.failure !== "refused") return UNREACHABLE;
-  }
-
-  return REFUSED;
+  return address.ok || address.failure === "refused" ? REFUSED : UNREACHABLE;
 }
 
 /** Prove a token: one that is malformed, refused, or shows no account whose free address is the install's gets its refusal, and nothing of the install is read with it. */
@@ -163,7 +143,7 @@ export async function givePathKey(parts: Extract<PathParts, { readonly accountId
  * Build the plug of an install without a domain on Cloudflare.
  *
  * @returns a plug whose `check` sends no change. Both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's free address as the one of `accountId`.
- * With no `accountId` the account is the one the token shows that address in. The settings are read only after that.
+ * With no `accountId` the account is the one `first` names. The settings are read only after that.
  * With `kept` the plug has `ownCheck`, which reads the same pieces with that key and no token
  */
 export function createPathPlug(parts: PathParts): DomainPlug {

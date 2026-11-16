@@ -53,7 +53,6 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   no_more_reading: "The dashboard is paused: the free allowance of the database for reading is used up for today. It is back after midnight UTC.",
   token: "Account token refused: paste the whole account token.",
   unreachable: "No answer from the provider. Try again.",
-  no_domain: "The account token shows no domain of that name.",
   no_update: "No newer version is known, so no update was started.",
   too_many_requests: "An update was tried in this minute already. Wait a minute.",
   no_key: "poplin holds no key, so it cannot update itself. Open Domain and press Repair.",

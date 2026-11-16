@@ -96,7 +96,7 @@ Each row is one kind of piece, with the names of its pieces. A kind the command 
 
 Under a domain, five rows stand in place of `Forwarder`: `Worker route`, `DNS record`, `Redirect rule`, `WAF rule`, and `Rate rule`. Each kind of rule has a second row for its rule set, such as `Redirect ruleset`.
 
-A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot switches` row says what stays there. A run under a domain removes 18 kinds at most.
+A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot settings` row says what stays there. A run under a domain removes 18 kinds at most.
 
 A rule set is Cloudflare's holder for rules of one kind. One that poplin made goes once no rule but poplin's is in it. One of the domain's own, which poplin only added a rule to, stays and has no row.
 
@@ -132,7 +132,7 @@ would remove  DNS record            *.example.com, poplin.example.com
 ...
 would remove  Sites' files          poplin-sites (files: 2, 15 B)
 would remove  Database              poplin (sites: 3)
-stays         Bot switches          the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set
+stays         Bot settings          the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set
 stays         Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 This removes every row above that says would remove. It cannot be undone.
 It logs no computer out. Run npx poplin logout on each one first: after the removal a logout cannot reach the install.

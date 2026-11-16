@@ -164,7 +164,7 @@ const TOLD = {
       "Workflow: removed",
       "Worker: removed",
     ],
-    stays: ["Bot switches: stays", "Account token: stays"],
+    stays: ["Bot settings: stays", "Account token: stays"],
   },
   "account address": {
     found: "Free address: found",
