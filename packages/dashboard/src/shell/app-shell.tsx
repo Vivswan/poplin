@@ -1,5 +1,6 @@
 // The frame every screen sits in: the sections at the side, each marked where its screen holds a problem, the version and the account at its foot, and the working area. On a phone the sections are behind a button at the top.
 
+import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
@@ -27,6 +28,7 @@ import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
 import { useScreenFocus } from "@/lib/focus";
 import { FRAME_KEY, GET_KEY, useFrame, useStarted } from "@/lib/frame";
+import { IN_BROWSER, PHONE } from "@/lib/media";
 import { sayDone, sayRefused, send } from "@/lib/notify";
 import { dateIn, useChosenTimeZone } from "@/lib/timezone";
 import { problemCount } from "@/problems/problem-words";
@@ -121,6 +123,8 @@ function SectionLink({ section, current }: { readonly section: (typeof SECTIONS)
  */
 function Account(): ReactNode {
   const at = Math.max(BOOT.email.lastIndexOf("@"), 0);
+  // Beside the side menu the menu opens clear of what stands over the email, such as the start of an update. A phone's sheet has no room beside it: there the menu opens over the email.
+  const beside = !useMediaQuery(PHONE, IN_BROWSER);
 
   return (
     <DropdownMenu>
@@ -133,7 +137,7 @@ function Account(): ReactNode {
         </span>
         <ChevronsUpDownIcon className="text-muted-foreground" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-(--anchor-width) min-w-40">
+      <DropdownMenuContent side={beside ? "right" : "top"} align={beside ? "end" : "start"} className="w-(--anchor-width) min-w-40">
         <DropdownMenuItem render={<Link to={OUT_PATH} reloadDocument {...NO_OWN_MARK} />}>{SIGN_OUT}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -359,7 +363,7 @@ function PhoneSections({ current, offer, started }: { readonly current: Section;
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label={name} className="relative -ml-2 md:hidden" />}>
         <MenuIcon />
-        {marked === 0 ? null : <TriangleAlertIcon aria-hidden="true" className="absolute -top-0.5 -right-0.5 size-3 text-destructive" />}
+        {marked === 0 ? null : <TriangleAlertIcon aria-hidden="true" className="absolute top-1/2 left-1/2 size-3 translate-x-0.5 -translate-y-3.5 rounded-full bg-background text-destructive" />}
       </SheetTrigger>
       <SheetContent side="left" className="gap-0 bg-sidebar data-[side=left]:w-72">
         <SheetTitle className="mx-3 mt-3 flex h-10 shrink-0 items-center gap-2 px-2.5">
