@@ -1,11 +1,11 @@
 ---
 title: Settings
-order: 20
+order: 60
 ---
 
 # Settings
 
-The settings of an install, the users who can log in, and the login this computer keeps; a site's own settings are in [Manage sites](../use/manage-sites.md#other-settings-of-a-site).
+The settings of an install, the users who can log in, and the login this computer keeps; a site's own settings are in [Manage sites](../sites/manage.md#other-settings-of-a-site).
 
 ## Change a setting
 
@@ -20,7 +20,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | ------------------------------- | ------------------------------------------------------------------------ |
 | `(Default: 9,000 MB)`           | the setting's default                                                    |
 | Reset                           | beside a default the row differs from: puts it back                      |
-| a warning mark after the field  | follows the number as it is typed; [Limits and cost](limits-and-cost.md) says what earns one |
+| a warning mark after the field  | follows the number as it is typed; [Limits and cost](../upkeep/cost/limits.md) says what earns one |
 | a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
 | `Use a whole number, 1 or more.` | such a sentence, for a number typed with a fraction, such as `1.5`      |
 | `Needs an update link to work.` | under Update automatically, while no update link is saved                |
@@ -49,9 +49,9 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
-`poplin update` needs an update link saved in the install once: [Update the install](update.md#optional-update-with-one-command) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
+`poplin update` needs an update link saved in the install once: [Update the install](../upkeep/update.md#optional-update-with-one-command) shows how. It is read from `POPLIN_UPDATE_ADDRESS` in the environment, and no command prints it.
 
-An install made with the Deploy button has a build at Cloudflare to make the update link for. One made from a terminal or with the OpenTofu module has none: with no update link saved it answers `no_update_address`, and updates as [Update the install](update.md#update-the-install) says.
+An install made with the Deploy button has a build at Cloudflare to make the update link for. One made from a terminal or with the OpenTofu module has none: with no update link saved it answers `no_update_address`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
 `poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--domain` and `--login`. On an install that has them, `--login` alone corrects a first login that was mistyped. It needs no login, and it works only until the first login to the install. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
 
@@ -68,7 +68,7 @@ The settings `poplin config` takes:
 | `max_storage_writes_per_day`                                                            | how many times a day the storage is written to or listed |
 | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` | request limits                                |
 | `update_check`                                                                          | whether the install asks which version is the newest     |
-| `auto_update`                                                                           | whether the install starts an update by itself: off in a new install, [Update](update.md#optional-update-by-itself) |
+| `auto_update`                                                                           | whether the install starts an update by itself: off in a new install, [Update](../upkeep/update.md#optional-update-by-itself) |
 
 Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install.
 

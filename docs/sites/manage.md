@@ -106,6 +106,6 @@ For a site in the trash, the panel has Restore and Delete for good. Its row has 
 | its button            | stays off until you type the site's name, which the question shows        |
 | once it is done       | the site leaves the list; nothing restores it                             |
 
-[Who can open a site](who-can-open.md) says what a public name is. Let search engines in is in [Settings](../run/settings.md#change-a-setting), under Visitors.
+[Who can open a site](who-can-open.md) says what a public name is. Let search engines in is in [Settings](../dashboard/settings.md#change-a-setting), under Visitors.
 
 The theme button in the header moves to the next look at each press: System, Light, Dark. System follows your device. The browser keeps the choice.

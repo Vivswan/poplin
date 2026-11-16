@@ -13,7 +13,7 @@ Nothing updates on its own while the setting `auto_update` is off, as it is in a
 | ------------------------- | ------------------------------------------------------------------- |
 | with the button of step 2 | three clicks at Cloudflare: [Build again](#build-again)             |
 | from a terminal           | two commands in its folder: [From a terminal](#from-a-terminal)     |
-| with the OpenTofu module  | a new bundle and an apply: [With OpenTofu](with-opentofu.md)        |
+| with the OpenTofu module  | a new bundle and an apply: [With OpenTofu](../start/with-opentofu.md)        |
 
 ## Build again
 

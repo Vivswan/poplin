@@ -1,6 +1,6 @@
 ---
 title: Problems
-order: 37
+order: 30
 ---
 
 # Problems
@@ -20,7 +20,7 @@ The login could not be checked     15 Nov 2026, 11:59 once        Domain
 | Where                                   | What it shows                                                                    |
 | --------------------------------------- | -------------------------------------------------------------------------------- |
 | a warning sign at Usage, Domain, or Settings, at the side | that screen holds a problem of the last 24 hours; its name says how many |
-| the same sign at Domain                 | also what the [last check of the domain](domain.md#the-last-check-of-the-domain) left to do |
+| the same sign at Domain                 | also what the [last check of the domain](../dashboard/domain.md#the-last-check-of-the-domain) left to do |
 | the sections button, on a phone         | the same sign, for all sections together                                         |
 | Problems, on the Usage screen           | every problem of the last 7 or 30 days; a press on a row opens it                |
 | the Domain screen                       | a login that could not be checked, with what to do                               |

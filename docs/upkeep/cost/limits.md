@@ -1,6 +1,6 @@
 ---
 title: Limits and cost
-order: 40
+order: 20
 ---
 
 # Limits and cost
@@ -40,7 +40,7 @@ made by  Repair, with an account token that also holds Notifications: Edit
 
 | Install | Gets the alert |
 | --- | --- |
-| by the Deploy button or by hand | once you add the permission to the account token and press Repair: [Domain](domain.md#optional-an-email-when-charges-reach-1-dollar) |
+| by the Deploy button or by hand | once you add the permission to the account token and press Repair: [Domain](../../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) |
 | by the OpenTofu module | the same way. The module makes no budget alert |
 
 Without the permission, Repair makes no alert and fails nothing. You can also make one by hand: Manage Account, then Billing, then Billable Usage, then Create budget alert.
@@ -62,14 +62,14 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | AI crawlers: while `block_bots` is `auto`, on a domain with no other hostnames; while it is `on`, on any domain | Repair: Bot settings. Module: `cloudflare_bot_management.zone` | Cloudflare blocks them on the whole domain |
 | plain http | Repair: Redirect rule. Module: `cloudflare_ruleset.https`. The Worker does the same | the request is sent to https |
 | the dashboard and private sites | Repair: Access application and Access policy. Module: `cloudflare_zero_trust_access_application.login` and its policy | Cloudflare's login, for the `logins` alone |
-| the bucket's public address | Module: `cloudflare_r2_managed_domain.sites`. A bucket [step 2](../start/by-hand.md#the-steps) made has none | it stays off: files are read through the Worker alone |
+| the bucket's public address | Module: `cloudflare_r2_managed_domain.sites`. A bucket [step 2](../../start/by-hand.md#the-steps) made has none | it stays off: files are read through the Worker alone |
 | uploads in parts that nobody finished | Module: `cloudflare_r2_bucket_lifecycle.sites`, after one day. A bucket step 2 made has Cloudflare's own rule, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
 | every file of an install that only tests | Module alone: `test_install_file_days`, not set by default | the bucket deletes every file at that age, a live site's included |
 | the account's usage charges of a billing period: 1 US dollar | Repair: Budget alert, with the optional permission Notifications: Edit. The module makes none | Cloudflare emails the first user. Nothing is stopped |
 | R2's bytes stored, write operations, and read operations | Module alone, and off until `usage_alert_percents` is set: `cloudflare_notification_policy.usage`. It needs the Notifications permission. Cloudflare's API does not list the product names the alerts are made with, so they are unconfirmed | Cloudflare emails the logins at each share of the free allowance the list names. Nothing is stopped |
 | the domain's plan | Module alone: `paid_plan_allowed` | an apply on a plan other than Free stops with an error, unless the input is true |
 
-Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made. The budget alert exists only where Repair made it.
+Repair is the button on the setup page and the Domain screen. Module is [the OpenTofu module](../../start/with-opentofu.md). The rows marked Module alone, and the one-day rule, exist only on an install the module made. The budget alert exists only where Repair made it.
 
 **What no setting bounds.** Every request the Worker answers spends the Workers plan's requests of the day: a 404, a redirect to the login, a call of the API, and a request a limit refused with 429 too. `requests_per_day` counts the requests at the address of a live site alone.
 
@@ -178,4 +178,4 @@ The dashboard's Usage screen draws a graph under Visits: how often pages were op
 - **A year is kept:** the counts of 365 UTC days, today included. A day with no count shows 0, and so does every day before the install was made.
 - **The numbers are estimates.** A count is exact while the install's day is under 2,000 requests. Past that the day is counted from a sample, and a count moves in steps of up to 50. A sum reads `about 1,200`, or `under 10`.
 
-[Manage sites](../use/manage-sites.md#look-go-back-re-link-delete) says which opens count, and where one site's count shows.
+[Manage sites](../../sites/manage.md#look-go-back-re-link-delete) says which opens count, and where one site's count shows.
