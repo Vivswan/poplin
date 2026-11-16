@@ -165,6 +165,16 @@ function planApplication(application: AccountApplication | undefined, wanted: Wa
   return { kind: "change", id: application.id, policyId, ...wanted };
 }
 
+/** The policy that lets the install's logins through, as poplin writes it: one rule for each email, in the order of the alphabet. */
+function loginsPolicy(logins: Iterable<string>): WantedPolicy {
+  return { subject: POLICY_NAME, decision: "allow", include: [...logins].sort().map((email) => ({ email: { email } })) };
+}
+
+/** A policy as Cloudflare is sent it. */
+function policyBody(accountId: string, wanted: WantedPolicy): { account_id: string; name: string; decision: WantedPolicy["decision"]; include: Rule[] } {
+  return { account_id: accountId, name: wanted.subject, decision: wanted.decision, include: [...wanted.include] };
+}
+
 /** The steps of one application and the policy it holds: the policy's first, so the application links one that exists. */
 function planPair(policy: WantedPolicy, application: WantedApplication, current: AccountAccess): AccessStep[] {
   const held = current.policies.find((candidate) => candidate.name === policy.subject);
@@ -181,13 +191,12 @@ function planPair(policy: WantedPolicy, application: WantedApplication, current:
  * The open paths come first, so no moment of a run leaves the API or the setup page behind the login
  */
 export function planAccess(desired: DesiredAccess, current: AccountAccess): AccessStep[] {
-  const emails = [...desired.logins].sort();
   const open = INSTALL_OBJECTS.openPaths.map((path) => `${desired.hostname}${path}`);
 
   return [
     ...planPair({ subject: OPEN_POLICY_NAME, decision: "bypass", include: [{ everyone: {} }] }, { subject: OPEN_APPLICATION_NAME, uris: open, policy: OPEN_POLICY_NAME }, current),
     ...planPair(
-      { subject: POLICY_NAME, decision: "allow", include: emails.map((email) => ({ email: { email } })) },
+      loginsPolicy(desired.logins),
       { subject: APPLICATION_NAME, uris: [desired.hostname, desired.privateSites], policy: POLICY_NAME },
       current,
     ),
@@ -224,6 +233,28 @@ export async function readLoginFacts(connection: Connection, accountId: string):
 }
 
 /**
+ * Write the install's logins into the policy that lets them through, and nothing else of Access: no application is read or changed.
+ *
+ * @param logins - every email let through, in any order
+ * @returns `true` once the policy lets through exactly these emails, which it may have done already, and `false` on an account with no such policy, where nothing is written
+ */
+export async function writeLogins(connection: Connection, accountId: string, logins: readonly string[]): Promise<CloudflareResult<boolean>> {
+  const policies = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
+  if (!policies.ok) return policies;
+
+  const held = policies.value.find((candidate) => candidate.name === POLICY_NAME);
+  const id = held?.id;
+  if (held === undefined || id === undefined) return { ok: true, value: false };
+
+  const wanted = loginsPolicy(logins);
+  if (decidesExactly({ ...held, id }, wanted)) return { ok: true, value: true };
+
+  const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(id, policyBody(accountId, wanted)));
+
+  return written.ok ? { ok: true, value: true } : written;
+}
+
+/**
  * Make the account's Access match an install's login.
  *
  * @param mode - `plan` reads the policies and applications and sends no change
@@ -244,7 +275,7 @@ export async function syncAccess(connection: Connection, accountId: string, desi
 
   return applySteps(planAccess(desired, current), async (step): Promise<CloudflareResult<unknown>> => {
     if ("include" in step) {
-      const body = { account_id: accountId, name: step.subject, decision: step.decision, include: [...step.include] };
+      const body = policyBody(accountId, step);
       const policy = await callCloudflare(connection, (api) =>
         step.kind === "create" ? new BasePolicies(api).create(body) : new BasePolicies(api).update(step.id, body),
       );

@@ -108,10 +108,10 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "GET /api/export/sites/:site": 4,
   "GET /api/export/sites/:site/files": 6,
   "GET /api/export/sites/:site/file": 5,
-  "POST /api/import/settings": 2,
+  "POST /api/import/settings": 5,
   "POST /api/import/sites": 7,
   "GET /api/config": 2,
-  "PATCH /api/config": 3,
+  "PATCH /api/config": 5,
   "DELETE /api/sessions": 2,
   "GET /api/audit": 2,
   "GET /api/domain": 2,
@@ -354,6 +354,16 @@ describe("createApi", () => {
     const users = [ada, "bo@example.com" as Login];
     expect(part(await done((api) => api.config.$patch({ json: { logins: users }, query: {} })), "values").logins).toEqual(users);
     expect([(await done((api) => api.domain.$get({ query: {} }))).body.waits, (await install.database.readDomainCheck())?.users_changed_at]).toEqual([true, NOW]);
+    // Drift: the same change is carried to the provider by itself, and so is an import that brings its users.
+    // A route that carried the list of before its own change would leave the provider with the old users, and one that carried on any setting would call it for nothing.
+    install.users.takes = true;
+    const three = [...users, "cy@example.com" as Login];
+    await done((api) => api.config.$patch({ json: { logins: three }, query: {} }));
+    await done((api) => api.config.$patch({ json: { trash_days: 8 }, query: {} }));
+    const settled = (await install.database.readDomainCheck())?.users_changed_at;
+    await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, logins: users.join(",") }, logins: true }, query: {} }));
+    await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, trash_days: "8" } }, query: {} }));
+    expect([install.users.pushed, settled, (await install.database.readDomainCheck())?.users_changed_at]).toEqual([[three, users], null, null]);
     expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { forever: "true" } })), "before").id).toBe(moved);
     expect(part(await done((api) => api.import.settings.$post({ json: { format: 1, settings }, query: {} })), "values").trash_days).toBe(7);
     const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));

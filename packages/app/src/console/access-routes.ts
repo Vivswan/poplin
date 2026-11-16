@@ -4,7 +4,7 @@
 //   GET  /logins/<id>              one waiting login, to review: no part of its code
 //   POST /logins/decide            deny a login, or allow it with the scope the person chose and the end of its code, which they typed; counted as a try at a code
 //   GET  /people                   the emails that can log in, and which one asks
-//   POST /people/add, /remove      one email in, or out, in one step each
+//   POST /people/add, /remove      one email in, or out, in one step each; the users are then carried to the provider's list, and `note` is the sentence of a change that did not reach it
 //   GET  /tokens                   every token that works, never its value; ?sort= with ?dir=; and the newest that ended
 //   POST /tokens/<id>/remove       the token stops working, and is listed among the ended ones
 
@@ -13,10 +13,11 @@ import { decideLogin, listLogins, showLogin } from "@poplin/core/src/actions/com
 import { readConfig } from "@poplin/core/src/actions/config";
 import { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
 import { listTokenStates, revokeToken } from "@poplin/core/src/actions/manage-tokens";
-import { Hono, type MiddlewareHandler } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import * as v from "valibot";
 
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
+import { followUsers } from "./access/users-follow";
 
 /** How many waiting logins the screen lists: the rest are counted. */
 const MOST_LISTED = 10;
@@ -41,6 +42,9 @@ const DECISION = v.variant("allow", [
   v.object({ login: v.string(), allow: v.literal(false) }),
   v.object({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), letters: v.string() }),
 ]);
+
+/** What a change of the users says in a console that carries none of them to the provider and has a Domain screen: a repair there carries them. */
+const NEXT_REPAIR = "Next, open Domain and press Repair.";
 
 /** One email to add or take out, as it was typed. */
 const PERSON = v.object({ login: v.string() });
@@ -68,6 +72,21 @@ function sortedTokens(tokens: readonly Token[], key: keyof typeof TOKEN_SORT_KEY
   });
 
   return descending ? ordered.reverse() : ordered;
+}
+
+/**
+ * Carry the users to the provider after a change of them was stored.
+ *
+ * @returns the sentence of a change that did not reach the provider's list, to show after the word that it is saved; `null` where it did.
+ *   A console built without the provider's side of the users points to its Domain screen, and says nothing where it has none
+ */
+async function carried(context: Context<Shared>): Promise<string | null> {
+  const follow = context.get("follow");
+  if (follow === undefined) return context.get("domain") === undefined ? null : NEXT_REPAIR;
+
+  const followed = await followUsers(context.get("asker").install, follow);
+
+  return followed.carried ? null : followed.sentence;
 }
 
 /** The Access screen's data routes. Each calls the action the dashboard's own page calls; no part of a login's code is in an answer. */
@@ -103,14 +122,16 @@ export const accessRoutes = new Hono<Shared>()
   .post("/people/add", vValidator("json", PERSON, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
     const added = await addLogin(install, actor, context.req.valid("json"));
+    if (!added.ok) return refused(context, added);
 
-    return added.ok ? context.json({ ok: true as const, login: added.login }) : refused(context, added);
+    return context.json({ ok: true as const, login: added.login, note: await carried(context) });
   })
   .post("/people/remove", vValidator("json", PERSON, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
     const removed = await removeLogin(install, actor, context.req.valid("json"));
+    if (!removed.ok) return refused(context, removed);
 
-    return removed.ok ? context.json({ ok: true as const, login: removed.login }) : refused(context, removed);
+    return context.json({ ok: true as const, login: removed.login, note: await carried(context) });
   })
   .get("/tokens", vValidator("query", TOKENS_QUERY, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

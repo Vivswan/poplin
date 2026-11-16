@@ -48,6 +48,9 @@ interface Asked {
 
   /** Whether the console has a Domain screen. */
   readonly domain: boolean;
+
+  /** Whether a change of the users is carried to the domain with no person, so one that waits is nothing to act on. */
+  readonly selfCarried: boolean;
 }
 
 /** A frame that shows nothing of the install. */
@@ -76,7 +79,9 @@ export async function frameOf(install: Install, actor: Actor, asked: Asked): Pro
   const settings = install.knownSettings ?? read.settings;
   if (settings === undefined) return NO_FRAME;
 
-  const domainNote = asked.domain ? domainNoteOf(domainStateOf(read.domainCheck, install.now())) : null;
+  // A change of the users that the install carries by itself is settled by a later try, and a try no later one mends is a problem of its own.
+  const remembered = read.domainCheck !== undefined && asked.selfCarried ? { ...read.domainCheck, users_changed_at: null } : read.domainCheck;
+  const domainNote = asked.domain ? domainNoteOf(domainStateOf(remembered, install.now())) : null;
   // What the domain needs marks its screen as a problem there does. A check that is only old is a reminder, and marks nothing.
   const marked = markedIn(read.problems, install.now(), { screen: asked.domain, says: domainNote === null || domainNote.quiet ? null : domainNote.sentence });
 
@@ -88,7 +93,7 @@ export const frameRoutes = new Hono<Shared>()
   .get("/frame", async (context) => {
     const { install, actor } = context.get("asker");
 
-    const asked = { version: context.get("host").version, domain: context.get("domain") !== undefined };
+    const asked = { version: context.get("host").version, domain: context.get("domain") !== undefined, selfCarried: context.get("follow")?.holdsKey() === true };
 
     return context.json({ ok: true as const, ...(await frameOf(install, actor, asked)) });
   })

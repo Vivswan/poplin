@@ -35,6 +35,7 @@ const WITH_TOKEN = [
   "mcp",
   "export-import",
   "backup-drill",
+  "users-follow",
   "outside-page",
   "L4",
   "L5",
@@ -48,7 +49,7 @@ const MANY_FILES = 7;
 const RUN_MS = 30_000;
 
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
-const CHECKS_ROWS = 849;
+const CHECKS_ROWS = 861;
 
 /** The benches a test opened, closed after it. */
 const OPENED: (() => void)[] = [];
@@ -99,6 +100,8 @@ const CASES: readonly Case[] = [
     {},
     { ...NO_LOGIN, private: "failed", duplicate: "failed", L5: "failed" },
   ],
+  ["an install that holds no key of its provider fails the check of the users: the login list never takes the one it added", { noKey: true }, {}, { ...NO_LOGIN, "users-follow": "failed" }],
+  ["a run with no key to read the provider's login list skips the check of the users", {}, { "login-list": "a key of the provider" }, { ...NO_LOGIN, "users-follow": "skipped" }],
   ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, NO_LOGIN],
   ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, NO_LOGIN],
   ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { ...NO_LOGIN, "burst-rate-rule": "failed" }],
@@ -234,6 +237,7 @@ describe("the live checks, against a local fake", () => {
       now: fake.now,
       say: () => undefined,
       manyFiles: MANY_FILES,
+      loginList: fake.loginList,
     });
     OPENED.push(close);
     await settle();
@@ -262,7 +266,7 @@ describe("the live checks, against a local fake", () => {
     const fake = await openFake({ access: true });
     const rows = meterRows(fake.fetch, ROW_CEILINGS.checks);
     const missing: Missing = {};
-    const { bench, settle, sweep, close } = openBench({ domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, say: () => undefined, manyFiles: MANY_FILES });
+    const { bench, settle, sweep, close } = openBench({ domain: FAKE_DOMAIN, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, say: () => undefined, manyFiles: MANY_FILES, loginList: fake.loginList });
     OPENED.push(close);
     await settle();
     Object.assign(missing, await probeMissing(bench, { "many-files": "asked" }));

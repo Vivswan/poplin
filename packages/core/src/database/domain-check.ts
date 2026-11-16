@@ -1,9 +1,9 @@
-// The statements that keep and read the last check or repair of the domain: one row, replaced by each run, which also remembers that the users changed since the last repair.
+// The statements that keep and read the last check or repair of the domain: one row, replaced by each run, which also remembers that the users changed and the change has not reached the domain.
 
 import { and, eq, sql as fragment } from "drizzle-orm";
 import * as v from "valibot";
 
-import { DOMAIN_CHECK, type DomainCheck, type RememberedCheck } from "../records/domain-check";
+import { type CarriedUsers, DOMAIN_CHECK, type DomainCheck, type RememberedCheck } from "../records/domain-check";
 import { MOMENT } from "../records/fields";
 import type { Statement, StatementResult } from "./driver";
 import { domainCheck, settings } from "./schema";
@@ -25,20 +25,16 @@ export function domainCheckAsked(): Statement {
 }
 
 /**
- * Build the statement that keeps a run in place of the one kept before. It changes exactly one row, which the audit entry written after it in the same batch relies on.
+ * Build the statement that keeps a run in place of the one kept before. It changes exactly one row, which the audit entry written after it in the same batch relies on, and leaves a change of the users waiting as it was.
  *
- * @param settled - the moment up to which the run carried the users to the domain; a change of the users up to it waits no more. Left out, the run settles nothing
  * @throws {Error} a value of the run breaks its rule
  */
-export function domainCheckKept(check: DomainCheck, settled?: number): Statement {
+export function domainCheckKept(check: DomainCheck): Statement {
   const { ran_at, by, run, pieces } = v.parse(DOMAIN_CHECK, check);
   const row = { id: 1, ran_at, ran_by: by, run, pieces: JSON.stringify(pieces) };
   const replaced = Object.fromEntries(REPLACED.map((column) => [column.name, fragment`excluded.${fragment.identifier(column.name)}`]));
-  if (settled === undefined) return built(BUILD.insert(domainCheck).values(row).onConflictDoUpdate({ target: domainCheck.id, set: replaced }));
 
-  const waiting = fragment`CASE WHEN ${domainCheck.users_changed_at} > ${v.parse(MOMENT, settled)} THEN ${domainCheck.users_changed_at} END`;
-
-  return built(BUILD.insert(domainCheck).values(row).onConflictDoUpdate({ target: domainCheck.id, set: { ...replaced, users_changed_at: waiting } }));
+  return built(BUILD.insert(domainCheck).values(row).onConflictDoUpdate({ target: domainCheck.id, set: replaced }));
 }
 
 /**
@@ -66,6 +62,36 @@ export function usersReplaced(logins: readonly string[], at: number): Statement 
   const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added} OR ${moved}))`;
 
   return built(BUILD.update(domainCheck).set({ users_changed_at: at }).where(and(eq(domainCheck.id, 1), differs)));
+}
+
+/** The mark of a change of the users, set anew: later than the moment given and than any mark before it, so whoever holds an earlier mark can tell that something happened since. */
+function laterMark(at: number): ReturnType<typeof fragment> {
+  return fragment`max(coalesce(${domainCheck.users_changed_at}, 0) + 1, ${v.parse(MOMENT, at)})`;
+}
+
+/**
+ * Build the statement that marks the users as waiting before a try to carry them to the domain, with a mark later than every one before it. It writes only on an install that keeps a run.
+ *
+ * @param at - the moment of the try
+ */
+export function usersClaimed(at: number): Statement {
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(eq(domainCheck.id, 1)));
+}
+
+/**
+ * Build the statement that settles a change of the users after a try to carry them to the domain. The mark goes only while the stored logins are exactly the list that was carried, in that order, and no mark was set since the try began.
+ * Otherwise a later mark is set: a list carried while the users changed again, or while another try wrote the domain, never leaves the change forgotten.
+ *
+ * @param carried - what the try came to
+ * @param at - the moment a mark is set anew with
+ */
+export function usersCarried(carried: CarriedUsers, at: number): Statement {
+  if (carried.logins === null) return usersClaimed(at);
+
+  const same = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND json_extract(${settings.value}, '$.logins') = json(${JSON.stringify(carried.logins)}))`;
+  const untouched = fragment`(${domainCheck.users_changed_at} IS NULL OR ${domainCheck.users_changed_at} <= ${v.parse(MOMENT, carried.since)})`;
+
+  return built(BUILD.update(domainCheck).set({ users_changed_at: fragment`CASE WHEN ${same} AND ${untouched} THEN NULL ELSE ${laterMark(at)} END` }).where(eq(domainCheck.id, 1)));
 }
 
 /**

@@ -14,10 +14,10 @@ const DECIDED = {
 /** How long after a login is allowed its computer has surely asked for its token, in milliseconds: it asks every five seconds. */
 const COLLECTED_AFTER_MS = 6000;
 
-/** What a person's change says once it is done. */
+/** What a person's change says once it is done; the sentence of a change that did not reach the domain's login follows it. */
 const PEOPLE_SAID = {
-  added: "Added. Next, open Domain and press Repair.",
-  removed: "Removed. Next, open Domain and press Repair.",
+  added: "Added.",
+  removed: "Removed.",
   gone: "That user was removed already.",
 } as const;
 
@@ -64,17 +64,24 @@ function decisionWords(login: Review, decision: Decision): string {
   return login.scope === "admin" && decision.scope === "publisher" ? DECIDED.lowered : DECIDED.allowed;
 }
 
+/** The line of a person's change: the word that it is done, and after it what the server says of a change that did not reach the domain's login. */
+function peopleWords(done: string, note: string | null): string {
+  return note === null ? done : `${done} ${note}`;
+}
+
 /**
  * Build the changes of the Access screen.
  *
  * @param onChanged - called after every done change, and after a login turned out to be gone, so the lists read again
- * @param onUsersChanged - called after a person was added or taken out, which the domain then waits a repair for, so what is said of the domain reads again
+ * @param onUsersChanged - called after a person was added or taken out, which the domain may then wait a repair for, so what is said of the domain reads again
  */
 export function accessActions(onChanged: () => void, onUsersChanged: () => void): AccessActions {
   // A person someone else took out meanwhile is gone as asked: that is said plainly, and is no refusal.
   const removePerson: AccessActions["removePerson"] = async (email) => {
+    let note: string | null;
+
     try {
-      await answerOf(api.people.remove.$post({ json: { login: email } }));
+      ({ note } = await answerOf(api.people.remove.$post({ json: { login: email } })));
     } catch (error) {
       if (!(error instanceof Refused)) throw error;
 
@@ -87,7 +94,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
 
     onChanged();
     onUsersChanged();
-    sayDone(PEOPLE_SAID.removed);
+    sayDone(peopleWords(PEOPLE_SAID.removed, note));
   };
 
   return {
@@ -124,7 +131,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
         const added = await answerOf(api.people.add.$post({ json: { login: email } }));
         onChanged();
         onUsersChanged();
-        sayDone(PEOPLE_SAID.added, { run: () => void removePerson(added.login) });
+        sayDone(peopleWords(PEOPLE_SAID.added, added.note), { run: () => void removePerson(added.login) });
 
         return undefined;
       } catch (error) {

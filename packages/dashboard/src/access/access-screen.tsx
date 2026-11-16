@@ -51,7 +51,7 @@ export function AccessScreen(): ReactNode {
     () =>
       accessActions(
         () => void client.invalidateQueries({ predicate: ({ queryKey }) => queryKey[0] === ACCESS_KEY[0] && queryKey[1] !== "review" }),
-        // The side and the Domain screen say that a repair waits once the users changed.
+        // The side and the Domain screen say that a repair waits where a change of the users did not reach the domain by itself.
         () => void Promise.all([client.invalidateQueries({ queryKey: FRAME_KEY }), client.invalidateQueries({ queryKey: DOMAIN_KEY })]),
       ),
     [client],

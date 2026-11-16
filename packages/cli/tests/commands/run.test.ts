@@ -327,11 +327,16 @@ describe("run", () => {
     expect(jsonOf(await bench.run("config trash_days --json"))).toMatchObject({ values: { trash_days: 9 } });
 
     // Drift: the stored logins and the login page's own list are two lists; a change that printed the first alone would leave a new person stopped at the login with nothing saying why.
+    // An install that carried the change to the login page by itself has no step left, and naming one would send a person to paste a token for nothing.
+    await bench.install.database.keepDomainCheck({ ran_at: bench.install.clock.now, by: "ada@example.com" as Email, run: "repair", pieces: [] }, {});
+    bench.install.users.takes = true;
+    const carried = await bench.run("config logins ada@example.com,cy@example.com");
+    bench.install.users.takes = false;
     const added = await bench.run("config logins ada@example.com,second@example.com");
 
     const step = "one more step: on the dashboard's Domain tab, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
 
-    expect([added.out, added.err]).toEqual([["logins  ada@example.com,second@example.com"], [step]]);
+    expect([added.out, added.err, carried.out, carried.err]).toEqual([["logins  ada@example.com,second@example.com"], [step], ["logins  ada@example.com,cy@example.com"], []]);
 
     // Drift: a token names no email, so the one login known to pass the login page is one that was a login already; a list of new emails alone would shut the dashboard on everyone.
     const replaced = await bench.run("config logins third@example.com");

@@ -105,6 +105,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held)
     base: "",
     client: CLIENT_FILES,
     domain: instance.domain,
+    follow: instance.follow,
     freeLimits: FREE_LIMITS,
     usage: instance.usage,
     rebuild: instance.rebuilding,

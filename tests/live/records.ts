@@ -1,7 +1,7 @@
 // What the live checks share: a check, what an install may lack, and what a check came to.
 
 /** Something a check needs that an install, its account, or a run may lack. `person` is always lacking: such a check is done by hand. */
-type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "person";
+type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "kept-key" | "person";
 
 /** Why each lacking capability is lacking, in words that name no host and no account. */
 export type Missing = Partial<Record<Capability, string>>;
@@ -52,6 +52,9 @@ export interface Bench {
 
   /** Sends one request as a stranger: no token, no cookie, no redirect followed. */
   readonly visit: (address: string, init?: RequestInit) => Promise<Response>;
+
+  /** Reads the emails the login in front of the install lets in, at the provider itself and with the run's own key there. A run with no such key rejects. */
+  readonly loginList: () => Promise<readonly string[]>;
 
   /** Runs one command line of the CLI, with `--json`, as the token holder. */
   readonly cli: (...words: readonly string[]) => Promise<Ran>;

@@ -1,9 +1,11 @@
 // One run of the domain plug for the Domain tab or the setup page: the token goes in, the rows come out, and the install keeps the run: its pieces as the last check of the domain, and one audit entry that says what was found or done.
-// A repair that leaves every piece of the login standing has carried the users to the domain, so a change of the users from before it waits for a repair no more.
+// A repair that leaves every piece of the login and every object that holds the users standing has carried the users it read to the domain: a change of the users waits no more while those are still the stored ones.
+// A repair that wrote such an object and stopped short may have left the domain with users of an earlier moment, so the change waits.
 
 import type { Install } from "@poplin/core/src/actions/records";
+import type { Login } from "@poplin/core/src/auth/logins";
 import type { AuditEntry } from "@poplin/core/src/records/audit";
-import { type CheckedPiece, keptPieces } from "@poplin/core/src/records/domain-check";
+import { type CarriedUsers, type CheckedPiece, keptPieces } from "@poplin/core/src/records/domain-check";
 
 import type { DomainPlug, DomainReading, DomainRow, DomainSettings, DomainState, ReadSettings } from "./records";
 
@@ -23,6 +25,12 @@ const REMEMBERED: Readonly<Record<Exclude<DomainState, "failed" | "not-run" | "l
   differs: "needs_repair",
   optional: "not_set_up",
 };
+
+/** The states of an object a repair left as the settings ask. */
+const STANDS: readonly DomainState[] = ["present", "created", "changed"];
+
+/** The states of an object a repair wrote. */
+const WRITTEN: readonly DomainState[] = ["created", "changed"];
 
 /** What a form asks of the plug: `check` reads, `repair` changes. */
 export type DomainRun = "check" | "repair";
@@ -66,6 +74,7 @@ function withoutToken(reading: DomainReading, token: string): DomainReading {
       detail: hidden(row.detail, token),
       part: row.part,
       ...(row.right === undefined ? {} : { right: hidden(row.right, token) }),
+      ...(row.users === undefined ? {} : { users: row.users }),
     })),
     steps: reading.steps.map((step) => ({ text: hidden(step.text, token), address: hidden(step.address, token) })),
   };
@@ -83,9 +92,23 @@ function byState(reading: Extract<DomainReading, { ok: true }>): Record<string, 
   );
 }
 
-/** Whether a run carried the users to the domain: a repair, with no piece of the login left undone. */
-function carriedUsers(run: DomainRun, pieces: readonly CheckedPiece[]): boolean {
-  return run === "repair" && pieces.every((piece) => piece.part !== "login" || piece.state === "ok");
+/** Whether a run carried the users to the domain: a repair, with no piece of the login left undone and every object that holds the users left as the settings ask. One the run could not read or change may hold the users of an earlier day. */
+function carriedUsers(run: DomainRun, rows: readonly DomainRow[], pieces: readonly CheckedPiece[]): boolean {
+  const login = pieces.every((piece) => piece.part !== "login" || piece.state === "ok");
+
+  return run === "repair" && login && rows.every((row) => row.users !== true || STANDS.includes(row.state));
+}
+
+/**
+ * Say what a run did to the users at the domain, as the install settles a change of them by it.
+ *
+ * @param logins - the logins the run read and worked with
+ * @returns the logins of a repair that carried them; `null` after a repair that wrote an object that holds the users and carried them to no end, so what the domain holds is unknown; `undefined` for a run that wrote none
+ */
+function usersAfter(run: DomainRun, rows: readonly DomainRow[], pieces: readonly CheckedPiece[], logins: readonly Login[] | undefined): CarriedUsers["logins"] | undefined {
+  if (logins !== undefined && carriedUsers(run, rows, pieces)) return logins;
+
+  return run === "repair" && rows.some((row) => row.users === true && WRITTEN.includes(row.state)) ? null : undefined;
 }
 
 /** A row as the install remembers it. */
@@ -106,11 +129,11 @@ function remembered(row: DomainRow): CheckedPiece {
  *
  * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, keeps nothing, so the run kept before stays the last one.
  *   An unrecorded run keeps nothing either, nor does one signed by a name that holds the token.
- *   Nothing kept ever holds the token. A repair that left the login standing settles a change of the users from before it began
+ *   Nothing kept ever holds the token. A repair that left the login standing settles a change of the users while the logins it carried are the stored ones
  * @throws {Error} the plug or the database failed; nothing was kept
  */
 export async function runDomain(plug: DomainPlug, install: Pick<Install, "database" | "now">, asked: Asked): Promise<DomainReading> {
-  // A user added while the run is under way is not in the settings it carries, and still waits after it.
+  // A change of the users after the run began, or another try at the provider meanwhile, still waits after it.
   const began = install.now();
   let read: DomainSettings | undefined;
   const settings: ReadSettings = async () => {
@@ -132,7 +155,8 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
   const pieces = reading.rows.map(remembered);
   const check = { ran_at: install.now(), by, run: asked.run, pieces: keptPieces(pieces) };
   const detail = { run: asked.run, from: asked.from, ...byState(reading) };
-  await install.database.keepDomainCheck(check, detail, carriedUsers(asked.run, pieces) ? began : undefined);
+  const carried = usersAfter(asked.run, reading.rows, pieces, read?.logins);
+  await install.database.keepDomainCheck(check, detail, carried === undefined ? undefined : { logins: carried, since: began });
 
   return reading;
 }

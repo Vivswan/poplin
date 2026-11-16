@@ -23,6 +23,7 @@ export type DomainState = "present" | "missing" | "differs" | "left-out" | "opti
  *
  * `part` is what the object is for: `login` guards private sites, `reach` makes a site answer at its address, and `rest` is everything else.
  * `right` is on a row that failed because the token lacked a right, and names that right.
+ * `users` is on an object that holds the install's users, such as the list of who may log in: a repair has carried the users only once every such object stands.
  */
 export interface DomainRow {
   readonly object: string;
@@ -30,6 +31,7 @@ export interface DomainRow {
   readonly detail: string;
   readonly part: CheckedPiece["part"];
   readonly right?: string;
+  readonly users?: true;
 }
 
 /** Something only a person can do, at the provider's own pages: what to do there, and the address to open. */

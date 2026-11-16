@@ -74,18 +74,25 @@ Every command that talks to the install also takes `--json`, for the answer as J
 
 ## Add a user
 
-A user is an email in `logins`, which can log in to the dashboard. A second user needs two steps, because Cloudflare's login page keeps its own list.
+A user is an email in `logins`, which can log in to the dashboard. Cloudflare's login page keeps its own list, and poplin writes every change into it by itself, with [the key it keeps](../about/security.md#the-kept-key).
 
-| Step | Where                        | Do                                                           |
-| ---- | ---------------------------- | ------------------------------------------------------------ |
-| 1    | the dashboard, Access, Users | press Add a user, type the email, and press Add a user again |
-| 2    | the dashboard, Domain         | press Repair, paste an account token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
+| Where                        | Do                                                           |
+| ---------------------------- | ------------------------------------------------------------ |
+| the dashboard, Access, Users | press Add a user, type the email, and press Add a user again |
 
-A new user can log in after step 2, not before. `poplin config logins` shows the same list.
+The line that follows says how the change went:
+
+| The line says                                           | Cloudflare's list                                | Do                                                    |
+| ------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
+| `Added.` or `Removed.`                                  | has the change: a new user can log in            | nothing                                               |
+| `... was not reached; it is tried again by itself.`     | gave no answer                                   | nothing: poplin tries again within 15 minutes         |
+| `... Open Domain and press Repair.`                     | is as it was: the install holds no key, Cloudflare refused the key, or the list is missing | on Domain, press Repair, paste an account token as in [step 3](../start/by-hand.md#the-steps), and press Repair again |
+
+The change is saved in every case. `poplin config logins` shows the same list.
 
 To remove another user, choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
-Either change waits for a Repair, and [the line at the top of Domain](domain.md) says so. The Repair takes a removed user off Cloudflare's list too. A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, waits the same way.
+A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
 Sign everyone out, on the same tab, makes every browser log in to the dashboard again, yours too. [Security](../about/security.md#hardening) says what it ends and what it leaves.
 

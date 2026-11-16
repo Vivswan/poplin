@@ -7,6 +7,7 @@
 //   POPLIN_LIVE_RUN       what tells this run's sites from another's; `local` when absent
 //   POPLIN_LIVE_MISSING   a JSON object of what the install is known to lack, each with its reason
 //   POPLIN_LIVE_REPORT    a file that receives the table of outcomes
+//   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   the key and the account the login list is read with at Cloudflare; absent, the check of the users is skipped
 //
 // On an install with a token, the suite first sets the two settings it counts on: `trash_days` and `visitor_requests_per_minute`.
 // Every request passes two meters: the bucket writes and lists it asks for, and the rows it makes the database write. A request past either ceiling is held back, and the run ends red with one line that says which.
@@ -16,6 +17,7 @@ import { afterAll, beforeAll, describe, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 
 import { CEILINGS, meterBucket } from "../../packages/cloudflare/scripts/live/budget";
+import { readLoginList } from "../../packages/cloudflare/scripts/live/login-list";
 import { meterRows, ROW_CEILINGS } from "../../packages/cloudflare/scripts/live/rows";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
@@ -35,6 +37,9 @@ const MANY_FILES = 2000;
 /** Why the publish of many small files is skipped: it costs a run thousands of requests. */
 const NOT_ASKED = "a run started by hand with the many-files check switched on (POPLIN_LIVE_MANY_FILES=1)";
 
+/** Why the check of the users is skipped on a run that cannot read Cloudflare's list. */
+const NO_PROVIDER_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read the login list at Cloudflare";
+
 /** Why the checks that need a token are skipped when the run has none. */
 const NO_TOKEN = "an admin token of the install in POPLIN_LIVE_TOKEN";
 
@@ -44,12 +49,21 @@ function setting(name: string): string | undefined {
   return value === undefined || value === "" ? undefined : value;
 }
 
+/** The key and the account the run reads Cloudflare with, where it was given both. */
+function providerOf(): { readonly key: string; readonly accountId: string } | undefined {
+  const [key, accountId] = [setting("CLOUDFLARE_API_TOKEN"), setting("CLOUDFLARE_ACCOUNT_ID")];
+
+  return key === undefined || accountId === undefined ? undefined : { key, accountId };
+}
+
 /** What the run already knows the install to lack. */
 function knownMissing(): Missing {
   const known: Missing = JSON.parse(setting("POPLIN_LIVE_MISSING") ?? "{}");
   if (setting("POPLIN_LIVE_TOKEN") === undefined) known.token = NO_TOKEN;
 
   if (setting("POPLIN_LIVE_MANY_FILES") !== "1") known["many-files"] = NOT_ASKED;
+
+  if (providerOf() === undefined) known["login-list"] = NO_PROVIDER_KEY;
 
   return known;
 }
@@ -60,6 +74,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
   // A request past the ceiling of bucket writes and lists is held back, which fails its check, and the run says so in one line.
   const meter = meterBucket((input, init) => fetch(input, init), setting("POPLIN_LIVE_MANY_FILES") === "1" ? CEILINGS.manyFiles : CEILINGS.checks);
   const rows = meterRows(meter.fetch, ROW_CEILINGS.checks);
+  const provider = providerOf();
   const opened = LIVE
     ? openBench({
         domain: setting("POPLIN_LIVE_DOMAIN") ?? "",
@@ -72,6 +87,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
         now: () => Date.now(),
         say: (line) => console.log(line),
         manyFiles: MANY_FILES,
+        loginList: provider === undefined ? undefined : () => readLoginList({ key: provider.key }, provider.accountId),
       })
     : undefined;
 

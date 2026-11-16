@@ -5,6 +5,7 @@ import { parseLogins } from "@poplin/core/src/auth/logins";
 
 import { createConsole } from "../../../src/console/console";
 import type { DomainPlug } from "../../../src/console/domain/records";
+import type { UsersFollow } from "../../../src/console/access/users-follow";
 import type { UsageHost } from "../../../src/console/usage/records";
 import { readSession } from "../../../src/login/session";
 import { codeCounts, FREE_LIMITS, ORIGIN, openOwned, USAGE_HOST, VERSION } from "./install";
@@ -51,8 +52,9 @@ interface Opened {
  * @param base - the path the console sits under; the root when left out
  * @param domain - the provider's side of the install; left out, the console has no Domain screen
  * @param usage - the host's side of the Usage screen; left out, a host that reads no figures of its own
+ * @param follow - the provider's side of the users; left out, the console carries no change of them
  */
-export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST): Promise<Opened> {
+export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST, follow?: UsersFollow): Promise<Opened> {
   const opened = await openOwned();
   const { database } = opened.install;
 
@@ -82,6 +84,7 @@ export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHo
     rebuild: { accepts: (address) => address.hostname === REBUILD_HOST, fetch: startRebuild },
     demo: { reset: "/reset" },
     domain,
+    ...(follow === undefined ? {} : { follow }),
     ...codeCounts(opened.counters),
   });
   const client = { Cookie: opened.cookie, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };

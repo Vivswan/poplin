@@ -298,7 +298,7 @@ export const updateCheck = sqliteTable(
   ],
 );
 
-/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: when a user was last added or removed with no repair after it. */
+/** The last check or repair of the domain: when it ran, who ran it, which of the two it was, and its pieces as a JSON list. Each run replaces the row. `users_changed_at`: when a user was last added or removed and the change has not reached the domain. */
 export const domainCheck = sqliteTable(
   "domain_check",
   {

@@ -106,12 +106,16 @@ export interface FakeSwitches {
 
   /** One visitor's requests leave from four addresses in turn, and the rate rule counts each for itself, as the edge's does. */
   readonly manyAddresses?: boolean;
+
+  /** The install holds no key of its provider, so a change of the users reaches no login list. */
+  readonly noKey?: boolean;
 }
 
-/** A fake install: what sends a request to it, an admin's token, and the pause that moves its time on. */
+/** A fake install: what sends a request to it, an admin's token, the login list its provider holds, and the pause that moves its time on. */
 interface Fake {
   readonly fetch: Fetch;
   readonly token: string;
+  readonly loginList: () => Promise<readonly string[]>;
   readonly pause: (ms: number) => Promise<void>;
   readonly now: () => number;
 }
@@ -158,6 +162,10 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const install = await openApi();
   const settings = await install.database.readSettings();
   if (settings === undefined) throw new Error("the fake install has no settings");
+
+  // The fake's provider takes every change of the users, unless a fault says the install holds no key: its list is then the one of the first settings for good.
+  install.users.takes = switches.noKey !== true;
+  const loginList = async (): Promise<readonly string[]> => (install.users.takes ? (install.users.pushed.at(-1) ?? settings.logins) : settings.logins);
 
   // When each request the rules let through came, on the fake's own time, and by which path.
   const arrivals: (Path & { readonly at: number })[] = [];
@@ -254,5 +262,5 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     time += ms;
   };
 
-  return { fetch, token: install.tokens.admin, pause, now: () => time };
+  return { fetch, token: install.tokens.admin, loginList, pause, now: () => time };
 }

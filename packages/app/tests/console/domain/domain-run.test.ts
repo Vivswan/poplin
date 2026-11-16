@@ -67,15 +67,24 @@ test("a run is kept as the last check of the domain: when, by whom, which run, a
 });
 
 // Drift: the domain's login lets in the users of the last repair that reached it. Settled by a check, a repair that left the login undone, or one that began before the user was added, a new user is locked out and no screen says why.
+// An object outside the login can hold a user too, such as the address a warning is mailed to: settled by a repair whose token had no right for it, it would go on naming a user who was removed.
 test.each([
-  { name: "a check", run: "check", login: "present", addedAfter: 0, waits: true },
-  { name: "a repair that left the login undone", run: "repair", login: "failed", addedAfter: 0, waits: true },
-  { name: "a repair under way when the user was added", run: "repair", login: "changed", addedAfter: 1, waits: true },
-  { name: "a repair that changed the login", run: "repair", login: "changed", addedAfter: 0, waits: false },
-  { name: "a repair that found the login standing", run: "repair", login: "present", addedAfter: 0, waits: false },
-] as const)("users that changed still wait after $name: $waits", async ({ run, login, addedAfter, waits }) => {
+  { name: "a check", run: "check", login: "present", holder: "present", addedAfter: 0, waits: true },
+  { name: "a repair that left the login undone", run: "repair", login: "failed", holder: "present", addedAfter: 0, waits: true },
+  { name: "a repair under way when the user was added", run: "repair", login: "changed", holder: "present", addedAfter: 1, waits: true },
+  { name: "a repair that changed the login", run: "repair", login: "changed", holder: "changed", addedAfter: 0, waits: false },
+  { name: "a repair that found the login standing", run: "repair", login: "present", holder: "present", addedAfter: 0, waits: false },
+  { name: "a repair with no right for another object that holds the users", run: "repair", login: "changed", holder: "optional", addedAfter: 0, waits: true },
+  { name: "a repair that failed at another object that holds the users", run: "repair", login: "present", holder: "failed", addedAfter: 0, waits: true },
+  { name: "a repair that wrote the login and failed after it, though nothing waited before", run: "repair", login: "changed", holder: "failed", addedAfter: -1, waits: true },
+] as const)("users that changed still wait after $name: $waits", async ({ run, login, holder, addedAfter, waits }) => {
   const { opened, asked, kept } = await openRun();
-  const rows: DomainRow[] = [{ object: "Record", state: "missing", detail: "every site", part: "reach" }, { object: "Login policy", state: login, detail: "the logins", part: "login" }];
+  const rows: DomainRow[] = [
+    { object: "Record", state: "missing", detail: "every site", part: "reach" },
+    { object: "Login policy", state: login, detail: "the logins", part: "login", users: true },
+    { object: "Cost warning", state: holder, detail: "mailed to the first user", part: "rest", users: true },
+    { object: "Bots rule", state: "optional", detail: "no right for it", part: "rest" },
+  ];
   await runDomain(fakePlug(() => ({ ok: true, rows: [], steps: [] })), opened.install, asked);
   // The plug is slow: the clock moves on while it works.
   const slow = fakePlug(() => {
@@ -83,8 +92,18 @@ test.each([
 
     return { ok: true, rows, steps: [] };
   });
-  await opened.install.database.addLogin("bo@example.com" as typeof opened.owner, { by: opened.owner, at: opened.install.now() + addedAfter });
-  await runDomain(slow, opened.install, { ...asked, run });
+  // A user added after the run began is one the run read no settings of: the plug adds it while it works.
+  const late = addedAfter > 0;
+  const add = (): Promise<unknown> => opened.install.database.addLogin("bo@example.com" as typeof opened.owner, { by: opened.owner, at: opened.install.now() });
+  if (addedAfter === 0) await add();
+  const settings = async (): Promise<Awaited<ReturnType<typeof asked.settings>>> => {
+    const read = await opened.install.database.readSettings();
+    if (read === undefined) throw new Error("the settings are not stored");
+    if (late) await add();
+
+    return read;
+  };
+  await runDomain(slow, opened.install, { ...asked, run, settings });
 
   const remembered = await kept();
 

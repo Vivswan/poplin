@@ -219,8 +219,8 @@ describe("the people", () => {
     await opened.change("/data/people/remove", { login: "jonas@example.com" });
 
     expect([added, removed]).toEqual([
-      { ok: true, login: "jonas@example.com" },
-      { ok: true, login: "jonas@example.com" },
+      { ok: true, login: "jonas@example.com", note: null },
+      { ok: true, login: "jonas@example.com", note: null },
     ]);
     expect([afterAdding - before, (await entries()) - afterAdding]).toEqual([1, 1]);
   });

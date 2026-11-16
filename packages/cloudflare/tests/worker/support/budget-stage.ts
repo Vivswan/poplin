@@ -21,6 +21,9 @@ export interface Stage {
 
   /** What stands in for the world outside the Worker, for the instance the row is measured on. A row sets the parts its request reaches. */
   readonly outside: { cloudflare?: Outside["cloudflare"]; latest?: Outside["latest"]; rebuild?: Outside["rebuild"] };
+
+  /** The key the measured instance keeps for Cloudflare. A row sets it to measure an install that holds one; left alone, the install holds none. */
+  keptKey?: string;
 }
 
 /** The instance a row's request is sent to, and the counted bindings every request to it carries. */
@@ -188,7 +191,7 @@ export async function costOf(row: BudgetRow): Promise<Cost> {
   const stage = await stageOf();
   const step = await row.arrange(stage);
   const tally = emptyTally();
-  const measured: Measured = { worker: instance(stage.w, stage.outside.cloudflare, stage.outside.latest, stage.outside.rebuild), bindings: talliedBindings(tally), w: stage.w };
+  const measured: Measured = { worker: instance(stage.w, stage.outside.cloudflare, stage.outside.latest, stage.outside.rebuild), bindings: { ...talliedBindings(tally), ...(stage.keptKey === undefined ? {} : { KEPT_KEY: stage.keptKey }) }, w: stage.w };
 
   if (row.start !== "new") {
     await get(measured, `${ADMIN}/api/whoami`);

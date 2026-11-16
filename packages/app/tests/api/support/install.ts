@@ -52,8 +52,8 @@ export interface Answered {
  * `routes` sends as the admin, `as` as another token or, for `null`, with no `Authorization` header, and `ask` sends a request written out by hand. `requests` holds every request the three sent, in order.
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
- *
  * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`.
+ * `users` stands in for the provider's side of the users: `pushed` holds every list of logins handed over, and `takes` says whether the provider takes them; it starts as an install with no key, which takes none.
  *
  * `provider` stands in for the install's provider: `sent` holds the method, the redirect mode, the body, and the address of every request to start a rebuild, and `status` is what the next one is answered with.
  */
@@ -65,6 +65,7 @@ export interface ApiInstall {
   readonly counters: MemoryCounters;
   readonly clock: { now: number };
   readonly provider: { status: number; readonly sent: unknown[][] };
+  readonly users: { takes: boolean; readonly pushed: (readonly string[])[] };
   readonly tokens: { readonly admin: string; readonly owner: string; readonly stranger: string };
   readonly reported: unknown[];
   readonly keys: () => Promise<string[]>;
@@ -165,6 +166,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const reported: unknown[] = [];
   const counters = new MemoryCounters();
   const provider: ApiInstall["provider"] = { status: 200, sent: [] };
+  const users: ApiInstall["users"] = { takes: false, pushed: [] };
   const word = parsePublicWord(publicWord);
   if (word === undefined) throw new Error(`the test's public word was refused: ${publicWord}`);
 
@@ -184,6 +186,15 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     // Found anew on every request, so a test that swaps the method in is heard.
     counters: { takeMinute: (window, now) => counters.takeMinute(window, now) },
     visitorOf: async (request) => request.headers.get(VISITOR_HEADER) ?? "one-visitor",
+    follow: {
+      where: "Example Cloud",
+      holdsKey: () => users.takes,
+      push: async (logins) => {
+        users.pushed.push(logins);
+
+        return users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
+      },
+    },
     rebuild: {
       accepts: (address) => address.href === REBUILD_ADDRESS,
       fetch: async (address, init) => {
@@ -213,6 +224,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     calls,
     counters,
     clock,
+    users,
     provider,
     tokens: { admin, owner, stranger },
     reported,

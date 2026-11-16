@@ -19,7 +19,7 @@ import { columns, countText, dayText } from "./text";
 /** What the login is still good for after a logout that the install did not answer. */
 const STILL_LIVE = "the token may still be live: revoke it on the install's dashboard";
 
-/** What a change of the logins still needs: the login page in front of the install keeps a list of its own. */
+/** What a change of the logins still needs on an install that did not carry it to the login page by itself: that page keeps a list of its own. */
 const LOGINS_STEP = "one more step: on the dashboard's Domain tab, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
 
 /** What follows the two versions of an install and a command that differ, in the words the list of problems has for them. */
@@ -111,8 +111,13 @@ async function config(action: ConfigAction, { client }: Session): Promise<Outcom
   if (!changed.ok) return failed(changed.failure, "changes");
 
   const lines = columns([[action.key, settingsToText(changed.value.values)[action.key]]]);
+  if (action.key !== "logins") return { ok: true, value: changed.value, lines, notes: [] };
 
-  return { ok: true, value: changed.value, lines, notes: action.key === "logins" ? [LOGINS_STEP] : [] };
+  // The install says whether the change still waits for a repair. One that does not say, or that remembers no run of its domain to say it by, is taken to wait.
+  const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
+  const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
+
+  return { ok: true, value: changed.value, lines, notes: settled ? [] : [LOGINS_STEP] };
 }
 
 /** A check that reads something an admin alone may read: a publisher's refusal is a finding, not a failure. */
