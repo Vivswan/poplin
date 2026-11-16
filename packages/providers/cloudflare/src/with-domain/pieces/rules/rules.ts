@@ -7,9 +7,14 @@ import { type CloudflareResult, type Connection, callCloudflare } from "../../..
 import { INSTALL_OBJECTS } from "../../../shared/install/install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../../../shared/install/sync";
 
+/** The status Cloudflare answers for a phase that never had a rule. */
 const NOT_FOUND_STATUS = 404;
+
+/** The characters a hostname in a rule expression may hold. */
 const LITERAL = /^[a-z0-9.-]+$/;
-const NEW_RULESET_NAMES = {
+
+/** The name poplin gives the ruleset it makes in a phase that had none. A ruleset of another name was the zone's before, and poplin only keeps its rules in it. */
+export const NEW_RULESET_NAMES = {
   http_ratelimit: INSTALL_OBJECTS.rateRuleset,
   http_request_firewall_custom: INSTALL_OBJECTS.guardRuleset,
   http_request_dynamic_redirect: INSTALL_OBJECTS.redirectRuleset,
@@ -64,6 +69,11 @@ interface ZoneRule {
 export interface PhaseRules {
   readonly id: string;
   readonly rules: readonly ZoneRule[];
+}
+
+/** A phase's entry point ruleset as it was read, with the name it was made under. */
+export interface NamedPhaseRules extends PhaseRules {
+  readonly name: string;
 }
 
 /** A rule poplin wants in a phase. `hasRoom` says whether the plan allows one more rule there, and `full` is the reason given when it does not. */
@@ -178,9 +188,9 @@ export function planOwnRule(wanted: OwnRule, current: PhaseRules | undefined): R
   return { kind: "change", subject: wanted.subject, rulesetId: current.id, ruleId: own.id, rule: wanted.rule };
 }
 
-async function readPhase(connection: Connection, zoneId: string, phase: Phase): Promise<CloudflareResult<PhaseRules | undefined>> {
+async function readPhase(connection: Connection, zoneId: string, phase: Phase): Promise<CloudflareResult<NamedPhaseRules | undefined>> {
   const ruleset = await callCloudflare(connection, (api) => new BasePhases(api).get(phase, { zone_id: zoneId }));
-  if (ruleset.ok) return { ok: true, value: { id: ruleset.value.id, rules: (ruleset.value.rules ?? []).map((rule) => ({ ...rule, id: rule.id ?? "" })) } };
+  if (ruleset.ok) return { ok: true, value: { id: ruleset.value.id, name: ruleset.value.name, rules: (ruleset.value.rules ?? []).map((rule) => ({ ...rule, id: rule.id ?? "" })) } };
 
   // Cloudflare answers 404 for a phase that never had a rule.
   if (ruleset.failure === "refused" && ruleset.status === NOT_FOUND_STATUS) return { ok: true, value: undefined };
@@ -222,7 +232,7 @@ export async function syncPhase(
   connection: Connection,
   zoneId: string,
   phase: Phase,
-  plan: (current: PhaseRules | undefined) => RuleStep[],
+  plan: (current: NamedPhaseRules | undefined) => RuleStep[],
   mode: Mode,
 ): Promise<Synced> {
   const current = await readPhase(connection, zoneId, phase);

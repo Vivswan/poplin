@@ -41,8 +41,11 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     "Worker route | remove | *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*",
     "DNS record | remove | *.example.com, poplin.example.com",
     "Redirect rule | remove | poplin_https",
+    "Redirect ruleset | remove | poplin redirect rule",
     "WAF rule | remove | poplin_outside_pages, poplin_bots",
+    "WAF ruleset | remove | poplin guard rules",
     "Rate rule | remove | poplin_rate",
+    "Rate ruleset | remove | poplin rate rule",
     ...SHARED.slice(0, -1),
     "Bot switches | stay | the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
     ...SHARED.slice(-1),
@@ -52,12 +55,12 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
 
 /** The calls each kind sends, pinned: for a dry run, and for a run, with how many of the run's remove something. */
 const CALLS: Readonly<Record<Kind, { readonly dry: number; readonly run: number; readonly removals: number }>> = {
-  domain: { dry: 23, run: 45, removals: 22 },
+  domain: { dry: 23, run: 48, removals: 25 },
   "no-domain": { dry: 16, run: 31, removals: 15 },
 };
 
 /** An account that holds nothing. */
-const NOTHING = { records: 0, routes: 0, rules: 0, applications: 0, policies: 0, alerts: 0, tokens: 0, workflows: 0, workers: 0, worker: false, buckets: 0, objects: 0, databases: 0 };
+const NOTHING = { records: 0, routes: 0, rules: 0, rulesets: 0, applications: 0, policies: 0, alerts: 0, tokens: 0, workflows: 0, workers: 0, worker: false, buckets: 0, objects: 0, databases: 0 };
 
 /** A kind of install. */
 type Kind = keyof typeof KINDS;
@@ -134,6 +137,7 @@ function left(account: Account): Record<string, number | boolean> {
     records: account.records.length,
     routes: account.routes.length,
     rules: Object.values(account.rulesets).reduce((sum, ruleset) => sum + (ruleset?.rules.length ?? 0), 0),
+    rulesets: Object.values(account.rulesets).filter((ruleset) => ruleset !== undefined).length,
     applications: account.applications.length,
     policies: account.policies.length,
     alerts: account.alerts.length,
@@ -188,8 +192,8 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     expect((await removed(account, kind, DRY)).found).toBe("none");
   });
 
-  // Drift: an account holds other people's work beside poplin's. A removal that went by kind, and not by poplin's names and marks, would take it.
-  test("an object of each kind that is not poplin's stays: a record, a route, a rule, an application, a policy, an alert, a token, a Workflow, a Worker, a bucket, and a database", async () => {
+  // Drift: an account holds other people's work beside poplin's. A removal that went by kind, and not by poplin's names and marks, would take it; and a ruleset poplin made goes whole only while nothing but poplin's rules is in it.
+  test("an object of each kind that is not poplin's stays: a record, a route, a rule with the ruleset it is in, an application, a policy, an alert, a token, a Workflow, a Worker, a bucket, and a database", async () => {
     const account = await installedAccount(kind);
     account.records.push({ id: "record-x", name: "www.example.com", comment: "the shop" });
     account.routes.push({ id: "route-x", pattern: "example.com/*", script: "shop" });
@@ -203,10 +207,12 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     account.workers.push({ id: "shop", tags: [] });
     account.buckets.push({ name: "photos" });
     account.databases.push({ uuid: "database-x", name: "shop" });
-    const strangers = { ...NOTHING, records: 1, routes: 1, rules: kind === "domain" ? 3 : 0, applications: 1, policies: 1, alerts: 1, tokens: 1, workflows: 1, workers: 1, buckets: 1, databases: 1 };
+    const strangers = { ...NOTHING, records: 1, routes: 1, rules: kind === "domain" ? 3 : 0, rulesets: kind === "domain" ? 3 : 0, applications: 1, policies: 1, alerts: 1, tokens: 1, workflows: 1, workers: 1, buckets: 1, databases: 1 };
+    const kept = ["Redirect ruleset | stay | poplin redirect rule", "WAF ruleset | stay | poplin guard rules", "Rate ruleset | stay | poplin rate rule"].map((row) => `${row}: it holds rules that are not poplin's, and stays`);
     const run = await removed(account, kind, applyOf(KINDS[kind].confirm));
 
     expect([run.done.ok && run.done.ready, shown(run.done).filter((row) => row.includes(" | skip | ")), left(account)]).toEqual([true, [], strangers]);
+    expect(shown(run.done).filter((row) => row.includes("ruleset | "))).toEqual(kind === "domain" ? kept : []);
   });
 
   // Drift: an install that was started and never set has no address, and one whose removal stopped half-way may have lost its Worker: each must still be removable, by a name a person can type.
@@ -327,7 +333,43 @@ describe("what one kind alone has", () => {
     const run = await removed(account, "domain", applyOf(KINDS.domain.confirm));
     const stays = run.done.ok ? run.done.rows.filter((row) => row.right !== undefined).map((row) => `${row.object} | ${row.state} | ${row.right}`) : [];
 
-    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | Zone WAF: Edit"], true, [], { ...NOTHING, rules: 2 }]);
+    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | Zone WAF: Edit"], true, [], { ...NOTHING, rules: 2, rulesets: 1 }]);
+  });
+
+  // Drift: where the zone had rules of its own in a phase, poplin's rule went into the zone's ruleset. Only the name tells that ruleset from one poplin made, so one of another name must stay even when poplin's rule was the last in it.
+  test("with a domain, a ruleset that is not under poplin's name is the zone's: poplin's rules go from it, and it stays with no row, empty as it then is", async () => {
+    const account = await installedAccount("domain");
+    for (const ruleset of Object.values(account.rulesets)) Object.assign(ruleset ?? {}, { name: "default" });
+
+    const run = await removed(account, "domain", applyOf(KINDS.domain.confirm));
+
+    expect([shown(run.done).filter((row) => row.includes("ruleset | ")), run.done.ok && run.done.ready, left(account)]).toEqual([[], true, { ...NOTHING, rulesets: 3 }]);
+  });
+
+  // Drift: a removal that took the rules and left their rulesets reported itself done, so an account can hold the three with no rule and no Worker: the run after must still find and take them.
+  test("with a domain, the empty rulesets of poplin's names that stand with nothing else of the install are removed", async () => {
+    const account = await installedAccount("domain");
+    await removed(account, "domain", applyOf(KINDS.domain.confirm));
+    account.rulesets = {
+      http_request_dynamic_redirect: { id: "set-a", name: "poplin redirect rule", rules: [] },
+      http_request_firewall_custom: { id: "set-b", name: "poplin guard rules", rules: [] },
+      http_ratelimit: { id: "set-c", name: "poplin rate rule", rules: [] },
+    };
+    const again = await removed(account, "domain", applyOf(`poplin@${ACCOUNT}`));
+    const rows = ["Redirect ruleset | remove | poplin redirect rule", "WAF ruleset | remove | poplin guard rules", "Rate ruleset | remove | poplin rate rule"];
+
+    expect([again.found, shown(again.done).slice(0, 3), again.done.ok && again.done.ready, left(account)]).toEqual(["none", rows, true, NOTHING]);
+  });
+
+  // Drift: the ruleset goes by a call of its own after its rules, so that call can be refused or find nothing where the rules' calls did not: the row must say which, and name the permission.
+  test.each([
+    ["a token that may not remove it", { status: 403, code: 10000 }, "Rate ruleset | block | the token lacks a permission. Add this one: Zone WAF: Edit", false],
+    ["one that went before the run reached it", { status: 404, code: 10003 }, "Rate ruleset | gone | poplin rate rule", true],
+  ])("with a domain, a ruleset's removal answered as for %s leaves its row saying so, and the rest is removed", async (_what, refuseAs, row, ready) => {
+    const account = await installedAccount("domain", { refuse: "DELETE /zones/zone-1/rulesets/set-http_ratelimit", refuseAs });
+    const run = await removed(account, "domain", applyOf(KINDS.domain.confirm));
+
+    expect([shown(run.done).filter((line) => line.startsWith("Rate ruleset")), run.done.ok && run.done.ready, left(account)]).toEqual([[row], ready, { ...NOTHING, rulesets: 1 }]);
   });
 
   // Drift: the forwarders' names hold nothing of the account, and the install says where it answers. An account whose free address was renamed or taken away must still lose its install, forwarders and all.

@@ -1,6 +1,6 @@
 // `poplin uninstall cloudflare`: everything an install made in an account, taken away with an account token, and nothing else.
 //
-//   1  what sends visitors to the Worker    routes, records, and the three kinds of rule, or the two forwarders
+//   1  what sends visitors to the Worker    routes, records, the three kinds of rule and the ruleset poplin made for each, or the two forwarders
 //   2  the login                            the Access applications, then the policies they hold
 //   3  the alerts                           the notification policies of poplin's names
 //   4  the two keys                         before the Worker that holds them
@@ -20,13 +20,14 @@ import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseRecords } from "cloudflare/resources/dns/records";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 import { BaseObjects } from "cloudflare/resources/r2/buckets/objects";
+import { BaseRulesets } from "cloudflare/resources/rulesets/rulesets";
 import { BaseRoutes } from "cloudflare/resources/workers/routes";
 import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
 import { BaseWorkflows } from "cloudflare/resources/workflows/workflows";
 import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 import { lacksRight, rightFor } from "../../../../with-domain/zone-plug";
-import { removeOwnRule, syncPhase } from "../../../../with-domain/pieces/rules/rules";
+import { NEW_RULESET_NAMES, type NamedPhaseRules, type RuleStep, removeOwnRule, syncPhase } from "../../../../with-domain/pieces/rules/rules";
 import { addressesAt, forwarderNames } from "../../../../without-domain/address-layout";
 import { removeForwarders } from "../../../../without-domain/pieces/forwarders/forwarders";
 import { workflowNameOf } from "../../../jobs/workflow-name";
@@ -46,11 +47,11 @@ const SCRIPT = INSTALL_OBJECTS.worker;
 /** The status Cloudflare answers for an object the account does not hold. */
 const NOT_FOUND = 404;
 
-/** The phases poplin keeps a rule in, each with its row and the refs of its rules there. */
+/** The phases poplin keeps a rule in, each with the row of its rules, the refs of its rules there, and the row of the ruleset poplin makes for them where the zone had none. */
 const OWN_RULES = [
-  { object: "Redirect rule", phase: "http_request_dynamic_redirect", refs: [INSTALL_OBJECTS.httpsRef] },
-  { object: "WAF rule", phase: "http_request_firewall_custom", refs: [INSTALL_OBJECTS.outsideRef, INSTALL_OBJECTS.botsRef] },
-  { object: "Rate rule", phase: "http_ratelimit", refs: [INSTALL_OBJECTS.rateRef] },
+  { object: "Redirect rule", holder: "Redirect ruleset", phase: "http_request_dynamic_redirect", refs: [INSTALL_OBJECTS.httpsRef] },
+  { object: "WAF rule", holder: "WAF ruleset", phase: "http_request_firewall_custom", refs: [INSTALL_OBJECTS.outsideRef, INSTALL_OBJECTS.botsRef] },
+  { object: "Rate rule", holder: "Rate ruleset", phase: "http_ratelimit", refs: [INSTALL_OBJECTS.rateRef] },
 ] as const;
 
 /** The names of poplin's two applications, and of the policy each holds. */
@@ -85,6 +86,7 @@ const WORDS = {
   applicationsStand: "an application still stands: it goes first",
   notOwn: "not this install's: the Worker is bound to another",
   strangers: "a Worker of this name is not poplin's, and stays",
+  othersRules: "it holds rules that are not poplin's, and stays",
   bots: "the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
   token: `delete it at Cloudflare: ${TOKENS_PAGE}`,
   unreachable: "Cloudflare gave no usable answer. Nothing was removed.",
@@ -92,8 +94,11 @@ const WORDS = {
   changed: "The account changed since it was looked at. Run this again. Nothing was removed.",
 } as const;
 
-/** The object of each row, as the table of rights names it. The Worker and its Workflow need the permission its variables need. */
-type Kind = "Worker route" | "DNS record" | (typeof OWN_RULES)[number]["object"] | "Forwarder" | "Access application" | "Access policy" | (typeof OWN_ALERTS)[number]["object"] | "Key" | "Upload key" | "Workflow" | "Worker" | "Sites' files" | "Database";
+/** The row of a kind of rule, or of the ruleset poplin makes for it. */
+type RuleKind = (typeof OWN_RULES)[number]["object" | "holder"];
+
+/** The object of each row, as the table of rights names it. The Worker and its Workflow need the permission its variables need, and a ruleset the one its rules need. */
+type Kind = "Worker route" | "DNS record" | RuleKind | "Forwarder" | "Access application" | "Access policy" | (typeof OWN_ALERTS)[number]["object"] | "Key" | "Upload key" | "Workflow" | "Worker" | "Sites' files" | "Database";
 
 /** What one run gathers. `zoneId` is of an install under a domain alone, and `form` is where a permission is added to the token. */
 interface Work {
@@ -122,7 +127,11 @@ function rightOf(object: Kind): string {
 
   if (object === "Database") return rightFor("D1 database");
 
-  return rightFor(object === "Worker" ? "Worker variable" : object);
+  if (object === "Worker") return rightFor("Worker variable");
+
+  if (object === "Redirect ruleset") return rightFor("Redirect rule");
+
+  return rightFor(object === "WAF ruleset" || object === "Rate ruleset" ? "WAF rule" : object);
 }
 
 /** Why a call failed, with nothing Cloudflare said but its status. */
@@ -237,11 +246,34 @@ async function removeRecords(work: Work, zoneId: string): Promise<boolean> {
   return settled(work, "DNS record", taken);
 }
 
-/** The rule with one of poplin's refs goes from each phase; the phase's other rules are in no request. */
+/** A ruleset under the name poplin makes one with is poplin's whole, and goes once no rule but poplin's is in it. One of another name was the zone's before the install: it stays, and is no row. */
+async function removeRuleset(work: Work, zoneId: string, own: (typeof OWN_RULES)[number], current: NamedPhaseRules): Promise<void> {
+  const name = NEW_RULESET_NAMES[own.phase];
+  if (current.name !== name) return;
+
+  const refs: readonly (string | undefined)[] = own.refs;
+  if (current.rules.some((rule) => !refs.includes(rule.ref))) {
+    note(work, { object: own.holder, state: "stay", detail: `${name}: ${WORDS.othersRules}` });
+
+    return;
+  }
+
+  const remove = (): Promise<CloudflareResult<unknown>> => callCloudflare(work.place.connection, (api) => new BaseRulesets(api).delete(current.id, { zone_id: zoneId }));
+  settled(work, own.holder, await removeOwn(work, { ok: true, value: [name] }, (ruleset) => ruleset, remove));
+}
+
+/** The rule with one of poplin's refs goes from each phase; the phase's other rules are in no request. The phase's ruleset is looked at once its rules went. */
 async function removeRules(work: Work, zoneId: string): Promise<void> {
-  for (const { object, phase, refs } of OWN_RULES) {
-    const done = await syncPhase(work.place.connection, zoneId, phase, (current) => refs.flatMap((ref) => removeOwnRule(ref, ref, current)), work.mode);
-    settled(work, object, takenOf(done), {}, true);
+  for (const own of OWN_RULES) {
+    const read: { phase?: NamedPhaseRules } = {};
+    const plan = (current: NamedPhaseRules | undefined): RuleStep[] => {
+      read.phase = current;
+
+      return own.refs.flatMap((ref) => removeOwnRule(ref, ref, current));
+    };
+    const done = await syncPhase(work.place.connection, zoneId, own.phase, plan, work.mode);
+    settled(work, own.object, takenOf(done), {}, true);
+    if (done.ok && read.phase !== undefined) await removeRuleset(work, zoneId, own, read.phase);
   }
 }
 
