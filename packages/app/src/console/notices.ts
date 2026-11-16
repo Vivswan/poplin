@@ -111,7 +111,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     not_made: "The login in front of the dashboard is missing at the provider, so nobody was logged out. Open Domain and press Repair.",
   },
   not_found: {
-    upload: "That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.",
+    upload: "The copy stopped. If the site is not under All sites, duplicate it again.",
   },
   release_refused: {
     no_digest: "No built files are published for that version, so poplin cannot take it by itself. Nothing was changed.",

@@ -52,4 +52,6 @@ Cloudflare's free plan     3,000 steps a day, 1,024 steps a job
 
 The page or the command that began the copy only asks whether it is a site yet: 3 queries an ask, and nothing of the storage. Closing the page leaves the copy running. Cancel ends the job. A step that fails is tried five more times; then the copy is given up, its files are removed, and [Problems](../../fix/problems.md) shows `copy_failed`.
 
+A job that stops without giving its copy up leaves an upload nobody finishes. The sweep removes it and its files once 25 hours have passed, and notes `copy_failed`: one query more in that run.
+
 **A Worker with no binding to a Workflow** runs no job. A deploy and the OpenTofu module both add the binding, so only a Worker uploaded some other way has none, until its next deploy. There the page or the command that began the copy sends one request for every round, and the copy stops when it is closed.

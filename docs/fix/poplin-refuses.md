@@ -64,6 +64,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `in_trash`                    | the site is in the trash                      | `poplin restore report--k3f9x2ab71qz`                         |
 | `not_in_trash`                | the site is not in the trash                  | nothing                                                       |
 | `no_such_version`             | the site keeps no such version                | `poplin show report--k3f9x2ab71qz` lists them                 |
+| `copy_gone`                   | a copy stopped                                | `poplin list`; if the site is not there, `poplin duplicate report--k3f9x2ab71qz` |
 | `name_taken`, `reserved_name` | the public name is held                       | `poplin set report--k3f9x2ab71qz --public --public-name docs` |
 | `bad_name`                    | the name breaks the rules                     | 3 to 40 lowercase letters, digits, and single dashes          |
 | `bad_argument`                | an argument is missing or malformed           | `poplin help set` shows what a command takes                  |

@@ -213,7 +213,7 @@ describe("a cancelled copy", () => {
 
     expect([during - before, (await store.list({ prefix: "" })).objects.length - before]).toEqual([112, 0]);
     expect([cancelled.status, next.status, next.code, next.about, await listed(opened)]).toEqual([200, 404, "not_found", "upload", ["report unlisted"]]);
-    expect(next.sentence).toBe("That copy can no longer be gone on with: it was cancelled, or its day to finish ran out. Unless the list of sites shows it, duplicate the site again.");
+    expect(next.sentence).toBe("The copy stopped. If the site is not under All sites, duplicate it again.");
   });
 
   // Drift: a Cancel that arrives after the last file would be told as done, and the person would look for a copy that "was not made" in a list that shows it.

@@ -58,7 +58,9 @@ Duplicate, in the panel, makes a private copy of the site, with a new link.
 
 The copy goes on while you use other screens. A site of more than 112 files is copied by a background job of the install: closing the tab leaves it running, and the copy is in the list when it is done. Cancel ends the job. A copy that fails makes no site, and Usage shows `copy_failed` under Problems.
 
-A Worker with no Workflow has no background job: [What one action costs](../upkeep/cost/what-one-action-costs.md) says which. There the page copies, and a tab closed half way makes no site; the files are removed in about a day.
+A copy whose job stops without a word is removed about a day after it began, and Problems shows `copy_failed` then. Until that day is over the line `Duplicating` stays; Cancel ends it sooner.
+
+A Worker with no Workflow has no background job: [What one action costs](../upkeep/cost/what-one-action-costs.md) says which. There the page copies, and a tab closed half way makes no site; the files are removed in about a day, and Problems shows `copy_failed`.
 
 For a site in the trash, the panel has Restore and Delete for good. Its row has Restore alone.
 

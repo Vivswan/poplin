@@ -320,6 +320,38 @@ describe("run", () => {
     expect(sent).toEqual([...Array.from({ length: stop === undefined ? 3 : 2 }, () => `POST /api/sites/${label}/duplicate`), ...(stop === undefined ? [] : ["DELETE /api/uploads/:upload"])]);
   });
 
+  // Drift: a copy whose job ended with no site is answered as gone; worded as a site that was not found, the person would look for a wrong label. The copy is still given up: an upload refused for another reason may be running.
+  test("a duplicate the install makes by itself and then refuses as gone says that the copy stopped, exits 1, and is given up all the same", async () => {
+    const bench = await openBench();
+    const pages = Object.fromEntries(Array.from({ length: 129 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`]));
+    const made = jsonOf(await bench.run(`${folderOf("report", { "index.html": "<title>Report</title>", ...pages })} --json`));
+    const { label } = made.site as { label: string };
+    bench.sent.length = 0;
+    bench.paused = async () => undefined;
+    bench.hook = async (request) => {
+      if (bench.sent.length < 2 || !request.url.endsWith("/duplicate")) return undefined;
+
+      const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+      const copy = uploads.find((upload) => upload.plan.kind === "duplicate");
+      if (bench.sent.length === 2) return answer(200, { before: null, site: null, copy: { upload: copy?.id, copied: null, files: 130 } });
+
+      return answer(404, { error: { code: "not_found", message: "there is no such thing here", about: "upload" } });
+    };
+
+    const failed = await bench.run(`duplicate ${label} --name report-draft`);
+
+    const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
+
+    expect([failed.code, failed.out, failed.err, failed.waits]).toEqual([
+      1,
+      [],
+      ["the copy stopped", "if poplin list does not show the site, copy it again: poplin duplicate <site>"],
+      [2000],
+    ]);
+    expect(bench.sent.map((sent) => sent.replace(/[0-9a-z]{16}$/, ":upload"))).toEqual([...Array.from({ length: 3 }, () => `POST /api/sites/${label}/duplicate`), "DELETE /api/uploads/:upload"]);
+    expect(uploads.filter((upload) => upload.plan.kind === "duplicate").map((upload) => upload.state)).toEqual(["abandoned"]);
+  });
+
   test("a duplicate whose last call went through with its answer lost is reported as done: without this a copy that is a site is reported as a failure", async () => {
     const bench = await openBench();
     const pages = Object.fromEntries(Array.from({ length: 129 }, (_page, at) => [`pages/${at}.html`, `<p>${at}</p>`]));
