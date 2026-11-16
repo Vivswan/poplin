@@ -29,7 +29,7 @@ The block shows an install without a domain. Under a domain, `--domain example.c
 | a terminal, and Node.js 24         | every line here: the start of [step 2 of Install](../start/install.md#2-run-the-command), up to `node --version` |
 | this computer logged in to poplin  | step 1 alone, with a login allowed with Can change: Everything. `npx poplin whoami` says whether it is; [step 5 of Install](../start/install.md#5-log-this-computer-in-and-check) logs it in |
 | the Cloudflare account             | the one the install is in. You must be able to log in at `https://dash.cloudflare.com`                |
-| an account token                   | steps 3 and 4: a removal takes the token an install takes. If yours is gone, the command prints the link that makes a new one |
+| an account token                   | steps 3 and 4, which each ask for it: a removal takes the token an install takes. If yours is gone, the command prints the link that makes a new one |
 
 ## 1. Save a copy
 
@@ -70,6 +70,8 @@ npx poplin uninstall cloudflare --no-domain --dry-run
 ```
 
 It prints the token's permissions and a link, then asks for the token without showing what you paste. The form is filled as [without a domain](../start/without-a-domain.md#the-account-token) or [under a domain](../start/install.md#3-make-the-account-token) shows.
+
+**Step 4 asks for the token again.** Cloudflare shows a new token once: leave its page open until step 4 is done. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
 Then it lists, and removes nothing. With `--keep-data` on the line too, it lists the data as `would keep`. Without a domain, for an install that has the budget alert:
 
@@ -121,7 +123,7 @@ A rule set is Cloudflare's holder for rules of one kind. One that poplin made go
 
 What you type is your dashboard's address, without the `https://`. The command prints it in its question. With neither option on the line, it first asks `Your own domain (example.com), or Enter for none:`.
 
-It asks for the token again, lists the same rows, and then asks. The sample is of an install under a domain that has every optional piece, removed with a token that holds the optional permissions. It is cut short where the dots are:
+It asks for the token again, as step 3 said, lists the same rows, and then asks. The sample is of an install under a domain that has every optional piece, removed with a token that holds the optional permissions. It is cut short where the dots are:
 
 ```text
 $ npx poplin uninstall cloudflare --domain example.com
@@ -158,6 +160,8 @@ Each row that says stays names what is yours to do by hand.
 2 kinds were not looked for, since the token lacks an optional permission: Budget alert and Certificate alert. If the install made one, it is still there: delete it by hand, or add the permission and run this command again.
 ```
 
+The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
+
 Read the rows that say `stays`:
 
 | Stays                                   | When                                                         | Do                                                                    |
@@ -172,14 +176,12 @@ Read the rows that say `stays`:
 
 | In the list, a token named "poplin install" | Do |
 | --- | --- |
-| its resources name the account of the removed install, and under a domain that domain | delete it |
+| its resources name the account of the removed install, and under a domain that domain | delete it, and every other token this row fits |
 | its resources name another account or another domain | leave it: it is of another install |
 
-Every token made from poplin's link is named "poplin install", so the name alone does not say which install a token is of. A token of another account's install, such as the one a CI job holds, has the same name.
+Every token made from poplin's link is named "poplin install", so the name alone does not say which install a token is of. An install, a repair, and a removal may each have made one: all of them are this install's, and all can go. A token of another account's install, such as the one a CI job holds, has the same name.
 
 Cloudflare shows with each token the resources it reaches: its accounts and its domains. A token you named otherwise is told the same way.
-
-The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
 
 ## Keep the data
 

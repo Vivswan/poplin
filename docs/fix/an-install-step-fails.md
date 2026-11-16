@@ -131,6 +131,7 @@ The login line is `npx poplin login`, with `--server` and your dashboard's addre
 | You see                                                    | Means                                                | Do                                                        |
 | ---------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
 | the terminal does not know `npx`                           | Node.js is not installed                             | run the LTS installer from nodejs.org, then open a new terminal |
+| on Windows, `npx` answers that running scripts is disabled on this system | the terminal is PowerShell, which does not run the script that `npx` starts with | run the same line from Command Prompt: press the Windows key, type Command Prompt, press Enter |
 | `node --version` prints a number below `v24`               | poplin runs on Node.js 24 or higher                  | run the LTS installer from nodejs.org                     |
 | the browser cannot find the dashboard                      | a new address takes a few minutes                    | wait a few minutes and reload                             |
 | the page refuses the letters you typed                     | that login is not the one your terminal began        | press Deny, and run the login line again                  |

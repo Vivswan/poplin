@@ -99,7 +99,7 @@ Ask which of the two kinds the user wants, and keep the answer. Show the table, 
 | blocking AI crawlers     | a setting of the install                                | that one setting does nothing                                |
 | two sites in one browser | kept apart                                              | sites of a kind share one browser origin: a script of one can read another, so only trusted pages belong there |
 
-The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made.
+When the user asks which to take: a domain, if they have one at Cloudflare; without one otherwise. The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made.
 
 Then ask for the email of the first login: one whose inbox the user can read. It goes after `--login`.
 

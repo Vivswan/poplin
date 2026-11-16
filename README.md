@@ -49,7 +49,7 @@ It acts as you, with the login the setup saves on your computer.
 
 ## Install
 
-One command makes your install. A domain is your choice:
+One command makes your install. A domain is your choice: take it if you have one at Cloudflare.
 
 | You install       | The command                                          | A site answers at                                                    |
 | ----------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |

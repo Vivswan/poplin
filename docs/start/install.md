@@ -27,6 +27,8 @@ An install is your own copy of poplin, in your own Cloudflare account. You make 
 | under your domain | `--domain example.com` | a hostname of its own: `report--k3f9x2ab71qz-p-poplin.example.com`   |
 | without a domain  | `--no-domain`          | a path: `poplin-private.your-name.workers.dev/report--k3f9x2ab71qz/` |
 
+**Which to choose:** a domain, if you have one at Cloudflare: a browser then keeps every site apart. Without one, a page of one site can read your other sites of its kind, so publish only pages you trust.
+
 The choice is made once: poplin has no command and no screen that changes it on an install that is made. [Without a domain](without-a-domain.md) has every row that differs.
 
 ## What you need
@@ -36,7 +38,7 @@ The choice is made once: poplin has no command and no screen that changes it on 
 | a Cloudflare account            | the Free plan is enough. With none yet, sign up at `https://dash.cloudflare.com/sign-up`                    |
 | a payment method on the account | the two sign-ups of step 1 ask for one. [What can cost money](../upkeep/cost/what-can-cost-money.md) says when it is charged |
 | an email inbox you can read     | Cloudflare's login sends its code there. It need not be the email of your Cloudflare account                |
-| Node.js, on your own computer   | version 24 or higher. Step 2 checks it                                                                      |
+| Node.js, on your own computer   | the program that runs poplin's command, and `npx` comes with it. Version 24 or higher: step 2 checks it     |
 | under a domain: the domain      | on that account, where Cloudflare's home page lists it as Active                                            |
 | an agent, to publish by asking  | an AI tool that runs in a terminal on your computer, such as Claude Code or Codex. You install it yourself, it may cost money, and poplin brings none |
 
@@ -50,7 +52,7 @@ Open `https://dash.cloudflare.com` in your browser and log in. No command switch
 | ------------------------------------------- | ------------------------------------------------- | ------------------------------------ | ----------------- |
 | Zero Trust, in the left menu                | pick a team name and the Free plan                | the login in front of your dashboard | both              |
 | Storage & databases, then R2, then Overview | finish the checkout it shows                      | the storage for your sites' files    | both              |
-| Workers & Pages                             | set the account's subdomain, if it shows none yet | the `your-name` of your addresses    | without a domain  |
+| Workers & Pages                             | set the account's subdomain, if it shows none yet: any word of 36 characters at most | the `your-name` of your addresses | without a domain |
 
 The team name can be any word: it only names your login page. Zero Trust and R2 each ask for the payment method. Each is done when Cloudflare shows its overview instead of the sign-up.
 
@@ -78,7 +80,7 @@ Then type the install's line. The first time, it asks whether it may download po
 npx poplin install cloudflare
 ```
 
-It asks three things, then works. The sample cuts the list of permissions and the link short, where the dots are:
+It asks three things, then works, and at the end asks once more: whether to log this computer in. The sample cuts the list of permissions and the link short, where the dots are:
 
 ```text
 Your own domain (example.com), or Enter for none: example.com
@@ -120,9 +122,21 @@ The form opens with nine rows filled. The install needs ten permissions: the lin
 | Zone Resources    | choose Include, then Specific zone, then your domain                             |
 | every other field | leave it as it is                                                                |
 | the bottom        | press Continue to summary, then Create Token                                     |
-| the next page     | the token is shown once: copy it, paste it at the command's question, and press Enter. Its letters do not show. Keep the text until the install is done: a run that stops asks for it again |
+| the next page     | the token is shown once: copy it, and leave the page open                        |
 
-Four more permissions are optional, and the command lists what each adds. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says how to add them, now or at any time.
+Then paste the token at the command's question, `Account token (not shown):`.
+
+```text
+Mac:      click the terminal, press Command and V, then Enter
+Windows:  click the Command Prompt window, press Ctrl and V, or click the right mouse button; then Enter
+Linux:    click the terminal, press Ctrl, Shift and V, then Enter
+```
+
+The terminal shows a row of small marks for what you paste, never the letters. Press Enter once.
+
+**Leave Cloudflare's page with the token open** until the command says `is installed`: Cloudflare shows the token once, and a run that stops asks for it again. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
+
+**Skip the optional permissions on a first install.** There are four, and the command lists what each adds. Nothing is wrong without them, and they can be added on any day: three for [rules against junk traffic](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers), and one for [an email about charges](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once.
 
 **If the form opens empty**, [When the install stops](../fix/an-install-step-fails.md#the-token-form-opens-empty) has the ten rows to add by hand.
 
@@ -192,11 +206,23 @@ The way on: npx poplin login --server https://poplin.example.com
 
 An install that works needs none of them: log this computer in, as step 5 shows.
 
-**After the run** you choose: keep the token where you keep passwords, or delete it at Cloudflare, under My Profile, then API Tokens. The install and every site keep working without it. Three things ask for a token again: Repair on the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. The same link makes a new one.
+**After the run, delete the token** at Cloudflare, under My Profile, then API Tokens, unless you keep it where you keep passwords. The install and every site keep working without it.
+
+Three things ask for a token again: Repair on the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. Each shows the link that makes a new one.
 
 ## 5. Log this computer in, and check
 
-At `Log this computer in now?`, Yes is chosen already: press Enter. It prints a short code in your terminal and opens your dashboard in your browser.
+At `Log this computer in now?`, Yes is chosen already: press Enter. It prints an address and a short code in your terminal, and opens the address in your browser:
+
+```text
+open this address, and allow this login there:
+  https://poplin.example.com/tokens/review/8c2e5a7019bd46f3
+the page asks for the last 4 letters of this code:
+  WXKT-RDMP
+the code works for 10 minutes
+```
+
+Here the last 4 letters are `RDMP`. Yours differ. If no browser opens, copy the address of the second line into your browser.
 
 | The browser shows            | Do                                                                    |
 | ---------------------------- | --------------------------------------------------------------------- |
@@ -254,7 +280,7 @@ Your dashboard is at the address the command printed. It opens on Sites, which s
 | Publish            | Do                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | by asking an agent | set the agent up once, with the line of [With an agent](with-an-agent.md). Then say `Put this report online.` |
-| by a command       | `npx poplin ./report`, for a folder with an `index.html` in it: see [Publish](../sites/publish.md)            |
+| by a command       | `npx poplin ./report`, for a folder with an `index.html` in it, the page a site opens on: see [Publish](../sites/publish.md). With no page yet, ask your agent to write one |
 
 `./report` is a folder named `report` inside the folder the terminal is in. A folder that is somewhere else is named by its whole path:
 
