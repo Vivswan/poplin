@@ -14,10 +14,10 @@ import { type Sent, useTokenRun } from "@/domain/token-run";
 import { TokenWay } from "@/domain/token-way";
 import type { Refused } from "@/lib/api";
 
-/** The words of each run: the dialog's title, what the run does, its button, and the button while the run is on its way. */
+/** The words of each run: what the dialog's title starts with, what the run does, its button, and the button while the run is on its way. */
 const WORDS = {
-  check: { title: "Check the domain", does: "Check changes nothing.", press: "Check", pressed: "Checking" },
-  repair: { title: "Repair the domain", does: "Repair fixes every piece that needs it.", press: "Repair", pressed: "Repairing" },
+  check: { title: "Check", does: "Check changes nothing.", press: "Check", pressed: "Checking" },
+  repair: { title: "Repair", does: "Repair fixes every piece that needs it.", press: "Repair", pressed: "Repairing" },
 } as const;
 
 /** The dialog has the token's box alone. */
@@ -31,12 +31,15 @@ interface RunDialogProps {
   /** What a token must hold and where one is made, in the provider's words. */
   readonly form: Domain["form"];
 
+  /** What the run is made on, as a sentence names it: `the domain`, or what an install without one has in its place. */
+  readonly thing: string;
+
   /** Sends the run. It answers the refusal, or nothing when the run read its pieces: the caller then closes the dialog. */
   readonly onRun: (run: DomainRun, sent: Sent) => Promise<Refused | undefined>;
 }
 
 /** Draw the dialog of the run its opening button names. Cancel, Escape, and a press outside close it, but not while a run is on its way. */
-export function RunDialog({ handle, form, onRun }: RunDialogProps): ReactNode {
+export function RunDialog({ handle, form, thing, onRun }: RunDialogProps): ReactNode {
   const { sheet, busy, saidAt, saidElsewhere, send, forget } = useTokenRun(NO_BOXES, onRun);
 
   return (
@@ -58,7 +61,9 @@ export function RunDialog({ handle, form, onRun }: RunDialogProps): ReactNode {
           <DialogContent className="sm:max-w-md" showCloseButton={false}>
             <form ref={sheet} onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
               <DialogHeader>
-                <DialogTitle>{words.title}</DialogTitle>
+                <DialogTitle>
+                  {words.title} {thing}
+                </DialogTitle>
                 <DialogDescription>{words.does}</DialogDescription>
               </DialogHeader>
               <ol className="flex flex-col gap-5">

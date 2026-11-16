@@ -1,4 +1,5 @@
 // The Domain screen: one line that says how the domain stands, the two runs beside it, and one row per piece the install needs on the domain.
+// On an install without a domain the same screen shows the pieces it has in a domain's place, under one line that says so; the words for both come from the server.
 //
 // It opens on the last run the install remembers. A run is made from a dialog that asks for the token, which is sent once and held nowhere; its pieces are shown until the screen is left.
 
@@ -136,6 +137,7 @@ export function DomainScreen(): ReactNode {
     <AppShell current="domain" heading="Domain">
       <MiddleColumn gutters className="flex min-h-0 flex-1 flex-col">
         <section aria-label="Domain" className="flex min-h-0 flex-1 flex-col">
+          {data.words.line === null ? null : <p className="shrink-0 px-6 pb-3 text-muted-foreground max-md:px-4">{data.words.line}</p>}
           <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
             <StatusLine line={line} tone={tone} beside={read === undefined ? never : <LastRun last={read} />} />
             <div className="ml-auto flex items-center gap-2">
@@ -156,7 +158,7 @@ export function DomainScreen(): ReactNode {
           {rows === undefined ? null : <Pieces rows={rows} />}
         </section>
       </MiddleColumn>
-      <RunDialog handle={asks} form={data.form} onRun={run} />
+      <RunDialog handle={asks} form={data.form} thing={data.words.thing} onRun={run} />
     </AppShell>
   );
 }

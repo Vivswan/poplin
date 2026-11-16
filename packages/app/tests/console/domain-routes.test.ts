@@ -44,7 +44,7 @@ function rowsIn(...states: DomainState[]): DomainRow[] {
 
 describe("what the screen opens with", () => {
   // Drift: the screen would show a token form of its own invention, or a remembered run where the install remembers none.
-  test("is the plug's own token facts and no remembered run; opening it runs nothing", async () => {
+  test("is the plug's own token facts, its own words for what the screen is about, and no remembered run; opening it runs nothing", async () => {
     const plug = usualPlug();
     const opened = await openConsole("", plug);
     const answer = await opened.get("/data/domain");
@@ -58,6 +58,7 @@ describe("what the screen opens with", () => {
         tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
         tokenNote: "Choose what the account token is for.",
       },
+      words: { thing: "the domain", line: null },
       last: null,
     });
     expect(plug.calls).toEqual([]);

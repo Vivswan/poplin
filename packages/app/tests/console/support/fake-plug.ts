@@ -20,6 +20,13 @@ const TOKEN_FORM = {
   tokenNote: "Choose what the account token is for.",
 };
 
+/** What the fake says of how it is named and of the settings: the ones of a provider that carries three of them to its rules. */
+const PLUG_WORDS = {
+  words: { thing: "the domain", line: null },
+  carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"],
+  idleSettings: {},
+} as const satisfies Pick<DomainPlug, "words" | "carriedSettings" | "idleSettings">;
+
 /** What the hostname of an install without a domain ends in at the fake provider. */
 const FREE_ADDRESS = ".provider.example";
 
@@ -57,7 +64,7 @@ export function fakePlug(answer: (run: "check" | "repair", token: string) => Dom
       return reading;
     };
 
-  return { calls, ...TOKEN_FORM, check: asked("check"), repair: asked("repair") };
+  return { calls, ...TOKEN_FORM, ...PLUG_WORDS, check: asked("check"), repair: asked("repair") };
 }
 
 /** A plug over the one-missing install: a check finds it, a repair fixes it. */

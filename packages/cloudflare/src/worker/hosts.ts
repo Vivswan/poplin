@@ -7,7 +7,7 @@
 //   the setup page     on the admin host and on those                  on the admin host
 //   any other host     no site's: serving's 404                        no site's: serving's 404
 //   at Cloudflare      the zone plug, and a new key through it         the plug of the free address, and a new key through it
-//   the guard rules    follow a changed setting with the kept key      none: there is no zone to hold a rule
+//   the guard rules    follow a changed setting with the kept key      none: there is no zone to hold a rule, so no change of a setting waits for one
 //
 // The two site hosts of the free address are Workers of their own that hand every request on, so a request for one arrives here with that host in its URL.
 
@@ -32,8 +32,8 @@ import { createDomainPlug, giveKey } from "../zone/zone-plug";
 /** What the hostname of a Worker's own address ends in. Cloudflare gives every Worker one, whatever its routes. */
 const OWN_ADDRESS = ".workers.dev";
 
-/** The guard rules of an install with no zone: it carries nothing, as an install with no key carries nothing. */
-const NO_RULES: RulesFollow = { holdsKey: () => false, push: async () => ({ ok: false, refusal: "no_key" }) };
+/** The guard rules of an install with no zone: there is none to write, so a change of their settings is carried the moment it is stored. None is left waiting, and none is noted as a problem. */
+const NO_RULES: RulesFollow = { holdsKey: () => true, push: async () => ({ ok: true }) };
 
 /** What is wrong with a `ZONE` binding, in a sentence that quotes no value of it. */
 const REFUSALS = {

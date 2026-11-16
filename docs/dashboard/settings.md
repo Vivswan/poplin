@@ -38,6 +38,8 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 
 A saved `search_engines_allowed` or `outside_pages` also changes its rule at Cloudflare by itself, with [the key poplin keeps](../about/security.md#the-kept-key); `block_bots` changes there at the next Repair on [Domain](domain.md), and so do all three on an install that holds no key.
 
+On an install [without a domain](../start/without-a-domain.md), the control of `block_bots` is disabled and says `Needs a domain.`: what it asks for is a switch of a domain at Cloudflare. `search_engines_allowed` and `outside_pages` work there through the Worker alone, and nothing is sent to Cloudflare for them.
+
 ## The install
 
 | Example                                                              | Does                                              |

@@ -65,6 +65,15 @@ export interface DomainPlug {
   /** What else the provider's form asks of the person, in one sentence, such as which account the token is for. */
   readonly tokenNote: string;
 
+  /** How the screens speak of the install's side at the provider: `thing` is what a sentence calls it, such as `the domain`, and `line` is one sentence said first on its screen, or `null`. */
+  readonly words: { readonly thing: string; readonly line: string | null };
+
+  /** The settings, beyond the logins, that a repair carries to the provider. */
+  readonly carriedSettings: readonly (keyof DomainSettings)[];
+
+  /** The settings that do nothing on this install, since the provider's side has no place for them: each with the one short line its control says in place of taking a change. */
+  readonly idleSettings: Readonly<Partial<Record<keyof DomainSettings, string>>>;
+
   /** Read every object and say what a repair would do. It changes nothing at the provider, and reads the settings only once the token is proven. */
   check(token: string, settings: ReadSettings): Promise<DomainReading>;
 

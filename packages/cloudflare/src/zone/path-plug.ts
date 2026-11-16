@@ -4,6 +4,7 @@
 //
 // With no zone to show, a token proves itself by the account: the one whose free address is the one in the install's own hostnames. Any other token is refused before anything is read.
 // Each piece is the one an install with a domain is made of. No record, route, or rule is read or written: the free address has none of them.
+// So no setting is carried by a repair, and the one whose whole effect is at a zone, `block_bots`, is said to do nothing here.
 
 import type { DomainPlug, DomainReading, ReadSettings } from "@poplin/app/src/console/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
@@ -19,6 +20,12 @@ import { accessPiece, firstValues, type Known, keyGiven, type Placed, type Progr
 
 /** How many accounts a token of an install with nothing set is looked through for the install's: one call each, inside what one request of a Worker may send. */
 const MAX_ACCOUNTS = 10;
+
+/** What the Domain screen says first on an install of this kind. */
+const NO_DOMAIN = "No domain: your sites answer at Cloudflare's free address.";
+
+/** What the control of a setting says whose whole effect is a rule or a switch of a zone. */
+const NEEDS_DOMAIN = "Needs a domain.";
 
 /** What the plug is built from. */
 type PathParts = Known & {
@@ -130,6 +137,9 @@ export async function givePathKey(parts: Extract<PathParts, { readonly accountId
 export function createPathPlug(parts: PathParts): DomainPlug {
   return {
     ...tokenFacts("noDomain"),
+    words: { thing: "the install", line: NO_DOMAIN },
+    carriedSettings: [],
+    idleSettings: { block_bots: NEEDS_DOMAIN },
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),
   };

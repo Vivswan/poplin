@@ -6,7 +6,7 @@ import { sha256Of } from "@poplin/core/src/storage/storage";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Bindings } from "../../src/worker/bindings";
 import { signer } from "../login/support/access";
-import { ADMIN, type ApiCalls, accessHeaders, ask, api, BINDINGS, countedBindings, done, instance, OWNER, type Published, page, publish, send, spentDatabase, tokenOf, type Worker, type World, world } from "./support/install";
+import { ADMIN, type ApiCalls, accessHeaders, ask, api, BINDINGS, countedBindings, done, installOf, instance, OWNER, problemsOf, type Published, page, publish, send, spentDatabase, tokenOf, type Worker, type World, world } from "./support/install";
 
 /** The admin host of the install without a domain: the Worker's own free address under the account `example`. */
 const FREE_ADMIN = "https://poplin.example.workers.dev";
@@ -233,6 +233,36 @@ describe("what a request costs, by the kind of install", () => {
     }
 
     expect(costs).toEqual([[200, 3], [200, 3]]);
+  });
+});
+
+describe("the screens of an install without a domain", () => {
+  // Drift: the kind's words and its settings reach the screens through the one plug. Built from the other kind's, the dialog would say "the domain", a repair would be asked for settings it carries nowhere, and block_bots would look like it works.
+  test("the Domain screen says there is no domain and names its runs by the install; Settings marks block_bots alone as needing a domain, and no setting for a repair", async () => {
+    const worker = instance(w);
+    const owner = await accessHeaders(w);
+    const domain = await (await askFree(worker, `${FREE_ADMIN}/data/domain`, { headers: owner })).json<{ words: unknown; form: { tokenRights: string[] } }>();
+    const { rows } = await (await askFree(worker, `${FREE_ADMIN}/data/settings`, { headers: owner })).json<{ rows: { key: string; repair: boolean; needs: string | null }[] }>();
+
+    expect([domain.words, domain.form.tokenRights.length]).toEqual([{ thing: "the install", line: "No domain: your sites answer at Cloudflare's free address." }, 5]);
+    expect([rows.filter((row) => row.repair), rows.filter((row) => row.needs !== null).map((row) => [row.key, row.needs])]).toEqual([[], [["block_bots", "Needs a domain."]]]);
+  });
+});
+
+describe("a changed setting of the guard rules, by the kind of install", () => {
+  // Drift: an install without a domain has no rule to write. A change left waiting there would wait for good: no run and no repair ever carries it.
+  test.each([
+    { ...KINDS.domain, waits: true },
+    { ...KINDS.account, waits: false },
+  ])("with $kind and no key, a saved outside_pages is left waiting only where a rule exists to write, and no problem is noted", async (kind) => {
+    const calls = callsOf(instance(w), await tokenOf(w, "admin"), kind);
+    const { database } = await installOf(w);
+    await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+
+    await done(await calls.config.$patch({ query: {}, json: { outside_pages: "allowed" } }));
+    const kept = await database.readDomainCheck();
+
+    expect([kept === undefined ? "no run kept" : kept.rules_changed_at !== null, await problemsOf(w)]).toEqual([kind.waits, []]);
   });
 });
 

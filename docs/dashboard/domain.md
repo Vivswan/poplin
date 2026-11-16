@@ -39,6 +39,22 @@ Three rows are Cloudflare's login:
 
 The row `Key` is the key poplin keeps at Cloudflare. Repair makes one where the install has none, or one Cloudflare no longer takes: [The kept key](../about/security.md#the-kept-key).
 
+## Without a domain
+
+On an install [without a domain](../start/without-a-domain.md) the screen is the same, with other rows. Its first line says `No domain: your sites answer at Cloudflare's free address.`
+
+| Piece              | It is                                                                  |
+| ------------------ | ---------------------------------------------------------------------- |
+| Forwarder          | one for the unlisted and public sites, one for the private sites: its row names the address |
+| Access application | the login in front of the dashboard and of every private site         |
+| Access policy      | who may log in: your users only                                        |
+| Access open paths  | the paths a program reaches without the login                          |
+| Worker variable    | what the Worker reads at its start                                     |
+| Key                | [the key poplin keeps](../about/security.md#the-kept-key)              |
+| D1 database        | the database of the install                                            |
+
+It has no DNS record, route, or rule, and its account token needs no permission of a zone. The optional parts below are of an install under a domain.
+
 ## The last check of the domain
 
 ```text

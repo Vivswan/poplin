@@ -8,6 +8,7 @@ import * as v from "valibot";
 import type { DomainPlug } from "../../src/console/domain/records";
 import { CONTROL_KINDS, controlOf } from "../../src/console/setting-controls";
 import { openConsole } from "./support/console";
+import { usualPlug } from "./support/fake-plug";
 
 /** One setting as the route answers it. */
 interface Row {
@@ -17,6 +18,7 @@ interface Row {
   readonly unit: string;
   readonly fallback: string;
   readonly repair: boolean;
+  readonly needs: string | null;
 }
 
 /** What the route answers. */
@@ -92,9 +94,10 @@ describe("the rows", () => {
           { over: 100_000, unit: "", warning: "above the free 100,000 requests a day" },
         ],
         repair: false,
+        needs: null,
       },
-      { key: "site_share_of_day", control: { kind: "number", word: null }, text: "40%", unit: "%", fallback: "25%", limits: [], repair: false },
-      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", limits: [], repair: false },
+      { key: "site_share_of_day", control: { kind: "number", word: null }, text: "40%", unit: "%", fallback: "25%", limits: [], repair: false, needs: null },
+      { key: "block_bots", control: { kind: "choice", options: ["auto", "on", "off"] }, text: "auto", unit: "", fallback: "auto", limits: [], repair: false, needs: null },
     ]);
   });
 
@@ -118,7 +121,16 @@ describe("the rows", () => {
   test("mark the settings a repair carries to the domain only in a dashboard with the Domain screen", async () => {
     const marked = async (domain?: DomainPlug): Promise<readonly string[]> => (await settingsOf(await openConsole("", domain))).rows.filter((row) => row.repair).map((row) => row.key);
 
-    expect([await marked(), await marked({} as DomainPlug)]).toEqual([[], ["outside_pages", "search_engines_allowed", "block_bots"]]);
+    expect([await marked(), await marked(usualPlug())]).toEqual([[], ["outside_pages", "search_engines_allowed", "block_bots"]]);
+  });
+
+  // Drift: on an install whose provider's side has no place for a setting, the screen would send a person to a repair that carries nothing, or let a switch be set that nothing acts on, with no word of why.
+  test("on an install whose repair carries no setting, mark none for a repair, and say what a setting that does nothing there needs", async () => {
+    const plug: DomainPlug = { ...usualPlug(), carriedSettings: [], idleSettings: { block_bots: "Needs a domain." } };
+    const { rows } = await settingsOf(await openConsole("", plug));
+
+    expect(rows.filter((row) => row.repair)).toEqual([]);
+    expect(rows.filter((row) => row.needs !== null).map((row) => [row.key, row.needs])).toEqual([["block_bots", "Needs a domain."]]);
   });
 });
 

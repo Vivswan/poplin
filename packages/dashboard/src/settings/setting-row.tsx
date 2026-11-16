@@ -1,4 +1,5 @@
 // The row of one setting: its name, what it does, its default with the way back to it while the value differs, the control, the host's warnings for the value it holds, and under the control a refusal, or a plain line.
+// A setting that does nothing on this install says in that line what it needs, and its control takes no change.
 
 import { type ReactNode, useEffect, useRef } from "react";
 
@@ -78,11 +79,12 @@ export function SettingRow({ row, text, refusal, onChange, marked, note }: Setti
       marked={marked}
       says={[words.about]}
       fallback={readOf(row, row.fallback)}
-      onReset={text === row.fallback ? undefined : reset}
+      onReset={row.needs !== null || text === row.fallback ? undefined : reset}
       warnings={warningsOf(row, text)}
       beside={isSwitch(row)}
+      idle={row.needs !== null}
       refused={refusal !== undefined}
-      under={refusal === undefined ? underOf(note) : <FieldError className="text-[13px]">{refusal}</FieldError>}
+      under={refusal === undefined ? underOf(row.needs ?? note) : <FieldError className="text-[13px]">{refusal}</FieldError>}
     >
       <SettingControl row={row} id={id} text={text} onChange={onChange} refused={refusal !== undefined} />
     </SettingFrame>
