@@ -63,7 +63,7 @@ const RETIRED_NAMES: readonly RegExp[] = [
 const NAMED_ON_PURPOSE: readonly { readonly path: string; readonly name?: RegExp }[] = [
   { path: "tests/no-old-shapes.test.ts" },
   // The test that the binding refuses the old key.
-  { path: "packages/providers/cloudflare/tests/zone/zone-binding.test.ts", name: /admin_hostname/ },
+  { path: "packages/providers/cloudflare/tests/shared/install/kind/zone-binding.test.ts", name: /admin_hostname/ },
   // The preview's page of its own samples, which it calls its gallery and switches by an option of that name.
   { path: "tests/preview.test.ts", name: /gallery: false/ },
 ];
@@ -193,7 +193,7 @@ describe("no old shapes outside migrations/", () => {
     const leaks: readonly (readonly [leak: string, line: string, rule: string, what: string, file: string])[] = [
       ["a static import of a step", 'import { REGISTRY } from "../migrations/registry";', "noRestrictedImports", "../migrations", "packages/app/src/sites/planted.ts"],
       ["an import of the folder itself", 'import "./migrations";', "noRestrictedImports", "./migrations", "packages/cli/src/commands/planted.ts"],
-      ["a dynamic import", 'const steps = await import("../../core/src/migrations/upgrade");', "noRestrictedImports", "../../core", "packages/providers/cloudflare/src/worker/planted.ts"],
+      ["a dynamic import", 'const steps = await import("../../core/src/migrations/upgrade");', "noRestrictedImports", "../../core", "packages/providers/cloudflare/src/shared/worker/planted.ts"],
       ["a dynamic import behind a comment", 'const steps = await import(/* only here */ "../migrations/upgrade");', "noRestrictedImports", "../migrations", "packages/core/src/sites/planted.ts"],
       ["an import in single quotes", "import { REGISTRY } from '../migrations/registry';", "noRestrictedImports", "../migrations", "packages/dashboard/src/pages/planted.tsx"],
       ["an import by the package's name", 'import { REGISTRY } from "@poplin/core/src/migrations/registry";', "noRestrictedImports", "@poplin/core", "packages/app/src/api/planted.ts"],
@@ -208,7 +208,7 @@ describe("no old shapes outside migrations/", () => {
       ...Object.fromEntries(leaks.map(([, line, , , file]) => [file, `// A planted file.\n${line}\n`])),
       "packages/app/src/sites/commented.ts": '// import { REGISTRY } from "../migrations/registry";\nexport const steps = "./migrations";\n',
       "packages/app/src/sites/migrations/helper.ts": allowed,
-      "packages/providers/cloudflare/src/database/migrations/helper.ts": allowed,
+      "packages/providers/cloudflare/src/shared/database/migrations/helper.ts": allowed,
       "packages/app/tests/sites/planted.test.ts": allowed,
       "packages/core/tests/migrations/planted.test.ts": allowed,
       "packages/core/src/migrations/0001-rename-text.ts": core,
@@ -241,11 +241,11 @@ describe("no old shapes outside migrations/", () => {
   // Drift: an allow-list by file alone would let any old name back into a file that rightly holds one.
   test("a file listed for one retired name is still named for another, and the word gallery alone is no setting", () => {
     using tree = plantedRepository({
-      "packages/providers/cloudflare/tests/zone/zone-binding.test.ts": 'const refused = { admin_hostname: "dashboard.example.com" };\nconst old = { zone_bots: "on" };\n',
+      "packages/providers/cloudflare/tests/shared/install/kind/zone-binding.test.ts": 'const refused = { admin_hostname: "dashboard.example.com" };\nconst old = { zone_bots: "on" };\n',
       "packages/demo/src/sites/names.ts": 'const OWN_PATHS = ["/gallery"];\nconst host = { samples, gallery: flags.gallery };\n',
     });
 
-    expect(violations(tree.path)).toEqual(["retired name: packages/providers/cloudflare/tests/zone/zone-binding.test.ts:2"]);
+    expect(violations(tree.path)).toEqual(["retired name: packages/providers/cloudflare/tests/shared/install/kind/zone-binding.test.ts:2"]);
   });
 
   test("drift: the rules bind everything but the places named; a guard that fired on those, or on current-shape code, would be switched off", () => {

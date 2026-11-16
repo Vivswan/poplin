@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
 import { version } from "../../../cli/package.json";
-import { pinReleases } from "../src/deploy/pin-releases";
+import { pinReleases } from "../src/shared/release/deploy/pin-releases";
 
 const [folder] = process.argv.slice(2);
 if (folder === undefined) throw new Error("usage: check-bundle.ts <folder of a release's files>");

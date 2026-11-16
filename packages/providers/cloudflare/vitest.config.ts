@@ -2,9 +2,9 @@
 
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
-import { EXAMPLE_BINDINGS } from "./tests/worker/support/example-bindings";
-import { BudgetReport } from "./tests/worker/support/budget-report";
-import { RuntimeLog } from "./tests/worker/support/runtime-log";
+import { EXAMPLE_BINDINGS } from "./tests/shared/worker/support/example-bindings";
+import { BudgetReport } from "./tests/shared/worker/support/budget-report";
+import { RuntimeLog } from "./tests/shared/worker/support/runtime-log";
 
 export default defineConfig({
   plugins: [cloudflareTest({ wrangler: { configPath: "../../../wrangler.jsonc" }, miniflare: { bindings: EXAMPLE_BINDINGS } })],
@@ -13,7 +13,7 @@ export default defineConfig({
   resolve: { alias: { "bun:test": "vitest" } },
 
   test: {
-    include: ["tests/{worker,storage,database,limits,jobs}/**/*.test.ts"],
+    include: ["tests/shared/{worker,storage,database,limits,jobs}/**/*.test.ts"],
     testTimeout: 30_000,
     reporters: ["default", new RuntimeLog(), new BudgetReport()],
     // The pool sends a file's cached imports as one message, and the Cloudflare SDK takes that past workerd's 32 MiB limit.

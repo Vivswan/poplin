@@ -10,11 +10,11 @@ import type { DomainRow, DomainSettings } from "../../packages/app/src/console/d
 import type { Login } from "../../packages/core/src/auth/logins";
 import { answerOf, convergeInstall, needOf, settleFreeAddress, workerConfig } from "../../packages/providers/cloudflare/scripts/live/converge";
 import { type Found, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
-import { createDomainPlug } from "../../packages/providers/cloudflare/src/zone/zone-plug";
-import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
-import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/providers/cloudflare/tests/zone/support/fake-install";
-import { ADDRESSES, LAYOUT } from "../../packages/providers/cloudflare/tests/zone/support/layouts";
-import { type Asked, bodyOf, page, refusal, reply } from "../../packages/providers/cloudflare/tests/zone/support/replies";
+import { createDomainPlug } from "../../packages/providers/cloudflare/src/with-domain/zone-plug";
+import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
+import { type Account, ACCOUNT as INSTALL_ACCOUNT, answer as answerInstall, emptyAccount, TOKEN } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-install";
+import { ADDRESSES, LAYOUT } from "../../packages/providers/cloudflare/tests/shared/install/support/layouts";
+import { type Asked, bodyOf, page, refusal, reply } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
 import { catchStep } from "./support/step";
 
 /** The workflow that runs the live scripts. */

@@ -5,8 +5,8 @@
 import { mintToken } from "@poplin/core/src/auth/tokens";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 
-import { callCloudflare } from "../../src/zone/client";
-import { syncDatabase } from "../../src/zone/database/database";
+import { callCloudflare } from "../../src/shared/install/client";
+import { syncDatabase } from "../../src/shared/install/pieces/database/database";
 import { type Run, type Stop, stopOf } from "./util";
 
 /** What the note of every live run's token starts with. */

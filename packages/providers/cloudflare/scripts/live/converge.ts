@@ -18,17 +18,17 @@ import type { DomainRow, DomainSettings } from "@poplin/app/src/console/domain/r
 import { type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 
-import { keepCopyConfig } from "../../src/deploy/kept-config";
-import { isAccessOff, readLoginFacts, syncAccess } from "../../src/zone/access/access";
-import type { AccountAddresses } from "../../src/zone/address-layout";
-import { type CloudflareFailure, callCloudflare } from "../../src/zone/client";
-import { syncDatabase } from "../../src/zone/database/database";
-import { syncForwarders } from "../../src/zone/forwarders/forwarders";
-import { syncJobs } from "../../src/zone/jobs/jobs";
-import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
-import { privateSitesPattern } from "../../src/zone/layout";
-import type { Report } from "../../src/zone/sync";
-import { createDomainPlug, keysMended } from "../../src/zone/zone-plug";
+import { keepCopyConfig } from "../../src/shared/release/deploy/kept-config";
+import { isAccessOff, readLoginFacts, syncAccess } from "../../src/shared/install/pieces/access/access";
+import type { AccountAddresses } from "../../src/without-domain/address-layout";
+import { type CloudflareFailure, callCloudflare } from "../../src/shared/install/client";
+import { syncDatabase } from "../../src/shared/install/pieces/database/database";
+import { syncForwarders } from "../../src/without-domain/pieces/forwarders/forwarders";
+import { syncJobs } from "../../src/shared/install/pieces/jobs/jobs";
+import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
+import { privateSitesPattern } from "../../src/with-domain/layout";
+import type { Report } from "../../src/shared/install/sync";
+import { createDomainPlug, keysMended } from "../../src/with-domain/zone-plug";
 import { capInstall } from "./caps";
 import { readFreePlans } from "./plan";
 import { sendLive } from "./send";

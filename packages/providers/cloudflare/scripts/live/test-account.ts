@@ -4,7 +4,7 @@
 
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 
-import { callCloudflare, type Zone } from "../../src/zone/client";
+import { callCloudflare, type Zone } from "../../src/shared/install/client";
 import { readFreePlans } from "./plan";
 import { BUCKET, isStop, type Run, type Stop, stopOf } from "./util";
 

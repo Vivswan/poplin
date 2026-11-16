@@ -13,7 +13,7 @@ import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseObjects } from "cloudflare/resources/r2/buckets/objects";
 import * as v from "valibot";
 
-import { callCloudflare, type Zone } from "../../src/zone/client";
+import { callCloudflare, type Zone } from "../../src/shared/install/client";
 import { refuseOtherAccount } from "./test-account";
 import { BUCKET, isStop, type Run, type Stop, stopOf } from "./util";
 

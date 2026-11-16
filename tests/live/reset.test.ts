@@ -13,8 +13,8 @@ import { BunSqliteDriver } from "../../packages/core/tests/database/support/bun-
 import { readSamples } from "../../packages/demo/scripts/samples";
 import { createPreview } from "../../packages/demo/src/preview/preview";
 import { readRealSites } from "../../packages/demo/src/preview/real-sites";
-import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
-import { type Asked, page, refusal } from "../../packages/providers/cloudflare/tests/zone/support/replies";
+import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
+import { type Asked, page, refusal } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
 import { liveAddresses } from "./addresses";
 import { openBench } from "./bench";
 import { FAKE_DOMAIN } from "./support/fake-install";

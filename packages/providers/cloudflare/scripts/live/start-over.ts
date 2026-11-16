@@ -27,16 +27,16 @@ import { BaseWorkflows } from "cloudflare/resources/workflows/workflows";
 import { BaseApplications } from "cloudflare/resources/zero-trust/access/applications/applications";
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 
-import { workflowNameOf } from "../../src/jobs/workflow-name";
-import { isAccessOff } from "../../src/zone/access/access";
-import type { AccountAddresses } from "../../src/zone/address-layout";
-import { BUDGET_ALERT } from "../../src/zone/alerts/budget-alert";
-import { type CloudflareResult, callCloudflare, type Zone } from "../../src/zone/client";
-import { syncDatabase } from "../../src/zone/database/database";
-import { removeForwarders } from "../../src/zone/forwarders/forwarders";
-import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
-import { removeOwnRule, syncPhase } from "../../src/zone/rules/rules";
-import { applySteps } from "../../src/zone/sync";
+import { workflowNameOf } from "../../src/shared/jobs/workflow-name";
+import { isAccessOff } from "../../src/shared/install/pieces/access/access";
+import type { AccountAddresses } from "../../src/without-domain/address-layout";
+import { BUDGET_ALERT } from "../../src/shared/install/pieces/alerts/budget-alert";
+import { type CloudflareResult, callCloudflare, type Zone } from "../../src/shared/install/client";
+import { syncDatabase } from "../../src/shared/install/pieces/database/database";
+import { removeForwarders } from "../../src/without-domain/pieces/forwarders/forwarders";
+import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
+import { removeOwnRule, syncPhase } from "../../src/with-domain/pieces/rules/rules";
+import { applySteps } from "../../src/shared/install/sync";
 import { refuseOtherAccount } from "./test-account";
 import { BUCKET, type Found, findInstall, isStop, openRun, type Run, reportStop, SCRIPT, type Stop, stopOf } from "./util";
 

@@ -5,8 +5,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { removeOrphans } from "../../packages/providers/cloudflare/scripts/live/orphans";
 import { BUCKET, openRun } from "../../packages/providers/cloudflare/scripts/live/util";
-import { withFake } from "../../packages/providers/cloudflare/tests/zone/support/fake-cloudflare";
-import { type Asked, refusal, reply } from "../../packages/providers/cloudflare/tests/zone/support/replies";
+import { withFake } from "../../packages/providers/cloudflare/tests/shared/install/support/fake-cloudflare";
+import { type Asked, refusal, reply } from "../../packages/providers/cloudflare/tests/shared/install/support/replies";
 import { parseObjectKey } from "../../packages/core/src/storage/storage";
 import { liveAddresses } from "./addresses";
 import { openBench } from "./bench";

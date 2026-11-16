@@ -8,7 +8,7 @@
 import { BaseSubscriptions } from "cloudflare/resources/accounts/subscriptions/subscriptions";
 import { BaseZones } from "cloudflare/resources/zones/zones";
 
-import { callCloudflare, type Zone } from "../../src/zone/client";
+import { callCloudflare, type Zone } from "../../src/shared/install/client";
 import { type Run, type Stop, stopOf } from "./util";
 
 /** The token permission each reading needs. */

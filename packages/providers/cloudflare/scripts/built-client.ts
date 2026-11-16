@@ -1,4 +1,4 @@
-// Write the dashboard's client into the Worker's sources as one module: `src/worker/built-client.js`, which no commit holds.
+// Write the dashboard's client into the Worker's sources as one module: `src/shared/worker/built-client.js`, which no commit holds.
 //
 //   packages/dashboard  --its own build, into a folder made for this run-->  the scripts, the stylesheet, the fonts, and the build's manifest
 //   the manifest        -->  the names of the script and the stylesheet, each of which holds a hash of its content
@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { buildClient, readClient } from "../../../dashboard/scripts/client-build";
 
 /** The module this script writes. */
-const MODULE = join(import.meta.dir, "..", "src", "worker", "built-client.js");
+const MODULE = join(import.meta.dir, "..", "src", "shared", "worker", "built-client.js");
 
 /** One file as the module holds it. */
 type Packed = { readonly type: string; readonly text: string } | { readonly type: string; readonly base64: string };

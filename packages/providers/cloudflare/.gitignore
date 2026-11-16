@@ -5,7 +5,7 @@ worker-configuration.d.ts
 dist/
 
 # The dashboard's client as one module, which `scripts/built-client.ts` writes before the Worker is bundled.
-src/worker/built-client.js
+src/shared/worker/built-client.js
 
 # The local bucket, database, and counters of the `dev` script.
 .wrangler/

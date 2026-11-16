@@ -9,10 +9,10 @@ import { appendFileSync } from "node:fs";
 import * as core from "@actions/core";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 
-import { type AccountAddresses, parseAccountAddresses } from "../../src/zone/address-layout";
-import { type CloudflareFailure, type Connection, callCloudflare, listZones, type Zone } from "../../src/zone/client";
-import { type DomainLayout, parseDomainLayout } from "../../src/zone/layout";
-import type { BoundInstall } from "../../src/zone/zone-binding";
+import { type AccountAddresses, parseAccountAddresses } from "../../src/without-domain/address-layout";
+import { type CloudflareFailure, type Connection, callCloudflare, listZones, type Zone } from "../../src/shared/install/client";
+import { type DomainLayout, parseDomainLayout } from "../../src/with-domain/layout";
+import type { BoundInstall } from "../../src/shared/install/kind/zone-binding";
 
 /** The Worker's name on the test account. */
 export const SCRIPT = "poplin";

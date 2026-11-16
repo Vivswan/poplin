@@ -2,8 +2,8 @@
 
 import { BasePolicies } from "cloudflare/resources/zero-trust/access/policies";
 
-import { type Connection, callCloudflare } from "../../src/zone/client";
-import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
+import { type Connection, callCloudflare } from "../../src/shared/install/client";
+import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 
 /**
  * Read the emails of the policy that lets the install's logins through.

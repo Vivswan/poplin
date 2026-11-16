@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, posix } from "node:path";
 
 import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
@@ -10,7 +11,7 @@ const ENTRY_FIELDS = ["main", "module", "types", "bin", "exports"];
 const BUILT_ENTRY = /^(?:\.\/)?dist\/(.+)\.mjs$/;
 
 const UNMIRRORED: readonly (readonly [path: string, reason: string])[] = [
-  ["packages/providers/cloudflare/tests/worker/request-budget.test.ts", "holds every request the Worker answers to a budget of database queries and storage calls"],
+  ["packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts", "holds every request the Worker answers to a budget of database queries and storage calls"],
 ];
 
 const PACKAGES = "packages/{*,providers/*}";
@@ -18,6 +19,26 @@ const PACKAGES = "packages/{*,providers/*}";
 const PACKAGE = /^packages\/(?:providers\/[^/]+|[^/]+)/;
 
 const SUPPORT_FILE = /^(packages\/(?:providers\/[^/]+|[^/]+))\/tests\/(.+)\/support\/[^/]+\.ts$/;
+
+const PROVIDERS = "packages/providers/";
+
+const PARTS: readonly string[] = ["shared", "with-domain", "without-domain"];
+
+const PART = /^packages\/providers\/[^/]+\/src\/([^/]+)\//;
+
+const CHOOSERS: readonly (readonly [path: string, reason: string])[] = [
+  ["packages/providers/cloudflare/src/shared/install/kind/first-run.ts", "makes the plug of the kind a person chose when nothing is set yet"],
+  ["packages/providers/cloudflare/src/shared/install/kind/zone-binding.ts", "reads the `ZONE` binding, which holds the values of one kind or of the other"],
+  ["packages/providers/cloudflare/src/shared/worker/hosts.ts", "builds where the install answers from the kind its `ZONE` binding names"],
+];
+
+const CROSSING: readonly (readonly [importer: string, imported: string])[] = [
+  ["packages/providers/cloudflare/src/shared/worker/sweep.ts", "packages/providers/cloudflare/src/with-domain/pieces/rules/rules-follow"],
+  ["packages/providers/cloudflare/src/without-domain/address-layout.ts", "packages/providers/cloudflare/src/with-domain/layout"],
+  ["packages/providers/cloudflare/src/without-domain/path-plug.ts", "packages/providers/cloudflare/src/with-domain/zone-plug"],
+];
+
+const SCANNER = new Bun.Transpiler({ loader: "ts" });
 
 /** The files of the packages a pattern takes, as sorted paths from the root. The pattern is counted from a package's own folder: a folder of `packages`, or a provider's folder of `packages/providers`. */
 function scan(root: string, pattern: string): string[] {
@@ -88,6 +109,24 @@ function strayShared(root: string): string[] {
   return shared.filter((path) => !concepts.has(path.replace(SUPPORT_FILE, "$1/src/$2")));
 }
 
+/** What breaks the parts of a provider's source, one line each: the shared part loads a kind's code, a kind loads the other's, a chooser loads no kind, or a source file sits in no part. An import of types alone loads nothing. */
+function partCrossings(root: string, choosers: readonly string[]): string[] {
+  const found: string[] = [];
+
+  for (const path of scan(root, "src/**/*.ts").filter((file) => file.startsWith(PROVIDERS))) {
+    const part = PART.exec(path)?.[1] ?? "";
+    const loaded = SCANNER.scan(readFileSync(join(root, path), "utf8")).imports.filter((loads) => loads.path.startsWith("."));
+    const targets = loaded.map((loads) => posix.join(posix.dirname(path), loads.path));
+    const outside = targets.filter((target) => ![part, "shared"].includes(PART.exec(target)?.[1] ?? part));
+
+    if (!PARTS.includes(part)) found.push(`${path} sits in no part`);
+    if (choosers.includes(path) && outside.length === 0) found.push(`${path} is named a chooser and loads no kind`);
+    if (!choosers.includes(path)) found.push(...outside.map((target) => `${path} loads ${target}`));
+  }
+
+  return found.sort();
+}
+
 describe("package layout", () => {
   test("every source file sits in a concept folder or is a declared entry: without this src/ fills with files no concept owns", async () => {
     expect(scan(ROOT, "src/*.ts").length).toBeGreaterThan(0);
@@ -102,6 +141,30 @@ describe("package layout", () => {
   test("every other file under tests/ sits in the support/ folder of a concept its package has: without this a shared fixture reads as a test with no source", () => {
     expect(scan(ROOT, "tests/**/support/*.ts").length).toBeGreaterThan(0);
     expect(strayShared(ROOT)).toEqual([]);
+  });
+
+  test("the shared part of a provider loads no kind's code, and a kind not the other's: without this a change to one kind of install breaks the other, where the checks of the changed kind alone do not look", () => {
+    expect(partCrossings(ROOT, CHOOSERS.map(([path]) => path))).toEqual(CROSSING.map(([importer, imported]) => `${importer} loads ${imported}`).sort());
+  });
+
+  test("drift: a parts rule that reads nothing passes forever; each wrong way out of a part is planted and named, beside the ways that are right", () => {
+    using tree = plantedRepository({
+      "packages/providers/example/src/shared/install/sync.ts": 'import { plug } from "../../with-domain/plug";\nexport const used = plug;\n',
+      "packages/providers/example/src/shared/install/kind/pick.ts": 'import { plug } from "../../../with-domain/plug";\nexport const used = plug;\n',
+      "packages/providers/example/src/shared/install/kind/idle.ts": 'import type { Plug } from "../../../with-domain/plug";\nexport type Used = Plug;\n',
+      "packages/providers/example/src/with-domain/plug.ts": 'import { sync } from "../shared/install/sync";\nimport { rules } from "./pieces/rules";\nexport const plug = [sync, rules];\n',
+      "packages/providers/example/src/without-domain/plug.ts": 'import { plug } from "../with-domain/plug";\nexport const used = plug;\n',
+      "packages/providers/example/src/zone/loose.ts": "",
+      "packages/demo/src/zone/loose.ts": 'import { plug } from "../with-domain/plug";\nexport const used = plug;\n',
+    });
+    const choosers = ["packages/providers/example/src/shared/install/kind/pick.ts", "packages/providers/example/src/shared/install/kind/idle.ts"];
+
+    expect(partCrossings(tree.path, choosers)).toEqual([
+      "packages/providers/example/src/shared/install/kind/idle.ts is named a chooser and loads no kind",
+      "packages/providers/example/src/shared/install/sync.ts loads packages/providers/example/src/with-domain/plug",
+      "packages/providers/example/src/without-domain/plug.ts loads packages/providers/example/src/with-domain/plug",
+      "packages/providers/example/src/zone/loose.ts sits in no part",
+    ]);
   });
 
   // Drift: a guard that lists the disk reads what is no part of the repository, and fails in the one checkout that holds it.

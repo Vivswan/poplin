@@ -2,8 +2,8 @@
 
 import { BaseInstances } from "cloudflare/resources/workflows/instances/instances";
 
-import { workflowNameOf } from "../../src/jobs/workflow-name";
-import { type Connection, callCloudflare } from "../../src/zone/client";
+import { workflowNameOf } from "../../src/shared/jobs/workflow-name";
+import { type Connection, callCloudflare } from "../../src/shared/install/client";
 import { SCRIPT } from "./util";
 
 /** The states of an instance that ended without doing its work. */

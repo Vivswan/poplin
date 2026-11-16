@@ -4,7 +4,7 @@
 #   a pull request            one comment, kept current: the rows that changed against the newest green run on main
 #   a pull request of a fork  the summary and the artifact alone: its token writes no comment
 #
-# The numbers come from packages/providers/cloudflare/tests/worker/request-budget.test.ts, which fails the job when a row is over
+# The numbers come from packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts, which fails the job when a row is over
 # its budget. The comment is written all the same, so it shows the row that went over.
 #
 # This file is repo-owned. It is a workflow of its own because the comment needs pull-requests: write, which

@@ -14,8 +14,8 @@ import { SqlDatabase } from "@poplin/core/src/database/sql-database";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import * as v from "valibot";
 
-import { callCloudflare } from "../../src/zone/client";
-import { INSTALL_OBJECTS } from "../../src/zone/install-objects";
+import { callCloudflare } from "../../src/shared/install/client";
+import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 import { type Run, type Stop, stopOf } from "./util";
 
 /** The token permission the database calls need. */

@@ -55,7 +55,7 @@ Each workflow runs the same steps on its own install. A push starts the one whos
 | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | `packages/providers/cloudflare/{src,tests}/zone/{bots,dns,routes,rules}/**`                                                               | with a domain    |
 | `packages/providers/cloudflare/{src,tests}/zone/forwarders/**`                                                                            | without a domain |
-| `packages/providers/cloudflare/src/zone/path-plug.ts` and its test                                                                                  | without a domain |
+| `packages/providers/cloudflare/src/without-domain/path-plug.ts` and its test                                                                                  | without a domain |
 
 A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/providers/cloudflare/scripts/live`.
 
@@ -294,7 +294,7 @@ A product change that moves a row cost turns that test red, with the database's 
 
 | To measure the prices again | Then |
 | --- | --- |
-| `bun run --cwd packages/providers/cloudflare build`, then `bunx vitest run tests/worker/worker.test.ts -t "the rows the live checks count"` there | set each price in `rows.ts` to the first number of its pair, and the pair in the test |
+| `bun run --cwd packages/providers/cloudflare build`, then `bunx vitest run tests/shared/worker/worker.test.ts -t "the rows the live checks count"` there | set each price in `rows.ts` to the first number of its pair, and the pair in the test |
 | `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
@@ -443,7 +443,7 @@ No live check reads what a request cost: no address of an install answers it, to
 
 | What                                                        | Where it is held                                                                                                                                  |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the database queries, rows, and storage calls of a request  | `packages/providers/cloudflare/tests/worker/request-budget.test.ts`: every route on the local Workers runtime, through the driver the deployed Worker uses  |
+| the database queries, rows, and storage calls of a request  | `packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts`: every route on the local Workers runtime, through the driver the deployed Worker uses  |
 | the processing time of a request                            | the checks `L6` and `download` below, by hand: Cloudflare shows it in the Worker's metrics alone, and the local runtime reports none              |
 
 The test's `About ms` column is time by the clock, the local database and storage included. It is no measure of processing time, and no test fails on it.

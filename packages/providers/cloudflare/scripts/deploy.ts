@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { version } from "../../../cli/package.json";
-import { deployWorker, type RunCommand } from "../src/deploy/deploy";
-import { projectReleases } from "../src/deploy/release-source";
+import { deployWorker, type RunCommand } from "../src/shared/release/deploy/deploy";
+import { projectReleases } from "../src/shared/release/deploy/release-source";
 
 /** The root of the tree this script sits in. */
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
