@@ -189,13 +189,15 @@ Cloudflare shows with each token the resources it reaches: its accounts and its 
 npx poplin uninstall cloudflare --no-domain --keep-data
 ```
 
+This is for an install of the same kind, made again in the same account over the data as it stands. It is not the way to move an install to a domain, off one, or to another account: [Move an install](back-up.md#move-an-install) has that.
+
 The list before the question says `would keep` for both, the line above the question says `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
 
 A run that left a kind undone ends `Run this command again with --keep-data`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
 
 | Then                                   | Do                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------- |
-| take the data up in a new install      | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |
+| take the data up in a new install of the same kind | `npx poplin install cloudflare`: it finds the data, and asks `Use it, with what it holds?` |
 | remove the data too                    | the same `uninstall` line without `--keep-data`: it asks you to type `poplin-sites` |
 
 The new install takes its users and its settings from the kept database:

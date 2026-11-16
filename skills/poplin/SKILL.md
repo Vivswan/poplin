@@ -137,6 +137,6 @@ Two rules hold for every refusal. A refusal about the login (`no_login`, `not_lo
 
 | Open                                                               | When                                                                    |
 | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| [`references/setup.md`](references/setup.md)                       | the user asks to set poplin up, cannot log in, or asks to remove the install; or there are no tools and no login |
+| [`references/setup.md`](references/setup.md)                       | the user asks to set poplin up, cannot log in, or asks to remove or move the install; or there are no tools and no login |
 | [`references/mcp-server.md`](references/mcp-server.md)             | you add the MCP server to your own configuration, during the setup      |
 | [`references/refusals.md`](references/refusals.md)                 | a tool or a command answers with a refusal `code`                       |

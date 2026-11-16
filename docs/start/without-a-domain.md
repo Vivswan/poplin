@@ -142,6 +142,16 @@ npx poplin login --server https://poplin.your-name.workers.dev
 npx poplin doctor
 ```
 
+## A domain, afterwards
+
+No command puts this install under a domain. The way is to [move it](../upkeep/back-up.md#move-an-install): back up with `npx poplin export --out backup.zip`, install anew under the domain, and bring the data back with `npx poplin import backup.zip`.
+
+| Thing                 | After the move                                                     |
+| --------------------- | ------------------------------------------------------------------ |
+| a site's address      | new: a hostname of its own under your domain                       |
+| a link you shared     | stops with this install. Send the new one                          |
+| each computer's login | made anew, with `npx poplin login`                                 |
+
 ## Afterwards
 
 The commands that mend and remove an install take `--no-domain` too:

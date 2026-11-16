@@ -99,7 +99,7 @@ Ask which of the two kinds the user wants, and keep the answer. Show the table, 
 | blocking AI crawlers     | a setting of the install                                | that one setting does nothing                                |
 | two sites in one browser | kept apart                                              | sites of a kind share one browser origin: a script of one can read another, so only trusted pages belong there |
 
-When the user asks which to take: a domain, if they have one at Cloudflare; without one otherwise. The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made.
+When the user asks which to take: a domain, if they have one at Cloudflare; without one otherwise. The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made. To have the other kind later, the user backs up, installs anew, and imports: [moving the install](#when-the-user-asks-to-move-the-install).
 
 Then ask for the email of the first login: one whose inbox the user can read. It goes after `--login`.
 
@@ -370,5 +370,21 @@ Both are commands the user's account token runs, so the rule of part c holds: th
 | remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | give the user the line, and read its list with them: it asks for the token. The removal itself is the user's too: they type the install's address at its question |
 
 Never pass `--confirm` on your own: it is the proof that the user means this install, and a removal cannot be undone. The guide has both: [I cannot log in](https://github.com/Vivswan/poplin/blob/main/docs/fix/cannot-log-in.md) and [Remove](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/remove.md).
+
+## When the user asks to move the install
+
+No command moves an install: not to a domain, not off one, and not to another account. Say so, and say the one way: back up, install anew where they want it, and bring the data back. Do not offer `--keep-data` and `--adopt` for it: they make the same kind again over kept data.
+
+| Step | The line                                            | Who                                                     |
+| ---- | --------------------------------------------------- | ------------------------------------------------------- |
+| 1    | `npx poplin export --all-versions --out backup.zip` | you, on the user's yes, with a login of Everything      |
+| 2    | `npx poplin import backup.zip --dry-run`            | you: it checks the zip, and sends nothing               |
+| 3    | the new install. In one account, the removal of the old install comes first | the user, as step 3 and the table above have them |
+| 4    | `npx poplin import backup.zip --settings`           | you, once this computer is logged in to the new install |
+| 5    | to another account: the removal of the old install  | the user, once step 4 put every site back               |
+
+Tell the user what changes before step 1, and wait for their yes. Under another domain, or of the other kind, every site gets a new address and each link they shared stops. Each computer logs in again. In one account the old install goes before the new one is made, so the zip is then the only copy.
+
+Off a domain, a site with a root link, or with a public name in the form of an id, is not put back. Mend those on the old install before step 1. [Move an install](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/back-up.md#move-an-install) has every row.
 
 Nothing is published by the setup. When the user later asks you to publish, [`../SKILL.md`](../SKILL.md) holds the rules. The two that matter most: a new site is private until the user asks otherwise, and you keep the label a publish returns so the next publish updates the same site.

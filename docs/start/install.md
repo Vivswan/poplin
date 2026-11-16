@@ -31,6 +31,8 @@ An install is your own copy of poplin, in your own Cloudflare account. You make 
 
 The choice is made once: poplin has no command and no screen that changes it on an install that is made. [Without a domain](without-a-domain.md) has every row that differs.
 
+**To have the other kind afterwards**, [move the install](../upkeep/back-up.md#move-an-install): back up, install anew, and import. Every site then gets a new address, and each link you shared stops.
+
 ## What you need
 
 | Thing                           | Why                                                                                                         |
