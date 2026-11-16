@@ -129,7 +129,7 @@ export interface Instance {
   /** Writes the Activity line of a login, once for each login at Access; it is told every dashboard page a user opens. */
   readonly entered: ReturnType<typeof createEntries>;
 
-  /** The install's side at Cloudflare, for setup and the Domain tab: the plug of the install's kind. */
+  /** The install's side at Cloudflare, for setup and the Domain screen: the plug of the install's kind. */
   readonly domain: DomainPlug;
 
   /** The key poplin keeps for Cloudflare: whether the install holds one, whether Cloudflare still takes it, and the way to a new one. Nothing answers the key itself. */

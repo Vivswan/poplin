@@ -1,11 +1,11 @@
-// The plug the Domain tab and the setup page work through: the provider's side of an install, read and repaired with a key that lives for one call.
+// The plug the Domain screen and the setup page work through: the provider's side of an install, read and repaired with a key that lives for one call.
 //
 //   dashboard  --check(token, settings)-->   plug  -->  the provider's API
 //              <--rows: object, state, detail--
 //
 // An install that holds something of its own to read the provider with has `ownCheck` too: the same rows, with no token.
 //
-// The dashboard knows no provider: whoever builds it hands the plug in, and with none there is no Domain tab.
+// The dashboard knows no provider: whoever builds it hands the plug in, and with none there is no Domain screen.
 
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { CheckedPiece } from "@poplin/core/src/records/domain-check";

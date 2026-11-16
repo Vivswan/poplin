@@ -17,7 +17,7 @@ Live Checks workflows, one for each kind of install
   packages/providers/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
   build the Worker bundle
   packages/providers/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
-  packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
+  packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain screen's repair, the caps
                                                            without a domain, in the repair's place: the two forwarders and the key
                                                            `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
                                                            `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
