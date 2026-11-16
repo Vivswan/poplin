@@ -81,6 +81,7 @@ export function SettingRow({ row, text, refusal, onChange, marked, note }: Setti
       onReset={text === row.fallback ? undefined : reset}
       warnings={warningsOf(row, text)}
       beside={isSwitch(row)}
+      refused={refusal !== undefined}
       under={refusal === undefined ? underOf(note) : <FieldError className="text-[13px]">{refusal}</FieldError>}
     >
       <SettingControl row={row} id={id} text={text} onChange={onChange} refused={refusal !== undefined} />

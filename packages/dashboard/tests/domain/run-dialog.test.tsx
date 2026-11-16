@@ -78,7 +78,7 @@ describe("the token's box", () => {
     fireEvent.change(token, { target: { value: TOKEN } });
     await press(page, "Check");
 
-    expect([token.type, token.autocomplete, token.required]).toEqual(["password", "off", true]);
+    expect([token.type, token.autocomplete, token.getAttribute("aria-required")]).toEqual(["password", "off", "true"]);
     expect(runs).toEqual([{ run: "check", sent: { token: TOKEN } }]);
     expect([token.value, document.body.innerHTML.includes(TOKEN)]).toEqual(["", false]);
   });

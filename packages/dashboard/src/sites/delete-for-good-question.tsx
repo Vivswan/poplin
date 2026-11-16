@@ -1,7 +1,7 @@
 // The question before a site in the trash is deleted for good. It is drawn once on the Sites screen, outside the row or the panel that asks it, so a press in it is no press on that row.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   AlertDialog,
@@ -59,7 +59,6 @@ export function askDeleteForGood(asked: Asked): void {
  */
 export function DeleteForGoodQuestion(): ReactNode {
   const client = useQueryClient();
-  const id = useId();
   const asked = useSyncExternalStore(hear, () => QUESTION.asked);
   const cancel = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -119,27 +118,25 @@ export function DeleteForGoodQuestion(): ReactNode {
             <AlertDialogTitle>Delete {site === undefined ? "" : shownName(site)} for good?</AlertDialogTitle>
             <AlertDialogDescription>This cannot be undone, and the site's files go too.</AlertDialogDescription>
           </AlertDialogHeader>
-          <Field data-invalid={refusal !== undefined}>
-            <FieldLabel htmlFor={id}>Site's name</FieldLabel>
+          <Field invalid={refusal !== undefined}>
+            <FieldLabel>Site's name</FieldLabel>
             <Input
-              id={id}
               value={typed}
               onChange={(event) => {
                 setTyped(event.target.value);
                 // A refusal is about the delete that was sent: it leaves when the name is typed again. A delete on its way is left to end.
                 if (!removal.isPending) removal.reset();
               }}
-              aria-invalid={refusal !== undefined}
-              aria-describedby={refusal === undefined ? `${id}-says` : `${id}-says ${id}-refused`}
+              aria-required
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={false}
               maxLength={LONGEST_NAME}
             />
-            <FieldDescription id={`${id}-says`}>
+            <FieldDescription>
               Type <span className="font-mono text-xs text-foreground">{site?.name}</span> to delete it.
             </FieldDescription>
-            {refusal === undefined ? null : <FieldError id={`${id}-refused`}>{refusal}</FieldError>}
+            {refusal === undefined ? null : <FieldError>{refusal}</FieldError>}
           </Field>
           <AlertDialogFooter>
             <AlertDialogCancel ref={cancel}>Cancel</AlertDialogCancel>

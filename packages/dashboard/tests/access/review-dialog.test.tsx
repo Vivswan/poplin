@@ -87,6 +87,13 @@ function type(letters: string): void {
   fireEvent.change(dialog().getByRole("textbox", { name: "Last 4 letters of the code in your terminal" }), { target: { value: letters } });
 }
 
+/** What a screen reader says after the name of the field of the letters: the lines the field is described by. */
+function saidAtField(): (string | null)[] {
+  const lines = dialog().getByRole("textbox").getAttribute("aria-describedby")?.split(" ") ?? [];
+
+  return lines.map((id) => document.getElementById(id)?.textContent ?? null);
+}
+
 /** Press Allow or Deny, and wait until the decision was answered: the buttons are off while it is on its way. */
 async function decide(name: "Allow" | "Deny"): Promise<void> {
   fireEvent.click(dialog().getByRole("button", { name }));
@@ -149,19 +156,22 @@ describe("the review", () => {
   });
 
   // Drift: letters the server refused would close the review as if done, or the refusal would show away from the field, or stay after the person typed again.
+  // Or the line under the field, the note or the refusal, would be tied to nothing, so a screen reader would say the field's name alone.
   test("keeps open when the server refuses the letters, says so at the field with the focus there, and takes the next try", async () => {
     let closed = 0;
     render(<Reviewing login={PUBLISHER} onClose={() => (closed += 1)} />);
     type("BBBB");
+    const before = saidAtField();
     await decide("Allow");
     const field = dialog().getByRole("textbox");
-    const refused = [closed, dialog().getByRole("alert").textContent, document.activeElement === field];
+    const refused = [closed, dialog().getByRole("alert").textContent, document.activeElement === field, field.getAttribute("aria-invalid"), saidAtField()];
     type(LETTERS);
     const cleared = dialog().queryAllByRole("alert").length;
     sent.length = 0;
     await decide("Allow");
 
-    expect([refused, cleared, sent, closed]).toEqual([[0, WRONG_LETTERS, true], 0, [{ allow: true, letters: LETTERS, scope: "publisher" }], 1]);
+    expect([before, refused]).toEqual([["Type them to allow."], [0, WRONG_LETTERS, true, "true", [WRONG_LETTERS]]]);
+    expect([cleared, sent, closed]).toEqual([0, [{ allow: true, letters: LETTERS, scope: "publisher" }], 1]);
   });
 });
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { Field as FieldPrimitive } from "@base-ui/react/field"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
@@ -52,7 +52,7 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 const fieldVariants = cva(
-  "group/field flex w-full gap-2 data-[invalid=true]:text-destructive",
+  "group/field flex w-full gap-2 data-invalid:text-destructive",
   {
     variants: {
       orientation: {
@@ -73,10 +73,9 @@ function Field({
   className,
   orientation = "vertical",
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+}: Omit<FieldPrimitive.Root.Props, "className"> & { className?: string } & VariantProps<typeof fieldVariants>) {
   return (
-    <div
-      role="group"
+    <FieldPrimitive.Root
       data-slot="field"
       data-orientation={orientation}
       className={cn(fieldVariants({ orientation }), className)}
@@ -101,12 +100,13 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
 function FieldLabel({
   className,
   ...props
-}: React.ComponentProps<typeof Label>) {
+}: Omit<FieldPrimitive.Label.Props, "className"> & { className?: string }) {
   return (
-    <Label
+    <FieldPrimitive.Label
       data-slot="field-label"
+      render={<Label />}
       className={cn(
-        "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:has-[:focus-visible]:ring-3 has-[>[data-slot=field]]:has-[:focus-visible]:ring-ring/50 *:data-[slot=field]:p-2.5 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10",
+        "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-disabled/field:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:has-[:focus-visible]:ring-3 has-[>[data-slot=field]]:has-[:focus-visible]:ring-ring/50 *:data-[slot=field]:p-2.5 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10",
         "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
         className
       )}
@@ -120,7 +120,7 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="field-label"
       className={cn(
-        "flex w-fit items-center gap-2 text-sm font-medium group-data-[disabled=true]/field:opacity-50",
+        "flex w-fit items-center gap-2 text-sm font-medium group-data-disabled/field:opacity-50",
         className
       )}
       {...props}
@@ -128,9 +128,12 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+function FieldDescription({
+  className,
+  ...props
+}: Omit<FieldPrimitive.Description.Props, "className"> & { className?: string }) {
   return (
-    <p
+    <FieldPrimitive.Description
       data-slot="field-description"
       className={cn(
         "text-left text-sm leading-normal font-normal text-muted-foreground group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5",
@@ -175,52 +178,17 @@ function FieldSeparator({
 
 function FieldError({
   className,
-  children,
-  errors,
+  match = true,
   ...props
-}: React.ComponentProps<"div"> & {
-  errors?: Array<{ message?: string } | undefined>
-}) {
-  const content = useMemo(() => {
-    if (children) {
-      return children
-    }
-
-    if (!errors?.length) {
-      return null
-    }
-
-    const uniqueErrors = [
-      ...new Map(errors.map((error) => [error?.message, error])).values(),
-    ]
-
-    if (uniqueErrors?.length == 1) {
-      return uniqueErrors[0]?.message
-    }
-
-    return (
-      <ul className="ml-4 flex list-disc flex-col gap-1">
-        {uniqueErrors.map(
-          (error, index) =>
-            error?.message && <li key={index}>{error.message}</li>
-        )}
-      </ul>
-    )
-  }, [children, errors])
-
-  if (!content) {
-    return null
-  }
-
+}: Omit<FieldPrimitive.Error.Props, "className"> & { className?: string }) {
   return (
-    <div
+    <FieldPrimitive.Error
       role="alert"
       data-slot="field-error"
+      match={match}
       className={cn("text-sm font-normal text-destructive", className)}
       {...props}
-    >
-      {content}
-    </div>
+    />
   )
 }
 

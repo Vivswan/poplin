@@ -1,6 +1,6 @@
 // The box a token is pasted into: a password box the browser does not fill, with the refusal of a run said under it.
 
-import { type ReactNode, useId } from "react";
+import type { ReactNode } from "react";
 
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -11,17 +11,14 @@ import { Input } from "@/components/ui/input";
  * @param refusal - the sentence said under the box in place of its note
  */
 export function TokenBox({ refusal }: { readonly refusal: string | undefined }): ReactNode {
-  const id = useId();
-  const saysId = `${id}-says`;
-
   return (
-    <Field data-invalid={refusal !== undefined}>
-      <FieldLabel htmlFor={id}>Account token</FieldLabel>
-      <Input id={id} name="token" type="password" autoComplete="off" required aria-invalid={refusal !== undefined} aria-describedby={saysId} />
+    <Field invalid={refusal !== undefined}>
+      <FieldLabel>Account token</FieldLabel>
+      <Input name="token" type="password" autoComplete="off" aria-required />
       {refusal === undefined ? (
-        <FieldDescription id={saysId}>Used once. Not stored.</FieldDescription>
+        <FieldDescription>Used once. Not stored.</FieldDescription>
       ) : (
-        <FieldError id={saysId} className="text-pretty">
+        <FieldError className="text-pretty">
           {refusal}
         </FieldError>
       )}

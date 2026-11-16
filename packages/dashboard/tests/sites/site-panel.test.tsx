@@ -64,9 +64,11 @@ async function draw(access: string, allowed: boolean): Promise<void> {
   await within(document.body).findByText("Show in search engines");
 }
 
-/** The lines under the two switches, as they are read, in the panel's order. No other line of this kind is in the panel. */
+/** The line each of the two switches is described by, as a screen reader says it after the switch's name, in the panel's order. */
 function notes(): readonly string[] {
-  return [...document.querySelectorAll("[data-slot='field-description']")].map((line) => line.textContent ?? "");
+  const switches = [...document.querySelectorAll("[role='switch']")];
+
+  return switches.flatMap((one) => (one.getAttribute("aria-describedby")?.split(" ") ?? []).map((id) => document.getElementById(id)?.textContent ?? ""));
 }
 
 afterEach(() => {

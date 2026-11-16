@@ -5,7 +5,7 @@ import { type ReactNode, type RefObject, useEffect, useRef, useState } from "rea
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FieldError } from "@/components/ui/field";
+import { Field, FieldError } from "@/components/ui/field";
 import { thenHome } from "@/lib/focus";
 import { momentIn, useTimeZoneChoice } from "@/lib/timezone";
 import { dayStart, firstDay } from "@/sites/expiry";
@@ -87,7 +87,9 @@ export function ExpiryDayDialog({ open, onClose, onSave, returnTo }: ExpiryDayDi
             {picked === undefined ? "No day picked." : `Deletes itself ${momentIn(dayStart(picked, choice), choice)}`}
           </p>
         ) : (
-          <FieldError>{refusal}</FieldError>
+          <Field invalid>
+            <FieldError>{refusal}</FieldError>
+          </Field>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

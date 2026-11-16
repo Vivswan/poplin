@@ -64,6 +64,7 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
       name="Update link"
       controlId={ADDRESS_FIELD}
       says={[SAYS]}
+      refused={draft.refusal !== undefined}
       under={draft.refusal === undefined ? undefined : <FieldError className="text-[13px]">{draft.refusal}</FieldError>}
     >
       {pasting ? (
@@ -71,14 +72,12 @@ export function UpdateAddressRow({ state, draft }: { readonly state: UpdateAddre
           <Input
             id={ADDRESS_FIELD}
             type="password"
-            aria-labelledby={`${ADDRESS_FIELD}-label`}
             value={draft.typed}
             onChange={(event) => draft.type(event.target.value)}
             onKeyDown={leaveAtEscape}
             placeholder="Paste the update link"
             autoComplete="off"
             spellCheck={false}
-            aria-invalid={draft.refusal !== undefined}
             autoFocus
             className="w-72 max-w-full min-w-0"
           />
