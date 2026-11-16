@@ -1,7 +1,7 @@
 // The Worker: every request and every scheduled run enters here.
 //
 //   <admin host>/api and below       the API, which checks the bearer token itself; its two login routes take none and are counted by visitor
-//   <admin host>/setup and below     the setup page, which takes a token alone once somebody has logged in
+//   <admin host>/setup and below     the setup page, which only repairs once somebody has logged in
 //   <admin host>/...                 the dashboard: the Access token and the users, on every request
 //   any other hostname               the Access token under `p`, the limits, then serving; one that is no site's gets serving's own 404
 //

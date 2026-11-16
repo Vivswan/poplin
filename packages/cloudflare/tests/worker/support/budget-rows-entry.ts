@@ -295,15 +295,15 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
   {
     group: SCREEN,
     name: "the setup page: repair after the first login",
-    // Worst: the login was removed at Cloudflare, so the repair makes its pieces anew and keeps the run.
+    // Worst: the login was removed at Cloudflare and the user's mailbox is lost, so the repair stores one more user, makes its pieces anew, and keeps the run.
     arrange: async (stage) => {
       await sessionOf(stage);
       stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
 
-      return (measured) => post(measured, "/setup/data/repair", { token: TOKEN }, {});
+      return (measured) => post(measured, "/setup/data/repair", { token: TOKEN, login: "other@example.com" }, {});
     },
     status: 200,
-    budget: { queries: 5, reads: 0, writes: 0 },
+    budget: { queries: 6, reads: 0, writes: 0 },
   },
   setupRun("the setup page: check with a token", { queries: 5, reads: 0, writes: 0 }, "/setup/api/check", { token: TOKEN }),
   // Worst: nothing of the domain is made yet, so the page's own repair makes every piece.

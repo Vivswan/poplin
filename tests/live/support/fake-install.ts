@@ -1,7 +1,7 @@
 // A local stand-in for a deployed install, for the self-test of the live checks: the real API and the real serving on a database and a store in memory, with a hand-written edge in front.
 //
 //   poplin.example.com/api...        the real API
-//   poplin.example.com/setup...      the install's own 404: its setup page is shut
+//   poplin.example.com/setup...      an answer of the install's own, here a plain 404, and never the login's
 //   poplin.example.com/...           with the login in front, a redirect off the domain to the team's login
 //   poplin.example.com/data/...      from a script, with the login in front, the edge's own 401
 //   poplin.example.com/...           with no login in front, the install's own refusal: 401 as JSON under /data/, a 403 anywhere else
@@ -416,7 +416,7 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
     if (isApiPath(url.pathname)) return place.api.fetch(request);
 
-    // As the install answers its setup page once somebody has logged in: a 404 that says nothing of keeping.
+    // An answer of the install's own stands in for its setup page: a 404 that says nothing of keeping, which a check tells from the login's redirect.
     if (isSetupPath(url.pathname)) return new Response("Not found.\n", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
     // As the install refuses a request no login stands behind.

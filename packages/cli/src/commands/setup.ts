@@ -85,7 +85,7 @@ function shown(run: "check" | "repair", reading: Reading, token: string): Outcom
 /**
  * Run the setup of the install at `--server`.
  *
- * It makes no install: the install must already answer at the address. Once somebody has logged in to the install it repairs alone: `--check` is refused, and `--login` corrects nothing.
+ * It makes no install: the install must already answer at the address. Once somebody has logged in to the install it repairs alone: `--check` is refused, and `--login` adds that email as one more user.
  * An install with nothing set takes its first login from `--login`, and its domain from `--domain`: with no `--domain` it is set up without one, at the address `--server` names.
  * One that is set ignores `--domain`, and until somebody has logged in takes `--login` as the correction of the first login.
  *

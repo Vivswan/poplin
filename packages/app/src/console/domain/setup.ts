@@ -6,19 +6,20 @@
 //   the install                 the form    what a run takes
 //   nothing set                 first       the token, the first login, and the domain of an install that has one
 //   set, nobody ever logged in  login       the token, and an email that corrects the first login
-//   set, somebody has           repair      the token alone, and only a repair: the way back in when the login in front is broken
+//   set, somebody has           repair      the token, and an email to add as a user; only a repair: the way back in when the login in front is broken
 //   nothing set, somebody has   none        every path is a 404
 //
 // The setup screen sends its repair through the second path, so a person's press and a program's call are one run.
 // The token is the only proof of ownership: the plug refuses one that does not act on the install's own account. Until one passes nothing of the install is read, so no answer can say anything of it.
 // A run on an install with nothing set writes nothing to the install's own database: what it changes is at the provider, under the token's own account.
 // Until somebody has logged in the first login may have been mistyped, with nobody able to log in to mend it: an email sent here, with a proven token, replaces it.
+// After that an email sent with a proven token is added as one more user, for a person whose mailbox is lost. It takes no login away.
 // No answer hands a sent value back: a refusal names the field and never what was in it.
 // Every try is counted against the sender's address before the plug is asked, and a counter that cannot answer refuses: the setup stays shut when its guard is gone.
 // A call is a try only once it is sent as JSON: one that a page of another origin made a browser send is refused uncounted, so it cannot use up the tries of the person at that address.
 
 import type { Install } from "@poplin/core/src/actions/records";
-import { storeFirstLogin } from "@poplin/core/src/actions/store-settings";
+import { storeFirstLogin, storeOneMoreLogin } from "@poplin/core/src/actions/store-settings";
 import { type Login, parseLogin } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent, secondsToNextDay } from "@poplin/core/src/database/driver";
 import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
@@ -140,22 +141,22 @@ export async function setupForm(parts: Pick<SetupParts, "domain" | "loggedIn">):
 }
 
 /**
- * Read the settings a run on a set install is made to match, with the first login corrected where an email was sent.
+ * Read the settings a run on a set install is made to match, with the sent email stored first: as the corrected first login, or once somebody has logged in as one more user.
  *
  * The plug asks for the settings only once the token is proven for the install's own account, so nothing is stored, and nothing of the install is read, for anybody else.
- * A repair stores the sent email as the only login. A check stores nothing, and shows what such a repair would change.
+ * A repair stores the email. A check stores nothing, and shows what a repair that corrects the first login would change.
  */
-async function settingsWith(install: SetupParts["install"], run: DomainRun, login: Login | undefined): Promise<SettingValues> {
+async function settingsWith(install: SetupParts["install"], asked: { readonly run: DomainRun; readonly form: SetupForm }, login: Login | undefined): Promise<SettingValues> {
   const stored = await install.database.readSettings();
   if (stored === undefined) throw new Error("the install has no settings, which every install stores before it answers a request");
 
   if (login === undefined) return stored;
 
-  if (run === "check") return { ...stored, logins: [login] };
+  if (asked.run === "check") return { ...stored, logins: [login] };
 
-  const corrected = await storeFirstLogin(install, login);
+  const changed = asked.form === "repair" ? await storeOneMoreLogin(install, login) : await storeFirstLogin(install, login);
 
-  return corrected.ok ? corrected.values : stored;
+  return changed.ok ? changed.values : stored;
 }
 
 /**
@@ -163,15 +164,14 @@ async function settingsWith(install: SetupParts["install"], run: DomainRun, logi
  *
  * On an install with nothing set the plug is made for the kind of install that was sent, and its settings are the defaults of such an install. The run is not recorded: no value of it is stored here.
  * A sent domain is an install under it. None is an install without a domain, at the hostname the run was sent to.
- * On a set install nobody has logged in to, an email is taken as the correction of the first login, and an empty one keeps the stored one. Once somebody has, no email is taken.
+ * On a set install nobody has logged in to, an email is taken as the correction of the first login. Once somebody has, it is taken as one more user. An empty one keeps the stored logins either way.
  *
  * @param asked - the form the setup has, and the hostname the run was sent to
  */
 async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent, asked: { readonly form: SetupForm; readonly host: string }): Promise<DomainReading> {
   const { domain, install } = parts;
   const { form, host } = asked;
-  // A repair alone reads no email.
-  const login = form === "repair" ? "" : sent.login;
+  const { login } = sent;
   // A token pasted into the email's box is no email: it is refused before the plug is asked, so it is never stored as a login or answered back.
   if (sent.token !== "" && login.toLowerCase().includes(sent.token.toLowerCase())) return { ok: false, refusal: "bad_login" };
 
@@ -179,7 +179,7 @@ async function runOnce(parts: SetupParts, run: DomainRun, sent: Sent, asked: { r
     const typed = login.trim() === "" ? undefined : parseLogin(login);
     if (typed?.ok === false) return { ok: false, refusal: "bad_login" };
 
-    return runDomain(domain, install, { run, token: sent.token, settings: () => settingsWith(install, run, typed?.value), from: "setup" });
+    return runDomain(domain, install, { run, token: sent.token, settings: () => settingsWith(install, { run, form }, typed?.value), from: "setup" });
   }
 
   const owner = parseLogin(login);

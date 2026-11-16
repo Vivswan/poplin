@@ -235,7 +235,7 @@ export async function accessHeaders(from: World, changes: Record<string, unknown
 }
 
 /**
- * Log the owner in as a person does: Access issues its token, and the first page of the dashboard is opened with it, which writes the login's Activity line and shuts the setup page.
+ * Log the owner in as a person does: Access issues its token, and the first page of the dashboard is opened with it, which writes the login's Activity line and leaves the setup page a repair alone.
  *
  * @param bindings - the bindings that page is asked on; the simulated ones when left out
  * @returns the headers Access puts on every request of that login, live for the 30 days an Access session lasts

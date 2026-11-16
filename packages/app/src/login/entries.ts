@@ -21,7 +21,7 @@ interface Entered {
 /**
  * Make what writes the logins of one instance to the audit log.
  *
- * The first entry is what closes the setup page, so a database that refuses it lets nobody in, however old the login grows meanwhile.
+ * The first entry is what ends the setup page's correction of the first login, so a database that refuses it lets nobody in, however old the login grows meanwhile.
  * Every later one is a record alone: a database that refuses it and still reads keeps the person, and the entry is given up, once, with a problem noted.
  *
  * @param report - told of an entry that was given up

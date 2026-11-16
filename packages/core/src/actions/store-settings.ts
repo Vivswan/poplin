@@ -3,8 +3,9 @@
 // The login page in front of an install keeps a list of its own, which follows the stored logins when the install carries them there or an admin repairs it from the dashboard.
 // So an email that was just stored may get nobody in yet, and a list made of such emails alone shuts the dashboard on everyone, the way back included.
 //
-// One change is made by nobody who is a login: while nobody has ever logged in, no login is known to work, and the first one may have been mistyped.
-// `storeFirstLogin` replaces it, for a caller that has proven it may change the install's side at the provider, and for no longer than that.
+// Two changes are made by nobody who is a login, each for a caller that has proven it may change the install's side at the provider.
+// While nobody has ever logged in, no login is known to work, and the first one may have been mistyped: `storeFirstLogin` replaces it, and for no longer than that.
+// Once somebody has, a user whose mailbox is lost can get in no more: `storeOneMoreLogin` adds an email and takes none away, so every login that works stays.
 
 import * as v from "valibot";
 
@@ -45,6 +46,20 @@ export async function storeFirstLogin(install: Pick<Install, "database" | "now">
   if (changed.kind === "not_set_up") return refuse("not_set_up");
 
   return { ok: true, values: changed.values };
+}
+
+/**
+ * Let one more email log in, beside every stored login.
+ *
+ * The caller has no login and no token of the install: it must have proven, by other means, that it may change what stands in front of the install.
+ *
+ * @returns every setting after the change, which is none for an email that is a login already, or `not_set_up` before setup stored any. The audit entry names the added email as its own signer
+ */
+export async function storeOneMoreLogin(install: Pick<Install, "database" | "now">, login: Login): Promise<Stored | Refused<"not_set_up">> {
+  const added = await install.database.addLogin(login, { by: login, at: install.now() });
+  if (added.kind === "not_set_up") return refuse("not_set_up");
+
+  return { ok: true, values: added.values };
 }
 
 /**
