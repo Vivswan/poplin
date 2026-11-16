@@ -50,7 +50,7 @@ export interface Bench {
   /** What the install lacks, with the reason. */
   readonly missing: Missing;
 
-  /** Sends one request as a stranger: no token, no cookie, no redirect followed. */
+  /** Sends one request as a stranger: no token, no cookie, no redirect followed. One whose connection is cut off before any answer is sent once more, unless it is a change asked of the API. */
   readonly visit: (address: string, init?: RequestInit) => Promise<Response>;
 
   /** Reads the emails the login in front of the install lets in, at the provider itself and with the run's own key there. A run with no such key rejects. */

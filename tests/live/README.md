@@ -259,6 +259,14 @@ Cloudflare counts the rate rule in each data center for itself, and each address
 
 Each result comes with one line: the requests, the time, each answer's count, each data center's count, and how many addresses the edge saw. It never holds an address.
 
+## A request that is cut off
+
+The edge's rules block with an answer: a 403. A stranger's request whose connection closes before any answer says nothing of a rule or of the install. The run sends it once more and reads the second answer, and the log holds one line for it. A request that is cut off twice reaches its check as cut off, and so does a change asked of the API, which is never sent twice.
+
+```text
+a stranger's request was cut off before any answer, and was sent once more
+```
+
 ## What a run skips
 
 A check that cannot run is written to the step summary as skipped, with what it needs, and to the log as a warning. It never fails the run.

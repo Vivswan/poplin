@@ -20,6 +20,15 @@ const SWEPT_PREFIX = "live-";
 /** How long a stranger's request may take: a hostname with no Worker behind it answers slowly or never. */
 const VISIT_TIMEOUT_MS = 30_000;
 
+/** The code of a request whose connection was closed before any answer came. */
+const CONNECTION_RESET = "ECONNRESET";
+
+/** Where the API answers: a request there that is no read may count against a minute's allowance, so it is never sent twice. */
+const API = "/api/";
+
+/** What a run says when it sends a stranger's request a second time. */
+const SENT_AGAIN = "a stranger's request was cut off before any answer, and was sent once more";
+
 /** The most sites one page of a listing holds. */
 const PAGE = 100;
 
@@ -93,6 +102,16 @@ function printed(lines: readonly string[]): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`a command printed ${lines.length} lines on stdout, not one JSON object`);
 
   return value;
+}
+
+/** Whether a request failed because its connection was closed before any answer: it says nothing of what the edge or the install would answer. */
+function isReset(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === CONNECTION_RESET;
+}
+
+/** Whether a stranger's request is safe to send twice: a read, or any method to an address outside the API, where an install takes reads alone and changes nothing. */
+function isRepeatable(address: string, init: RequestInit): boolean {
+  return (init.method ?? "GET") === "GET" || !new URL(address).pathname.startsWith(API);
 }
 
 /**
@@ -191,6 +210,21 @@ export function openBench(parts: BenchParts): OpenBench {
     return made;
   };
 
+  // A request that was cut off and is safe to repeat is sent again: once, and the second answer is the one a check reads.
+  const visit: Bench["visit"] = async (address, init = {}) => {
+    const send = (): Promise<Response> => parts.fetch(address, { redirect: "manual", signal: AbortSignal.timeout(VISIT_TIMEOUT_MS), ...init });
+
+    try {
+      return await send();
+    } catch (error) {
+      if (!isReset(error) || !isRepeatable(address, init)) throw error;
+
+      parts.say(SENT_AGAIN);
+
+      return send();
+    }
+  };
+
   const client = createClient({ server: admin, token: parts.token ?? "", fetch: parts.fetch });
 
   // Every site of a live run in one listing, read to its last page before any is removed.
@@ -240,7 +274,7 @@ export function openBench(parts: BenchParts): OpenBench {
       admin,
       prefix,
       missing: parts.missing,
-      visit: (address, init = {}) => parts.fetch(address, { redirect: "manual", signal: AbortSignal.timeout(VISIT_TIMEOUT_MS), ...init }),
+      visit,
       loginList: parts.loginList ?? (async () => Promise.reject(new Error("the run holds no key to read the provider's login list with"))),
       cli,
       asked: () => asked,
