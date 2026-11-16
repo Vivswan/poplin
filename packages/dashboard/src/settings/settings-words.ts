@@ -41,8 +41,8 @@ const WORDS: Readonly<Record<string, Words>> = {
   },
   outside_pages: {
     block: "visitors",
-    label: "Allow embedding",
-    about: "While off, other websites cannot frame your sites.",
+    label: "Let outside pages embed sites",
+    about: "While off, a page of another domain cannot embed a site.",
     on: "allowed",
   },
   block_bots: {
