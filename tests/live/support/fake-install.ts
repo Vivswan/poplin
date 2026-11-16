@@ -3,8 +3,8 @@
 //   poplin.example.com/api...        the real API
 //   poplin.example.com/setup...      the install's own 404: its setup page is shut
 //   poplin.example.com/...           with the login in front, a redirect off the domain to the team's login
-//   poplin.example.com/login         with no login in front, a 403
-//   poplin.example.com/...           with no login in front, the install's own redirect to its login path
+//   poplin.example.com/data/...      from a script, with the login in front, the edge's own 401
+//   poplin.example.com/...           with no login in front, the install's own refusal: 401 as JSON under /data/, a 403 anywhere else
 //   *-poplin.example.com             the edge's rules, the install's own count of one visitor, then the real serving
 //   *-page.example.com               the same, on an install whose routes reach the public word
 //   any other hostname               no answer
@@ -23,6 +23,9 @@ export const FAKE_DOMAIN = "example.com";
 
 /** The admin hostname. */
 const ADMIN_HOST = `poplin.${FAKE_DOMAIN}`;
+
+/** What the install says to a request to its dashboard that no login stands behind. */
+const NO_LOGIN = "No login was checked for this request. Open the dashboard's address again.";
 
 /** Where the login in front of the install sends a stranger. */
 const LOGIN_PAGE = `https://team.cloudflareaccess.com/cdn-cgi/access/login/${ADMIN_HOST}`;
@@ -74,7 +77,7 @@ export interface FakeSwitches {
   /** A login stands in front of the whole admin hostname but its open paths, and of every letter p hostname. */
   readonly access?: boolean;
 
-  /** A fault: the login in front of the admin hostname covers the login path alone, so the install itself answers every other path. */
+  /** A fault: the login in front of the admin hostname covers the path `/login` alone, as an install made before the whole hostname was guarded, so the install itself answers every other path. */
   readonly loginPathOnly?: boolean;
 
   /** A fault: the login in front of the admin hostname covers the setup page's path too. */
@@ -231,12 +234,16 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const answerAdmin = (request: Request, url: URL): Promise<Response> | Response => {
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return install.api.fetch(request);
 
-    if (behindLogin(switches, url.pathname)) return refusal(302, "", { Location: LOGIN_PAGE });
+    // The edge answers a script's call itself, where it sends a page on to the team's login.
+    if (behindLogin(switches, url.pathname)) return request.headers.get("X-Requested-With") === "XMLHttpRequest" ? refusal(401, "Unauthorized\n") : refusal(302, "", { Location: LOGIN_PAGE });
 
     // As the install answers its setup page once somebody has logged in: a 404 that says nothing of keeping.
     if (isSetupPath(url.pathname)) return new Response("Not found.\n", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
-    return url.pathname === "/login" ? refusal(403, "Forbidden\n") : refusal(302, "", { Location: `https://${ADMIN_HOST}/login` });
+    // As the install refuses a request no login stands behind.
+    if (url.pathname.startsWith("/data/")) return Response.json({ ok: false, code: "no_login", about: null, sentence: NO_LOGIN }, { status: 401, headers: REFUSAL_HEADERS });
+
+    return refusal(403, `${NO_LOGIN}\n`);
   };
 
   const fetch: Fetch = async (input, init) => {
