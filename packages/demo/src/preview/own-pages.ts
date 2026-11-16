@@ -26,6 +26,9 @@ li { padding: 0.15rem 0; overflow-wrap: anywhere; }
 .status { margin-left: 0.35rem; padding: 0 0.35rem; border: 1px solid var(--line); border-radius: 999px; color: var(--soft); font-size: 12px; }
 `;
 
+/** The dashboard's first page, as a page at the dashboard's own origin links to it. */
+const HOME = "/";
+
 /** What the gallery is drawn from. */
 interface Gallery {
   /** Every link, in the order of its group. */
@@ -54,9 +57,10 @@ function groupSection(group: string, entries: readonly Entry[]): Markup {
 /**
  * Put the preview's frame around a page of its own.
  *
+ * @param home - the address of the dashboard's first page, for a page that is shown at another origin
  * @returns the whole document, with the way to the dashboard above the page; it loads nothing from anywhere
  */
-async function shell(title: string, body: Markup): Promise<string> {
+async function shell(title: string, body: Markup, home: string = HOME): Promise<string> {
   const page = await html`<!doctype html>
 <html lang="en">
 <head>
@@ -66,7 +70,7 @@ async function shell(title: string, body: Markup): Promise<string> {
 <title>${title} - poplin demo</title>
 <style>${raw(STYLE)}</style>
 </head>
-<body><main><p class="home"><a href="/">Dashboard</a></p>${body}</main></body>
+<body><main><p class="home"><a href="${home}">Dashboard</a></p>${body}</main></body>
 </html>`;
 
   return String(page);
@@ -100,11 +104,14 @@ bun packages/cli/src/bin.ts login --server ${gallery.origin}</pre></section>
 /**
  * Build the page the preview shows around a refusal the product answers as plain text.
  *
- * @param text - the product's whole answer
+ * @param refusal - the product's whole answer, and the status it came with
+ * @param home - the address of the dashboard's first page, as the page links to it
  * @returns a page that says what the product answered and with which status
  */
-export function plainPage(text: string, status: number): Promise<string> {
-  return shell(String(status), html`<h1>${status}</h1><p class="banner">Demo. The product answers this request with the status ${status} and these words alone, as plain text:</p><pre>${text}</pre>`);
+export function plainPage({ text, status }: { readonly text: string; readonly status: number }, home: string): Promise<string> {
+  const body = html`<h1>${status}</h1><p class="banner">Demo. The product answers this request with the status ${status} and these words alone, as plain text:</p><pre>${text}</pre>`;
+
+  return shell(String(status), body, home);
 }
 
 /** The lines `poplin login` prints on one computer: the address that opens the review, as a link, and the code. */

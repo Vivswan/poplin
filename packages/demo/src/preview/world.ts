@@ -3,20 +3,15 @@
 // Nothing here names a runtime: the host that starts the demo brings the driver, so the same install opens under bun, in a Worker, or in a browser.
 
 import { MemoryCounters } from "../../../app/src/limits/memory-counters";
-import { hostnameAddresses } from "../../../app/src/sites/hostname-addresses";
 import type { Install } from "../../../core/src/actions/records";
 import { type Login, parseLogins } from "../../../core/src/auth/logins";
 import type { Actor } from "../../../core/src/auth/scopes";
 import type { SqlDriver } from "../../../core/src/database/driver";
 import { openDatabase } from "../../../core/src/database/open";
-import { parseHostname } from "../../../core/src/names/hostname";
-import { DEFAULT_PUBLIC_WORD } from "../../../core/src/names/marker";
 import { defaultSettings } from "../../../core/src/records/settings";
 import { MemoryStore } from "../../../core/src/storage/memory";
 import type { ObjectStore } from "../../../core/src/storage/storage";
-
-/** The invented domain the demo's install sits under. */
-export const DOMAIN = "example.com";
+import type { Kind } from "./kind";
 
 /** The invented person every demo page is shown to. */
 const ADMIN_EMAIL = "mira@example.com";
@@ -43,6 +38,9 @@ export interface World {
   /** The install the actions work on. */
   readonly install: Install;
 
+  /** The kind of install it is: its address layout, and where its addresses are on this machine. */
+  readonly kind: Kind;
+
   /** The sample admin, as a person in a browser. */
   readonly admin: Actor & { readonly holder: Login };
 
@@ -53,25 +51,16 @@ export interface World {
   readonly counters: MemoryCounters;
 }
 
-function layout(): ReturnType<typeof hostnameAddresses> {
-  const domain = parseHostname(DOMAIN);
-  if (!domain.ok) throw new Error(`the demo's domain was refused: ${domain.refusal}`);
-
-  return hostnameAddresses({ domain: domain.value, publicWord: DEFAULT_PUBLIC_WORD });
-}
-
-/** The address layout of the demo's installs: the product's own, under the invented domain. */
-export const ADDRESSES = layout();
-
 /**
  * Open a fresh install with the default settings and the sample admin as its one login.
  *
  * @param driver - a SQL database of the host's own, such as SQLite in memory: empty, or holding a demo opened before
+ * @param kind - the kind of install to open, whose layout writes its addresses
  * @param kept - the store of a host that keeps one; a memory store when left out
  * @returns the install, with nothing published in an empty database; settings and a visitor key that are there already stay as they are
  * @throws {Error} the database did not open
  */
-export async function openWorld(driver: SqlDriver, kept: Kept = {}): Promise<World> {
+export async function openWorld(driver: SqlDriver, kind: Kind, kept: Kept = {}): Promise<World> {
   const clock: Clock = {};
   const now = (): number => clock.held ?? Date.now();
   const opened = await openDatabase(driver, now());
@@ -82,11 +71,13 @@ export async function openWorld(driver: SqlDriver, kept: Kept = {}): Promise<Wor
   if (holder === undefined) throw new Error("the demo's login was refused");
 
   const { database } = opened;
+  const { addressOf, publicAddressOf, reservedNames } = kind.addresses;
   await database.initSettings(defaultSettings({ installer: holder }), { by: holder, at: kept.since ?? now() });
   await database.ensureVisitorKey(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), now());
 
   return {
-    install: { database, store: kept.store ?? new MemoryStore(), now, addressOf: ADDRESSES.addressOf, publicAddressOf: ADDRESSES.publicAddressOf, reservedNames: ADDRESSES.reservedNames },
+    install: { database, store: kept.store ?? new MemoryStore(), now, addressOf, publicAddressOf, reservedNames },
+    kind,
     admin: { scope: "admin", holder },
     clock,
     counters: new MemoryCounters(),

@@ -7,12 +7,14 @@
 // Every name is invented.
 
 import { readChanges, type SiteChanges } from "../../../core/src/actions/changes";
-import { parseSiteName } from "../../../core/src/names/names";
+import { parseSiteName, type ReservedNames } from "../../../core/src/names/names";
 import type { SiteAccess } from "../../../core/src/records/site";
-import { ADDRESSES } from "./world";
 
 /** The sample of the row that stands for the demo itself. No folder holds it: the demo's seed publishes one page that leads back to the demo, and an install publishes the built demo. */
 export const THE_DEMO = "demo";
+
+/** No public name kept back: the table is the same for every address layout, and an install that keeps one of its names refuses it when the table is played. */
+const NONE_KEPT: ReservedNames = { has: () => false };
 
 /** Every sample site, by the name it is made under, the oldest first. */
 export const SITES: readonly Draft[] = [
@@ -128,7 +130,7 @@ function made(draft: Draft): Standing {
 /** A site after settings were asked of it. The product's own reading of them decides its name, who may open it, and its public name. */
 function changed(site: Standing, asked: SiteChanges): Standing {
   const name = parseSiteName(site.name);
-  const read = name.ok ? readChanges(asked, { name: name.value, current: site.reach, now: 0, reserved: ADDRESSES.reservedNames }) : name;
+  const read = name.ok ? readChanges(asked, { name: name.value, current: site.reach, now: 0, reserved: NONE_KEPT }) : name;
   if (!read.ok) throw new Error(`the sample table asks of ${site.name} what the product refuses`);
 
   const given = SETTINGS.filter((key) => asked[key] !== undefined).map((key) => [key, asked[key]]);

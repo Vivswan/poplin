@@ -17,7 +17,7 @@ import { restoreSite } from "../../../core/src/actions/restore";
 import { updateSite } from "../../../core/src/actions/set";
 import { parseLogin } from "../../../core/src/auth/logins";
 import type { Actor } from "../../../core/src/auth/scopes";
-import { previewPlug } from "./domain-plug";
+import { standingPlug } from "./domain-plug";
 import { type Draft, SITE_HISTORY, type SiteMoment, SITES, THE_DEMO, type Who } from "./sample-sites";
 import type { World } from "./world";
 
@@ -410,7 +410,7 @@ async function checkDomain(world: World): Promise<void> {
   const settings = await world.install.database.readSettings();
   if (settings === undefined) throw new Error("the demo's seed lost its settings");
 
-  await runDomain(previewPlug("done"), world.install, { run: "check", token: DOMAIN_TOKEN, settings: async () => settings, by: world.admin.holder, from: "dashboard" });
+  await runDomain(standingPlug(world.kind.provider), world.install, { run: "check", token: DOMAIN_TOKEN, settings: async () => settings, by: world.admin.holder, from: "dashboard" });
 }
 
 /**

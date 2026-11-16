@@ -8,7 +8,6 @@
 // The addresses are link targets and nothing else: the demo asks none of them for anything.
 
 import { listSites } from "../../../core/src/actions/list";
-import { ADMIN_ORIGIN } from "./mount";
 import { standingSites, THE_DEMO } from "./sample-sites";
 import type { World } from "./world";
 
@@ -67,7 +66,7 @@ export async function realAddresses(world: World, real: RealSites | undefined): 
     const ended = site.expires !== "never" && site.expires <= now;
     if (row === undefined || !isRow || ended) continue;
 
-    const address = row.sample === THE_DEMO ? `${ADMIN_ORIGIN}/` : real[site.name];
+    const address = row.sample === THE_DEMO ? `${world.kind.adminOrigin}/` : real[site.name];
     if (address !== undefined) found.set(new URL(site.url).hostname, address);
   }
 
