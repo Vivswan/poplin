@@ -224,7 +224,7 @@ const PROBLEMS = `
 CREATE TABLE problems (
   day TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
   kind TEXT NOT NULL CHECK (kind IN ('request_failed', 'api_failed', 'sweep_failed', 'count_unwritten', 'login_unwritten', 'login_unchecked', 'update_failed', 'update_went_back', 'users_not_carried',
-    'rules_not_carried', 'copy_failed', 'direct_upload_refused', 'files_limit_reached', 'writes_limit_reached', 'requests_limit_reached')),
+    'rules_not_carried', 'copy_failed', 'direct_upload_refused', 'login_not_repaired', 'files_limit_reached', 'writes_limit_reached', 'requests_limit_reached')),
   count INTEGER NOT NULL CHECK (count >= 1),
   more INTEGER NOT NULL DEFAULT 0 CHECK (more IN (0, 1)),
   first_at INTEGER NOT NULL,

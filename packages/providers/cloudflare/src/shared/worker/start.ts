@@ -42,6 +42,7 @@ import { readKeptKey } from "../install/key/kept-key";
 import { createEndLogins } from "../install/key/logins-end";
 import { isSettled, readUploadKey } from "../install/key/upload-key";
 import { createUsersFollow } from "../install/key/users-follow";
+import { createLoginRepair, type LoginRepair } from "../install/pieces/access/login-repair";
 import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
 import { goBack } from "../release/update/go-back";
@@ -139,6 +140,9 @@ export interface Instance {
 
   /** Ends every login of the dashboard at Cloudflare, with the kept key. */
   readonly endLogins: EndLogins;
+
+  /** The login's own pieces at Cloudflare: a scheduled run puts back with the kept key what is missing or differs. */
+  readonly login: LoginRepair;
 
   /** The guard rules' side at Cloudflare: a change of a setting they are written from is carried there with the kept key. */
   readonly rules: RulesFollow;
@@ -429,6 +433,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     domain,
     key,
     ...carried,
+    login: createLoginRepair(kept, { ...own.value, adminHost: hosts.adminHost, privateSites: hosts.privateSites }),
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), databaseBytes: () => driver.heldBytes(), workflow: workflowNameOf(own.value.script), key: kept }),
     version: VERSION,
     jobs: workflowJobs(env.JOBS),

@@ -146,6 +146,7 @@ you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  -
 | Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
 | What it reaches | your one account and your one domain; the account alone on an install without a domain |
 | What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
+| What it does by itself | once a day it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. Activity says what it wrote |
 | What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
 | How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
 | How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
@@ -154,7 +155,7 @@ Cloudflare limits the key to the account and the domain, not to poplin's own obj
 
 The [Domain](../dashboard/domain.md#check-needs-no-token) screen reads every piece with the key, so its Check asks for no token. Repair still takes a pasted account token.
 
-**The key can replace any Worker of the account.** poplin uses that right on its own Worker alone: to update itself, and to put the version before back after an update whose database step failed. Cloudflare gives the right for a whole account or not at all: a key limited to one Worker is refused on every call.
+**The key can replace any Worker of the account.** poplin uses that right on its own Worker alone: to update itself, to put the version before back after an update whose database step failed, and to write the login's variable. Cloudflare gives the right for a whole account or not at all: a key limited to one Worker is refused on every call.
 
 So a bug or a bad release of poplin could reach every other Worker the account holds. poplin is best in an account that holds only poplin.
 

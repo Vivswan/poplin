@@ -122,8 +122,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "noteProblem, a later hour": [1, 1],
   "noteProblem, once a day": [1, 1],
   "noteProblem, once a day and noted": [1, 0],
-  "listProblems, 7 days of 15 kinds": [105, 0],
-  "sweepRunOut, 17 problems past the days kept": [28, 17],
+  "listProblems, 7 days of 16 kinds": [112, 0],
+  "sweepRunOut, 18 problems past the days kept": [29, 18],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -631,7 +631,8 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     };
     const keyless = { holdsKey: () => false, push: async () => ({ ok: false as const, refusal: "no_key" as const }) };
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
-    const running = { version: "0.1.0", updating, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
+    const login = { holdsKey: () => false, repair: () => Promise.reject(new Error("the test asked for a repair of the login")) };
+    const running = { version: "0.1.0", updating, login, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
     await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), { by: PUBLISHER.holder, at: NOW });
     rows.read = 0;
     rows.written = 0;
@@ -923,8 +924,8 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     for (const kind of PROBLEM_KINDS) {
       for (let day = 1; day <= 7; day += 1) await database.noteProblem({ ...note, kind, at: MIDNIGHT + day * 86_400_000 });
     }
-    await cost("listProblems, 7 days of 15 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
-    await cost("sweepRunOut, 17 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
+    await cost("listProblems, 7 days of 16 kinds", () => database.listProblems(dayOf(MIDNIGHT + 86_400_000)));
+    await cost("sweepRunOut, 18 problems past the days kept", () => database.sweepRunOut(MIDNIGHT + 31 * 86_400_000));
     await cost("changeAccessAndDetails", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
     await cost("changeAccessAndDetails, the same", () => database.changeAccessAndDetails(first.id, { access: "unlisted" }, { title: "Both" }, BY_ADA));
     const copy = await begunSite(database, site(900));
