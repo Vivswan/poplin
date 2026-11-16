@@ -6,6 +6,12 @@ import useLocalStorageState from "use-local-storage-state";
 /** The key the choice is kept under in the browser. */
 const KEY = "poplin.timezone";
 
+/** How many milliseconds an hour and a day hold. */
+const [HOUR_MS, DAY_MS] = [3_600_000, 86_400_000] as const;
+
+/** How a moment within a week is written: 3 hours ago, yesterday, 2 days ago. */
+const RELATIVE_FORMAT = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
 /** The time zones a person chooses between: the browser's own, and UTC. */
 export const TIMEZONES = ["own", "utc"] as const;
 
@@ -92,6 +98,31 @@ export function dateIn(moment: number, choice: TimeZoneChoice = shown, own?: str
   const [year, month, day] = (["year", "month", "day"] as const).map((type) => parts.find((part) => part.type === type)?.value ?? "");
 
   return `${year}-${month}-${day}`;
+}
+
+/** The day a moment falls on in the chosen time zone, as a count of days: two moments on the same date there have the same count, and the next date has one more. */
+function dayCountIn(moment: number, choice: TimeZoneChoice, own: string | undefined): number {
+  return Date.parse(`${dateIn(moment, choice, own)}T00:00:00Z`) / DAY_MS;
+}
+
+/**
+ * Write a moment briefly, as someone who reads it now says it: "just now" within half an hour, the hours on the same date or within half a day, "yesterday" and the days within a week, and the day otherwise.
+ *
+ * The day words count dates in the chosen time zone, not spans of 24 hours: "yesterday" is said only of the date before the reader's.
+ *
+ * @param moment - milliseconds since the epoch
+ * @param now - the moment it is read at
+ * @param choice - the time zone to count dates in; left out, the one a person chose
+ * @param own - the name of the browser's own time zone; left out, the browser's
+ */
+export function briefMomentIn(moment: number, now: number, choice: TimeZoneChoice = shown, own?: string): string {
+  const hours = Math.round((moment - now) / HOUR_MS);
+  if (hours === 0) return "just now";
+
+  const days = dayCountIn(moment, choice, own) - dayCountIn(now, choice, own);
+  if (days === 0 || Math.abs(moment - now) < DAY_MS / 2) return RELATIVE_FORMAT.format(hours, "hour");
+
+  return Math.abs(days) >= 7 ? dayIn(moment, choice, own) : RELATIVE_FORMAT.format(days, "day");
 }
 
 /**
