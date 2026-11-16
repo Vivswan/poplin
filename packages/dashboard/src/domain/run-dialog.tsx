@@ -46,7 +46,7 @@ export function RunDialog({ handle, form, thing, onRun }: RunDialogProps): React
     <Dialog
       handle={handle}
       // A person cannot close it while a run is on its way; the caller closes it when the run is done.
-      onOpenChange={(open, details) => (!open && busy !== undefined && details.reason !== "imperative-action" ? details.cancel() : undefined)}
+      onOpenChange={(open, details) => (!open && busy && details.reason !== "imperative-action" ? details.cancel() : undefined)}
       onOpenChangeComplete={(open) => (open ? undefined : forget())}
     >
       {({ payload }) => {
@@ -54,7 +54,7 @@ export function RunDialog({ handle, form, thing, onRun }: RunDialogProps): React
         const words = WORDS[run];
         const onSubmit = (event: FormEvent): void => {
           event.preventDefault();
-          void send(run);
+          send(run);
         };
 
         return (
@@ -80,10 +80,10 @@ export function RunDialog({ handle, form, thing, onRun }: RunDialogProps): React
                 </Alert>
               )}
               <DialogFooter>
-                <DialogClose render={<Button type="button" variant="outline" disabled={busy !== undefined} />}>Cancel</DialogClose>
-                <Button type="submit" disabled={busy !== undefined}>
-                  {busy === undefined ? null : <Spinner data-icon="inline-start" aria-hidden="true" />}
-                  {busy === undefined ? words.press : words.pressed}
+                <DialogClose render={<Button type="button" variant="outline" disabled={busy} />}>Cancel</DialogClose>
+                <Button type="submit" disabled={busy}>
+                  {busy ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
+                  {busy ? words.pressed : words.press}
                 </Button>
               </DialogFooter>
             </form>

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldError } from "@/components/ui/field";
 import { thenHome } from "@/lib/focus";
 import { momentIn, useTimeZoneChoice } from "@/lib/timezone";
+import { useOnePress } from "@/dialog/one-press";
 import { dayStart, firstDay } from "@/sites/expiry";
 
 /** What the dialog is drawn from. */
@@ -29,7 +30,6 @@ interface ExpiryDayDialogProps {
 export function ExpiryDayDialog({ open, onClose, onSave, returnTo }: ExpiryDayDialogProps): ReactNode {
   const [picked, setPicked] = useState<Date>();
   const [refusal, setRefusal] = useState<string>();
-  const [busy, setBusy] = useState(false);
   const [choice] = useTimeZoneChoice();
   const [first, setFirst] = useState(() => firstDay(Date.now(), choice));
   // Which opening this is: an answer closes the opening it was asked in, and no later one.
@@ -46,20 +46,18 @@ export function ExpiryDayDialog({ open, onClose, onSave, returnTo }: ExpiryDayDi
     setFirst(firstDay(Date.now(), choice));
   }, [open, choice]);
 
-  const save = async (): Promise<void> => {
+  const { press: save, busy } = useOnePress(async (): Promise<void> => {
     if (picked === undefined) return;
 
     const asked = opening.current;
-    setBusy(true);
     const refused = await onSave(dayStart(picked, choice));
-    setBusy(false);
     if (asked !== opening.current) return;
 
     if (refused === undefined) return onClose();
 
     // A refusal is about the day that was sent: it is not said of a day picked since.
     if (shown.current === picked) setRefusal(refused);
-  };
+  });
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onClose())}>
@@ -95,7 +93,7 @@ export function ExpiryDayDialog({ open, onClose, onSave, returnTo }: ExpiryDayDi
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={picked === undefined || busy} onClick={() => void save()}>
+          <Button disabled={picked === undefined || busy} onClick={save}>
             Save
           </Button>
         </DialogFooter>

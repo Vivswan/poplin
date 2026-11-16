@@ -3,14 +3,16 @@
 import { showBytes } from "@poplin/core/src/records/settings";
 import { Link } from "@tanstack/react-router";
 import { CopyIcon, ExternalLinkIcon, PencilIcon } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useId } from "react";
+import { type ReactElement, type ReactNode, useEffect, useId, useRef } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Refused } from "@/lib/api";
 import { ACCESSES, type Access, addressParts, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
 import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
+import { useOnePress } from "@/dialog/one-press";
 import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
 import { Who } from "@/shared/who";
 import { DeleteForGood } from "@/sites/delete-for-good";
@@ -22,6 +24,9 @@ import type { Ask } from "@/sites/site-questions";
 
 /** What stands under the switch for embedding: the two things it decides, which its label names one of. */
 const EMBEDDING_NOTE = "Other pages may show this site in a frame and load its files.";
+
+/** The code of the refusal that says no site is at a label. */
+const GONE = "not_found";
 
 /** What the panel is drawn from. */
 interface SitePanelProps {
@@ -176,14 +181,17 @@ function searchNote({ open, allowed }: { readonly open: boolean; readonly allowe
 }
 
 /** A site in the trash: when it leaves for good, the way back, and the way out at once. */
-function TrashBlock({ site, onRestore, onGone }: { readonly site: Site; readonly onRestore: () => void; readonly onGone: () => void }): ReactNode {
+function TrashBlock({ site, onRestore, onGone }: { readonly site: Site; readonly onRestore: () => Promise<unknown>; readonly onGone: () => void }): ReactNode {
+  const { press, busy } = useOnePress(onRestore);
   const leaves = site.gone_on === undefined ? "" : ` It leaves the trash for good on ${wholeMoment(site.gone_on)}.`;
 
   return (
     <PanelBlock label="In the trash">
       <p className="text-muted-foreground">The site comes back with its link and its settings.{leaves}</p>
       <div className="flex items-center gap-2">
-        <Button onClick={onRestore}>Restore</Button>
+        <Button disabled={busy} onClick={press}>
+          Restore
+        </Button>
         <span className="ml-auto">
           <DeleteForGood site={site} onGone={onGone} />
         </span>
@@ -202,6 +210,15 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
   useEffect(() => {
     if (moved !== undefined) onMoved(moved);
   }, [moved, onMoved]);
+
+  // A site that was shown here and is then no longer there, deleted for good in this tab or another, leaves no panel behind. An address that never named a site keeps its sentence.
+  const shown = useRef(false);
+  if (data !== undefined) shown.current = true;
+
+  const gone = shown.current && error instanceof Refused && error.code === GONE;
+  useEffect(() => {
+    if (gone) onClose();
+  }, [gone, onClose]);
 
   const frame = { closeLink, onClose, opener, back: "Back to sites" };
   const site = data?.site;
@@ -224,7 +241,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
     return (
       <SidePanel title={shownName(site)} {...frame}>
         <FactsBlock site={site} />
-        <TrashBlock site={site} onRestore={() => void actions.restore(site)} onGone={onClose} />
+        <TrashBlock site={site} onRestore={() => actions.restore(site)} onGone={onClose} />
       </SidePanel>
     );
   }

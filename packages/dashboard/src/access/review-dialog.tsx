@@ -2,7 +2,6 @@
 //
 // Anyone can begin a login, so nothing the login says of itself is the page's own words: its name is a quoted fact, and what it may change starts at the least, whatever it asked for.
 
-import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, type RefObject, useRef, useState } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
@@ -15,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { thenHome } from "@/lib/focus";
 import { shortMoment, wholeMoment } from "@/lib/sites";
+import { useOnePress } from "@/dialog/one-press";
 import { PanelFact, PanelFacts } from "@/shared/side-panel";
 
 /** The scopes a computer that asked for everything can be let in with, the least first. */
@@ -162,25 +162,18 @@ function ReviewForm({
   const [typed, setTyped] = useState("");
   const [scope, setScope] = useState<Review["scope"]>("publisher");
   const [refusal, setRefusal] = useState<string>();
-  const sending = useMutation({ mutationFn: (allow: boolean) => actions.decide(login, { allow, letters: typed, scope }) });
-  const busy = sending.isPending;
-
   // The answer is acted on only while this login is still the one under review: a review that was left, even one still fading out, does not close the one that followed it.
-  const decide = (allow: boolean): void =>
-    sending.mutate(allow, {
-      onSuccess: (decided) => {
-        if (under.current?.id !== login.id) return undefined;
+  const { press: decide, busy } = useOnePress(async (allow: boolean): Promise<void> => {
+    const decided = await actions.decide(login, { allow, letters: typed, scope });
+    if (under.current?.id !== login.id) return;
 
-        if (decided.kind === "done" || decided.kind === "gone") return onClose();
+    if (decided.kind === "done" || decided.kind === "gone") return onClose();
 
-        if (decided.kind !== "letters") return undefined;
+    if (decided.kind !== "letters") return;
 
-        setRefusal(decided.sentence);
-        field.current?.focus();
-
-        return undefined;
-      },
-    });
+    setRefusal(decided.sentence);
+    field.current?.focus();
+  });
   const type = (letters: string): void => {
     setTyped(letters);
     setRefusal(undefined);
