@@ -110,7 +110,7 @@ const COMMAND_LINES = [
   ["rollback", "report", "--to", "2"],
   ["new-link", "report--k3f9x2ab71qz"],
   ["delete", "report--k3f9x2ab71qz"],
-  ["delete", "report--k3f9x2ab71qz", "--forever"],
+  ["delete", "report--k3f9x2ab71qz", "--no-trash"],
   ["restore", "report--k3f9x2ab71qz", "--json"],
   ["whoami"],
   ["logout"],

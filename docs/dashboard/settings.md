@@ -48,15 +48,15 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 | `poplin config versions_kept`                                        | shows one setting                                 |
 | `poplin config versions_kept 10`                                     | changes one setting                               |
 | `poplin doctor`                                                      | checks that the install answers, and prints its version beside this poplin's, as `install 0.1.0, this poplin 0.1.0`; changes nothing |
-| `poplin update`                                                      | starts an update of the install to the newest version; `--check` says what it would do |
+| `poplin update`                                                      | starts an update of the install to the newest version; `--dry-run` says what it would do |
 | `poplin update --to 0.2.0`                                           | takes that version in place of the newest: a lower one [goes back](../upkeep/update.md#go-back) |
 | `poplin setup --server https://poplin.your-name.workers.dev --domain example.com --login you@example.com` | finishes a new install, as its setup page does |
-| `poplin setup --check --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
+| `poplin setup --dry-run --server https://poplin.your-name.workers.dev` | lists what that would change, with the same flags; changes nothing |
 | `poplin help rollback`                                               | shows the help of one command                     |
 
 `poplin update` works on an install that holds its key: [Update the install](../upkeep/update.md#with-the-kept-key) shows what it does. An install that holds none answers `no_key`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
-`poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--login`, and `--domain` under a domain: [without a domain](../start/without-a-domain.md#the-steps) it takes none. On an install that has them, `--login` alone corrects a first login that was mistyped, until the first login. After it, the command only repairs: `--check` is refused. It needs no login. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
+`poplin setup` reads the account token from `POPLIN_SETUP_TOKEN` in the environment. A new install needs `--login`, and `--domain` under a domain: [without a domain](../start/without-a-domain.md#the-steps) it takes none. On an install that has them, `--login` alone corrects a first login that was mistyped, until the first login. After it, the command only repairs: `--dry-run` is refused. It needs no login. [From a terminal instead](../start/from-a-terminal.md) shows where it fits.
 
 The settings `poplin config` takes:
 

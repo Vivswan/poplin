@@ -53,7 +53,7 @@ function repair(worker: ReturnType<typeof instance>, setup: string, sent: Record
   return send(worker, `${setup}/data/repair`, sent, headers, bindings);
 }
 
-/** Send a check to a setup page with a token, as `poplin setup --check` does. */
+/** Send a check to a setup page with a token, as `poplin setup --dry-run` does. */
 function check(worker: ReturnType<typeof instance>, setup: string, sent: Record<string, string>): Promise<Response> {
   return send(worker, `${setup}/api/check`, sent);
 }

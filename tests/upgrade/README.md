@@ -24,11 +24,13 @@ Both run on every push, inside `bun run test`, and again in `release-gate.yml` o
 | database                     | the seeded install's database                   | it opens, has the schema of a new install, loses no row, answers `list` and `show` as before, and a site takes every site action               |
 | settings                     | the stored settings row                         | it reads, and `config` answers as before                                                                                                       |
 | storage                      | every object of every site                      | every stored path answers the same at every address                                                                                            |
-| update notice                | the update row                                  | `whoami` and `update --check` answer as before                                                                                                 |
+| update notice                | the update row                                  | `whoami` and `update --dry-run` answer as before                                                                                                 |
 | backup                       | `export --all-versions`                         | `import` brings every site back as it was, and `import --settings` takes its settings; the other way round, all or a refusal with nothing kept |
 | login file                   | `login.json`                                    | `whoami` reads it                                                                                                                              |
 | this command on that install | its API                                         | every site action is done, or refused with a hint to update                                                                                    |
 | that command on this install | its `poplin`                                    | the same                                                                                                                                       |
+
+A read is asked when the command of the code that made the install has its flags.
 
 `upgrade.test.ts` lists what is not checked as skipped tests, each with what it needs.
 

@@ -41,7 +41,7 @@ const CLI_WORDS: Readonly<Record<string, readonly string[]>> = {
   embeddable: ["--embeddable"],
   expires: ["--expires"],
   version: ["--to"],
-  forever: ["--forever"],
+  forever: ["--no-trash"],
   trash: ["--trash"],
 };
 

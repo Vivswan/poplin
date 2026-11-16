@@ -474,4 +474,4 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | `pin`   | Set the build variable `POPLIN_VERSION` to an older release's version and build again. Then set it to `v1` and build again. | The first log names the older version. The second build fails with one line that starts with `poplin:` and holds `Nothing was deployed`, and the install still answers. |
 | `alerts` | With a token that also holds Notifications: Edit, run the workflow. Then open Notifications in the Cloudflare dashboard. | The list holds `poplin: usage charges reached 1 dollar`, sent to the login. |
 
-Delete the sites you published when you are done: `poplin delete <label> --forever`.
+Delete the sites you published when you are done: `poplin delete <label> --no-trash`.

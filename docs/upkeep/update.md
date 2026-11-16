@@ -39,7 +39,7 @@ No build runs, at Cloudflare or anywhere. The install takes the built Worker the
 | nowhere               | switch `auto_update` on: [Update by itself](#optional-update-by-itself)   |
 
 ```text
-$ npx poplin update --check
+$ npx poplin update --dry-run
 0.3.1 is out; the install runs 0.3.0
 the install holds its key
 nothing was started
@@ -98,10 +98,10 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 | Where          | Do                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------- |
 | the dashboard  | press Go back to 0.3.0, at the foot of the side, under `Running poplin 0.3.1, since ...`    |
-| a terminal     | `npx poplin update --to 0.3.0`; `npx poplin update --check` names the version to go back to |
+| a terminal     | `npx poplin update --to 0.3.0`; `npx poplin update --dry-run` names the version to go back to |
 
 ```text
-$ npx poplin update --check
+$ npx poplin update --dry-run
 no newer version is known; the install runs 0.3.1
 the install holds its key
 the install can go back to 0.3.0: poplin update --to 0.3.0
@@ -272,7 +272,7 @@ bun run --cwd poplin deploy
 
 ## A newer version
 
-While the setting `update_check` is on, the install says when a newer version is out. `poplin update --check` says the same on every kind of install.
+While the setting `update_check` is on, the install says when a newer version is out. `poplin update --dry-run` says the same on every kind of install.
 
 ```text
 $ poplin doctor

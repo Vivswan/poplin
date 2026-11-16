@@ -36,7 +36,7 @@ Every other example runs the same way, with `npx` before `poplin`.
 | `poplin duplicate report--k3f9x2ab71qz`       | makes a private copy, with a new address                      |
 | `poplin delete report--k3f9x2ab71qz`          | moves the site into the trash                                 |
 | `poplin restore report--k3f9x2ab71qz`         | takes it back out of the trash                                |
-| `poplin delete report--k3f9x2ab71qz --forever` | removes it now, after you type its label; nothing restores it |
+| `poplin delete report--k3f9x2ab71qz --no-trash` | removes it now, after you type its label; nothing restores it |
 
 - **Versions:** an install keeps a few per site. `poplin config versions_kept` shows how many.
 - **Trash:** a deleted site waits some days, then it is gone. `poplin config trash_days` shows how many.

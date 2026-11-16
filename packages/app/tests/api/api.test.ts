@@ -410,7 +410,7 @@ describe("createApi", () => {
     expect<unknown>([[started.status, error.code, error.about], install.host.put.length]).toEqual([answer, put]);
   });
 
-  // Drift: `poplin update --check` says what a start would come to from this one read. An answer that left the key out, or named a release the install does not know of, would promise an update that is then refused.
+  // Drift: `poplin update --dry-run` says what a start would come to from this one read. An answer that left the key out, or named a release the install does not know of, would promise an update that is then refused.
   test("the read before a start says the version, the newer release, whether the key is held, and the version to go back to, and starts nothing", async () => {
     const install = await openApi();
     install.host.key = false;

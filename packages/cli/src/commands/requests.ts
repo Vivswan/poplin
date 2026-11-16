@@ -40,7 +40,7 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   rollback,
   "new-link": (words) => oneSite("new-link", words),
   duplicate,
-  delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, forever: words.flags.has("--forever"), ...install })),
+  delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, forever: words.flags.has("--no-trash"), ...install })),
   restore: (words) => oneSite("restore", words),
   list: (words) => withInstall(words, (install) => ({ kind: "list", trash: words.flags.has("--trash"), ...install })),
   login,
@@ -248,7 +248,7 @@ function setup(words: Words): TypedRequest | UsageError {
   const first = flagValue(words.flags, "--login");
   const typed = { ...(domain === undefined ? {} : { domain }), ...(first === undefined ? {} : { login: first }) };
 
-  return withInstall(words, (install) => ({ kind: "setup", check: words.flags.has("--check"), ...typed, ...install }));
+  return withInstall(words, (install) => ({ kind: "setup", check: words.flags.has("--dry-run"), ...typed, ...install }));
 }
 
 function readConfigAction(words: Words): ConfigAction | UsageError {
@@ -280,8 +280,8 @@ function update(words: Words): TypedRequest | UsageError {
   const to = flagValue(words.flags, "--to");
   if (to !== undefined && !isPlainVersion(to)) return usageError("--to takes a version, such as 0.2.0", "poplin update --to 0.2.0");
 
-  if (words.flags.has("--check")) {
-    if (to !== undefined) return usageError("--check starts nothing, so it takes no --to", "poplin update --check");
+  if (words.flags.has("--dry-run")) {
+    if (to !== undefined) return usageError("--dry-run starts nothing, so it takes no --to", "poplin update --dry-run");
 
     return withInstall(words, (install) => ({ kind: "update", action: { kind: "check" }, ...install }));
   }

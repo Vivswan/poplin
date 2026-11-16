@@ -5,18 +5,21 @@ import { fault, field, type Machine, type Ran, runCli } from "./command";
 import { attempt, differences, type Finding, found, type Shape } from "./findings";
 import type { Seeded } from "./seeded-install";
 import { openInstall, type Running, storeOf } from "./this-install";
-import { HERE, type Tree } from "./trees";
+import { HERE, part, type Tree } from "./trees";
 import { listen } from "./util";
 import { walk } from "./walk";
 
 /** The reads an upgrade must leave as they were, each with the shape its answer shows. The first sites of the first one are shown too. */
-const READS: readonly (readonly [shape: Shape, line: readonly string[]])[] = [
+const READS: readonly Read[] = [
   ["database", ["list"]],
   ["database", ["list", "--trash"]],
   ["settings", ["config"]],
   ["update notice", ["whoami"]],
-  ["update notice", ["update", "--check"]],
+  ["update notice", ["update", "--dry-run"]],
 ];
+
+/** Where a tree lists its commands and their flags: the module from its root, and the export. */
+const COMMAND_TABLE = ["packages/cli/src/commands/command-table.ts", "COMMANDS"] as const;
 
 /** The shapes that are read through an opened database, and so not at all when this code refuses it. */
 const BEHIND_THE_DATABASE: readonly Shape[] = ["settings", "storage", "update notice"];
@@ -35,6 +38,9 @@ const PLACE_SEGMENTS = 2;
 
 /** The most sites shown one by one: a listing already holds every site whole. */
 const MOST_SHOWN = 2;
+
+/** One read: the shape its answer shows, and its command with the flags after it. */
+type Read = readonly [shape: Shape, line: readonly string[]];
 
 /** What one address of a site answered. */
 interface Page {
@@ -56,7 +62,10 @@ interface Page {
 
 /** What an install held and answered under the code that made it. */
 export interface Before {
-  /** The answer to each read, with the shape it shows. */
+  /** The reads that were asked: those the command of the code that made the install has. */
+  readonly asked: readonly Read[];
+
+  /** The answer to each read asked, and then to the showing of each site, with the shape it shows. */
   readonly reads: readonly { readonly shape: Shape; readonly ran: Ran }[];
 
   /** What every site served at its addresses, at every path a file is stored under. */
@@ -138,9 +147,20 @@ async function rowsOf(driver: SqlDriver): Promise<ReadonlyMap<string, number>> {
   return new Map(names.map((name, at) => [name, Number(counted[at]?.rows[0]?.held)]));
 }
 
-/** Ask every read with one tree's command, then show each site of `sites`; left out, the first sites the first read lists. None changes the install, so those of a kind are asked together. */
-async function readAll(cli: Tree, machine: Machine, sites?: readonly string[]): Promise<Before["reads"]> {
-  const reads = await Promise.all(READS.map(async ([shape, line]) => ({ shape, ran: await runCli(cli, machine, line) })));
+/** The reads a tree's command has every flag of. A flag that tree names otherwise leaves its read out, as the walk leaves out an action one end lacks. */
+async function readsOf(tree: Tree): Promise<readonly Read[]> {
+  const commands = await part<readonly { readonly name: string; readonly flags: readonly { readonly name: string }[] }[]>(tree, ...COMMAND_TABLE);
+
+  return READS.filter(([, [command, ...flags]]) => {
+    const known = commands.find((one) => one.name === command)?.flags.map((flag) => flag.name) ?? [];
+
+    return flags.every((flag) => known.includes(flag));
+  });
+}
+
+/** Ask each read with one tree's command, then show each site of `sites`; left out, the first sites the first read lists. None changes the install, so those of a kind are asked together. */
+async function readAll(asked: readonly Read[], cli: Tree, machine: Machine, sites?: readonly string[]): Promise<Before["reads"]> {
+  const reads = await Promise.all(asked.map(async ([shape, line]) => ({ shape, ran: await runCli(cli, machine, line) })));
 
   const listed = field(reads[0]?.ran.answer, "sites");
   const ids = sites ?? (Array.isArray(listed) ? listed.slice(0, MOST_SHOWN).map((site) => String(field(site, "id"))) : []);
@@ -155,13 +175,14 @@ async function readAll(cli: Tree, machine: Machine, sites?: readonly string[]): 
  * @throws {Error} the install did not answer its own command's reads
  */
 export async function capture(upgrading: Upgrading): Promise<Before> {
-  const reads = await readAll(upgrading.from, upgrading.machine);
+  const asked = await readsOf(upgrading.from);
+  const reads = await readAll(asked, upgrading.from, upgrading.machine);
   const failed = reads.find(({ ran }) => ran.exit !== 0);
   if (failed !== undefined) throw new Error(`${upgrading.from.name} does not answer its own \`${failed.ran.line}\`: ${failed.ran.said}`);
 
   const pages = await pagesOf(upgrading.seeded, addressesOf(reads));
 
-  return { reads, pages, rows: await rowsOf(upgrading.seeded.driver) };
+  return { asked, reads, pages, rows: await rowsOf(upgrading.seeded.driver) };
 }
 
 /** Whether an upgraded database is the one a new install gets: the same tables, indexes, and triggers, in the same words. */
@@ -198,8 +219,8 @@ async function pageFaults(running: Running, before: Before): Promise<string[]> {
 
 /** The reads again, asked by this code's command of this code's install, each beside what it answered before. */
 async function readFaults(upgrading: Upgrading, before: Before, machine: Machine): Promise<Finding[]> {
-  const shown = before.reads.slice(READS.length).map(({ ran }) => ran.line.split(" ").at(-1) ?? "");
-  const after = await readAll(HERE, machine, shown);
+  const shown = before.reads.slice(before.asked.length).map(({ ran }) => ran.line.split(" ").at(-1) ?? "");
+  const after = await readAll(before.asked, HERE, machine, shown);
 
   return before.reads.flatMap(({ shape, ran }, at) => {
     const now = after[at]?.ran;
