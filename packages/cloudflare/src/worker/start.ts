@@ -39,7 +39,7 @@ import { INSTALL_OBJECTS } from "../zone/install-objects";
 import type { DomainLayout } from "../zone/layout";
 import { readZoneBinding } from "../zone/zone-binding";
 import { createFirstRun } from "../zone/first-run";
-import { createDomainPlug } from "../zone/zone-plug";
+import { createDomainPlug, giveKey } from "../zone/zone-plug";
 import type { Bindings } from "./bindings";
 import { derivedSecret, type Held } from "./held";
 import { readOwnWorker } from "./own-worker";
@@ -115,8 +115,8 @@ export interface Instance {
   /** The install's side at Cloudflare, for setup and the Domain tab. */
   readonly domain: DomainPlug;
 
-  /** The key poplin keeps for Cloudflare: whether the install holds one, and whether Cloudflare still takes it. Nothing answers the key itself. */
-  readonly key: Pick<InstallKey, "has" | "verify">;
+  /** The key poplin keeps for Cloudflare: whether the install holds one, whether Cloudflare still takes it, and the way to a new one. Nothing answers the key itself. */
+  readonly key: InstallKey;
 
   /** The version of poplin the install runs. */
   readonly version: string;
@@ -307,6 +307,8 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database });
   const rebuild = { accepts: isDeployHook, fetch: outside.rebuild };
   const kept = readKeptKey(env[INSTALL_OBJECTS.keyBinding], { fetch: outside.cloudflare });
+  const placed = { ...own.value, layout, fetch: outside.cloudflare };
+  const key: InstallKey = createInstallKey(kept, own.value.accountId, (authorisation) => giveKey({ ...placed, key }, authorisation));
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),
@@ -327,8 +329,8 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     servedByName: new Map(),
     api,
     identify: access.ok ? accessIdentity({ keys: accessKeys({ teamDomain: access.value.teamDomain, fetch: outside.fetch }), audience: access.value.audience }) : NOBODY,
-    domain: createDomainPlug({ ...own.value, layout, fetch: outside.cloudflare }),
-    key: createInstallKey(kept, own.value.accountId),
+    domain: createDomainPlug({ ...placed, key }),
+    key,
     version: VERSION,
     rebuilding: { ...rebuild, counters },
   };

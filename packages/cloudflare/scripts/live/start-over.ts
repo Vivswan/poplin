@@ -8,12 +8,14 @@
 //   Database          the database named `poplin`, with every record
 //   Bucket objects    every object of the test install's bucket; the bucket itself stays
 //   Budget alert      the notification policy with poplin's name
+//   Key               every API token of the account with the name of the key an install keeps
 //
-// A record, a route, a rule, an application, a policy, or an alert without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
+// A record, a route, a rule, an application, a policy, an alert, or a token without poplin's mark stays. The zone's bot switches are no object: they stay as they are set.
 // It runs only on the test account: one that pays for nothing and holds the test install's bucket, a name no install of a person has.
 // Each kind is listed and then removed, so a run that stopped half-way is run again, and a second run removes nothing.
 
 import { BasePolicies as BaseAlerts } from "cloudflare/resources/alerting/policies";
+import { BaseTokens } from "cloudflare/resources/accounts/tokens/tokens";
 import { BaseRecords } from "cloudflare/resources/dns/records";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
@@ -56,6 +58,7 @@ const KINDS: readonly Kind[] = [
   { name: "Database", remove: removeDatabase, optional: false },
   { name: "Bucket objects", remove: removeObjects, optional: true },
   { name: "Budget alert", remove: removeAlert, optional: true },
+  { name: "Key", remove: removeKeys, optional: true },
 ];
 
 /** The variables a run reads. */
@@ -186,6 +189,14 @@ async function removeAlert(run: Run): Promise<Removal> {
   const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseAlerts(api).list(account)));
 
   return removeOwn(listed, (policy) => policy.name === BUDGET_ALERT, (policy) => callCloudflare(run.connection, (api) => new BaseAlerts(api).delete(policy.id ?? "", account)), "Notifications: Edit");
+}
+
+// Ended keys are listed too: a key of the name that ran out is still an object poplin made.
+async function removeKeys(run: Run): Promise<Removal> {
+  const account = { account_id: run.accountId };
+  const listed = await callCloudflare(run.connection, (api) => Array.fromAsync(new BaseTokens(api).list({ ...account, include_expired: true })));
+
+  return removeOwn(listed, (token) => token.name === INSTALL_OBJECTS.keyName, (token) => callCloudflare(run.connection, (api) => new BaseTokens(api).delete(token.id ?? "", account)), "Account API Tokens: Edit");
 }
 
 /**

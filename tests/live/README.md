@@ -17,6 +17,7 @@ Live Checks workflow
   packages/cloudflare/scripts/live/start-over.ts a run by hand with `start_over` ticked: everything poplin made, removed
   packages/cloudflare/scripts/live/converge.ts   the account's plans, bucket, database, login, wrangler deploy, the Domain tab's repair, the caps
                                                  `Worker: deployed` in its log: Cloudflare took the built bundle and the source map beside it in one upload
+                                                 `Key: created` or `Key: present` in its log: the Worker has its key as a secret, and Cloudflare lists an active token of the key's name
   packages/cloudflare/scripts/live/suite.ts      a token for the run -> bun test tests/live/live.test.ts -> the token removed
   packages/cloudflare/scripts/live/reset.ts      a token for the reset -> the install put back -> every token removed
   step summary                                   one table of the install's pieces, one of the checks, one of the reset
@@ -55,7 +56,7 @@ One job touches the install at a time. The checks and the midnight reset wait in
 
 On GitHub: Actions, Live Checks, Run workflow, tick `start_over`, Run workflow.
 
-The run removes the Worker and its routes, poplin's DNS records, rules, Access application and policy, the database, and every file in the bucket. The bucket stays, and so does everything on the account that poplin did not make. A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
+The run removes the Worker and its routes, poplin's DNS records, rules, Access application and policy, the database, every file in the bucket, the budget alert, and the key. The bucket stays, and so does everything on the account that poplin did not make. A kind the token has no permission for stays too, and a warning names the permission. The run then makes the install from nothing and puts the samples and the demo back.
 
 ## The test install
 
@@ -68,12 +69,24 @@ One install on the Cloudflare test account, called staging. It stays up between 
 | Updated     | after a green main that changed such a file                                      |
 | Put back    | after every run of the checks, whatever they came to, and at 00:00 UTC every day |
 
-| A reset removes                      | A reset leaves                                                               |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| every site but the demo's, for good  | the logins and every other setting                                           |
-| everything in the trash              | the Worker, the bucket, the database, and the zone's objects                 |
-| every token, its own among them      | the sample sites below, published anew                                       |
-| every login of a computer that waits | the demo: a public site with the public name `demo`, updated where it stands |
+| A reset removes                               | A reset leaves                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| every site that is no sample and not the demo | the logins and every other setting                                                    |
+| a sample that differs from its row, for good  | the Worker, the bucket, the database, and the zone's objects                          |
+| every token, its own among them               | the sample sites below: one that still matches is kept, any other is published anew   |
+| every login of a computer that waits          | the demo: a public site with the public name `demo`, updated where it stands          |
+
+| A sample is kept when                                      | It is published anew after                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------- |
+| one site holds its name                                    | a rename, or a second site of that name                       |
+| access, public name, typed title, and both switches match  | any of them changed on the dashboard, or in the table         |
+| it is on its row's side of the trash, there for a day more | a move to the trash, or out of it, or under a day in it left  |
+| it keeps its row's versions by their numbers, newest live  | a publish, a rollback, a dropped version, fewer versions kept |
+| it never runs out, or does within its span and not today   | an expiry set or cleared, or less than a day left             |
+| every version holds the folder's files, byte for byte      | a changed, added, renamed, or removed file, or a media type   |
+| it stores the title of the folder's entry page             | another title in `index.html`                                 |
+
+The demo's site is kept by the same rule, on its title, its expiry, and the files of its live version. A kept site costs no row of the database and no write or list of the bucket: its files are read, one request each.
 
 | The sample sites a reset leaves | How many                                   |
 | ------------------------------- | ------------------------------------------ |
@@ -115,6 +128,7 @@ For the account the workflow reads:
 | a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
 | bucket writes and lists: 150 by the checks, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
+| rows written to the database: 1,100 by the checks, 600 by a reset | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
 | the sample sites and the demo: 12 sites, 120 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
@@ -132,7 +146,8 @@ one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 1
 a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
 31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
 a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
-a usual run                      about 85 (checks) + 131 (reset)
+a usual run                      about 77 (checks) + 0 (a reset that keeps every sample and the demo)
+a reset that keeps nothing       about 131
 ```
 
 A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
@@ -146,7 +161,45 @@ a run, at its worst      1,140 + 700 + 64 = 1,904
 the plan's day           100,000 requests to the Worker, reached at about 52 such runs
 ```
 
-The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more.
+The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests.
+
+## The rows a run writes
+
+The database's free plan takes 100,000 rows written a day, every database of the account together. Past them it refuses each write until midnight UTC, and every run of that day fails.
+
+| One request of a run                      | Rows, at most | Which are                                                                  |
+| ----------------------------------------- | ------------- | -------------------------------------------------------------------------- |
+| a new site, from its begin to its finish  | 25            | the site 12, the upload 7, the day's counts 2, the version 2, the log 2    |
+| a new version                             | 19            | 15 while it drops no older version                                         |
+| a site put back from a backup             | 25            | and 2 for each version more                                                |
+| a site removed for good                   | 14            | with three versions and a day's count; 9 to the trash, 9 out of it         |
+| a new link 12, a setting of a site 5      |               | a rollback 3, a setting of the install 4, a computer's login 3             |
+| a listing of the bucket                   | 1             | the files of a version, and what an upload lacks                           |
+| a page or a file a site answered          | 2             | the day's count of the site, and of all sites                              |
+
+The database counts an index entry and a row a trigger writes as rows, so the one row of a new site is 12. `rows.ts` holds the prices, and a test in the Workers pool sends each kind of request to a Worker on D1 and compares the two counts.
+
+A product change that moves a row cost turns that test red, with the database's count beside the harness's for each kind of request.
+
+| To measure the prices again | Then |
+| --- | --- |
+| `bun run --cwd packages/cloudflare build`, then `bunx vitest run tests/worker/worker.test.ts -t "the rows the live checks count"` there | set each price in `rows.ts` to the first number of its pair, and the pair in the test |
+| `bun test ./tests/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
+
+```text
+the checks, as the harness counts them   934 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+a reset that keeps every sample          48: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
+a reset that keeps none                  about 495
+the harness's own statements             18: three tokens in and out, and the caps
+a usual run                              about 1,000 counted; the sweep later drops each upload's row, 5 a publish, about 125 more
+a day of 40 such runs                    about 45,000 of the 100,000
+```
+
+The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
+
+```text
+Rows written this run: 934 of at most 1100
+```
 
 ## The backup drill
 
@@ -197,7 +250,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 
 | Skipped: needs                                                      | Checks                                                                   |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| a token permission for a rule, the bot settings, or the login       | the piece of the install that permission makes, and the checks behind it |
+| a token permission for a rule, the bot settings, the login, or the key | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | Access switched on for the account                                  | `L1`                                                                     |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
@@ -228,6 +281,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Access: Organizations, Identity Providers, and Groups: Read | the account | the team domain the Worker checks a login against |
 | Billing: Read                                               | the account | reading that every subscription is at a price of 0 |
 | Notifications: Edit                                         | the account | the budget alert                                  |
+| Account API Tokens: Edit                                    | the account | the key the install keeps                         |
 
 ## What one request costs
 
@@ -248,8 +302,8 @@ Before you start: Access is on for the test account, and the `POPLIN_LIVE_LOGIN`
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | login   | Open the dashboard, logged out. Enter your email and the code Cloudflare sends.                                                                                  | Cloudflare's login page first, then the dashboard. An email that is no login gets no code that works.   |
 | `setup` | On a Cloudflare account with no poplin, follow `docs/start/by-hand.md` from step 1 to step 5. Then open `/setup` on the dashboard and on the Worker's own address.     | Each step works as written: in step 2 the last button of the form deploys, and the page that opens has the `workers.dev` address at its top. The setup page lists the objects it made. After the first login, `/setup` answers 404 on both addresses.|
-| `token` | Open the link "Make the token" on the setup page, or the one in step 3 of `docs/start/by-hand.md`, logged in to Cloudflare.                                            | The token form opens with the eight linked rights ticked.                                                                           |
-| `eight-rights` | Install with the link's eight rights only: on a Cloudflare account with no poplin, make the token from that link, add nothing to it, and press Repair on the setup page. Log in, then publish a site and open it. | The notice counts what was repaired and names no failure. No row says failed. The redirect, guard, and rate rows say `optional`, each with the right that switches it on. So does the bot row, or `left out` on a domain with other hostnames. The login works and the site opens. |
+| `token` | Open the link "Make the token" on the setup page, or the one in step 3 of `docs/start/by-hand.md`, logged in to Cloudflare.                                            | The token form opens with the nine linked rights ticked.                                                                           |
+| `link-rights` | Install with the link's nine rights only: on a Cloudflare account with no poplin, make the token from that link, add nothing to it, and press Repair on the setup page. Log in, then publish a site and open it. | The notice counts what was repaired and names no failure. No row says failed. The redirect, guard, and rate rows say `optional`, each with the right that switches it on. So does the bot row, or `left out` on a domain with other hostnames. The login works and the site opens. |
 | `http`  | Switch the redirect rule off in the zone's Redirect Rules, then run `curl -i http://<a site's address>` and the same on the admin hostname and the Worker's own address.                 | Status 308 and a `Location` that is the same address over `https`, from the Worker: its address reaches the Worker as `http`. Switch the rule on again. |
 | `L3`    | Publish two private sites. Open the first, then the second.                                                                                                      | Both open. The second asks for nothing.                                                                 |
 | `L2`    | Publish private site B. Publish private site A whose page shows B in an `iframe`. Open A in Chromium, Firefox, and Safari. Then open B directly and reload A.    | In each engine: whether B shows inside A before B was opened directly, and after. Write both down.      |

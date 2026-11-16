@@ -177,12 +177,16 @@ export async function tokenOf(from: World, scope: "admin" | "publisher"): Promis
   return issued.token;
 }
 
-/** The API as one caller asks it: with the token, or with no `Authorization` header for `null`. */
-export function api(worker: Worker, token: string | null): ApiCalls {
+/**
+ * The API as one caller asks it: with the token, or with no `Authorization` header for `null`.
+ *
+ * @param send - what sends each request; left out, the Worker is asked on the simulated bindings
+ */
+export function api(worker: Worker, token: string | null, send: (input: string, init: RequestInit) => Promise<Response> = (input, init) => ask(worker, input, init)): ApiCalls {
   const headers: Record<string, string> = token === null ? {} : { Authorization: `Bearer ${token}` };
 
   // The client names every address as text.
-  return hc<Api>(ADMIN, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => ask(worker, String(input), init) }).api;
+  return hc<Api>(ADMIN, { headers, fetch: (input: RequestInfo | URL, init?: RequestInit) => send(String(input), init ?? {}) }).api;
 }
 
 /** Send the bytes of one file of an upload. */

@@ -2,6 +2,7 @@
 // Without these a key Cloudflare ended could still read as working, and the object the dashboard holds could give the key away.
 
 import { describe, expect, test } from "bun:test";
+import type { DomainReading } from "@poplin/app/src/console/domain/records";
 import { createInstallKey } from "../../src/key/install-key";
 import { readKeptKey } from "../../src/key/kept-key";
 import { withFake } from "../zone/support/fake-cloudflare";
@@ -12,6 +13,9 @@ const ACCOUNT = "account-a";
 
 /** A key in the form the reader takes, and nothing like one Cloudflare makes. */
 const KEY = "kept-key-of-the-test";
+
+/** What stands in for the way to a new key: it answers the token it was handed, so a test sees the install's key pass it on and nothing else. */
+const GIVE = async (authorisation: string): Promise<DomainReading> => ({ ok: true, rows: [{ object: "Key", state: "created", detail: authorisation, part: "rest" }], steps: [] });
 
 /** The one call `verify` makes. */
 const VERIFY = { method: "GET", path: `/accounts/${ACCOUNT}/tokens/verify`, key: `Bearer ${KEY}`, body: undefined };
@@ -34,7 +38,7 @@ describe("createInstallKey", () => {
   // Drift: the path and the statuses are Cloudflare's API for a token an account owns. The key is in no text of the object or of its answer.
   test.each(rows)("$name verifies as $ends, asked at the account's own verify path with the key", async ({ respond, ends }) => {
     await withFake(respond, async (connection, asked) => {
-      const key = createInstallKey(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT);
+      const key = createInstallKey(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, GIVE);
       const answer = await key.verify();
 
       const outcome: readonly unknown[] = [key.has(), answer, new Set(asked.map((entry) => JSON.stringify(entry)))];
@@ -48,9 +52,10 @@ describe("createInstallKey", () => {
     await withFake(
       () => reply({ id: "token-1", status: "active" }),
       async (connection, asked) => {
-        const key = createInstallKey(readKeptKey(undefined, { baseUrl: connection.baseUrl }), ACCOUNT);
+        const key = createInstallKey(readKeptKey(undefined, { baseUrl: connection.baseUrl }), ACCOUNT, GIVE);
 
         expect([key.has(), await key.verify(), asked]).toEqual([false, { ok: false, refusal: "no_key" }, []]);
+        expect(await key.give("a-pasted-token")).toMatchObject({ rows: [{ detail: "a-pasted-token" }] });
       },
     );
   });

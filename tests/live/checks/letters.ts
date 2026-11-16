@@ -52,8 +52,7 @@ export const LETTER_CHECKS: readonly Check[] = [
     name: "a private site's address sends a stranger to the login, off the install's domain",
     needs: ["token", "letters", "access"],
     run: async (bench) => {
-      const text = "<p>behind login</p>";
-      const site = await bench.publish({ access: "private", text });
+      const { site, text } = await bench.shared("private");
 
       const response = await bench.visit(site.url);
       expect(response.status).toBeOneOf([302, 303]);
@@ -85,8 +84,7 @@ export const LETTER_CHECKS: readonly Check[] = [
     name: "a letter p address hands out no file without a token the login signed",
     needs: ["token", "letters"],
     run: async (bench) => {
-      const text = "<p>no token</p>";
-      const site = await bench.publish({ access: "private", text });
+      const { site, text } = await bench.shared("private");
 
       for (const [what, headers] of FORGED) {
         const response = await bench.visit(site.url, { headers });

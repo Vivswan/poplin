@@ -25,6 +25,8 @@ Check and Repair each open a dialog that asks for an account token:
 | 1    | Make an account token | press Open the account token form, or take the token you kept from [step 3](../start/by-hand.md#the-steps) |
 | 2    | Paste it              | paste the token into the box Account token, then press the dialog's Check or Repair                        |
 
+The row `Key` is the key poplin keeps at Cloudflare. Repair makes one where the install has none, or one Cloudflare no longer takes: [The kept key](../about/security.md#the-kept-key).
+
 ## The last check of the domain
 
 ```text

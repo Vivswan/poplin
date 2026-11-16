@@ -41,7 +41,7 @@ type Paths = ExtractSchema<Api>;
 type MethodOf<Key> = Key extends `$${infer Method}` ? Uppercase<Method> : never;
 
 /** One route the app declares: its method and its path. */
-type Declared = { [Path in keyof Paths & string]: { readonly method: MethodOf<keyof Paths[Path]>; readonly path: Path } }[keyof Paths & string];
+export type Declared = { [Path in keyof Paths & string]: { readonly method: MethodOf<keyof Paths[Path]>; readonly path: Path } }[keyof Paths & string];
 
 /** A `fetch` that counts, and what it counted. */
 interface Meter {

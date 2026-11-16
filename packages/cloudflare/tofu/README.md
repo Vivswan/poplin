@@ -84,6 +84,7 @@ The setup page's Repair and this module make the same objects with the same valu
 | R2 bucket, public access off | the deploy; a new bucket has no public address | `cloudflare_r2_bucket.sites`, `cloudflare_r2_managed_domain.sites` | Repair does not read the bucket |
 | Worker and its sweep trigger | the deploy | `cloudflare_workers_script.poplin`, `cloudflare_workers_cron_trigger.sweep` | nowhere |
 | Budget alert | Repair, with the right Notifications: Edit | not made: the provider's `cloudflare_notification_policy` takes neither the alert type `billing_budget_alert` nor its filter `total_spend_dollars` | only Repair makes it. On an install this module made, add the right to an account token and press Repair on the Domain screen |
+| Key | Repair, with the right Account API Tokens: Edit | not made: the module declares no API token and binds no secret | only Repair makes it. On an install this module made, press Repair on the Domain screen with an account token that holds the right |
 | R2 bucket lifecycle | not made: its token has no R2 permission. A new bucket has Cloudflare's own rule, which ends an unfinished upload after seven days | `cloudflare_r2_bucket_lifecycle.sites` | one day here, seven there |
 | Usage alerts | not made | `cloudflare_notification_policy.usage` | only this module makes them, and only with `usage_alert_percents` set |
 | the Free plan check | Repair reads the plan and changes nothing for it | a postcondition of `data.cloudflare_zone.this` | here an apply on a paid plan stops unless `paid_plan_allowed` is true |

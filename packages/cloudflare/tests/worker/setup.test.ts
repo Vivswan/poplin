@@ -282,11 +282,12 @@ describe("a Worker with nothing set", () => {
     const ran = JSON.parse(text) as Ran;
 
     expect([stranger.status, repaired.status, ran.summary.tone, text.includes(TOKEN)]).toEqual([200, 200, "good", false]);
-    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "ACCESS"]);
+    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "FIRST_SETTINGS", "ACCOUNT_ID", "ACCESS", "KEPT_KEY"]);
     expect([await stored(), (await BINDINGS.SITES.list()).objects.length]).toEqual(before);
-    // The page and the run together: 32 calls to Cloudflare of the 50 a request of the Free plan may send, and 10 to the database of its 50.
-    // Two of the 32 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
-    expect([asked.length - strangers, tally.calls]).toEqual([32, 10]);
+    // The page and the run together: 37 calls to Cloudflare of the 50 a request of the Free plan may send, and 10 to the database of its 50.
+    // Two of the 37 are the budget alert: Cloudflare has no create-or-update by name, so its policies are listed and then one is made.
+    // Five are the key: the Worker's bindings read for it, the permission groups, the new token, and the two pages of the account's tokens.
+    expect([asked.length - strangers, tally.calls]).toEqual([37, 10]);
   });
 
   // Drift: the page takes a secret from anyone who finds the address, before the install has a domain or a login to tell them apart by.
@@ -329,7 +330,7 @@ describe("the Domain screen", () => {
     expect(strangers.map((answer) => [answer.status, answer.headers.get("Location")])).toEqual([[302, `${ADMIN}/login?return=${encodeURIComponent("/domain")}`], [401, null], [401, null]]);
     expect([asked.length > 0, shell.status, ((await readShell(await shell.text())).boot as { domain: boolean }).domain]).toEqual([true, 200, true]);
     expect([form.tokenRights.includes("Workers Scripts: Edit"), form.tokenRights.includes("Zone Settings: Read")]).toEqual([true, true]);
-    // Drift: the link carries eight rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.
+    // Drift: the link carries nine rights, so a right the plug holds optional that the page listed among the needed ones sends a person back to adding it by hand.
     expect([form.tokenRights.includes("Zone WAF: Edit"), form.tokenOptional.find((optional) => optional.right === "Zone WAF: Edit")?.adds.startsWith("Cloudflare stops"), text.includes("by hand")]).toEqual([false, true, false]);
     expect([checked.status, (await checked.json<Ran>()).ok, none, repaired.status, (await repaired.json<Ran>()).summary.tone, account.applications.length, (await stored()).includes(TOKEN)]).toEqual([200, true, [], 200, "good", 1, false]);
   });

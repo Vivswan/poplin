@@ -12,7 +12,7 @@ import { SETTINGS_ANSWER } from "../../packages/core/src/actions/store-settings"
 import { parseLogins } from "../../packages/core/src/auth/logins";
 import { run } from "../../packages/cli/src/commands/run";
 import { openSession } from "../../packages/cli/tests/mcp/support/session";
-import type { Bench, Draft, LiveSite, Missing, Ran } from "./records";
+import type { Bench, Draft, LiveSite, Missing, Ran, Shared } from "./records";
 
 /** What every site name a live run makes starts with, whatever the run: the sweep removes each such site. */
 const SWEPT_PREFIX = "live-";
@@ -169,6 +169,19 @@ export function openBench(parts: BenchParts): OpenBench {
     return ran.value.site as unknown as LiveSite;
   };
 
+  // Each publish and its removal writes some 35 rows to the install's database, so the checks that change nothing read one site between them.
+  const read = new Map<Draft["access"], Shared>();
+  const shared: Bench["shared"] = async (access) => {
+    const held = read.get(access);
+    if (held !== undefined) return held;
+
+    const text = `<p>a ${access} page the checks read</p>`;
+    const made = { site: await publish({ access, text }), text };
+    read.set(access, made);
+
+    return made;
+  };
+
   const client = createClient({ server: admin, token: parts.token ?? "", fetch: parts.fetch });
 
   // Every site of a live run in one listing, read to its last page before any is removed.
@@ -224,6 +237,7 @@ export function openBench(parts: BenchParts): OpenBench {
       folder,
       manyFiles,
       publish,
+      shared,
       scratchFile: (name) => join(scratch, name),
       pause: parts.pause,
       now: parts.now,

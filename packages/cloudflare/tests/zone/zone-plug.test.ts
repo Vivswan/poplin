@@ -1,12 +1,13 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, type Mock, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DomainReading, DomainSettings } from "@poplin/app/src/console/domain/records";
+import type { InstallKey } from "@poplin/app/src/console/key/records";
 import type { Login } from "@poplin/core/src/auth/logins";
-import { createDomainPlug } from "../../src/zone/zone-plug";
+import { createDomainPlug, giveKey } from "../../src/zone/zone-plug";
 import { withFake } from "./support/fake-cloudflare";
 import type { Asked } from "./support/replies";
-import { ACCOUNT, type Account, answer, emptyAccount, OTHER_TOKEN, TEAM, TOKEN } from "./support/fake-install";
+import { ACCOUNT, type Account, answer, emptyAccount, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "./support/fake-install";
 import { LAYOUT } from "./support/layouts";
 
 const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" };
@@ -29,6 +30,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Access application | ${state("access", usual)} | poplin: poplin.example.com/login, *-p-poplin.example.com`,
     `Access policy | ${state("access", usual)} | poplin logins`,
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
+    `Key | ${state("key", usual)} | poplin kept key`,
     `Redirect rule | ${state("https", usual)} | https redirect`,
     `WAF rule | ${state("guards", usual)} | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin`,
     `WAF rule | ${state("guards", usual)} | outside pages rule`,
@@ -92,7 +94,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(14);
+    expect(writes(asked)).toHaveLength(15);
 
     const sent = asked.length;
 
@@ -120,8 +122,8 @@ test("a repair writes the application's audience tag and the team's domain onto 
 
   await withAccount(account, async (plug) => {
     expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: ready });
-    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "ACCESS"]);
-    expect(account.bindings.at(-1)).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications[0]?.aud } });
+    expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "ACCESS", "KEPT_KEY"]);
+    expect(account.bindings.at(-2)).toEqual({ name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications[0]?.aud } });
     expect(await plug.repair(TOKEN, SETTINGS)).toMatchObject({ steps: [] });
 
     account.bindings = account.bindings.map((binding) => (binding.name === "ACCESS" ? { ...binding, json: JSON.stringify({ team_domain: TEAM, audience: "f".repeat(64) }) } : binding));
@@ -167,6 +169,7 @@ const RIGHT_OF: readonly (readonly [path: RegExp, right: string])[] = [
   [/^\/zones\/[^/]+\/bot_management/, "Bot Management: Edit"],
   [/^\/accounts\/[^/]+\/d1\/database/, "D1: Edit"],
   [/^\/accounts\/[^/]+\/alerting\/v3\/policies/, "Notifications: Edit"],
+  [/^\/accounts\/[^/]+\/tokens/, "Account API Tokens: Edit"],
 ];
 
 test("the rights the page names, needed and optional, are the rights a repair's calls use, no more and no fewer: a call added without its right is refused on every real install", async () => {
@@ -188,6 +191,7 @@ const KEY_OF: Readonly<Record<string, readonly [key: string, type: string]>> = {
   "Workers Scripts: Edit": ["workers_scripts", "edit"],
   "Zone Settings: Read": ["zone_settings", "read"],
   "D1: Edit": ["d1", "edit"],
+  "Account API Tokens: Edit": ["account_api_tokens", "edit"],
 };
 
 /** The first box of Cloudflare's token form for each permission: whether it is given on the account or on a zone. */
@@ -204,6 +208,7 @@ const SCOPE_OF: Readonly<Record<string, "Account" | "Zone">> = {
   "Bot Management: Edit": "Zone",
   "D1: Edit": "Account",
   "Notifications: Edit": "Account",
+  "Account API Tokens: Edit": "Account",
 };
 
 // Drift: the form drops a key it does not know without a word, so a needed right the link does not carry is a token that fails at a repair with nothing on the page having asked for it.
@@ -314,6 +319,7 @@ test("a repair that fails half way, for another reason than a permission, stops:
       "Worker route | not-run | poplin.example.com/*",
       "Access application | not-run | ",
       "Worker variable | not-run | ",
+      "Key | not-run | ",
       "Redirect rule | not-run | ",
       "WAF rule | not-run | ",
       "Rate rule | not-run | ",
@@ -340,7 +346,7 @@ const lacking: readonly { readonly name: string; readonly rights: readonly (keyo
   { name: "all four", rights: ["Single Redirect: Edit", "Zone WAF: Edit", "Bot Management: Edit", "Notifications: Edit"] },
 ];
 
-// Drift: the install page tells a person the link's eight rights are enough, so a piece that fails without an optional right, or stops the run, makes that page false for every reader who followed it.
+// Drift: the install page tells a person the link's nine rights are enough, so a piece that fails without an optional right, or stops the run, makes that page false for every reader who followed it.
 test.each(lacking)("a repair with a token without $name fails nothing: every other object is made, the database among them, and each piece that needs the right is optional and names it", async ({ rights }) => {
   const account = { ...emptyAccount(), refuse: rights.flatMap((right) => OPTIONAL[right].calls) };
   const optional = rights.flatMap((right) => OPTIONAL[right].rows.map((object) => [object, right] as const));
@@ -433,6 +439,7 @@ const NEEDS: readonly (readonly [right: string, call: string])[] = [
   ["Bot Management: Edit", "GET /zones/zone-1/bot_management"],
   ["D1: Edit", `GET /accounts/${ACCOUNT}/d1/database`],
   ["Notifications: Edit", `GET /accounts/${ACCOUNT}/alerting/v3/policies`],
+  ["Account API Tokens: Edit", `GET /accounts/${ACCOUNT}/tokens`],
 ];
 
 // Drift: a refused row used to quote Cloudflare's status alone, and the person had to guess which of eleven rows their token lacked.
@@ -494,10 +501,11 @@ test("Access refused as not switched on after the policy was already made is a s
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-    expect(rows.slice(6, 10)).toEqual([
+    expect(rows.slice(6, 11)).toEqual([
       "Access policy | created | poplin logins",
       "Access application | failed | poplin: refused with status 403: 10000 access.api.error.not_enabled",
       "Worker variable | not-run | ",
+      "Key | not-run | ",
       "Redirect rule | not-run | ",
     ]);
     expect(account.policies).toHaveLength(1);
@@ -521,5 +529,215 @@ test("every row says what its object is for, and a row refused for a missing rig
       ["DNS record", "Worker route"],
     ]);
     expect(rows.filter((row) => row.right !== undefined).map((row) => [row.object, row.state, row.right])).toEqual([["Worker route", "failed", "Workers Routes: Edit"]]);
+  });
+});
+
+/** The key as a Worker holds it, by what Cloudflare says of it. */
+const HELD = {
+  works: { has: () => true, verify: async () => ({ ok: true, value: { since: null } }) },
+  none: { has: () => false, verify: async () => ({ ok: false, refusal: "no_key" }) },
+  refused: { has: () => true, verify: async () => ({ ok: false, refusal: "key_refused" }) },
+  silent: { has: () => true, verify: async () => ({ ok: false, refusal: "unreachable" }) },
+} as const satisfies Readonly<Record<string, Pick<InstallKey, "has" | "verify">>>;
+
+/** An older key of the install as Cloudflare lists it. */
+const OLD_KEY = { id: "old-key", name: "poplin kept key", status: "active" };
+
+/** The one call that writes the Worker's settings. */
+const SETTINGS_WRITE = `PATCH /accounts/${ACCOUNT}/workers/scripts/poplin/settings`;
+
+/** Where the account's own tokens are. */
+const TOKENS = `/accounts/${ACCOUNT}/tokens`;
+
+/** One run that has to do with the key: the account it meets, the key the Worker holds, and what the key's row, the steps, and the account say after it. */
+interface KeyRun {
+  readonly name: string;
+  readonly run: "check" | "repair" | "give";
+  readonly account?: Partial<Account>;
+  readonly held?: keyof typeof HELD;
+  readonly row: string;
+  readonly right?: string;
+  readonly step?: string;
+  readonly keys: number;
+  readonly secrets: number;
+}
+
+const keyRuns: readonly KeyRun[] = [
+  { name: "a check on a Worker whose key works", run: "check", held: "works", row: "Key | present | poplin kept key", keys: 0, secrets: 0 },
+  { name: "a check on a Worker with no key", run: "check", held: "none", row: "Key | missing | poplin kept key", keys: 0, secrets: 0 },
+  { name: "a check on a Worker whose key Cloudflare refuses", run: "check", held: "refused", account: { tokens: [OLD_KEY] }, row: "Key | differs | poplin kept key: Cloudflare no longer takes the key the install holds", keys: 1, secrets: 0 },
+  { name: "a check on a Worker that gets no answer about its key", run: "check", held: "silent", row: "Key | failed | poplin kept key: no answer from Cloudflare", keys: 0, secrets: 0 },
+  { name: "a repair on a Worker whose key works makes none", run: "repair", held: "works", row: "Key | present | poplin kept key", keys: 0, secrets: 0 },
+  { name: "a repair on a Worker with no key makes one", run: "repair", held: "none", row: "Key | created | poplin kept key", keys: 1, secrets: 1 },
+  { name: "a repair on a Worker whose key Cloudflare refuses makes a new one and deletes the old", run: "repair", held: "refused", account: { tokens: [OLD_KEY] }, row: "Key | changed | poplin kept key", keys: 1, secrets: 1 },
+  { name: "a repair on a Worker that gets no answer about its key makes none: a key that may still work is not replaced", run: "repair", held: "silent", row: "Key | failed | poplin kept key: no answer from Cloudflare", keys: 0, secrets: 0 },
+  {
+    name: "a repair with a token that may not make a token: the row names the right, and everything else is made",
+    run: "repair",
+    account: { refuse: `GET ${TOKENS}/permission_groups` },
+    row: "Key | failed | poplin kept key: refused with status 403: 10000 Authentication error. Add this right to the account token: Account API Tokens: Edit",
+    right: "Account API Tokens: Edit",
+    keys: 0,
+    secrets: 0,
+  },
+  {
+    name: "a repair whose list of groups lacks a right's name: the row names it",
+    run: "repair",
+    account: { groups: emptyAccount().groups.filter((group) => group.name !== "Bot Management Read") },
+    row: "Key | failed | poplin kept key: Cloudflare lists no permission group named Bot Management Read",
+    keys: 0,
+    secrets: 0,
+  },
+  {
+    name: "a repair whose write of the Worker's settings is refused, quoting what was sent: the new key is deleted, and no row quotes it",
+    run: "repair",
+    account: { refuse: SETTINGS_WRITE, refuseQuotes: true, refuseAs: { status: 400, code: 10021 } },
+    row: "Key | failed | poplin kept key, made, and deleted again when its write onto the Worker failed: refused with status 400: 10021 Authentication error",
+    keys: 0,
+    secrets: 1,
+  },
+  {
+    name: "a repair whose write fails and whose new key Cloudflare will not delete: the row says the key is left",
+    run: "repair",
+    account: { refuse: [SETTINGS_WRITE, `DELETE ${TOKENS}/*`], refuseAs: { status: 400, code: 1 } },
+    row: "Key | failed | poplin kept key, made, and left at Cloudflare for you to delete when its write onto the Worker failed: refused with status 400: 1 Authentication error",
+    keys: 1,
+    secrets: 1,
+  },
+  {
+    name: "a repair that cannot delete the older key: the new one is kept, and a step names what is left",
+    run: "repair",
+    held: "refused",
+    account: { tokens: [OLD_KEY], refuse: `DELETE ${TOKENS}/old-key` },
+    row: "Key | changed | poplin kept key",
+    step: "An older key named poplin kept key may still be at Cloudflare. Delete it there:",
+    keys: 2,
+    secrets: 1,
+  },
+  { name: "giving a key to a Worker with none", run: "give", held: "none", row: "Key | created | poplin kept key", keys: 1, secrets: 1 },
+  { name: "giving a key to a Worker that holds one replaces it", run: "give", held: "works", account: { tokens: [OLD_KEY] }, row: "Key | changed | poplin kept key", keys: 1, secrets: 1 },
+  {
+    name: "giving a key with a token that may not make one",
+    run: "give",
+    held: "none",
+    account: { refuse: `POST ${TOKENS}` },
+    row: "Key | failed | poplin kept key: refused with status 403: 10000 Authentication error. Add this right to the account token: Account API Tokens: Edit",
+    right: "Account API Tokens: Edit",
+    keys: 0,
+    secrets: 0,
+  },
+  {
+    name: "giving a key with a token that may not write the Worker: the new key is deleted, and the row names that right",
+    run: "give",
+    held: "none",
+    account: { refuse: SETTINGS_WRITE, refuseQuotes: true },
+    row: "Key | failed | poplin kept key, made, and deleted again when its write onto the Worker failed: refused with status 403: 10000 Authentication error. Add this right to the account token: Workers Scripts: Edit",
+    right: "Workers Scripts: Edit",
+    keys: 0,
+    secrets: 1,
+  },
+];
+
+describe("the key an install keeps", () => {
+  let logs: Mock<(...said: unknown[]) => void>[] = [];
+
+  beforeEach(() => {
+    logs = (["log", "info", "warn", "error", "debug"] as const).map((level) => spyOn(console, level).mockImplementation(() => undefined));
+  });
+
+  afterEach(() => {
+    for (const log of logs) log.mockRestore();
+  });
+
+  // Drift: the key is the one credential an install keeps. A run that made a second one, left one nothing holds, or said its value anywhere would do so on every install.
+  test.each(keyRuns)("$name", async ({ run, account = {}, held, row, right, step, keys, secrets }) => {
+    const met = { ...emptyAccount(), ...account };
+    const key = held === undefined ? undefined : HELD[held];
+
+    await withFake(
+      (asked) => answer(met, asked),
+      async (connection, asked) => {
+        const parts = { accountId: ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl, key };
+        const reading = run === "give" ? await giveKey(parts, TOKEN) : await createDomainPlug(parts)[run](TOKEN, SETTINGS);
+        const rows = reading.ok ? reading.rows.filter((found) => found.object === "Key") : [];
+        const written = asked.filter((entry) => entry.method === "PATCH").map((entry) => (entry.body as { settings: { bindings: { name: string; type: string; text?: string }[] } }).settings.bindings);
+        const secret = written.flatMap((bindings) => bindings.filter((binding) => binding.type === "secret_text").map((binding) => [binding.name, binding.text?.startsWith(KEY_VALUE_START)]));
+        const said = [JSON.stringify(reading), Bun.inspect(reading), ...logs.flatMap((log) => log.mock.calls.map((call) => Bun.inspect(call)))].join("\n");
+        // What the fake's refusal quotes of the call is left out of the compared row: the token it was sent with, and where it quotes them the bindings.
+        const plain = (detail: string): string => detail.replace(/ for Bearer .*?(\. Add this right|$)/, "$1");
+
+        expect(rows.map((found) => `${found.object} | ${found.state} | ${plain(found.detail)}`)).toEqual([row]);
+        expect(rows.map((found) => [found.part, found.right])).toEqual([["rest", right]]);
+        expect(reading.ok ? reading.steps.filter((found) => found.text.includes("key")) : []).toEqual(step === undefined ? [] : [{ text: step, address: `https://dash.cloudflare.com/${ACCOUNT}/api-tokens` }]);
+        // A key that was made is the only one of its name left, and it went onto the Worker in a change that holds one secret.
+        expect([met.tokens.length, secret]).toEqual([keys, Array.from({ length: secrets }, () => ["KEPT_KEY", true])]);
+        expect([said.includes(KEY_VALUE_START), logs.flatMap((log) => log.mock.calls)]).toEqual([false, []]);
+        expect(run !== "give" || (reading.ok && reading.rows.length === 1 && writes(asked).every((write) => write.includes("/tokens") || write === SETTINGS_WRITE))).toBe(true);
+      },
+    );
+  });
+
+  // Drift: a token made from an older link has no right to make a key. An install whose login waited on the key would not start for it.
+  test("a repair with a token that may not make a key still writes the Worker's variables, with no key among them, and goes on to every other piece", async () => {
+    const account = { ...emptyAccount(), refuse: `GET ${TOKENS}/permission_groups` };
+
+    await withAccount(account, async (plug) => {
+      const rows = shown(await plug.repair(TOKEN, SETTINGS));
+
+      expect(account.bindings.map((binding) => binding.name)).toEqual(["SITES", "DB", "ZONE", "ACCESS"]);
+      expect(rows.filter((row) => !row.startsWith("Key | "))).toEqual(table({ all: "created", bots: "changed" }).filter((row) => !row.startsWith("Key | ")));
+    });
+  });
+
+  // Drift: a key Cloudflare never reads back cannot be compared, so a later change must name it as kept; sent again it would need a value nobody has.
+  test("a later repair that changes a variable names the key as inherited, like every other binding, and makes no new one", async () => {
+    const account = emptyAccount();
+
+    await withAccount(account, async (plug, asked) => {
+      await plug.repair(TOKEN, SETTINGS);
+      account.bindings = account.bindings.filter((binding) => binding.name !== "ACCESS");
+      const sent = asked.length;
+      const rows = shown(await plug.repair(TOKEN, SETTINGS));
+      const changes = asked.slice(sent).filter((entry) => entry.method === "PATCH").map((entry) => (entry.body as { settings: { bindings: { name: string; type: string }[] } }).settings.bindings);
+
+      expect(rows.filter((row) => row.startsWith("Key") || row.startsWith("Worker variable"))).toEqual(["Worker variable | created | ACCESS", "Key | present | poplin kept key"]);
+      expect(changes.map((bindings) => bindings.map((binding) => `${binding.name} ${binding.type}`))).toEqual([["SITES inherit", "DB inherit", "ZONE inherit", "KEPT_KEY inherit", "ACCESS json"]]);
+      expect([account.tokens.length, writes(asked.slice(sent))]).toEqual([1, [SETTINGS_WRITE]]);
+    });
+  });
+
+  // Drift: the Worker's secret says a key was written, not that it still works. A key deleted at Cloudflare would read as present for ever.
+  test("with no key in hand, a key is present only while the Worker has the secret and Cloudflare lists an active token of its name", async () => {
+    const account = emptyAccount();
+    const keyRow = async (plug: ReturnType<typeof createDomainPlug>): Promise<string[]> => shown(await plug.check(TOKEN, SETTINGS)).filter((row) => row.startsWith("Key"));
+
+    await withAccount(account, async (plug) => {
+      await plug.repair(TOKEN, SETTINGS);
+      const made = await keyRow(plug);
+      account.tokens = account.tokens.map((token) => ({ ...token, status: "disabled" }));
+      const disabled = await keyRow(plug);
+      account.tokens = [];
+      const deleted = await keyRow(plug);
+      account.bindings = account.bindings.filter((binding) => binding.name !== "KEPT_KEY");
+
+      expect([made, disabled, deleted, await keyRow(plug)]).toEqual([
+        ["Key | present | poplin kept key"],
+        ["Key | differs | poplin kept key: Cloudflare no longer takes the key the install holds"],
+        ["Key | differs | poplin kept key: Cloudflare no longer takes the key the install holds"],
+        ["Key | missing | poplin kept key"],
+      ]);
+    });
+  });
+
+  test("a token that does not prove itself is given nothing: no key is made with it, and it is refused as a check refuses it", async () => {
+    await withFake(
+      (asked) => answer(emptyAccount(), asked),
+      async (connection, asked) => {
+        const parts = { accountId: ACCOUNT, script: "poplin", layout: LAYOUT, baseUrl: connection.baseUrl, key: HELD.none };
+
+        expect([await giveKey(parts, "short"), await giveKey(parts, OTHER_TOKEN)]).toEqual([REFUSED, REFUSED]);
+        expect([...new Set(asked.map((entry) => `${entry.method} ${entry.path.split("?")[0]}`))]).toEqual(["GET /zones"]);
+      },
+    );
   });
 });
