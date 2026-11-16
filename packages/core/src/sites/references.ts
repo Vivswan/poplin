@@ -70,8 +70,8 @@ export type TypedSite = SettledSite | UnreadAddress;
 /** A typed site, or why the string names none. */
 type CheckedTyped = { readonly ok: true; readonly value: TypedSite } | { readonly ok: false; readonly refusal: TypedRefusal };
 
-/** Take the whitespace and one wrapping pair off a pasted text. */
-function unwrapped(typed: string): string {
+/** Take the whitespace and one wrapping pair off a pasted text: quotes, or the angle brackets a chat or a mail puts around a link. */
+export function unwrapped(typed: string): string {
   const text = typed.trim();
   const wrapper = WRAPPERS.find(([open, close]) => text.length >= open.length + close.length && text.startsWith(open) && text.endsWith(close));
   if (wrapper === undefined) return text;

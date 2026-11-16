@@ -12,6 +12,7 @@ import { pathAddresses } from "../../../app/src/sites/path-addresses";
 import { ADMIN_LABEL, type Hostname, parseHostname } from "../../../core/src/names/hostname";
 import { DEFAULT_PUBLIC_WORD } from "../../../core/src/names/marker";
 import type { AddressLayout } from "../../../core/src/sites/address-layout";
+import { unwrapped } from "../../../core/src/sites/references";
 import { type Provider, WITH_DOMAIN, WITHOUT_DOMAIN } from "./domain-plug";
 import { type Mount, SERVED_PREFIX } from "./mount";
 
@@ -120,8 +121,9 @@ function withDomain(): Kind {
   }
 
   // A site is served under the dashboard's origin, after whatever path the demo itself sits under: its address is read from `/served/` on.
+  // The address is read as the app reads a pasted one: without the quotes or the angle brackets around it.
   function ownAddress(pasted: string, origin: string): string {
-    const text = pasted.trim();
+    const text = unwrapped(pasted);
     const here = new URL(origin);
     const url = URL.parse(WITH_SCHEME.test(text) ? text : `${here.protocol}//${text}`);
     const at = url?.pathname.indexOf(`${SERVED_PREFIX}/`) ?? -1;
