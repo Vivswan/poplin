@@ -1,5 +1,6 @@
 // The one table of what can go wrong: every code a command ends in, its sentence for a person, the hint that goes with it, and how the command exits.
 
+import { TAKEN_BY_REPAIR } from "../../../core/src/actions/start-update";
 import type { Failure } from "../client/client";
 import type { Ending } from "./exit-codes";
 
@@ -117,7 +118,7 @@ const HINTS_ABOUT: Readonly<Record<string, Readonly<Record<string, string>>>> = 
     digest_differs: "the files fetched for the release are not the files the project published; try again, and if it comes back, report it",
     other_version: "the files published for the release name another version or schema than the project's website; trying again gives the same answer, so report it",
     database: "that release changes the database, and the version asked for cannot read it; trying again gives the same answer",
-    needs_hand: "the install cannot put this release in place by itself; the install goes on with the version it runs",
+    needs_hand: TAKEN_BY_REPAIR,
     host: "the install's host did not answer before anything was sent; try again in a few minutes",
   },
 };

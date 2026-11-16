@@ -2,6 +2,7 @@
 //
 // A release is named by its version and taken by its content: where the files come from is trusted for nothing.
 
+import gt from "semver/functions/gt";
 import rsort from "semver/functions/rsort";
 import { uint8ArrayToHex } from "uint8array-extras";
 import * as v from "valibot";
@@ -49,6 +50,16 @@ export function publishedPins(text: string): ReleasePins | undefined {
  */
 export function newestPinned(pins: ReleasePins): string | undefined {
   return rsort(Object.keys(pins))[0];
+}
+
+/**
+ * Tell whether one released version stands above another, in the order `newestPinned` picks the highest by.
+ *
+ * @param version - a released version, such as `0.3.0`
+ * @returns `false` for two versions that are one
+ */
+export function isAbove(version: string, other: string): boolean {
+  return gt(version, other);
 }
 
 /**

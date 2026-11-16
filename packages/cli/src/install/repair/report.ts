@@ -142,6 +142,7 @@ export function repairHelp(providers: readonly Provider[], provider?: Provider):
   return [
     [`poplin ${REPAIR_COMMAND} ${shown === undefined ? "<provider>" : `${others.length === 0 ? "" : `${shown.id} `}${shown.usage}`} [options]`],
     ["Mend your install at its provider, with an account token. It needs no login,", "so it is the way back in. It finds the install first, then makes each piece", "that is missing or differs, and leaves the rest."],
+    ["An install behind the newest release is brought to it: the way an install", "takes a release it cannot take by itself. One that runs the newest is left."],
     ...listed,
     ["Options:", ...optionLines(REPAIR_OPTIONS)],
     [...DRY_RUN_HELP],
