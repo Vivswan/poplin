@@ -117,6 +117,7 @@ import {
   tokenById,
   tokenNames,
   USER_TOKENS,
+  endSignerLeftOut,
   endTokensOfDropped,
   endTokensOfRemoved,
   isUser,
@@ -249,6 +250,16 @@ function auditPlain(signed: Signed, action: AuditAction, detail: Readonly<Record
 /** Whether an email is one of the stored logins, for a statement on the settings row. */
 function isStoredLogin(email: string): SQL {
   return fragment`EXISTS (SELECT 1 FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${email})`;
+}
+
+/** The settings, and whether who signs a change of them still stands. */
+function settingsAndSigner(by: string): Statement {
+  return built(BUILD.select({ value: settings.value, stands: fragment<number>`${signerStands(by)}`.as("stands") }).from(settings).where(eq(settings.id, 1)));
+}
+
+/** Whether the read of `settingsAndSigner` found a signer who no longer stands. */
+function signerGone(read: StatementResult | undefined): boolean {
+  return read?.rows[0]?.stands !== 1;
 }
 
 /** The audit entry of one login added or removed, with the logins after it, written only when the statement before it changed a row. */
@@ -1267,45 +1278,56 @@ export class SqlDatabase implements Database {
   async changeSettings(
     changes: Partial<SettingValues>,
     signed: Signed,
-  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">> {
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">> {
     const checked = v.parse(SETTING_CHANGES, changes);
     // A merge patch: each key it names is replaced and every other key stays, only when a value differs.
     const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
-    const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`json(${patched}) <> json(${settings.value})`)));
+    const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed.by), fragment`json(${patched}) <> json(${settings.value})`)));
     // The marks of changed users and of changed rules read the settings as they still are, so they run before the change.
-    const rules = rulesReplaced(checked, signed.at);
+    const rules = rulesReplaced(checked, signed);
     // So do the tokens of the users the new logins leave out, which end in the same step.
-    const users = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed.at), ...endTokensOfDropped(checked.logins, signed)];
+    const users = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed), ...endTokensOfDropped(checked.logins, signed)];
     const marks = [...users, ...(rules === undefined ? [] : [rules])];
-    const answers = await this.#driver.batch([...marks, update, auditPlain(signed, "settings_changed", checked), READ_SETTINGS]);
-    const [updated, , read] = answers.slice(marks.length);
-    const values = settingsIn(read);
-    if (values === undefined) return { kind: "not_set_up" };
-
-    return { kind: changed(updated) ? "done" : "unchanged", values };
-  }
-
-  async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">> {
-    const added = fragment<string>`json_insert(${settings.value}, '$.logins[#]', ${v.parse(LOGIN, login)})`;
-    const add = BUILD.update(settings).set({ value: added, updated_at: signed.at }).where(and(eq(settings.id, 1), fragment`NOT ${isStoredLogin(login)}`));
-    const [updated, , , read] = await this.#driver.batch([built(add), auditOfLogins(signed), usersChanged(signed.at), READ_SETTINGS]);
-    const values = settingsIn(read);
-    if (values === undefined) return { kind: "not_set_up" };
-
-    return { kind: changed(updated) ? "done" : "unchanged", values };
-  }
-
-  async removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login">> {
-    const place = fragment`(SELECT j.key FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${v.parse(LOGIN, login)})`;
-    const removed = fragment<string>`json_remove(${settings.value}, '$.logins[' || ${place} || ']')`;
-    // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
-    const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.logins') > 1 END`;
-    const remove = BUILD.update(settings).set({ value: removed, updated_at: signed.at }).where(and(eq(settings.id, 1), isStoredLogin(login), keepsWorkingLogin));
-    const [updated, , , read] = await this.#driver.batch([built(remove), auditOfLogins(signed), usersChanged(signed.at), READ_SETTINGS, ...endTokensOfRemoved(login, signed)]);
+    // The token that signs ends after the change, where the new logins leave its own user out: it stands for every statement before.
+    const own = checked.logins === undefined ? [] : endSignerLeftOut(signed);
+    const answers = await this.#driver.batch([...marks, update, auditPlain(signed, "settings_changed", checked), ...own, settingsAndSigner(signed.by)]);
+    const [updated, read] = [answers[marks.length], answers.at(-1)];
     const values = settingsIn(read);
     if (values === undefined) return { kind: "not_set_up" };
 
     if (changed(updated)) return { kind: "done", values };
+
+    return signerGone(read) ? { kind: "signer_gone" } : { kind: "unchanged", values };
+  }
+
+  async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">> {
+    const added = fragment<string>`json_insert(${settings.value}, '$.logins[#]', ${v.parse(LOGIN, login)})`;
+    const add = BUILD.update(settings).set({ value: added, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed.by), fragment`NOT ${isStoredLogin(login)}`));
+    const [updated, , , read] = await this.#driver.batch([built(add), auditOfLogins(signed), usersChanged(signed.at), settingsAndSigner(signed.by)]);
+    const values = settingsIn(read);
+    if (values === undefined) return { kind: "not_set_up" };
+
+    if (changed(updated)) return { kind: "done", values };
+
+    return signerGone(read) ? { kind: "signer_gone" } : { kind: "unchanged", values };
+  }
+
+  async removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login" | "signer_gone">> {
+    const place = fragment`(SELECT j.key FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${v.parse(LOGIN, login)})`;
+    const removed = fragment<string>`json_remove(${settings.value}, '$.logins[' || ${place} || ']')`;
+    // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
+    const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.logins') > 1 END`;
+    const lands = and(eq(settings.id, 1), signerStands(signed.by), isStoredLogin(login), keepsWorkingLogin);
+    const remove = BUILD.update(settings).set({ value: removed, updated_at: signed.at }).where(lands);
+    // The mark of changed users goes first, under the removal's own condition: the tokens of the removed user end right after its audit entry.
+    const mark = usersChanged(signed.at, fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${lands})`);
+    const [, updated, , , , read] = await this.#driver.batch([mark, built(remove), auditOfLogins(signed), ...endTokensOfRemoved(login, signed), settingsAndSigner(signed.by)]);
+    const values = settingsIn(read);
+    if (values === undefined) return { kind: "not_set_up" };
+
+    if (changed(updated)) return { kind: "done", values };
+
+    if (signerGone(read)) return { kind: "signer_gone" };
 
     return values.logins.includes(login) ? { kind: "no_working_login" } : { kind: "unchanged", values };
   }

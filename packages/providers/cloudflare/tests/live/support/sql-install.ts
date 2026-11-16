@@ -13,12 +13,10 @@ import { DEFAULT_PUBLIC_WORD } from "../../../../../core/src/names/marker";
 import { defaultSettings, type SettingValues } from "../../../../../core/src/records/settings";
 import { MemoryStore } from "../../../../../core/src/storage/memory";
 import { BunSqliteDriver } from "../../../../../core/tests/database/support/bun-sqlite-driver";
+import { tokenRow } from "../../../scripts/live/tokens";
 
 /** The moment every request arrives at. */
 export const FAKE_NOW = 1_700_000_000_000;
-
-/** How long a token the fake makes is good for, in milliseconds. */
-const TOKEN_MS = 60 * 60 * 1000;
 
 /** The hostname the fake's API answers on. */
 const ADMIN_HOST = "poplin.example.com";
@@ -107,7 +105,8 @@ export async function openSqlInstall(kind: "domain" | "account address" = "domai
     sql,
     addToken: async (note) => {
       const { token, record } = await mintToken({ scope: "admin", note, now: FAKE_NOW });
-      await sql("INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ?, ?, ?)", [record.id, record.hash, record.note, FAKE_NOW, FAKE_NOW + TOKEN_MS, record.note]);
+      const row = tokenRow(record, FAKE_NOW);
+      await sql(row.sql, row.params);
 
       return token;
     },

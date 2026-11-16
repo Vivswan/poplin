@@ -393,6 +393,49 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       ]);
     });
 
+    // Drift: a request is let in before its user is removed and may write after. A settings write that still landed would put the removed user back among the logins, or end the tokens of a user who stays.
+    test("a change of the settings signed by a token whose user was removed since writes nothing, and one signed by a token that leaves its own user out lands whole, once", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy, di, ed] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login, "ed@example.com" as Login];
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy, di, ed] }, BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [] }, null);
+      const token = async (note: string, now = NOW): Promise<TokenRecord> => (await mintToken({ scope: "admin", note, now })).record;
+      // The token of cy runs out five milliseconds on: a removal after that leaves it as it ended.
+      const [laptop, brief, pad, ci] = [await token("laptop"), await token("brief", NOW - 30 * DAY_MS + 5), await token("pad"), await token("ci")];
+      for (const [made, by] of [[laptop, bo], [brief, cy], [pad, di], [ci, ed]] as const) await database.addToken(made, { by, at: NOW });
+      const state = async (): Promise<unknown> => {
+        const [stored, tokens, check] = [await database.readSettings(), await database.listTokenStates(NOW + 9, 50), await database.readDomainCheck()];
+        const ended = Object.fromEntries(tokens.ended.map(({ note, how }) => [note, how]));
+
+        return { logins: stored?.logins, outside: stored?.outside_pages, live: tokens.live.map(({ note }) => note).sort(), ended, changes: (await auditDetails(database, "settings_changed")).length, rulesWait: (check?.rules_changed_at ?? 0) > 0 };
+      };
+      await database.removeLogin(bo, { by: ADMIN, at: NOW + 1 });
+      await database.removeLogin(cy, { by: ADMIN, at: NOW + 6 });
+      const before = await state();
+      const late: Signed = { by: laptop.id, at: NOW + 2 };
+      // The token that ran out signs from before its end, as a request let in then would: its user is gone, so it is too.
+      const ranOut: Signed = { by: brief.id, at: NOW + 2 };
+      const refused = [
+        await database.changeSettings({ logins: [ADMIN, bo], outside_pages: "allowed" }, late),
+        await database.addLogin(bo, late),
+        await database.removeLogin(cy, late),
+        await database.removeLogin(di, late),
+        await database.changeSettings({ logins: [ADMIN] }, ranOut),
+        await database.removeLogin(cy, ranOut),
+      ];
+      const after = await state();
+      const own = [await database.removeLogin(ed, { by: ci.id, at: NOW + 7 }), await database.changeSettings({ logins: [ADMIN], outside_pages: "allowed" }, { by: pad.id, at: NOW + 8 })];
+      const again = await database.changeSettings({ logins: [ADMIN, di], outside_pages: "blocked" }, { by: pad.id, at: NOW + 8 });
+
+      expect<unknown>([refused, after]).toEqual([Array.from({ length: 6 }, () => ({ kind: "signer_gone" })), before]);
+      expect(before).toEqual({ logins: [ADMIN, di, ed], outside: "blocked", live: ["ci", "pad"], ended: { laptop: "user_removed", brief: "ran_out" }, changes: 2, rulesWait: false });
+      expect<unknown>([own.map(({ kind }) => kind), again, await state()]).toEqual([
+        ["done", "done"],
+        { kind: "signer_gone" },
+        { logins: [ADMIN], outside: "allowed", live: [], ended: { laptop: "user_removed", brief: "ran_out", pad: "user_removed", ci: "user_removed" }, changes: 4, rulesWait: true },
+      ]);
+    });
+
     // Drift: `poplin config logins` and an import replace the whole list. A list that dropped a user and kept that user's tokens would be the way round the removal.
     test("a list of logins that leaves users out ends their tokens with it, and a list that keeps everyone ends none", async () => {
       const database = await opened(makeDatabase);

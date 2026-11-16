@@ -7,13 +7,15 @@
 //
 // A mark is always later than every mark before it, the settled ones too, so a try that began under an earlier mark can never take a later one for its own.
 
-import { and, eq, sql as fragment, gt } from "drizzle-orm";
+import { and, eq, sql as fragment, gt, type SQL } from "drizzle-orm";
 import * as v from "valibot";
 
 import { type CarriedRules, type CarriedUsers, DOMAIN_CHECK, type DomainCheck, type RememberedCheck } from "../records/domain-check";
 import { MOMENT } from "../records/fields";
 import { RULE_SETTINGS, type RuleSettings } from "../records/settings";
+import type { Signed } from "./database";
 import type { Statement, StatementResult } from "./driver";
+import { signerStands } from "./login-statements";
 import { domainCheck, settings } from "./schema";
 import { BUILD, built, CHANGED } from "./statements";
 
@@ -70,12 +72,13 @@ export function domainCheckKept(check: DomainCheck): Statement {
 }
 
 /**
- * Build the statement that remembers the users changed, for a batch where it follows the audit entry of that change: it writes only when that entry was written, and only on an install that keeps a run.
+ * Build the statement that remembers the users changed, only on an install that keeps a run.
  *
  * @param at - the moment of the change
+ * @param when - what must hold for the mark to be set. Left out, the statement follows the audit entry of the change in a batch, and writes only when that entry was written
  */
-export function usersChanged(at: number): Statement {
-  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(and(eq(domainCheck.id, 1), CHANGED)));
+export function usersChanged(at: number, when: SQL = CHANGED): Statement {
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(and(eq(domainCheck.id, 1), when)));
 }
 
 /**
@@ -83,9 +86,9 @@ export function usersChanged(at: number): Statement {
  * It writes only on an install that keeps a run, for a list that adds a login, drops one, or has another first login. Another order behind the same first login is no change.
  *
  * @param logins - the logins that replace the stored ones
- * @param at - the moment of the change
+ * @param signed - who signs the change and its moment; a signer who no longer stands remembers nothing
  */
-export function usersReplaced(logins: readonly string[], at: number): Statement {
+export function usersReplaced(logins: readonly string[], signed: Signed): Statement {
   const stored = fragment`json_each(${settings.value}, '$.logins')`;
   const given = fragment`json_each(${JSON.stringify(logins)})`;
   const dropped = fragment`EXISTS (SELECT 1 FROM ${stored} AS was WHERE was.value NOT IN (SELECT value FROM ${given}))`;
@@ -93,7 +96,7 @@ export function usersReplaced(logins: readonly string[], at: number): Statement 
   const moved = fragment`json_extract(${settings.value}, '$.logins[0]') IS NOT ${logins[0] ?? null}`;
   const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added} OR ${moved}))`;
 
-  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(and(eq(domainCheck.id, 1), differs)));
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(signed.at) }).where(and(eq(domainCheck.id, 1), differs, signerStands(signed.by))));
 }
 
 /**
@@ -128,13 +131,13 @@ export function usersCarried(carried: CarriedUsers, at: number): Statement {
  * It writes only on an install that keeps a run, and only where a value differs.
  *
  * @param changes - the settings a change names; the ones no rule is written from are not read
- * @param at - the moment of the change
+ * @param signed - who signs the change and its moment; a signer who no longer stands remembers nothing
  * @returns the statement, or `undefined` for a change that names no such setting
  */
-export function rulesReplaced(changes: Partial<RuleSettings>, at: number): Statement | undefined {
+export function rulesReplaced(changes: Partial<RuleSettings>, signed: Signed): Statement | undefined {
   if (RULE_SETTINGS.every((key) => changes[key] === undefined)) return undefined;
 
-  return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(at) }).where(and(eq(domainCheck.id, 1), fragment`NOT ${storedRules(changes)}`)));
+  return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(signed.at) }).where(and(eq(domainCheck.id, 1), fragment`NOT ${storedRules(changes)}`, signerStands(signed.by))));
 }
 
 /**

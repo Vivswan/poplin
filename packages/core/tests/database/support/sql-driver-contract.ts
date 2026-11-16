@@ -591,7 +591,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
         const steps = plan.map((step) => String(step.detail));
         scans.push(
           ...steps
-            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|\w+ VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|given\b|ends\b)/.test(step))
+            .filter((step) => /\bSCAN\b/.test(step) && !/\bSCAN (CONSTANT ROW|sqlite_master|\w+ (?:EXISTS )?VIRTUAL TABLE|\(subquery-1\)|page\b|cut\b|given\b|ends\b)/.test(step))
             .map((step) => `${step} <- ${statement.sql.trim().split("\n")[0]}`),
         );
       }

@@ -976,31 +976,32 @@ export interface Database {
    *
    * Logins that add or drop a user, or that put another user first, are remembered, in the same step, as changed users by an install that keeps a check of its domain. The same users in another order behind the same first one are not.
    *
+   * @returns `signer_gone` for a token that signs and was removed, or whose user is no user any more, as when that user was removed while it asked; it writes nothing
    * @throws {Error} a value breaks its rule
    */
   changeSettings(
     changes: Partial<SettingValues>,
     signed: Signed,
-  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">>;
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">>;
 
   /**
    * Let one more email log in. It is one step that reads no list first: of logins added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which holds the logins after it.
    * An install that keeps a check of its domain remembers, in the same step, that the users changed: one more row written.
    *
-   * @returns `unchanged` for an email that already is a login, which writes nothing
+   * @returns `unchanged` for an email that already is a login, and `signer_gone` as `changeSettings` answers it; neither writes anything
    * @throws {Error} the login is no email in its normal form
    */
-  addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up">>;
+  addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">>;
 
   /**
    * Stop one email from logging in, in the same one step, and only while a login that works stays: the signer's own email when it is a login, and any login at all when the signer is none.
    *
    * It writes one `settings_changed` audit entry, which holds the logins after it, and an install that keeps a check of its domain remembers that the users changed.
    *
-   * @returns `unchanged` for an email that is no login, and `no_working_login` for the signer's own email or the last login there is; neither writes anything
+   * @returns `unchanged` for an email that is no login, `no_working_login` for the signer's own email or the last login there is, and `signer_gone` as `changeSettings` answers it; none writes anything
    * @throws {Error} the login is no email in its normal form
    */
-  removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login">>;
+  removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login" | "signer_gone">>;
 
   /** The bytes of the key the visitor limits are made from, `undefined` before one was stored. Only this and `readSettingsAndKey` return them. */
   readVisitorKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;
