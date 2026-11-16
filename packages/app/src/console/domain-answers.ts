@@ -1,8 +1,9 @@
 // What the Domain screen is answered after a run: every piece as a row to draw, one line that counts what is left, and the steps only a person can do. A run that read no table is answered as a refusal that names the box it is about.
 //
 //   2 to repair                      or, with nothing to repair after a user was added or removed: Users changed. Press Repair.
-//   Piece         State     Detail
-//   DNS record    missing   poplin.example.com
+//   Piece         State          Detail
+//   DNS record    missing        poplin.example.com
+//   DNS record    needs repair   poplin.example.com: missing or changed      as the install remembers a run: it keeps no more of why
 //
 // The words are made here, and the client draws what it is given.
 
@@ -46,6 +47,9 @@ const KEPT: Readonly<Record<Exclude<KeptPiece["state"], "unread"> | UnreadReason
   not_run: { state: "not run", tone: "idle", counts: "failed" },
 };
 
+/** Why a remembered piece needs a repair, said after what names it: the install keeps that a piece was missing or had changed, and not which. */
+const KEPT_WHY = "missing or changed";
+
 /** The sentence of a refusal that reads otherwise after a run than after any other request: here it is the database that took no more, after the plug had answered. */
 const RUN_SENTENCES: Readonly<Record<string, string>> = {
   allowance_spent: "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC.",
@@ -73,7 +77,7 @@ interface ShownRow {
 }
 
 /** The one line over the rows. */
-export interface Summary {
+interface Summary {
   /** The count, such as `2 to repair`. */
   readonly line: string;
 
@@ -83,10 +87,20 @@ export interface Summary {
 
 /** A run that read its table, as a screen draws it. */
 interface RunDone {
+  /** The run read its table. */
   readonly ok: true;
+
+  /** Every piece, in the run's order. */
   readonly rows: readonly ShownRow[];
+
+  /** The steps only a person can do. */
   readonly steps: readonly DomainStep[];
+
+  /** The line that counts the rows. */
   readonly summary: Summary;
+
+  /** How many rows wait for a repair, where the line counts them; 0 where the line says anything else. A screen adds what else on it asks for a repair. */
+  readonly waiting: number;
 }
 
 /** A refusal as the client reads it: the code, the box it is about, and the sentence to show. */
@@ -132,11 +146,9 @@ interface Last {
 
   /** The line that counts them. */
   readonly summary: Summary;
-}
 
-/** The line of so many things that wait for a repair, such as `2 to repair`. */
-export function toRepair(waiting: number): Summary {
-  return { line: `${waiting} to repair`, tone: "bad" };
+  /** How many rows wait for a repair, where the line counts them; 0 where the line says anything else. */
+  readonly waiting: number;
 }
 
 function count(rows: readonly DomainRow[], states: readonly DomainState[]): number {
@@ -144,19 +156,24 @@ function count(rows: readonly DomainRow[], states: readonly DomainState[]): numb
 }
 
 /** A run goes on past a row that failed for a right and stops at any other failure, and the rows alone do not say which: the line counts what is left and claims neither. An optional piece that is not set up is no work left over. */
-function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): Summary {
+function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): Pick<RunDone, "summary" | "waiting"> {
   const failed = count(rows, ["failed"]);
-  if (failed > 0) return { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" };
+  if (failed > 0) return { summary: { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" }, waiting: 0 };
 
   const waiting = count(rows, TO_REPAIR);
-  if (waiting > 0) return toRepair(waiting);
+  if (waiting > 0) return { summary: { line: `${waiting} to repair`, tone: "bad" }, waiting };
 
-  if (waits) return USERS_CHANGED;
+  if (waits) return { summary: USERS_CHANGED, waiting: 0 };
 
   const repaired = count(rows, REPAIRED);
-  if (run === "repair" && repaired > 0) return { line: `${repaired} repaired`, tone: "good" };
+  if (run === "repair" && repaired > 0) return { summary: { line: `${repaired} repaired`, tone: "good" }, waiting: 0 };
 
-  return { line: "Nothing to repair", tone: "good" };
+  return { summary: { line: "Nothing to repair", tone: "good" }, waiting: 0 };
+}
+
+/** What a remembered piece says in its row: what names it, and for one that needs a repair also why, as far as the install keeps it. */
+function keptDetail(piece: KeptPiece): string {
+  return piece.state === "needs_repair" ? `${piece.detail}: ${KEPT_WHY}` : piece.detail;
 }
 
 /**
@@ -170,10 +187,9 @@ export function keptAnswer(kept: Kept): Last | null {
 
   const drawn = check.pieces.map((piece) => ({ piece, as: KEPT[piece.state === "unread" ? piece.reason : piece.state] }));
   const counted = drawn.map(({ piece, as }) => ({ object: piece.piece, detail: piece.detail, part: piece.part, state: as.counts }));
-  const summary = summaryOf("check", counted, waits);
-  const rows = drawn.map(({ piece, as }) => ({ piece: piece.piece, state: as.state, tone: as.tone, detail: piece.detail }));
+  const rows = drawn.map(({ piece, as }) => ({ piece: piece.piece, state: as.state, tone: as.tone, detail: keptDetail(piece) }));
 
-  return { ran_at: check.ran_at, by: check.by, run: check.run, stale, waits, rows, summary };
+  return { ran_at: check.ran_at, by: check.by, run: check.run, stale, waits, rows, ...summaryOf("check", counted, waits) };
 }
 
 /**
@@ -200,5 +216,5 @@ export function runRefusal(code: string, tokenFor: string): RunRefused {
 export function runDone(run: DomainRun, reading: Extract<DomainReading, { readonly ok: true }>, waits: boolean): RunDone {
   const rows = reading.rows.map((row) => ({ piece: row.object, state: domainStateWords(row.state), tone: TONES[row.state], detail: row.detail }));
 
-  return { ok: true, rows, steps: reading.steps, summary: summaryOf(run, reading.rows, waits) };
+  return { ok: true, rows, steps: reading.steps, ...summaryOf(run, reading.rows, waits) };
 }

@@ -11,7 +11,6 @@ import { Hono } from "hono";
 import * as v from "valibot";
 
 import { refused, refuseInvalid, type Shared } from "./data";
-import { type Summary, toRepair } from "./domain-answers";
 import { refusalSentence } from "./notices";
 
 /** The stretches of days the list offers, the shortest first. */
@@ -37,16 +36,16 @@ interface Mark {
 
 /**
  * What the frame holds of the problems: each kind last seen within a day, once, the newest first, and the mark of each screen that has any.
- * `domainAsks` counts those the Domain screen draws that say to press Repair, such as `1 to repair`, and is `null` for none: the screen says it over pieces that are all in place, so its line never says that nothing is left over such a problem.
+ * `domainAsks` counts those the Domain screen draws that say to press Repair: the screen adds them to the pieces its line counts, so the line counts every mark under it that a repair ends.
  */
 export interface Marked {
   readonly recent: readonly ShownProblem[];
   readonly marks: Readonly<Record<Home, Mark | null>>;
-  readonly domainAsks: Summary | null;
+  readonly domainAsks: number;
 }
 
 /** The frame of an install with no problem. */
-export const NOTHING_MARKED: Marked = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: null };
+export const NOTHING_MARKED: Marked = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: 0 };
 
 /** What to do about a problem. An update that was refused is kept under the refusal's code and what it is about, so its advice is that refusal's own sentence. */
 function todoOf(problem: Problem): string {
@@ -84,7 +83,7 @@ export function markedIn(problems: readonly Problem[], now: number, domain: { re
   const asking = recent.filter((problem) => problem.home === "domain" && asksRepair(problem.kind)).length;
   const marks = { usage: markOf("usage", recent, also.usage), domain: markOf("domain", recent, also.domain), settings: markOf("settings", recent, also.settings) };
 
-  return { recent, marks, domainAsks: asking === 0 ? null : toRepair(asking) };
+  return { recent, marks, domainAsks: asking };
 }
 
 /** The data route of the problems. The newest is first. */

@@ -53,7 +53,7 @@ describe("the shell page", () => {
   // Drift: a start value that holds markup would end the data block and run in the dashboard's page: a browser ends a script block at `</script>` whatever JSON says.
   test("writes a start value that holds markup so that a browser reads it back whole and runs nothing of it", async () => {
     const hostile = "</script><script>alert(1)</script><!-- & &amp; -->";
-    const marked = { recent: [], marks: { usage: { count: 1, says: hostile }, domain: null, settings: null }, domainAsks: { line: hostile, tone: "bad" as const } };
+    const marked = { recent: [], marks: { usage: { count: 1, says: hostile }, domain: null, settings: null }, domainAsks: 2 };
     const boot = { base: "", email: hostile, title: hostile, version: "1.0.0", update: null, starts: false, back: null, demo: null, domain: true, domainNote: { label: hostile, sentence: hostile, quiet: false }, ...marked };
     const shell = readShell(String(await shellPage(boot, { script: "app-4f1c.js", style: "app-9d2e.css" })));
 
