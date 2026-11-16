@@ -91,6 +91,13 @@ function opened(name: string): (string | null)[] {
   return [...within(document.body).getByRole("dialog", { name }).querySelectorAll("p")].map((line) => line.textContent);
 }
 
+/** The host's warnings a row shows under its control, each line apart; `null` for a row that shows none. */
+function warned(): (string | null)[] | null {
+  const lines = document.querySelector("[data-slot=setting-warnings]")?.querySelectorAll("span > span");
+
+  return lines === undefined ? null : [...lines].map((line) => line.textContent);
+}
+
 describe("the row of a setting that does nothing on this install", () => {
   // Drift: a control that took a change would store a value nothing acts on, with no word of why, and a Reset would offer the same.
   test("says what it needs under a control that takes no change, and offers no Reset", () => {
@@ -154,12 +161,11 @@ describe("the row of a setting", () => {
     expect(describedBy("max_total_size")).toEqual(["The most all sites hold, the trash included. (Default: 9,000 MB)", "MB", WARNINGS[0]]);
   });
 
-  // Drift: a warning would have no mark after the control, or two warnings would run together as one paragraph.
-  test("holds the host's warnings behind the mark after the control, each sentence a line of its own", () => {
+  // Drift: a warning of what costs money would again be behind a mark that says it to a pointer alone, or two warnings would run together as one paragraph.
+  test("says the host's warnings in plain lines under the control, each sentence a line of its own, with nothing to press", () => {
     const { page } = drawn(BOUNDED, "20001MB");
-    fireEvent.click(page.getByRole("button", { name: "Warning for All sites together" }));
 
-    expect(opened("Warning")).toEqual(WARNINGS);
+    expect([warned(), page.queryByRole("button", { name: /^Warning/ })]).toEqual([WARNINGS, null]);
   });
 
   // Drift: the mark would follow the stored value, so a count typed above a free limit would show no warning until it was saved, and one typed back under it would keep its mark.
@@ -170,11 +176,9 @@ describe("the row of a setting", () => {
     ["with no count", "MB", null],
     ["in another unit, under its own mark", "10001KB", null],
     ["in another unit, above its own mark", "10000001KB", [WARNINGS[0]]],
-  ])("marks the text its control holds, saved or not: %s", (_what, text, warnings) => {
-    const { page } = drawn(BOUNDED, text);
-    const mark = page.queryByRole("button", { name: "Warning for All sites together" });
-    if (mark !== null) fireEvent.click(mark);
+  ])("warns of the text its control holds, saved or not: %s", (_what, text, warnings) => {
+    drawn(BOUNDED, text);
 
-    expect(mark === null ? null : opened("Warning")).toEqual(warnings);
+    expect(warned()).toEqual(warnings);
   });
 });

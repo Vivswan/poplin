@@ -1,4 +1,4 @@
-// One setting of the Settings screen as a row. A wide column has the name at the left, with one short sentence and the default under it, and the control at the right.
+// One setting of the Settings screen as a row. A wide column has the name at the left, with one short sentence and the default under it, and the control at the right, with what the host warns of at its value in plain words under it.
 // A narrow column keeps the sentence and the default behind a "?" beside the name. The narrowest one, a phone's, has a field under its name and a switch beside it.
 
 import { Field } from "@base-ui/react/field";
@@ -100,26 +100,17 @@ function About({ name, says, fallback, onReset }: Pick<SettingFrameProps, "name"
   );
 }
 
-/** The mark after a control the host warns about: pointing at it or pressing it opens what the host says. */
-function Warnings({ name, warnings }: { readonly name: string; readonly warnings: readonly string[] }): ReactNode {
+/** What the host warns of at the value a control holds: plain lines under the control, after a mark, each sentence a line of its own. They are read with no pointer and no press, and a screen reader hears them with the control. */
+function Warnings({ warnings }: { readonly warnings: readonly string[] }): ReactNode {
   return (
-    <Popover>
-      <PopoverTrigger
-        openOnHover
-        render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Warning for ${name}`} className="shrink-0 text-warn hover:text-warn" />}
-      >
-        <TriangleAlertIcon />
-      </PopoverTrigger>
-      <Field.Description className="sr-only">{warnings.join(" ")}</Field.Description>
-      <PopoverContent align="end" className="gap-1.5">
-        <PopoverTitle>Warning</PopoverTitle>
-        <PopoverDescription render={<div />} className="flex flex-col gap-1.5 text-popover-foreground">
-          {warnings.map((warning) => (
-            <p key={warning}>{warning}</p>
-          ))}
-        </PopoverDescription>
-      </PopoverContent>
-    </Popover>
+    <Field.Description render={<div />} data-slot="setting-warnings" className="flex gap-1.5 text-[13px] leading-5 text-warn">
+      <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      <span className="flex min-w-0 flex-col gap-1">
+        {warnings.map((warning) => (
+          <span key={warning}>{warning}</span>
+        ))}
+      </span>
+    </Field.Description>
   );
 }
 
@@ -172,10 +163,8 @@ export function SettingFrame({
         </p>
       </div>
       <div className="flex max-w-full min-w-0 flex-col gap-1.5">
-        <div className="flex min-h-8 max-w-full items-center gap-2">
-          {children}
-          {warnings.length === 0 ? null : <Warnings name={name} warnings={warnings} />}
-        </div>
+        <div className="flex min-h-8 max-w-full items-center gap-2">{children}</div>
+        {warnings.length === 0 ? null : <Warnings warnings={warnings} />}
         {under === undefined ? null : <div className="text-[13px] leading-5 empty:hidden">{under}</div>}
       </div>
     </Field.Root>
