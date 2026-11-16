@@ -12,7 +12,7 @@ import { type Install, type Refused, refuse } from "./records";
 import { SITE_OBJECT, siteAnswer } from "./site-object";
 
 /** What a delete may ask for besides its site: whether the site goes now and for good. */
-export const DELETE_OPTIONS = v.strictObject({ forever: v.optional(v.boolean()) });
+export const DELETE_OPTIONS = v.strictObject({ no_trash: v.optional(v.boolean()) });
 
 /** What a delete answers: the site as it was, the site in the trash or `null` once it is gone for good, and the prefix whose files are not all removed yet. */
 export const DELETED_SITE = v.object({ before: v.nullable(SITE_OBJECT), site: v.nullable(SITE_OBJECT), left: v.pipe(v.array(v.string()), v.readonly()) });
@@ -56,8 +56,8 @@ export async function removeSite(install: Install, id: SiteId, signed: Signed, t
 /**
  * Move a site to the trash, or remove it for good.
  *
- * @param request - `site` is a reference to the site. `forever` removes the row and the files now, from the trash or not; without it the site goes to the trash and keeps its public name
- * @returns the site in the trash; with `forever`, `site` is `null` and `before` is the site as it last was. `left` names the prefix whose files are not all removed yet, which the sweep finishes; it is empty once all went
+ * @param request - `site` is a reference to the site. `no_trash` removes the row and the files now, from the trash or not; without it the site goes to the trash and keeps its public name
+ * @returns the site in the trash; with `no_trash`, `site` is `null` and `before` is the site as it last was. `left` names the prefix whose files are not all removed yet, which the sweep finishes; it is empty once all went
  */
 export async function deleteSite(
   install: Install,
@@ -69,7 +69,7 @@ export async function deleteSite(
 
   const { site, settings, signed } = reached;
 
-  if (request.forever === true) {
+  if (request.no_trash === true) {
     const removed = await removeSite(install, site.id, signed);
     if (removed === undefined) return refuse("not_found");
 

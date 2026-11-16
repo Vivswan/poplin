@@ -38,7 +38,7 @@ interface Named {
   readonly upload: string;
   readonly trash?: "true";
   readonly limit?: "1";
-  readonly forever?: "true";
+  readonly noTrash?: "true";
 }
 
 const property = fuzzTarget(import.meta.file);
@@ -60,7 +60,7 @@ async function uploadOf(response: Pick<Response, "json">): Promise<string> {
 }
 
 /** The paths of every route, under the path the app declares it by. A route the app declares and this leaves out does not compile, nor one it does not declare. */
-function pathsOf({ site, upload, trash, limit, forever }: Named): Readonly<Record<keyof ExtractSchema<Api>, readonly string[]>> {
+function pathsOf({ site, upload, trash, limit, noTrash }: Named): Readonly<Record<keyof ExtractSchema<Api>, readonly string[]>> {
   const one = { param: { site }, query: {} };
   const held = { param: { upload }, query: {} };
   const file = { version: "1", path: PAGE.path };
@@ -73,7 +73,7 @@ function pathsOf({ site, upload, trash, limit, forever }: Named): Readonly<Recor
     "/api/logins": [ROUTES.logins.$path()],
     "/api/logins/token": [ROUTES.logins.token.$path()],
     "/api/sites": [ROUTES.sites.$path({ query: { trash, limit } })],
-    "/api/sites/:site": [ROUTES.sites[":site"].$path(one), ROUTES.sites[":site"].$path({ ...one, query: { forever } })],
+    "/api/sites/:site": [ROUTES.sites[":site"].$path(one), ROUTES.sites[":site"].$path({ ...one, query: { no_trash: noTrash } })],
     "/api/sites/:site/rollback": [ROUTES.sites[":site"].rollback.$path(one)],
     "/api/sites/:site/new-link": [ROUTES.sites[":site"]["new-link"].$path(one)],
     "/api/sites/:site/restore": [ROUTES.sites[":site"].restore.$path(one)],
@@ -108,7 +108,7 @@ async function openTarget(): Promise<Target> {
   const site = ((await finished.json()) as { site: { id: string } }).site.id;
   const pending = await uploadOf(await calls.uploads.$post({ query: {}, json: { site, files: [PAGE] } }));
   const held = Object.values(pathsOf({ site, upload: pending })).flat();
-  const absent = Object.values(pathsOf({ site: NO_SITE, upload: NO_UPLOAD, trash: "true", limit: "1", forever: "true" })).flat();
+  const absent = Object.values(pathsOf({ site: NO_SITE, upload: NO_UPLOAD, trash: "true", limit: "1", noTrash: "true" })).flat();
 
   return { install, paths: [...held, ...absent], runs: 0 };
 }

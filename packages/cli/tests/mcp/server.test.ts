@@ -241,7 +241,7 @@ describe("the MCP server", () => {
     const shown = await bench.call("get_site", { site: typed });
     const asked = [...bench.sent];
     const updated = await bench.call("publish_site", { path: folder, site: typed });
-    const deleted = await bench.call("delete_site", { site: typed, forever: true });
+    const deleted = await bench.call("delete_site", { site: typed, no_trash: true });
     const left = ((await answered(bench.install.routes.sites.$get())).body.sites as unknown[]).length;
 
     if (expected.at(-1)?.startsWith("GET /api/sites/") === true) {
@@ -281,15 +281,15 @@ describe("the MCP server", () => {
     expect([failed.error, bench.sent.at(-1)?.slice(0, 20), uploads.uploads.filter((upload) => upload.plan.kind === "duplicate").map((upload) => upload.state)]).toEqual([true, "DELETE /api/uploads/", ["abandoned"]]);
   });
 
-  test("new_link and delete_site with forever say what was lost, and nothing less than their own argument asks for either: an agent must be able to tell the user what is gone", async () => {
+  test("new_link and delete_site with no_trash say what was lost, and nothing less than their own argument asks for either: an agent must be able to tell the user what is gone", async () => {
     const { bench, site } = await withSite();
 
     const linked = await bench.call("new_link", { site: site.label });
     const moved = siteOf(linked);
     const old = await bench.call("get_site", { site: site.label });
-    const kept = await bench.call("delete_site", { site: moved.label, forever: false });
+    const kept = await bench.call("delete_site", { site: moved.label, no_trash: false });
     await bench.call("restore_site", { site: moved.label });
-    const gone = await bench.call("delete_site", { site: moved.label, forever: true });
+    const gone = await bench.call("delete_site", { site: moved.label, no_trash: true });
     const after = await bench.call("get_site", { site: moved.label });
 
     expect(linked.text.split("\n")).toEqual([
@@ -373,8 +373,8 @@ describe("the MCP server", () => {
     [
       "an argument of the wrong type",
       "delete_site",
-      { site: "report--k3f9x2ab71qz", forever: "yes" },
-      'forever: Invalid type: Expected boolean but received "yes"',
+      { site: "report--k3f9x2ab71qz", no_trash: "yes" },
+      'no_trash: Invalid type: Expected boolean but received "yes"',
     ],
     ["an argument no tool takes", "get_site", { site: "report--k3f9x2ab71qz", force: true }, "force"],
     ["a missing argument", "publish_site", {}, "path"],
@@ -478,13 +478,13 @@ describe("the MCP server", () => {
     const echoed = await bench.call("get_site", { site: site.label });
     bench.hook = undefined;
     const titled = await bench.call("update_site", { site: site.label, title: `the ${token}` });
-    const mistyped = await bench.call("delete_site", { site: site.label, forever: token });
+    const mistyped = await bench.call("delete_site", { site: site.label, no_trash: token });
     const unknown = await bench.client.callTool({ name: token, arguments: {} }).catch((error: Error) => error.message);
 
     expect(echoed.text).toBe("internal: the install failed to do that: [token]\ntry again; poplin doctor reports on the install");
     expect((titled.data.site as { title: string }).title).toBe("the [token]");
     expect(mistyped.text).toBe(
-      'bad_argument: an argument is missing, unknown, or of the wrong form: forever: Invalid type: Expected boolean but received "[token]"',
+      'bad_argument: an argument is missing, unknown, or of the wrong form: no_trash: Invalid type: Expected boolean but received "[token]"',
     );
     expect(JSON.stringify(unknown)).toContain("[token]");
     expect(bench.written.join("\n")).not.toContain(token);

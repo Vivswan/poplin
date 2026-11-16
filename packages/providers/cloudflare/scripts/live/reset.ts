@@ -218,7 +218,7 @@ async function removeSites(client: Client, io: Io, listing: { readonly trash: bo
     if (doomed.length === 0) return removed;
 
     for (const site of doomed) {
-      const gone = await callUnhurried(io, () => client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: site.id }, query: { forever: "true" } })));
+      const gone = await callUnhurried(io, () => client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: site.id }, query: { no_trash: "true" } })));
       if (!gone.ok) return { kind: "failed", what: `the install did not remove a site (${told(gone.failure)})` };
 
       removed += 1;

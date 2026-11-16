@@ -1239,7 +1239,7 @@ describe("the rows the live checks count", () => {
     const moved = { site: linked.site.id };
     await step("the files of a version listed", async () => done(await calls.export.sites[":site"].files.$get({ param: moved, query: { version: "4" } })));
     const stored = await done<{ format: number; site: ExportedSite }>(await calls.export.sites[":site"].$get({ param: moved, query: { all_versions: "true" } }));
-    await step("removed for good, with three versions, an earlier id, and a day's count", async () => done(await calls.sites[":site"].$delete({ param: moved, query: { forever: "true" } })));
+    await step("removed for good, with three versions, an earlier id, and a day's count", async () => done(await calls.sites[":site"].$delete({ param: moved, query: { no_trash: "true" } })));
     await step("put back from a backup, with three versions", async () => {
       const paths = stored.site.versions.map((version) => `v${version.number}/${html.path}`);
 
@@ -1271,7 +1271,7 @@ describe("the rows the live checks count", () => {
     await step("a site that runs out, out of the trash", async () => done(await calls.sites[":site"].restore.$post({ param: short, query: {} })));
     const relinked = await step("a new link of a site that runs out", async () => done<{ site: Published }>(await calls.sites[":site"]["new-link"].$post({ param: short, query: {} })));
     const backup = await done<{ format: number; site: ExportedSite }>(await calls.export.sites[":site"].$get({ param: { site: relinked.site.id }, query: {} }));
-    await step("a site that runs out removed for good", async () => done(await calls.sites[":site"].$delete({ param: { site: relinked.site.id }, query: { forever: "true" } })));
+    await step("a site that runs out removed for good", async () => done(await calls.sites[":site"].$delete({ param: { site: relinked.site.id }, query: { no_trash: "true" } })));
     await step("a site that runs out put back from a backup", async () => {
       const paths = backup.site.versions.map((version) => `v${version.number}/${html.path}`);
 

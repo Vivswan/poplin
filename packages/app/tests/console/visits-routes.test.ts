@@ -24,7 +24,7 @@ test("answers a count for every day of the range, the earliest first: all sites 
   await install.database.addRequests({ day: days[0] ?? "", site: notes.id, requests: 50, views: 40 });
   await install.database.addRequests({ day: days[0] ?? "", site: draft.id, requests: 5, views: 5 });
   await deleteSite(install, { scope: "admin", holder: owner }, { site: gone.id });
-  await deleteSite(install, { scope: "admin", holder: owner }, { site: gone.id, forever: true });
+  await deleteSite(install, { scope: "admin", holder: owner }, { site: gone.id, no_trash: true });
   const empty = Array.from({ length: 26 }, () => 0);
 
   const answer = (await (await opened.get(`/data/usage/visits?range=30&sites=${draft.id},${gone.id},${notes.id},${draft.id}`)).json()) as {

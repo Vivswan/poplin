@@ -274,7 +274,7 @@ export function openBench(parts: BenchParts): OpenBench {
     if (parts.token === undefined) return;
 
     for (const id of [...(await liveSites(false)), ...(await liveSites(true))]) {
-      const removed = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: id }, query: { forever: "true" } }));
+      const removed = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: id }, query: { no_trash: "true" } }));
       if (!removed.ok) throw new Error(`the sweep could not remove a site: ${removed.failure.kind}`);
 
       if (removed.value.left.length > 0) throw new Error("the sweep removed a site and the install kept some of its files");

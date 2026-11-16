@@ -184,7 +184,7 @@ export const siteRoutes = new Hono<Shared>()
 
     if (shown.site.state !== "trash") return refused(context, { code: "not_in_trash" });
 
-    const removed = await deleteSite(install, actor, { site, forever: true });
+    const removed = await deleteSite(install, actor, { site, no_trash: true });
 
     return removed.ok ? context.json({ ok: true as const, site: removed.site }) : refused(context, removed);
   });

@@ -157,7 +157,7 @@ property(
 
       const before = (await world.keys()).length;
       world.faults.failRemoval = site.storeDown;
-      const removed = await deleteSite(world.install, OWNER, { site: ids[index] ?? "", forever: true });
+      const removed = await deleteSite(world.install, OWNER, { site: ids[index] ?? "", no_trash: true });
       world.faults.failRemoval = false;
 
       expect(removed.ok && removed.left.length === 0).toBe(before - (await world.keys()).length === site.files);

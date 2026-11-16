@@ -54,7 +54,7 @@ async function backupOf(stage: Stage, token: string): Promise<Backup> {
     for (const { path, size } of listed.files) files.push({ path: `v${number}/${path}`, size, content_type: "text/html", sha256: await sha256Of(new Uint8Array(size)) });
   }
 
-  await done(await calls.sites[":site"].$delete({ param, query: { forever: "true" } }));
+  await done(await calls.sites[":site"].$delete({ param, query: { no_trash: "true" } }));
 
   return { site: kept.site, files };
 }

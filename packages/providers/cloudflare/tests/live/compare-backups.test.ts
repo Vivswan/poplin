@@ -155,7 +155,7 @@ describe("the backup drill", () => {
   test("a site that is gone from the restored install is reported entry by entry, and so are the counts: without this a restore could lose a site unseen", async () => {
     const { into, first } = await drilled("");
     const docs = (jsonOf(await into.run("show docs --json")).site as { id: string }).id;
-    expect((await into.install.routes.sites[":site"].$delete({ param: { site: docs }, query: { forever: "true" } })).status).toBe(200);
+    expect((await into.install.routes.sites[":site"].$delete({ param: { site: docs }, query: { no_trash: "true" } })).status).toBe(200);
 
     const compared = await compareBackups(first, await exportedZip(into, ""));
 

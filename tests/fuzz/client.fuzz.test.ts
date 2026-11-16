@@ -127,7 +127,7 @@ const CALLS: readonly ((client: Client) => Promise<Called<unknown>>)[] = [
   (client) => client.call(REDEEMED_LOGIN, (api) => api.logins.token.$post({ query: {}, json: { secret: "a-secret" } })),
   (client) => client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true", limit: "50" } })),
   (client) => client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: PARAM, query: {} })),
-  (client) => client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: PARAM, query: { forever: "true" } })),
+  (client) => client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: PARAM, query: { no_trash: "true" } })),
   (client) => client.call(DUPLICATED_SITE, (api) => api.sites[":site"].duplicate.$post({ param: PARAM, query: {}, json: {} })),
   (client) => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ query: {}, json: { files: [{ path: "index.html", size: 1, content_type: "text/html", sha256: "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=" }] } })),
   (client) => client.call(SHOWN_UPLOAD, (api) => api.uploads[":upload"].$get({ param: PARAM, query: {} })),

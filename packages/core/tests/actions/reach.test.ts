@@ -25,7 +25,7 @@ const ACTIONS: readonly ActionRow[] = [
   ["roll it back", "a second version", (world, actor, site) => rollbackSite(world.install, actor, { site }), ["live_version"]],
   ["give it a new link", "nothing", (world, actor, site) => newLink(world.install, actor, site), ["new_id"]],
   ["delete it", "nothing", (world, actor, site) => deleteSite(world.install, actor, { site }), ["trash"]],
-  ["delete it forever", "nothing", (world, actor, site) => deleteSite(world.install, actor, { site, forever: true }), ["delete"]],
+  ["delete it for good", "nothing", (world, actor, site) => deleteSite(world.install, actor, { site, no_trash: true }), ["delete"]],
   ["restore it", "the trash", (world, actor, site) => restoreSite(world.install, actor, site), ["restore"]],
 ];
 

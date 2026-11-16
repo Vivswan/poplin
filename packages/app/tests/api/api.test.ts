@@ -148,7 +148,7 @@ function samples(site: string, upload: string): Readonly<Record<TokenRoute, Send
     "PATCH /api/sites/:site": (api) => api.sites[":site"].$patch({ param: { site }, json: { title: "Q3 sales" }, query: {} }),
     "POST /api/sites/:site/rollback": (api) => api.sites[":site"].rollback.$post({ param: { site }, json: {}, query: {} }),
     "POST /api/sites/:site/new-link": (api) => api.sites[":site"]["new-link"].$post({ param: { site }, query: {} }),
-    "DELETE /api/sites/:site": (api) => api.sites[":site"].$delete({ param: { site }, query: { forever: "true" } }),
+    "DELETE /api/sites/:site": (api) => api.sites[":site"].$delete({ param: { site }, query: { no_trash: "true" } }),
     "POST /api/sites/:site/restore": (api) => api.sites[":site"].restore.$post({ param: { site }, query: {} }),
     "POST /api/sites/:site/duplicate": (api) => api.sites[":site"].duplicate.$post({ param: { site }, json: {}, query: {} }),
     "POST /api/uploads": (api) => api.uploads.$post({ json: { site, files: manifest(PAGES) }, query: {} }),
@@ -378,7 +378,7 @@ describe("createApi", () => {
     await done((api) => api.config.$patch({ json: { outside_pages: "allowed", trash_days: 9 }, query: {} }));
     await done((api) => api.config.$patch({ json: { block_bots: "off" }, query: {} }));
     expect([install.rules.pushed, (await install.database.readDomainCheck())?.rules_changed_at]).toEqual([[{ outside_pages: "allowed", search_engines_allowed: false }], null]);
-    expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { forever: "true" } })), "before").id).toBe(moved);
+    expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { no_trash: "true" } })), "before").id).toBe(moved);
     expect(part(await done((api) => api.import.settings.$post({ json: { format: 1, settings }, query: {} })), "values").trash_days).toBe(7);
     const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));
     const restored = part(await done((api) => api.import.sites.$post({ json: { format: 1, site: backup as never, files }, query: {} })), "upload").id as string;
@@ -843,7 +843,7 @@ describe("the staged publish over HTTP", () => {
     const last = await files(site);
     await count();
     const refused = await files(site);
-    const removed = await answered(api.sites[":site"].$delete({ param: { site }, query: { forever: "true" } }));
+    const removed = await answered(api.sites[":site"].$delete({ param: { site }, query: { no_trash: "true" } }));
     await count();
     install.clock.now += DAY;
     const tomorrow = await answered(api.uploads.$post({ json: { name: "report", files: manifest(PAGES) }, query: {} }));

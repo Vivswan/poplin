@@ -163,7 +163,7 @@ describe("a copy of a site", () => {
     const opened = await openConsole();
     const source = await publish(opened, "report", 300);
     const begun = await ask(opened, `/sites/${source}/duplicate`);
-    await deleteSite(opened.base.install, { scope: "admin", holder: opened.base.owner }, { site: source, forever: true });
+    await deleteSite(opened.base.install, { scope: "admin", holder: opened.base.owner }, { site: source, no_trash: true });
 
     const next = await ask(opened, `/sites/${source}/duplicate`, { upload: begun.copy.upload });
 
