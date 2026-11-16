@@ -78,8 +78,8 @@ export interface Account {
   /** The id of every application whose logins were ended, in order. */
   revoked: string[];
 
-  /** The zone's entry point ruleset of each phase that has one. */
-  rulesets: Record<string, { id: string; rules: Row[] } | undefined>;
+  /** The zone's entry point ruleset of each phase that has one, under the name it was made with. */
+  rulesets: Record<string, { id: string; name: string; rules: Row[] } | undefined>;
 
   /** The zone's bot switches. */
   switches: Row;
@@ -207,6 +207,7 @@ function stored(list: Row[], asked: Asked, id: string | undefined, key = "id"): 
   return reply({ [key]: id });
 }
 
+/** The zone's rulesets: the entry point of a phase, a new one with its first rules, the removal of one with whatever it holds, which is answered with no body, and the rules of one. */
 function rules(account: Account, asked: Asked, parts: readonly string[]): Response {
   const body = (asked.body ?? {}) as Row;
 
@@ -217,16 +218,22 @@ function rules(account: Account, asked: Asked, parts: readonly string[]): Respon
   }
 
   if (parts[3] === undefined) {
-    const made = { id: `set-${body.phase}`, rules: (body.rules as Row[]).map((rule, index) => ({ id: `rule-${index}`, ...rule })) };
+    const made = { id: `set-${body.phase}`, name: String(body.name), rules: (body.rules as Row[]).map((rule, index) => ({ id: `rule-${index}`, ...rule })) };
     account.rulesets[String(body.phase)] = made;
 
     return reply(made);
   }
 
-  const ruleset = Object.values(account.rulesets).find((candidate) => candidate?.id === parts[3]);
-  if (ruleset === undefined) return refusal(404, 10003, "no such ruleset");
+  const [phase, ruleset] = Object.entries(account.rulesets).find(([, candidate]) => candidate?.id === parts[3]) ?? [];
+  if (phase === undefined || ruleset === undefined) return refusal(404, 10003, "no such ruleset");
 
-  return stored(ruleset.rules, asked, parts[5]);
+  if (parts[4] !== undefined) return stored(ruleset.rules, asked, parts[5]);
+
+  if (asked.method !== "DELETE") return reply(ruleset);
+
+  delete account.rulesets[phase];
+
+  return new Response(null, { status: 204 });
 }
 
 /** The account's Access applications. Access gives each an audience tag of 64 hexadecimal characters, here the count of tags given out, and a change keeps the tag. A call to end an application's logins is answered 202 and noted. */
