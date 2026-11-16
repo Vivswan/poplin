@@ -220,8 +220,11 @@ export function siteColumns(
   logins: LoginNames,
 ): readonly ColumnSpec<Site>[] {
   const linkCell = (site: Site): ReactNode => (
+    // The buttons end at the column's right edge in every row, however long the row's link is and whether or not it has an eye.
     <span className="flex min-w-0 items-center gap-1">
-      <SiteLink site={site} whole={reveal.shows(site)} gives className="text-muted-foreground" />
+      <span className="flex min-w-0 flex-1">
+        <SiteLink site={site} whole={reveal.shows(site)} gives className="text-muted-foreground" />
+      </span>
       <span className="flex shrink-0 items-center">
         {addressParts(site.url, site.id).hidden === "" ? null : <RevealButton site={site} reveal={reveal} inList className={AFTER_LINK_LOOK} />}
         <LinkButtons site={site} onCopy={onCopy} className={AFTER_LINK_LOOK} />

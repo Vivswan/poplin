@@ -111,8 +111,8 @@ describe("a waiting login with no token beside it", () => {
 });
 
 describe("the removed tokens under the list", () => {
-  // Drift: each of the two tables would be fitted to its own words alone, so the same column would begin at another place in the list than in the removed tokens under it.
-  test("stand in the columns of the list, each column as wide in one table as in the other", () => {
+  // Drift: the list would take the widths the removed tokens need and move when they are opened; or the removed tokens would be fitted to their own words alone and start narrower than the list above.
+  test("take the widths of the list's columns where theirs are narrower, and give the list none of theirs", () => {
     const own = HTMLElement.prototype.getBoundingClientRect;
     // The test page lays nothing out: a heading is 10 px wide a letter, so "Can change" and "Could change" differ, as "State" and "How" do.
     HTMLElement.prototype.getBoundingClientRect = function box(this: HTMLElement): DOMRect {
@@ -126,7 +126,7 @@ describe("the removed tokens under the list", () => {
     );
 
     expect(widths).toEqual([
-      ["48px", "50px", "120px", "70px"],
+      ["48px", "50px", "100px", "70px"],
       ["48px", "50px", "120px", "70px"],
     ]);
   });

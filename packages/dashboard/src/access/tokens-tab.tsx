@@ -224,9 +224,8 @@ function leavingQuestion(token: Token | undefined): Question | undefined {
 /** Draw the Tokens tab. */
 export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sort, onSort, onReview, actions, onRetry }: TokensTabProps): ReactNode {
   const [leaving, setLeaving] = useState<Token>();
-  // The list and the removed tokens under it stand in the same columns: each is told what the other measured.
+  // The removed tokens under the list are told what the list measured, so no column of theirs is narrower than the list's. The list is told nothing: opening them moves none of its columns.
   const [fitted, setFitted] = useState<Fitted>();
-  const [removedFitted, setRemovedFitted] = useState<Fitted>();
   const rows = useMemo(() => tokenRows(waiting?.logins ?? [], tokens ?? []), [waiting, tokens]);
   // A read of the tokens that was refused does not hide the logins that wait: they are listed, and the refusal is said under them.
   const unreadTokens = tokens === undefined ? failure : undefined;
@@ -234,8 +233,8 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
   const names = useMemo(() => namesOf(tokens ?? [], ended), [tokens, ended]);
   const none = ended === undefined || ended.tokens.length === 0;
   const removed = none ? undefined : <RemovedTokens ended={ended} names={names} />;
-  // Under the table the removed tokens are a second table in the same columns; under a phone's list, and where no list is, they stand alone.
-  const paired = none ? undefined : <RemovedTokens ended={ended} names={names} alongside={fitted} endWidth={ACTION_WIDTH} onFitted={setRemovedFitted} />;
+  // Under the table the removed tokens are a second table that starts in the list's columns; under a phone's list, and where no list is, they stand alone.
+  const paired = none ? undefined : <RemovedTokens ended={ended} names={names} alongside={fitted} endWidth={ACTION_WIDTH} />;
   const afterAll = (under: ReactNode): ReactNode =>
     after === undefined && under === undefined ? undefined : (
       <>
@@ -296,7 +295,6 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
             actionsWidth={ACTION_WIDTH}
             loading={tokens === undefined && rows.length === 0}
             after={afterAll(paired)}
-            alongside={removedFitted}
             onFitted={setFitted}
           />
         </div>
