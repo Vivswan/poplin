@@ -21,8 +21,8 @@ const HINT_AFTER_MS = 400;
 /** How far from the screen's edges a line is said: lengths the stylesheet sets. A wide screen says it at the top, inside the header's band; a phone at the bottom, over the bar of unsaved changes while one is shown. */
 const LINE_EDGES = { top: "var(--line-top)", bottom: "var(--line-bottom)" };
 
-/** The look of a line, laid over the library's own: less room above and below its words, so one row is lower than the header. On a phone its words end after two rows, so a line is never higher than the room a scrolling area ends in. */
-const LINE_LOOK = { toast: "cn-toast py-2.5!", title: "max-md:line-clamp-2" };
+/** The look of a line, laid over the library's own: so little room around its words that a line with a button, which has two rows, is lower than the header. On a phone its words end after two rows. */
+const LINE_LOOK = { toast: "cn-toast py-2.5! has-data-description:py-1!", title: "max-md:line-clamp-2", description: "text-xs! leading-4!" };
 
 /** Where every screen's data is kept. A refused read is not asked again by itself: the refusal is shown. */
 const QUERIES = new QueryClient({ defaultOptions: { queries: { retry: false } } });
