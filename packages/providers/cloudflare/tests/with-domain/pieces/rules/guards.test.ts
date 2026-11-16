@@ -22,8 +22,8 @@ const SCANNER_PATHS = [
 ];
 const NEVER_A_SITES = `not http.request.method in {"GET" "HEAD"} or ${SCANNER_PATHS.join(" or ")}`;
 const OFF_THE_EDGE = 'not starts_with(http.request.uri.path, "/cdn-cgi/")';
-const BOTS = `${SITES} and ${OFF_THE_EDGE} and ((cf.client.bot and cf.verified_bot_category ne "AI Assistant") or ${NEVER_A_SITES})`;
-const BOTS_BUT_SEARCH = `${SITES} and ${OFF_THE_EDGE} and ((cf.client.bot and cf.verified_bot_category ne "AI Assistant" and cf.verified_bot_category ne "Search Engine Crawler") or ${NEVER_A_SITES})`;
+const BOTS = `${SITES} and ${OFF_THE_EDGE} and ((cf.client.bot and cf.verified_bot_category ne "AI Assistant" and cf.verified_bot_category ne "Page Preview") or ${NEVER_A_SITES})`;
+const BOTS_BUT_SEARCH = `${SITES} and ${OFF_THE_EDGE} and ((cf.client.bot and cf.verified_bot_category ne "AI Assistant" and cf.verified_bot_category ne "Page Preview" and cf.verified_bot_category ne "Search Engine Crawler") or ${NEVER_A_SITES})`;
 const ONE_ENDING = 'ends_with(http.host, "-poplin.example.com")';
 const SLOTS_FULL = "the zone's plan allows no further custom rule and other rules hold every slot";
 const BLOCKING = { layout: LAYOUT, plan: "free", outsidePages: "blocked", searchEnginesAllowed: false } as const;
@@ -50,9 +50,9 @@ describe("the guard expressions", () => {
     { name: "search engines let through", searchEnginesAllowed: true, expression: BOTS_BUT_SEARCH },
   ];
 
-  // Drift: Cloudflare gives a verified bot one kind. A rule that leaves out the kind `AI Assistant` stops an assistant that opens one page for a person, and one that names a further kind lets its crawlers in.
+  // Drift: a verified bot has one kind. A rule without `AI Assistant` or `Page Preview` stops an assistant that opens one page for a person, or a chat app's link preview; one that names a further kind, `AI Crawler` say, lets a training crawler in.
   test.each(bots)(
-    "the bots rule with $name lets a verified assistant through, and reads the site hostnames alone, never the dashboard's or the zone's own",
+    "the bots rule with $name lets a verified assistant and a link preview through, and reads the site hostnames alone, never the dashboard's or the zone's own",
     ({ searchEnginesAllowed, expression }) => {
       expect(botsExpression(LAYOUT, searchEnginesAllowed)).toBe(expression);
     },

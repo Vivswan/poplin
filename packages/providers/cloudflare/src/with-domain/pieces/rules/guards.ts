@@ -1,5 +1,5 @@
 // The two custom rules that stop a request before the Worker runs, so it costs the install nothing. Both read the site hostnames alone, never the admin hostname.
-// The bots rule stops a verified bot, but never an assistant that opens one page for a person, nor a search engine's crawler where those are allowed.
+// The bots rule stops a verified bot, but never an assistant that opens one page for a person or a chat app that fetches a shared link for its preview, nor a search engine's crawler where those are allowed.
 // It also stops what no static site answers: a method other than GET and HEAD, and the paths scanners ask every host for.
 // A browser calls every hostname under one domain the same site, so the outside pages rule stops pages of other domains and the Worker refuses the rest.
 
@@ -28,7 +28,7 @@ interface DesiredGuards {
   /** `blocked` stops a page of another domain from framing a site or loading its files; a page under the same domain reaches the Worker. */
   readonly outsidePages: "blocked" | "allowed";
 
-  /** Whether the crawlers of search engines pass the bots rule; an assistant that opens a page for its user passes either way, and every other verified bot is stopped either way. */
+  /** Whether the crawlers of search engines pass the bots rule; an assistant that opens a page for its user and a fetch for a link preview pass either way, and every other verified bot is stopped either way. */
   readonly searchEnginesAllowed: boolean;
 }
 
@@ -49,13 +49,14 @@ export function outsidePagesExpression(layout: DomainLayout): string {
 /**
  * Write the expression of the bots rule: true for a request to a site from a bot Cloudflare has verified, with a method other than GET and HEAD, or for a path of the scanner list.
  *
- * A verified bot of Cloudflare's kind `AI Assistant`, which opens one page when its user asks for it, is never stopped as a bot.
+ * A verified bot of Cloudflare's kind `AI Assistant`, which opens one page when its user asks for it, or `Page Preview`, which fetches a shared link to show its preview, is never stopped as a bot.
  *
  * @returns an expression false for every request to the admin hostname and for every path under `/cdn-cgi/`, where Cloudflare's own login answers
  * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
  */
 export function botsExpression(layout: DomainLayout, searchEnginesAllowed: boolean): string {
-  const passing = searchEnginesAllowed ? [INSTALL_OBJECTS.assistantsPass, INSTALL_OBJECTS.searchEnginesPass] : [INSTALL_OBJECTS.assistantsPass];
+  const always = [INSTALL_OBJECTS.assistantsPass, INSTALL_OBJECTS.previewsPass];
+  const passing = searchEnginesAllowed ? [...always, INSTALL_OBJECTS.searchEnginesPass] : always;
   const bots = `(${[INSTALL_OBJECTS.botsCondition, ...passing].join(" and ")})`;
   const stopped = `${bots} or ${INSTALL_OBJECTS.otherMethods} or ${INSTALL_OBJECTS.scannerPaths.join(" or ")}`;
 

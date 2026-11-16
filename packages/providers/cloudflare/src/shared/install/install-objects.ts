@@ -35,6 +35,7 @@ export const INSTALL_OBJECTS = {
   botsDescription: "poplin: stop verified bots, other methods, and scanner paths",
   botsCondition: "cf.client.bot",
   assistantsPass: 'cf.verified_bot_category ne "AI Assistant"',
+  previewsPass: 'cf.verified_bot_category ne "Page Preview"',
   searchEnginesPass: 'cf.verified_bot_category ne "Search Engine Crawler"',
   edgePaths: 'not starts_with(http.request.uri.path, "/cdn-cgi/")',
   otherMethods: 'not http.request.method in {"GET" "HEAD"}',
