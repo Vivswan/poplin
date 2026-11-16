@@ -50,7 +50,7 @@ export interface Bench {
   /** What the install lacks, with the reason. */
   readonly missing: Missing;
 
-  /** Sends one request as a stranger: no token, no cookie, no redirect followed. */
+  /** Sends one request as a stranger: no token, no cookie, no redirect followed. One whose connection is cut off before any answer is sent once more, unless it is a change asked of the API. */
   readonly visit: (address: string, init?: RequestInit) => Promise<Response>;
 
   /** Runs one command line of the CLI, with `--json`, as the token holder. */
