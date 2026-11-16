@@ -14,6 +14,7 @@ import type { DomainRow, DomainSettings } from "@poplin/app/src/console/domain/r
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
 
+import { keepCopyConfig } from "../../src/deploy/kept-config";
 import { isAccessOff, readLoginFacts, syncAccess } from "../../src/zone/access/access";
 import { callCloudflare } from "../../src/zone/client";
 import { syncDatabase } from "../../src/zone/database/database";
@@ -182,14 +183,14 @@ export async function workerConfig(
   found: Pick<Found, "layout">,
   bound: { readonly databaseId: string; readonly access: AccessBinding; readonly login: string },
 ): Promise<Record<string, unknown>> {
-  const base: unknown = Bun.JSONC.parse(await Bun.file(join(PACKAGE, "..", "..", "wrangler.jsonc")).text());
-  if (!isRecord(base)) throw new Error("wrangler.jsonc holds no configuration");
+  const own: unknown = Bun.JSONC.parse(await Bun.file(join(PACKAGE, "..", "..", "wrangler.jsonc")).text());
+  if (!isRecord(own)) throw new Error("wrangler.jsonc holds no configuration");
 
+  // The Worker's name goes wherever an install's own name does: the Workflow is named after it. Wrangler makes the Workflow at Cloudflare right after each upload.
   return {
-    ...base,
+    ...keepCopyConfig(own, { name: SCRIPT }),
     $schema: undefined,
     minify: undefined,
-    name: SCRIPT,
     main: join(PACKAGE, "dist", "worker.js"),
     no_bundle: true,
     workers_dev: false,

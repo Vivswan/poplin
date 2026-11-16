@@ -10,7 +10,7 @@ import type { Outside } from "../../../src/worker/start";
 export const OWN_KEY = "kept-key-of-the-test";
 
 /** Every binding of a set-up install's Worker, as Cloudflare's API lists them. */
-const OWN_BINDINGS = ["SITES", "DB", "MINUTE_LIMITS", "WORKER_NAME", "ACCOUNT_ID", "ZONE", "ACCESS", "FIRST_SETTINGS", "KEPT_KEY"];
+const OWN_BINDINGS = ["SITES", "DB", "JOBS", "MINUTE_LIMITS", "WORKER_NAME", "ACCOUNT_ID", "ZONE", "ACCESS", "FIRST_SETTINGS", "KEPT_KEY"];
 
 /** The built module of the release, as any text. */
 const MODULE = "export default {};\n";
@@ -29,6 +29,7 @@ const CONFIG = {
   r2_buckets: [{ binding: "SITES" }],
   d1_databases: [{ binding: "DB" }],
   ratelimits: [{ name: "MINUTE_LIMITS", namespace_id: "1001", simple: { limit: 1_000_000, period: 60 } }],
+  workflows: [{ name: "poplin-jobs", binding: "JOBS", class_name: "PoplinJobs" }],
   vars: { WORKER_NAME: "poplin" },
 };
 

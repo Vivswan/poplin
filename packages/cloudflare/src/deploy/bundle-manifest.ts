@@ -3,8 +3,8 @@
 //   version, schema, files   portable: which release it is, how many steps its database has been through, and each built file's digest and size
 //   deploy                   Cloudflare's: what an upload of those files states beside them, read from the release's own wrangler.jsonc
 //
-// A binding to a thing the account holds, or to a value the install's own Worker carries, is `kept`: the bucket, the database, a variable.
-// One whose whole value the release decides is `stated`, with that value. The Workflow's binding states its class and no name: the Workflow is named after the install's own Worker.
+// A binding to a thing the account holds, or to a value the install's own Worker carries, is `kept`: the bucket, the database, the Workflow, a variable.
+// One whose whole value the release decides is `stated`, with that value. The Workflow is named after the install's own Worker and made beside its deploy, so no release states it.
 // A setting of wrangler.jsonc this file does not know stops the build: a release cannot ship a setting its manifest leaves out.
 
 import { releaseDigest } from "@poplin/core/src/records/release";
@@ -58,11 +58,10 @@ interface Built {
 }
 
 function bindingsOf(config: v.InferOutput<typeof CONFIG>): readonly Binding[] {
-  const kept = [...config.r2_buckets.map((bucket) => bucket.binding), ...config.d1_databases.map((database) => database.binding), ...Object.keys(config.vars)];
+  const things = [...config.r2_buckets, ...config.d1_databases, ...config.workflows].map((thing) => thing.binding);
   const limits = config.ratelimits.map(({ name, ...limit }): Binding => ({ name, kind: "stated", binding: { type: "ratelimit", ...limit } }));
-  const workflows = config.workflows.map(({ binding, class_name }): Binding => ({ name: binding, kind: "stated", binding: { type: "workflow", class_name } }));
 
-  return [...kept.map((name): Binding => ({ name, kind: "kept" })), ...limits, ...workflows];
+  return [...[...things, ...Object.keys(config.vars)].map((name): Binding => ({ name, kind: "kept" })), ...limits];
 }
 
 async function stated(bytes: Uint8Array<ArrayBuffer>): Promise<{ readonly sha256: string; readonly bytes: number }> {

@@ -20,7 +20,7 @@ Cloudflare's free plan     one request: 50 database queries
 | Open the Sites screen | 1 | 2 | 651 | 0 | 0 | 0 |
 | Open the Access screen | 3 | 5 | 257 | 0 | 0 | 0 |
 | Open the Activity screen | 2 | 4 | 607 | 0 | 0 | 0 |
-| Open the Usage screen | 3 | 8 | 37,748 | 0 | 0 | 0 |
+| Open the Usage screen | 3 | 8 | 37,778 | 0 | 0 | 0 |
 | Open the Settings screen | 1 | 2 | 3 | 0 | 0 | 0 |
 | Open the Domain screen | 1 | 2 | 3 | 0 | 0 | 0 |
 | Copy a site of 112 files | 1 | 8 | 31 | 21 | 112 | 114 |
