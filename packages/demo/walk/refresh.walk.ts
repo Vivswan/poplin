@@ -7,6 +7,9 @@ import { arrive, test, toSection } from "./visit";
 /** How long the page's clock is moved on, in milliseconds, and how long the words may take to follow it: they are written anew every ten seconds. */
 const [LATER_MS, WORDS_MS] = [3 * 60_000, 15_000] as const;
 
+/** The data routes the Usage screen reads as it opens: the graph's days, the rows under it, and what went wrong. */
+const USAGE_OPENS_WITH = ["usage/visits", "usage", "problems"] as const;
+
 /** Press a button and say which of the data routes the page then asked, each by its path after `data/` and its query. */
 async function askedAt(page: Page, button: string): Promise<readonly string[]> {
   const asked: string[] = [];
@@ -45,7 +48,10 @@ test.describe("on a wide screen", () => {
   // Drift: the graph's days stand half an hour: with no button of its own there would be no way to read them sooner, and a button that read the rows under the graph too would not be the graph's.
   test("the button of the visits graph reads the graph alone", async ({ page }) => {
     await arrive(page);
+    // The screen's own first reads are all answered before the press. The rows are asked a moment after the graph's days, and that first read, asked once the graph's words already show, would be taken for the button's.
+    const opened = Promise.all(USAGE_OPENS_WITH.map((route) => page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(`/data/${route}`))));
     await toSection(page, "Usage");
+    await opened;
     await expect(page.getByRole("region", { name: "Visits", exact: true }).getByText(/^Updated /)).toBeVisible();
 
     expect(await askedAt(page, "Refresh the graph")).toEqual(["usage/visits?range=30"]);
