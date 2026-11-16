@@ -5,7 +5,7 @@ order: 20
 
 # When poplin refuses
 
-Every code poplin refuses with, what it means, and what to do; a failure of an install's steps is in [When a step fails](an-install-step-fails.md).
+Every code poplin refuses with, what it means, and what to do; the lines `poplin install` stops at are in [When the install stops](an-install-step-fails.md).
 
 A refused command prints one sentence and often a hint. With `--json` it prints an object with a `code`. A tool answers with the same object. Every example runs as the first does, with `npx` before `poplin`.
 
@@ -42,19 +42,49 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason |
 | `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, report it             |
 
-**Setting up an install**
+**Making an install**
+
+`poplin install` with `--json` prints one object. A run that made no install names why in `problem`, where the other commands write `code`.
+
+| Problem             | Means                                                              | What to do                                                      |
+| ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, login, token, account, provider | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
+| `usage`             | the line is written wrong; `words` says how                        | `npx poplin install --help`                                     |
+| `already_installed` | the account holds an install; `found` has its version and address  | nothing was changed: `npx poplin login --server https://poplin.example.com` |
+| `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or rename or delete it at `address` |
+| `name_held`         | a Worker named poplin that is not poplin's                         | rename or delete it at `address`                                |
+| `blocked`           | a person must act first; `blocked` lists what, with the address to open | the table below                                            |
+| `token_refused`     | Cloudflare refused the token, or it shows no such account          | make the token again, for the account the install goes to       |
+| `no_domain`         | the token shows no active domain of that name                      | correct `--domain`, or the token's Zone Resources               |
+| `no_provider`       | this build of poplin carries no provider to install at             | run the published package: `npx poplin install`                 |
+| `unreachable`       | Cloudflare or poplin's website gave no answer                      | run it again in a minute                                        |
+| `stopped`, `crashed` | the command was stopped, or failed with no word for it            | run it again                                                    |
+
+Each entry of `blocked` names what blocks in `what`:
+
+| What            | Means                                                           | What to do                                                       |
+| --------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `storage_off`   | R2 is not switched on, or the token may not use it              | switch R2 on; check the token has Workers R2 Storage: Edit       |
+| `login_off`     | Zero Trust is not switched on: nobody could log in              | pick the Free plan at `address`, before the run                  |
+| `right_lacking` | the token lacks the permission in `right`                       | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token) |
+| `no_address`    | without a domain: the account has no `workers.dev` subdomain, or one of more than 36 characters | set one of 36 characters at most, under Workers & Pages |
+| `no_release`    | poplin's website names no version to install                    | nothing can be installed until it does                           |
+| `newer_release` | the newest version needs a newer command                        | `npx poplin@latest install cloudflare`                           |
+| `bad_release`   | the release's files are not the ones poplin's website names; nothing was uploaded | run it again; if it comes back, report it      |
+
+**`poplin setup`**
 
 | Code                    | Means                                                       | What to do                                                    |
 | ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
 | `no_setup_server`       | `poplin setup` was given no address                         | `poplin setup --server https://poplin.your-name.workers.dev`  |
-| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no account token                 | put the token of [by hand](../start/by-hand.md#the-steps), step 3, in it |
-| `setup_token_refused`   | the account token was refused, or it is of another account  | make one with the rights [step 3](an-install-step-fails.md#step-3-the-form-opens-empty) lists, in the install's account |
+| `no_setup_token`        | `POPLIN_SETUP_TOKEN` holds no account token                 | put an account token in it                                    |
+| `setup_token_refused`   | the account token was refused, or it is of another account  | make one in the install's account                             |
 | `setup_provider_silent` | Cloudflare gave the install no answer, or asked it to wait  | try again in a minute                                         |
 | `setup_no_domain`       | the account token shows no such domain                      | give `--domain` a domain that is Active in the token's account |
 | `setup_bad_domain`      | `--domain` holds more than a domain, or one over 50 characters | the domain alone: `--domain example.com`                   |
 | `setup_bad_address`     | no `--domain`, and `--server` is not the Worker's own `workers.dev` address | give `--server` that address, or add `--domain <domain>`     |
-| `setup_bad_login`       | `--login` holds no email address                            | a new install needs `--login <email>`, and `--domain <domain>` with a domain |
-| `setup_closed`          | nothing at that address takes a setup                       | check the address; after the first login, leave out `--dry-run` |
+| `setup_bad_login`       | `--login` holds no email address                            | `--login <email>`                                             |
+| `setup_closed`          | nothing at that address takes a setup                       | check the address                                             |
 
 **Naming a site**
 

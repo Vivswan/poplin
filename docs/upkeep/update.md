@@ -5,7 +5,7 @@ order: 10
 
 # Update the install
 
-How each kind of install updates, and the notice of a newer version; the steps it names are those of [By hand](../start/by-hand.md#the-steps).
+How each kind of install updates, and the notice of a newer version; the steps it names are those of [Install](../start/install.md).
 
 Nothing updates on its own while the setting `auto_update` is off, as it is in a new install. An install says when a newer version is out, and how it updates depends on how it was made.
 

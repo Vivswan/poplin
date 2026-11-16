@@ -10,7 +10,7 @@ Paste this line into your agent:
 Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
-With no install yet, the agent takes you through making one: it tells you what to click and checks each step. It acts as you, with the login saved on this computer, and asks before it adds poplin's tools to its own configuration.
+With no install yet, the agent makes one with you: it asks for a domain or none and for your email, tells you what to choose in your browser, checks with a dry run, and runs `npx poplin install cloudflare`. The account token never passes through the chat. It acts as you, with the login saved on this computer, and asks before it adds poplin's tools to its own configuration.
 
 ## What It Does
 

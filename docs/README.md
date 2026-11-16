@@ -24,4 +24,4 @@ Agent:  Published. It is private: only you can open it, after you log in.
 | [Fix](fix/README.md)                | when something fails                            |
 | [About](about/README.md)            | security and the build                          |
 
-The examples write `poplin`. Type `npx poplin` in its place, as [By hand](start/by-hand.md) does, unless poplin is installed on the computer. `example.com` stands for your own domain. An install [without a domain](start/without-a-domain.md) has other addresses, and that page shows them.
+The examples write `poplin`. Type `npx poplin` in its place, as [Install](start/install.md) does, unless poplin is installed on the computer. `example.com` stands for your own domain. An install [without a domain](start/without-a-domain.md) has other addresses, and that page shows them.

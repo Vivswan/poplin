@@ -8,6 +8,7 @@ import { parseCommand } from "../packages/cli/src/commands/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { words } from "../packages/cli/tests/commands/support/command-line";
 import { TOOL_INPUTS } from "../packages/core/src/actions/tool-inputs";
+import { INSTALL_FLAGS, INSTALL_WORDS, providerRefusal } from "./support/install-words";
 import { type Page, readPage } from "./support/markdown-page";
 import { plantedRepository, repositoryFiles } from "./support/repository-files";
 
@@ -29,8 +30,8 @@ const READ_ON = Date.UTC(2026, 0, 1);
 /** Every input a tool takes, as its schema names it. */
 const INPUTS: readonly string[] = Object.values(TOOL_INPUTS).flatMap((input) => Object.keys(input.entries));
 
-/** The words in code font that are no tool, input, or code: what an answer and `whoami` name, the three values of `access`, the two words of the server's entry, and a folder that is never uploaded. */
-const OTHER_WORDS: readonly string[] = ["url", "code", "install", "role", "token", "expires", "private", "unlisted", "public", "poplin", "npx", "node_modules"];
+/** The words in code font that are no tool, input, or code: what an answer and `whoami` name, the three values of `access`, the two words of the server's entry, a folder that is never uploaded, and the keys of the value the install command prints. */
+const OTHER_WORDS: readonly string[] = ["url", "code", "install", "role", "token", "expires", "private", "unlisted", "public", "poplin", "npx", "node_modules", "ok", "ready", "answers", "address", "found", "steps", "problem"];
 
 /** One lowercase word, or several joined by underscores: the way tools, their inputs, and refusal codes are written. */
 const WORD = /^[a-z]+(?:_[a-z]+)*$/;
@@ -121,6 +122,9 @@ function isCode(word: string): boolean {
 function refusalOf(line: string): string | undefined {
   const parsed = parseCommand(words(line), READ_ON);
 
+  const refused = parsed.kind === "provider" ? providerRefusal(parsed.command, parsed.words) : undefined;
+  if (refused !== undefined) return `${line.trim()}: ${refused}`;
+
   return parsed.kind === "usage-error" ? `${line.trim()}: ${parsed.message}` : undefined;
 }
 
@@ -133,7 +137,7 @@ describe("the agent skill", () => {
 
   test("the pages cover every tool, and every other word in code font is an input of a tool or a code: without this a renamed tool or input, of one word or several, stays in a page an agent follows", async () => {
     const words = (await readAll(ROOT)).flatMap((page) => page.spans).filter((span) => WORD.test(span));
-    const named = [...new Set(words)].filter((word) => !OTHER_WORDS.includes(word) && !INPUTS.includes(word) && !isCode(word));
+    const named = [...new Set(words)].filter((word) => !OTHER_WORDS.includes(word) && !INPUTS.includes(word) && !isCode(word) && !INSTALL_WORDS.includes(word));
 
     expect(named.sort()).toEqual([...TOOLS].sort());
   });
@@ -142,7 +146,7 @@ describe("the agent skill", () => {
     const codes = await refusalCodes(ROOT);
 
     expect(codes.length).toBeGreaterThan(0);
-    expect(codes.filter((code) => !isCode(code))).toEqual([]);
+    expect(codes.filter((code) => !isCode(code) && !INSTALL_WORDS.includes(code))).toEqual([]);
     expect(["constructor", "no_such_code"].filter(isCode)).toEqual([]);
   });
 
@@ -158,7 +162,7 @@ describe("the agent skill", () => {
     const pages = await readAll(ROOT);
     const written = pages.flatMap((page) => [...page.prose, ...page.blocks.map((block) => block.text)]);
     const lines = [...new Set(written.flatMap((text) => matches(text, COMMAND_LINE, 1)))].sort();
-    const flags = new Set<string>(COMMANDS.flatMap((spec: CommandSpec) => spec.flags.map((flag) => flag.name)));
+    const flags = new Set<string>([...COMMANDS.flatMap((spec: CommandSpec) => spec.flags.map((flag) => flag.name)), ...INSTALL_FLAGS]);
 
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.map(refusalOf).filter((refusal) => refusal !== undefined)).toEqual([]);

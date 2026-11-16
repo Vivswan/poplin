@@ -20,7 +20,7 @@ An install without a domain names none: `npx poplin doctor --repair --no-domain`
 | Thing                    | Where it comes from                                                                                      |
 | ------------------------ | -------------------------------------------------------------------------------------------------------- |
 | the Cloudflare account   | the one the install is in: only its holder can make the token                                            |
-| an account token         | [step 3](../start/by-hand.md#the-steps) makes one; `npx poplin doctor --repair --help` lists its permissions |
+| an account token         | [step 3](../start/install.md#3-make-the-account-token) makes one; `npx poplin doctor --repair --help` lists its permissions |
 | the domain, or none      | the domain your dashboard is under; none for an address that ends in `workers.dev`                       |
 
 The token is asked for without being shown. A program gives it in the variable `POPLIN_INSTALL_TOKEN`, or pipes it with `--token-stdin`. It is used for the run and stored nowhere.

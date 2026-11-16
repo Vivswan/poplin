@@ -5,7 +5,7 @@ import type { DomainReading, DomainSettings } from "@poplin/app/src/console/doma
 import type { Login } from "@poplin/core/src/auth/logins";
 import { readUploadKey } from "../../src/shared/install/key/upload-key";
 import type { HeldKey } from "../../src/shared/install/key/key-state";
-import { createDomainPlug, giveKey } from "../../src/with-domain/zone-plug";
+import { createDomainPlug, giveKey, tokenFacts } from "../../src/with-domain/zone-plug";
 import { withFake } from "../shared/install/support/fake-cloudflare";
 import type { Asked } from "../shared/install/support/replies";
 import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "../shared/install/support/fake-install";
@@ -238,6 +238,7 @@ const SCOPE_OF: Readonly<Record<string, "Account" | "Zone">> = {
   "Zone WAF: Edit": "Zone",
   "Bot Management: Edit": "Zone",
   "D1: Edit": "Account",
+  "Workers R2 Storage: Edit": "Account",
   "Notifications: Edit": "Account",
   "Account API Tokens: Edit": "Account",
 };
@@ -257,13 +258,13 @@ test("every right an install needs is in the link to the token form under Cloudf
 // A right the plug holds optional that the steps asked for would send every reader back to the by-hand step the link spares them.
 test("the install page gives the plug's own link to the token form, and names the three boxes of every right: the needed ones in the steps' table for an empty form, and the optional ones only in the part after the steps", () => {
   const page = (...path: string[]): string => readFileSync(join(import.meta.dir, "..", "..", "..", "..", "..", "docs", ...path), "utf8");
-  const steps = `${page("start", "by-hand.md")}${page("fix", "an-install-step-fails.md")}`;
+  const steps = `${page("start", "install.md")}${page("fix", "an-install-step-fails.md")}`;
   const [, optional = ""] = page("dashboard", "domain.md").split("\n## Optional: block junk traffic and crawlers\n");
   const boxes = (text: string): string[] => [...text.matchAll(/^ *\| (Account|Zone) +\| (.+?) +\| (Edit|Read) +\|/gm)].map(([, first, second, third]) => `${first} / ${second}: ${third}`).sort();
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
   const boxed = (rights: readonly string[]): string[] => rights.map((right) => `${SCOPE_OF[right] ?? "no scope is known"} / ${right}`).sort();
 
-  expect(boxes(steps)).toEqual(boxed(plug.tokenRights));
+  expect(boxes(steps)).toEqual(boxed(tokenFacts("domain", ["R2 bucket"]).tokenRights));
   expect(boxes(optional)).toEqual(boxed(plug.tokenOptional.map((entry) => entry.right)));
   expect(steps.includes(`(${plug.tokenLink})`)).toBe(true);
 });
