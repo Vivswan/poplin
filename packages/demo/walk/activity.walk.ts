@@ -1,4 +1,4 @@
-// The Activity table in its room: what its columns show whole, and where the room they leave over goes.
+// The Activity log in its room: what the table's columns show whole and where the room they leave over goes, and what a phone's row shows whole.
 
 import { expect } from "@playwright/test";
 
@@ -40,3 +40,20 @@ for (const size of SCREENS) {
     });
   });
 }
+
+test.describe("on a phone, in the Activity list", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  // Drift: what was done would be cut again ("Deleted (moved to the tr...") where the site beside it has a long title: the two stood on one line that only what was done gave room on.
+  test("a row says what was done and the site's title whole, the title under what was done where the two have no room side by side", async ({ page }) => {
+    await arrive(page);
+    await page.getByRole("button", { name: /^Sections/u }).click();
+    await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: "Activity", exact: true }).click();
+    const row = page.getByRole("list", { name: "Activity", exact: true }).getByRole("listitem").filter({ hasText: "Deleted (moved to the trash)" }).filter({ hasText: "Notes from the offsite" }).first();
+    await row.scrollIntoViewIfNeeded();
+
+    expect(await row.evaluate((item) => [...item.querySelectorAll("*")].filter((part) => getComputedStyle(part).overflowX !== "visible" && part.scrollWidth > part.clientWidth).map((part) => part.textContent))).toEqual([]);
+    const [what, site] = await Promise.all(["Deleted (moved to the trash)", "Notes from the offsite"].map((words) => row.getByText(words, { exact: true }).boundingBox()));
+    expect(site?.y ?? 0).toBeGreaterThan((what?.y ?? Number.NaN) + (what?.height ?? Number.NaN) / 2);
+  });
+});
