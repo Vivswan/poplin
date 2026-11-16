@@ -140,7 +140,7 @@ async function listVersion(store: ObjectStore, prefix: string, files: number): P
 
     if (!page.more) return listed;
 
-    if (pages <= 1) throw new Error(`the listing of ${prefix} did not end in the pages ${files} files need`);
+    if (pages <= 1) throw new Error("the listing of a version did not end in the pages its files need");
 
     page = await store.list({ prefix, cursor: page.cursor });
   }
@@ -221,7 +221,7 @@ async function copyFile(install: Install, upload: CopyUpload, path: string, batc
   const { from: source } = upload.plan;
   const from = fileKey(source.folder, source.number, path);
   const to = uploadKey(upload, path);
-  if (!from.ok || !to.ok) throw new Error(`${JSON.stringify(path)} is no key of upload ${upload.id}`);
+  if (!from.ok || !to.ok) throw new Error("a path of the copied version is no key of its upload");
 
   const read = await install.store.read(from.key);
   if (read.kind !== "found") {

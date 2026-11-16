@@ -210,7 +210,7 @@ function isDotSegment(segment: string): boolean {
 }
 
 function requireWellFormed(text: string, what: string): void {
-  if (!text.isWellFormed()) throw new TypeError(`${what} holds a lone surrogate, which no store can keep: ${JSON.stringify(text)}`);
+  if (!text.isWellFormed()) throw new TypeError(`${what} holds a lone surrogate, which no store can keep`);
 }
 
 /**
@@ -281,7 +281,7 @@ export function checkWriteOptions(options: WriteOptions): WriteOptions {
   const checked = { contentType: options.contentType };
   requireWellFormed(checked.contentType, "the content type");
 
-  if (!isContentType(checked.contentType)) throw new TypeError(`the content type is empty or holds a control character, which no header carries: ${JSON.stringify(checked.contentType)}`);
+  if (!isContentType(checked.contentType)) throw new TypeError("the content type is empty or holds a control character, which no header carries");
 
   return checked;
 }
@@ -296,7 +296,7 @@ export function checkWriteOptions(options: WriteOptions): WriteOptions {
 export function checkListOptions(options: ListOptions): number {
   requireWellFormed(options.prefix, "the list prefix");
 
-  if (options.prefix.normalize("NFC") !== options.prefix) throw new TypeError(`the list prefix is not in NFC, so no key starts with it: ${JSON.stringify(options.prefix)}`);
+  if (options.prefix.normalize("NFC") !== options.prefix) throw new TypeError("the list prefix is not in NFC, so no key starts with it");
 
   const limit = options.limit ?? MAX_LIST_LIMIT;
   const valid = Number.isInteger(limit) && limit >= 1 && limit <= MAX_LIST_LIMIT;
@@ -316,7 +316,7 @@ export function checkListOptions(options: ListOptions): number {
  * @throws {RangeError} `maxPages` is not a whole number from 1
  */
 export async function deletePrefix(store: ObjectStore, prefix: string, maxPages: number): Promise<{ readonly removed: number; readonly more: boolean }> {
-  if (!prefix.endsWith(KEY_SEPARATOR)) throw new TypeError(`a folder prefix ends in ${KEY_SEPARATOR}, so it cannot match a longer folder name: ${JSON.stringify(prefix)}`);
+  if (!prefix.endsWith(KEY_SEPARATOR)) throw new TypeError(`a folder prefix ends in ${KEY_SEPARATOR}, so it cannot match a longer folder name`);
 
   if (!(Number.isInteger(maxPages) && maxPages >= 1)) throw new RangeError(`a page limit is a whole number from 1, not ${maxPages}`);
 

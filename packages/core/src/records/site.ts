@@ -132,7 +132,7 @@ function accessOf(row: SiteRow): SiteAccess {
 
   if (row.access !== "public" && row.public_name === null) return { access: row.access };
 
-  throw new Error(`site ${row.id} is stored as ${row.access} ${row.public_name === null ? "without" : "with"} a public name`);
+  throw new Error(`a stored site is ${row.access} ${row.public_name === null ? "without" : "with"} a public name`);
 }
 
 /**
@@ -158,7 +158,7 @@ export function siteFromRow(row: unknown): Site {
   const { access, public_name, search_engines, embeddable, expires_at, trashed_at, versions, ...rest } = parsed.output;
   const kept = [...versions].sort((left, right) => left.number - right.number);
   if (!kept.some((version) => version.number === rest.live_version))
-    throw new Error(`site ${rest.id} is live at version ${rest.live_version}, which is not kept`);
+    throw new Error("a stored site is live at a version that is not kept");
 
   const state: SiteState = trashed_at === null ? { state: "live" } : { state: "trash", trashed_at };
 
@@ -181,7 +181,7 @@ export function siteFromRow(row: unknown): Site {
  */
 export function siteToRow(site: Site): SiteRow {
   // A row holds the trash as a moment alone, so a trashed site without one would be stored as a live site.
-  if (site.state === "trash" && !v.is(MOMENT, site.trashed_at)) throw new Error(`site ${site.id} is in the trash since no moment`);
+  if (site.state === "trash" && !v.is(MOMENT, site.trashed_at)) throw new Error("a site is in the trash since no moment");
 
   const columns: Omit<SiteRow, "versions"> = {
     id: site.id,
