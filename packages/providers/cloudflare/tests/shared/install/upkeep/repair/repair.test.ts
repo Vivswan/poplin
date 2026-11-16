@@ -7,7 +7,7 @@ import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import type { Mend, Repaired, Run, Token, Whole } from "@poplin/core/src/install/installer";
 import type { Place, Where } from "../../../../../src/shared/install/first/find";
 import { installer } from "../../../../../src/shared/install/first/installer";
-import { ACCOUNT, type Account, emptyAccount, KEY_VALUE_START, TOKEN } from "../../support/fake-install";
+import { ACCOUNT, type Account, answer, emptyAccount, KEY_VALUE_START, TOKEN } from "../../support/fake-install";
 import { type Store, storeOf } from "../../support/fake-store";
 import { RELEASE, worldOf } from "../../support/fake-reach";
 import type { Asked } from "../../support/replies";
@@ -119,13 +119,14 @@ async function wholeInstall(kind: keyof typeof KINDS, changes: Partial<Account> 
 }
 
 /**
- * Make a whole install whose Worker is tagged with another version than the release the website names, as one that could not take that release by itself.
+ * Make a whole install whose Worker states another release than the one the website names, as one that could not take that release by itself.
+ * Its latest version is the one the install's change of the settings made, as on every real install.
  *
- * @param version - the version its Worker's latest upload is tagged with
+ * @param version - the release its Worker's `RELEASE` binding names
  */
 async function behindInstall(kind: keyof typeof KINDS, version: string = OLDER, stored: Login | "nothing" = OWNER): ReturnType<typeof wholeInstall> {
   const account = await wholeInstall(kind, {}, stored);
-  account.versions = [{ ...account.versions[0], annotations: { "workers/tag": version } }];
+  account.bindings = account.bindings.map((binding) => (binding.name === "RELEASE" ? { ...binding, text: version } : binding));
 
   return account;
 }
@@ -236,6 +237,34 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
   });
 });
 
+describe.each(BOTH)("the release an install runs, where Cloudflare tags no version it is not told to, %s", (kind) => {
+  // Drift: every variable and key a person or a repair writes makes a latest version with no tag. An install read by that tag is one whose version is not read from its first repair on, so no repair ever brings it to a release.
+  test("a variable and a secret written by hand each make a latest version with no tag, and the install still reads as the release it runs, and as behind one", async () => {
+    const [current, behind] = [await wholeInstall(kind), await behindInstall(kind)];
+    for (const account of [current, behind]) {
+      const kept = account.bindings.map((binding) => ({ name: binding.name, type: "inherit" }));
+      for (const written of [{ name: "BY_HAND", type: "plain_text", text: "set in the dashboard" }, { name: "A_SECRET", type: "secret_text", text: "set in the dashboard" }]) {
+        answer(account, { method: "PATCH", path: `/accounts/${ACCOUNT}/workers/scripts/poplin/settings`, key: `Bearer ${TOKEN}`, body: { settings: { bindings: [...kept, written] } } });
+      }
+    }
+    const dry = await repaired(behind, kind, { run: DRY }, KINDS[kind].where, { older: { [OLDER]: OWN_SCHEMA } });
+
+    expect(current.versions.map((version) => (version.annotations as { readonly "workers/tag"?: string } | undefined)?.["workers/tag"])).toEqual([undefined, undefined, RELEASE, RELEASE]);
+    expect([shown((await repaired(current, kind)).done)[0], shown(dry.done)[0]]).toEqual([`Worker | leave | poplin, runs ${RELEASE}`, `Worker | change | poplin: ${OLDER} to ${RELEASE}`]);
+  });
+
+  // Drift: code another tool uploads is not poplin's release. Read as the tag an older version carries, it would be told as that release, and left in place as the newest.
+  test("an upload by another tool, which keeps poplin's marks and states no release, is read as no version: never as the tag of the version under it", async () => {
+    const account = await wholeInstall(kind);
+    const kept = account.bindings.filter((binding) => binding.name !== "RELEASE").map((binding) => ({ name: binding.name, type: "inherit" }));
+    answer(account, { method: "PUT", path: `/accounts/${ACCOUNT}/workers/scripts/poplin`, key: `Bearer ${TOKEN}`, body: { metadata: { bindings: kept }, "index.js": "" } });
+    const { done, changes } = await repaired(account, kind);
+
+    expect(account.versions.map((version) => (version.annotations as { readonly "workers/tag"?: string } | undefined)?.["workers/tag"])).toEqual([undefined, RELEASE, RELEASE]);
+    expect([shown(done)[0], changes]).toEqual(["Worker | leave | poplin: its version is not read, so no release is put in place", []]);
+  });
+});
+
 describe.each(BOTH)("a release the install is behind, %s", (kind) => {
   // Drift: this is the one way an install takes a release it cannot take by itself. An upload that named a binding anew would drop the bucket or the key, and one with no tag or no update stated would leave no way back.
   test("a dry run names the change and sends none; the run sends one upload that keeps every binding by name, tags the version, and states the update, in the pinned calls; the run after it sends none", async () => {
@@ -245,17 +274,19 @@ describe.each(BOTH)("a release the install is behind, %s", (kind) => {
     const dry = await repaired(account, kind, { run: DRY }, KINDS[kind].where, meets);
     const run = await repaired(account, kind, {}, KINDS[kind].where, meets);
     const again = await repaired(account, kind, {}, KINDS[kind].where, meets);
-    const { metadata } = account.uploads.at(-1) as { readonly metadata: { readonly bindings: readonly { readonly name: string; readonly type: string; readonly json?: unknown }[]; readonly annotations: unknown } };
+    const { metadata } = account.uploads.at(-1) as { readonly metadata: { readonly bindings: readonly { readonly name: string; readonly type: string; readonly json?: unknown; readonly text?: unknown }[]; readonly annotations: unknown } };
     const stated = metadata.bindings.filter((binding) => binding.type !== "inherit");
 
     expect([dry.changes, shown(dry.done), shown(dry.done)[0], dry.done.ok && dry.done.ready]).toEqual([[], shown(run.done), `Worker | change | poplin: ${OLDER} to ${RELEASE}`, true]);
     expect([run.changes, run.calls.length - CALLS[kind], run.done.ok && run.done.ready]).toEqual([[UPLOAD], UPLOAD_CALLS, true]);
-    expect([metadata.annotations, stated.map((binding) => binding.name), stated.at(-1)?.json]).toEqual([
+    expect([metadata.annotations, stated.map((binding) => binding.name), stated.find((binding) => binding.name === "LAST_UPDATE")?.json]).toEqual([
       { "workers/tag": RELEASE, "workers/message": `poplin ${RELEASE}, by a repair` },
-      ["MINUTE_LIMITS", "LAST_UPDATE"],
+      ["MINUTE_LIMITS", "LAST_UPDATE", "RELEASE"],
       { from: OLDER, to: RELEASE, schema: OWN_SCHEMA, at: 0 },
     ]);
     expect([account.bindings.map((binding) => binding.name).filter((name) => name !== "LAST_UPDATE").sort(), account.uploads.length]).toEqual([[...names].sort(), 2]);
+    // The release is stated once, by its value: named as kept beside it, Cloudflare would be told one binding twice.
+    expect(metadata.bindings.filter((binding) => binding.name === "RELEASE")).toEqual([{ name: "RELEASE", type: "plain_text", text: RELEASE }]);
     expect([again.changes, shown(again.done)[0], again.calls.length]).toEqual([[], `Worker | leave | poplin, runs ${RELEASE}`, CALLS[kind]]);
   });
 

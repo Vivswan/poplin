@@ -72,6 +72,7 @@ export const INSTALL_OBJECTS = {
   worker: "poplin",
   workerBinding: "WORKER_NAME",
   placeBinding: "INSTALL_PLACE",
+  releaseBinding: "RELEASE",
   bucketBinding: "SITES",
   keyBinding: "KEPT_KEY",
   keyName: "poplin kept key",

@@ -2,11 +2,13 @@
 // A change names every other binding as inherited, so the bucket, the database, the limiter, and the variables a person set stay as they are.
 // Every variable a run changes goes in one change: the Worker is deployed anew once, and never starts with half of them.
 // A read of the bindings that lacks the Worker's own name is a read in part: a change after it would drop every binding it did not list, so none is sent.
+// Cloudflare makes a version of the Worker for each change, with no annotation the change does not state: so a change states the tag again, from the release the bindings name.
 // Secrets go in that same change. Cloudflare reads none back, so one is written whenever it is handed over and is never compared.
 
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare } from "../../client";
 import { INSTALL_OBJECTS } from "../../install-objects";
+import { readRelease, taggedAs } from "../../../release/update/release-mark";
 import { type Mode, reportOf, type Synced } from "../../sync";
 
 /** A variable's whole value: a record of texts, kept as a JSON variable, or one text, kept as a plain one. */
@@ -50,6 +52,9 @@ interface OwnWorker {
   /** The Worker's name. */
   readonly script: string;
 }
+
+/** What the version a change makes says made it, after the release of its code. */
+const MADE = "with its settings changed";
 
 /** The status Cloudflare answers for a Worker that does not exist. */
 const NO_WORKER = 404;
@@ -148,7 +153,8 @@ export async function syncVariables(connection: Connection, worker: OwnWorker, d
 
   const sent = [...written.map(bindingOf), ...secrets.map(({ name, text }) => ({ name, type: "secret_text", text }))];
   const kept = bindings.filter((binding) => !sent.some((changed) => changed.name === binding.name)).map((binding) => ({ name: binding.name, type: "inherit" }));
-  const text = JSON.stringify({ bindings: [...kept, ...sent] });
+  const release = readRelease(bindings);
+  const text = JSON.stringify({ bindings: [...kept, ...sent], ...(release === undefined ? {} : { annotations: taggedAs(release, MADE) }) });
 
   // Cloudflare reads the settings from one form field of JSON text, so the text is handed over as the request's body: given as an object, the SDK spreads it over a field per key.
   const changed = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).edit(worker.script, { account_id: worker.accountId }, { body: { settings: text } }));

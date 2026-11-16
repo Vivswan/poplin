@@ -54,7 +54,7 @@ test("a repair states the first value of a binding the release keeps and the Wor
     return [FIRST_DB];
   });
 
-  expect([put, lacking, sent]).toEqual([{ ok: true }, [["DB"]], [[{ name: "WORKER_NAME", type: "inherit" }, FIRST_DB]]]);
+  expect([put, lacking, sent]).toEqual([{ ok: true }, [["DB"]], [[{ name: "WORKER_NAME", type: "inherit" }, FIRST_DB, { name: "RELEASE", type: "plain_text", text: "0.3.0" }]]]);
 });
 
 // Drift: a binding with no first value here is one a newer poplin makes. An upload without it would put in place code whose binding is absent.

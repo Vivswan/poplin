@@ -187,8 +187,9 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
       { type: "plain_text", text: "poplin", name: "WORKER_NAME" },
       { name: "INSTALL_PLACE", type: "plain_text", text: kind === "domain" ? "example.com" : "none" },
       { type: "ratelimit", namespace_id: "1001", simple: { limit: 1_000_000, period: 60 }, name: "MINUTE_LIMITS" },
+      { name: "RELEASE", type: "plain_text", text: RELEASE },
     ]);
-    const variables = ["ACCESS: json", "ACCOUNT_ID: plain_text", "FIRST_SETTINGS: json", "INSTALL_PLACE: plain_text", "WORKER_NAME: plain_text", "ZONE: json"];
+    const variables = ["ACCESS: json", "ACCOUNT_ID: plain_text", "FIRST_SETTINGS: json", "INSTALL_PLACE: plain_text", "RELEASE: plain_text", "WORKER_NAME: plain_text", "ZONE: json"];
     const bound = ["DB: d1", "JOBS: workflow", "KEPT_KEY: secret_text", "MINUTE_LIMITS: ratelimit", "SITES: r2_bucket", "UPLOAD_KEY: secret_text"];
 
     expect(account.bindings.map((binding) => `${binding.name}: ${binding.type}`).sort()).toEqual([...variables, ...bound].sort());
@@ -233,7 +234,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     expect(shown(run.done)).toEqual(shown(dry.done));
     expect(shown(run.done).filter((row) => row.includes(" | block | "))).toEqual(blocked);
     expect(run.done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "login_off" }], steps: [{ address: `https://one.dash.cloudflare.com/${ACCOUNT}` }] });
-    expect(account.bindings.map((binding) => binding.name).sort()).toEqual(["ACCOUNT_ID", "DB", "FIRST_SETTINGS", "INSTALL_PLACE", "JOBS", "KEPT_KEY", "MINUTE_LIMITS", "SITES", "UPLOAD_KEY", "WORKER_NAME", "ZONE"]);
+    expect(account.bindings.map((binding) => binding.name).sort()).toEqual(["ACCOUNT_ID", "DB", "FIRST_SETTINGS", "INSTALL_PLACE", "JOBS", "KEPT_KEY", "MINUTE_LIMITS", "RELEASE", "SITES", "UPLOAD_KEY", "WORKER_NAME", "ZONE"]);
   });
 
   // Drift: a database of poplin's name may hold an earlier install's records, so a run takes it only once a person said to, and then leaves what it holds.
