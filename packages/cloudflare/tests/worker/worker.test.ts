@@ -932,7 +932,7 @@ describe("the admin hostname", () => {
 
     expect({
       "an address that asks nothing but who is there": await asked("/data/public-address?name=docs"),
-      "the people, who are in the settings read for the users": await asked("/data/people"),
+      "the people, who are in the settings read for the users, and the count of the tokens each allowed": await asked("/data/people"),
       "a page of the dashboard: the users with the settings, then all its frame shows": await asked("/"),
       "the frame alone": await asked("/data/frame"),
       "the sites, each with its views and who published it": await asked("/data/sites"),
@@ -945,7 +945,7 @@ describe("the admin hostname", () => {
       ),
     }).toEqual({
       "an address that asks nothing but who is there": [200, 1],
-      "the people, who are in the settings read for the users": [200, 1],
+      "the people, who are in the settings read for the users, and the count of the tokens each allowed": [200, 2],
       "a page of the dashboard: the users with the settings, then all its frame shows": [200, 2],
       "the frame alone": [200, 2],
       "the sites, each with its views and who published it": [200, 2],
@@ -1029,7 +1029,7 @@ describe("the audit log as a file", () => {
     const session = await logIn(instance(w), w);
     const counted = "WITH RECURSIVE counted(entry) AS (SELECT 1 UNION ALL SELECT entry + 1 FROM counted WHERE entry < ?)";
     await BINDINGS.DB.batch([
-      BINDINGS.DB.prepare(`${counted} INSERT INTO tokens (id, hash, scope, note, created_at) SELECT printf('%016x', entry), 'none', 'publisher', 'agent ' || entry, ? FROM counted`).bind(FILE_ENTRIES + 200, Date.now()),
+      BINDINGS.DB.prepare(`${counted} INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by) SELECT printf('%016x', entry), 'none', 'publisher', 'agent ' || entry, ?, 'owner@example.com' FROM counted`).bind(FILE_ENTRIES + 200, Date.now()),
       BINDINGS.DB.prepare(
         `${counted} INSERT INTO audit (at, actor, action, site_id, site_name, detail) SELECT ?, printf('%016x', entry), 'delete', printf('%012d', entry), 'gone-' || entry, '{}' FROM counted`,
       ).bind(FILE_ENTRIES + 200, Date.now()),

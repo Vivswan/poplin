@@ -84,16 +84,17 @@ export async function newLinks(count: number): Promise<void> {
   await sql(`UPDATE sites SET id = 'a' || substr(id, 2)`);
 }
 
-/** Make publisher tokens that work, each with a note. */
+/** Make publisher tokens that work, each with a note and allowed by the owner. */
 export async function manyTokens(stage: Stage, count: number): Promise<void> {
-  await sql(`${COUNTED} INSERT INTO tokens (id, hash, scope, note, created_at) SELECT ${TOKEN_ID}, ?2, 'publisher', 'token ' || n, ?3 + n FROM counted`, count, NO_HASH, stage.w.clock.now - count);
+  const made = `SELECT ${TOKEN_ID}, ?2, 'publisher', 'token ' || n, ?3 + n, ?4 FROM counted`;
+  await sql(`${COUNTED} INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by) ${made}`, count, NO_HASH, stage.w.clock.now - count, OWNER);
 }
 
 /** Make publisher tokens that were removed, each by the owner. */
 export async function endedTokens(stage: Stage, count: number): Promise<void> {
   const { now } = stage.w.clock;
   await sql(
-    `${COUNTED} INSERT INTO tokens (id, hash, scope, note, created_at, removed_at, removed_by) SELECT printf('%016x', n + 1048576), ?2, 'publisher', 'ended ' || n, ?3, ?3 + n, ?4 FROM counted`,
+    `${COUNTED} INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by, removed_at, removed_by) SELECT printf('%016x', n + 1048576), ?2, 'publisher', 'ended ' || n, ?3, ?4, ?3 + n, ?4 FROM counted`,
     count,
     NO_HASH,
     now - count,
