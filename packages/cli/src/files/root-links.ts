@@ -1,9 +1,7 @@
-// The first link of a publish that starts at the root of its host, read on the publisher's machine. Under an address with a path, such a link leaves the site.
+// The first link of a site that starts at the root of its host, read on the machine that sends the site. Under an address with a path, such a link leaves the site.
 
 import { Parser } from "htmlparser2";
 import { parseSrcset } from "srcset";
-
-import type { PublishFile } from "./read";
 
 const PAGE_FILE = /\.html?$/i;
 const BASE = "base";
@@ -16,6 +14,15 @@ const EDGE_SPACE = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
 
 const SINGLE_LINK_ATTRIBUTES: ReadonlySet<string> = new Set([HREF, "src"]);
 
+/** One file of a site, as a publish lists it or a backup holds it. */
+interface SiteFile {
+  /** Where the file sits in the site. */
+  readonly path: string;
+
+  /** Opens the file's bytes; each call starts a new read from the first byte. */
+  open(): ReadableStream<Uint8Array> | Promise<ReadableStream<Uint8Array>>;
+}
+
 /** A link that starts at the root of its host, and the file that holds it. */
 interface RootLink {
   /** The path of the file in the site. */
@@ -25,9 +32,10 @@ interface RootLink {
   readonly link: string;
 }
 
-/** How far one page is read: `end` is set once its first root link is found, or once a `<base>` sent its links to another host, which leaves no link to name. */
+/** How far one page is read: `end` is set once its first root link is found, or once a `<base>` sent its links to another host, which leaves no link to name. `based` is set by the first `<base>` with an `href`: a browser reads no later one. */
 interface Reading {
   end: { readonly link: string | undefined } | undefined;
+  based: boolean;
 }
 
 function isRootLink(link: string): boolean {
@@ -54,8 +62,13 @@ function linksOf(attribute: string, value: string): string[] {
 function readTag(name: string, attributes: Readonly<Record<string, string>>, reading: Reading): void {
   if (reading.end !== undefined) return;
 
+  const base = name === BASE && Object.hasOwn(attributes, HREF);
+  if (base && reading.based) return;
+
+  if (base) reading.based = true;
+
   // A base that names a host sends every root link of the page there, where this install has no say.
-  if (name === BASE && namesHost(trimmed(attributes[HREF] ?? ""))) {
+  if (base && namesHost(trimmed(attributes[HREF] ?? ""))) {
     reading.end = { link: undefined };
 
     return;
@@ -71,11 +84,11 @@ function readTag(name: string, attributes: Readonly<Record<string, string>>, rea
   }
 }
 
-async function rootLinkOf(page: PublishFile): Promise<string | undefined> {
-  const reading: Reading = { end: undefined };
+async function rootLinkOf(page: SiteFile): Promise<string | undefined> {
+  const reading: Reading = { end: undefined, based: false };
   const parser = new Parser({ onopentag: (name, attributes) => readTag(name, attributes, reading) });
   const decoder = new TextDecoder();
-  const reader = page.open().getReader();
+  const reader = (await page.open()).getReader();
 
   try {
     while (reading.end === undefined) {
@@ -94,14 +107,14 @@ async function rootLinkOf(page: PublishFile): Promise<string | undefined> {
 }
 
 /**
- * Find the first link of a publish that starts at the root of its host: an `href`, a `src`, or a candidate of a `srcset` that starts with one `/`.
+ * Find the first link of a site that starts at the root of its host: an `href`, a `src`, or a candidate of a `srcset` that starts with one `/`.
  *
  * Only `.html` and `.htm` files are read, as UTF-8, each up to its first such link. A page is read no further than a `<base>` whose `href` names a host, since its links go there.
  *
- * @param files - the files of a listing, in its order
+ * @param files - the files of a listing or of one version of a backup, in their order
  * @returns the first such link of the first file that holds one; `undefined` when no file does
  */
-export async function firstRootLink(files: readonly PublishFile[]): Promise<RootLink | undefined> {
+export async function firstRootLink(files: readonly SiteFile[]): Promise<RootLink | undefined> {
   for (const file of files) {
     if (!PAGE_FILE.test(file.path)) continue;
 

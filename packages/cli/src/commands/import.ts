@@ -10,7 +10,8 @@ import { showBytes } from "../../../core/src/records/settings";
 import { type Backup, type BackupSite, openBackup } from "../backup/read";
 import type { Called, Failure } from "../client/client";
 import { sha256Of } from "../files/hash";
-import { problem, problemOf } from "./problems";
+import { type Problem, problem, problemOf } from "./problems";
+import { refusedByLayout } from "./publish";
 import type { Outcome, RequestOf, Session } from "./records";
 import { countText, dryRunText } from "./text";
 import { abandonUpload, callUnhurried, giveUpUpload, sendUpload, type UploadFile } from "./upload";
@@ -33,6 +34,9 @@ const HASHED_AT_ONCE = 4;
 
 /** What goes with a zip refused after the install read the address `--site` gave. */
 const ONLY_ASKED = "nothing of the backup was sent: the install was asked only how it reads the site's address";
+
+/** The refusal of a site whose live pages this install cannot serve; every other refusal before a site is begun is the install not answering, which each later site would meet too. */
+const ROOT_LINKS = "root_links";
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
@@ -163,9 +167,20 @@ async function begin(session: Pick<Session, "client" | "io">, format: number, si
   return { begun: await send(live.body), sending: live };
 }
 
+function sentenceOf(said: Problem): string {
+  return said.about === undefined ? said.message : `${said.message} (${said.about})`;
+}
+
+/** A site of which nothing was sent: its live version has a link the install cannot serve, or the install did not say how its addresses are laid out. */
+function unsent(site: BackupSite, said: Problem): Result {
+  const stops = said.code === ROOT_LINKS ? {} : { stops: true as const };
+
+  return { ...sizeOf(site), result: "failed", code: said.code, message: sentenceOf(said), ...stops };
+}
+
 function unfinished(site: BackupSite, failure: Failure, aftermath?: string): Result {
   const said = problemOf(failure);
-  const sentence = said.about === undefined ? said.message : `${said.message} (${said.about})`;
+  const sentence = sentenceOf(said);
   const message = aftermath === undefined ? sentence : `${sentence}; ${aftermath}`;
   const result = isRefusedAs(failure, ALREADY_THERE) ? "skipped" : "failed";
   const forAll = failure.kind !== "refused" || REFUSED_FOR_ALL.includes(failure.status);
@@ -181,9 +196,13 @@ function finished(site: BackupSite, sending: Sending): Result {
   return { ...sizeOf(site), result: "imported", versions: 1, files: sending.files.length, bytes, live_only: true };
 }
 
-/** Import one site: begin, send every file, finish. An import that cannot be finished, or that the person stops, is given up, and the site is then not made. */
+/** Import one site: check its live pages as a publish does, begin, send every file, finish. An import that cannot be finished, or that the person stops, is given up, and the site is then not made. */
 async function importSite(session: Session, format: number, site: BackupSite): Promise<Result> {
   const { client, io } = session;
+  const live = site.versions.find((version) => version.number === site.record.live_version);
+  const refused = await refusedByLayout(live?.files ?? [], session);
+  if (refused !== undefined) return unsent(site, refused);
+
   const hashed = await hashedVersions(site, io.stopped);
   if (hashed === "stopped") return unfinished(site, { kind: "stopped" });
 

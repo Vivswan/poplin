@@ -119,22 +119,23 @@ function published(plan: PublishPlan, answer: Published): Outcome {
 }
 
 /**
- * Why the install of a session cannot serve a plan's pages: it has no domain, so a site of it sits under a path, where a link that starts with `/` leaves the site.
+ * Why the install of a session cannot serve a site's pages: it has no domain, so a site of it sits under a path, where a link that starts with `/` leaves the site.
  *
  * The session is asked how the install's addresses are laid out, and the pages are read only when a site sits under a path.
  *
- * @returns the refusal, which names the first such link of the first file that holds one, or why the install did not answer; `undefined` when the plan can be sent
+ * @param files - the files that would be live: those of a publish, or of the live version of a site in a backup
+ * @returns the problem `root_links`, which names the first such link of the first file that holds one, or why the install did not answer; `undefined` when the files can be sent
  */
-async function refusedByLayout(plan: PublishPlan, { layout, io }: Session): Promise<Outcome | undefined> {
+export async function refusedByLayout(files: Parameters<typeof firstRootLink>[0], { layout, io }: Pick<Session, "layout" | "io">): Promise<Problem | undefined> {
   const asked = await callUnhurried(io, layout);
-  if (!asked.ok) return { ok: false, problem: problemOf(asked.failure) };
+  if (!asked.ok) return problemOf(asked.failure);
 
   if (asked.value.kind !== "path") return undefined;
 
-  const found = await firstRootLink(plan.files);
+  const found = await firstRootLink(files);
   if (found === undefined) return undefined;
 
-  return { ok: false, problem: problem("root_links", `${found.link} in ${found.file}`) };
+  return problem("root_links", `${found.link} in ${found.file}`);
 }
 
 /**
@@ -197,8 +198,8 @@ export function previewPublish(plan: PublishPlan, addressRead: boolean): Outcome
  */
 export async function sendPublish(plan: PublishPlan, session: Session): Promise<Outcome> {
   const { client, io } = session;
-  const refused = await refusedByLayout(plan, session);
-  if (refused !== undefined) return refused;
+  const refused = await refusedByLayout(plan.files, session);
+  if (refused !== undefined) return { ok: false, problem: refused };
 
   const begun = await callUnhurried(io, () => client.call(BEGUN_UPLOAD, (api) => api.uploads.$post({ json: plan.manifest }), "repeatable"));
   if (!begun.ok) return begun.failure.kind === "refused" ? { ok: false, problem: problemOf(begun.failure) } : givenUp(begun.failure, AFTERMATH.unbegun);
