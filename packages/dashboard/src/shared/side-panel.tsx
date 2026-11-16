@@ -165,12 +165,14 @@ function covers(place: HTMLElement, control: Element): boolean {
 }
 
 /**
- * Whether what the library says closed the panel closes it: Escape does, and so does a press beside it or a focus that left it, unless it went to a place of its own.
+ * Whether what the library says closed the panel closes it: Escape does, and so does a focus that left it or, where the list is in sight, a press beside it, unless it went to a place of the panel's own.
  *
  * A focus that left for nothing was taken away with its control, and stays the panel's.
  */
-function closes({ reason, event }: Dialog.Root.ChangeEventDetails): boolean {
+function closes({ reason, event }: Dialog.Root.ChangeEventDetails, listInSight: boolean): boolean {
   if (reason !== "outside-press" && reason !== "focus-out") return true;
+
+  if (reason === "outside-press" && !listInSight) return false;
 
   const went = reason === "focus-out" ? (event as FocusEvent).relatedTarget : event.target;
 
@@ -198,7 +200,7 @@ function useNoFocusUnder(place: HTMLElement | null, onClose: () => void): void {
 /**
  * Draw a panel: the library's dialog without its modal layer, drawn into its own place in the page, so nothing is dimmed and the rest of the page stays in use.
  *
- * It moves the focus to the heading, closes on Escape, and gives the focus back to its opener, though not after a close it was refused: the screen then finds the focus its place.
+ * It moves the focus to the heading, closes on Escape and when Tab leaves it, and gives the focus back to its opener, though not after a close it was refused: the screen then finds the focus its place.
  * Over the end of its list it is set off by a hairline and a soft shadow, and a press beside it closes it; where it has the row to itself it lies in the list's place.
  */
 export function SidePanel({ title, closeLink, onClose, opener, back, beside, children }: SidePanelProps): ReactNode {
@@ -217,7 +219,7 @@ export function SidePanel({ title, closeLink, onClose, opener, back, beside, chi
     >
       {place === null ? null : (
         // An Escape pressed while a question lies over the page is the question's alone, also where the focus is on neither.
-        <Dialog.Root open modal={false} disablePointerDismissal={!liesOver} onOpenChange={(open, details) => (open || liesUnder(place) || !closes(details) ? undefined : onClose())}>
+        <Dialog.Root open modal={false} onOpenChange={(open, details) => (open || liesUnder(place) || !closes(details, liesOver) ? undefined : onClose())}>
           <Dialog.Portal container={place} className="flex min-h-0 flex-1 flex-col">
             <Dialog.Popup
               initialFocus={heading}

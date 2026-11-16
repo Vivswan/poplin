@@ -431,8 +431,8 @@ function BodyRow<Row>({
     >
       {cells.map((spec, at) => (
         <td key={spec.id} className={cn(CELL_LOOK, "bg-inherit", spec.fixed === true && "sticky left-0 z-10 pl-6", endRoom(cells, at, actions === undefined), spec.numeric === true && "text-right")}>
-          {/* The row's own button is its first control and is out of sight: a press anywhere on the row does the same, and the row draws the ring while the button holds the focus. */}
-          {at === 0 && opens !== undefined ? <Button variant="ghost" data-opens={id} aria-label={opens.name(row)} className="sr-only" onClick={() => opens.open(row)} /> : null}
+          {/* The row's own button is its first control and is out of sight: a press anywhere on the row does the same, and the row draws the ring while the button holds the focus. It eases nothing: a closed panel gives it the focus back at once. */}
+          {at === 0 && opens !== undefined ? <Button variant="ghost" data-opens={id} aria-label={opens.name(row)} className="sr-only transition-none" onClick={() => opens.open(row)} /> : null}
           <div className="truncate">{spec.cell(row)}</div>
         </td>
       ))}
