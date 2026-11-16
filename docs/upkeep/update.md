@@ -118,7 +118,7 @@ The samples are cut short where the dots are. Without a domain the address ends 
 | -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `left`, and `poplin, runs 0.3.0`                         | the install runs the newest release: nothing is uploaded                   |
 | `changed`, and `poplin: 0.2.0 to 0.3.0`                  | the release is in place                                                    |
-| `left`, and `its version is not read`                    | the Worker's latest version carries no release's tag, so nothing says it is behind: nothing is uploaded |
+| `left`, and `its version is not read`                    | the Worker's `RELEASE` variable is gone or names no release, as after code another tool uploaded: nothing says it is behind, so nothing is uploaded |
 | `stopped` or `failed`, and why                           | nothing was uploaded; the rest of the install is still mended. Do what the row says, then run the line again |
 
 | After the upload                                         | The repair                                                                 |
@@ -184,7 +184,7 @@ the install asks Cloudflare, with its key, to run the version before again
 | How long            | Cloudflare runs the version before about ten seconds after it is asked                                  |
 | What is lost        | nothing: a step is kept whole or not at all, so the database is as 0.3.0 left it                        |
 | Where it shows      | Activity: `Went back to 0.3.0: the update to 0.3.1 could not change the database`; the problem `update_went_back` |
-| When it stays put   | the install holds no key, the code was put in place another way, or an earlier step of the same release was kept |
+| When it stays put   | the install holds no key, the code was put in place another way, a variable or secret was set by hand between the last repair and the update, or an earlier step of the same release was kept |
 | What to do          | report it, and update again once a later release is out                                                 |
 
 Where the install stays put, it answers `This install's database could not be brought up to date. Try again.` until the step runs, or until you roll back at Cloudflare.

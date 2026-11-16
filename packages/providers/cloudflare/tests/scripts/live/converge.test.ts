@@ -73,6 +73,9 @@ const PLANS = "Account plans: free (0 subscriptions: 0 at a price of 0, 0 ended)
 /** What the wait tells after an install that was made anew, and after one that was mended. */
 const [TWELVE, ONCE] = ["New deployment: answered the run's token 12 times in a row over 33 seconds", "New deployment: answered the run's token"];
 
+/** What a run says once `poplin install` read the release back: after the settings change that ends an install it made, and after the upload and the repair of one it mended. */
+const [READ_MADE, READ_MENDED] = [`Release: read as ${COMMIT} after the install wrote its settings`, `Release: read as ${COMMIT} after the upload and the repair`];
+
 /** The lines of `poplin install` on an account that holds an install, which the command says beside its value: the address with the account's own name hidden. */
 const ALREADY = [
   `This account already holds poplin ${COMMIT}, at https://poplin.[hidden], and it is as it should be. nothing was changed.`,
@@ -445,7 +448,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     const standing = await standingOn(freshAccount(), kind);
     const [first, second] = [await standing.again(), await standing.again()];
 
-    expect(first).toEqual({ code: 0, lines: [told.found, PLANS, ...told.made("changed"), TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS], missing: { "settled-upload-key": expect.any(String) }, uploads: [FIRST_UPLOAD] });
+    expect(first).toEqual({ code: 0, lines: [told.found, PLANS, ...told.made("changed"), READ_MADE, TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS], missing: { "settled-upload-key": expect.any(String) }, uploads: [FIRST_UPLOAD] });
     expect(second).toEqual({
       code: 0,
       lines: [
@@ -456,6 +459,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
         `Worker's code: this commit's build, by the upload of an update (${COMMIT} -> ${COMMIT})`,
         ...told.mended,
         "Sweep: has not asked for a newer version yet",
+        READ_MENDED,
         ONCE,
         "Storage and file caps: set",
         ANSWERS,
@@ -463,9 +467,31 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
       missing: {},
       uploads: [UPDATE_UPLOAD],
     });
-    expect({ versions: standing.account.versions.map((version) => (version.annotations as { readonly "workers/tag": string })["workers/tag"]), keys: standing.account.tokens.length }).toEqual({ versions: [COMMIT, COMMIT], keys: 2 });
+    expect({ versions: standing.account.versions.map((version) => (version.annotations as { readonly "workers/tag": string })["workers/tag"]), keys: standing.account.tokens.length }).toEqual({ versions: [COMMIT, COMMIT, COMMIT], keys: 2 });
     // The caps reached the install's own database, through its real API and a token whose row the run stored there.
     expect(await standing.settings()).toMatchObject(LIVE_CAPS);
+  });
+
+  // Drift: a release read from the tag of the latest version reads as none after the first change of the Worker's settings, on Cloudflare alone: no fake said so for months.
+  // The run reads it back with the product's own command, so a release that is no longer read turns the test install red on the next push.
+  test.each([
+    ["makes", 0, "Install: none found, so poplin install ran", "the install wrote its settings"],
+    ["mends", 1, "Worker's code: ", "the upload and the repair"],
+  ] as const)("a run that %s an install whose Worker then states no release stops, and says after what the release was not read", async (_what, earlier, line, after) => {
+    using _step = catchStep();
+    const harness = await harnessOf(freshAccount(), kind);
+    const env = { POPLIN_LIVE_INSTALL: kind, POPLIN_LIVE_START_OVER: "false" };
+    for (let run = 0; run < earlier; run += 1) await convergeInstall(harness.run, env, harness.world);
+    harness.lines.length = 0;
+    const say = (said: string): void => {
+      harness.run.say(said);
+      if (said.startsWith(line)) harness.account.bindings = harness.account.bindings.filter((binding) => binding.name !== "RELEASE");
+    };
+    const code = await convergeInstall({ ...harness.run, say }, env, harness.world);
+
+    const ended = harness.lines.filter((said) => said.includes("Release") || said.includes("did not read"));
+
+    expect([code, ended]).toEqual([1, [`::error::The test install could not be made ready: poplin install did not read the install as this commit's build after ${after}.`]]);
   });
 
   // Drift: a start-over that removed by a list of its own would pass while `poplin uninstall` left a piece behind; and one that took the marking bucket would leave an account no later run may remove anything on.
@@ -475,7 +501,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     const over = await standing.again(true);
     const removal = [...told.removed, "Sites' files: removed (0 in it)", "Database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + 2} kinds in 0 seconds`];
 
-    expect(over.lines).toEqual([told.found, PLANS, "Start over: asked for", ...removal, ...told.made("left"), TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS]);
+    expect(over.lines).toEqual([told.found, PLANS, "Start over: asked for", ...removal, ...told.made("left"), READ_MADE, TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS]);
     expect({ code: over.code, uploads: over.uploads, buckets: standing.account.buckets.map((bucket) => bucket.name) }).toEqual({ code: 0, uploads: [FIRST_UPLOAD], buckets: ["poplin-live-sites", "poplin-sites"] });
   });
 
@@ -506,7 +532,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
 
     expect(over).toEqual({
       code: 0,
-      lines: [told.found, PLANS, `Start over: another build made it: ${what}`, ...removal, ...told.made("left"), TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS],
+      lines: [told.found, PLANS, `Start over: another build made it: ${what}`, ...removal, ...told.made("left"), READ_MADE, TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS],
       missing: { "settled-upload-key": expect.any(String) },
       uploads: [FIRST_UPLOAD],
     });

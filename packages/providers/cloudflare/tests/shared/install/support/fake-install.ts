@@ -109,8 +109,11 @@ export interface Account {
   /** Every upload of the install's Worker, in order: its metadata, and the name of each file sent with it. */
   uploads: Row[];
 
-  /** The versions of the install's Worker, the latest first, each with the annotations its upload stated. */
+  /** The versions of the install's Worker, the latest first: an upload and a change of the settings each make one, with the annotations that call stated and no other, and the bindings the Worker had after it. */
   versions: Row[];
+
+  /** The id of the version each deployment of the install's Worker runs, the newest first. */
+  deployments: string[];
 
   /** The cron list of the install's Worker. */
   crons: string[];
@@ -186,6 +189,7 @@ export function emptyAccount(): Account {
     ],
     uploads: [],
     versions: [],
+    deployments: [],
     crons: [],
     address: { enabled: false, previews_enabled: true },
     buckets: [],
@@ -302,6 +306,36 @@ function boundAfter(account: Account, sent: readonly Row[]): Row[] {
   return sent.flatMap((binding) => (binding.type === "inherit" ? account.bindings.filter((kept) => kept.name === binding.name) : [taken(binding)]));
 }
 
+/** A new latest version of the install's Worker, deployed at once: it carries the annotations of the call that made it, and none of the version before. */
+function versioned(account: Account, annotations: Row | undefined): void {
+  const number = account.versions.length + 1;
+  account.versions.unshift({ id: `version-${number}`, number, annotations, bindings: account.bindings });
+  account.deployments.unshift(`version-${number}`);
+}
+
+/** A deployment of an earlier version of the install's Worker: that version runs again, with the bindings it was made with. One the Worker has no such version for is refused. */
+function deployed(account: Account, asked: Asked): Response {
+  const id = (asked.body as { readonly versions: readonly { readonly version_id: string }[] }).versions[0]?.version_id;
+  const version = account.versions.find((made) => made.id === id);
+  if (version === undefined) return refusal(404, 10092, "Version not found.");
+
+  account.deployments.unshift(version.id as string);
+  account.bindings = version.bindings as Row[];
+
+  return reply({ id: `deployment-${account.deployments.length}` });
+}
+
+/** The versions of the install's Worker: the list names each by its id and number alone, one read by its id answers its annotations, and a deployment runs a version again. */
+function versions(account: Account, asked: Asked, parts: readonly string[]): Response {
+  if (parts[5] === "deployments") return asked.method === "POST" ? deployed(account, asked) : reply({ deployments: account.deployments.map((id) => ({ versions: [{ version_id: id, percentage: 100 }] })) });
+
+  if (parts[6] === undefined) return reply({ items: account.versions.map(({ id, number }) => ({ id, number })) });
+
+  const version = account.versions.find((made) => made.id === parts[6]);
+
+  return version === undefined ? refusal(404, 10092, "Version not found.") : reply({ id: version.id, number: version.number, annotations: version.annotations ?? {}, resources: {} });
+}
+
 /** An upload of the install's Worker: it makes the Worker where there is none, with Cloudflare's first addresses, and a new latest version with the annotations sent. */
 function uploaded(account: Account, asked: Asked): Response {
   const { metadata, ...files } = asked.body as { readonly metadata: { readonly bindings: Row[]; readonly annotations?: Row } };
@@ -312,7 +346,7 @@ function uploaded(account: Account, asked: Asked): Response {
 
   account.bindings = boundAfter(account, metadata.bindings);
   account.uploads.push({ metadata, files: Object.keys(files) });
-  account.versions.unshift({ id: `version-${account.versions.length + 1}`, number: account.versions.length + 1, annotations: metadata.annotations });
+  versioned(account, metadata.annotations);
 
   return reply({ id: "poplin" });
 }
@@ -323,7 +357,7 @@ function written(account: Account, asked: Asked): Response {
 
   if (account.noWorker === true) return refusal(404, 10007, "This Worker does not exist on your account.");
 
-  Object.assign(account, { noWorker: true, bindings: [], versions: [], crons: [] });
+  Object.assign(account, { noWorker: true, bindings: [], versions: [], deployments: [], crons: [] });
 
   return reply(null);
 }
@@ -345,7 +379,7 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
 
   if (account.noWorker === true) return refusal(404, 10007, "This Worker does not exist on your account.");
 
-  if (parts[5] === "versions") return reply({ items: account.versions });
+  if (parts[5] === "versions" || parts[5] === "deployments") return versions(account, asked, parts);
 
   if (parts[5] === "schedules") {
     if (asked.method === "PUT") account.crons = (asked.body as { readonly cron: string }[]).map((schedule) => schedule.cron);
@@ -363,8 +397,9 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
 
   if (asked.method === "GET") return reply(settingsOf(account));
 
-  const { settings } = asked.body as { settings: { bindings: Row[] } };
+  const { settings } = asked.body as { settings: { bindings: Row[]; annotations?: Row } };
   account.bindings = boundAfter(account, settings.bindings);
+  versioned(account, settings.annotations);
 
   return reply({ bindings: account.bindings });
 }
