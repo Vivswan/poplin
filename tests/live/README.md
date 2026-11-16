@@ -68,12 +68,24 @@ One install on the Cloudflare test account, called staging. It stays up between 
 | Updated     | after a green main that changed such a file                                      |
 | Put back    | after every run of the checks, whatever they came to, and at 00:00 UTC every day |
 
-| A reset removes                      | A reset leaves                                                               |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| every site but the demo's, for good  | the logins and every other setting                                           |
-| everything in the trash              | the Worker, the bucket, the database, and the zone's objects                 |
-| every token, its own among them      | the sample sites below, published anew                                       |
-| every login of a computer that waits | the demo: a public site with the public name `demo`, updated where it stands |
+| A reset removes                               | A reset leaves                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| every site that is no sample and not the demo | the logins and every other setting                                                    |
+| a sample that differs from its row, for good  | the Worker, the bucket, the database, and the zone's objects                          |
+| every token, its own among them               | the sample sites below: one that still matches is kept, any other is published anew   |
+| every login of a computer that waits          | the demo: a public site with the public name `demo`, updated where it stands          |
+
+| A sample is kept when                                      | It is published anew after                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------- |
+| one site holds its name                                    | a rename, or a second site of that name                       |
+| access, public name, typed title, and both switches match  | any of them changed on the dashboard, or in the table         |
+| it is on its row's side of the trash, there for a day more | a move to the trash, or out of it, or under a day in it left  |
+| it keeps its row's versions by their numbers, newest live  | a publish, a rollback, a dropped version, fewer versions kept |
+| it never runs out, or does within its span and not today   | an expiry set or cleared, or less than a day left             |
+| every version holds the folder's files, byte for byte      | a changed, added, renamed, or removed file, or a media type   |
+| it stores the title of the folder's entry page             | another title in `index.html`                                 |
+
+The demo's site is kept by the same rule, on its title, its expiry, and the files of its live version. A kept site costs no row of the database and no write or list of the bucket: its files are read, one request each.
 
 | The sample sites a reset leaves | How many                                   |
 | ------------------------------- | ------------------------------------------ |
@@ -132,7 +144,8 @@ one run, at its ceilings         2 (the bucket found or made) + 150 (checks) + 1
 a day of 40 such runs            40 x 302 + 150 (the midnight reset) = 12,230
 31 such days                     12,230 x 31 = 379,130 of the 1,000,000 R2 takes for free in a month
 a run with the many-files check  2 + 2,300 + 150 = 2,452, started by hand alone
-a usual run                      about 85 (checks) + 131 (reset)
+a usual run                      about 85 (checks) + 0 (a reset that keeps every sample and the demo)
+a reset that keeps nothing       about 131
 ```
 
 A run starts after a green main that changed a file reaching the install, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.

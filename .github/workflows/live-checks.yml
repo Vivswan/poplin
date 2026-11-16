@@ -6,7 +6,7 @@
 #   a push that changed no such file -> GitHub starts no run
 #   a run by hand with `start_over` ticked -> everything poplin made on the test account removed -> the same steps, from nothing
 #
-#   put back: every site but the demo removed, the trash emptied, the samples of demo/samples and the demo published, waiting logins and every token removed
+#   put back: every site that is no sample and not the demo removed, each sample that differs from demo/samples and its table published anew, the demo published when its files differ, waiting logins and every token removed
 #
 # The test install stays up between runs, with its logins and its settings.
 # The environment's secrets reach the steps that call Cloudflare and no other step. Each step prints what it did.

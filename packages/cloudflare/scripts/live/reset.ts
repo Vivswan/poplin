@@ -1,9 +1,11 @@
 // Put the owner's test install back to the sample sites and the demo: after every run of the live checks, and at midnight UTC.
 //
-//   a token for the reset -> every site but the demo removed for good -> the trash emptied -> the sample sites published as the demo's own table ends
-//     -> the demo built, given the address of each sample site, and published at the public name `demo` -> waiting logins and every token removed
+//   a token for the reset -> the sample sites that still are what the demo's own table ends in, found -> every other site but the demo removed for good, the trash too
+//     -> the missing sample sites published -> the demo built, given the address of each sample site, and published at the public name `demo` unless it holds those files already
+//     -> waiting logins and every token removed
 //
 // The install then lists the sites the demo lists, each open to the same people, and the demo's links lead to them.
+// A site that is kept costs the database no row and the bucket no write: a reset after checks that left the samples alone writes nothing but its own token.
 // The demo's site is updated where it stands, so its address always answers. The logins, the settings, and the install itself stay.
 // Every request is one site or one page of a listing, sent one after another, and an answer of "too many requests" is waited out as the CLI waits.
 // The bucket writes and lists it asks for are counted, and a reset that would pass their ceiling stops red.
@@ -14,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DELETED_SITE } from "@poplin/core/src/actions/delete";
 import { LISTED_SITES } from "@poplin/core/src/actions/list";
+import { SETTINGS_ANSWER } from "@poplin/core/src/actions/store-settings";
 import type * as v from "valibot";
 
 import { type Client, createClient, type Failure, type Fetch } from "../../../cli/src/client/client";
@@ -24,14 +27,18 @@ import { buildDemo } from "../../../demo/scripts/build";
 import { REAL_SITES_FILE, type RealSites } from "../../../demo/src/preview/real-sites";
 import { standingSites, THE_DEMO } from "../../../demo/src/preview/sample-sites";
 import { CEILINGS, meterBucket } from "./budget";
-import { type Cli, publishSamples } from "./samples";
+import { isSameSite, type Wanted } from "./same-site";
+import { type Cli, publishSamples, type Sample, sampleSites, wantedOf } from "./samples";
 import { findDatabase, runSql, seedToken } from "./tokens";
 import { findInstall, isStop, openRun, type Run, reportStop, type Stop } from "./util";
 
 /** The folder that holds one folder per sample site. */
 const SAMPLES = join(import.meta.dir, "..", "..", "..", "..", "demo", "samples");
 
-/** The row of the sample table that stands for the demo itself: its name, its public name, and its title. Its address is `<public name>-<public word>.<domain>`. */
+/** What the demo's site is published with, so it never runs out. */
+const NEVER = "never";
+
+/** The row of the sample table that stands for the demo itself: its name, its public name, its title, and what a publish leaves of its site. Its address is `<public name>-<public word>.<domain>`. */
 const DEMO = demoRow();
 
 /** The most sites one page of a listing holds. */
@@ -60,6 +67,9 @@ interface ResetEnds {
   /** Waits so many milliseconds. */
   readonly pause: (ms: number) => Promise<void>;
 
+  /** The install's time, in milliseconds: what is left of a site's expiry is counted from it. */
+  readonly now: () => number;
+
   /** Runs one statement on the install's database, and answers why it did not run. */
   readonly sql: (statement: string) => Promise<Stop | undefined>;
 
@@ -81,11 +91,14 @@ interface Tally {
   /** How many it removed from the trash. */
   readonly trashed: number;
 
-  /** The sample sites it published that stand outside the trash. */
-  readonly published: readonly string[];
+  /** The sample sites that stand outside the trash. */
+  readonly live: readonly string[];
 
-  /** The sample sites it published and moved to the trash. */
+  /** The sample sites that stand in the trash. */
   readonly binned: readonly string[];
+
+  /** The sample sites among them it left as they stood, and published none of. */
+  readonly kept: readonly string[];
 
   /** The sample site it gave more than one version, and how many. */
   readonly versioned: { readonly name: string; readonly versions: number };
@@ -93,8 +106,8 @@ interface Tally {
   /** How many sample sites the demo it published links to at their own addresses. */
   readonly linked: number;
 
-  /** Whether the demo's site was made or updated. */
-  readonly demo: "published" | "updated";
+  /** Whether the demo's site was made, updated, or left as it stood. */
+  readonly demo: "published" | "updated" | "kept";
 
   /** The bucket writes and lists it asked for. */
   readonly operations: number;
@@ -103,13 +116,15 @@ interface Tally {
 /** One page of a listing. */
 type Sites = v.InferOutput<typeof LISTED_SITES>["sites"];
 
-/** The row of the sample table whose sample is the demo itself. */
-function demoRow(): { readonly name: string; readonly publicName: string; readonly title: string } {
+/** The row of the sample table whose sample is the demo itself, and what a publish of the built demo leaves of its site, whatever the site is called and whichever versions it kept. */
+function demoRow(): { readonly name: string; readonly publicName: string; readonly title: string; readonly wanted: Omit<Wanted, "folder"> } {
   const row = standingSites().find((site) => site.sample === THE_DEMO);
   const title = row?.settings.title;
   if (row?.reach.access !== "public" || typeof title !== "string") throw new Error("the sample table has no public row for the demo itself, with a title");
 
-  return { name: row.name, publicName: row.reach.public_name, title };
+  const wanted = { reach: row.reach, title, embeddable: undefined, searchEngines: undefined, expires: NEVER, trashed: false, versions: "live" } as const;
+
+  return { name: row.name, publicName: row.reach.public_name, title, wanted };
 }
 
 /** Why a call got no answer to use, in words that quote nothing the install said. */
@@ -150,15 +165,44 @@ async function firstPage(client: Client, io: Io, trash: boolean): Promise<Sites 
   return listed.value.sites;
 }
 
-/** Remove the sites of one listing for good, a page at a time: the first page is read anew until it holds nothing to remove. Outside the trash the demo's site stays. */
-async function removeSites(client: Client, io: Io, trash: boolean): Promise<number | Stop> {
+/**
+ * Find the sample sites the install holds that are still what their rows end in: the same settings, versions, and files.
+ *
+ * @returns each such site by its row's name; a name two sites hold names none, so both are removed
+ */
+async function keptSamples(ends: ResetEnds, client: Client, io: Io, samples: readonly Sample[]): Promise<ReadonlyMap<string, Sites[number]> | Stop> {
+  const [live, trash] = [await firstPage(client, io, false), await firstPage(client, io, true)];
+  if ("kind" in live) return live;
+
+  if ("kind" in trash) return trash;
+
+  const settings = await callUnhurried(io, () => client.call(SETTINGS_ANSWER, (api) => api.config.$get()));
+  if (!settings.ok) return { kind: "failed", what: `the install did not show its settings (${told(settings.failure)})` };
+
+  const kept = new Map<string, Sites[number]>();
+
+  for (const sample of samples) {
+    const [site, ...others] = [...live, ...trash].filter((held) => held.name === sample.row.name);
+    if (site === undefined || others.length > 0) continue;
+
+    const same = await isSameSite({ client, io }, site, wantedOf(sample, settings.value.values), ends.now());
+    if (typeof same !== "boolean") return same;
+
+    if (same) kept.set(sample.row.name, site);
+  }
+
+  return kept;
+}
+
+/** Remove the sites of one listing for good, a page at a time: the first page is read anew until it holds nothing to remove. A spared site stays, and outside the trash the demo's. */
+async function removeSites(client: Client, io: Io, listing: { readonly trash: boolean; readonly spared: ReadonlySet<string> }): Promise<number | Stop> {
   let removed = 0;
 
   for (;;) {
-    const sites = await firstPage(client, io, trash);
+    const sites = await firstPage(client, io, listing.trash);
     if ("kind" in sites) return sites;
 
-    const doomed = sites.filter((site) => trash || site.public_name !== DEMO.publicName);
+    const doomed = sites.filter((site) => !listing.spared.has(site.id) && (listing.trash || site.public_name !== DEMO.publicName));
     if (doomed.length === 0) return removed;
 
     for (const site of doomed) {
@@ -170,7 +214,7 @@ async function removeSites(client: Client, io: Io, trash: boolean): Promise<numb
   }
 }
 
-/** Build the demo with the addresses of the sample sites beside its files, and publish it onto the site that holds it, or as a new public site when no site does. */
+/** Build the demo with the addresses of the sample sites beside its files, and publish it onto the site that holds it, or as a new public site when no site does. A site that holds those very files is left as it stands. */
 async function publishDemo(ends: ResetEnds, client: Client, io: Io, built: { readonly out: string; readonly real: RealSites }): Promise<Tally["demo"] | Stop> {
   const done = await ends.buildDemo(built.out).then(
     () => true,
@@ -184,13 +228,18 @@ async function publishDemo(ends: ResetEnds, client: Client, io: Io, built: { rea
   const sites = await firstPage(client, io, false);
   if ("kind" in sites) return sites;
 
-  const held = sites.some((site) => site.public_name === DEMO.publicName);
-  const target = held ? ["--site", DEMO.publicName] : ["--name", DEMO.name, "--public", "--public-name", DEMO.publicName];
+  const held = sites.find((site) => site.public_name === DEMO.publicName);
+  const same = held === undefined ? false : await isSameSite({ client, io }, held, { ...DEMO.wanted, folder: built.out }, ends.now());
+  if (typeof same !== "boolean") return same;
+
+  if (same) return "kept";
+
+  const target = held === undefined ? ["--name", DEMO.name, "--public", "--public-name", DEMO.publicName] : ["--site", DEMO.publicName];
   // A demo's site that ran out, or one made under a default expiry, would answer 404 at its address.
-  const code = await runCli(["publish", built.out, ...target, "--title", DEMO.title, "--expires", "never", "--json"], io);
+  const code = await runCli(["publish", built.out, ...target, "--title", DEMO.title, "--expires", NEVER, "--json"], io);
   if (code !== 0) return { kind: "failed", what: `publishing the demo exited ${code}` };
 
-  return held ? "updated" : "published";
+  return held === undefined ? "published" : "updated";
 }
 
 /** The names of the sites of one listing, sorted; the demo's site by the row's name, whatever it is called. */
@@ -202,16 +251,16 @@ async function namesOf(client: Client, io: Io, trash: boolean): Promise<readonly
 }
 
 /** Say what the install holds that a reset must not leave: a site that is neither a sample nor the demo, a sample on the wrong side of the trash, or one of them missing. */
-async function checkSites(client: Client, io: Io, put: Pick<Tally, "published" | "binned">): Promise<Stop | undefined> {
+async function checkSites(client: Client, io: Io, put: Pick<Tally, "live" | "binned">): Promise<Stop | undefined> {
   const [live, trash] = [await namesOf(client, io, false), await namesOf(client, io, true)];
   if ("kind" in live) return live;
 
   if ("kind" in trash) return trash;
 
-  const wanted = [[...put.published, DEMO.name].sort(), [...put.binned].sort()];
+  const wanted = [[...put.live, DEMO.name].sort(), [...put.binned].sort()];
   if ([live, trash].join("\n") === wanted.join("\n")) return undefined;
 
-  return { kind: "failed", what: `the install holds ${live.length} sites and ${trash.length} in the trash after the reset, not the ${put.published.length} samples and the demo, and ${put.binned.length} in the trash` };
+  return { kind: "failed", what: `the install holds ${live.length} sites and ${trash.length} in the trash after the reset, not the ${put.live.length} samples and the demo, and ${put.binned.length} in the trash` };
 }
 
 /** Every step that needs the token, in order. */
@@ -220,14 +269,19 @@ async function putBack(ends: ResetEnds, scratch: string): Promise<Omit<Tally, "o
   const io = ioOf(ends, scratch, said);
   const cli: Cli = { io, said };
   const client = createClient({ server: ends.server, token: ends.token, fetch: ends.fetch });
+  const samples = sampleSites({ samples: ends.samples, scratch: join(scratch, "sites") });
 
-  const removed = await removeSites(client, io, false);
+  const kept = await keptSamples(ends, client, io, samples);
+  if ("kind" in kept) return kept;
+
+  const spared = new Set([...kept.values()].map((site) => site.id));
+  const removed = await removeSites(client, io, { trash: false, spared });
   if (typeof removed !== "number") return removed;
 
-  const trashed = await removeSites(client, io, true);
+  const trashed = await removeSites(client, io, { trash: true, spared });
   if (typeof trashed !== "number") return trashed;
 
-  const put = await publishSamples(cli, { samples: ends.samples, scratch: join(scratch, "sites") });
+  const put = await publishSamples(cli, samples, kept);
   if ("kind" in put) return put;
 
   const demo = await publishDemo(ends, client, io, { out: join(scratch, DEMO.name), real: put.real });
@@ -235,7 +289,7 @@ async function putBack(ends: ResetEnds, scratch: string): Promise<Omit<Tally, "o
 
   const { real, ...told } = put;
 
-  return (await checkSites(client, io, put)) ?? { removed, trashed, ...told, linked: Object.keys(real).length, demo };
+  return (await checkSites(client, io, put)) ?? { removed, trashed, ...told, kept: [...kept.keys()], linked: Object.keys(real).length, demo };
 }
 
 /** Remove the waiting logins, then every token. The tokens go whatever became of the logins. */
@@ -285,6 +339,7 @@ async function resetTestInstall(run: Run): Promise<Tally | Stop | undefined> {
     token,
     fetch: (input, init) => fetch(input, init),
     pause: (ms) => Bun.sleep(ms),
+    now: () => Date.now(),
     sql: (statement) => runSql(run, database, statement, []),
     samples: SAMPLES,
     buildDemo: async (out) => {
@@ -308,8 +363,9 @@ function tell(run: Run, ended: Tally | Stop | undefined): number {
   const rows = [
     ["Sites removed for good", String(ended.removed)],
     ["Sites removed from the trash", String(ended.trashed)],
-    ["Sample sites published", ended.published.join(", ")],
+    ["Sample sites outside the trash", ended.live.join(", ")],
     ["Sample sites in the trash", ended.binned.join(", ")],
+    ["Sample sites kept as they stood", `${ended.kept.length} of ${ended.live.length + ended.binned.length}`],
     ["Versions", `${ended.versioned.versions} of ${ended.versioned.name}, 1 of every other`],
     ["The demo's site", ended.demo],
     ["Sample sites the demo links to", String(ended.linked)],

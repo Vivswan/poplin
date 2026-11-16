@@ -6,18 +6,22 @@
 //   the site published most    three publishes: its list of versions holds three, as the demo's does
 //   a site that ends trashed   moved to the trash
 //   the demo's own row         left out: the reset publishes the built demo there
+//   a site the install kept    not published again: it is still what its row ends in
 //
 // Every version of the demo's history of thirty days is far past what a reset may ask of the bucket, so one site alone gets more than one.
 
 import { cpSync } from "node:fs";
 import { join } from "node:path";
 import { PUBLISHED_SITE } from "@poplin/core/src/actions/finish-publish";
+import type { SiteObject } from "@poplin/core/src/actions/site-object";
+import type { SettingValues } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
 
 import type { Io } from "../../../cli/src/commands/records";
 import { run as runCli } from "../../../cli/src/commands/run";
 import type { RealSites } from "../../../demo/src/preview/real-sites";
 import { type Standing, standingSites, THE_DEMO } from "../../../demo/src/preview/sample-sites";
+import type { Wanted } from "./same-site";
 import type { Stop } from "./util";
 
 /** The most publishes the site that was published most is given: as many versions as an install keeps by default. */
@@ -25,6 +29,9 @@ const MOST_PUBLISHES = 3;
 
 /** How long a site must stay for the demo to link to it: until the reset of the next midnight, in milliseconds. */
 const DAY_MS = 86_400_000;
+
+/** What a site with no expiry is published with: an install's own default would give it one. */
+const NEVER = "never";
 
 /** What `publish --json` prints on its one line of stdout. */
 const PRINTED = v.pipe(v.string(), v.parseJson(), PUBLISHED_SITE);
@@ -44,10 +51,22 @@ interface Folders {
   readonly scratch: string;
 }
 
-/** What publishing the table left on the install. */
+/** One site of the table as a reset leaves it. */
+export interface Sample {
+  /** The row as its history ends. */
+  readonly row: Standing;
+
+  /** The folder it is published from. */
+  readonly folder: string;
+
+  /** How many versions it is given. */
+  readonly versions: number;
+}
+
+/** What the install holds of the table after the samples were published. */
 interface Put {
   /** The names of the sites outside the trash, in the table's order. */
-  readonly published: readonly string[];
+  readonly live: readonly string[];
 
   /** The names of the sites in the trash. */
   readonly binned: readonly string[];
@@ -59,8 +78,8 @@ interface Put {
   readonly real: RealSites;
 }
 
-/** A site as a publish answered it. */
-type Site = v.InferOutput<typeof PRINTED>["site"];
+/** A site as a publish or a listing answered it, in what the demo's links read of it. */
+type Site = Pick<SiteObject, "url" | "expires" | "updated">;
 
 /** The folder a site is published from: its sample's own, or one put together from its sample and every sample beside it, each under its folder. */
 function folderOf(row: Standing, from: Folders): string {
@@ -74,9 +93,9 @@ function folderOf(row: Standing, from: Folders): string {
   return folder;
 }
 
-/** The flags that give a new site what its row ends in. A site with no expiry is told so: an install's own default would give it one. Whether search engines may list it stays the install's own choice. */
+/** The flags that give a new site what its row ends in. A site with no expiry is told so. Whether search engines may list it stays the install's own choice. */
 function settingsOf(row: Standing): readonly string[] {
-  const { title, embeddable, expires = "never" } = row.settings;
+  const { title, embeddable, expires = NEVER } = row.settings;
   const access = row.reach.access === "public" ? ["--public", "--public-name", row.reach.public_name] : [`--${row.reach.access}`];
   const titled = typeof title === "string" ? ["--title", title] : [];
   const framed = embeddable === undefined ? [] : ["--embeddable", embeddable ? "on" : "off"];
@@ -85,7 +104,7 @@ function settingsOf(row: Standing): readonly string[] {
 }
 
 /** Publish one folder, and read the site the install answered with. */
-async function publish(cli: Cli, target: readonly string[], what: string): Promise<Site | Stop> {
+async function publish(cli: Cli, target: readonly string[], what: string): Promise<v.InferOutput<typeof PRINTED>["site"] | Stop> {
   cli.said.length = 0;
   const code = await runCli(["publish", ...target, "--json"], cli.io);
   if (code !== 0) return { kind: "failed", what: `publishing ${what} exited ${code}` };
@@ -95,8 +114,8 @@ async function publish(cli: Cli, target: readonly string[], what: string): Promi
   return printed.success ? printed.output.site : { kind: "failed", what: `publishing ${what} printed no site` };
 }
 
-/** Publish one site of the table with so many versions, and move it to the trash where its row ends there. */
-async function publishRow(cli: Cli, row: Standing, folder: string, versions: number): Promise<Site | Stop> {
+/** Publish one site of the table with its versions, and move it to the trash where its row ends there. */
+async function publishRow(cli: Cli, { row, folder, versions }: Sample): Promise<Site | Stop> {
   const made = await publish(cli, [folder, "--name", row.name, ...settingsOf(row)], `the sample ${row.name}`);
   if ("kind" in made) return made;
 
@@ -113,27 +132,52 @@ async function publishRow(cli: Cli, row: Standing, folder: string, versions: num
 }
 
 /**
- * Publish every site of the sample table onto an install that holds none of them.
+ * Read the sample table as a reset leaves it: every site but the demo's own row, with its folder and its versions.
  *
- * @returns what the install holds of the table afterwards, or the first step that failed, in words that quote nothing the install said
+ * @returns the sites in the table's order; a site put together from more than one sample has its folder written under `from.scratch`
  */
-export async function publishSamples(cli: Cli, from: Folders): Promise<Put | Stop> {
+export function sampleSites(from: Folders): readonly Sample[] {
   const rows = standingSites().filter((row) => row.sample !== THE_DEMO);
   const most = Math.max(...rows.map((row) => row.publishes));
   const longest = rows.find((row) => row.publishes === most);
-  const versioned = { name: longest?.name ?? "", versions: Math.min(most, MOST_PUBLISHES) };
+
+  return rows.map((row) => ({ row, folder: folderOf(row, from), versions: row === longest ? Math.min(most, MOST_PUBLISHES) : 1 }));
+}
+
+/**
+ * Say what publishing a sample leaves, for the question whether a site the install holds is still that.
+ *
+ * @param settings - the install's own: whether search engines may list a new site, which no publish of a sample says, and how many versions of a site it keeps
+ */
+export function wantedOf({ row, folder, versions }: Sample, settings: Pick<SettingValues, "default_search_engines" | "versions_kept">): Wanted {
+  const { title, embeddable = true, expires = NEVER } = row.settings;
+  const typed = typeof title === "string" ? title : undefined;
+  const kept = { kept: Math.min(versions, settings.versions_kept), newest: versions };
+
+  return { reach: row.reach, title: typed, embeddable, searchEngines: settings.default_search_engines, expires, trashed: row.trashed, versions: kept, folder };
+}
+
+/**
+ * Publish every site of the sample table the install did not keep. No site of the install may hold the name or the public name of one that is published.
+ *
+ * @param kept - the sites the install holds that are still what their rows end in, by the row's name
+ * @returns what the install holds of the table afterwards, or the first step that failed, in words that quote nothing the install said
+ */
+export async function publishSamples(cli: Cli, samples: readonly Sample[], kept: ReadonlyMap<string, Site>): Promise<Put | Stop> {
+  const longest = samples.reduce((most, sample) => (sample.versions > most.versions ? sample : most));
   const real: Record<string, string> = {};
 
-  for (const row of rows) {
-    const made = await publishRow(cli, row, folderOf(row, from), row === longest ? versioned.versions : 1);
-    if ("kind" in made) return made;
+  for (const sample of samples) {
+    const { row } = sample;
+    const site = kept.get(row.name) ?? (await publishRow(cli, sample));
+    if ("kind" in site) return site;
 
-    const stays = made.expires === "never" || made.expires - made.updated > DAY_MS;
+    const stays = site.expires === NEVER || site.expires - site.updated > DAY_MS;
     // The address is written as a browser writes the root of its origin, which is the one form the demo takes.
-    if (!row.trashed && stays) real[row.name] = new URL("/", made.url).href;
+    if (!row.trashed && stays) real[row.name] = new URL("/", site.url).href;
   }
 
-  const names = (trashed: boolean): readonly string[] => rows.filter((row) => row.trashed === trashed).map((row) => row.name);
+  const names = (trashed: boolean): readonly string[] => samples.filter(({ row }) => row.trashed === trashed).map(({ row }) => row.name);
 
-  return { published: names(false), binned: names(true), versioned, real };
+  return { live: names(false), binned: names(true), versioned: { name: longest.row.name, versions: longest.versions }, real };
 }
