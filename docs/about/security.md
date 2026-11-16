@@ -83,7 +83,8 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no bucket key and no database key exists outside Cloudflare |
 | the person who sets the install up | a Cloudflare API token, pasted into the setup page or the Domain screen | the person makes it at Cloudflare; the Worker uses it for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it |
 | the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | Repair makes it with the pasted token and puts it on the Worker as an encrypted secret; [The kept key](#the-kept-key) says what it may do |
-| the Worker, to start its own update | an update link, saved once by an admin with `poplin update --save-address` | an admin makes it at Cloudflare, which calls it a Deploy Hook. It is no API token: Cloudflare's documentation says it triggers a build for one branch, and that anyone who has it can. The Worker keeps it in its database, sends it one empty POST when an admin starts an update, and never shows, logs, or exports it. Deleting it at Cloudflare ends it |
+| the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
+| the Worker with no key, to start its own update | an update link, saved once by an admin with `poplin update --save-address` | an admin makes it at Cloudflare, which calls it a Deploy Hook. It is no API token: Cloudflare's documentation says it triggers a build for one branch, and that anyone who has it can. The Worker keeps it in its database, sends it one empty POST when an admin starts an update, and never shows, logs, or exports it. Deleting it at Cloudflare ends it |
 
 A token the Worker issues is never a Cloudflare API key. It has one of two scopes:
 
@@ -115,12 +116,16 @@ you paste one account token  ->  Repair makes "poplin kept key" at Cloudflare  -
 | --- | --- |
 | Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
 | What it reaches | your one account and your one domain |
-| What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
-| What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; touch a Worker, the bucket, or the database; make another key |
+| What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
+| What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
 | How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
 | How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
 
 Cloudflare limits the key to the account and the domain, not to poplin's own objects: it reaches every Access application of the account and every WAF rule of the domain.
+
+**The key can replace any Worker of the account.** poplin uses that right on its own Worker alone, to update itself. Cloudflare gives the right for a whole account or not at all: a key limited to one Worker is refused on every call.
+
+So a bug or a bad release of poplin could reach every other Worker the account holds. poplin is best in an account that holds only poplin.
 
 What guards each address:
 
@@ -179,7 +184,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | plain http | the Worker sends every request over `http` to the same address over `https`, with a 308, before it reads anything of the install; an optional rule at Cloudflare's edge does the same before the Worker runs. Every answer of a site and of the dashboard tells the browser to use `https` alone for 180 days, but for the 308 from plain http, the 429 of a limit, the page of a paused site, and the Worker's own plain answers, such as the one of an install that could not start. The zone's other hostnames are left as they are |
 | the Worker's log | Cloudflare keeps the lines the Worker writes about refusals and errors, with its own record of each request switched off. poplin writes into no line a token, a cookie, a login code, an email, a visitor's address, or a site's id: [the Worker's log](../dashboard/activity.md#the-workers-log-at-cloudflare) |
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
-| a release an update deploys | Cloudflare's build of an install runs a release only when the SHA-256 digest of its files is the one poplin's website publishes for that version; any other file deploys nothing. A release publishes its source archive and its built Worker, and the website publishes their digests only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins. [Update](../upkeep/update.md#what-a-build-checks) has each refusal, and [what a release publishes](../upkeep/update.md#what-a-release-publishes) |
+| a release an update deploys | An install that updates with its key uploads a release's built Worker only when the manifest's SHA-256 digest is the one poplin's website publishes for that version, and each built file's digest and size are the manifest's; any other file changes nothing. Cloudflare's build of an install runs a release only when the SHA-256 digest of its files is the one poplin's website publishes for that version; any other file deploys nothing. A release publishes its source archive and its built Worker, and the website publishes their digests only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins. [Update](../upkeep/update.md#what-a-build-checks) has each refusal, and [what a release publishes](../upkeep/update.md#what-a-release-publishes) |
 | junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../upkeep/cost/limits.md#where-a-limit-is-counted). Setup skips it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own; the OpenTofu module, which owns the zone's rate rules, stops with a message in that second case |
 
 ## Optional edge rules
