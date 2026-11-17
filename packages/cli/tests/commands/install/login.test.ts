@@ -224,7 +224,7 @@ describe("logIn", () => {
   test.each([
     ["denied on the dashboard", "The login was denied on the dashboard. Nothing was stored.", [[ADA, "login_denied", { scope: "admin", computer: "test-computer" }]]],
     ["answered by nobody for ten minutes", "The login expired before approval", []],
-    ["stopped by the person", "Cancelled. Nothing was stored.", []],
+    ["stopped by the person", "Cancelled. Nothing changed.", []],
   ] as const)("a login %s exits 1, saves nothing, and makes no token", async (how, sentence, audit) => {
     const desk = await openDesk();
 
@@ -384,7 +384,7 @@ describe("logIn", () => {
     const unnamed = await desk.bench.run("login", { env });
     const named = await desk.bench.run(`login --server ${ORIGIN}`, { env });
 
-    expect([unnamed.code, unnamed.err[0], unnamed.waits]).toEqual([3, "--server is required: there is no stored login", []]);
+    expect([unnamed.code, unnamed.err[0], unnamed.waits]).toEqual([3, "--server is required when not logged in", []]);
     expect([named.code, named.err, desk.saved()?.server]).toEqual([0, ["POPLIN_SERVER is set in this shell. Fix: unset it to use the stored login"], ORIGIN]);
   });
 

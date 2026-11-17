@@ -16,7 +16,7 @@ you get:    https://poplin.example.com           your dashboard, under your doma
             https://poplin.your-name.workers.dev your dashboard, without a domain
 ```
 
-An install is your own copy of poplin, in your own Cloudflare account. You make it once. After that, your agent and your computers publish to it.
+An install is your own copy of poplin, in your own Cloudflare account. You make it once. After that, your agent and your machines publish to it.
 
 `example.com` stands for your own domain, and `your-name` for your account's subdomain at `workers.dev`, which Workers & Pages shows at Cloudflare. Type yours in their place.
 
@@ -40,9 +40,9 @@ The choice is made once: poplin has no command and no screen that changes it on 
 | a Cloudflare account            | the Free plan is enough. With none yet, sign up at `https://dash.cloudflare.com/sign-up`                    |
 | a payment method on the account | the two sign-ups of step 1 ask for one. [What can cost money](../upkeep/cost/what-can-cost-money.md) says when it is charged |
 | an email inbox you can read     | Cloudflare's login sends its code there. It need not be the email of your Cloudflare account                |
-| Node.js, on your own computer   | the program that runs poplin's command, and `npx` comes with it. Version 24 or higher: step 2 checks it     |
+| Node.js, on your own machine   | the program that runs poplin's command, and `npx` comes with it. Version 24 or higher: step 2 checks it     |
 | under a domain: the domain      | on that account, where Cloudflare's home page lists it as Active                                            |
-| an agent, to publish by asking  | an AI tool that runs in a terminal on your computer, such as Claude Code or Codex. You install it yourself, it may cost money, and poplin brings none |
+| an agent, to publish by asking  | an AI tool that runs in a terminal on your machine, such as Claude Code or Codex. You install it yourself, it may cost money, and poplin brings none |
 
 **A domain that is not on Cloudflare yet** is added on Cloudflare's home page. Cloudflare shows two nameservers; paste them in the Nameservers setting at the shop where you bought the domain. The domain turns Active up to a day later.
 
@@ -82,7 +82,7 @@ Then type the install's line. The first time, it asks whether it may download po
 npx poplin install cloudflare
 ```
 
-It asks three things, then works, and at the end asks once more: whether to log this computer in. The sample cuts the link short, where the dots are:
+It asks three things, then works, and at the end asks once more: whether to log this machine in. The sample cuts the link short, where the dots are:
 
 ```text
 Custom domain (Enter for workers.dev): example.com
@@ -102,7 +102,7 @@ See: npx poplin install cloudflare --help for 4 optional permissions
 Create the account token here:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
 On the form, limit it to this account and this domain
-Tick by hand: Workers R2 Storage: Edit
+Select manually: Workers R2 Storage: Edit
 Account token (hidden):
 ```
 
@@ -168,7 +168,7 @@ created    Key                   poplin kept key
 Waiting for https://poplin.example.com to respond
 poplin 0.1.0 is installed
 Dashboard: https://poplin.example.com
-The account token was not stored. You can delete it at Cloudflare.
+The account token was not stored. Delete it at Cloudflare.
 Log this machine in now?
 ```
 
@@ -180,10 +180,9 @@ Log this machine in now?
 | -------------------- | -------------------------------------------------------------------- |
 | `created`, `updated` | the thing was not there, or differed, and now is as it should be     |
 | `unchanged`          | it was there already, as it should be                                |
-| `skipped`            | it is optional and was not made: the token lacks its permission, or the domain or its plan has no room for it. Nothing is wrong. `First user` is skipped where a kept database holds its own users and the email is none of them |
+| `skipped`            | it is optional and was not made: the token lacks its permission, or the domain or its plan has no room for it. Nothing is wrong. `First user` is skipped where a kept database holds its own users and the email is none of them A `skipped` row that says `an earlier row stopped the run` was not reached |
 | `blocked`            | it cannot be made until you act: the lines under the rows say where  |
 | `failed`             | it could not be made, and the row says why                           |
-| `not run`            | an earlier row stopped the run before it                             |
 
 | Piece              | It is                                                           |
 | ------------------ | --------------------------------------------------------------- |
@@ -213,13 +212,13 @@ Next: npx poplin login --server https://poplin.example.com
 | `and needs a repair`           | the repair, as the line under it writes it: with `--domain` or `--no-domain`  |
 | neither                        | the line under it says why that was not read, and names the repair's dry run  |
 
-An install that works needs none of them: log this computer in, as step 5 shows.
+An install that works needs none of them: log this machine in, as step 5 shows.
 
 **After the run, delete the token** at Cloudflare, under My Profile, then API Tokens, unless you keep it where you keep passwords. The install and every site keep working without it.
 
 Three things ask for a token again: the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. Each shows the link that makes a new one. The screen asks for a Repair, and for a Check on an install that holds no key. A token pasted there goes to your own install, which uses it for that one run and stores it nowhere.
 
-## 5. Log this computer in, and check
+## 5. Log this machine in, and check
 
 At `Log this machine in now?`, Yes is chosen already: press Enter. It prints an address and a short code in your terminal, and opens the address in your browser:
 
@@ -240,22 +239,22 @@ Here the last 4 letters are `RDMP`. Yours differ. If no browser opens, copy the 
 
 | On the page                                 | Do                                                    |
 | ------------------------------------------- | ----------------------------------------------------- |
-| Can change                                  | choose Everything, on a computer of your own          |
+| Can change                                  | choose Everything, on a machine of your own          |
 | Last 4 letters of the code in your terminal | type them                                             |
 | Allow                                       | press it                                              |
 
 Can change has two choices, and the page opens on the second:
 
-| Can change     | Choose it for                             | This computer reaches                                                              | The login lasts       |
+| Can change     | Choose it for                             | This machine reaches                                                              | The login lasts       |
 | -------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- | --------------------- |
-| Everything     | a computer of your own                    | every site, and the settings: `npx poplin config`, `export`, `import`, and `update` need it | 30 days       |
-| Own sites only | a computer that should only publish, such as a shared one | the sites that one login published, and no other                   | until you remove it   |
+| Everything     | a machine of your own                    | every site, and the settings: `npx poplin config`, `export`, `import`, and `update` need it | 30 days       |
+| Own sites only | a machine that should only publish, such as a shared one | the sites that one login published, and no other                   | until you remove it   |
 
-An agent on this computer uses the same login. With Everything it reaches a site that an earlier login published. With Own sites only it does not: after a new login it no longer reaches the sites of the login before.
+An agent on this machine uses the same login. With Everything it reaches a site that an earlier login published. With Own sites only it does not: after a new login it no longer reaches the sites of the login before.
 
 The page takes only the letters of the code your terminal printed. If it refuses them, or you did not start a login, press Deny.
 
-After a no, or on another computer, the same login is one line, with the address of your own dashboard, as the command printed it:
+After a no, or on another machine, the same login is one line, with the address of your own dashboard, as the command printed it:
 
 ```sh
 npx poplin login --server https://poplin.example.com
@@ -277,10 +276,9 @@ ok  settings  21 settings
 ok  sites     0 sites
 ok  trash     0 sites
 ok  problems  none in 7 days
-Nothing changed
 ```
 
-The login lasts 30 days: after that, `npx poplin login` makes a new one. **If a line does not start with `ok`**, [When the install stops](../fix/an-install-step-fails.md#the-computer-is-not-logged-in) has it.
+The login lasts 30 days: after that, `npx poplin login` makes a new one. **If a line does not start with `ok`**, [When the install stops](../fix/an-install-step-fails.md#the-machine-is-not-logged-in) has it.
 
 Your dashboard is at the address the command printed. It opens on Sites, which says `No sites yet`.
 
@@ -298,7 +296,7 @@ Mac:      npx poplin ~/Desktop/report
 Windows:  npx poplin "C:\Users\user\Desktop\report"
 ```
 
-On a Mac, `~` is your own folder. On Windows, `user` stands for your own name on the computer, and the quotes keep a path that holds a space in one piece.
+On a Mac, `~` is your own folder. On Windows, `user` stands for your own name on the machine, and the quotes keep a path that holds a space in one piece.
 
 A new site takes its name from the folder, and a name holds small letters, digits, and dashes alone. A folder such as `my report` needs `--name`, and on a Mac its quotes come after the `~/`:
 
@@ -371,10 +369,10 @@ npx poplin install cloudflare --no-domain --user you@example.com --yes
 | `--yes`       | asks nothing. A missing answer stops the run before any change, and is named             |
 | `--json`      | prints one JSON value, and nothing else on standard output                               |
 | `--adopt`     | uses a bucket or a database named like poplin's that no install holds, with what it holds. Where the database holds users, they log in, and [`--user` is not used](../upkeep/remove.md#keep-the-data) |
-| `--log-in`    | logs this computer in when the install is made; `--no-log-in` does not, and does not ask |
+| `--log-in`    | logs this machine in when the install is made; `--no-log-in` does not, and does not ask |
 | `--no-wait`   | does not wait for the new install to answer                                              |
 
-A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--user` logs no computer in. It ends with the line that lets that email in, also where its address does not answer yet.
+A run that asks nothing logs no machine in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--user` logs no machine in. It ends with the line that lets that email in, also where its address does not answer yet.
 
 With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command`. A run without `--json` names the same command in its last lines. After an install that could not be read, that line adds `--dry-run`.
 

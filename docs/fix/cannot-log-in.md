@@ -23,7 +23,7 @@ you get:    the login mended, and with --add-user one more email that can log in
 
 | You see                                                               | It is                                                   | Do                                                                    |
 | --------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------- |
-| a command says `Not logged in`, or `The token is missing or expired`         | this computer's own login ran out. The dashboard still opens | `npx poplin login`: [The computer is not logged in](an-install-step-fails.md#the-computer-is-not-logged-in) |
+| a command says `Not logged in`, or `The token is missing or expired`         | this machine's own login ran out. The dashboard still opens | `npx poplin login`: [The machine is not logged in](an-install-step-fails.md#the-machine-is-not-logged-in) |
 | the browser asks for your email, and no code arrives                  | the email is no user of the install, or its mailbox is gone | [the steps](#the-steps), with `--add-user`. With a mailbox that still works, check the spelling and the spam folder first |
 | the browser shows no login page: `The login is not set up yet.`, or an error | the login page in front of the dashboard is missing or broken | [the steps](#the-steps), without `--add-user`                  |
 | the install said `Until then nobody can log in` when it was made      | Zero Trust was off, so the login page was never made    | switch Zero Trust on, as [step 1 of Install](../start/install.md#1-switch-on-what-no-command-can) has it. Then [the steps](#the-steps) |
@@ -92,11 +92,9 @@ An **account token** is a long password that lets a program change your Cloudfla
    ...
    unchanged  Workflow              poplin-jobs
    created    User                  new@example.com
-   The login is ready. Open your dashboard and log in:
-     https://poplin.example.com
    The repair is complete
    Dashboard: https://poplin.example.com
-   The account token was not stored. You can delete it at Cloudflare.
+   The account token was not stored. Delete it at Cloudflare.
    ```
 
    Without a domain, the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`. Where the login page was fine, its rows say `unchanged`.
@@ -118,15 +116,15 @@ Every piece of the install has a row. Four matter here:
 | -------------------- | --------------------------------------------------------------------- |
 | `unchanged`          | the piece was as it should be                                         |
 | `created`, `updated` | the piece was missing or differed, and is mended                      |
-| `skipped`            | an optional piece the token cannot reach: it stays as it is. Nothing is wrong |
+| `skipped`            | an optional piece the token cannot reach: it stays as it is. Nothing is wrong. Saying `an earlier row stopped the run`: the piece was not reached |
 | `blocked`            | it cannot be mended until you act: [When it stops](#when-it-stops)    |
-| `failed`, `not run`  | Cloudflare refused the piece, or an earlier row stopped the run       |
+| `failed`             | Cloudflare refused the piece                                          |
 
 | The last lines say                                    | Means                                         | Do                                                           |
 | ----------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
 | `The repair is complete`                              | what was missing is made, the new user too    | log in                                                       |
 | `The install needs no repair`                         | nothing was broken, and no user was added     | if no code arrives, run the line with `--add-user`           |
-| `The run is incomplete:`, a count of rows, and `To resume, rerun this command.` | a row says `blocked`, `failed`, or `not run` | [When it stops](#when-it-stops), then the same line again    |
+| `The run is incomplete:`, a count of rows, and `Next: rerun this command`      | a row says `blocked` or `failed`             | [When it stops](#when-it-stops), then the same line again    |
 
 The login is mended to the users the install has stored. No site and no setting of yours is changed.
 
@@ -150,7 +148,7 @@ It adds one email and takes none away. Once you are in, in this order:
 | Do                                         | Where                                                                           |
 | ------------------------------------------ | ------------------------------------------------------------------------------- |
 | 1. remove the lost or mistyped email       | the dashboard, Access, Users: the menu at the end of that email's row, then Remove |
-| 2. log your computers in again             | `npx poplin login`, with `--server` and your dashboard's address: removing an email ends every login that email allowed |
+| 2. log your machines in again             | `npx poplin login`, with `--server` and your dashboard's address: removing an email ends every login that email allowed |
 | 3. delete the account token, or keep it    | at Cloudflare, under My Profile, then API Tokens. Keep it where you keep passwords until step 1 is done |
 
 The dashboard's Activity lists the new user as `Added a user:` and the email, by `doctor-repair@poplin.invalid`. No user of yours has that email: it marks a change made from a terminal.

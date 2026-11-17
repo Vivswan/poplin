@@ -32,7 +32,7 @@ const [AGAIN, BARE] = [
 const FOUND = `poplin 0.1.0 is installed at ${ADDRESS}`;
 
 /** The last lines of a run that left nothing undone, after the line that says what it is called. */
-const ENDED = [`Dashboard: ${ADDRESS}`, "The account token was not stored. You can delete it at Stand-In Host."];
+const ENDED = [`Dashboard: ${ADDRESS}`, "The account token was not stored. Delete it at Stand-In Host."];
 
 /** The rows of an install with one object missing, which a repair makes. */
 const ONE_GONE: readonly Row[] = [
@@ -89,19 +89,21 @@ describe("a repair with the account token", () => {
   });
 
   test("a run that mends says so and exits with 0, and tells the person what the provider says is theirs to do: without this a mended login is not followed by where to log in", async () => {
-    const account = installed(repairedOf(ONE_GONE, { steps: [{ text: "The login is ready. Open your dashboard and log in:", address: ADDRESS }] }));
+    const account = installed(repairedOf(ONE_GONE, { steps: [{ text: "Pick a plan here:", address: `${ADDRESS}/plans` }, { text: "The login is ready. Open your dashboard and log in:", address: ADDRESS }] }));
     const ran = await runLine(RUN, account, { env: HELD });
 
     expect(ran.code).toBe(0);
     expect(ran.out.slice(1)).toEqual([
       "unchanged  Store                 poplin-sites",
       "created    Guard rule            bots",
-      "The login is ready. Open your dashboard and log in:",
-      `  ${ADDRESS}`,
+      "Pick a plan here:",
+      `  ${ADDRESS}/plans`,
       "The repair is complete",
       ...ENDED,
     ]);
     expect(account.changes).toBe(1);
+    // A step at the dashboard's own address is left to the line that names the dashboard, and the JSON value keeps both steps.
+    expect((jsonOf(await runLine(`${RUN} --json`, account, { env: HELD })).steps as unknown[]).length).toBe(2);
   });
 
   test("a dry run names what a run would change, changes nothing, and exits with 0 as the run after it would, with the repair as the next step: without this its words say ready while its exit and its value say failed", async () => {
@@ -143,7 +145,8 @@ describe("a repair with the account token", () => {
       "blocked    Guard rule            bots: The token lacks a permission. Add this one: Rules: Edit",
       LACKING.words,
       `  ${LACKING.address}`,
-      "The run is incomplete: 1 blocked. To resume, rerun this command.",
+      "The run is incomplete: 1 blocked",
+      "Next: rerun this command",
       "The account token was not stored",
     ]);
   });
@@ -232,12 +235,13 @@ describe("what a repair does not go on from", () => {
       { step: "install", command: `${bare} --place example.com` },
     ],
     ["a provider that gives no answer", { state: "refused", why: "unreachable", words: "The host gave no answer." }, 5, "unreachable", "The host gave no answer. Nothing changed.", AGAIN],
-  ] as const)("%s is said in one line with what to run next, and nothing is repaired", async (_, scene, code, problem, line, next) => {
+  ] as const)("%s is said with what to run next, and nothing is repaired", async (_, scene, code, problem, line, next) => {
     const account = installed(undefined, scene);
     const ran = await runLine(RUN, account, { env: HELD });
     const json = await runLine(`${RUN} --json`, account, { env: HELD });
 
-    expect([ran.code, ran.out, ran.err, account.repairs]).toEqual([code, [], [line], []]);
+    // A person reads the `Fix:` on its own line; the value keeps the one sentence.
+    expect([ran.code, ran.out, ran.err, account.repairs]).toEqual([code, [], line.split(/(?<=\.) (?=Fix: )/), []]);
     expect(jsonOf(json)).toEqual({ ok: false, problem, next, words: line, run: "apply", ready: false });
   });
 

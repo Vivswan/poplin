@@ -83,10 +83,10 @@ const BEYOND = Buffer.concat([Buffer.from("504b0607" + "00000000" + "00000000000
 
 /** Every zip that is no backup: what is wrong with it, what builds it, and the reason it is refused with. */
 const REFUSED: readonly (readonly [what: string, build: Build, reason: RegExp])[] = [
-  ["bytes that are no zip", (path) => writeFileSync(path, "PK hello"), /^the file is not a readable zip \(/],
+  ["bytes that are no zip", (path) => writeFileSync(path, "PK hello"), /^the file is not a readable zip$/],
   // Drift: a folder was refused in the system's words, "EISDIR: illegal operation on a directory, read".
   ["a folder", (path) => mkdirSync(path), /^".*" is a folder, and a backup is a zip written by poplin export$/],
-  ["a zip that is cut off", async (path) => writeFileSync(path, (await Bun.file(await writeZip(`${path}.whole`, backupEntries())).bytes()).slice(0, 200)), /^the file is not a readable zip \(/],
+  ["a zip that is cut off", async (path) => writeFileSync(path, (await Bun.file(await writeZip(`${path}.whole`, backupEntries())).bytes()).slice(0, 200)), /^the file is not a readable zip$/],
   ["no manifest at the end", without("manifest.json"), /^the zip does not end with manifest\.json/],
   ["an entry after the manifest", entriesWith((entries) => [...entries, [`${VERSION_FILES}/late.txt`, "late"]]), /^an entry follows manifest\.json/],
   ["two manifests", entriesWith((entries) => [...entries, ...entries.slice(-1)]), /^an entry follows manifest\.json/],
@@ -97,10 +97,10 @@ const REFUSED: readonly (readonly [what: string, build: Build, reason: RegExp])[
   ["settings that are not the first entry", before("manifest.json", ["settings.json", "{}"]), /^settings\.json is not the first entry/],
   ["an entry of no backup", before("manifest.json", ["notes.txt", "hello"]), /^"notes\.txt" is not a backup entry/],
   ["an entry beside a version's files", before("manifest.json", [`${FOLDER}/versions/1/notes.txt`, "hello"]), /is not a backup entry/],
-  ["a name that climbs out of its site", renamed("aa/x.css", `${VERSION_FILES}/../x.css`), /^the file is not a readable zip \(invalid relative path/],
-  ["a name that climbs out of the zip", renamed("aa/x.css", "../../../../../../../../../../../../../tmp/x.css".padEnd(`${VERSION_FILES}/aa/x.css`.length, "s")), /^the file is not a readable zip \(invalid relative path/],
-  ["an absolute name", renamed("aa/x.css", `/${VERSION_FILES.slice(1)}/aa/x.css`), /^the file is not a readable zip \(absolute path/],
-  ["a name with a backslash", renamed("aa/x.css", `${VERSION_FILES}/aa\\x.css`), /^the file is not a readable zip \(invalid characters in fileName/],
+  ["a name that climbs out of its site", renamed("aa/x.css", `${VERSION_FILES}/../x.css`), /^the file is not a readable zip$/],
+  ["a name that climbs out of the zip", renamed("aa/x.css", "../../../../../../../../../../../../../tmp/x.css".padEnd(`${VERSION_FILES}/aa/x.css`.length, "s")), /^the file is not a readable zip$/],
+  ["an absolute name", renamed("aa/x.css", `/${VERSION_FILES.slice(1)}/aa/x.css`), /^the file is not a readable zip$/],
+  ["a name with a backslash", renamed("aa/x.css", `${VERSION_FILES}/aa\\x.css`), /^the file is not a readable zip$/],
   ["a path with a dot segment", renamed("a/x.css", `${VERSION_FILES}/./x.css`), /has a path no site can store/],
   ["a path with an empty segment", renamed("a/x.css", `${VERSION_FILES}//ax.css`), /has a path no site can store/],
   ["a file that is there twice", before(`${VERSION_FILES}/css/site.css`, [`${VERSION_FILES}/index.html`, FILES["index.html"]]), /appears twice/],
@@ -116,9 +116,9 @@ const REFUSED: readonly (readonly [what: string, build: Build, reason: RegExp])[
   ["a file with no site before it", without(`${FOLDER}/site.json`), /is out of order: a site's entries follow its site\.json/],
   ["a manifest that counts other bytes", (path) => writeZip(path, backupEntries({ manifest: { bytes: 31 } })), /^the manifest counts differ from the sites, files, or bytes/],
   ["a manifest that counts a site that is not there", (path) => writeZip(path, backupEntries({ manifest: { sites: 2 } })), /^the manifest counts differ from the sites, files, or bytes/],
-  ["a place beyond what a file can hold", (path) => writeFileSync(path, BEYOND), /^the file is not a readable zip \(/],
-  ["a file whose stream is longer than its entry says", lying("size", 26, "a".repeat(50_000)), /^the file is not a readable zip \(too many bytes in the stream/],
-  ["a file whose stream is shorter than its entry says", lying("size", 26, "a"), /^the file is not a readable zip \(not enough bytes in the stream/],
+  ["a place beyond what a file can hold", (path) => writeFileSync(path, BEYOND), /^the file is not a readable zip$/],
+  ["a file whose stream is longer than its entry says", lying("size", 26, "a".repeat(50_000)), /^the file is not a readable zip$/],
+  ["a file whose stream is shorter than its entry says", lying("size", 26, "a"), /^the file is not a readable zip$/],
   ["a file whose bytes are not the ones written", lying("checksum", 7), /fails its checksum/],
 ];
 

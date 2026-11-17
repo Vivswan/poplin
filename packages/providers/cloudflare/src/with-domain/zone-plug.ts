@@ -96,6 +96,9 @@ const SWITCH_ON = "To switch this on, add this permission to the account token a
 /** What the row of an alert that is not set up says in place of that: the install's key makes its alerts too. */
 const BY_ITSELF = "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair";
 
+/** What the row of a piece left out for an optional permission says on a command line: that the token lacks the permission, the repair that makes the piece once it has it, and of an alert that the install's key makes it too. */
+const COMMAND_WORDS = { lacks: "The account token lacks", repair: "run npx poplin doctor --repair", itself: "The install creates it within a day" } as const;
+
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
 
@@ -1084,6 +1087,41 @@ export function tokenFacts(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[
  */
 export function rightFor(object: Piece): string {
   return RIGHTS[object][0].name;
+}
+
+/** The optional permission a piece is made with; `undefined` for a piece that needs none, and for an object the table does not name. */
+function optionalOf(object: string): Optional | undefined {
+  const right = Object.entries(RIGHTS).find(([piece]) => piece === object)?.[1][0];
+
+  return right !== undefined && "adds" in right ? right : undefined;
+}
+
+/**
+ * Word a row of a check or a repair for a command line, whose reader runs commands and knows Cloudflare's names.
+ *
+ * The open paths are named as what they are at Cloudflare: an Access application and its Access policy.
+ * A row that names a permission to add says that the token lacks it, as the run's last lines do.
+ * A piece left out for an optional permission names the permission the token lacks and the command that makes the piece, in place of what the piece adds.
+ */
+function commandRow(row: DomainRow): DomainRow {
+  const open = row.detail.startsWith(INSTALL_OBJECTS.accessOpenPolicy) ? "Access policy" : "Access application";
+  const object = row.object === "Access open paths" ? open : row.object;
+  const right = row.state === "optional" ? optionalOf(row.object) : undefined;
+  // On an account whose Access is off the open paths say only that: named, their row is not the login application's row twice.
+  if (row.object === "Access open paths" && row.detail === ACCESS_OFF) return { ...row, object, detail: `${OPEN_PATHS}: ${ACCESS_OFF}` };
+
+  if (right === undefined) return { ...row, object, detail: row.detail.replace(`${ADD_PERMISSION}: `, `${COMMAND_WORDS.lacks} `) };
+
+  const said = switchOn(right);
+  const subject = row.detail.endsWith(said) ? row.detail.slice(0, -said.length) : "";
+  const detail = right.how === undefined ? `${COMMAND_WORDS.lacks} ${right.name}. Fix: add it, then ${COMMAND_WORDS.repair}` : `${COMMAND_WORDS.itself}. Fix: to create it now, add ${right.name}, then ${COMMAND_WORDS.repair}`;
+
+  return { ...row, object, detail: `${subject}${detail}` };
+}
+
+/** Word the rows of a check or a repair for a command line, each as `commandRow` words it. */
+export function commandRows(rows: readonly DomainRow[]): DomainRow[] {
+  return rows.map(commandRow);
 }
 
 /**

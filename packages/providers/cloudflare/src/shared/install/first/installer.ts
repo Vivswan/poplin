@@ -27,7 +27,7 @@ import { BY_NAME, INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
-import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
+import { commandRows, createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, placeWords, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { placeBinding } from "../kind/started-place";
@@ -181,9 +181,9 @@ function note(work: Work, row: Row): boolean {
 }
 
 /** The row of a piece whose call failed: blocked where the token lacks its permission, which the row names. A piece of the Worker's needs the permission its variables need. */
-function failed(work: Work, object: "R2 bucket" | "D1 database" | "Worker" | "Sweep trigger" | "Worker address", detail: string, failure: NotWritten): false {
+function failed(work: Work, object: "R2 bucket" | "D1 database" | "Worker" | "Cron trigger" | "workers.dev route", detail: string, failure: NotWritten): false {
   const right = rightFor(object === "R2 bucket" || object === "D1 database" ? object : "Worker variable");
-  if (lacksRight(failure)) note(work, { object, state: "block", detail: `${detail}: ${WORDS.lacks}: ${right}`, right });
+  if (lacksRight(failure)) note(work, { object, state: "block", detail: `${detail}: ${WORDS.lacks} ${right}`, right });
   else note(work, { object, state: "fail", detail: `${detail}: ${whyOf(failure)}` });
 
   return false;
@@ -197,26 +197,27 @@ function synced(work: Work, object: "R2 bucket" | "D1 database", detail: string,
 }
 
 /**
- * Settle one piece of the Worker: its code, its sweep trigger, or its free address.
+ * Settle one piece of the Worker: its code, its cron trigger, or its free address.
  *
+ * @param row - `setting` is on a piece that is a switch of the Worker: a run writes it and makes nothing, so its row never says made
  * @param stands - reads whether the piece is as it should be, on a Worker that was there before the run; `undefined` on a Worker the run makes, where the piece is made with it
  * @param write - makes the piece match; never called by a dry run, nor for a piece that stands
  */
 async function workerPiece(
   work: Work,
-  row: { readonly object: "Worker" | "Sweep trigger" | "Worker address"; readonly detail: string },
+  row: { readonly object: "Worker" | "Cron trigger" | "workers.dev route"; readonly detail: string; readonly setting?: true },
   stands: (() => Promise<CloudflareResult<boolean>>) | undefined,
   write: () => Promise<{ readonly ok: true } | NotWritten>,
 ): Promise<boolean> {
   const stood = stands === undefined ? undefined : await stands();
   if (stood?.ok === false) return failed(work, row.object, row.detail, stood);
 
-  if (stood?.value === true) return note(work, { ...row, state: "leave" });
+  if (stood?.value === true) return note(work, { object: row.object, detail: row.detail, state: "leave" });
 
   const written = work.mode === "apply" ? await write() : ({ ok: true } as const);
   if (!written.ok) return failed(work, row.object, row.detail, written);
 
-  return note(work, { ...row, state: stood === undefined ? "make" : "change" });
+  return note(work, { object: row.object, detail: row.detail, state: stood === undefined && row.setting !== true ? "make" : "change" });
 }
 
 /** Whether two cron lists hold the same crons. */
@@ -234,7 +235,7 @@ async function targetOf(place: Place, where: Where, form: string): Promise<Targe
   if (!address.ok && lacksRight(address)) {
     const right = rightFor("Forwarder");
 
-    return { what: "right_lacking", right, words: `Free address: ${WORDS.lacks}: ${right}`, address: form };
+    return { what: "right_lacking", right, words: `Free address: ${WORDS.lacks} ${right}`, address: form };
   }
 
   if (!address.ok) return address;
@@ -288,7 +289,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
   const scheduled = await workerPiece(
     work,
-    { object: "Sweep trigger", detail: bundle.deploy.crons.join(", ") },
+    { object: "Cron trigger", detail: bundle.deploy.crons.join(", ") },
     reads(
       () => readCrons(connection, worker),
       (crons) => sameCrons(crons, bundle.deploy.crons),
@@ -299,7 +300,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
   return workerPiece(
     work,
-    { object: "Worker address", detail: target.kind === "no-domain" ? `on: ${target.layout.adminHost}` : "off: the install is served on its domain" },
+    { object: "workers.dev route", detail: target.kind === "no-domain" ? `enabled: ${target.layout.adminHost}` : "disabled", setting: true },
     reads(
       () => callCloudflare(connection, (api) => new BaseSubdomain(api).get(SCRIPT, { account_id: accountId })),
       (current) => current.enabled === wanted.enabled && current.previews_enabled === wanted.previews_enabled,
@@ -331,7 +332,7 @@ async function finish(work: Work, target: Target, login: Login, kept: SettingVal
   }
 
   const loginOff = work.blocked.some((block) => block.what === "login_off");
-  for (const row of reading.rows.filter((entry) => !OWN_ROWS.has(entry.object))) note(work, rowOf(row, work.mode, loginOff));
+  for (const row of commandRows(reading.rows.filter((entry) => !OWN_ROWS.has(entry.object)))) note(work, rowOf(row, work.mode, loginOff));
 
   work.steps.push(...reading.steps);
 

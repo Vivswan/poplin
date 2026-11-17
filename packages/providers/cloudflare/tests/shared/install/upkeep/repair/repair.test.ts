@@ -62,7 +62,7 @@ const FOLLOWS: Readonly<Record<keyof typeof KINDS, readonly (readonly [string, s
 const ADD_CALLS = [`GET /accounts/${ACCOUNT}/access/policies`, `PUT /accounts/${ACCOUNT}/access/policies/made-1`, `POST /accounts/${ACCOUNT}/d1/database/made-0/query`];
 
 /** What the row of a user says where the token may not write the login. */
-const LACKS_ACCESS = "User | block | lost@example.com: The account token lacks this permission: Access: Apps and Policies: Edit";
+const LACKS_ACCESS = "User | block | lost@example.com: The account token lacks Access: Apps and Policies: Edit";
 
 /** The kinds, for a test of each. */
 const BOTH = Object.keys(KINDS) as (keyof typeof KINDS)[];
@@ -206,7 +206,7 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     const { done } = await repaired(account, kind);
     const made = shown(done).filter((row) => row.includes(" | make | ")).map((row) => row.split(" | ")[0]);
 
-    expect([made, done.ok && done.ready, letThrough(account)]).toEqual([["Access application", "Access policy", "Access open paths", "Access open paths", "Worker variable"], true, [OWNER]]);
+    expect([made, done.ok && done.ready, letThrough(account)]).toEqual([["Access application", "Access policy", "Access application", "Access policy", "Worker variable"], true, [OWNER]]);
     expect(account.bindings.some((binding) => binding.name === "ACCESS")).toBe(true);
     expect(shown((await repaired(account, kind)).done).filter((row) => !row.includes(" | leave | "))).toEqual([]);
   });
@@ -220,7 +220,7 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     const right = "Access: Apps and Policies: Edit";
 
     expect(shown(done).filter((row) => row.startsWith("Access application") || row.startsWith("Workflow"))).toEqual([
-      `Access application | block | refused with status 403 and codes 10000. Add this permission to the account token: ${right}`,
+      `Access application | block | refused with status 403 and codes 10000. The account token lacks ${right}`,
       "Workflow | make | poplin-jobs",
     ]);
     expect(done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "right_lacking", right }] });
@@ -355,7 +355,7 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
 
   // Drift: a person runs the repair to get back in. One that stopped at an upload it could not send would leave the login unmended, and one that said nothing of the upload would leave the release untaken with no word.
   test.each([
-    ["a token without the permission to upload", {}, `Worker | block | poplin: ${OLDER} to ${RELEASE}: The account token lacks this permission: Workers Scripts: Edit`],
+    ["a token without the permission to upload", {}, `Worker | block | poplin: ${OLDER} to ${RELEASE}: The account token lacks Workers Scripts: Edit`],
     ["code that stops as it starts", { refuseAs: { status: 400, code: 10021 } }, `Worker | fail | poplin: ${OLDER} to ${RELEASE}: Cloudflare refused the release's code: it fails at startup. The install still runs its previous version`],
     ["code Cloudflare refuses otherwise", { refuseAs: { status: 400, code: 10068 } }, `Worker | fail | poplin: ${OLDER} to ${RELEASE}: refused with status 400`],
   ])("an upload refused for %s gets a row that says so, the piece that was gone is still made, and the run is not ready", async (_name, refused, row) => {
@@ -413,7 +413,7 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
 
     expect(shown((await repaired(placed, kind, UPDATE)).done)).toEqual([`Worker | change | poplin: ${OLDER} to ${RELEASE}`, "Database steps | block | poplin: its schema does not match this release's, so no step ran"]);
     expect(shown((await repaired(unplaced, kind, UPDATE)).done)).toEqual([
-      `Worker | block | poplin: ${OLDER} to ${RELEASE}: The account token lacks this permission: Workers Scripts: Edit`,
+      `Worker | block | poplin: ${OLDER} to ${RELEASE}: The account token lacks Workers Scripts: Edit`,
       "Database steps | not-run | poplin: its schema is read after the release is deployed",
     ]);
   });

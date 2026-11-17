@@ -16,7 +16,7 @@ const ACCESS_FLAGS = [
 ] as const;
 
 /** What `--expires` takes, for the hint of a refused one. */
-const EXPIRY_FORMS = "A duration is a count of s, m, h, or d, such as 7d. A date is written 2026-12-01.";
+const EXPIRY_FORMS = "Usage: --expires 7d (s, m, h, or d), 2026-12-01, or never";
 
 /** What `--title` takes, for the hint of a refused one. */
 const TITLE_FORM = `A title is one line of at most ${MAX_TITLE_LENGTH} characters. "" uses the page title.`;
@@ -43,7 +43,7 @@ function readSwitch(flags: Flags, name: string): boolean | undefined | UsageErro
   if (word === undefined) return undefined;
 
   // Core reads `on` and `off` for the switch a new site gets, and a site's own switches are typed the same way.
-  return readSetting("default_search_engines", word) ?? usageError(`${name} expects on or off, got ${JSON.stringify(word)}`);
+  return readSetting("default_search_engines", word) ?? usageError(`${name} requires on or off, got ${JSON.stringify(word)}`);
 }
 
 function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError {
@@ -67,7 +67,7 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
   // A span in its form that core does not take is longer than a span may be.
   if (isSpan(when)) return usageError(`--expires ${when} is too long a duration`, EXPIRY_FORMS);
 
-  return usageError(`--expires expects a duration, a date, or never, got ${JSON.stringify(when)}`, EXPIRY_FORMS);
+  return usageError(`--expires requires a duration, a date, or never, got ${JSON.stringify(when)}`, EXPIRY_FORMS);
 }
 
 /** Read `--title` by core's own rule of a typed title, so a title the install would refuse is refused here, with the rule it breaks. */

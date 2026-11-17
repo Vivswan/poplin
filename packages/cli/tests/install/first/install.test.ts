@@ -56,7 +56,7 @@ describe("a fresh install", () => {
       `Waiting for ${ADDRESS} to respond`,
       "poplin 0.1.0 is installed",
       `Dashboard: ${ADDRESS}`,
-      "The account token was not stored. You can delete it at Stand-In Host.",
+      "The account token was not stored. Delete it at Stand-In Host.",
       `Next: npx poplin login --server ${ADDRESS}`,
     ]);
     expect<unknown>(account.runs).toEqual([{ found: { state: "none", place: PLACE, notes: [] }, where: { kind: "none" }, login: "you@example.com", run: "apply" }]);
@@ -335,13 +335,14 @@ describe("what a run comes to", () => {
     expect(ran.out.slice(1 + MADE.length)).toEqual([
       "blocked    Login                 the login product is not switched on",
       "failed     Keys                  status 500",
-      "not run    Jobs                  needs the keys",
+      "skipped    Jobs                  needs the keys",
       "The login product is not switched on for this account",
       "  https://host.example.com/login",
       "Do these steps in a browser, then rerun this command:",
       "  Switch on the login product and choose a team name",
       "  https://host.example.com/login",
-      "The run is incomplete: 1 blocked, 1 failed, and 1 not run. To resume, rerun this command.",
+      "The run is incomplete: 1 blocked, 1 failed, and 1 skipped",
+      "Next: rerun this command",
       "The account token was not stored",
     ]);
     expect(ran.fetched).toEqual([]);
@@ -355,11 +356,11 @@ describe("what a run comes to", () => {
       account.installed = installedOf([...FRESH, ...undone], { ready: false, steps: [{ text: "Switch on the login product", address: "https://host.example.com/login" }] });
       const ran = await runLine(`${RUN} --no-wait`, account, { env: HELD });
 
-      return [String(ran.code), ...ran.out.filter((line) => line.includes("in a browser") || line.includes("To resume"))];
+      return [String(ran.code), ...ran.out.filter((line) => line.includes("in a browser") || line.startsWith("Next: "))];
     };
 
-    expect(await lastLines(whole)).toEqual(["1", `Do these steps in a browser, then run ${REPAIR.command}:`, `The run is incomplete: 1 blocked. To resume, run ${REPAIR.command}.`]);
-    expect(await lastLines({ state: "started", place: PLACE, notes: [] })).toEqual(["1", "Do these steps in a browser, then rerun this command:", "The run is incomplete: 1 blocked. To resume, rerun this command."]);
+    expect(await lastLines(whole)).toEqual(["1", `Do these steps in a browser, then run ${REPAIR.command}:`, `Next: run ${REPAIR.command}`]);
+    expect(await lastLines({ state: "started", place: PLACE, notes: [] })).toEqual(["1", "Do these steps in a browser, then rerun this command:", "Next: rerun this command"]);
   });
 
   test("an install that does not answer in 5 minutes exits 1, is said to be installed at a URL that does not respond yet, and offers no login: without this a person is told of an install at an address that shows nothing", async () => {
@@ -378,7 +379,7 @@ describe("what a run comes to", () => {
       `Dashboard: ${ADDRESS}`,
       `When it responds, log in: npx poplin login --server ${ADDRESS}`,
       `If it does not respond: ${REPAIR.command}`,
-      "The account token was not stored. You can delete it at Stand-In Host.",
+      "The account token was not stored. Delete it at Stand-In Host.",
     ]);
   });
 
@@ -446,7 +447,7 @@ describe.each([
     expect([plain.code, plain.asked, plain.out.slice(-4)]).toEqual([
       0,
       [],
-      ["poplin 0.1.0 is installed", `Dashboard: ${ADDRESS}`, "The account token was not stored. You can delete it at Stand-In Host.", `Add new@example.com as a user: ${letIn}`],
+      ["poplin 0.1.0 is installed", `Dashboard: ${ADDRESS}`, "The account token was not stored. Delete it at Stand-In Host.", `Add new@example.com as a user: ${letIn}`],
     ]);
     expect([told.code, told.fetched, told.out.at(-1)]).toEqual([0, [], plain.out.at(-1)]);
     expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, next: { step: "repair", command: letIn } }]);
@@ -463,7 +464,7 @@ describe.each([
     const ran = await runLine(`${line} --yes --no-wait`, account, { env: HELD });
     const json = await runLine(`${line} --yes --no-wait --json`, { ...account, scenes: [LEFTOVER, whole] }, { env: HELD });
 
-    expect([ran.code, ran.out.at(-2)]).toEqual([1, `The run is incomplete: 1 blocked. To resume, run npx poplin doctor --repair ${place} --add-user new@example.com.`]);
+    expect([ran.code, ran.out.at(-2)]).toEqual([1, `Next: run npx poplin doctor --repair ${place} --add-user new@example.com`]);
     expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, next: { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` } });
   });
 
@@ -570,14 +571,15 @@ describe("a run that is blocked", () => {
       "blocked    Program               the release's files differ from their digests",
       "The files of poplin 0.1.0 are not the ones the project published. Nothing was uploaded.",
       "  https://example.com/releases",
-      "The run is incomplete: 1 blocked. To resume, rerun this command.",
+      "The run is incomplete: 1 blocked",
+      "Next: rerun this command",
       "The account token was not stored",
     ]);
     expect(plain.fetched).toEqual([]);
     expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, address: null, release: null, blocked: [{ what: "bad_release" }] });
   });
 
-  // Drift: a run that is blocked before its first row has started nothing, so a count of what is undone beside exit 1 and `To resume` say what is not so, of a project with no release yet as of an account with no address.
+  // Drift: a run that is blocked before its first row has started nothing, so a count of what is undone beside exit 1 and `Next: rerun this command` say what is not so, of a project with no release yet as of an account with no address.
   test("before its first row says that nothing changed and when to rerun, and counts nothing: without this a run that started nothing ends with a count of what is undone", async () => {
     const account = emptyAccount();
     const none: Blocked = { what: "no_release", words: "The project's website names no release now. Run this again in a few minutes.", address: "https://example.com" };
@@ -655,7 +657,7 @@ describe("on a terminal", () => {
       "Create the account token here:",
       "  https://host.example.com/tokens/new?rights=chosen",
       "On the form, limit it to this account and this place",
-      "Tick by hand: Places: Read",
+      "Select manually: Places: Read",
     ]);
     expect(account.runs[0]).toMatchObject({ where: { kind: "place", name: "example.com" }, login: "you@example.com" });
     expect(ran.out.at(-1)).toBe(`Next: npx poplin login --server ${ADDRESS}`);

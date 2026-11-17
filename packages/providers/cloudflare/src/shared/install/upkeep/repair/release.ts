@@ -122,7 +122,7 @@ function stepsRow(stepped: Stepped, rights: Asked["rights"]): Row | undefined {
 
   const right = rights.nameOf("D1 database");
 
-  return rights.lacks(failure) ? { object: STEPS, state: "block", detail: `${name}: ${LACKS}: ${right}`, right } : { object: STEPS, state: "fail", detail: `${name}: ${failureWords(failure)}` };
+  return rights.lacks(failure) ? { object: STEPS, state: "block", detail: `${name}: ${LACKS} ${right}`, right } : { object: STEPS, state: "fail", detail: `${name}: ${failureWords(failure)}` };
 }
 
 /** A Worker nothing is done to, with its one row. */
@@ -139,13 +139,13 @@ async function uploaded(asked: Asked, release: Release, from: string): Promise<E
   const put = upload.ok ? await upload.value.put(release.bundle, updateOf(release, from, asked.reach.now()), undefined) : upload;
   const change = `: ${from} to ${release.bundle.version}`;
   if (put.ok) {
-    const unset: Row[] = put.unset === undefined ? [] : [{ object: "Sweep trigger", state: "fail", detail: `${release.bundle.deploy.crons.join(", ")}: ${WORDS.schedule}` }];
+    const unset: Row[] = put.unset === undefined ? [] : [{ object: "Cron trigger", state: "fail", detail: `${release.bundle.deploy.crons.join(", ")}: ${WORDS.schedule}` }];
 
     return { state: "placed", rows: [workerRow("change", change), ...unset] };
   }
 
   const right = asked.rights.nameOf("Worker variable");
-  if (put.refusal === "lacks_right") return { state: "unplaced", rows: [workerRow("block", `${change}: ${LACKS}: ${right}`, right)] };
+  if (put.refusal === "lacks_right") return { state: "unplaced", rows: [workerRow("block", `${change}: ${LACKS} ${right}`, right)] };
 
   if (put.refusal === "needs_hand") return { state: "unplaced", rows: [workerRow("block", `${change}: ${WORDS.newer_release}`)] };
 

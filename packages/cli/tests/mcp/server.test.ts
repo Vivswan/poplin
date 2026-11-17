@@ -328,8 +328,7 @@ describe("the MCP server", () => {
     expect(codeOf(old)).toBe("not_found");
     expect(siteOf(kept).state).toBe("trash");
     expect(gone.text.split("\n")).toEqual([
-      `deleted permanently  ${moved.label}`,
-      "Deleted 1 file in 1 version. This cannot be undone.",
+      `deleted  ${moved.label}  1 file in 1 version`,
       `No longer served: ${moved.addresses.site}`,
     ]);
     expect({ site: gone.data.site, before: (gone.data.before as Site).label }).toEqual({ site: null, before: moved.label });

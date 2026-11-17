@@ -10,7 +10,7 @@ import type { CloudflareFailure } from "../client";
 import type { Mode } from "../sync";
 
 /** What a row says before the permission a token lacks. */
-export const LACKS = "The account token lacks this permission";
+export const LACKS = "The account token lacks";
 
 /** The states of a row that leave a run not done. */
 export const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);
@@ -61,5 +61,5 @@ export function rowOf(row: DomainRow, mode: Mode, loginOff: boolean): Row {
 export function lackingOf(rows: readonly Row[], form: string): Blocked[] {
   const rights = [...new Set(rows.flatMap((row) => (row.right === undefined ? [] : [row.right])))];
 
-  return rights.map((right) => ({ what: "right_lacking", right, words: `${LACKS}: ${right}`, address: form }));
+  return rights.map((right) => ({ what: "right_lacking", right, words: `${LACKS} ${right}`, address: form }));
 }

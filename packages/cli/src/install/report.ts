@@ -19,8 +19,11 @@ const STATES: Readonly<Record<RowState, StateWords>> = {
   "leave-out": { "dry-run": "would skip", apply: "skipped", tone: "warning" },
   block: { "dry-run": "blocked", apply: "blocked", tone: "error" },
   fail: { "dry-run": "failed", apply: "failed", tone: "error" },
-  "not-run": { "dry-run": "not run", apply: "not run", tone: "warning" },
+  "not-run": { "dry-run": "would skip", apply: "skipped", tone: "warning" },
 };
+
+/** What the line of a piece the run never reached says: an earlier piece stopped the run. */
+const UNREACHED = "an earlier row stopped the run";
 
 /** The states of an object that a run changes, or a dry run would. */
 const CHANGES: ReadonlySet<RowState> = new Set(["make", "change", "remove"]);
@@ -38,6 +41,9 @@ const COUNTED: readonly (readonly [RowState, string])[] = [
   ["remove", "remove"],
   ["leave-out", "skip"],
 ];
+
+/** Where a provider's sentence ends and the lead of its hint starts: the hint goes on a line of its own. */
+const LEAD_BREAK = /(?<=\.) (?=(?:Fix|See|Next): )/;
 
 /** What a line that stands under another starts with. */
 const INDENT = "  ";
@@ -139,7 +145,7 @@ export function heldStop(found: Extract<Found<unknown, unknown>, { readonly stat
 
 /** Say that the account token was not stored and where it can be deleted: the last line of a run that used one. */
 function tokenLine(provider: Provider): string {
-  return `The account token was not stored. You can delete it at ${provider.name}.`;
+  return `The account token was not stored. Delete it at ${provider.name}.`;
 }
 
 /** Name the poplin an install runs: with its version, or with the words for one that could not be read. */
@@ -319,7 +325,8 @@ export function optionRows(rows: readonly OptionRow[]): [term: string, about: st
  * @returns the line, and what kind of line it is
  */
 export function rowLine(row: Row, run: Run): Line {
-  return wordedRow(STATES, row, run);
+  // A piece the run never reached has no words of its own: the line says why it was skipped, and the JSON value keeps its empty detail.
+  return wordedRow(STATES, row.state === "not-run" && row.detail === "" ? { ...row, detail: UNREACHED } : row, run);
 }
 
 /**
@@ -343,7 +350,7 @@ export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: tr
   const proof = "A dry run does not test the account token's write permissions";
 
   if (!installed.ready) {
-    const undone = [...UNDONE].filter((state) => count(state) > 0).map((state) => `${count(state)} ${STATES[state]["dry-run"]}`);
+    const undone = [...UNDONE].filter((state) => count(state) > 0).map((state) => `${count(state)} ${STATES[state].apply}`);
 
     return [...blockedLines(installed.blocked), { tone: "error", text: undone.length === 0 ? "A run would be incomplete until the steps above are done" : `A run would be incomplete: ${LIST.format(undone)}` }];
   }
@@ -389,7 +396,7 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
   const steps = installed.steps.flatMap((step) => [`${INDENT}${step.text}`, `${INDENT}${step.address}`]);
   const byHand = steps.length === 0 ? [] : [`Do these steps in a browser, then ${next}:`, ...steps];
 
-  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `The run is incomplete${undone.length === 0 ? "" : `: ${LIST.format(undone)}`}. To resume, ${next}.` }, kept];
+  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `The run is incomplete${undone.length === 0 ? "" : `: ${LIST.format(undone)}`}` }, plain(`Next: ${next}`), kept];
 }
 
 /**
@@ -409,7 +416,7 @@ export function factsLines(facts: WorkTokenFacts, help: string): string[] {
     "Create the account token here:",
     `${INDENT}${facts.tokenLink}`,
     `On the form, limit it to ${facts.tokenFor}`,
-    ...facts.tokenByHand.map((right) => `Tick by hand: ${right}`),
+    ...facts.tokenByHand.map((right) => `Select manually: ${right}`),
   ];
 }
 
@@ -421,7 +428,7 @@ function stopWords(stop: Exclude<Stop, { readonly problem: "missing_answer" | "b
 
   if (stop.problem === "name_held") return [stop.words, `${INDENT}${stop.address}`, UNCHANGED];
 
-  if (stop.problem !== "already_installed") return [stop.words];
+  if (stop.problem !== "already_installed") return stop.words.split(LEAD_BREAK);
 
   const owners = provider === undefined ? [] : ownerLines(provider, stop.version, stop.newest, stop.mend !== "nothing");
 

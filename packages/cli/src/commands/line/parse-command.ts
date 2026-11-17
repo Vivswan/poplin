@@ -155,7 +155,7 @@ function readFlag(flag: TypedFlag, spec: CommandSpec, seen: Flags): string | tru
       `poplin ${spec.name} --help`,
     );
 
-  if (seen.has(flag.name)) return usageError(`${flag.name} specified more than once`);
+  if (seen.has(flag.name)) return usageError(`${flag.name} was passed more than once`);
 
   if (known.value === undefined && flag.value !== undefined) return usageError(`${flag.name} takes no value`);
 

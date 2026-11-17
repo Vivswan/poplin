@@ -28,16 +28,25 @@ const KINDS = {
 /** A dry run, and a run. */
 const [DRY, APPLY]: readonly [Run, Run] = ["dry-run", "apply"];
 
+/** What the row of a piece left out for an optional permission says before the permission, and after it. */
+const [LACKS, ADD_IT] = ["The account token lacks", ". Fix: add it, then run npx poplin doctor --repair"] as const;
+
+/** The optional pieces of an install under a domain that are made with a permission of their own, each with that permission. */
+const LACKING = ["Redirect rule | Single Redirect: Edit", "WAF rule | Zone WAF: Edit", "Rate rule | Zone WAF: Edit", "Bot settings | Bot Management: Edit"] as const;
+
+/** What the row of an alert that is left out says: the install makes its alerts by itself too. */
+const ITSELF = "The install creates it within a day. Fix: to create it now, add Notifications: Edit, then run npx poplin doctor --repair";
+
 /** The Worker's own pieces of a new install, which both kinds start with. */
-const OWN = ["R2 bucket | make | poplin-sites", "D1 database | make | poplin", `Worker | make | poplin, runs ${RELEASE}`, "Sweep trigger | make | */15 * * * *"];
+const OWN = ["R2 bucket | make | poplin-sites", "D1 database | make | poplin", `Worker | make | poplin, runs ${RELEASE}`, "Cron trigger | make | */15 * * * *"];
 
 /** The login, the variables, and the keys, which both kinds make alike; `host` and `sites` are what the login stands in front of. */
 function shared(host: string, sites: string): string[] {
   return [
     `Access application | make | poplin: ${host}, ${sites}`,
     "Access policy | make | poplin logins",
-    `Access open paths | make | poplin open paths: ${host}/api`,
-    "Access open paths | make | poplin open paths policy",
+    `Access application | make | poplin open paths: ${host}/api`,
+    "Access policy | make | poplin open paths policy",
     "Worker variable | make | ACCESS",
     "Worker variable | make | ACCOUNT_ID",
     "Worker variable | make | FIRST_SETTINGS",
@@ -52,7 +61,7 @@ function shared(host: string, sites: string): string[] {
 const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
   domain: [
     ...OWN,
-    "Worker address | make | off: the install is served on its domain",
+    "workers.dev route | change | disabled",
     "Public word | leave | page (public sites answer at <name>-page.example.com)",
     "DNS record | make | *.example.com",
     "DNS record | make | poplin.example.com",
@@ -71,7 +80,7 @@ const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
   ],
   "no-domain": [
     ...OWN,
-    "Worker address | make | on: poplin.example.workers.dev",
+    "workers.dev route | change | enabled: poplin.example.workers.dev",
     "Forwarder | make | poplin-private: https://poplin-private.example.workers.dev (private sites)",
     "Forwarder | make | poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)",
     ...shared("poplin.example.workers.dev", "poplin-private.example.workers.dev"),
@@ -208,11 +217,11 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const account = fresh({ refuse: `PUT /accounts/${ACCOUNT}/workers/scripts/poplin/schedules`, refuseAs: { status: 400, code: 10001 } });
     const stopped = await installed(account, kind, APPLY);
 
-    expect([shown(stopped.done).slice(2), stopped.done.ok && stopped.done.ready]).toEqual([[`Worker | make | poplin, runs ${RELEASE}`, "Sweep trigger | fail | */15 * * * *: refused with status 400 and codes 10001"], false]);
+    expect([shown(stopped.done).slice(2), stopped.done.ok && stopped.done.ready]).toEqual([[`Worker | make | poplin, runs ${RELEASE}`, "Cron trigger | fail | */15 * * * *: refused with status 400 and codes 10001"], false]);
 
     delete account.refuse;
     const again = await installed(account, kind, APPLY);
-    const stood = ["R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", "Worker | leave | poplin: its code predates this run and was not checked against a release", "Sweep trigger | change | */15 * * * *"];
+    const stood = ["R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", "Worker | leave | poplin: its code predates this run and was not checked against a release", "Cron trigger | change | */15 * * * *"];
 
     expect([again.found.state, shown(again.done).slice(0, 4), shown(again.done).slice(5), again.done.ok && again.done.ready]).toEqual(["started", stood, ROWS[kind].slice(5), true]);
     expect([account.uploads.length, account.buckets.length, account.databases.length]).toEqual([1, 1, 1]);
@@ -229,7 +238,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const dry = await installed(account, kind, DRY);
     const run = await installed(account, kind, APPLY);
     const off = "block | Access is off for the account";
-    const blocked = [`Access application | ${off}`, `Access policy | ${off}`, `Access open paths | ${off}`, "Worker variable | block | ACCESS: written once the Access application exists"];
+    const blocked = [`Access application | ${off}`, `Access policy | ${off}`, "Access application | block | poplin open paths: Access is off for the account", "Worker variable | block | ACCESS: written once the Access application exists"];
 
     expect(dry.found).toMatchObject({ state: "none", notes: [{ what: "login_off", address: `https://one.dash.cloudflare.com/${ACCOUNT}` }] });
     expect(shown(run.done)).toEqual(shown(dry.done));
@@ -470,21 +479,22 @@ describe("what stops a run before it changes anything", () => {
     const { done } = await installed(fresh({ refuse: "GET /zones/zone-1/dns_records", refuseMessage: "Authentication error" }), "domain", DRY);
     const rows = shown(done).slice(6);
 
-    expect(rows[0]).toBe("DNS record | block | refused with status 403 and codes 10000. Add this permission to the account token: DNS: Edit");
+    expect(rows[0]).toBe("DNS record | block | refused with status 403 and codes 10000. The account token lacks DNS: Edit");
     expect([...new Set(rows.slice(1).map((row) => row.split(" | ")[1]))]).toEqual(["not-run"]);
     expect(done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "right_lacking", right: "DNS: Edit" }] });
   });
 
   // Drift: an optional piece the token has no permission for is no failure: the install works without it, and the run is whole.
+  // Its row names the permission and the repair, in one statement: the words the dashboard has for it tell a person to press a button no terminal has.
   test.each([
-    ["domain", ["Redirect rule", "WAF rule", "Rate rule", "Bot settings", "Budget alert", "Certificate alert"]],
-    ["no-domain", ["Budget alert"]],
+    ["domain", [...LACKING.map((row) => row.replace(" | ", ` | ${LACKS} `) + ADD_IT), `Budget alert | ${ITSELF}`, `Certificate alert | ${ITSELF}`]],
+    ["no-domain", [`Budget alert | ${ITSELF}`]],
   ] as const)("a token without the optional permissions leaves those pieces out of a new install, %s, in the dry run as in the run, and the run is ready", async (kind, optional) => {
     const refuse = ["GET /zones/zone-1/rulesets*", `GET /accounts/${ACCOUNT}/alerting*`, "GET /zones/zone-1/bot_management"];
     const account = fresh({ refuse });
     const dry = await installed(account, kind, DRY);
     const run = await installed(account, kind, APPLY);
-    const left = shown(run.done).filter((row) => row.includes(" | leave-out | ")).map((row) => row.split(" | ")[0]);
+    const left = shown(run.done).filter((row) => row.includes(" | leave-out | ")).map((row) => row.replace(" | leave-out", ""));
 
     const states = (done: Installed): string[][] => shown(done).map((row) => row.split(" | ").slice(0, 2));
 

@@ -13,10 +13,10 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 
 | Code                                           | Means                                              | What to do                                                    |
 | ---------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `no_login`, `no_server`                        | this computer has no login                         | `npx poplin login --server https://poplin.example.com`        |
+| `no_login`, `no_server`                        | this machine has no login                         | `npx poplin login --server https://poplin.example.com`        |
 | `not_logged_in`                                | the login ran out                                  | `poplin login`                                                |
-| `login_denied`, `login_expired`, `interrupted` | the login was not allowed; nothing was saved       | `poplin login` again, and allow it in the browser             |
-| `bad_login`                                    | the saved login cannot be used                     | `poplin login` again                                          |
+| `login_denied`, `login_expired`, `interrupted` | the login was not allowed; nothing was stored       | `poplin login` again, and allow it in the browser             |
+| `bad_login`                                    | the stored login cannot be used                     | `poplin login` again                                          |
 | `bad_server`                                   | `--server` takes an `https://` address, host only  | `--server https://poplin.example.com`                         |
 | `wrong_server`                                 | the login is for another install                   | log in to this one with `--server`                            |
 | `not_allowed`                                  | this login may not do that                         | `poplin whoami` shows the login; use an admin's               |

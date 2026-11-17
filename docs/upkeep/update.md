@@ -49,7 +49,7 @@ No build runs, at Cloudflare or anywhere. The install takes the built Worker the
 ```text
 $ npx poplin update --dry-run
 0.3.1 is available. The install runs 0.3.0.
-The install has its provider key
+The install holds a key to update itself with
 Dry run: no update was started
 
 $ npx poplin update
@@ -115,7 +115,7 @@ unchanged  Public word           page (public sites answer at <name>-page.exampl
 ...
 The repair is complete
 Dashboard: https://poplin.example.com
-The account token was not stored. You can delete it at Cloudflare.
+The account token was not stored. Delete it at Cloudflare.
 ```
 
 Without `--update`, the repair mends and uploads no release, whatever `auto_update` says. Where a newer one is out, its row `Worker` says so, and the run ends as it would without that row:
@@ -128,7 +128,7 @@ unchanged  Public word           page (public sites answer at <name>-page.exampl
 ...
 The install needs no repair
 Dashboard: https://poplin.example.com
-The account token was not stored. You can delete it at Cloudflare.
+The account token was not stored. Delete it at Cloudflare.
 ```
 
 The samples are cut short where the dots are. Without a domain the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`.
@@ -190,7 +190,7 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 ```text
 $ npx poplin update --dry-run
 No newer version is known. The install runs 0.3.1.
-The install has its provider key
+The install holds a key to update itself with
 To go back to 0.3.0: npx poplin update --to 0.3.0
 Dry run: no update was started
 
@@ -258,12 +258,12 @@ The website is built after a release is out, so a new release is named there, an
 
 An install and an update upload the Worker's source map with the Worker, so an error in Cloudflare's log of the Worker names a source file and its line. A map of more than 16 MiB is left out. No address serves the map.
 
-## The command on your computer
+## The command on your machine
 
 `poplin doctor` names both versions. When they differ, the row says so:
 
 ```text
-ok  version   install 0.2.0, CLI 0.1.0: versions differ, update the older one
+ok  version   install 0.2.0, CLI 0.1.0: versions differ
 ```
 
 `npx poplin@latest doctor` runs the newest command.
@@ -312,7 +312,6 @@ ok  settings  21 settings
 ok  sites     4 sites
 ok  trash     0 sites
 ok  problems  none in 7 days
-Nothing changed
 ```
 
 | Question             | Answer                                                                                             |

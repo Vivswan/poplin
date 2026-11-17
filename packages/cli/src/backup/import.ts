@@ -332,7 +332,7 @@ async function preview(backup: Backup, request: ImportRequest, chosen: Chosen, a
   return {
     ok: true,
     value: { dry_run: true, file: request.zip, format: backup.manifest.format, settings: request.settings, sites },
-    lines: [...lines, `The zip passed every check. ${dryRunText(asked)}`],
+    lines: [...lines, "The backup passed every check", dryRunText(asked)],
     notes: [NOT_CHECKED],
   };
 }

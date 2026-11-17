@@ -109,8 +109,8 @@ export function repairedLines(repaired: Mended, run: Run, provider: Provider): L
   const same = changesIn(repaired.rows) === 0;
   if (run === "dry-run") return repaired.ready && same ? [{ tone: "done", text: DONE.same }] : dryRunLines(repaired);
 
-  // What a person is told to do after a run that mended everything, such as where to log in, stands before its last lines.
-  const told = repaired.ready ? repaired.steps.flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
+  // What a person is told to do after a run that mended everything stands before its last lines. A step at the dashboard's own address is left to the line that names the dashboard; the JSON value keeps it.
+  const told = repaired.ready ? repaired.steps.filter((step) => step.address !== repaired.address).flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
 
   return [...told, ...runLines(repaired, provider, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair(), repair: NEXT.repair() })];
 }

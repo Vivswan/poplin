@@ -78,12 +78,12 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 | --- | --- | --- |
 | a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by a code Cloudflare sends to the email; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time. poplin sets no cookie of its own |
 | a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
-| the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that computer in a browser; an agent on that computer acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
-| a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that computer |
+| the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that machine in a browser; an agent on that machine acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
+| a machine with no browser | the same kind of token | `poplin login` prints an address and a short code to open on another device, where a user allows that machine |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no database key exists outside Cloudflare; the one bucket key is the upload key below |
 | the CLI, to the bucket, for the files of a publish | one ticket a file: a signed address that lives 10 minutes | the Worker signs it with the upload key, which never leaves the Worker; [The upload key](#the-upload-key) says what a ticket and the key can reach |
-| the person who makes the install | a Cloudflare API token, read by `poplin install` on that person's own computer | the person makes it at Cloudflare; the command sends it to Cloudflare alone, uses it for that one run, in which it also makes the kept key, and never stores, logs, or prints it |
-| a person who repairs the install | a Cloudflare API token, pasted into Repair on the Domain screen, or read by `poplin doctor --repair` on that person's own computer | the Worker uses a pasted one for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it; the command sends its own to Cloudflare alone |
+| the person who makes the install | a Cloudflare API token, read by `poplin install` on that person's own machine | the person makes it at Cloudflare; the command sends it to Cloudflare alone, uses it for that one run, in which it also makes the kept key, and never stores, logs, or prints it |
+| a person who repairs the install | a Cloudflare API token, pasted into Repair on the Domain screen, or read by `poplin doctor --repair` on that person's own machine | the Worker uses a pasted one for that one request, in which a Repair also makes the kept key, and never stores, logs, or shows it; the command sends its own to Cloudflare alone |
 | the Worker, to Cloudflare's API | one kept key, an API token named "poplin kept key" that the account owns | `poplin install` makes it in its run, and puts it on the Worker as an encrypted secret. A Repair makes a new one where the install holds none, or one Cloudflare no longer takes; [The kept key](#the-kept-key) says what it may do |
 | the Worker, to update itself | the kept key | the Worker fetches the release's built files, checks each against the digests poplin's website publishes, and uploads them in place of its own code: [Update](../upkeep/update.md#with-the-kept-key) |
 
@@ -91,14 +91,14 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 
 | Scope | Given to | May |
 | --- | --- | --- |
-| publisher | a computer or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login` and leaves Can change at Own sites only on the page that allows it. `poplin login --publisher` saves no other kind, whatever that page chose | publish, and manage its own sites |
+| publisher | a machine or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login` and leaves Can change at Own sites only on the page that allows it. `poplin login --publisher` saves no other kind, whatever that page chose | publish, and manage its own sites |
 | admin | a user, whose email is on the list of allowed logins; a user's login at the dashboard carries the same rights | everything: every site, the settings, the tokens |
 
-The page that allows a computer's login treats what the login says of itself as a stranger's words, since anyone can begin one:
+The page that allows a machine's login treats what the login says of itself as a stranger's words, since anyone can begin one:
 
 | The page | So |
 | --- | --- |
-| has the fixed title `Allow this login?`, and shows the computer's name in quotes beside `Name it gave` | a login cannot write the question a user answers |
+| has the fixed title `Allow this login?`, and shows the machine's name in quotes beside `Name it gave` | a login cannot write the question a user answers |
 | starts at Own sites only, whatever the login asked for | a token for everything is given only by a user who chose Everything |
 | is reached by an address that names the login and holds no part of its code | a link someone sent gives nothing to type |
 | is given no part of the code; the Worker checks the 4 letters the user types | the letters are in the terminal alone, so only its reader can allow the login |
@@ -241,7 +241,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
 | tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed |
 | a token that ended | a removed token never logs in again, and its row is removed once it ended more than 90 days ago, a few rows at a time; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |
-| every login at once | Sign everyone out, under Access, asks Cloudflare with the kept key to end every login of the dashboard and of private sites: each browser meets the login again at its next request, a few seconds on. A computer's token is untouched, and is revoked on its own |
+| every login at once | Sign everyone out, under Access, asks Cloudflare with the kept key to end every login of the dashboard and of private sites: each browser meets the login again at its next request, a few seconds on. A machine's token is untouched, and is revoked on its own |
 | the stored key | kept in the database; the limits per visitor are made from it |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and correct content types on every answer of a site but three: the 308 from plain http, the 429 of a limit, and the page of a paused site carry neither header. The files of a site whose Allow embedding is off carry one more, which [Between sites](between-sites.md) describes |

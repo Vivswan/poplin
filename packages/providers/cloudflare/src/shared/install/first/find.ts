@@ -71,7 +71,7 @@ const WORDS = {
   held: `This account has a Worker named ${SCRIPT} that is not marked as poplin's, so nothing changes it. If you just installed or updated poplin, wait a minute and rerun. Otherwise rename it in the Cloudflare dashboard, then rerun.`,
   storage: "R2 is not enabled for this account, or the account token cannot use it. Enable R2 in the Cloudflare dashboard, and check that the token has Workers R2 Storage: Edit.",
   loginOff: "Access is not enabled for this account. Open Zero Trust and choose a plan (Free works). Until then nobody can log in.",
-  lacks: "The account token lacks this permission",
+  lacks: "The account token lacks",
 } as const;
 
 /** Where an install goes: under a domain of the person's own, or on the account's free address; `account` is the account a person named, where the token shows more than one. */
@@ -127,7 +127,7 @@ function refusedBy(failure: CloudflareFailure): FoundHere {
 function rightLacking(rights: Rights, object: Parameters<Rights["nameOf"]>[0], accountId: string): Blocked {
   const right = rights.nameOf(object);
 
-  return { what: "right_lacking", right, words: `${object}: ${WORDS.lacks}: ${right}`, address: pagesOf(accountId).tokens };
+  return { what: "right_lacking", right, words: `${object}: ${WORDS.lacks} ${right}`, address: pagesOf(accountId).tokens };
 }
 
 /** Take an account a person named by its id, or by its number in the list they were shown. */

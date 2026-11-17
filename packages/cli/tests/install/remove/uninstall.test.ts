@@ -42,13 +42,13 @@ const REMOVED = [
 ];
 
 /** What a run says of the machines that are still logged in, once the install is gone. */
-const LOGOUT = "Run npx poplin logout on each machine still logged in";
+const LOGOUT = "Next: npx poplin logout on each machine still logged in";
 
 /** The last lines of a run that removed everything. */
 const DONE = ["The install is removed: 4 resource types removed, 1 unchanged", LOGOUT];
 
 /** What a person is told before the name is typed. */
-const WARNED = ["An uninstall cannot be undone", "An uninstall logs no machine out. Run npx poplin logout on each machine first."] as const;
+const WARNED = ["An uninstall cannot be undone", "Uninstall does not log machines out. Run npx poplin logout on each machine first."] as const;
 
 /** A kind the token could not look for: it lacks the optional permission the kind is made with. */
 const UNLOOKED: RemovalRow = { object: "Guard rule", state: "stay", detail: "the token lacks an optional permission, so this was not looked for. Add this one: Rules: Edit", right: "Rules: Edit" };
@@ -73,7 +73,6 @@ describe("a dry run", () => {
       FOUND,
       ...LISTED,
       `Without --dry-run, pass --confirm ${NAME} or type it at the prompt`,
-      "--keep-data keeps the sites' files and the database",
       WARNED[1],
       "A run would remove 4 resource types",
     ]);
@@ -113,7 +112,7 @@ describe("a dry run", () => {
     const ran = await runLine("uninstall stand-in --no-place --dry-run", installed(() => removedOf(rows, { ready: false, blocked })), { env: HELD });
 
     expect(ran.code).toBe(1);
-    expect(ran.out.slice(-3)).toEqual(["the token lacks a permission. Add this one: Programs: Edit", "  https://host.example.com/tokens", "A run would be incomplete: 1 blocked, 1 not run. It would remove the other 1 resource type."]);
+    expect(ran.out.slice(-3)).toEqual(["the token lacks a permission. Add this one: Programs: Edit", "  https://host.example.com/tokens", "A run would be incomplete: 1 blocked, 1 skipped. It would remove the other 1 resource type."]);
   });
 });
 
@@ -183,7 +182,7 @@ describe("a run", () => {
     const account = installed(rows);
     const asked = await runLine("uninstall stand-in --no-place --keep-data", account, { env: HELD, asks: true, typed: [NAME] });
     const dry = await runLine("uninstall stand-in --no-place --keep-data --dry-run", installed(rows), { env: HELD });
-    const kept = ["would keep    Store                 poplin-sites: 2 files, 15 B", "would keep    Records               poplin: 3 sites"];
+    const kept = ["unchanged     Store                 poplin-sites: 2 files, 15 B", "unchanged     Records               poplin: 3 sites"];
 
     expect([asked.code, asked.out.slice(3, 5), asked.err]).toEqual([0, kept, [...WARNED]]);
     expect(handed(account)).toEqual([
@@ -203,19 +202,23 @@ describe("a run", () => {
     const ran = await runLine(`uninstall stand-in --no-place --confirm ${NAME}`, installed(rows), { env: HELD });
     const json = await runLine(`uninstall stand-in --no-place --confirm ${NAME} --json`, installed(rows), { env: HELD });
     const dry = await runLine("uninstall stand-in --no-place --dry-run", installed(rows), { env: HELD });
-    const unlooked = "because the account token lacks an optional permission: Guard rule and Alert";
+    const why = "the account token lacks an optional permission";
 
-    expect([ran.code, ran.out.slice(-3)]).toEqual([
+    expect([ran.code, ran.out.slice(-4)]).toEqual([
       0,
       [
-        "The install is removed, except what the account token could not check: 4 resource types removed, 3 unchanged",
-        `2 resource types were not checked ${unlooked}. If the install created one, it still exists. Delete it manually, or add the permission and rerun this command.`,
+        "The install is removed: 4 resource types removed, 2 skipped, 1 unchanged",
+        `Guard rule and Alert may still exist: ${why}`,
+        "Fix: add the permission and rerun this command, or delete them manually",
         LOGOUT,
       ],
     ]);
     // The sentence says to run the command again with the permission added, so the next step is that command: a program that goes by `next` alone would stop at `none`.
     expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, unlooked: ["Guard rule", "Alert"], next: AGAIN }]);
-    expect([dry.code, dry.out.slice(-2)]).toEqual([0, [`2 resource types would not be checked ${unlooked}`, "A run would remove 4 resource types"]]);
+    expect([dry.code, dry.out.slice(-2)]).toEqual([0, [`Guard rule and Alert would be skipped: ${why}`, "A run would remove 4 resource types"]]);
+    // A kind that was not looked for was skipped, and the row says so: `unchanged` would say the run read it. The value keeps the state a program reads.
+    expect(ran.out.filter((line) => line.startsWith("skipped")).map((line) => line.split(/ {2,}/)[1])).toEqual(["Guard rule", "Alert"]);
+    expect((jsonOf(json).rows as { did: string }[]).filter((row) => row.did === "stay")).toHaveLength(3);
   });
 
   test("told to keep the data where the data is all that is left says so and exits 1, as does a run that met only what is not the install's: without this a removal of nothing reads as done", async () => {
@@ -233,13 +236,10 @@ describe("a run", () => {
     const data: RemovalRow[] = [{ object: "Store", state: "keep", detail: "poplin-sites" }, UNLOOKED];
     const kept = await runLine("uninstall stand-in --no-place --dry-run --keep-data", installed(() => removedOf(data)), { env: HELD });
     const none = await runLine(`uninstall stand-in --no-place --confirm ${NAME}`, installed(() => removedOf([UNLOOKED])), { env: HELD });
-    const unlooked = "because the account token lacks an optional permission: Guard rule";
+    const why = "the account token lacks an optional permission";
 
-    expect([kept.code, kept.err.at(-1)]).toEqual([1, `Only the data remains, and --keep-data keeps it. 1 resource type would not be checked ${unlooked}. Nothing changed.`]);
-    expect([none.code, none.err.at(-1)]).toEqual([
-      1,
-      `This account has no install. 1 resource type was not checked ${unlooked}. If the install created one, it still exists. Delete it manually, or add the permission and rerun this command. Nothing changed.`,
-    ]);
+    expect([kept.code, kept.err.at(-1)]).toEqual([1, `Only the data remains, and --keep-data keeps it. Guard rule would be skipped: ${why}. Nothing changed.`]);
+    expect([none.code, none.err.slice(-2)]).toEqual([1, [`This account has no install. Guard rule may still exist: ${why}. Nothing changed.`, "Fix: add the permission and rerun this command, or delete them manually"]]);
 
     const keeping = `uninstall stand-in --no-place --confirm ${NAME} --keep-data --json`;
     const nexts = await Promise.all([keeping, "uninstall stand-in --no-place --dry-run --keep-data --json"].map(async (line) => jsonOf(await runLine(line, installed(() => removedOf(data)), { env: HELD }))));
@@ -259,7 +259,7 @@ describe("a run", () => {
     const ran = await runLine(`uninstall stand-in --no-place --confirm ${NAME}`, installed(() => removedOf(rows, { ready: false })), { env: HELD });
     const json = await runLine(`uninstall stand-in --no-place --confirm ${NAME} --json`, installed(() => removedOf(rows, { ready: false })), { env: HELD });
 
-    expect([ran.code, ran.out.at(-1)]).toEqual([1, "1 resource type was removed and 1 remains. To remove the rest, rerun this command."]);
+    expect([ran.code, ran.out.slice(-2)]).toEqual([1, ["1 resource type was removed and 1 remains", "Next: rerun this command"]]);
     expect(jsonOf(json)).toMatchObject({ ok: false, run: "apply", ready: false, rows: [{ object: "Address", did: "remove" }, { object: "Program", did: "fail", detail: "refused with status 500" }] });
   });
 });

@@ -340,6 +340,6 @@ export async function openBackup(path: string): Promise<{ readonly ok: true; rea
     await handle.close();
     if (error instanceof Refusal) return { ok: false, reason: error.message };
 
-    return { ok: false, reason: `the file is not a readable zip (${error instanceof Error ? error.message : String(error)})` };
+    return { ok: false, reason: "the file is not a readable zip" };
   }
 }

@@ -46,16 +46,16 @@ const API_ROWS = {
   no_working_login: { sentence: "The change would leave no user who can log in", hint: "Fix: keep one current user in the list", exit: "failed" },
   needs_update_check: {
     sentence: "auto_update requires update_check",
-    hint: "Fix: set update_check on before auto_update on, or auto_update off before update_check off",
+    hint: "Fix: set update_check on first, or auto_update off first",
     exit: "failed",
   },
   already_a_login: { sentence: "The email is already a user", hint: "See: poplin config logins", exit: "failed" },
   not_a_login: { sentence: "The email is not a user", hint: "See: poplin config logins", exit: "failed" },
   no_update: { sentence: "No version to update to", hint: "See: poplin update --dry-run", exit: "failed" },
   update_unreachable: { sentence: "The provider did not respond to the update", hint: "See: poplin update --dry-run in a minute (the update may still have applied)", exit: "failed" },
-  no_key: { sentence: "The install has no provider key, so it cannot update itself", hint: "Fix: open Domain on the dashboard and press Repair", exit: "failed" },
+  no_key: { sentence: "The install has no key, so it cannot update itself", hint: "Fix: open Domain on the dashboard and press Repair", exit: "failed" },
   key_refused: { sentence: "The provider rejected the install's key", hint: "Fix: open Domain on the dashboard and press Repair", exit: "failed" },
-  lacks_right: { sentence: "The install's provider key lacks a permission", hint: "Fix: open Domain on the dashboard and press Repair to create a key that has it", exit: "failed" },
+  lacks_right: { sentence: "The install's key lacks a permission", hint: "Fix: open Domain on the dashboard and press Repair to create a key that has it", exit: "failed" },
   release_refused: { sentence: "The release was rejected and nothing changed", hint: "See: poplin update --dry-run", exit: "failed" },
   version_refused: { sentence: "The provider rejected the new version and the install runs the previous one", hint: `Fix: retry. If it recurs, report it at ${ISSUES}`, exit: "failed" },
   logins_not_ended: { sentence: "The provider did not end the dashboard sessions, or did not respond", hint: "Fix: open Domain on the dashboard and press Repair", exit: "failed" },
@@ -68,12 +68,12 @@ const API_ROWS = {
 /** The codes of what goes wrong on this machine, or between it and the install. */
 const LOCAL_ROWS = {
   no_login: { sentence: "Not logged in", hint: "Fix: poplin login --server <url>", exit: "no-install" },
-  no_server: { sentence: "--server is required: there is no stored login", hint: "Fix: poplin login --server <url>", exit: "no-install" },
+  no_server: { sentence: "--server is required when not logged in", hint: "Fix: poplin login --server <url>", exit: "no-install" },
   login_denied: { sentence: "The login was denied on the dashboard", hint: "Nothing was stored.", exit: "failed" },
   login_expired: { sentence: "The login expired before approval", hint: "Nothing was stored. Fix: rerun this command", exit: "failed" },
-  interrupted: { sentence: "Cancelled", hint: "Nothing was stored.", exit: "failed" },
+  interrupted: { sentence: "Cancelled", hint: "Nothing changed.", exit: "failed" },
   bad_login: { sentence: "The login is unusable", exit: "no-install" },
-  bad_server: { sentence: "--server expects an https:// origin without a path", hint: "Usage: --server https://poplin.example.com (http:// only for 127.0.0.1, localhost, and [::1])", exit: "usage-error" },
+  bad_server: { sentence: "--server requires an https:// origin without a path", hint: "Usage: --server https://poplin.example.com (http:// only for 127.0.0.1, localhost, and [::1])", exit: "usage-error" },
   wrong_server: { sentence: "No token for this install", hint: "Fix: poplin login --server <url>", exit: "no-install" },
   unreadable: { sentence: "Cannot publish", exit: "failed" },
   no_name: { sentence: "Cannot derive a site name from the path", exit: "failed" },
@@ -119,11 +119,11 @@ const HINTS_ABOUT: Readonly<Record<string, Readonly<Record<string, string>>>> = 
 /** The field a code's sentence already names: a screen leaves such an `about` out, and `--json` keeps it. */
 const FIELD_SAID: Readonly<Record<string, string>> = { name_taken: "public_name", id_taken: "id", needs_update_check: "auto_update" };
 
-/** A hint that is one statement that nothing was done, such as `Nothing was stored.` or `Nothing changed.` */
-const NOTHING_DONE = /^Nothing (?:was \w+|changed)\.$/;
+/** A hint or an `about` that is one statement that nothing was done, such as `Nothing was stored.` or `Nothing changed`. */
+const NOTHING_DONE = /^Nothing (?:was \w+|changed)\.?$/;
 
 /** What goes with a change whose answer never came: the install may have made it. */
-const MAY_HAVE_CHANGED = "The request may have arrived, so the change may have applied. See: poplin list";
+const MAY_HAVE_CHANGED = "See: poplin list (the request may have been applied)";
 
 /** What goes with a change that never left this machine: the install had nothing of it. */
 const NOTHING_SENT = "No request was sent, so nothing changed. Fix: check the URL and the network";
@@ -218,7 +218,9 @@ export function aboutOf(said: Problem): string | undefined {
  */
 export function problemLines(said: Problem): string[] {
   const about = aboutOf(said);
-  const sentence = about === undefined ? said.message : `${said.message}: ${about}`;
+  // What the problem is about, where it only says nothing was done, is a sentence of its own after the problem's.
+  const joined = about !== undefined && NOTHING_DONE.test(about) ? `${said.message}. ${about}.` : `${said.message}: ${about}`;
+  const sentence = about === undefined ? said.message : joined;
   if (said.hint === undefined) return [sentence];
 
   // A hint that only says nothing was done ends the sentence's own line: it names nothing to run.

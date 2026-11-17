@@ -13,7 +13,7 @@ import type { DomainSettings } from "@poplin/app/src/console/domain/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Mend, Reach, Repaired, Row, Step, Whole } from "@poplin/core/src/install/installer";
 import { createPathPlug } from "../../../../without-domain/path-plug";
-import { ACCESS_OFF, createDomainPlug, lacksRight, rightFor, tokenFacts } from "../../../../with-domain/zone-plug";
+import { ACCESS_OFF, commandRows, createDomainPlug, lacksRight, rightFor, tokenFacts } from "../../../../with-domain/zone-plug";
 import type { CloudflareFailure } from "../../client";
 import { boundInstall, jsonOf, type Place, placeWords, type Where } from "../../first/find";
 import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "../../first/rows";
@@ -135,7 +135,7 @@ function whyOf(failure: Untaken): string {
 
 /** The row of a call that failed for one object: blocked where the token lacks the object's permission, which the row names. */
 function failed(object: "D1 database" | typeof USER, detail: string, failure: Untaken, right: string): Row {
-  if (failure.failure !== "allowance" && lacksRight(failure)) return { object, state: "block", detail: `${detail}: ${LACKS}: ${right}`, right };
+  if (failure.failure !== "allowance" && lacksRight(failure)) return { object, state: "block", detail: `${detail}: ${LACKS} ${right}`, right };
 
   return { object, state: "fail", detail: `${detail}: ${whyOf(failure)}` };
 }
@@ -168,7 +168,7 @@ async function mended(work: Work, install: BoundInstall, settings: DomainSetting
   if (!reading.ok) return reading.refusal === "unreachable" ? { ok: false, why: "unreachable", words: WORDS.unreachable } : { ok: false, why: "token", words: WORDS.token };
 
   const loginOff = reading.rows.some((row) => row.state === "missing" && row.detail === ACCESS_OFF);
-  for (const row of reading.rows) note(work, rowOf(row, work.mode, loginOff));
+  for (const row of commandRows(reading.rows)) note(work, rowOf(row, work.mode, loginOff));
 
   work.steps.push(...reading.steps);
 

@@ -13,12 +13,12 @@ import { againWords, blockedLines, NEXT } from "../report";
 const STATES: Readonly<Record<RemovalState, StateWords>> = {
   remove: { "dry-run": "would remove", apply: "removed", tone: "done" },
   gone: { "dry-run": "not found", apply: "not found", tone: "note" },
-  keep: { "dry-run": "would keep", apply: "kept", tone: "note" },
+  keep: { "dry-run": "unchanged", apply: "unchanged", tone: "note" },
   stay: { "dry-run": "unchanged", apply: "unchanged", tone: "note" },
   skip: { "dry-run": "would skip", apply: "skipped", tone: "warning" },
   block: { "dry-run": "blocked", apply: "blocked", tone: "error" },
   fail: { "dry-run": "failed", apply: "failed", tone: "error" },
-  "not-run": { "dry-run": "not run", apply: "not run", tone: "warning" },
+  "not-run": { "dry-run": "would skip", apply: "skipped", tone: "warning" },
 };
 
 /** The states of a kind a run did not remove though it was to. */
@@ -34,7 +34,7 @@ const KIND = "resource type";
 const LOGOUT = "npx poplin logout";
 
 /** What a person is told of the machines that are logged in, before a removal. */
-const LOGGED_IN = `An uninstall logs no machine out. Run ${LOGOUT} on each machine first.`;
+const LOGGED_IN = `Uninstall does not log machines out. Run ${LOGOUT} on each machine first.`;
 
 /** A removal that worked through its rows. */
 type Listed = Extract<Removed, { readonly ok: true }>;
@@ -50,6 +50,11 @@ function count(removed: Listed, states: readonly RemovalState[]): number {
 /** The kinds the token could not look for: each is made with an optional permission the token lacks, so one may still be there. */
 function unlookedOf(removed: Listed): string[] {
   return removed.rows.filter((row) => row.state === "stay" && row.right !== undefined).map((row) => row.object);
+}
+
+/** The state a row is worded as: a kind the token could not look for was skipped, whatever the install has of it. */
+function shownState(row: RemovalRow): RemovalState {
+  return row.state === "stay" && row.right !== undefined ? "skip" : row.state;
 }
 
 /** Whether a run could not look for a kind: one the install made may still be there, and the same command takes it once the token has the permission. */
@@ -70,24 +75,21 @@ export function afterRemoval(removed: Listed, run: Run, again: Next): Next {
  * Say which kinds the token could not look for, in a dry run or in a run.
  *
  * @param careful - the careful choices of the run's line, which the sentence names as the next step's command line holds them
- * @returns the sentences, a run's with what to do about a kind that may still be there; `undefined` where the token looked for every kind
+ * @returns the sentence, and a run's `Fix:` for a kind that may still be there; none where the token looked for every kind
  */
-export function unlookedWords(removed: Listed, run: Run, careful: readonly Careful[]): string | undefined {
-  const unlooked = unlookedOf(removed);
-  if (unlooked.length === 0) return undefined;
-
-  const were = unlooked.length === 1 ? "was not" : "were not";
-  const kinds = `${countText(unlooked.length, KIND)} ${run === "dry-run" ? "would not be" : were} checked because the account token lacks an optional permission: ${LIST.format(unlooked)}`;
-  const byHand = `If the install created one, it still exists. Delete it manually, or add the permission and ${againWords(careful)}.`;
-
-  return leftUnlooked(removed, run) ? `${kinds}. ${byHand}` : kinds;
+export function unlookedWords(removed: Listed, run: Run, careful: readonly Careful[]): readonly string[] {
+  return unlookedLines(removed, run, careful).map((line) => line.text);
 }
 
-/** The line of the kinds the token could not look for; none where it looked for every kind. */
+/** The lines of the kinds the token could not look for, a run's with what to do about them; none where it looked for every kind. */
 function unlookedLines(removed: Listed, run: Run, careful: readonly Careful[] = []): Line[] {
-  const words = unlookedWords(removed, run, careful);
+  const unlooked = unlookedOf(removed);
+  if (unlooked.length === 0) return [];
 
-  return words === undefined ? [] : [{ tone: "warning", text: words }];
+  const why = "the account token lacks an optional permission";
+  if (!leftUnlooked(removed, run)) return [{ tone: "warning", text: `${LIST.format(unlooked)} would be skipped: ${why}` }];
+
+  return [{ tone: "warning", text: `${LIST.format(unlooked)} may still exist: ${why}` }, plain(`Fix: add the permission and ${againWords(careful)}, or delete them manually`)];
 }
 
 /**
@@ -96,7 +98,7 @@ function unlookedLines(removed: Listed, run: Run, careful: readonly Careful[] = 
  * @param run - whether the row is of a dry run or of a run: the state's word differs, and nothing else
  */
 export function removalLine(row: RemovalRow, run: Run): Line {
-  return wordedRow(STATES, row, run);
+  return wordedRow(STATES, { ...row, state: shownState(row) }, run);
 }
 
 /**
@@ -108,11 +110,10 @@ export function removalLine(row: RemovalRow, run: Run): Line {
 export function listedLines(removed: Listed, data: "remove" | "keep"): Line[] {
   const kinds = countText(count(removed, ["remove"]), KIND);
   const proof = plain(`Without --dry-run, pass --confirm ${removed.confirm} or type it at the prompt`);
-  const kept = data === "keep" ? [] : [plain("--keep-data keeps the sites' files and the database")];
   const first = plain(LOGGED_IN);
-  if (removed.ready) return [proof, ...kept, first, ...unlookedLines(removed, "dry-run"), { tone: "done", text: `A run would remove ${kinds}` }];
+  if (removed.ready) return [proof, first, ...unlookedLines(removed, "dry-run"), { tone: "done", text: `A run would remove ${kinds}` }];
 
-  const undone = UNDONE.filter((state) => count(removed, [state]) > 0).map((state) => `${count(removed, [state])} ${STATES[state]["dry-run"]}`);
+  const undone = UNDONE.filter((state) => count(removed, [state]) > 0).map((state) => `${count(removed, [state])} ${STATES[state].apply}`);
 
   return [proof, ...blockedLines(removed.blocked), { tone: "error", text: `A run would be incomplete: ${undone.join(", ")}. It would remove the other ${kinds}.` }];
 }
@@ -139,13 +140,18 @@ export function removedLines(removed: Listed, careful: readonly Careful[]): Line
   const left = count(removed, UNDONE);
   const removedCount = count(removed, ["remove", "gone"]);
   const kinds = countText(removedCount, KIND);
-  if (!removed.ready) return [...blockedLines(removed.blocked), { tone: "error", text: `${kinds} ${removedCount === 1 ? "was" : "were"} removed and ${left} ${left === 1 ? "remains" : "remain"}. To remove the rest, ${againWords(careful)}.` }];
+  if (!removed.ready) return [...blockedLines(removed.blocked), { tone: "error", text: `${kinds} ${removedCount === 1 ? "was" : "were"} removed and ${left} ${left === 1 ? "remains" : "remain"}` }, plain(`Next: ${againWords(careful)}`)];
 
-  const others = (["keep", "stay"] as const).filter((state) => count(removed, [state]) > 0).map((state) => `, ${count(removed, [state])} ${STATES[state].apply}`);
+  const shown = removed.rows.map(shownState);
+  const others = (["skip", "stay"] as const).flatMap((state) => {
+    const rows = shown.filter((one) => one === state || (state === "stay" && one === "keep")).length;
+
+    return rows === 0 ? [] : [`, ${rows} ${STATES[state].apply}`];
+  });
   const unlooked = unlookedLines(removed, "apply", careful);
   const whole = unlooked.length === 0;
-  const done: Line = { tone: whole ? "done" : "warning", text: `The install is removed${whole ? "" : ", except what the account token could not check"}: ${kinds} removed${others.join("")}` };
-  const logout = plain(`Run ${LOGOUT} on each machine still logged in`);
+  const done: Line = { tone: whole ? "done" : "warning", text: `The install is removed: ${kinds} removed${others.join("")}` };
+  const logout = plain(`Next: ${LOGOUT} on each machine still logged in`);
 
   return [done, ...unlooked, logout];
 }

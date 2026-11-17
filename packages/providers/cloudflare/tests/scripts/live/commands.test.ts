@@ -75,7 +75,7 @@ describe.each(["domain", "account address"] as const)("the commands of an instal
     const gone = await command(run, "uninstall", ["cloudflare", ...place, "--json", "--dry-run"], world.ends);
 
     expect({ made: statesOf(made).filter((state) => state !== "leave"), there, mended: statesOf(mended) }).toEqual({
-      made: kind === "domain" ? ["make", "change"] : ["make"],
+      made: ["make", "change"],
       there: { kind: "stopped", problem: "already_installed", version: COMMIT },
       mended: ["leave"],
     });
@@ -103,7 +103,7 @@ describe.each(["domain", "account address"] as const)("the commands of an instal
     const next = `npx poplin install cloudflare ${kind === "domain" ? "--domain [hidden]" : "--no-domain"}`;
 
     expect({ told: printed.filter((line) => line.includes("npx poplin")), named: names.filter((name) => printed.join("\n").includes(name)), value: printed.some((line) => line.includes('"next"')) }).toEqual({
-      told: [`This account has no install. Fix: ${next}`, `This account has no install. Fix: ${next}`, `::error::The repair stopped: ${next}, at https://poplin.[hidden]`],
+      told: [`Fix: ${next}`, `Fix: ${next}`, `::error::The repair stopped: ${next}, at https://poplin.[hidden]`],
       named: [],
       value: false,
     });

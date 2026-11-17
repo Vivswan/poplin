@@ -193,7 +193,7 @@ describe("publish", () => {
     const said = failed.err.slice(failed.waits.length);
 
     expect(said[0]).toBe(sentence);
-    expect(said[1]).toStartWith("Upload aborted, no site changed");
+    expect(said[1]).toStartWith("Nothing changed. Fix: ");
     expect(jsonOf(failed)).toMatchObject({ error: { message: sentence.split(":")[0] } });
     expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
     expect(await stateOf(bench)).toEqual(before);
@@ -457,7 +457,7 @@ describe("publish", () => {
   // Drift: a zone that never lets up, or a person who stops the command, must end the upload; a rest with no bound would hang a script for good.
   test.each<[string, "over" | "interrupted", number[], number, number, string]>([
     ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7, 5, `The response is not from a poplin install: status 429 from ${ORIGIN}`],
-    ["is stopped by the person during the first rest", "interrupted", [2000], 1, 1, "Cancelled: upload aborted, no site changed"],
+    ["is stopped by the person during the first rest", "interrupted", [2000], 1, 1, "Cancelled. Nothing changed."],
   ])("an upload whose zone %s is given up after its rests and says why", async (_name, paused, waits, puts, code, line) => {
     const bench = await openBench();
     const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });

@@ -181,7 +181,7 @@ describe("upload", () => {
         command: "publish",
         moment: { matches: isPut, held: 1, stops: "at once" },
         sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(1), "DELETE /api/uploads/:upload"],
-        err: ["Cancelled: upload aborted, no site changed"],
+        err: ["Cancelled. Nothing changed."],
         left: ["create abandoned"],
       },
     ],
@@ -191,7 +191,7 @@ describe("upload", () => {
         command: "publish",
         moment: { matches: isPut, held: 4, stops: "a moment later" },
         sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(4), "DELETE /api/uploads/:upload"],
-        err: ["Cancelled: upload aborted, no site changed"],
+        err: ["Cancelled. Nothing changed."],
         left: ["create abandoned"],
       },
     ],
@@ -201,7 +201,7 @@ describe("upload", () => {
         command: "publish",
         moment: { matches: pathEnds("/finish"), held: 1, stops: "a moment later" },
         sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(6), "POST /api/uploads/:upload/finish", "DELETE /api/uploads/:upload"],
-        err: ["Cancelled: upload aborted, no site changed"],
+        err: ["Cancelled. Nothing changed."],
         left: ["create abandoned"],
       },
     ],
@@ -211,7 +211,7 @@ describe("upload", () => {
         command: "duplicate",
         moment: { matches: pathEnds("/duplicate"), held: 1, stops: "a moment later" },
         sent: (label) => [`POST /api/sites/${label}/duplicate`],
-        err: ["Cancelled", "The request may have arrived, so the change may have applied. See: poplin list"],
+        err: ["Cancelled", "See: poplin list (the request may have been applied)"],
         left: [],
       },
     ],
@@ -221,7 +221,7 @@ describe("upload", () => {
         command: "duplicate",
         moment: { matches: pathEnds("/duplicate"), answered: 1, held: 1, stops: "a moment later" },
         sent: (label) => [`POST /api/sites/${label}/duplicate`, `POST /api/sites/${label}/duplicate`, "DELETE /api/uploads/:upload"],
-        err: ["Cancelled: copy aborted, no site created"],
+        err: ["Cancelled. Nothing changed."],
         left: ["duplicate abandoned"],
       },
     ],
@@ -265,7 +265,7 @@ describe("upload", () => {
 
     const stopped = await bench.run(folderOf("notes", SIX));
 
-    expect([stopped.code, stopped.err]).toEqual([1, ["A file changed during the upload", "Upload aborted, no site changed. Fix: publish again once the files stop changing"]]);
+    expect([stopped.code, stopped.err]).toEqual([1, ["A file changed during the upload", "Nothing changed. Fix: publish again once the files stop changing"]]);
     expect([(await unfinished(bench)).said, bench.sent.filter((line) => line.startsWith("DELETE")).length]).toEqual([["create abandoned"], 2]);
     expect(await stateOf(bench)).toEqual(before);
   });
@@ -350,7 +350,7 @@ describe("upload", () => {
         code: 5,
         waits: [1500, 3000, 6000],
         status: ["Publishing notes", again(2, 2), again(3, 3), again(6, 4), ""],
-        err: [`The response is not from a poplin install: status 502 from ${ORIGIN}`, "Upload aborted, no site changed. Fix: check that the URL is the install's"],
+        err: [`The response is not from a poplin install: status 502 from ${ORIGIN}`, "Nothing changed. Fix: check that the URL is the install's"],
         out: 0,
       },
     ],
@@ -385,7 +385,7 @@ describe("upload", () => {
 
     const stopped = await bench.run(folderOf("notes", pages));
 
-    expect([stopped.code, stopped.err, sent, stopped.waits]).toEqual([1, [againPiped(2, 2), "Cancelled: upload aborted, no site changed"], puts, [1500]]);
+    expect([stopped.code, stopped.err, sent, stopped.waits]).toEqual([1, [againPiped(2, 2), "Cancelled. Nothing changed."], puts, [1500]]);
     expect((await unfinished(bench)).said).toEqual(["create abandoned"]);
   });
 
@@ -644,7 +644,7 @@ describe("upload", () => {
     expect([made.code, made.out, made.err]).toEqual([
       1,
       [],
-      ["A file changed after it was read, or was corrupted in transit: index.html", "Upload aborted, no site changed. Fix: publish again once the files stop changing"],
+      ["A file changed after it was read, or was corrupted in transit: index.html", "Nothing changed. Fix: publish again once the files stop changing"],
     ]);
     expect([bench.sent.filter((line) => line.startsWith("PUT")).length, await stateOf(bench)]).toEqual([1, before]);
   });

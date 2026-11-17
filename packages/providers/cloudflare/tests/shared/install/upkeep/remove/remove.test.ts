@@ -30,8 +30,8 @@ const SHARED = [
   "Upload key | remove | poplin upload key",
   "Workflow | remove | poplin-jobs",
   "Worker | remove | poplin",
-  "Sites' files | remove | poplin-sites (files: 2, 15 B) | 2 | 15",
-  "Database | remove | poplin (sites: 3) | 3",
+  "R2 bucket | remove | poplin-sites (files: 2, 15 B) | 2 | 15",
+  "D1 database | remove | poplin (sites: 3) | 3",
   "Account token | stay | delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens",
 ];
 
@@ -187,16 +187,16 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     const account = await installedAccount(kind);
     const kept = await removed(account, kind, applyOf(KINDS[kind].confirm, "keep"));
 
-    expect([shown(kept.done).filter((row) => row.includes(" | keep | ")), kept.done.ok && kept.done.ready]).toEqual([["Sites' files | keep | poplin-sites", "Database | keep | poplin"], true]);
+    expect([shown(kept.done).filter((row) => row.includes(" | keep | ")), kept.done.ok && kept.done.ready]).toEqual([["R2 bucket | keep | poplin-sites", "D1 database | keep | poplin"], true]);
     expect(left(account)).toEqual({ ...NOTHING, buckets: 1, objects: 2, databases: 1 });
 
     const still = await removed(account, kind, applyOf("poplin-sites", "keep"));
-    const byName = ["Sites' files | keep | poplin-sites (matched by its name alone)", "Database | keep | poplin (matched by its name alone)"];
+    const byName = ["R2 bucket | keep | poplin-sites (matched by its name alone)", "D1 database | keep | poplin (matched by its name alone)"];
 
     expect([shown(still.done).slice(0, 2), left(account)]).toEqual([byName, { ...NOTHING, buckets: 1, objects: 2, databases: 1 }]);
 
     const again = await removed(account, kind, applyOf("poplin-sites"));
-    const data = ["Sites' files | remove | poplin-sites (files: 2, 15 B; matched by its name alone) | 2 | 15", "Database | remove | poplin (sites: 3; matched by its name alone; poplin's by its schema steps) | 3"];
+    const data = ["R2 bucket | remove | poplin-sites (files: 2, 15 B; matched by its name alone) | 2 | 15", "D1 database | remove | poplin (sites: 3; matched by its name alone; poplin's by its schema steps) | 3"];
 
     expect([again.found, shown(again.done).slice(0, 2), again.done.ok && again.done.confirm, left(account)]).toEqual(["leftover", data, "poplin-sites", NOTHING]);
     expect((await removed(account, kind, DRY)).found).toBe("none");
@@ -206,7 +206,7 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
   test("a dry run told to keep the data lists the bucket and the database as kept, with what they hold, sends no change, and every other row is the row of a dry run that keeps nothing", async () => {
     const account = await installedAccount(kind);
     const dry = await removed(account, kind, { run: "dry-run", data: "keep" });
-    const kept = ["Sites' files | keep | poplin-sites (files: 2, 15 B) | 2 | 15", "Database | keep | poplin (sites: 3) | 3"];
+    const kept = ["R2 bucket | keep | poplin-sites (files: 2, 15 B) | 2 | 15", "D1 database | keep | poplin (sites: 3) | 3"];
 
     expect([shown(dry.done), dry.writes]).toEqual([ROWS[kind].map((row) => kept.find((one) => one.split(" | ")[0] === row.split(" | ")[0]) ?? row), []]);
     expect(dry.done).toMatchObject({ ok: true, ready: true });
@@ -217,17 +217,17 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     const account = await installedAccount(kind, { refuse: `GET /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects`, refuseAs: { status: 500, code: 10001 } });
     const dry = await removed(account, kind, { run: "dry-run", data: "keep" });
     const run = await removed(account, kind, applyOf(KINDS[kind].confirm, "keep"));
-    const files = (done: Removed): string[] => shown(done).filter((row) => row.startsWith("Sites' files"));
+    const files = (done: Removed): string[] => shown(done).filter((row) => row.startsWith("R2 bucket"));
 
-    expect([files(dry.done), dry.done.ok && dry.done.ready, files(run.done), run.done.ok && run.done.ready]).toEqual([["Sites' files | keep | poplin-sites"], true, ["Sites' files | keep | poplin-sites"], true]);
+    expect([files(dry.done), dry.done.ok && dry.done.ready, files(run.done), run.done.ok && run.done.ready]).toEqual([["R2 bucket | keep | poplin-sites"], true, ["R2 bucket | keep | poplin-sites"], true]);
   });
 
   // Drift: with no Worker, a database is poplin's by its name alone, and the name is a common one. One that holds tables and none of poplin's schema steps is somebody else's records, which no run may delete.
   test.each([
-    ["tables that are not poplin's", { tables: ["invoices"] }, "Database | skip | poplin: matched by its name alone, and it holds tables that are not poplin's: left in place", { databases: 1, counted: 0, ready: true }],
-    ["no table", { tables: [] }, "Database | remove | poplin (empty; matched by its name alone)", { databases: 0, counted: 0, ready: true }],
-    ["poplin's schema steps", {}, "Database | remove | poplin (sites: 3; matched by its name alone; poplin's by its schema steps) | 3", { databases: 0, counted: 1, ready: true }],
-    ["an answer that is no list of tables", { tables: "failed" }, "Database | fail | no answer from Cloudflare", { databases: 1, counted: 0, ready: false }],
+    ["tables that are not poplin's", { tables: ["invoices"] }, "D1 database | skip | poplin: matched by its name alone, and it holds tables that are not poplin's: left in place", { databases: 1, counted: 0, ready: true }],
+    ["no table", { tables: [] }, "D1 database | remove | poplin (empty; matched by its name alone)", { databases: 0, counted: 0, ready: true }],
+    ["poplin's schema steps", {}, "D1 database | remove | poplin (sites: 3; matched by its name alone; poplin's by its schema steps) | 3", { databases: 0, counted: 1, ready: true }],
+    ["an answer that is no list of tables", { tables: "failed" }, "D1 database | fail | no answer from Cloudflare", { databases: 1, counted: 0, ready: false }],
   ] as const)("a database of poplin's name with no Worker, holding %s: the dry run and the run say which, and only poplin's or an empty one goes", async (_holds, holds, row, { databases, counted, ready }) => {
     const account = await installedAccount(kind);
     await removed(account, kind, applyOf(KINDS[kind].confirm, "keep"));
@@ -235,7 +235,7 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
 
     const dry = await removed(account, kind, DRY);
     const run = await removed(account, kind, applyOf("poplin-sites"));
-    const files = "Sites' files | remove | poplin-sites (files: 2, 15 B; matched by its name alone) | 2 | 15";
+    const files = "R2 bucket | remove | poplin-sites (files: 2, 15 B; matched by its name alone) | 2 | 15";
 
     expect([dry.found, shown(dry.done).slice(0, 2), dry.writes, dry.calls]).toEqual(["leftover", [files, row], [], LEFT_CALLS[kind] + counted]);
     expect([shown(run.done).slice(0, 2), run.done.ok && run.done.ready, left(account)]).toEqual([[files, row], ready, { ...NOTHING, databases }]);
@@ -309,8 +309,8 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
   // Drift: a token that may not touch one kind must not stop the rest, the row must name the permission to add, and nothing Cloudflare said, which may repeat the token, may reach a row.
   test.each([
     ["the account's tokens", `GET /accounts/${ACCOUNT}/tokens`, ["Key | block", "Upload key | block"], ["Account API Tokens: Edit"], { tokens: 2 }],
-    ["the Worker", `DELETE /accounts/${ACCOUNT}/workers/scripts/poplin`, ["Worker | block", "Sites' files | not-run", "Database | not-run"], ["Workers Scripts: Edit"], { worker: true, buckets: 1, objects: 2, databases: 1 }],
-    ["the bucket's objects", `DELETE /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects/*`, ["Sites' files | block"], ["Workers R2 Storage: Edit"], { buckets: 1, objects: 2 }],
+    ["the Worker", `DELETE /accounts/${ACCOUNT}/workers/scripts/poplin`, ["Worker | block", "R2 bucket | not-run", "D1 database | not-run"], ["Workers Scripts: Edit"], { worker: true, buckets: 1, objects: 2, databases: 1 }],
+    ["the bucket's objects", `DELETE /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects/*`, ["R2 bucket | block"], ["Workers R2 Storage: Edit"], { buckets: 1, objects: 2 }],
     ["the Access applications", `DELETE /accounts/${ACCOUNT}/access/apps/*`, ["Access application | block", "Access policy | not-run"], ["Access: Apps and Policies: Edit"], { applications: 2, policies: 2 }],
   ])("a token that may not touch %s leaves that row blocked with the permission to add, removes the rest, and no row holds the token", async (_what, refuse, undone, rights, stays) => {
     const account = await installedAccount(kind, { refuse });
@@ -323,10 +323,10 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
 
   // Drift: a Worker bound to another bucket or database does not own the ones of poplin's names, and an object deleted by hand while a run goes on is no failure.
   test.each([
-    ["the Worker's bucket is another", (account: Account) => rebound(account, "SITES", { bucket_name: "photos" }), "Sites' files | skip | poplin-sites: not this install's: the Worker binds another", { buckets: 1, objects: 2 }],
-    ["the Worker's database is another", (account: Account) => rebound(account, "DB", { id: "database-x" }), "Database | skip | poplin: not this install's: the Worker binds another", { databases: 1 }],
+    ["the Worker's bucket is another", (account: Account) => rebound(account, "SITES", { bucket_name: "photos" }), "R2 bucket | skip | poplin-sites: not this install's: the Worker binds another", { buckets: 1, objects: 2 }],
+    ["the Worker's database is another", (account: Account) => rebound(account, "DB", { id: "database-x" }), "D1 database | skip | poplin: not this install's: the Worker binds another", { databases: 1 }],
     ["the Workflow of the name runs another Worker", (account: Account) => Object.assign(account.workflows[0] ?? {}, { script_name: "shop" }), "Workflow | skip | poplin-jobs: it runs the Worker shop, which is not poplin's", { workflows: 1 }],
-    ["the bucket is gone when the run reaches it", (account: Account) => gone(account, `GET /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects`), "Sites' files | gone | poplin-sites", { buckets: 1, objects: 2 }],
+    ["the bucket is gone when the run reaches it", (account: Account) => gone(account, `GET /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects`), "R2 bucket | gone | poplin-sites", { buckets: 1, objects: 2 }],
     ["the Workflow is gone when the run reaches it", (account: Account) => gone(account, `DELETE /accounts/${ACCOUNT}/workflows/poplin-jobs`), "Workflow | gone | poplin-jobs", { workflows: 1 }],
   ])("where %s, its row says so, it stays, and the run is done", async (_what, change, row, stays) => {
     const account = await installedAccount(kind);
@@ -414,7 +414,7 @@ describe("what one kind alone has", () => {
 
   // Drift: the ruleset goes by a call of its own after its rules, so that call can be refused or find nothing where the rules' calls did not: the row must say which, and name the permission.
   test.each([
-    ["a token that may not remove it", { status: 403, code: 10000 }, "Rate ruleset | block | the account token lacks this permission: Zone WAF: Edit", false],
+    ["a token that may not remove it", { status: 403, code: 10000 }, "Rate ruleset | block | the account token lacks Zone WAF: Edit", false],
     ["one that went before the run reached it", { status: 404, code: 10003 }, "Rate ruleset | gone | poplin rate rule", true],
   ])("with a domain, a ruleset's removal answered as for %s leaves its row saying so, and the rest is removed", async (_what, refuseAs, row, ready) => {
     const account = await installedAccount("domain", { refuse: "DELETE /zones/zone-1/rulesets/set-http_ratelimit", refuseAs });

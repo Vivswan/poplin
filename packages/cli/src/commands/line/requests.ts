@@ -233,7 +233,7 @@ function rollback(words: Words): TypedRequest | UsageError {
 
   const version = Number(to);
   if (!VERSION_PATTERN.test(to) || !Number.isSafeInteger(version))
-    return usageError(`--to expects a version number such as 4, got ${JSON.stringify(to)}`, "See: poplin show <site>");
+    return usageError(`--to requires a version number such as 4, got ${JSON.stringify(to)}`, "See: poplin show <site>");
 
   return withSite(words, (site, install) => ({ kind: "rollback", site, to: version, dryRun, ...install }));
 }
@@ -297,7 +297,7 @@ function config(words: Words): TypedRequest | UsageError {
 
 function update(words: Words): TypedRequest | UsageError {
   const to = flagValue(words.flags, "--to");
-  if (to !== undefined && !isPlainVersion(to)) return usageError("--to expects a version such as 0.2.0", "Usage: poplin update --to <version>");
+  if (to !== undefined && !isPlainVersion(to)) return usageError("--to requires a version such as 0.2.0", "Usage: poplin update --to <version>");
 
   if (words.flags.has(DRY_RUN)) {
     if (to !== undefined) return usageError("--dry-run and --to are mutually exclusive", "Usage: poplin update --dry-run");

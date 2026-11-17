@@ -2,7 +2,7 @@
 
 Open this when the user asks you to set poplin up, or when you have no poplin tools and no login. It is the whole script: a first install from nothing, or connecting yourself to an install that exists.
 
-**You act as the user, with their own login, and you ask before you change your own configuration.** The login is the one saved on this computer. You leave a stored login as it is.
+**You act as the user, with their own login, and you ask before you change your own configuration.** The login is the one stored on this machine. You leave a stored login as it is.
 
 Poplin publishes a static site (a folder, or one HTML file) to an install: the user's own copy of poplin, in their own Cloudflare account. Once you are set up, the user can ask you to put a page online and you hand back its address.
 
@@ -11,7 +11,7 @@ Poplin publishes a static site (a folder, or one HTML file) to an install: the u
 | 1    | Say what is about to happen, and ask                  | you                                                 |
 | 2    | Check what exists: Node.js, a stored login, an install | you                                                 |
 | 3    | Make the install, when there is none                  | the user: in a browser, then two lines of one command in a terminal of their own: the dry run, and the run. You run both in a script alone |
-| 4    | Log this computer in, when no login is saved          | you run it, or the user at the end of step 3; the user allows it in a browser |
+| 4    | Log this machine in, when no login is stored          | you run it, or the user at the end of step 3; the user allows it in a browser |
 | 5    | Add the MCP server to your own configuration          | you                                                 |
 | 6    | Confirm that it works, and tell the user              | you                                                 |
 
@@ -46,17 +46,17 @@ If the new Node.js is still not found, the terminal you run in is older than the
 
 | `npx poplin whoami` prints                      | Means                      | Next                                             |
 | ----------------------------------------------- | -------------------------- | ------------------------------------------------ |
-| lines for `install`, `role`, `token`, `expires` | this computer is logged in | tell the user which install; go to step 5        |
+| lines for `install`, `role`, `token`, `expires` | this machine is logged in | tell the user which install; go to step 5        |
 | `Not logged in`                                 | there is no login          | ask the question below                           |
 | `The token is missing or expired`                      | the stored login ran out    | tell the user, and ask whether to log in again   |
 | `Cannot reach the install`                      | the address or the network | tell the user and stop until it is sorted        |
 | any other sentence                              | a refusal                  | read its hint, then [`refusals.md`](refusals.md) |
 
-A last line names where the login comes from: saved on this machine, or `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment. Either is the user's own login, and you use it as it is.
+A last line names where the login comes from: stored on this machine, or `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment. Either is the user's own login, and you use it as it is.
 
 If it is logged in to an install the user did not expect, say so and ask before you go on. Do not log out: the stored login is the user's to change. A login that ran out is replaced only on the user's yes, in step 4.
 
-With no login, ask: "Do you already have a poplin install? If so, what is the address of its dashboard?" Do not guess an address, and do not search the computer for one.
+With no login, ask: "Do you already have a poplin install? If so, what is the address of its dashboard?" Do not guess an address, and do not search the machine for one.
 
 | The user answers                         | Next   |
 | ---------------------------------------- | ------ |
@@ -125,7 +125,7 @@ If the user pastes it to you all the same, do not repeat it. Ask them to open My
 
 | You run                                     | The token reaches the command                                  | Parts d and e are run by |
 | ------------------------------------------- | -------------------------------------------------------------- | ------------------------ |
-| on the user's computer, in a chat           | at its question `Account token (hidden):`, typed by the user | the user, in a terminal of their own |
+| on the user's machine, in a chat           | at its question `Account token (hidden):`, typed by the user | the user, in a terminal of their own |
 | in a script or a CI job, with nobody to ask | in `POPLIN_INSTALL_TOKEN`, which the job's secret store set    | you                      |
 
 Never ask the user to set that variable for you. A line that sets it, such as an export line, stays in their shell's history with the token in it. The first run of part d tells you which row you are in.
@@ -274,7 +274,7 @@ A run that stopped is looked up in the [install guide](https://github.com/Vivswa
 ```text
 poplin 0.1.0 is installed
 Dashboard: https://poplin.example.com
-The account token was not stored. You can delete it at Cloudflare.
+The account token was not stored. Delete it at Cloudflare.
 Log this machine in now?
 ```
 
@@ -293,7 +293,7 @@ The user first does what `blocked` and `steps` name, such as switching Zero Trus
 | `install`                                   | started, and not set yet                | the line of part e again                    |
 | `repair`                                    | set, with pieces missing: often the login, made with Zero Trust off | the repair below    |
 
-A run without `--json`, as the user's is, names the same in its last line: it ends `To resume, rerun this command.`, or names the repair.
+A run without `--json`, as the user's is, names the same in its last line: it ends `Next: rerun this command`, or names the repair.
 
 `poplin install` only makes a new install: a second run on one that is set answers `already_installed` and changes nothing. The repair mends it, with the same token and the option of the install's kind. `next.command` is that line, and `--yes` and `--json` are yours to add:
 
@@ -311,7 +311,7 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. When 
 
 With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits as the run after it would: with 0 where a run would go through, also while `changes` is above 0. `next.step` is `repair` then, with `--add-user` where your line had it, and `login` once nothing is left to mend.
 
-## 4. Log this computer in
+## 4. Log this machine in
 
 Do this when step 2 found no login. For a login that ran out, do it only on the user's yes. Never replace a login that works.
 
@@ -334,10 +334,10 @@ The page has one choice, Can change, and it starts at Own sites only. Tell the u
 
 | Can change     | The guide says it is for                  | You then reach                                                        | The login lasts        |
 | -------------- | ----------------------------------------- | --------------------------------------------------------------------- | ---------------------- |
-| Everything     | the user's own computer                   | every site of the install, and its settings                           | 30 days                |
-| Own sites only | a computer that should only publish       | the sites that one login published, and no other                      | until the user removes it |
+| Everything     | the user's own machine                   | every site of the install, and its settings                           | 30 days                |
+| Own sites only | a machine that should only publish       | the sites that one login published, and no other                      | until the user removes it |
 
-With Own sites only, a site another login published is refused, with `not_found` or `not_allowed`. After a new login, that holds for every site you published before it. That is why the guide says Everything on the user's own computer.
+With Own sites only, a site another login published is refused, with `not_found` or `not_allowed`. After a new login, that holds for every site you published before it. That is why the guide says Everything on the user's own machine.
 
 If you read output as JSON, add `--json`: the first line then carries the web address and the code.
 
@@ -346,7 +346,7 @@ If you read output as JSON, add `--json`: the first line then carries the web ad
 | `Logged in. The token is stored on this machine.` | the check below                                |
 | a sentence that it was denied, or ran out       | tell the user; run it again only on their word |
 
-The login saves a token on this computer, and the commands read it from there. You never need to see it, so do not ask the user to paste one into the chat, and do not print one.
+The login stores a token on this machine, and the commands read it from there. You never need to see it, so do not ask the user to paste one into the chat, and do not print one.
 
 Then check the install:
 
@@ -370,7 +370,7 @@ Before a restart, tell the user four things, since the chat may not come back:
 
 | Tell the user      | In words like                                           |
 | ------------------ | ------------------------------------------------------- |
-| what is done       | only what is done by then. From step 2: Node.js is installed. From step 5: this computer is logged in and the tools are added |
+| what is done       | only what is done by then. From step 2: Node.js is installed. From step 5: this machine is logged in and the tools are added |
 | what is left       | from step 2: every step after the check. From step 5: the last check                                                          |
 | how to restart you | close the agent, open a new terminal window, and start the agent again there, in the same folder                              |
 | what to say next   | `Go on with the poplin setup.`                                                                                                |
@@ -408,11 +408,11 @@ No command moves an install: not to a domain, not off one, and not to another ac
 | 1    | `npx poplin export --all-versions --out backup.zip` | you, on the user's yes, with a login of Everything      |
 | 2    | `npx poplin import backup.zip --dry-run`            | you: it checks the zip, and sends nothing               |
 | 3    | the new install. In one account, the removal of the old install comes first | the user: the install as [3. Make the install](#3-make-the-install) has it, the removal as the last row of the table before this one has it |
-| 4    | the login of this computer to the new install       | the user: yes at `Log this machine in now?`, the last question of their install, with Can change: Everything. It replaces the stored login of the old install |
+| 4    | the login of this machine to the new install       | the user: yes at `Log this machine in now?`, the last question of their install, with Can change: Everything. It replaces the stored login of the old install |
 | 5    | `npx poplin import backup.zip --settings`           | you, once `npx poplin whoami` names the new install     |
 | 6    | to another account: the removal of the old install  | the user, once step 5 put every site back               |
 
-You log this computer out of nothing and in to nothing for a move: step 4 is the user's own answer, in their own terminal.
+You log this machine out of nothing and in to nothing for a move: step 4 is the user's own answer, in their own terminal.
 
 Tell the user what changes before step 1, and wait for their yes. Under another domain, or of the other kind, every site gets a new address and each link they shared stops. In one account the old install goes before the new one is made, so the zip is then the only copy.
 
@@ -422,7 +422,7 @@ Tell the user what changes before step 1, and wait for their yes. Under another 
 | `--settings`, step 5       | every setting but the logins                                       | the new install keeps its own settings            |
 | `--settings --users`       | the list of users too                                              | the users are the new install's first login       |
 
-No line carries a token, a key of the install, or the activity log: each computer logs in again, and the log starts anew.
+No line carries a token, a key of the install, or the activity log: each machine logs in again, and the log starts anew.
 
 Off a domain, a site with a root link, or with a public name in the form of an id, is not put back. Mend those on the old install before step 1. [Move an install](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/back-up.md#move-an-install) has every row.
 

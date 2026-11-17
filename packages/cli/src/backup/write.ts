@@ -81,7 +81,7 @@ function givenOnce(bytes: Buffer): Readable {
  */
 export async function createBackup(target: string, overwrite: boolean): Promise<{ readonly ok: true; readonly writer: BackupWriter } | NotWritable> {
   const there = await standsAt(target);
-  if (there === "folder") return { ok: false, reason: "unwritable", why: `"${target}" is a folder, and --out expects a file` };
+  if (there === "folder") return { ok: false, reason: "unwritable", why: `"${target}" is a folder, and --out requires a file` };
 
   if (!overwrite && there === "file") return { ok: false, reason: "exists" };
 

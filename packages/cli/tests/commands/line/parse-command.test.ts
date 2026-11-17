@@ -16,7 +16,7 @@ const SITE_FORMS = "A site is a label (report--k3f9x2ab71qz), an id (k3f9x2ab71q
 const SWAPPED = misspelled("list");
 const CREATE = { kind: "publish", target: { kind: "create" }, settings: {}, dryRun: false, ...PLAIN };
 const SEVEN_DAYS = { kind: "span", span: { count: 7, unit: "d" } };
-const EXPIRY_FORMS = "A duration is a count of s, m, h, or d, such as 7d. A date is written 2026-12-01.";
+const EXPIRY_FORMS = "Usage: --expires 7d (s, m, h, or d), 2026-12-01, or never";
 const NOW = Date.UTC(2026, 10, 1);
 const KINDS = new Set<string>([...COMMANDS.map((spec) => spec.name), "version", "usage-error"]);
 
@@ -173,8 +173,8 @@ describe("parseCommand", () => {
     ["poplin --json", refusal("--json requires a command or a path", "See: poplin --help")],
     ["poplin --title list", refusal("--title requires a command or a path", "See: poplin --help")],
     ["poplin migrate", refusal('Unknown command "migrate"', "To publish a folder of that name: poplin ./migrate")],
-    ["poplin list --trash --trash", refusal("--trash specified more than once")],
-    [`poplin set ${LABEL} --title a --title b`, refusal("--title specified more than once")],
+    ["poplin list --trash --trash", refusal("--trash was passed more than once")],
+    [`poplin set ${LABEL} --title a --title b`, refusal("--title was passed more than once")],
     [`poplin set ${LABEL} --title`, refusal("--title requires a value: --title <title>")],
     [
       `poplin set ${LABEL} --title --public`,
@@ -188,11 +188,11 @@ describe("parseCommand", () => {
       `poplin set ${LABEL} --public-name docs`,
       refusal("--public-name requires --public", "Usage: poplin set <site> --public --public-name <public name>"),
     ],
-    [`poplin set ${LABEL} --search-engines yes`, refusal('--search-engines expects on or off, got "yes"')],
-    [`poplin set ${LABEL} --embeddable ON`, refusal('--embeddable expects on or off, got "ON"')],
-    [`poplin set ${LABEL} --expires 2026-02-30`, refusal('--expires expects a duration, a date, or never, got "2026-02-30"', EXPIRY_FORMS)],
-    [`poplin set ${LABEL} --expires 0d`, refusal('--expires expects a duration, a date, or never, got "0d"', EXPIRY_FORMS)],
-    [`poplin set ${LABEL} --expires 7w`, refusal('--expires expects a duration, a date, or never, got "7w"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --search-engines yes`, refusal('--search-engines requires on or off, got "yes"')],
+    [`poplin set ${LABEL} --embeddable ON`, refusal('--embeddable requires on or off, got "ON"')],
+    [`poplin set ${LABEL} --expires 2026-02-30`, refusal('--expires requires a duration, a date, or never, got "2026-02-30"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 0d`, refusal('--expires requires a duration, a date, or never, got "0d"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 7w`, refusal('--expires requires a duration, a date, or never, got "7w"', EXPIRY_FORMS)],
     [`poplin set ${LABEL} --expires 2020-01-01`, refusal("--expires 2020-01-01 is not a future date", EXPIRY_FORMS)],
     [`poplin set ${LABEL} --expires 2026-11-01`, refusal("--expires 2026-11-01 is not a future date", EXPIRY_FORMS)],
     ["poplin ./demo --expires 100000000000d", refusal("--expires 100000000000d is too long a duration", EXPIRY_FORMS)],
@@ -235,10 +235,10 @@ describe("parseCommand", () => {
     [`poplin set ${LABEL} --public --public-name Q3`, refusal('Invalid --public-name "Q3": the minimum is 3 characters')],
     [`poplin set ${LABEL} --name Q3`, refusal('Invalid --name "Q3": the minimum is 3 characters')],
     ["poplin ./report --name Q3", refusal('Invalid --name "Q3": the minimum is 3 characters')],
-    [`poplin rollback ${LABEL} --to 0`, refusal('--to expects a version number such as 4, got "0"', "See: poplin show <site>")],
-    [`poplin rollback ${LABEL} --to=-1`, refusal('--to expects a version number such as 4, got "-1"', "See: poplin show <site>")],
-    ["poplin update --to latest", refusal("--to expects a version such as 0.2.0", "Usage: poplin update --to <version>")],
-    ["poplin update --to v0.2.0", refusal("--to expects a version such as 0.2.0", "Usage: poplin update --to <version>")],
+    [`poplin rollback ${LABEL} --to 0`, refusal('--to requires a version number such as 4, got "0"', "See: poplin show <site>")],
+    [`poplin rollback ${LABEL} --to=-1`, refusal('--to requires a version number such as 4, got "-1"', "See: poplin show <site>")],
+    ["poplin update --to latest", refusal("--to requires a version such as 0.2.0", "Usage: poplin update --to <version>")],
+    ["poplin update --to v0.2.0", refusal("--to requires a version such as 0.2.0", "Usage: poplin update --to <version>")],
     ["poplin config --dry-run", refusal("--dry-run requires a <value>", "Usage: poplin config <key> <value> --dry-run")],
     ["poplin config trash_days --dry-run", refusal("--dry-run requires a <value>", "Usage: poplin config <key> <value> --dry-run")],
     ["poplin update --dry-run --to 0.2.0", refusal("--dry-run and --to are mutually exclusive", "Usage: poplin update --dry-run")],

@@ -22,13 +22,13 @@ import { columns, countText, dayText, GAP, REHEARSED } from "../text";
 const STILL_LIVE = "The token may still be valid. Fix: revoke it on the dashboard";
 
 /** What a change of the logins still needs on an install that did not carry it to the login page by itself: that page keeps a list of its own. */
-const LOGINS_STEP = "New users cannot log in yet. Fix: on the dashboard's Domain screen, paste an account token and press Repair";
+const LOGINS_STEP = ["New users cannot log in yet", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"] as const;
 
 /** What a dry run of a change of the logins says of that step: whether it is needed shows only once the change is stored. */
 const LOGINS_MAY_STEP = "Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair";
 
-/** What follows the two versions of an install and a command that differ, in the words the list of problems has for them. */
-const TWO_VERSIONS = "versions differ, update the older one";
+/** What follows the two versions of an install and a command that differ. */
+const TWO_VERSIONS = "versions differ";
 
 /** What a sentence calls the install's side at its provider, by how the install lays out its addresses: one under a domain of its own, or one on paths with none. */
 const THINGS = { hostname: "the domain", path: "the install" } as const satisfies Record<AddressLayout["kind"], string>;
@@ -145,7 +145,7 @@ async function changeSetting(action: Extract<ConfigAction, { readonly kind: "cha
   const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
   const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
 
-  return { ok: true, value: answer, lines, notes: settled ? [] : [LOGINS_STEP] };
+  return { ok: true, value: answer, lines, notes: settled ? [] : [...LOGINS_STEP] };
 }
 
 async function config(action: ConfigAction, session: Session): Promise<Outcome> {
@@ -251,7 +251,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const hang = Math.max(...marks.map((mark) => mark.length)) + Math.max(...checks.map((check) => check.check.length)) + 2 * GAP.length;
   const lines = columns(checks.map((check, at) => [marks[at] ?? "", check.check, check.detail])).map((text, at): Line => ({ tone: checks[at]?.ok === true ? "done" : "error", text, hang }));
 
-  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, problems: noted.problems, token, checks }, lines: [...lines, "Nothing changed"] };
+  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, problems: noted.problems, token, checks }, lines };
 
   return checks.every((check) => check.ok) ? outcome : { ...outcome, found: "failed" };
 }

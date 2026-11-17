@@ -44,7 +44,7 @@ The five steps of [Install](install.md), each with what differs here:
 | 2. Run the command               | press Enter at the first question, or add `--no-domain`              |
 | 3. Make the account token        | [the other link, and six permissions](#the-account-token)            |
 | 4. Read what it made             | [forwarders in place of records and routes](#what-it-prints)         |
-| 5. Log this computer in          | the same question and the same page, at [your own address](#log-in)  |
+| 5. Log this machine in          | the same question and the same page, at [your own address](#log-in)  |
 
 ## What you need
 
@@ -78,7 +78,7 @@ See: npx poplin install cloudflare --help for 1 optional permission
 Create the account token here:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
 On the form, limit it to this account
-Tick by hand: Workers R2 Storage: Edit
+Select manually: Workers R2 Storage: Edit
 Account token (hidden):
 ```
 
@@ -116,7 +116,7 @@ This account has no install
 created    R2 bucket             poplin-sites
 created    D1 database           poplin
 created    Worker                poplin, runs 0.1.0
-created    Worker address        on: poplin.your-name.workers.dev
+updated    workers.dev route     enabled: poplin.your-name.workers.dev
 created    Forwarder             poplin-private: https://poplin-private.your-name.workers.dev (private sites)
 created    Forwarder             poplin-sites: https://poplin-sites.your-name.workers.dev (unlisted and public sites)
 created    Access application    poplin: poplin.your-name.workers.dev, poplin-private.your-name.workers.dev
@@ -124,7 +124,7 @@ created    Key                   poplin kept key
 Waiting for https://poplin.your-name.workers.dev to respond
 poplin 0.1.0 is installed
 Dashboard: https://poplin.your-name.workers.dev
-The account token was not stored. You can delete it at Cloudflare.
+The account token was not stored. Delete it at Cloudflare.
 Log this machine in now?
 ```
 
@@ -132,14 +132,14 @@ The sample shows a few of the rows. Two pieces are of this kind alone:
 
 | Piece          | It is                                                                                   |
 | -------------- | --------------------------------------------------------------------------------------- |
-| Worker address | the address Cloudflare gives the Worker, switched on: your dashboard answers there      |
+| workers.dev route | the address Cloudflare gives the Worker, enabled: your dashboard answers there       |
 | Forwarder      | a small Worker that gives the sites of one kind their hostname and hands every request on |
 
 The Access application is Cloudflare's login in front of the dashboard and of every private site.
 
 ## Log in
 
-The command's last question logs this computer in, as [step 5 of Install](install.md#5-log-this-computer-in-and-check) shows: the pages in your browser are the same. After a no, or on another computer, the address after `--server` is the dashboard's, as the command printed it:
+The command's last question logs this machine in, as [step 5 of Install](install.md#5-log-this-machine-in-and-check) shows: the pages in your browser are the same. After a no, or on another machine, the address after `--server` is the dashboard's, as the command printed it:
 
 ```sh
 npx poplin login --server https://poplin.your-name.workers.dev
@@ -159,7 +159,7 @@ No command puts this install under a domain. The way is to [move it](../upkeep/b
 | --------------------- | ------------------------------------------------------------------ |
 | a site's address      | new: a hostname of its own under your domain                       |
 | a link you shared     | stops with this install. Send the new one                          |
-| each computer's login | made anew, with `npx poplin login`: the zip holds no token         |
+| each machine's login | made anew, with `npx poplin login`: the zip holds no token         |
 | the users             | the first login of the new install. `--settings --users` brings the old list |
 | the activity log      | starts anew: the zip does not hold it                              |
 

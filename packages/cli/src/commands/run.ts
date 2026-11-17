@@ -147,7 +147,7 @@ async function online(request: OnlineRequest, io: Io, run: (session: Session) =>
   const session = await connect(request, io);
 
   if (session === "logged-out" && request.kind === "logout") {
-    const none = "No stored login on this machine";
+    const none = "Not logged in";
 
     return request.dryRun ? { ok: true, value: { dry_run: true, revoked: false }, lines: [none, "Dry run: no request was sent"] } : { ok: true, value: { revoked: false }, lines: [none] };
   }

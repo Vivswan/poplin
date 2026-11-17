@@ -118,7 +118,7 @@ describe("export", () => {
     const onto = [await bench.run(`export --out ${folder}`), await bench.run(`export --out ${folder} --overwrite`)];
     const nowhere = await bench.run(`export --out ${join(folder, "none", "backup.zip")}`);
 
-    expect(onto.map((ran) => [ran.code, ran.err])).toEqual(Array(2).fill([1, [`Cannot write the backup: "${folder}" is a folder, and --out expects a file`]]));
+    expect(onto.map((ran) => [ran.code, ran.err])).toEqual(Array(2).fill([1, [`Cannot write the backup: "${folder}" is a folder, and --out requires a file`]]));
     expect([nowhere.code, nowhere.err]).toEqual([1, [`Cannot write the backup: folder "${join(folder, "none")}" does not exist`]]);
     expect([bench.sent, readdirSync(folder)]).toEqual([[], []]);
   });

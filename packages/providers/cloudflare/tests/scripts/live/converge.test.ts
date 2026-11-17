@@ -95,8 +95,8 @@ const ALREADY = [
 const SHARED_MADE = [
   "Access application: made",
   "Access policy: made",
-  "Access open paths: made",
-  "Access open paths: made",
+  "Access application: made",
+  "Access policy: made",
   "Worker variable: made",
   "Worker variable: made",
   "Worker variable: made",
@@ -107,13 +107,13 @@ const SHARED_MADE = [
 ];
 
 /** The same pieces as a repair that changes nothing tells them. */
-const SHARED_LEFT = ["Access application: left", "Access policy: left", "Access open paths: left", "Access open paths: left", "Worker variable: left", "Key: left", "Upload key: left", "Worker logs: left"];
+const SHARED_LEFT = ["Access application: left", "Access policy: left", "Access application: left", "Access policy: left", "Worker variable: left", "Key: left", "Upload key: left", "Worker logs: left"];
 
 /** What a run tells of an account it made the install on from nothing. */
 const FROM_NONE = "Install: none found, so poplin install ran";
 
 /** The Worker's own pieces of a new install. */
-const OWN_MADE = [FROM_NONE, "R2 bucket: made", "D1 database: made", "Worker: made", "Sweep trigger: made", "Worker address: made"];
+const OWN_MADE = [FROM_NONE, "R2 bucket: made", "D1 database: made", "Worker: made", "Cron trigger: made", "workers.dev route: changed"];
 
 /** What each kind tells of its account, of an install it made, of one it mended, and of one it removed. `bots` is what a new install does to the zone's bot switches, the one thing a removal leaves as it is set. */
 const TOLD = {
@@ -505,7 +505,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     const standing = await standingOn(freshAccount(), kind);
     await standing.again();
     const over = await standing.again(true);
-    const removal = [...told.removed, "Sites' files: removed (0 in it)", "Database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + 2} kinds in 0 seconds`];
+    const removal = [...told.removed, "R2 bucket: removed (0 in it)", "D1 database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + 2} kinds in 0 seconds`];
 
     expect(over.lines).toEqual([told.found, PLANS, "Start over: asked for", ...removal, ...told.made("left"), READ_MADE, TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS]);
     expect({ code: over.code, uploads: over.uploads, buckets: standing.account.buckets.map((bucket) => bucket.name) }).toEqual({ code: 0, uploads: [FIRST_UPLOAD], buckets: ["poplin-live-sites", "poplin-sites"] });
@@ -521,20 +521,20 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
       },
       [] as readonly string[],
     ],
-    ["a database that held schema step 1 as another build applied it", async (account: Account) => void (await account.store?.call("UPDATE schema_steps SET fingerprint = 'of another build'", [])), ["Sites' files: removed (0 in it)"]],
+    ["a database that held schema step 1 as another build applied it", async (account: Account) => void (await account.store?.call("UPDATE schema_steps SET fingerprint = 'of another build'", [])), ["R2 bucket: removed (0 in it)"]],
     [
       "a Worker of an install that was never finished",
       async (account: Account) => {
         account.bindings = account.bindings.filter((binding) => binding.name !== "ZONE");
       },
-      ["Sites' files: removed (0 in it)"],
+      ["R2 bucket: removed (0 in it)"],
     ],
   ])("an install another build made, with %s, is started over by the run itself, with nobody asking", async (what, drift, files) => {
     const standing = await standingOn(freshAccount(), kind);
     await standing.again();
     await drift(standing.account);
     const over = await standing.again();
-    const removal = [...told.removed, ...files, "Database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + files.length + 1} kinds in 0 seconds`];
+    const removal = [...told.removed, ...files, "D1 database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + files.length + 1} kinds in 0 seconds`];
 
     expect(over).toEqual({
       code: 0,
@@ -630,7 +630,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
   test("on an account whose Access is off, the login's rows are a lack the suite skips for, on the run that makes the install and on the one that mends it", async () => {
     const standing = await standingOn(freshAccount({ accessOff: true }), kind);
     const [first, second] = [await standing.again(), await standing.again()];
-    const lacking = ["Access application", "Access policy", "Access open paths", "Worker variable"].map((object) => `${object}: stopped: needs Access switched on for the account`);
+    const lacking = ["Access application", "Access policy", "Access application", "Worker variable"].map((object) => `${object}: stopped: needs Access switched on for the account`);
 
     expect([first.code, second.code, first.missing.access, second.missing]).toEqual([0, 0, "Access switched on for the account", { access: "Access switched on for the account" }]);
     expect([first.lines.filter((line) => line.includes("stopped")), second.lines.filter((line) => line.includes("stopped"))]).toEqual([lacking, lacking]);
@@ -665,7 +665,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     const standing = await standingOn(freshAccount({ refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workers/scripts/poplin/schedules`, refuseAs: { status: 403, code: 7003 } }), kind);
     const ran = await standing.again();
 
-    expect([ran.code, ran.lines.filter((line) => line.startsWith("Sweep trigger"))]).toEqual([1, ["Sweep trigger: failed (refused with status 403 and codes 7003): needs the token permission for the Sweep trigger"]]);
+    expect([ran.code, ran.lines.filter((line) => line.startsWith("Cron trigger"))]).toEqual([1, ["Cron trigger: failed (refused with status 403 and codes 7003): needs the token permission for the Cron trigger"]]);
   });
 
   // Drift: every line of a run is public. The commands word their rows with the install's addresses, and one of them printed whole would name the test account.
@@ -689,7 +689,7 @@ describe("the rows of an install with a domain, made by a token with none of the
     expect({ code: ran.code, out: ran.lines.filter((line) => line.includes(": left out: ")), made: ran.lines.filter((line) => line.endsWith(": made")).length }).toEqual({
       code: 0,
       out: out.map((object) => `${object}: left out: needs ${leftOut(object)}`),
-      made: 21,
+      made: 20,
     });
     expect(ran.missing).toEqual({
       "settled-upload-key": expect.any(String),

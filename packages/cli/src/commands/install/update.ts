@@ -7,8 +7,8 @@ import type { Outcome, RequestOf, Session } from "../records";
 
 /** What the check says of an install by whether it holds its key. */
 const KEY_LINES = {
-  held: "The install has its provider key",
-  none: "The install has no provider key, so it cannot update itself. Fix: open Domain on the dashboard and press Repair",
+  held: "The install holds a key to update itself with",
+  none: "The install has no key, so it cannot update itself. Fix: open Domain on the dashboard and press Repair",
 } as const;
 
 async function start({ client }: Session, asked: string | undefined): Promise<Outcome> {

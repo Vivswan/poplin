@@ -351,7 +351,7 @@ describe("import", () => {
     const byId = jsonOf(await into.run(`import ${zip} --site ${notes.split("--")[1]} --json`));
     const absent = await into.run(`import ${zip} --site zzzzzzzzzzzz`);
 
-    expect([dry.code, dry.out.length, dry.out[0], dry.out.at(-1)]).toEqual([0, 8, "Would restore the settings except the users", "The zip passed every check. Dry run: no request was sent"]);
+    expect([dry.code, dry.out.length, dry.out[0], dry.out.slice(-2)]).toEqual([0, 9, "Would restore the settings except the users", ["The backup passed every check", "Dry run: no request was sent"]]);
     // Drift: a dry run that "passed every check" was read as a promise that the import would go through, and a public name the install held then failed it.
     expect(dry.err).toEqual(["A dry run does not check ids and public names the install already has"]);
     expect([one, byWideName].map((ran) => (ran.sites as Line[]).map((site) => site.label))).toEqual([[docs], [wide]]);

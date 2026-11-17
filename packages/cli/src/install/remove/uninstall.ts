@@ -124,8 +124,8 @@ async function removal(ground: Ground, request: UninstallRequest, how: Removal, 
   // A kind the token could not look for may still be there, so the stop names it beside what is left, and a run's next step is this command with the permission added.
   const there = removed.rows.some((row) => row.state === "keep") ? NOTHING.data : NOTHING.none;
   const careful = choicesOf(request.mode);
-  const unlooked = unlookedWords(removed, how.run, careful);
-  const words = unlooked === undefined ? `${there} ${UNTOUCHED}` : followed(`${there} ${unlooked}`, UNTOUCHED);
+  const [unlooked, ...fix] = unlookedWords(removed, how.run, careful);
+  const words = [unlooked === undefined ? `${there} ${UNTOUCHED}` : followed(`${there} ${unlooked}`, UNTOUCHED), ...fix].join(" ");
 
   return { problem: "no_install", exit: 1, words, next: afterRemoval(removed, how.run, NEXT.uninstall(request.provider, careful, placeOf(request.provider, ground.where))) };
 }

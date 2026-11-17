@@ -34,7 +34,7 @@ const STOPPED_UNSENT = "nothing uploaded, no site changed";
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
-  abandoned: "upload aborted, no site changed",
+  abandoned: "Nothing changed",
   unknown: "the abort is unconfirmed, and an upload left open expires within 24 h. See: poplin list",
   live: "the publish went live but the response was lost. See: poplin list",
   unbegun: "no site changed. An upload the install started anyway expires within 24 h",

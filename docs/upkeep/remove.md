@@ -9,7 +9,7 @@ Run `npx poplin uninstall cloudflare --domain example.com` (or `--no-domain`). I
 
 ```text
 1  save a copy of your sites    npx poplin export --all-versions --out backup.zip
-2  on each computer             npx poplin logout
+2  on each machine             npx poplin logout
 3  look first                   npx poplin uninstall cloudflare --no-domain --dry-run
 4  remove                       npx poplin uninstall cloudflare --no-domain
 ```
@@ -27,7 +27,7 @@ The block shows an install without a domain. Under a domain, `--domain example.c
 | Thing                              | For                                                                                                   |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | a terminal, and Node.js 24         | every line here: the start of [step 2 of Install](../start/install.md#2-run-the-command), up to `node --version` |
-| this computer logged in to poplin  | step 1 alone, with a login allowed with Can change: Everything. `npx poplin whoami` says whether it is; [step 5 of Install](../start/install.md#5-log-this-computer-in-and-check) logs it in |
+| this machine logged in to poplin  | step 1 alone, with a login allowed with Can change: Everything. `npx poplin whoami` says whether it is; [step 5 of Install](../start/install.md#5-log-this-machine-in-and-check) logs it in |
 | the Cloudflare account             | the one the install is in. You must be able to log in at `https://dash.cloudflare.com`                |
 | an account token                   | steps 3 and 4, which each ask for it: a removal takes the token an install takes. If yours is gone, the command prints the link that makes a new one |
 
@@ -39,27 +39,27 @@ npx poplin export --all-versions --out backup.zip
 
 It downloads every site and the settings as one zip, into the folder the terminal is in. [Back up](back-up.md) says what the zip holds and how an import puts it back.
 
-## 2. Log each computer out
+## 2. Log each machine out
 
-The command logs no computer out. Do this before the removal, while the install still answers, on each computer that was logged in:
+The command logs no machine out. Do this before the removal, while the install still answers, on each machine that was logged in:
 
 ```sh
 npx poplin logout
 ```
 
-It prints `Logged out of` and the install's address. On the computer of step 1, run it after the export.
+It prints `Logged out of` and the install's address. On the machine of step 1, run it after the export.
 
-**On a computer you reach only after the removal**, the same line says `Cannot reach the install`, and its hint says `The stored login is deleted`. The removal's own last lines say the same. That is enough where the database went too: the tokens were in it. A database kept with `--keep-data` still holds them, so log out before such a removal.
+**On a machine you reach only after the removal**, the same line says `Cannot reach the install`, and its hint says `The stored login is deleted`. The removal's own last lines say the same. That is enough where the database went too: the tokens were in it. A database kept with `--keep-data` still holds them, so log out before such a removal.
 
 | Piece                                 | It is there                                           | Remove it                                                                   |
 | ------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
-| the saved login                       | on each computer you logged in                        | `npx poplin logout`                                                         |
+| the stored login                       | on each machine you logged in                        | `npx poplin logout`                                                         |
 | a login in two variables              | only if you set `POPLIN_SERVER` and `POPLIN_TOKEN` yourself, as a build server does | delete the two lines where you set them, before the logout, and open a new terminal |
 | an agent's own login                  | only if you set `POPLIN_CONFIG_DIR` for the agent yourself | `npx poplin logout` with that variable set; then delete the folder it names |
 | poplin's tools in your agent          | the MCP server named `poplin`                         | ask the agent: `Remove the poplin MCP server from your configuration.` Then restart it |
 | poplin installed with npm             | only if you ran `npm install -g poplin`               | `npm uninstall -g poplin`                                                   |
 
-While the two variables are set, `poplin logout` works on that login and leaves the saved one on the computer. So their lines go first. `poplin logout --dry-run` says which login a logout would end, and ends none.
+While the two variables are set, `poplin logout` works on that login and leaves the stored one on the machine. So their lines go first. `poplin logout --dry-run` says which login a logout would end, and ends none.
 
 `npx` keeps the copy it downloaded in npm's own cache. It runs only when you type the command, and there is nothing to do about it.
 
@@ -73,7 +73,7 @@ It prints how many permissions the token needs and a link, then asks for the tok
 
 **Step 4 asks for the token again.** Cloudflare shows a new token once: leave its page open until step 4 is done. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
-Then it lists, and removes nothing. With `--keep-data` on the line too, it lists the data as `would keep`. Without a domain, for an install that has the budget alert:
+Then it lists, and removes nothing. With `--keep-data` on the line too, it lists the data as `unchanged`. Without a domain, for an install that has the budget alert:
 
 ```text
 poplin 0.1.0 is installed at https://poplin.your-name.workers.dev
@@ -85,12 +85,11 @@ would remove  Key                   poplin kept key
 would remove  Upload key            poplin upload key
 would remove  Workflow              poplin-jobs
 would remove  Worker                poplin
-would remove  Sites' files          poplin-sites (files: 2, 15 B)
-would remove  Database              poplin (sites: 3)
+would remove  R2 bucket             poplin-sites (files: 2, 15 B)
+would remove  D1 database           poplin (sites: 3)
 unchanged     Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 Without --dry-run, pass --confirm poplin.your-name.workers.dev or type it at the prompt
---keep-data keeps the sites' files and the database
-An uninstall logs no machine out. Run npx poplin logout on each machine first.
+Uninstall does not log machines out. Run npx poplin logout on each machine first.
 A run would remove 10 resource types
 ```
 
@@ -105,12 +104,11 @@ A rule set is Cloudflare's holder for rules of one kind. One that poplin made go
 | A row starts with            | Means                                                                  |
 | ---------------------------- | ---------------------------------------------------------------------- |
 | `would remove`, `removed`    | pieces that carry poplin's name, or the comment or tag poplin put on them |
-| `unchanged`                  | not removed by the command: the row says why, or where it is           |
-| `would keep`, `kept`         | the sites' files and the database, with `--keep-data`                  |
+| `unchanged`                  | not removed by the command: the row says why, or where it is. With `--keep-data`, the R2 bucket and the D1 database |
 | `not found`                  | it went between the list and the removal                               |
-| `would skip`, `skipped`      | a thing of poplin's name that is not this install's: it stays          |
+| `would skip`, `skipped`      | a thing of poplin's name that is not this install's, a kind the token lacks the permission to look for, or a piece that waits for an earlier one: it stays |
 | `blocked`                    | the token lacks the permission the row names                           |
-| `failed`, `not run`          | Cloudflare refused that removal, or an earlier piece still stands      |
+| `failed`                     | Cloudflare refused that removal                                        |
 
 `poplin-sites` names two things without a domain: a forwarder, which is a small Worker, and the bucket with the sites' files.
 
@@ -133,29 +131,30 @@ poplin 0.1.0 is installed at https://poplin.example.com
 would remove  Worker route          *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*
 would remove  DNS record            *.example.com, poplin.example.com
 ...
-would remove  Sites' files          poplin-sites (files: 2, 15 B)
-would remove  Database              poplin (sites: 3)
+would remove  R2 bucket             poplin-sites (files: 2, 15 B)
+would remove  D1 database           poplin (sites: 3)
 unchanged     Bot settings          AI crawler blocking and Bot Fight Mode are zone settings and keep their values
 unchanged     Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 An uninstall cannot be undone
-An uninstall logs no machine out. Run npx poplin logout on each machine first.
+Uninstall does not log machines out. Run npx poplin logout on each machine first.
 Type poplin.example.com to confirm: poplin.example.com
 removed    Worker route          *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*
 ...
-removed    Database              poplin (sites: 3)
+removed    D1 database           poplin (sites: 3)
 The install is removed: 18 resource types removed, 2 unchanged
-Run npx poplin logout on each machine still logged in
+Next: npx poplin logout on each machine still logged in
 ```
 
 Nothing is removed before you type the address. Another text than the install's own removes nothing.
 
 ## What stays, and what to do
 
-The last lines count the rows that say `removed` or `not found`, and the rows that say `unchanged`. Where the token lacks an optional permission, they name each kind it could not check:
+The last lines count the rows that say `removed` or `not found`, and the rows that say `skipped` or `unchanged`. Where the token lacks an optional permission, they name each kind it skipped:
 
 ```text
-The install is removed, except what the account token could not check: 16 resource types removed, 4 unchanged
-2 resource types were not checked because the account token lacks an optional permission: Budget alert and Certificate alert. If the install created one, it still exists. Delete it manually, or add the permission and rerun this command.
+The install is removed: 16 resource types removed, 2 skipped, 2 unchanged
+Budget alert and Certificate alert may still exist: the account token lacks an optional permission
+Fix: add the permission and rerun this command, or delete them manually
 ```
 
 The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
@@ -189,7 +188,7 @@ npx poplin uninstall cloudflare --no-domain --keep-data
 
 This is for an install of the same kind, made again in the same account over the data as it stands. It is not the way to move an install to a domain, off one, or to another account: [Move an install](back-up.md#move-an-install) has that.
 
-The list before the question says `would keep` for both, and their rows then say `kept`. The two keys go with the rest.
+The list before the question says `unchanged` for both, and so do their rows after it. The two keys go with the rest.
 
 A run that left a kind undone ends `rerun this command with --keep-data.`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
 
@@ -206,7 +205,7 @@ The new install takes its users and its settings from the kept database:
 | no users yet            | the email you give for `--user`   | used                                                                               |
 | records this poplin cannot read | the email you give for `--user` | used, and the row of the database says that its users were not read          |
 
-To let one more person in afterwards: `npx poplin doctor --repair --no-domain --add-user you@example.com`, with their email. Under a domain the line holds `--domain` and your domain in place of `--no-domain`. Where the email of `--user` is none of the kept users, the run ends with that line, after `Add you@example.com as a user:`, and offers no login of this computer.
+To let one more person in afterwards: `npx poplin doctor --repair --no-domain --add-user you@example.com`, with their email. Under a domain the line holds `--domain` and your domain in place of `--no-domain`. Where the email of `--user` is none of the kept users, the run ends with that line, after `Add you@example.com as a user:`, and offers no login of this machine.
 
 A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 
@@ -219,7 +218,7 @@ A dry run with `--keep-data` lists the same. The kept bucket and database stay i
 | `The install in this account is at`, and an address      | the line named another place than the install's: `--no-domain` for an install under a domain, the other way round, or another domain | run it again with the install's own domain after `--domain`, or with `--no-domain` |
 | `This account has an incomplete install`, and a place    | an install that was never finished was started for another place than the line named | run it again with the option the line names: `--domain` and that domain, or `--no-domain` |
 | `The confirmation does not match`, and the address       | the address you typed is not the install's own       | run it again, and type the address the line names                             |
-| `removed and`, a number, and `rerun this command`        | a row says `blocked`, `failed`, or `not run`         | fix what the row names, then run the same line again: it removes what is left |
+| `removed and`, a number, and `rerun this command`        | a row says `blocked`, `failed`, or `skipped`        | fix what the row names, then run the same line again: it removes what is left |
 | a row `blocked`, ending `lacks this permission:` and a name | the token lacks the permission of that name          | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |
 | `The account changed after it was checked.`              | something changed at Cloudflare during the run       | run it again                                                                  |
 | `--dry-run and --confirm are mutually exclusive`             | the two options were on one line                     | take one of them off                                                          |

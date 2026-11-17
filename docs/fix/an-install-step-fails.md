@@ -9,7 +9,7 @@ Each line `npx poplin install cloudflare` can stop at, and what to do next; the 
 
 ```text
 stopped before any change    the line ends in "Nothing changed": fix the cause, run the same command again
-stopped part way             rows say blocked, failed, or not run: what is made stays, and every piece reads before it writes
+stopped part way             rows say blocked, failed, or skipped: what is made stays, and every piece reads before it writes
 ```
 
 ## Before any change
@@ -43,14 +43,14 @@ A row says what happened to one piece. [Step 4 of Install](../start/install.md#4
 
 | A row                                                              | Means                                                   | Do                                                                |
 | ------------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------- |
-| `skipped`, ending `add this permission to the account token and run npx poplin doctor --repair:` and a name | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
+| `skipped`, saying `The account token lacks` and a name, or `The install creates it within a day` | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
 | `blocked`, ending `lacks this permission:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `blocked`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows, then [finish with the repair](#the-second-run) |
 | `failed`, saying `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
 | `failed`, with other words                                         | the row says why, such as a Worker of the name that is not poplin's | do what the row asks                                  |
 | `failed`, ending `Cloudflare asked to wait` or `no answer from Cloudflare` | Cloudflare was busy, or gave no answer          | run the command again in a minute                                 |
-| `not run`                                                          | an earlier row stopped the run before this piece        | fix that row first                                                |
-| the address and `has not responded yet`, then `is installed, but its URL does not respond yet` | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-computer-in-and-check). If it still does not answer, run the repair the run printed: `npx poplin doctor --repair` with your `--domain` or `--no-domain`. Where the last line names a repair with `--add-user`, run that line |
+| `skipped`, saying `an earlier row stopped the run`                 | an earlier row stopped the run before this piece        | fix that row first                                                |
+| the address and `has not responded yet`, then `is installed, but its URL does not respond yet` | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-machine-in-and-check). If it still does not answer, run the repair the run printed: `npx poplin doctor --repair` with your `--domain` or `--no-domain`. Where the last line names a repair with `--add-user`, run that line |
 
 ## The second run
 
@@ -58,8 +58,8 @@ The last line of a run that left something undone names the command that goes on
 
 | The last line says                               | The install is                                        | Run, after the fix                                         |
 | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
-| `To resume, rerun this command.`                 | started, and not set yet                              | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `This account has an incomplete install. A run resumes it.`, and goes on. The other place is refused |
-| `To resume, run npx poplin doctor --repair` and your `--domain` or `--no-domain` | set: its address is written, and pieces are missing   | that line as it is written, with the same token. Where the line has `--add-user` and an email, keep both: [the install kept its users](../upkeep/remove.md#keep-the-data) |
+| `Next: rerun this command`                      | started, and not set yet                              | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `This account has an incomplete install. A run resumes it.`, and goes on. The other place is refused |
+| `Next: run npx poplin doctor --repair` and    your `--domain` or `--no-domain` | set: its address is written, and pieces are missing   | that line as it is written, with the same token. Where the line has `--add-user` and an email, keep both: [the install kept its users](../upkeep/remove.md#keep-the-data) |
 | `Nothing changed. Fix the above, then rerun this command.` | as it was before the run: the run printed no row, and changed nothing | the same line, once the line above it no longer holds: [Before any change](#before-any-change) has each |
 
 The first two go on from what stands: every piece reads before it writes. `poplin install` only makes a new install, so a second `install` on one that is set says `is already installed`, and changes nothing.
@@ -74,11 +74,9 @@ npx poplin doctor --repair
 poplin 0.1.0 is installed at https://poplin.example.com
 created    Access application    poplin: poplin.example.com, *-p-poplin.example.com
 created    Access policy         poplin logins
-The login is ready. Open your dashboard and log in:
-  https://poplin.example.com
 The repair is complete
 Dashboard: https://poplin.example.com
-The account token was not stored. You can delete it at Cloudflare.
+The account token was not stored. Delete it at Cloudflare.
 ```
 
 The sample shows a few of the rows. The repair asks for the domain, or Enter for none, and for the token, as the install did. The line the install printed has `--domain` or `--no-domain` on it, and that repair asks for the token alone. [I cannot log in](cannot-log-in.md) has every line it can stop at.
@@ -127,9 +125,9 @@ Then finish the form as in the table of [step 3](../start/install.md#3-make-the-
 
 Cloudflare's login sends its code only to an email that is a login of the install. The first one is the email you gave the command. If that email was mistyped, or its mailbox is gone, [I cannot log in](cannot-log-in.md) has the way back in.
 
-## The computer is not logged in
+## The machine is not logged in
 
-The login line is `npx poplin login`, with `--server` and your dashboard's address: [step 5](../start/install.md#5-log-this-computer-in-and-check) shows it. A computer with no stored login needs the address each time.
+The login line is `npx poplin login`, with `--server` and your dashboard's address: [step 5](../start/install.md#5-log-this-machine-in-and-check) shows it. A machine with no stored login needs the address each time.
 
 | You see                                                    | Means                                                | Do                                                        |
 | ---------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
@@ -138,9 +136,9 @@ The login line is `npx poplin login`, with `--server` and your dashboard's addre
 | `node --version` prints a number below `v24`               | poplin runs on Node.js 24 or higher                  | run the LTS installer from nodejs.org                     |
 | the browser cannot find the dashboard                      | a new address takes a few minutes                    | wait a few minutes and reload                             |
 | the page refuses the letters you typed                     | that login is not the one your terminal began        | press Deny, and run the login line again                  |
-| `poplin doctor` says `publisher token`                     | the page was left at Own sites only: this login reaches the sites it published, and no settings | on a computer of your own, run the login line again, and choose Everything |
-| `The login was denied on the dashboard`                    | Deny was pressed; nothing was saved                  | run the login line again                                  |
-| `The login expired before approval`               | the code ran out before Allow; nothing was saved     | run the login line again                                  |
+| `poplin doctor` says `publisher token`                     | the page was left at Own sites only: this login reaches the sites it published, and no settings | on a machine of your own, run the login line again, and choose Everything |
+| `The login was denied on the dashboard`                    | Deny was pressed; nothing was stored                  | run the login line again                                  |
+| `The login expired before approval`               | the code ran out before Allow; nothing was stored     | run the login line again                                  |
 | `Not logged in`                                            | the login did not finish                             | run the login line again                                  |
 | `The token is missing or expired`                                 | the login ran out: it lasts 30 days                  | `npx poplin login`, and allow it again                    |
 | `Cannot reach the install`                                 | the address is mistyped, or the network is down      | check the address after `--server`                        |

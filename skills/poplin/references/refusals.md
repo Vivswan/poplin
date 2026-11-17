@@ -4,7 +4,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 
 | Code                                              | Means                                            | What to do                                                           |
 | ------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| `no_login`, `not_logged_in`                       | no login on this computer, or it ran out         | tell the user; logging in again is their call                        |
+| `no_login`, `not_logged_in`                       | no login on this machine, or it ran out         | tell the user; logging in again is their call                        |
 | `not_allowed`                                     | this login may not touch that site               | tell the user; do not look for a way around it                       |
 | `not_found`                                       | no site with that label or public name           | `list_sites`; the label changes after `new_link`                     |
 | `in_trash`                                        | the site is in the trash                         | ask: restore it, or publish a new site                               |

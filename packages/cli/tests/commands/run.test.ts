@@ -322,7 +322,7 @@ describe("run", () => {
     const failed = await bench.run(`duplicate ${label}`);
     const uploads = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
 
-    expect([failed.code, failed.out, failed.err[1]?.split(". ")[0]]).toEqual([code, [], "Copy aborted, no site created"]);
+    expect([failed.code, failed.out, failed.err[1]?.split(". ")[0]]).toEqual([code, [], "Nothing changed"]);
     expect(bench.sent.map((sent) => sent.replace(/[0-9a-z]{16}$/, ":upload"))).toEqual([`POST /api/sites/${label}/duplicate`, `POST /api/sites/${label}/duplicate`, "DELETE /api/uploads/:upload"]);
     expect(uploads.uploads.filter((upload) => upload.plan.kind === "duplicate").map((upload) => upload.state)).toEqual(["abandoned"]);
     expect(await stateOf(bench)).toEqual(before);
@@ -351,7 +351,7 @@ describe("run", () => {
     const copied = await bench.run(`duplicate ${label} --name report-draft`);
     const sent = bench.sent.map((line) => line.replace(/[0-9a-z]{16}$/, ":upload"));
 
-    expect([copied.code, copied.waits, copied.out[0]?.replace(/--[0-9a-z]{12}/, "--:id"), copied.err.join(" ").toLowerCase().includes("copy aborted, no site created")]).toEqual(
+    expect([copied.code, copied.waits, copied.out[0]?.replace(/--[0-9a-z]{12}/, "--:id"), copied.err.join(" ").toLowerCase().includes("cancelled. nothing changed.")]).toEqual(
       stop === undefined ? [code, waits, "copied    report-draft--:id  130 files", false] : [code, waits, undefined, true],
     );
     expect(sent).toEqual([...Array.from({ length: stop === undefined ? 3 : 2 }, () => `POST /api/sites/${label}/duplicate`), ...(stop === undefined ? [] : ["DELETE /api/uploads/:upload"])]);
@@ -441,7 +441,7 @@ describe("run", () => {
 
     expect(who.out.slice(0, 2)).toEqual([`install  ${ORIGIN}`, "role     admin"]);
     expect(jsonOf(await bench.run("whoami --json"))).toMatchObject({ server: ORIGIN, token: { scope: "admin", note: "a test" } });
-    expect(doctor.out.map((line) => line.split(/ {2,}/).slice(0, 2).join(" "))).toEqual(["ok install", "ok version", "ok login", "ok settings", "ok sites", "ok trash", "ok problems", "Nothing changed"]);
+    expect(doctor.out.map((line) => line.split(/ {2,}/).slice(0, 2).join(" "))).toEqual(["ok install", "ok version", "ok login", "ok settings", "ok sites", "ok trash", "ok problems"]);
     expect(asPublisher.out[3]).toBe("ok  settings  skipped: requires an admin token");
     expect((await bench.run("config trash_days")).out).toEqual(["7"]);
     expect((await bench.run("config")).out).toContain("max_site_size                200MB");
@@ -464,9 +464,9 @@ describe("run", () => {
     bench.install.users.takes = false;
     const added = await bench.run("config logins ada@example.com,second@example.com");
 
-    const step = "New users cannot log in yet. Fix: on the dashboard's Domain screen, paste an account token and press Repair";
+    const step = ["New users cannot log in yet", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"];
 
-    expect([added.out, added.err, carried.out, carried.err]).toEqual([["logins  ada@example.com,second@example.com"], [step], ["logins  ada@example.com,cy@example.com"], []]);
+    expect([added.out, added.err, carried.out, carried.err]).toEqual([["logins  ada@example.com,second@example.com"], step, ["logins  ada@example.com,cy@example.com"], []]);
 
     // Drift: a token names no email, so the one login known to pass the login page is one that was a login already; a list of new emails alone would shut the dashboard on everyone.
     const replaced = await bench.run("config logins third@example.com");
@@ -491,9 +491,9 @@ describe("run", () => {
 
     expect([keyless.code, keyless.out]).toEqual([
       0,
-      [`7.9.0 is available. The install runs ${INSTALL_VERSION}.`, "The install has no provider key, so it cannot update itself. Fix: open Domain on the dashboard and press Repair", "Dry run: no update was started"],
+      [`7.9.0 is available. The install runs ${INSTALL_VERSION}.`, "The install has no key, so it cannot update itself. Fix: open Domain on the dashboard and press Repair", "Dry run: no update was started"],
     ]);
-    expect([refused.code, refused.err]).toEqual([1, ["The install has no provider key, so it cannot update itself", "Fix: open Domain on the dashboard and press Repair"]]);
+    expect([refused.code, refused.err]).toEqual([1, ["The install has no key, so it cannot update itself", "Fix: open Domain on the dashboard and press Repair"]]);
     expect([jsonOf(checked), before]).toEqual([{ version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", notes }, key: true, back: null }, []]);
     expect([started.out, bench.install.host.put]).toEqual([[`Updated the install from ${INSTALL_VERSION} to 7.9.0`], ["7.9.0"]]);
     expect([again.code, jsonOf(again)]).toEqual([1, { error: { code: "too_many_requests", message: "Rate limited by the install", about: "update", hint: "Fix: retry in a minute" } }]);
@@ -507,7 +507,7 @@ describe("run", () => {
     const back = await bench.run("update --to 7.7.0");
 
     expect([checked.out, back.out, bench.install.host.put]).toEqual([
-      [`No newer version is known. The install runs ${INSTALL_VERSION}.`, "The install has its provider key", "To go back to 7.7.0: poplin update --to 7.7.0", "Dry run: no update was started"],
+      [`No newer version is known. The install runs ${INSTALL_VERSION}.`, "The install holds a key to update itself with", "To go back to 7.7.0: poplin update --to 7.7.0", "Dry run: no update was started"],
       [`Updated the install from ${INSTALL_VERSION} to 7.7.0`],
       ["7.7.0"],
     ]);
@@ -597,6 +597,10 @@ describe("run", () => {
       [1, "Cancelled. Nothing changed."],
     ]);
     expect(await stateOf(bench)).toEqual(before);
+
+    // Drift: a program reads what a stopped delete left under `about`: said as a hint, the key it reads is gone.
+    const stopped = await bench.run(`delete ${label} --no-trash --json`, { terminal: { asks: true, progress: true }, typed: { stop: true } });
+    expect(jsonOf(stopped).error).toEqual({ code: "stopped", message: "Cancelled", about: "Nothing changed" });
   });
 
   // Drift: --dry-run was taken by half the commands that change something, and the rest refused the flag: a person could not ask what a delete or a new link would do before the act nothing undoes.
@@ -622,9 +626,9 @@ describe("run", () => {
       { code: 0, out: [`would update  q3-report--${label.slice(-12)}  name and access`, "would rename  from report", `would move    from ${url}`, "unlisted      open to anyone with the URL", "", open.replace("report", "q3-report"), last], err: [] },
       { code: 0, out: [`would roll back  ${label}  version 1 would be live`, "private          login required", "", url, last], err: [] },
       { code: 0, out: [`would rotate  ${label}`, `would revoke  ${label}  ${url}`, "The new id and URL are generated by a real run", last], err: [] },
-      { code: 0, out: [`would copy  ${label}  1 file, to a new private site report-draft`, last], err: [] },
+      { code: 0, out: [`would copy  ${label}  1 file, as new private site report-draft`, last], err: [] },
       { code: 0, out: [`would trash  ${label}  permanent deletion on 2023-11-21`, last], err: [] },
-      { code: 0, out: [`would delete permanently  ${label}`, "Would delete 1 file in 1 version. This could not be undone.", `Would no longer be served: ${url}`, `A real run prompts for the label ${label}`, last], err: [] },
+      { code: 0, out: [`would delete  ${label}  1 file in 1 version`, `Would no longer be served: ${url}`, last], err: [] },
       { code: 0, out: ["would set  trash_days  9", last], err: [] },
       { code: 0, out: [`Would log out of ${ORIGIN}`, "The token would be revoked", "POPLIN_SERVER and POPLIN_TOKEN would stay set in this shell", "Dry run: one read-only request checked the token"], err: [] },
     ]);
@@ -663,7 +667,7 @@ describe("run", () => {
     expect(jsonOf(await bench.run("logout --json --dry-run"))).toEqual({ dry_run: true, server: ORIGIN, revoked: true });
     expect(summary(await bench.run("config trash_days --dry-run")).err[0]).toBe("--dry-run requires a <value>");
     expect(jsonOf(await bench.run("logout --json --dry-run", { env: {} }))).toEqual({ dry_run: true, revoked: false });
-    expect((await bench.run("logout --dry-run", { env: {} })).out).toEqual(["No stored login on this machine", "Dry run: no request was sent"]);
+    expect((await bench.run("logout --dry-run", { env: {} })).out).toEqual(["Not logged in", "Dry run: no request was sent"]);
     expect((await bench.run(`set ${label} --search-engines on --dry-run`)).err).toEqual(["Search engines index only a public site. The setting would be saved."]);
     expect((await bench.run("config logins ada@example.com,new@example.com --dry-run")).err).toEqual(["Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair"]);
   });
@@ -680,7 +684,7 @@ describe("run", () => {
 
     const dry = await bench.run(`duplicate ${label} --dry-run`);
 
-    expect([dry.code, dry.out[0], dry.waits, asked]).toEqual([0, `would copy  ${label}  1 file, to a new private site report`, [7000], 2]);
+    expect([dry.code, dry.out[0], dry.waits, asked]).toEqual([0, `would copy  ${label}  1 file, as new private site report`, [7000], 2]);
   });
 
   // Drift: the one act nothing undoes ended in silence, and the person could not tell a removed site from a command that did nothing.
@@ -690,7 +694,7 @@ describe("run", () => {
 
     const deleted = await bench.run(`delete ${label.slice(-12)} --no-trash`, { terminal: { asks: true, progress: true }, typed: `${label}\n` });
 
-    expect(summary(deleted)).toEqual({ code: 0, out: [`deleted permanently  ${label}`, "Deleted 1 file in 1 version. This cannot be undone.", `No longer served: ${site.addresses.site}`], err: [`This permanently deletes ${label} and all its files`] });
+    expect(summary(deleted)).toEqual({ code: 0, out: [`deleted  ${label}  1 file in 1 version`, `No longer served: ${site.addresses.site}`], err: [`This permanently deletes ${label} and all its files`] });
     expect(deleted.asked).toEqual([`Type ${label} to confirm:`]);
     expect(await stateOf(bench)).toEqual([{ sites: [] }, { sites: [] }, []]);
   });
@@ -698,7 +702,7 @@ describe("run", () => {
   // Drift: with the install down every command sent the person to `poplin whoami` for the address, which then failed the same way and showed none; and a change that never left this computer was said to have been made, maybe.
   test.each<[string, string, () => Error, string[]]>([
     ["a read", "whoami", () => new Error("no route to host"), ["Fix: check the URL and the network, or poplin login --server <url>"]],
-    ["a change that left this computer", `set ${NO_SITE} --private`, () => new Error("socket closed"), ["The request may have arrived, so the change may have applied. See: poplin list"]],
+    ["a change that left this computer", `set ${NO_SITE} --private`, () => new Error("socket closed"), ["See: poplin list (the request may have been applied)"]],
     [
       "a change that never left this computer",
       `set ${NO_SITE} --private`,
@@ -718,9 +722,9 @@ describe("run", () => {
     ["no login", {}, "list", 3, "Not logged in"],
     ["half a login", { POPLIN_SERVER: ORIGIN }, "list", 3, "The login is unusable: POPLIN_SERVER is set without POPLIN_TOKEN. Fix: set POPLIN_TOKEN too, or unset POPLIN_SERVER to use the stored login"],
     ["another install than the login's", undefined, "list --server https://other.example.com", 3, "No token for this install: https://other.example.com"],
-    ["an address that is not https", undefined, "list --server http://poplin.example.com:8787", 2, "--server expects an https:// origin without a path"],
-    ["login with no install to ask", {}, "login", 3, "--server is required: there is no stored login"],
-    ["login at an address that is not https", {}, "login --server http://poplin.example.com:8787", 2, "--server expects an https:// origin without a path"],
+    ["an address that is not https", undefined, "list --server http://poplin.example.com:8787", 2, "--server requires an https:// origin without a path"],
+    ["login with no install to ask", {}, "login", 3, "--server is required when not logged in"],
+    ["login at an address that is not https", {}, "login --server http://poplin.example.com:8787", 2, "--server requires an https:// origin without a path"],
   ])("%s sends nothing and exits with its own code", async (_name, env, line, code, sentence) => {
     const bench = await openBench();
 
@@ -751,7 +755,7 @@ describe("run", () => {
     expect(summary(out)).toEqual({ code: 0, out: [`Logged out of ${ORIGIN}`, "The token is revoked"], err: [] });
     expect(existsSync(file)).toBe(false);
     expect((await bench.run("whoami", { env: { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.owner } })).code).toBe(1);
-    expect(summary(await bench.run("logout", { env: {} }))).toEqual({ code: 0, out: ["No stored login on this machine"], err: [] });
+    expect(summary(await bench.run("logout", { env: {} }))).toEqual({ code: 0, out: ["Not logged in"], err: [] });
 
     await saveLogin({ server: ORIGIN, token: bench.install.tokens.stranger } as Login, machine);
     bench.hook = () => Promise.reject(new Error("the install is down"));
@@ -827,7 +831,7 @@ describe("run", () => {
   // Drift: the install is built from one release and the command from another, and this line is the one place a person reads both.
   test.each([
     ["the same version", VERSION, `ok  version   install ${VERSION}, CLI ${VERSION}`],
-    ["another version", INSTALL_VERSION, `ok  version   install ${INSTALL_VERSION}, CLI ${VERSION}: versions differ, update the older one`],
+    ["another version", INSTALL_VERSION, `ok  version   install ${INSTALL_VERSION}, CLI ${VERSION}: versions differ`],
   ])("doctor names the install's version beside its own, on an install of %s", async (_name, installed, line) => {
     const bench = await openBench();
     bench.hook = async (request) => {
@@ -916,7 +920,7 @@ describe("run", () => {
 
     expect(report.code).toBe(1);
     expect(report.out[3]).toBe("failed  settings  Internal error on the install");
-    expect(report.out.at(-1)).toBe("Nothing changed");
+    expect(report.out.at(-1)).toBe("ok      problems  none in 7 days");
   });
 
   test("a change whose answer is lost says the change may have been made: the install rotated the link though the command failed; a dry run, which changes nothing, puts nothing in doubt", async () => {
@@ -934,7 +938,7 @@ describe("run", () => {
     expect(summary(lost)).toEqual({
       code: 5,
       out: [],
-      err: [`The response is not from a poplin install: status 502 from ${ORIGIN}`, "The request may have arrived, so the change may have applied. See: poplin list"],
+      err: [`The response is not from a poplin install: status 502 from ${ORIGIN}`, "See: poplin list (the request may have been applied)"],
     });
     expect(summary(await bench.run(`new-link ${label} --dry-run`))).toEqual({ code: 5, out: [], err: [`The response is not from a poplin install: status 502 from ${ORIGIN}`, "Fix: check that the URL is the install's"] });
   });

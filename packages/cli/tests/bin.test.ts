@@ -75,7 +75,7 @@ describe("bin", () => {
 
   // Drift: Ctrl-C outside a wait ended the process at once, and the upload of the publish held its place under the limits for a day. A signal sent to a child on Windows ends it without the handler, so the wiring is seen where a signal is one.
   test.skipIf(process.platform === "win32").each<[string, Record<string, string>, number, { code: number | null; signal: string | null }, string[]]>([
-    ["the first Ctrl-C gives the upload up, says so in one line, and exits 1", {}, 1, { code: 1, signal: null }, [SAID.sending, SAID.givingUp, "Cancelled: upload aborted, no site changed"]],
+    ["the first Ctrl-C gives the upload up, says so in one line, and exits 1", {}, 1, { code: 1, signal: null }, [SAID.sending, SAID.givingUp, "Cancelled. Nothing changed."]],
     ["a second Ctrl-C ends a command that is still giving its upload up, at once", { HOLD_GIVE_UP: "1" }, 2, { code: null, signal: "SIGINT" }, [SAID.sending, SAID.givingUp]],
   ])("%s", async (_name, env, interrupts, exit, said) => {
     const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });

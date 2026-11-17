@@ -12,7 +12,7 @@ Look at https://github.com/Vivswan/poplin, read its skill, and help me set up po
 
 With no install yet, the agent makes one with you: it asks for a domain or none and for your email, and tells you what to choose in your browser. It then gives you two lines to run in a terminal of your own: a dry run, and `npx poplin install cloudflare`. You paste back what each prints.
 
-The account token never passes through the chat: the agent never sees it. It acts as you, with the login saved on this computer, and adds poplin's tools to its own configuration under the one yes it asks for at the start.
+The account token never passes through the chat: the agent never sees it. It acts as you, with the login stored on this machine, and adds poplin's tools to its own configuration under the one yes it asks for at the start.
 
 ## What It Does
 
