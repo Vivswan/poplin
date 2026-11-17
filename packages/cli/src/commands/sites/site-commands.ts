@@ -13,7 +13,7 @@ import type { Called, Failure } from "../../client/client";
 import { problem, problemOf } from "../problems";
 import type { Outcome, RequestOf, Session } from "../records";
 import type { Line } from "../../local/screen";
-import { addressChange, columns, countText, type DoneRow, dayText, doneRows, GAP, REHEARSED, searchNotes, siteLines } from "../text";
+import { columns, countText, type DoneRow, dayText, doneRows, GAP, OLD_ADDRESS, oldAddressRows, REHEARSED, searchNotes, siteLines } from "../text";
 import { abandonUpload, callUnhurried, givenUp, giveUpUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
@@ -46,10 +46,8 @@ const WORDS = {
   changed: { apply: "updated", "dry-run": "would update" },
   same: { apply: "unchanged", "dry-run": "unchanged" },
   renamed: { apply: "renamed", "dry-run": "would rename" },
-  redirected: { apply: "redirects", "dry-run": "would redirect" },
   rolled: { apply: "rolled back", "dry-run": "would roll back" },
   linked: { apply: "rotated", "dry-run": "would rotate" },
-  stopped: { apply: "revoked", "dry-run": "would revoke" },
   copied: { apply: "copied", "dry-run": "would copy" },
   trashed: { apply: "trashed", "dry-run": "would trash" },
   removed: { apply: "deleted", "dry-run": "would delete" },
@@ -143,7 +141,7 @@ function changedWords(before: SiteObject | null, site: SiteObject): string {
 }
 
 /**
- * The answer of an action on one site, printed as what was done, who can open the site, and the site's address, with its old address when the action changed it.
+ * The answer of an action on one site, printed as what was done, who can open the site, and the site's address, with what each address the action took it from does now.
  *
  * @param done - the words for what was done, and for what a dry run says would be
  * @param more - the rows the action adds under its first
@@ -160,7 +158,7 @@ function answered(
 
   const { before, site } = called.value;
 
-  return rehearsed({ ok: true, value: called.value, lines: siteLines(words[run], site, facts(site), [...more, ...addressChange(before, site, WORDS.redirected[run])]), notes }, run);
+  return rehearsed({ ok: true, value: called.value, lines: siteLines(words[run], site, facts(site), [...more, ...oldAddressRows(before, site, run)]), notes }, run);
 }
 
 async function set(request: Asked<"set">, { client }: Session): Promise<Outcome> {
@@ -263,7 +261,7 @@ async function newLink(request: Asked<"new-link">, { client }: Session): Promise
   if (!linked.ok) return failed(linked, callOf(run));
 
   const { before, site } = linked.value;
-  const dead: DoneRow[] = before === null ? [] : [{ tone: "warning", done: WORDS.stopped[run], object: before.label, what: before.addresses.site }];
+  const dead: DoneRow[] = before === null ? [] : [{ tone: "warning", done: OLD_ADDRESS.revoked[run], object: before.label, what: before.addresses.site }];
   if (run === "apply") return { ok: true, value: linked.value, lines: siteLines(WORDS.linked.apply, site, [], dead) };
 
   // The install draws the new id when it gives it, so a dry run has no new address to end in.

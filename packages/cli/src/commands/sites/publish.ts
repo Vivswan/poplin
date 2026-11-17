@@ -13,7 +13,7 @@ import { firstRootLink } from "../../files/root-links";
 import { readTitle } from "../../files/title";
 import { type Problem, problem, problemOf } from "../problems";
 import type { Io, Outcome, RequestOf, Session } from "../records";
-import { addressChange, columns, countText, doneRows, dryRunText, searchNotes, siteLines } from "../text";
+import { columns, countText, doneRows, dryRunText, oldAddressRows, searchNotes, siteLines } from "../text";
 import { abandonUpload, callUnhurried, givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
@@ -126,7 +126,7 @@ function published(plan: PublishPlan, answer: Published): Outcome {
   const { site } = answer;
   const facts = site.created ? [] : [`version ${site.live_version}`];
   const sent = doneRows([{ tone: "done", done: "uploaded", what: summary(plan) }]);
-  const lines = [...sent, ...siteLines(site.created ? "created" : "updated", site, facts, addressChange(answer.before, site))];
+  const lines = [...sent, ...siteLines(site.created ? "created" : "updated", site, facts, oldAddressRows(answer.before, site))];
 
   return { ok: true, value: answer, lines, notes: searchNotes(plan.manifest, site) };
 }

@@ -21,6 +21,13 @@ const DONE_WIDTH = 8;
 /** Who can open a site, by its access. */
 const ACCESS_WORDS = { private: "login required", unlisted: "open to anyone with the URL", public: "open to everyone" } as const;
 
+/** What the install does at an address a change took a site from, as a run says it and as a dry run does: it sends on to the new one, serves the site as before, or answers 404. */
+export const OLD_ADDRESS = {
+  redirects: { apply: "redirects", "dry-run": "would redirect" },
+  serves: { apply: "still serves", "dry-run": "would still serve" },
+  revoked: { apply: "revoked", "dry-run": "would revoke" },
+} as const satisfies Readonly<Record<string, Readonly<Record<Run, string>>>>;
+
 /** The last line of a dry run that asked the install what a change would come to. */
 export const REHEARSED = "Dry run: the install validated the request";
 
@@ -161,16 +168,23 @@ export function siteLines(done: string, site: SiteObject, facts: readonly string
 }
 
 /**
- * The row for a change of access that moved a site to another address: a private site's address carries `-p-`, every other `-u-`. The old address sends visitors on.
+ * The rows for the addresses a change took a site from, each by what the install answers there afterwards.
  *
  * @param before - the site as the action found it, `null` for a site the action made
- * @param redirects - the word of the row: what a dry run says the old address would do
- * @returns one row with the old address, or none when the site kept its address
+ * @returns no row for a site that kept its addresses, or that got a new id: the action that gives one says so itself
  */
-export function addressChange(before: SiteObject | null, site: SiteObject, redirects = "redirects"): DoneRow[] {
-  if (before === null || before.id !== site.id || before.addresses.site === site.addresses.site) return [];
+export function oldAddressRows(before: SiteObject | null, site: SiteObject, run: Run = "apply"): DoneRow[] {
+  if (before === null || before.id !== site.id) return [];
 
-  return [{ tone: "note", done: redirects, what: `from ${before.addresses.site}` }];
+  const old = before.addresses;
+  const rows: DoneRow[] = [];
+  // Only the id finds a site, so an address with an older name is answered as the one with the new name is: served, or sent on to the other form when the site went to or from private.
+  if ((before.access === "private") !== (site.access === "private")) rows.push({ tone: "note", done: OLD_ADDRESS.redirects[run], what: `from ${old.site}` });
+  else if (old.site !== site.addresses.site) rows.push({ tone: "note", done: OLD_ADDRESS.serves[run], what: old.site });
+
+  if (old.public !== null && old.public !== site.addresses.public) rows.push({ tone: "warning", done: OLD_ADDRESS.revoked[run], what: old.public });
+
+  return rows;
 }
 
 /**
