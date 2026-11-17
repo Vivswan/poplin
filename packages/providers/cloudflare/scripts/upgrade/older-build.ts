@@ -5,7 +5,7 @@
 //   this checkout     packages/cli/package.json told one patch above the older build's version, unless it is above it already
 //
 // An install takes a release above its own version alone, and a commit of main says the version of the last release, as the older build does.
-// The stand-in is on npm as `0.1.0-main.736.20261116.g23fca0b`: the oldest pre-release whose own harness installs with `poplin install`, with main's first schema step.
+// The stand-in is on npm as `0.1.0-main.767.20261117.gea52312`: a pre-release with main's first schema step and settings row, so main takes over the install it makes.
 // A pre-release on npm is the command alone, with no built Worker and no line of the website's `releases.json`, so its Worker is built here from the commit.
 // Argument: the folder the older build goes in, which must not be there yet. The step that runs this holds no secret.
 
@@ -17,8 +17,8 @@ import inc from "semver/functions/inc";
 
 import { lastRelease } from "../../../../../tests/upgrade/support/trees";
 
-/** The commit of main that stands in for a release while none is cut. It moves forward whenever the first schema step is edited in place. */
-const STAND_IN = "23fca0be198e221d23b5deb706fc440b40af85e5";
+/** The commit of main that stands in for a release while none is cut. It moves forward whenever the first schema step or a stored shape is edited in place; once a release has a tag, the newest tag is taken and this is read no more. */
+const STAND_IN = "ea52312a4e298d36aa84ca1a22275eb4d51124ff";
 
 /** The file of a tree that says its version, from the tree's root. */
 const VERSION_FILE = join("packages", "cli", "package.json");
