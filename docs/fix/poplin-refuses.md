@@ -51,7 +51,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 
 | Problem             | Means                                                              | What to do                                                      |
 | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, login, token, account, provider, confirm | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
+| `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, user, token, account, provider, confirm | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
 | `usage`             | the line is written wrong; `words` says how                        | the command's own help: `npx poplin install --help`             |
 | `already_installed` | the account holds an install; `found` has its version, its address, and in `mend` whether it needs mending | nothing was changed: run what `next` names, the login for `mend` nothing, and for the rest the repair as `next.command` writes it |
 | `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or delete it at `address`    |

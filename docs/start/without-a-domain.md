@@ -154,7 +154,7 @@ No command puts this install under a domain. The way is to [move it](../upkeep/b
 | a site's address      | new: a hostname of its own under your domain                       |
 | a link you shared     | stops with this install. Send the new one                          |
 | each computer's login | made anew, with `npx poplin login`: the zip holds no token         |
-| the users             | the first login of the new install. `--settings --logins` brings the old list |
+| the users             | the first login of the new install. `--settings --users` brings the old list |
 | the activity log      | starts anew: the zip does not hold it                              |
 
 ## Afterwards

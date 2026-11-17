@@ -20,7 +20,7 @@ const KINDS = [
 ] as const;
 
 /** The words of an install that asks nothing, before its place. */
-const INSTALL = ["install", "cloudflare", `--login=${LOGIN}`, "--yes", "--adopt"];
+const INSTALL = ["install", "cloudflare", `--user=${LOGIN}`, "--yes", "--adopt"];
 
 /** The words of a repair that asks nothing, before its place. */
 const REPAIR = ["doctor", "--repair", "--yes"];

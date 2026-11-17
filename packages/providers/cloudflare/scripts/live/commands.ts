@@ -1,6 +1,6 @@
 // The product's own install commands, run in this process on the test account: the lines a person types, with the answers of a run that asks nothing.
 //
-//   poplin install cloudflare   (--domain=<name> | --no-domain) --account=<id> --login=<email> --yes --adopt --no-log-in --json
+//   poplin install cloudflare   (--domain=<name> | --no-domain) --account=<id> --user=<email> --yes --adopt --no-log-in --json
 //   poplin doctor --repair      (--domain=<name> | --no-domain) --account=<id> --yes --json
 //   poplin uninstall cloudflare (--domain=<name> | --no-domain) --account=<id> --dry-run --json, then --confirm=<what the dry run says to type> --json
 //

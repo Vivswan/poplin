@@ -8,11 +8,11 @@ import type { GivenToken, InstallMode, Missing, ParsedInstall, Plan, Provider, S
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
 
 /** The variable that answers the first login. */
-const LOGIN_VARIABLE = "POPLIN_LOGIN";
+const USER_VARIABLE = "POPLIN_USER";
 
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
 export const SHARED_OPTIONS: readonly OptionRow[] = [
-  { flag: "--login", value: "<email>", about: "Email of the first login", variable: LOGIN_VARIABLE },
+  { flag: "--user", value: "<email>", about: "Email of the first user", variable: USER_VARIABLE },
   { flag: "--dry-run", value: null, about: "Read everything and show the plan; change nothing", variable: null },
   { flag: "--adopt", value: null, about: "Reuse what an earlier install left behind", variable: null },
   { flag: "--yes", value: null, about: "Never prompt; a missing answer stops the run", variable: null },
@@ -47,14 +47,14 @@ interface Answers {
 
 /** Read the first login from its option or its variable; `undefined` when neither gave one. An option with nothing in it is refused, and a variable with nothing in it is one that is not set. */
 function readLogin(shared: Typed, env: Variables): Login | undefined | Stop {
-  const typed = shared.get("login");
-  const held = env[LOGIN_VARIABLE] ?? "";
+  const typed = shared.get("user");
+  const held = env[USER_VARIABLE] ?? "";
   if (typeof typed !== "string" && held === "") return undefined;
 
   const login = parseLogin(typeof typed === "string" ? typed : held);
   if (login.ok) return login.value;
 
-  return typeof typed === "string" ? usage(COMMAND, "--login takes an email address", "for example: --login you@example.com") : usage(COMMAND, `${LOGIN_VARIABLE} holds no email address`);
+  return typeof typed === "string" ? usage(COMMAND, "--user takes an email address", "for example: --user you@example.com") : usage(COMMAND, `${USER_VARIABLE} holds no email address`);
 }
 
 /** How the run goes, from its switches. `open` is what an answer no switch gave is: `"ask"` on a terminal, and `"no"` where nothing is asked. */
@@ -97,7 +97,7 @@ function fixedPlan(read: Named, env: Variables, json: boolean): Plan | Stop {
   const piped: GivenToken | undefined = read.shared.has("token-stdin") ? { from: "stdin" } : undefined;
   const token = answers.token === undefined ? piped : ({ from: "environment", token: answers.token } as const);
   const missing: Missing[] = where.ok ? [] : where.open.map(missingOf);
-  if (login === undefined) missing.push({ key: "login", name: "the first login", give: `Give --login <email> (or ${LOGIN_VARIABLE}).` });
+  if (login === undefined) missing.push({ key: "user", name: "the first login", give: `Give --user <email> (or ${USER_VARIABLE}).` });
 
   if (token === undefined) missing.push(MISSING_TOKEN);
 

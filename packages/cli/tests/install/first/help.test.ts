@@ -20,7 +20,7 @@ Providers:
   stand-in                  Stand-In Host: under your own place, or without one
 
 Options:
-  --login <email>           Email of the first login  (POPLIN_LOGIN)
+  --user <email>            Email of the first user  (POPLIN_USER)
   --dry-run                 Read everything and show the plan; change nothing
   --adopt                   Reuse what an earlier install left behind
   --yes                     Never prompt; a missing answer stops the run
@@ -51,13 +51,12 @@ const PROVIDER_HELP = `Usage: poplin install stand-in (--place <name> | --no-pla
 Stand-In Host: under your own place, or without one
 
 Options:
-  --place <name>            Install under your own place: example.com
-                            (POPLIN_PLACE)
-  --no-place                Install at the address the host gives the account
+  --place <name>            Your own place: example.com  (POPLIN_PLACE)
+  --no-place                The address the host gives the account
                             (POPLIN_PLACE=none)
   --account <id>            Account id, when the token can access more than one
                             (POPLIN_ACCOUNT)
-  --login <email>           Email of the first login  (POPLIN_LOGIN)
+  --user <email>            Email of the first user  (POPLIN_USER)
   --dry-run                 Read everything and show the plan; change nothing
   --adopt                   Reuse what an earlier install left behind
   --yes                     Never prompt; a missing answer stops the run

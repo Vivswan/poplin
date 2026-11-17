@@ -58,7 +58,7 @@ describe("a line that is written wrong", () => {
     ["uninstall stand-in --no-place --dry-run --confirm poplin.example.com", ["poplin uninstall: --dry-run removes nothing: leave out --confirm"]],
     ["uninstall stand-in --no-place --confirm=", ["poplin uninstall: --confirm takes the install's address", "a run with --dry-run shows it"]],
     ["uninstall stand-in --no-place --force", ["poplin uninstall: no option --force", "The proof of a removal is the install's address: --confirm <address>"]],
-    ["uninstall stand-in --no-place --login you@example.com", ["poplin uninstall: no option --login", "uninstall takes no login: the install that is there says who logs in"]],
+    ["uninstall stand-in --no-place --user you@example.com", ["poplin uninstall: no option --user", "uninstall takes no login: the install that is there says who logs in"]],
     ["uninstall stand-in --place example.com --no-place --dry-run", ["poplin uninstall: give one of --place <name> and --no-place"]],
     ["uninstall nowhere --dry-run", ['poplin uninstall: no provider "nowhere"', "poplin uninstall lists the providers"]],
     ["uninstall stand-in --no-place --dry-run --token-stdin", [`poplin uninstall: the token is given twice: ${TOKEN_VARIABLE} is set, and --token-stdin was given`]],

@@ -20,7 +20,7 @@ export const UNINSTALL_OPTIONS: readonly OptionRow[] = [
 /** The options a person may reach for that this command has none of, each with the line that says what to give. */
 const ELSEWHERE: Readonly<Record<string, string>> = {
   "--force": "The proof of a removal is the install's address: --confirm <address>",
-  "--login": "uninstall takes no login: the install that is there says who logs in",
+  "--user": "uninstall takes no login: the install that is there says who logs in",
   "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
 };
 

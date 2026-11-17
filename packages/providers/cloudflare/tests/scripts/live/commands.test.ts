@@ -66,7 +66,7 @@ describe.each(["domain", "account address"] as const)("the commands of an instal
     for (const name of ["example.com", "example.workers.dev"]) run.hide(name);
 
     const place = placeWords(run, found);
-    const install = ["cloudflare", ...place, `--login=${LOGIN}`, "--yes", "--adopt", "--no-log-in", "--json"];
+    const install = ["cloudflare", ...place, `--user=${LOGIN}`, "--yes", "--adopt", "--no-log-in", "--json"];
     const made = await command(run, "install", install, world.ends);
     const there = await command(run, "install", install, world.ends);
     const mended = await command(run, "repair", ["--repair", ...place, "--yes", "--json"], world.ends);

@@ -25,7 +25,7 @@ export const REPAIR_OPTIONS: readonly OptionRow[] = [
 const ELSEWHERE: Readonly<Record<string, string>> = {
   "--server": "--repair works with the account token, not a login: leave out --server",
   "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
-  "--login": "a repair keeps the users the install has. To let one more person in: --add-user <email>",
+  "--user": "a repair keeps the users the install has. To let one more person in: --add-user <email>",
   "--remove": "To remove an install: poplin uninstall <provider>",
 };
 

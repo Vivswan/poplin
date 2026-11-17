@@ -101,7 +101,7 @@ Ask which of the two kinds the user wants, and keep the answer. Show the table, 
 
 When the user asks which to take: a domain, if they have one at Cloudflare; without one otherwise. The kind is chosen once. Poplin has no command and no screen that changes it on an install that is made. To have the other kind later, the user backs up, installs anew, and imports: [moving the install](#when-the-user-asks-to-move-the-install).
 
-Then ask for the email of the first login: one whose inbox the user can read. It goes after `--login`.
+Then ask for the email of the first login: one whose inbox the user can read. It goes after `--user`.
 
 ### b. The browser: what no command switches on
 
@@ -155,7 +155,7 @@ That makes ten permissions under a domain, and six without one. If the form open
 Run it with the user's two answers. It changes nothing.
 
 ```sh
-npx poplin install cloudflare --domain example.com --login you@example.com --dry-run --json
+npx poplin install cloudflare --domain example.com --user you@example.com --dry-run --json
 ```
 
 Without a domain, `--no-domain` stands in place of `--domain example.com`.
@@ -178,7 +178,7 @@ A repair named next also holds `--update`, where your line had it or the stop ne
 | `command` names | It runs as written, with the token in your environment | Add                                   |
 | --------------- | ------------------------------------------------------ | ------------------------------------- |
 | the repair      | yes                                                    | `--json`, to read its value           |
-| the install     | once it has the login                                  | `--login`, `--yes`, `--json`          |
+| the install     | once it has the login                                  | `--user`, `--yes`, `--json`           |
 | the removal     | never by you: the user runs it                         | nothing                               |
 
 Some stops name the command with no place. One that comes while the line is read does, as `usage` and a `missing_answer` do, and `stopped` and `crashed` may. `other_place` does too: the install is at another place than your line named, and its sentence names the option to give.
@@ -202,7 +202,7 @@ A consent is never in `command`. Where a repair found kept data and no install, 
 | `ready` is false, and `blocked` has entries            | 1         | the user must act first                        | the table of blocks below, then this part again       |
 | `ready` is false, `blocked` is empty, and no `problem` | 1         | a read failed, and its row says why            | run it again in a minute                              |
 | `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`. `next.step` is `login` for an install that is as it should be: step 4. It is `repair` for the rest: part f, as `next.command` writes it |
-| `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt`. Where its database holds users, they log in: a row `First login` that was left out says `--login` was not used |
+| `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt`. Where its database holds users, they log in: a row `First login` that was left out says `--user` was not used |
 | any other `problem`                                    | 1, 2, 5   | a stop                                         | [`refusals.md`](refusals.md)                          |
 
 Each entry of `blocked` has the address to open, and says what blocks:
@@ -220,7 +220,7 @@ Each entry of `blocked` has the address to open, and says what blocks:
 **When your environment holds no token**, the user runs the command in a terminal of their own, where you do not see the token. Give them this one line, with their answers in it:
 
 ```sh
-npx poplin install cloudflare --domain example.com --login you@example.com --dry-run
+npx poplin install cloudflare --domain example.com --user you@example.com --dry-run
 ```
 
 Say how to open that terminal: a new window, beside the one you run in.
@@ -251,7 +251,7 @@ It asks `Account token (not shown):`. The user pastes the token there and presse
 The same line, with `--yes` in place of `--dry-run`:
 
 ```sh
-npx poplin install cloudflare --domain example.com --login you@example.com --yes --json
+npx poplin install cloudflare --domain example.com --user you@example.com --yes --json
 ```
 
 | The value says                          | Exit code | Next                                                                   |
@@ -261,7 +261,7 @@ npx poplin install cloudflare --domain example.com --login you@example.com --yes
 | `ready` is true, and `answers` is false | 1         | the install is made, and its new address does not answer yet: wait a few minutes, then step 4. If it still does not answer: the repair of part f |
 | `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows. Then part f |
 
-Where `next.step` is `repair` and its `command` holds `--add-user`, the install kept the users its database holds, and the email of `--login` is none of them. Tell the user who logs in, as the row `First login` names them.
+Where `next.step` is `repair` and its `command` holds `--add-user`, the install kept the users its database holds, and the email of `--user` is none of them. Tell the user who logs in, as the row `First login` names them.
 
 Run that `command` as it is written, in place of step 4 and of the repair of part f: it holds the install's place, mends what is undone, and lets the email in. Without `--add-user` the email stays out.
 
@@ -280,7 +280,7 @@ Log this computer in now?
 
 Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Tell them the two choices of Can change first, as step 4 has them. Then run the check of step 4.
 
-A run that kept a database's users and did not use the email of `--login` asks no such question. Its last line is `To let` the email `log in too:` and a repair with `--add-user`: the user runs that line.
+A run that kept a database's users and did not use the email of `--user` asks no such question. Its last line is `To let` the email `log in too:` and a repair with `--add-user`: the user runs that line.
 
 The command stores the token nowhere. Afterwards the user either keeps it where they keep passwords, or deletes it at Cloudflare, under My Profile, then API Tokens: the install keeps working.
 
@@ -420,7 +420,7 @@ Tell the user what changes before step 1, and wait for their yes. Under another 
 | -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
 | `--all-versions`, step 1   | every kept version of each site                                    | the live version alone: the others are lost       |
 | `--settings`, step 5       | every setting but the logins                                       | the new install keeps its own settings            |
-| `--settings --logins`      | the list of users too                                              | the users are the new install's first login       |
+| `--settings --users`       | the list of users too                                              | the users are the new install's first login       |
 
 No line carries a token, a key of the install, or the activity log: each computer logs in again, and the log starts anew.
 
