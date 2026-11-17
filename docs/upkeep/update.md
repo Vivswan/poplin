@@ -156,7 +156,12 @@ An install that runs a newer release than the newest the command reads is never 
 
 With `--update` it stops the same way where the newest release is one the command you ran cannot put in place, and names `npx poplin@latest doctor --repair --update`.
 
-A repair without `--update` reads the install's records to mend the login. Where the install is behind and its records are of an older poplin than the command you ran, it stops before it changes anything, and names the repair that goes on: `npx poplin doctor --repair --update`.
+A repair without `--update` reads the install's records to mend the login. Where the install is behind and its records are of an older poplin than the command you ran, it stops before it changes anything, and names two ways on:
+
+| You want          | Run                                                                        |
+| ----------------- | -------------------------------------------------------------------------- |
+| to mend only      | the poplin of the install's version: `npx poplin@0.2.0 doctor --repair`    |
+| the release too   | `npx poplin doctor --repair --update`                                      |
 
 ## Go back
 

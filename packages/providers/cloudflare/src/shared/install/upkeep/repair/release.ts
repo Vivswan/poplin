@@ -85,12 +85,12 @@ interface Asked {
 /**
  * What became of the install's code.
  *
- * `left` is a Worker nothing is done to: `out` is the newer release it was not asked to take, where one is out.
+ * `left` is a Worker nothing is done to: `behind` is on one that was not asked to take a newer release, with the version it runs and the release that is out.
  * `placed` is a release a run put in place, or a dry run read that a run would. `unplaced` is one that is not in place, which a row says why.
  * `stop` is an install the newest poplin alone goes on with: one of a newer release than the newest this poplin reads, or behind a release this poplin cannot place. Nothing is mended, and its words say what to run.
  */
 type Settled =
-  | { readonly state: "left"; readonly rows: readonly Row[]; readonly out: string | undefined }
+  | { readonly state: "left"; readonly rows: readonly Row[]; readonly behind: { readonly runs: string; readonly out: string } | undefined }
   | { readonly state: "placed" | "unplaced"; readonly rows: readonly Row[] }
   | { readonly state: "stop"; readonly words: string };
 
@@ -126,8 +126,8 @@ function stepsRow(stepped: Stepped, rights: Asked["rights"]): Row | undefined {
 }
 
 /** A Worker nothing is done to, with its one row. */
-function left(detail: string, out?: string): Extract<Settled, { readonly state: "left" }> {
-  return { state: "left", rows: [workerRow("leave", detail)], out };
+function left(detail: string, behind?: { readonly runs: string; readonly out: string }): Extract<Settled, { readonly state: "left" }> {
+  return { state: "left", rows: [workerRow("leave", detail)], behind };
 }
 
 /** Send the one upload of a release with the token, and say in rows what Cloudflare made of it. */
@@ -192,7 +192,7 @@ export async function syncRelease(asked: Asked): Promise<Settled> {
     return { state: "stop", words: `The install runs ${version}, and the newest release this poplin reads is ${newest}. Nothing is put back to an older release. Run the newest poplin: ${command}` };
   }
 
-  if (!asked.update) return newest === undefined ? left(`, runs ${version}`) : left(`, runs ${version}; ${newest} ${WORDS.out}`, newest);
+  if (!asked.update) return newest === undefined ? left(`, runs ${version}`) : left(`, runs ${version}; ${newest} ${WORDS.out}`, { runs: version, out: newest });
 
   if (newest === undefined) return { state: "unplaced", rows: [workerRow("fail", `, runs ${version}: ${WORDS.noNewest}`)] };
 

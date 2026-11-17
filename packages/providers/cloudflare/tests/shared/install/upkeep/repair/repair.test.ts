@@ -465,14 +465,15 @@ describe.each(BOTH)("a repair that was not asked to update, %s", (kind) => {
     expect([shown(done)[0], changes, done.ok && done.ready]).toEqual([`Worker | leave | poplin, runs ${OLDER}`, [], true]);
   });
 
-  // Drift: this poplin reads the records of its own schema alone. On an install that is behind it, the newest poplin's repair would stop the same way, so the stop must name the one repair that goes on.
-  test("an install that is behind, with records this poplin does not read, is left whole, and the stop names the repair that updates, with the place", async () => {
+  // Drift: this poplin reads the records of its own schema alone, and a person who came to mend a login must not be made to update. A stop that named the update alone would force it, and one that named the newest poplin would stop the same way again.
+  test("an install that is behind, with records this poplin does not read, is left whole, and the stop names both ways on at the place: the poplin of the install's version, then the repair that updates", async () => {
     const account = await behindInstall(kind);
     await account.store.call("UPDATE schema_steps SET fingerprint = 'another'", []);
     const { done, changes } = await repaired(account, kind);
     const words =
-      `The install runs ${OLDER}, and its records are not at the schema of this poplin, so this poplin cannot mend it as it is. ` +
-      `To bring it to the newest release and mend it: npx poplin doctor --repair --update ${PLACED[kind]}`;
+      `The install runs ${OLDER}, and its records are not at the schema of this poplin. ` +
+      `To mend it as it is, run the poplin of its version: npx poplin@${OLDER} doctor --repair ${PLACED[kind]}. ` +
+      `To take ${RELEASE} and mend it: npx poplin doctor --repair --update ${PLACED[kind]}`;
 
     expect([done, changes, account.uploads.length]).toEqual([{ ok: false, why: "behind", words }, [], 1]);
   });

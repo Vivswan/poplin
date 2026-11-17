@@ -206,7 +206,7 @@ export interface Mend {
  * `address` is where the install's dashboard is.
  * The second shape is a repair that changed nothing: the provider gave no answer, or refused the token at the install; the install answers at `elsewhere` than the place named;
  * its records are of `another` poplin than this one, or it runs a newer release than the newest this one reads; or it `changed` since it was found, and is no whole install now.
- * `behind` is an install behind the newest release whose records this code does not read as they are: only a repair that updates goes on from it.
+ * `behind` is an install behind the newest release whose records this code does not read as they are: a repair that updates goes on from it, and its words also name the product of the install's own version, which mends it as it is.
  */
 export type Repaired =
   | { readonly ok: true; readonly rows: readonly Row[]; readonly steps: readonly Step[]; readonly blocked: readonly Blocked[]; readonly address: string; readonly ready: boolean }

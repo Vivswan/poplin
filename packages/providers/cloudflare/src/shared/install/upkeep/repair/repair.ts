@@ -41,7 +41,6 @@ const WORDS = {
   token: "Cloudflare refused the token at the install: it must show the install's own account, and its domain where it has one.",
   changed: "The install changed while it was read. Run this again.",
   another: "The install's records are not at the schema of this poplin. Run the poplin of the install's own version, or the newest:",
-  behind: "its records are not at the schema of this poplin, so this poplin cannot mend it as it is. To bring it to the newest release and mend it: npx poplin doctor --repair --update",
   noDomain: "The install here has no domain: give --no-domain.",
   noFirst: `${INSTALL_OBJECTS.firstSettingsBinding}: the install stored no settings yet, and the ones its Worker starts with cannot be read`,
   allowance: "the database's free allowance for the day is used up",
@@ -229,13 +228,16 @@ function unreadRecords(work: Work, release: Extract<Awaited<ReturnType<typeof sy
 /**
  * Why an install whose code the run left alone is not mended, where its records are not at this poplin's schema.
  *
- * @param out - the newer release the run was not asked to take; `undefined` for an install that is not behind one
- * @returns `behind` where a repair that updates goes on, and else `another`, which the newest poplin goes on from
+ * @param behind - the version the install runs and the newer release the run was not asked to take; `undefined` for an install that is not behind one
+ * @returns `behind` with both ways on, the poplin of the install's own version, which mends it as it is, and last the repair that updates; else `another`, which the newest poplin goes on from
  */
-function unmendedWhole(found: Whole<Place>, out: string | undefined, mend: Mend, where: Where): Repaired {
-  if (out !== undefined) return { ok: false, why: "behind", words: atPlace(`The install runs ${found.version}, and ${WORDS.behind}`, where) };
+function unmendedWhole(behind: { readonly runs: string; readonly out: string } | undefined, mend: Mend, where: Where): Repaired {
+  if (behind === undefined) return { ok: false, why: "another", words: atPlace(anotherWords(mend.update), where) };
 
-  return { ok: false, why: "another", words: atPlace(anotherWords(mend.update), where) };
+  const asItIs = atPlace(`To mend it as it is, run the poplin of its version: npx poplin@${behind.runs} doctor --repair`, where);
+  const updated = atPlace(`To take ${behind.out} and mend it: npx poplin doctor --repair --update`, where);
+
+  return { ok: false, why: "behind", words: `The install runs ${behind.runs}, and its records are not at the schema of this poplin. ${asItIs}. ${updated}` };
 }
 
 /**
@@ -259,7 +261,7 @@ export async function repair(found: Whole<Place>, where: Where, mend: Mend, reac
 
   const stored = await readStored(connection, { accountId, databaseId });
   // An install whose code this run left alone is another poplin's whole. One this run was to bring to its release has its rows to show, and its records are read by the run after.
-  if (stored.state === "another" && release.state === "left") return unmendedWhole(found, release.out, mend, where);
+  if (stored.state === "another" && release.state === "left") return unmendedWhole(release.behind, mend, where);
 
   for (const row of release.rows) note(work, row);
 
