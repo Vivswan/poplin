@@ -5,10 +5,15 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { NO_PRESS_WHILE_CLOSING } from "@/dialog/closing"
+import { useClosesWithRoute } from "@/dialog/dialog-route"
 import { useUnsavedTyping } from "@/lib/unsaved"
 
-function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+// A question closes when the address leaves the place it was asked at.
+function AlertDialog<Payload>({ ...props }: AlertDialogPrimitive.Root.Props<Payload>) {
+  const closing = useClosesWithRoute<AlertDialogPrimitive.Root.ChangeEventDetails>(props)
+
+  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} {...closing} />
 }
 
 function AlertDialogTrigger({ ...props }: AlertDialogPrimitive.Trigger.Props) {
@@ -40,6 +45,7 @@ function AlertDialogOverlay({
 }
 
 // Drawn only while the dialog is: what is typed into it counts as unsaved until it closes.
+// A question that is closing takes no press.
 function AlertDialogPopup({ onInput, ...props }: AlertDialogPrimitive.Popup.Props) {
   const typed = useUnsavedTyping()
 
@@ -49,6 +55,7 @@ function AlertDialogPopup({ onInput, ...props }: AlertDialogPrimitive.Popup.Prop
         typed()
         onInput?.(event)
       }}
+      {...NO_PRESS_WHILE_CLOSING}
       {...props}
     />
   )

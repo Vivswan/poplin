@@ -25,6 +25,7 @@ import { sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { MiddleColumn, ScreenPage } from "@/shared/middle-column";
+import { useOnePress } from "@/dialog/one-press";
 import { HomeProblems } from "@/problems/home-problems";
 import { AppShell } from "@/shell/app-shell";
 
@@ -128,10 +129,10 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
       throw refused;
     }
   };
-  const check = async (): Promise<void> => {
+  const { press: check, busy: pressed } = useOnePress(async (): Promise<void> => {
     const done = await pieces.check();
     if (done !== undefined) sayRan(done.summary);
-  };
+  });
 
   return (
     <>
@@ -143,7 +144,7 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
               <StatusLine line={line} tone={tone} beside={beside} />
               <div className="ml-auto flex items-center gap-2">
                 {domain.checks_alone ? (
-                  <Button variant="outline" disabled={checking} onClick={() => void check()}>
+                  <Button variant="outline" disabled={checking || pressed} onClick={check}>
                     {checking ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
                     Check
                   </Button>
