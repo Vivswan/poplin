@@ -12,15 +12,15 @@ const LOGIN_VARIABLE = "POPLIN_LOGIN";
 
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
 export const SHARED_OPTIONS: readonly OptionRow[] = [
-  { flag: "--login", value: "<email>", about: "the first login", variable: LOGIN_VARIABLE },
-  { flag: "--dry-run", value: null, about: "read everything, change nothing, and say what a run would make", variable: null },
-  { flag: "--adopt", value: null, about: "use what an earlier install left behind, with what it holds", variable: null },
-  { flag: "--yes", value: null, about: "ask nothing; a missing answer stops the run and is named", variable: null },
-  { flag: "--token-stdin", value: null, about: "read the account token from standard input, and ask nothing", variable: null },
-  { flag: "--log-in", value: null, about: "log this computer in when it is done", variable: null },
-  { flag: "--no-log-in", value: null, about: "do not log this computer in, and do not ask", variable: null },
-  { flag: "--no-wait", value: null, about: "do not wait for the install to answer", variable: null },
-  { flag: "--json", value: null, about: "print one JSON value, and nothing else on stdout", variable: null },
+  { flag: "--login", value: "<email>", about: "Email of the first login", variable: LOGIN_VARIABLE },
+  { flag: "--dry-run", value: null, about: "Read everything and show the plan; change nothing", variable: null },
+  { flag: "--adopt", value: null, about: "Reuse what an earlier install left behind", variable: null },
+  { flag: "--yes", value: null, about: "Never prompt; a missing answer stops the run", variable: null },
+  { flag: "--token-stdin", value: null, about: "Read the account token from stdin; never prompt", variable: null },
+  { flag: "--log-in", value: null, about: "Log this machine in when done", variable: null },
+  { flag: "--no-log-in", value: null, about: "Do not log this machine in; do not ask", variable: null },
+  { flag: "--no-wait", value: null, about: "Do not wait for the install to answer", variable: null },
+  { flag: "--json", value: null, about: "Print one JSON value, and nothing else on stdout", variable: null },
 ];
 
 /** The options a person may reach for that belong to another command, each with the line that says which. */

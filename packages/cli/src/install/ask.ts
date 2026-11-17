@@ -14,7 +14,7 @@ import { factsLines, placeOf, type Unsettled } from "./report";
 export const TOKEN_VARIABLE = TOKEN_VARIABLES.install;
 
 /** The lines of a help text that say where the account token is read from. */
-export const TOKEN_HELP: readonly string[] = [`The account token is read from ${TOKEN_VARIABLE}, or from standard input`, "with --token-stdin, or asked for without being shown. It is used for the run", "and stored nowhere."];
+export const TOKEN_HELP: readonly string[] = [`The account token is read from ${TOKEN_VARIABLE}, from stdin with`, "--token-stdin, or from a hidden prompt. It is used for the run and stored", "nowhere."];
 
 /** The command line whose help lists what the token of each kind of work needs. */
 const HELP_OF: Readonly<Record<"install" | "repair" | "remove", (provider: Provider) => string>> = {

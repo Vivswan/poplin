@@ -12,13 +12,13 @@ export const REPAIR_COMMAND = "doctor --repair";
 
 /** The options of a repair, which every provider takes. The parser reads these rows and the help prints them. */
 export const REPAIR_OPTIONS: readonly OptionRow[] = [
-  { flag: "--repair", value: null, about: "mend the install at its provider, with an account token", variable: null },
-  { flag: "--update", value: null, about: "first bring an install that is behind to the newest release", variable: null },
-  { flag: "--dry-run", value: null, about: "say what a repair would change, and change nothing", variable: null },
-  { flag: "--add-user", value: "<email>", about: "let one more person log in", variable: null },
-  { flag: "--yes", value: null, about: "ask nothing; a missing answer stops the run and is named", variable: null },
-  { flag: "--token-stdin", value: null, about: "read the account token from standard input, and ask nothing", variable: null },
-  { flag: "--json", value: null, about: "print one JSON value, and nothing else on stdout", variable: null },
+  { flag: "--repair", value: null, about: "Repair the install with a provider account token", variable: null },
+  { flag: "--update", value: null, about: "Update to the latest release first", variable: null },
+  { flag: "--dry-run", value: null, about: "Show what a repair would change; change nothing", variable: null },
+  { flag: "--add-user", value: "<email>", about: "Allow one more person to log in", variable: null },
+  { flag: "--yes", value: null, about: "Never prompt; a missing answer stops the run", variable: null },
+  { flag: "--token-stdin", value: null, about: "Read the account token from stdin; never prompt", variable: null },
+  { flag: "--json", value: null, about: "Print one JSON value, and nothing else on stdout", variable: null },
 ];
 
 /** The options a person may reach for that a repair does not take, each with the line that says why or where. */

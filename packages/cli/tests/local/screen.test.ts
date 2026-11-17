@@ -7,7 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 
 import stringWidth from "string-width";
 
-import { processScreen, showsColour } from "../../src/local/screen";
+import { lookOf, processScreen, showsColour } from "../../src/local/screen";
 
 /** The ends of a screen nobody types into and nothing stops. */
 const NOBODY = { input: new PassThrough(), stop: () => undefined };
@@ -57,6 +57,18 @@ describe("showsColour", () => {
     ["a terminal that takes no control sequence", true, { TERM: "dumb" }, false],
   ])("%s: without this a log of CI or a pipe holds marks, colours, and the frames of the spinner", (_name, isTerminal, env, shows) => {
     expect(showsColour(isTerminal, env)).toBe(shows);
+  });
+});
+
+describe("lookOf", () => {
+  test.each([
+    ["a terminal 132 wide", { isTTY: true, columns: 132 }, {}, { width: 132, colour: true }],
+    ["a terminal that does not say how wide it is", { isTTY: true }, {}, { width: 80, colour: true }],
+    ["a pipe or a file", { columns: 132 }, {}, { width: 80, colour: false }],
+    ["a wide terminal with NO_COLOR set", { isTTY: true, columns: 132 }, { NO_COLOR: "1" }, { width: 80, colour: false }],
+    ["a wide terminal in CI", { isTTY: true, columns: 132 }, { CI: "true" }, { width: 80, colour: false }],
+  ])("%s: a help text is as wide as the terminal only where it is painted, so what a pipe or a log holds stays 80 wide", (_name, stream, env, look) => {
+    expect(lookOf(stream, env)).toEqual(look);
   });
 });
 

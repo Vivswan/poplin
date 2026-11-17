@@ -9,12 +9,12 @@ import type { RemovalMode, UninstallPlan } from "./records";
 
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
 export const UNINSTALL_OPTIONS: readonly OptionRow[] = [
-  { flag: "--dry-run", value: null, about: "list what a run would remove and keep, and remove nothing", variable: null },
-  { flag: "--confirm", value: "<address>", about: "the install's address, as proof; asked for when left out", variable: null },
-  { flag: "--keep-data", value: null, about: "leave the sites' files and the database", variable: null },
-  { flag: "--yes", value: null, about: "ask nothing; a missing answer stops the run and is named", variable: null },
-  { flag: "--token-stdin", value: null, about: "read the account token from standard input, and ask nothing", variable: null },
-  { flag: "--json", value: null, about: "print one JSON value, and nothing else on stdout", variable: null },
+  { flag: "--dry-run", value: null, about: "List what would be removed and kept; remove nothing", variable: null },
+  { flag: "--confirm", value: "<address>", about: "Install address, as confirmation; else prompted", variable: null },
+  { flag: "--keep-data", value: null, about: "Keep the site files and the database", variable: null },
+  { flag: "--yes", value: null, about: "Never prompt; a missing answer stops the run", variable: null },
+  { flag: "--token-stdin", value: null, about: "Read the account token from stdin; never prompt", variable: null },
+  { flag: "--json", value: null, about: "Print one JSON value, and nothing else on stdout", variable: null },
 ];
 
 /** The options a person may reach for that this command has none of, each with the line that says what to give. */

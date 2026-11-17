@@ -15,8 +15,11 @@ const NPM_EXEC = "exec";
 /** The words a command line starts with after `poplin`: every command and `help`, each as a whole word, and a path, a placeholder, or a flag. */
 const AFTER = [...[...COMMANDS, ...PROVIDER_COMMANDS].map((spec) => `${spec.name}(?![\\w-])`), "help(?![\\w-])", "\\.{1,2}(?:/|\\s|$)", "~", "<", "\\[", "--"].join("|");
 
-/** A command as a text names it, with `npx` before it or without. `poplin@latest` is not one: it names a version on purpose. */
-const NAMED = new RegExp(`\\b(?:npx )?poplin (?=${AFTER})`, "g");
+/** The colour sequences a painted text may hold between two of its words. */
+const PAINT = "(?:\\x1b\\[[\\d;]*m)*";
+
+/** A command as a text names it, with `npx` before it or without, painted or not. `poplin@latest` is not one: it names a version on purpose. */
+const NAMED = new RegExp(`(?<=^|\\W|\\x1b\\[[\\d;]*m)(?:npx )?poplin(${PAINT}) (?=${PAINT}(?:${AFTER}))`, "g");
 
 /** The buttons of the dashboard a text may name, each with the command that does the same. The longer wording stands first. */
 const BUTTONS: readonly (readonly [said: RegExp, command: string])[] = [
@@ -47,7 +50,7 @@ export function runnerOf(env: Readonly<Record<string, string | undefined>>): Run
 export function pasted(text: string, runner: Runner): string {
   const commands = BUTTONS.reduce((said, [button, command]) => said.replace(button, command), text);
 
-  return commands.replace(NAMED, `${runner} `);
+  return commands.replace(NAMED, `${runner}$1 `);
 }
 
 /** The same screen, with every line, question, and choice worded for the person at this terminal. */

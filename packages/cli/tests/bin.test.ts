@@ -66,8 +66,8 @@ describe("bin", () => {
 
     expect(outcomes).toEqual([
       { status: 0, stdout: manifest.version, stderr: "" },
-      { status: 0, stdout: "usage: poplin list [flags]", stderr: "" },
-      { status: 2, stdout: "", stderr: "usage: poplin <path> [flags]       publish a folder, or one HTML file" },
+      { status: 0, stdout: "Usage: poplin list [flags]", stderr: "" },
+      { status: 2, stdout: "", stderr: "Usage: poplin <path> [flags]       Publish a folder or one HTML file" },
       { status: 2, stdout: "", stderr: 'unknown command "listt"' },
       { status: 3, stdout: "", stderr: "not logged in" },
     ]);

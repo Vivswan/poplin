@@ -10,7 +10,7 @@ import type { Io } from "../commands/records";
 import { guardedScreen, written } from "../commands/line/util";
 import { pasted, runnerOf } from "../local/invoked";
 import { loadProviders } from "../local/providers";
-import { foldedText, type Tone } from "../local/screen";
+import { foldedText, type Look, PLAIN_LOOK, type Tone } from "../local/screen";
 import { VERSION } from "../poplin";
 import { STOPPED, TOKEN_VARIABLE } from "./ask";
 import type { Careful, InstallEnds, Next, Parsed, Provider, Stop } from "./records";
@@ -54,8 +54,8 @@ export interface CommandRun<Planned> {
   /** Reads the words into what they ask for. */
   readonly parse: (words: readonly string[], providers: readonly Provider[], env: Io["machine"]["env"], canAsk: boolean) => Parsed<Planned>;
 
-  /** The help of the command, or of one provider. */
-  readonly help: (providers: readonly Provider[], provider?: Provider) => string;
+  /** The help of the command, or of one provider, laid out for a look. */
+  readonly help: (providers: readonly Provider[], provider: Provider | undefined, look: Look) => string;
 
   /** Whether a plan asked for the one JSON value. */
   readonly json: (plan: Planned) => boolean;
@@ -135,10 +135,17 @@ export function stopped(stop: Stop, show: Show, at: StoppedAt): number {
   return exitCode({ kind: ENDINGS[stop.exit] });
 }
 
+/** A help of the command as stdout shows it, with each command it names started as this process was. */
+function shownHelp<Planned>(command: CommandRun<Planned>, providers: readonly Provider[], provider: Provider | undefined, io: Io): string {
+  const look = io.looks?.out ?? PLAIN_LOOK;
+
+  return foldedText(pasted(command.help(providers, provider, look), runnerOf(io.machine.env)), look.width);
+}
+
 /** The list of providers, for a line that names none where nobody can be asked. */
 function list<Planned>(command: CommandRun<Planned>, providers: readonly Provider[], json: boolean, io: Io): number {
   if (json) io.out(JSON.stringify({ ok: true, providers: providers.map((one) => ({ id: one.id, name: one.name, about: one.about })) }));
-  else io.out(foldedText(pasted(command.help(providers), runnerOf(io.machine.env))));
+  else io.out(shownHelp(command, providers, undefined, io));
 
   return exitCode({ kind: "done" });
 }
@@ -165,7 +172,7 @@ async function answered<Planned>(line: Line<Planned>, parsed: Parsed<Planned>, p
   const { command } = line;
   const { name } = command;
   if (parsed.kind === "help" || parsed.kind === "version") {
-    io.out(parsed.kind === "help" ? foldedText(pasted(command.help(providers, parsed.provider), runnerOf(io.machine.env))) : VERSION);
+    io.out(parsed.kind === "help" ? shownHelp(command, providers, parsed.provider, io) : VERSION);
 
     return exitCode({ kind: "done" });
   }

@@ -3,8 +3,6 @@
 //   a dry run    would make   <object>   <detail>
 //   a run        made         <object>   <detail>
 
-import { Help } from "commander";
-
 import type { Login } from "../../../core/src/auth/logins";
 import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
@@ -41,9 +39,6 @@ const COUNTED: readonly (readonly [RowState, string])[] = [
   ["leave-out", "leave out"],
 ];
 
-/** Commander's own layout of a help text, at the width every help of poplin has. */
-const HELP = Object.assign(new Help(), { helpWidth: 80 });
-
 /** What a line that stands under another starts with. */
 const INDENT = "  ";
 
@@ -72,7 +67,13 @@ const UNCHANGED_SENTENCE = "Nothing was changed.";
 const UNCHANGED_ENDING = /(^|\. |: )nothing was changed\.?$/;
 
 /** What every dry run of the three commands exits with, as each help says it. */
-export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
+export const DRY_RUN_HELP: readonly string[] = ["--dry-run exits as the real run would, as far as reading can tell: 0 when it", "would go through, and 1 when something would stop it first."];
+
+/** What a help lists in place of the providers where the built package carries none. */
+export const NO_PROVIDER = "none: this build of poplin includes no provider";
+
+/** What the help of one provider adds to the command's own, beside the line that asks for it. */
+export const PROVIDER_HELP = "Provider options and token permissions";
 
 /** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (a place, a user, a repair's update, never a consent), then each careful choice. */
 export const NEXT = {
@@ -310,15 +311,10 @@ function ownerLines(provider: Provider, version: string | undefined, newest: str
 }
 
 /**
- * The rows of some options in a help text: each as it is typed, what it means, and the variable that answers the same.
- *
- * @returns one text per option, laid out by commander: a meaning wider than the line goes on under itself
+ * The rows of some options in a help text: each as it is typed, and what it means with the variable that answers the same.
  */
-export function optionLines(rows: readonly OptionRow[]): string[] {
-  const terms = rows.map((row) => (row.value === null ? row.flag : `${row.flag} ${row.value}`));
-  const width = Math.max(...terms.map((term) => term.length));
-
-  return rows.map((row, at) => HELP.formatItem(terms[at] ?? "", width, row.variable === null ? row.about : `${row.about}  (${row.variable})`, HELP));
+export function optionRows(rows: readonly OptionRow[]): [term: string, about: string][] {
+  return rows.map((row) => [row.value === null ? row.flag : `${row.flag} ${row.value}`, row.variable === null ? row.about : `${row.about}  (${row.variable})`]);
 }
 
 /**
