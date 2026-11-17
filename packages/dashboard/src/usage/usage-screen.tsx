@@ -17,7 +17,7 @@ export function UsageScreen(): ReactNode {
   return (
     <AppShell current="usage" heading="Usage">
       <ProblemsPlace>
-        <section aria-label="Usage" className="line-room flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <section aria-label="Usage" className="line-room flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pb-6">
           <VisitsBlock />
           {error === null ? null : <p className="px-6 py-8 text-muted-foreground max-md:px-4">{error.message}</p>}
           {usage === undefined && error === null ? <WaitingRows /> : null}

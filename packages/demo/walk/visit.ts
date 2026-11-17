@@ -72,25 +72,34 @@ function watch(context: BrowserContext, origin: string): Watched {
   return { seen, besides };
 }
 
+/**
+ * A part of the page by its role, also under an open panel: a panel hides the rest of the page from a screen reader for as long as it is open, and a pointer still reaches it.
+ *
+ * Of two parts with one name, as the sections at the side and in a phone's sheet, it is the one in sight.
+ */
+export function onPage(within: Page | Locator, role: Parameters<Page["getByRole"]>[0], named: Parameters<Page["getByRole"]>[1] = {}): Locator {
+  return within.getByRole(role, { ...named, includeHidden: true }).filter({ visible: true });
+}
+
 /** The heading of the screen a page shows. */
 export function screenHeading(page: Page, name: string): Locator {
-  return page.getByRole("heading", { level: 1, name, exact: true });
+  return onPage(page, "heading", { level: 1, name, exact: true });
 }
 
 /** The sites the Sites screen lists, each by what the list calls it: in the table of a wide screen and in the list of a narrow one. A site that is served has a link there, which opens the site; a site in the trash has plain words. */
 export function siteNames(page: Page): Locator {
-  return page.getByRole("region", { name: "Sites", exact: true }).locator('[data-slot="site-name"]:visible');
+  return onPage(page, "region", { name: "Sites", exact: true }).locator('[data-slot="site-name"]:visible');
 }
 
 /** One site in the list the Sites screen shows, by what the list calls the site. */
 export function siteName(page: Page, name: string): Locator {
-  return page.getByRole("region", { name: "Sites", exact: true }).locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]:visible`);
+  return onPage(page, "region", { name: "Sites", exact: true }).locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]:visible`);
 }
 
 /** Open a site's panel: a press on its row beside the title. A wide screen's row says there who can open the site; a narrow screen's row has a button of its own under its words. */
 export async function openPanel(page: Page, name: string): Promise<void> {
-  const list = page.getByRole("region", { name: "Sites", exact: true });
-  const row = list.getByRole("row").filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) });
+  const list = onPage(page, "region", { name: "Sites", exact: true });
+  const row = onPage(list, "row").filter({ has: page.locator(`[data-slot="site-name"][title=${JSON.stringify(name)}]`) });
   if (await row.isVisible()) return row.getByText(/^(Private|Unlisted|Public)$/).click();
 
   // On a phone the button lies under the row's words and controls: the press lands in the row's own corner, where nothing lies over it.
@@ -116,10 +125,10 @@ export async function arrive(page: Page): Promise<string[]> {
 
 /** Go to a section by its entry at the side, which a narrow screen keeps behind a button. A section whose screen holds a problem says how many after its name. */
 export async function toSection(page: Page, label: string): Promise<void> {
-  const behind = page.getByRole("button", { name: SECTIONS_BUTTON });
+  const behind = onPage(page, "button", { name: SECTIONS_BUTTON });
   if (await behind.isVisible()) await behind.click();
 
-  await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: new RegExp(`^${label}( \\d+ problems?)?$`) }).click();
+  await onPage(onPage(page, "navigation", { name: "Sections", exact: true }), "link", { name: new RegExp(`^${label}( \\d+ problems?)?$`) }).click();
 }
 
 /** Move a site to the trash from its panel, on the Sites screen, and wait until the dashboard says so and the site has left the list. */

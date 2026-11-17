@@ -2,7 +2,7 @@
 //
 // A number the install counted itself reads "about", since its count can read low. What the account holds reads "at most", since the host's figure of it can read high.
 // Once the host gave its own figures, the line over the table says when, and how far behind they run.
-// A figure the host gave none of reads "Not read". The processing time stands beside a limit that stops nothing by itself, so above it the line shows a quiet sign with a hint and never the words of a limit passed.
+// A figure the host gave none of reads "Not read". The processing time stands beside a limit that stops nothing by itself, so above it the line says "Slow" beside a quiet sign with a hint, and never the words of a limit passed.
 // A day's number is of a UTC day: its line says "today" where that is the reader's date too, and names the day where it is not.
 
 import { showBytes } from "@poplin/core/src/records/settings";
@@ -79,6 +79,15 @@ const AT_MOST: ReadonlySet<Line["what"]> = new Set(["host_stored", "host_databas
 /** The lines whose limit stops nothing by itself: a number above it is a sign to look, never a limit passed. */
 const GUIDES: ReadonlySet<Line["what"]> = new Set(["host_slowest"]);
 
+/** What a line above its guide says, in the look of a number near its limit. */
+const SLOW = "Slow";
+
+/** What the line over the table says of the lines named "Account", after when the host's figures were read. */
+const ACCOUNT_LINES = '"Account" lines count the whole account, not only poplin.';
+
+/** The look of a way in words that a line of a phone ends in: to the setting of its limit, and to the host's page. */
+const WORD_LINK = "h-auto gap-1 border-0 px-0 text-[13px] font-normal text-link underline-offset-2";
+
 /** What a line says in place of a number the host gave none of. */
 const NOT_READ = "Not read";
 
@@ -151,23 +160,31 @@ function namesOf(spans: ReturnType<typeof spansOf>): Names {
   };
 }
 
-/** The quiet sign of a number above its guide: a button whose hint a pointer and the keyboard are shown, and whose press does nothing. Nothing for a line that has no such hint. */
+/** What a number above its guide shows: a quiet sign, a button whose hint a pointer and the keyboard are shown and whose press does nothing, and the word beside it. Nothing for a line that has no such hint. */
 function GuideSign({ line, name, host }: Hosted): ReactNode {
   const hint = guideHint(line, host);
   if (hint === undefined) return null;
 
   return (
-    <IconButton label={hint} name={`${name}: ${hint}`} className="text-warn hover:text-warn">
-      <TriangleAlertIcon />
-    </IconButton>
+    <span className="flex items-center gap-1">
+      <IconButton label={hint} name={`${name}: ${hint}`} className="text-warn hover:text-warn">
+        <TriangleAlertIcon />
+      </IconButton>
+      <span className="font-medium text-warn">{SLOW}</span>
+    </span>
   );
 }
 
-/** The hint of a number above its guide, in words, for a phone: it has no pointer to show a hint to. */
+/** A number above its guide on a phone, which has no pointer to show a hint to: the word, and the hint in words on a line of its own, under the limit. */
 function GuideWords({ line, host }: Pick<Hosted, "line" | "host">): ReactNode {
   const hint = guideHint(line, host);
 
-  return hint === undefined ? null : <span className="text-[13px] text-muted-foreground">{hint}</span>;
+  return hint === undefined ? null : (
+    <span className="flex flex-col gap-0.5 text-[13px]">
+      <span className="font-medium text-warn">{SLOW}</span>
+      <span className="text-muted-foreground">{hint}</span>
+    </span>
+  );
 }
 
 /** How much of its limit a line has used: a thin bar where there is room for one, the percent, and words from near the limit on. Nothing for a line without a limit or without a number, and for a guide the sign alone. */
@@ -225,21 +242,25 @@ function RowLinks({ line, name, host }: Hosted): ReactNode {
   );
 }
 
-/** The way from a line to the host's own page of its number, in words, for a phone: it has no pointer to show a hint to. */
-function HostLink({ line, name, host }: Hosted): ReactNode {
+/** Where a line of a phone leads, in words, since a phone has no pointer to show a hint to: the setting that holds its limit, then the host's own page of its number, side by side and in one look. Nothing for a line that leads nowhere. */
+function WordLinks({ line, name, host }: Hosted): ReactNode {
   const link = hostPage(line);
-  if (link === undefined) return null;
+  if (link === undefined && line.setting === null) return null;
 
   return (
-    <Button
-      variant="link"
-      nativeButton={false}
-      render={<a href={link} target="_blank" rel="noreferrer" aria-label={hostLinkName(name, host)} />}
-      className="h-auto gap-1 self-start border-0 px-0 text-[13px] font-normal text-link underline-offset-2"
-    >
-      See it at {host}
-      <ExternalLinkIcon aria-hidden className="size-3.5" />
-    </Button>
+    <span className="flex flex-wrap items-center gap-x-5">
+      {line.setting === null ? null : (
+        <Button variant="link" nativeButton={false} render={<Link {...settingAddress(line.setting)} aria-label={`Change the limit of ${name}`} />} className={WORD_LINK}>
+          Change the limit
+        </Button>
+      )}
+      {link === undefined ? null : (
+        <Button variant="link" nativeButton={false} render={<a href={link} target="_blank" rel="noreferrer" aria-label={hostLinkName(name, host)} />} className={WORD_LINK}>
+          See it at {host}
+          <ExternalLinkIcon aria-hidden className="size-3.5" />
+        </Button>
+      )}
+    </span>
   );
 }
 
@@ -269,7 +290,7 @@ function usageColumns(names: Names, host: string, bar: boolean): readonly Column
   ];
 }
 
-/** The lines where the table has no room: the name beside the number, under them the share beside the limit, and the way to the host's page last. Every number ends at one edge, and every limit ends under it. */
+/** The lines where the table has no room: the name beside the number, under them the share beside the limit, and last where the line leads, in words. Every number ends at one edge, and every limit ends under it. */
 function NarrowList({ usage, names }: { readonly usage: Usage; readonly names: Names }): ReactNode {
   const named = usage.lines.map((line) => ({ line, name: names(line.what) }));
 
@@ -280,16 +301,14 @@ function NarrowList({ usage, names }: { readonly usage: Usage; readonly names: N
           <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1">{name}</span>
             <span className="shrink-0 tabular-nums">{used(line)}</span>
-            <span className="flex w-10 shrink-0 justify-end">
-              <LimitLink line={line} name={name} />
-            </span>
           </span>
           {/* The limit is read right after its number, and drawn at the end of the row under it. */}
-          <span className="flex flex-row-reverse items-start gap-2 pr-12">
+          <span className="flex flex-row-reverse items-start gap-2">
             <span className="shrink-0 text-xs leading-5 text-muted-foreground tabular-nums">{line.limit === null ? "No limit" : `of ${amount(line, line.limit)}`}</span>
-            <span className="flex min-w-0 flex-1 flex-col">{GUIDES.has(line.what) ? <GuideWords line={line} host={usage.host} /> : <ShareCell line={line} name={name} host={usage.host} bar="list" />}</span>
+            <span className="flex min-w-0 flex-1 flex-col">{GUIDES.has(line.what) ? null : <ShareCell line={line} name={name} host={usage.host} bar="list" />}</span>
           </span>
-          <HostLink line={line} name={name} host={usage.host} />
+          {GUIDES.has(line.what) ? <GuideWords line={line} host={usage.host} /> : null}
+          <WordLinks line={line} name={name} host={usage.host} />
         </li>
       ))}
     </ul>
@@ -305,7 +324,7 @@ function behindWords(behind: number | null): string {
 function officialWords(official: NonNullable<Usage["official"]>, host: string): string {
   // A host may be named by a plain word, which starts both sentences.
   const first = `${host.slice(0, 1).toUpperCase()}${host.slice(1)}`;
-  if ("at" in official) return `${first}'s own figures, as of ${momentIn(official.at)}.${behindWords(official.behind)}`;
+  if ("at" in official) return `${first}'s own figures, as of ${momentIn(official.at)}.${behindWords(official.behind)} ${ACCOUNT_LINES}`;
 
   if (official.refusal === "unreachable") return `${first} did not answer. ${OWN_COUNT}`;
 

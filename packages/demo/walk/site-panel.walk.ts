@@ -3,7 +3,7 @@
 
 import { expect } from "@playwright/test";
 
-import { arrive, openPanel, siteName, test, toSection } from "./visit";
+import { arrive, onPage, openPanel, siteName, test, toSection } from "./visit";
 
 /** The screens the walk is taken on: the narrowest the Sites table fits, and one between it and the widest. */
 const SCREENS = [
@@ -40,8 +40,8 @@ for (const size of SCREENS) {
     // Drift: the panel would take the whole room of the list again on a screen narrower than the widest, where no row is seen or pressed while it is open.
     test("the panel is 440 px wide at the end of the screen, the table keeps its width, a site's title stays in sight beside it, and a press under the last row closes it", async ({ page }) => {
       await arrive(page);
-      const list = page.getByRole("region", { name: "Sites", exact: true });
-      const table = page.getByRole("table", { name: "Sites", exact: true });
+      const list = onPage(page, "region", { name: "Sites", exact: true });
+      const table = onPage(page, "table", { name: "Sites", exact: true });
       const without = await table.boundingBox();
 
       await openPanel(page, SAMPLE.opened);

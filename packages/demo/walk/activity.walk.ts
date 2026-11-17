@@ -1,5 +1,8 @@
 // The Activity log in its room: what the table's columns show whole and where the room they leave over goes, and what a phone's row shows whole.
 // And the screen at rest and narrowed to one site: which entries it shows stands in sight on a line of its own over the list, with the tools whole over it.
+// And the file of a narrowed log whose newest entries hold nothing of it: it begins with the entries the screen finds further back.
+
+import { readFile } from "node:fs/promises";
 
 import { expect, type Locator } from "@playwright/test";
 
@@ -116,3 +119,23 @@ for (const size of AT_REST) {
     });
   });
 }
+
+// Drift: the first file of a narrowed log would begin at the log's newest entry again: where the newest 5,000 entries hold nothing of it, that file is one note and no entry, while the screen, searched further, shows them.
+test("a file of a log narrowed to what its newest 5,000 entries do not hold begins with the entries Search further shows, as many lines as the screen has rows", async ({ page }) => {
+  await arrive(page);
+  await page.goto("state/activity/long");
+  const log = page.getByRole("region", { name: "Activity", exact: true });
+  await log.getByRole("button", { name: "Search further", exact: true }).click();
+  const rows = log.locator("tbody > tr");
+  await expect(rows.first()).toBeVisible();
+  const shown = await rows.count();
+
+  await log.getByRole("button", { name: "Download", exact: true }).filter({ visible: true }).click();
+  const [file] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "CSV", exact: true }).click()]);
+  const [, ...lines] = (await readFile(await file.path(), "utf8")).split("\r\n").filter((line) => line !== "");
+
+  // The control: the screen shows entries, so a file of none would be the fault.
+  expect(shown).toBeGreaterThan(1);
+  expect(lines.filter((line) => line.includes("Searched 5,000 entries"))).toEqual([]);
+  expect(lines).toHaveLength(shown);
+});

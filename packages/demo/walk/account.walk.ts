@@ -44,10 +44,13 @@ test.describe("on a phone", () => {
     await arrive(page);
     await page.getByRole("button", { name: SECTIONS_BUTTON }).click();
     await account(page).tap();
-    const [item, button] = await Promise.all([signOut(page).boundingBox(), account(page).boundingBox()]);
+    // The menu grows into its place as it opens: it is measured until it has come to rest.
+    await expect(async () => {
+      const [item, button] = await Promise.all([signOut(page).boundingBox(), account(page).boundingBox()]);
 
-    expect((item?.y ?? Number.NaN) + (item?.height ?? Number.NaN)).toBeLessThanOrEqual(button?.y ?? Number.NaN);
-    expect(item?.x).toBeGreaterThanOrEqual(0);
+      expect((item?.y ?? Number.NaN) + (item?.height ?? Number.NaN)).toBeLessThanOrEqual(button?.y ?? Number.NaN);
+      expect(item?.x).toBeGreaterThanOrEqual(0);
+    }).toPass();
 
     await signOut(page).tap();
     await expect(page.locator("body")).toContainText(SIGNED_OUT);

@@ -26,6 +26,9 @@ const MOST_FILE_ENTRIES = 10_000;
 /** How far back a count of the log reads: a log of more entries is counted as this many and more. */
 const MOST_COUNTED = 10_000;
 
+/** How many windows of the log with no entry of a narrowed file in them the file is moved past before it begins. */
+const EMPTY_WINDOWS_PASSED = 4;
+
 /** What a reading of the log may ask for. */
 export const AUDIT_QUERY = v.strictObject({
   limit: v.optional(v.pipe(POSITIVE, v.maxValue(MAX_PAGE)), MAX_PAGE),
@@ -173,6 +176,25 @@ export async function listAuditForFile(install: Install, actor: Actor, query: v.
 }
 
 /**
+ * Find where a narrowed file of the log begins: past the windows of the log that hold no entry of it, a few at the most. Where an entry lies that near, the file's first lines are entries, and not the note of a reading that stopped short.
+ *
+ * @param asked - the narrowing, and in `after` the place the file would begin
+ * @returns the place the file is read from: `after` itself where its window holds an entry or the log ends in it, and the end of the last window passed where every one of them was empty
+ */
+async function startOfNarrowedFile(install: Install, asked: Omit<Asked, "limit" | "after"> & { readonly after: number }): Promise<number> {
+  let from = asked.after;
+
+  for (let passed = 0; passed < EMPTY_WINDOWS_PASSED; passed += 1) {
+    const read = await found(install, { ...asked, after: from, limit: 1 });
+    if (read.entries.length > 0 || read.stoppedAt === undefined) return from;
+
+    from = read.stoppedAt;
+  }
+
+  return from;
+}
+
+/**
  * Find where a narrowed file of the log ends, by the readings the file itself is made of, with their entries dropped: each looks at no more than its window.
  *
  * @param entries - how many entries the file holds
@@ -197,7 +219,8 @@ async function endOfNarrowedFile(install: Install, asked: Omit<Asked, "limit">, 
 /**
  * Find the place the file after a file of the log goes on from. It hands no entry out.
  *
- * A narrowed file may end sooner than a full one: where one of its readings stopped short. The file is to be read from `from`, the place its end was counted from, so an entry written meanwhile shifts neither.
+ * A narrowed file may end sooner than a full one: where one of its readings stopped short. It begins past the windows of the log that hold no entry of it, four at the most.
+ * The file is to be read from `from`, the place its end was counted from, so an entry written meanwhile shifts neither.
  *
  * @param query - `kind`, `site`, `of`, and `after` as the file's readings take them; `entries` is how many entries the file holds, 10,000 at the most
  * @returns `from`, the place the file itself is read from, and `after`, or `null` when the log ends with the file, so no file follows; `not_allowed` for anyone but an admin, or `bad_argument` naming the key that was refused
@@ -214,8 +237,9 @@ export async function nextAuditFile(
 
   const { entries, ...narrowed } = asked.output;
   const from = narrowed.after ?? ((await install.database.listAudit({ limit: 1 })).at(0)?.seq ?? 0) + 1;
-  const placed = { ...narrowed, after: from };
-  if (narrowed.kind !== undefined || narrowed.site !== undefined || narrowed.of !== undefined) return { ok: true, from, after: await endOfNarrowedFile(install, placed, entries) };
+  if (narrowed.kind === undefined && narrowed.site === undefined && narrowed.of === undefined) return { ok: true, from, after: (await install.database.endOfAuditPart({ entries, after: from })) ?? null };
 
-  return { ok: true, from, after: (await install.database.endOfAuditPart({ entries, after: from })) ?? null };
+  const start = await startOfNarrowedFile(install, { ...narrowed, after: from });
+
+  return { ok: true, from: start, after: await endOfNarrowedFile(install, { ...narrowed, after: start }, entries) };
 }

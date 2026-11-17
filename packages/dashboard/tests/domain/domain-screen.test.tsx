@@ -30,13 +30,13 @@ const ROWS = {
 } as const;
 
 /** What a check made now answers. */
-const FOUND = { ok: true, rows: ROWS.found, steps: [], summary: { line: "1 to repair", tone: "bad" } };
+const FOUND = { ok: true, rows: ROWS.found, steps: [], summary: { line: "1 to repair", tone: "bad" }, waiting: 1 };
 
 /** The refusal of a check the provider did not answer. */
 const UNREACHED = { ok: false, code: "unreachable", about: null, sentence: "No answer from the provider. Try again." };
 
-/** What the frame says the problems of the domain ask for, until a test sets it: nothing. */
-const frame: { asks: { line: string; tone: string } | null } = { asks: null };
+/** How many problems of the domain the frame says ask for a repair, until a test sets it: none. */
+const frame = { asks: 0 };
 
 /** The body of every check the screen sent. */
 const checks: unknown[] = [];
@@ -46,7 +46,7 @@ const held: (() => void)[] = [];
 
 /** The run the install remembers, made `minutes` ago. */
 function lastOf(minutes: number): Record<string, unknown> {
-  return { ran_at: Date.now() - minutes * 60_000, by: "mira@example.com", run: "check", stale: false, waits: false, rows: ROWS.remembered, summary: { line: "Nothing to repair", tone: "good" } };
+  return { ran_at: Date.now() - minutes * 60_000, by: "mira@example.com", run: "check", stale: false, waits: false, rows: ROWS.remembered, summary: { line: "Nothing to repair", tone: "good" }, waiting: 0 };
 }
 
 /**
@@ -115,7 +115,7 @@ afterEach(() => {
   globalThis.fetch = OWN_FETCH;
   checks.length = 0;
   held.length = 0;
-  frame.asks = null;
+  frame.asks = 0;
 });
 afterAll(async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -166,34 +166,45 @@ describe("on an install whose check needs no token", () => {
   });
 
   // Drift: the problems of the domain are drawn under the line from the frame, which is read again as it grows old. A line taken from the run alone would say "Nothing to repair" over a problem that says "press Repair",
-  // one kept from the moment of the run would go on asking for a repair after the problem left, and one that let the frame's count stand over a run with work of its own would hide that work.
-  test("the line of a run with nothing left is the frame's count of the problems that ask for a repair, for as long as the frame holds them; a run with work left keeps its own line", async () => {
+  // one kept from the moment of the run would go on asking for a repair after the problem left, and one that counted the pieces alone would say "1 to repair" over a piece and three problems that each ask for one.
+  test("the line counts the pieces that wait for a repair and the problems the frame says ask for one, for as long as the frame holds them", async () => {
     serve(true, lastOf(1));
     const page = await drawn();
     const lines = [shown(page).line];
-    const reread = async (asks: typeof frame.asks): Promise<void> => {
+    const reread = async (asks: number): Promise<void> => {
       frame.asks = asks;
       await act(async () => {
         await client.invalidateQueries({ queryKey: FRAME_KEY });
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
     };
-    await reread({ line: "3 to repair", tone: "bad" });
+    await reread(3);
     lines.push(shown(page).line);
-    await reread(null);
+    await reread(0);
     lines.push(shown(page).line);
-    await reread({ line: "3 to repair", tone: "bad" });
+    await reread(3);
     await press(page, "Check");
     await waitFor(() => expect(shown(page).details).toEqual([ROWS.found[0].detail]));
     lines.push(shown(page).line);
+    await reread(0);
+    lines.push(shown(page).line);
 
-    expect(lines.map((line) => line.slice(0, line.indexOf("repair") + "repair".length))).toEqual(["Nothing to repair", "3 to repair", "Nothing to repair", "1 to repair"]);
+    expect(lines.map((line) => line.slice(0, line.indexOf("repair") + "repair".length))).toEqual(["Nothing to repair", "3 to repair", "Nothing to repair", "4 to repair", "1 to repair"]);
+  });
+
+  // Drift: a line that says what a repair did not do, or that the users changed, says more than a count: a count of the problems put in its place would hide it.
+  test.each(["2 not done", "Users changed. Press Repair."])("a run whose line is %s keeps it over problems that ask for a repair", async (line) => {
+    serve(true, { ...lastOf(1), summary: { line, tone: "bad" } });
+    frame.asks = 2;
+    const page = await drawn();
+
+    expect(shown(page).line.startsWith(line)).toBe(true);
   });
 
   // Drift: a check that left nothing would be said in the words of the run alone, "Nothing to repair.", beside a line and a problem that ask for a repair.
   test("a pressed check that leaves nothing, over problems that ask for a repair, is said in the line the screen then shows", async () => {
-    serve(true, lastOf(1), { now: true, found: { ok: true, rows: ROWS.remembered, steps: [], summary: { line: "Nothing to repair", tone: "good" } } });
-    frame.asks = { line: "1 to repair", tone: "bad" };
+    serve(true, lastOf(1), { now: true, found: { ok: true, rows: ROWS.remembered, steps: [], summary: { line: "Nothing to repair", tone: "good" }, waiting: 0 } });
+    frame.asks = 1;
     const page = await drawn();
     await press(page, "Check");
     await waitFor(() => page.getByText("1 to repair."));

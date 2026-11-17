@@ -87,11 +87,12 @@ describe("what the screen opens with", () => {
       waits: false,
       rows: [
         { piece: "DNS record", state: "present", tone: "good", detail: "*.example.com" },
-        { piece: "DNS record", state: "needs repair", tone: "bad", detail: "poplin.example.com" },
+        { piece: "DNS record", state: "needs repair", tone: "bad", detail: "poplin.example.com: missing or changed" },
         { piece: "Worker route", state: "present", tone: "good", detail: "poplin.example.com/*" },
         { piece: "Rate rule", state: "optional", tone: "idle", detail: "rate rule: the domain has other hostnames" },
       ],
       summary: { line: "1 to repair", tone: "bad" },
+      waiting: 1,
     });
   });
 
@@ -252,30 +253,30 @@ describe("a run", () => {
   });
 });
 describe("the line that counts a run's rows", () => {
-  // Drift: the line would claim a repair that left work was done, or count an optional piece as work.
+  // Drift: the line would claim a repair that left work was done, or count an optional piece as work; or the count a screen adds its problems to would be one the line does not say.
   test.each([
-    ["check", rowsIn("present", "missing", "differs", "left-out"), "2 to repair", "bad"],
-    ["repair", rowsIn("created", "changed", "removed", "present"), "3 repaired", "good"],
-    ["repair", rowsIn("present", "present"), "Nothing to repair", "good"],
-    ["check", rowsIn("present", "created"), "Nothing to repair", "good"],
-    ["repair", rowsIn("created", "failed", "present"), "1 not done", "bad"],
-    ["repair", rowsIn("failed", "not-run", "missing"), "3 not done", "bad"],
-    ["repair", rowsIn("created", "optional", "optional"), "1 repaired", "good"],
-    ["check", rowsIn("present", "optional"), "Nothing to repair", "good"],
-  ] as const)("after a %s of %p says %s", (run, rows, line, tone) => {
+    ["check", rowsIn("present", "missing", "differs", "left-out"), "2 to repair", "bad", 2],
+    ["repair", rowsIn("created", "changed", "removed", "present"), "3 repaired", "good", 0],
+    ["repair", rowsIn("present", "present"), "Nothing to repair", "good", 0],
+    ["check", rowsIn("present", "created"), "Nothing to repair", "good", 0],
+    ["repair", rowsIn("created", "failed", "present"), "1 not done", "bad", 0],
+    ["repair", rowsIn("failed", "not-run", "missing"), "3 not done", "bad", 0],
+    ["repair", rowsIn("created", "optional", "optional"), "1 repaired", "good", 0],
+    ["check", rowsIn("present", "optional"), "Nothing to repair", "good", 0],
+  ] as const)("after a %s of %p says %s", (run, rows, line, tone, waiting) => {
     const reading: Extract<DomainReading, { ok: true }> = { ok: true, rows: [...rows], steps: [] };
 
-    expect(runDone(run, reading, false).summary).toEqual({ line, tone });
+    expect(runDone(run, reading, false)).toMatchObject({ summary: { line, tone }, waiting });
   });
 
   // Drift: a user added in Access cannot log in until a repair, and a green "Nothing to repair" would say there is nothing to do. Said over a count of work, it would hide the pieces a repair must also mend.
   test.each([
-    ["check", rowsIn("present", "optional"), "Users changed. Press Repair.", "bad"],
-    ["repair", rowsIn("created", "present"), "Users changed. Press Repair.", "bad"],
-    ["check", rowsIn("present", "missing"), "1 to repair", "bad"],
-    ["repair", rowsIn("created", "failed"), "1 not done", "bad"],
-  ] as const)("after a %s of %p while changed users wait for a repair says %s", (run, rows, line, tone) => {
-    expect(runDone(run, { ok: true, rows: [...rows], steps: [] }, true).summary).toEqual({ line, tone });
+    ["check", rowsIn("present", "optional"), "Users changed. Press Repair.", "bad", 0],
+    ["repair", rowsIn("created", "present"), "Users changed. Press Repair.", "bad", 0],
+    ["check", rowsIn("present", "missing"), "1 to repair", "bad", 1],
+    ["repair", rowsIn("created", "failed"), "1 not done", "bad", 0],
+  ] as const)("after a %s of %p while changed users wait for a repair says %s", (run, rows, line, tone, waiting) => {
+    expect(runDone(run, { ok: true, rows: [...rows], steps: [] }, true)).toMatchObject({ summary: { line, tone }, waiting });
   });
 
   // Drift: an optional piece that is not set up would read as a failure.
@@ -313,11 +314,12 @@ describe("the run the install remembers", () => {
       waits: true,
       rows: [
         { piece: "DNS record", state: "present", tone: "good", detail: "every site" },
-        { piece: "Login policy", state: "needs repair", tone: "bad", detail: "the logins" },
+        { piece: "Login policy", state: "needs repair", tone: "bad", detail: "the logins: missing or changed" },
         { piece: "Rate rule", state: "optional", tone: "idle", detail: "left out" },
         { piece: "Route", state: "not run", tone: "idle", detail: "never reached" },
       ],
       summary: { line: "2 not done", tone: "bad" },
+      waiting: 0,
     });
     expect(keptAnswer({ check: null, stale: false, waits: false })).toBeNull();
   });

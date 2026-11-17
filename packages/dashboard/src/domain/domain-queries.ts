@@ -3,8 +3,8 @@
 //   an install whose check needs no token    the remembered run shows at once; opening the screen checks again when there is none, or it is older than `CHECK_FRESH_MS`
 //   an install whose check needs a token     the remembered run shows until a run is made from the dialog
 //
-// The line of a run is its own count of its pieces. Where that says nothing is left while the frame holds problems of the domain that say to press Repair, the frame's count of those is the line:
-// the problems are drawn under it from the same frame, so the two never say different things.
+// The line counts every mark under it that a repair ends: the pieces of the run that wait for one, and the problems of the domain that say to press Repair.
+// Those problems are drawn under the line from the frame, and the frame gives their count, so the line and what is under it never say different things.
 //
 // The pieces on show are forgotten when the screen is left, so the screen always opens on what the install remembers.
 
@@ -54,9 +54,11 @@ interface Pieces {
   readonly take: (ran: Ran) => Promise<Ran>;
 }
 
-/** A run as the screen shows it: with its own line, or, where that says nothing is left, with what the problems drawn under it ask for. */
+/** A run as the screen shows it: its line counts its pieces that wait for a repair and the problems drawn under it that ask for one. A line that says anything else of work that is left, such as what a repair did not do, stays. */
 function shownOf(ran: Ran, asks: Frame["domainAsks"]): Ran {
-  return ran.summary.tone === "good" && asks !== null ? { ...ran, summary: asks } : ran;
+  if (asks === 0 || (ran.summary.tone === "bad" && ran.waiting === 0)) return ran;
+
+  return { ...ran, summary: { line: `${ran.waiting + asks} to repair`, tone: "bad" } };
 }
 
 /** Read what the Domain screen opens with. */
@@ -79,7 +81,7 @@ export function useDomainPieces(domain: Domain): Pieces {
   const { domainAsks } = useFrame().data;
   // The side says what the domain needs, which a run changes, and a repair ends the problems that asked for it: the frame is read again before the run is shown, so its line is never said over problems that are gone.
   const framed = (): Promise<void> => client.invalidateQueries({ queryKey: FRAME_KEY });
-  const asksNow = (): Frame["domainAsks"] => client.getQueryData<Frame>(FRAME_KEY)?.domainAsks ?? null;
+  const asksNow = (): Frame["domainAsks"] => client.getQueryData<Frame>(FRAME_KEY)?.domainAsks ?? 0;
   const ended = (): void => {
     setBefore({ at: last?.ran_at });
     void client.invalidateQueries({ queryKey: DOMAIN_KEY });
@@ -97,13 +99,13 @@ export function useDomainPieces(domain: Domain): Pieces {
       return ran;
     },
     enabled: domain.checks_alone,
-    ...(last === null ? {} : { initialData: { ok: true as const, rows: last.rows, steps: [], summary: last.summary }, initialDataUpdatedAt: last.ran_at }),
+    ...(last === null ? {} : { initialData: { ok: true as const, rows: last.rows, steps: [], summary: last.summary, waiting: last.waiting }, initialDataUpdatedAt: last.ran_at }),
     staleTime: CHECK_FRESH_MS,
     gcTime: 0,
   });
 
   // Until a run ends here the remembered run is shown as the screen's data has it now, which another screen's change may have read again.
-  const ran: Ran | undefined = before === undefined && last !== null ? { ok: true, rows: last.rows, steps: [], summary: last.summary } : pieces.data;
+  const ran: Ran | undefined = before === undefined && last !== null ? { ok: true, rows: last.rows, steps: [], summary: last.summary, waiting: last.waiting } : pieces.data;
 
   return {
     ran: ran === undefined ? undefined : shownOf(ran, domainAsks),

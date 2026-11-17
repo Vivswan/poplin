@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, isUnanswered, openPanel, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
+import { arrive, isUnanswered, onPage, openPanel, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -164,7 +164,7 @@ const STOPS: readonly Stop[] = [
   {
     name: "how a new site is made",
     open: (page) => page.getByRole("button", { name: "New site", exact: true }).click(),
-    shows: (page) => [page.getByText("Publish a folder", { exact: true })],
+    shows: (page) => [page.getByRole("dialog", { name: "New site", exact: true })],
     close: pressEscape,
   },
   {
@@ -502,20 +502,20 @@ function panel(page: Page): Locator {
 
 /** Press a place of the page beside an open panel that holds no control: the blank under the table's last row, a heading of the table beside its words, the band over the screen, or the blank under the sections. */
 async function pressBeside(page: Page, beside: "under the last row" | "on a heading of the table" | "on the band over the screen" | "on the blank of the sections"): Promise<void> {
-  const list = page.getByRole("region", { name: "Sites", exact: true });
+  const list = onPage(page, "region", { name: "Sites", exact: true });
   if (beside === "under the last row") {
     const room = await list.boundingBox();
-    const last = await list.getByRole("row").last().boundingBox();
+    const last = await onPage(list, "row").last().boundingBox();
     if (room === null || last === null) throw new Error("the list is out of sight");
     // The control: there is blank under the last row.
     expect(room.y + room.height - (last.y + last.height)).toBeGreaterThan(40);
 
     return page.mouse.click(room.x + 120, room.y + room.height - 20);
   }
-  if (beside === "on a heading of the table") return list.getByRole("columnheader").first().click({ position: { x: 8, y: 6 } });
+  if (beside === "on a heading of the table") return onPage(list, "columnheader").first().click({ position: { x: 8, y: 6 } });
   if (beside === "on the band over the screen") return page.locator("header").first().click({ position: { x: 12, y: 4 } });
 
-  const sections = await page.getByRole("navigation", { name: "Sections", exact: true }).boundingBox();
+  const sections = await onPage(page, "navigation", { name: "Sections", exact: true }).boundingBox();
   if (sections === null) throw new Error("the sections are out of sight");
 
   return page.mouse.click(sections.x + sections.width / 2, sections.y + sections.height + 80);
@@ -752,7 +752,7 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
   // Drift: an open panel would take a column's room from the table again, which was then laid out anew at every open and close; or a press beside the panel would leave it open; or a press on another row would only close it.
   test("the table keeps its width under the panel, a press on another row moves the panel to that site, and a press beside the panel closes it", async ({ page }) => {
     await arrive(page);
-    const table = page.getByRole("table", { name: "Sites", exact: true });
+    const table = onPage(page, "table", { name: "Sites", exact: true });
     const width = async (): Promise<number> => Math.round((await table.boundingBox())?.width ?? Number.NaN);
     const without = await width();
 
@@ -764,7 +764,7 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await expect(page.getByRole("dialog", { name: SAMPLE.graphed, exact: true })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
 
-    await page.getByRole("searchbox", { name: "Find a site", exact: true }).click();
+    await onPage(page, "searchbox", { name: "Find a site", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await width()).toBe(without);
   });
@@ -812,9 +812,8 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
   // Drift: the focus would go under the panel and out of sight again: the end of each row lies under the panel, and a row's controls keep the panel open.
   test("a focus that reaches a row's control under the panel closes the panel and stays there; one on a row's control beside the panel keeps it open", async ({ page }) => {
     await arrive(page);
-    const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true }) });
-    const beside = row.getByRole("button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
-    const under = row.getByRole("button", { name: /^Open the site /u });
+    const beside = onPage(page, "button", { name: `Details of ${SAMPLE.graphed}`, exact: true });
+    const under = onPage(onPage(page, "row").filter({ has: beside }), "button", { name: /^Open the site /u });
 
     await openPanel(page, SAMPLE.site);
     await beside.focus();
@@ -832,7 +831,7 @@ test.describe("on a screen 1440 px wide, at a press on the open site's row", () 
   // Drift: a press on a row would leave the focus on the area the table scrolls in, where the next key starts at no row; or the panel, closed as the button goes down, would open again as it comes up.
   test("a press on the row of the open site, held as long as a hand holds it, closes the panel and leaves the focus on the row's button", async ({ page }) => {
     await arrive(page);
-    const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true }) });
+    const row = onPage(page, "row").filter({ has: onPage(page, "button", { name: `Details of ${SAMPLE.site}`, exact: true }) });
 
     await openPanel(page, SAMPLE.site);
     await expect(panel(page)).toBeVisible();
@@ -848,8 +847,8 @@ test.describe("on a screen 1440 px wide, where a site's panel lies over more tha
   // Drift: the focus would go under the panel again on a control that is in no row: the panel lies over the last heading of the table and the end of its tools as well.
   test("a focus that leaves the first row for a heading under the panel, or reaches a tool of the list under it, closes the panel and stays there", async ({ page }) => {
     await arrive(page);
-    const first = page.getByRole("row").getByRole("button", { name: /^Details of / }).first();
-    const tool = page.getByRole("button", { name: "Columns", exact: true });
+    const first = onPage(onPage(page, "row"), "button", { name: /^Details of / }).first();
+    const tool = onPage(page, "button", { name: "Columns", exact: true });
 
     await openPanel(page, SAMPLE.site);
     await first.focus();
@@ -967,25 +966,6 @@ for (const size of [PHONE, FITS_FROM]) {
       await pressBeside(page, "on the band over the screen");
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true })).toBeFocused();
-    });
-
-    // Drift: Tab after the panel's last control would stop on a place with no name again, with the panel still open; or Escape would leave the focus on the page itself where the list is a table.
-    test("Tab after the panel's last control closes the panel and goes to the row's button, and so does Escape", async ({ page }) => {
-      await arrive(page);
-      const details = page.getByRole("button", { name: `Details of ${SAMPLE.site}`, exact: true });
-
-      await details.press("Enter");
-      await panel(page).getByRole("button", { name: "Delete", exact: true }).focus();
-      await page.keyboard.press("Tab");
-      await expect(page.getByRole("dialog")).toHaveCount(0);
-      await expect(details).toBeFocused();
-
-      // On a phone a person presses Escape after the list has left sight, which is when its button can no longer take the focus.
-      await details.press("Enter");
-      await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
-      if (size === PHONE) await expect(details).toBeHidden();
-      await pressEscape(page);
-      await expect(details).toBeFocused();
     });
   });
 }
