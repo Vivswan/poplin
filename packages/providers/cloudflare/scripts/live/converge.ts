@@ -11,9 +11,9 @@
 //     -> wait for the install to answer and its database to hold this commit's schema -> wait for the new deployment to answer the run's token -> the test install's caps
 //
 // The commands run in this process and take the commit's build as the newest release: commands.ts says how. Nothing here makes, mends, or removes a piece of an install itself.
-// It holds no state: each run reads what is there. A row of a command is printed as its object and what was done, and nothing else of it: a row's detail may quote Cloudflare.
-// A piece the install answers without, lacking a token permission or an account switch only a person can flip, is told as a lack, which the live suite skips for.
-// A piece nothing answers without stops the run as an error, whether it failed or the token lacks its permission.
+// It holds no state: each run reads what is there. A row is printed as its object and what was done, and of a call that failed how: its status and codes, a wait asked for, or no answer. Nothing else of its detail, which may name what the account holds.
+// A repair with a row that failed on a call Cloudflare asked to wait for, or gave no answer to, is run once more a minute later. A refusal is never asked again.
+// A piece the install answers without, lacking a token permission or an account switch only a person can flip, is told as a lack, which the live suite skips for. One nothing answers without stops the run as an error, failed or not permitted.
 //
 // The last wait asks the install who the run's token is: once, or 12 times in a row, 3 s apart, each on its own connection, where the install was made anew or its database brought forward.
 //   the new deployment                                                         200
@@ -26,8 +26,10 @@
 
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { isPlainVersion } from "@poplin/core/src/records/update";
+import pRetry from "p-retry";
 
 import type { Fetch } from "../../../../cli/src/client/client";
+import { failureWords } from "../../src/shared/install/first/rows";
 import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 import { checkedBundle } from "../../src/shared/release/update/bundle-files";
 import { openUpload } from "../../src/shared/release/update/upload";
@@ -71,6 +73,12 @@ const TOLD: Readonly<Record<string, string>> = {
 /** The states of a row that a command left as wanted. */
 const SETTLED: ReadonlySet<string> = new Set(["make", "change", "remove", "leave"]);
 
+/** How a row ends that failed on a call Cloudflare asked to wait for, or gave no answer to: what a later run of the same command may not meet. */
+const PASSES: readonly string[] = [failureWords({ ok: false, failure: "rate-limited" }), failureWords({ ok: false, failure: "network", message: "" })];
+
+/** How long a run rests before it runs a repair once more, in milliseconds. */
+const AGAIN_AFTER_MS = 60_000;
+
 /** The states of a removal's row that left something the removal was to take. */
 const NOT_REMOVED: ReadonlySet<string> = new Set(["block", "fail", "not-run"]);
 
@@ -79,6 +87,9 @@ const VITAL: ReadonlySet<string> = new Set(["R2 bucket", "D1 database", "Worker"
 
 /** How a row words a refusal by Cloudflare, with its status. */
 const REFUSAL_STATUS = /refused with status \d+/;
+
+/** How a row words a call that failed, in whole: a refusal's status and the numbers of its codes, a wait asked for, or no answer. */
+const CALL_FAILED = new RegExp(`${REFUSAL_STATUS.source}(?: and codes \\d+(?:, \\d+)*)?|${PASSES.join("|")}`);
 
 /** How a row words a refusal of a token that lacks a permission. */
 const NOT_PERMITTED = /status 40[13]/;
@@ -201,6 +212,17 @@ interface Arrived {
 /** The install as the wait for its new deployment and the caps reach it: every part of that wait but the token and what the run did to the database. */
 type Reached = Omit<Waiting, "token" | "strandsOlder">;
 
+/** A repair that came to its rows with one that failed on a call Cloudflare asked to wait for, or gave no answer to. */
+class Passing extends Error {
+  constructor(
+    readonly repaired: Answer,
+    readonly rows: readonly CommandRow[],
+    readonly row: CommandRow,
+  ) {
+    super("a call of the repair got no answer in time");
+  }
+}
+
 /** Add a piece to the summary's rows and print it, so the log shows how far a run came. */
 function note(run: Run, progress: Progress, piece: Piece): void {
   progress.pieces.push(piece);
@@ -248,12 +270,12 @@ function needOf(row: CommandRow): string | undefined {
   return NOT_PERMITTED.test(row.detail) ? `the token permission for the ${row.object}` : undefined;
 }
 
-/** What is told of a row: what the command did, and of a row it did not settle the status of a refusal alone, since its detail may quote Cloudflare, which may name a person or the zone. */
+/** What is told of a row: what the command did, and of a row it did not settle how its call failed, alone. The rest of its detail names its subject, which may be one the account holds and the run hides nothing of. */
 function resultOf(row: CommandRow): string {
   const did = TOLD[row.state] ?? row.state;
-  const refusal = SETTLED.has(row.state) ? undefined : REFUSAL_STATUS.exec(row.detail)?.[0];
+  const failed = SETTLED.has(row.state) ? undefined : CALL_FAILED.exec(row.detail)?.[0];
 
-  return refusal === undefined ? did : `${did} (${refusal})`;
+  return failed === undefined ? did : `${did} (${failed})`;
 }
 
 /** Whether a row is the upload key's, of a key that was not there before the run: made by it, or not read. */
@@ -261,13 +283,17 @@ function isFreshKey(row: CommandRow): boolean {
   return row.object === UPLOAD_KEY && row.state !== "leave";
 }
 
+/** Tell the suite of a key this run made: the bucket refuses one for its first minutes, so the check of the way a file goes then counts on no direct ticket. */
+function noteFreshKey(progress: Progress, rows: readonly CommandRow[]): void {
+  if (rows.some(isFreshKey)) progress.missing["settled-upload-key"] ??= FRESH_KEY;
+}
+
 /** Sort the rows of an install or a repair into the summary and the lacking things, and answer what stops the run. */
 function sortRows(run: Run, progress: Progress, rows: readonly CommandRow[]): Stop | undefined {
   let failed: Stop | undefined;
   let skipped: Stop | undefined;
 
-  // A key this run made is one the bucket refuses for its first minutes: the check of the way a file goes then counts on no direct ticket.
-  if (rows.some(isFreshKey)) progress.missing["settled-upload-key"] ??= FRESH_KEY;
+  noteFreshKey(progress, rows);
 
   for (const row of rows) {
     if (SETTLED.has(row.state)) {
@@ -417,10 +443,45 @@ async function tellSweep(run: Run, world: World, progress: Progress, database: s
 }
 
 /**
+ * Run a repair, and once more after a rest where a row of it failed on a call Cloudflare asked to wait for, or gave no answer to. A refusal is never asked again.
+ *
+ * The rest is on the run's own clock: the library waits none. A key the first run made is told to the suite, since the second finds it standing.
+ *
+ * @returns what the last run answered
+ */
+async function ridingOut(run: Run, world: World, progress: Progress, repair: () => Promise<Answer>): Promise<Answer> {
+  const attempt = async (): Promise<Answer> => {
+    const repaired = await repair();
+    const rows = repaired.kind === "rows" ? repaired.rows : [];
+    const passing = rows.find((row) => row.state === "fail" && PASSES.some((words) => row.detail.endsWith(words)));
+    if (passing !== undefined) throw new Passing(repaired, rows, passing);
+
+    return repaired;
+  };
+  const again = async ({ error }: { readonly error: Error }): Promise<boolean> => {
+    if (!(error instanceof Passing)) return false;
+
+    noteFreshKey(progress, error.rows);
+    note(run, progress, { piece: "Repair", result: `run once more after ${AGAIN_AFTER_MS / 1000} seconds: the ${error.row.object} is ${resultOf(error.row)}` });
+    await world.ends.sleep(AGAIN_AFTER_MS);
+
+    return true;
+  };
+
+  try {
+    return await pRetry(attempt, { retries: 1, minTimeout: 0, maxTimeout: 0, shouldRetry: again });
+  } catch (error) {
+    if (error instanceof Passing) return error.repaired;
+
+    throw error;
+  }
+}
+
+/**
  * Mend the install that stands: this commit's build in place of its code, `poplin doctor --repair`, then the wait for it.
  *
  * The repair comes first, since an install that lost a piece answers nowhere until it is mended. It reads the install's settings from its database and refuses one at another schema than this commit's:
- * the new Worker brings such a database forward on its first request, so the run then waits for that and repairs again.
+ * the new Worker brings such a database forward on its first request, so the run then waits for that and repairs again. A repair Cloudflare asked to wait for is run once more too.
  *
  * @param standing - the version the install ran, where it is a released one, and whether its database held every schema step of this commit before the upload
  */
@@ -428,7 +489,7 @@ async function mend(run: Run, found: Found, world: World, progress: Progress, st
   const uploaded = await putCommit(run, world, progress, standing.version);
   if (uploaded !== undefined) return uploaded;
 
-  const repair = (): Promise<Answer> => command(run, "repair", ["--repair", ...placeWords(run, found), "--yes", "--json"], world.ends);
+  const repair = (): Promise<Answer> => ridingOut(run, world, progress, () => command(run, "repair", ["--repair", ...placeWords(run, found), "--yes", "--json"], world.ends));
   const first = await repair();
   const behind = first.kind === "stopped" && first.problem === ANOTHER_VERSION;
   const forward = behind ? await readyDatabase(run, found, world) : undefined;
