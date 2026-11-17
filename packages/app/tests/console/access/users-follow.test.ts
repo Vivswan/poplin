@@ -118,10 +118,10 @@ describe("followUsers", () => {
   });
 
   const refusals: readonly { readonly refusal: FollowRefusal; readonly sentence: string; readonly noted: boolean }[] = [
-    { refusal: "key_refused", sentence: "Example Cloud refused poplin's key, so the login list there is as it was. Open Domain and press Repair.", noted: true },
-    { refusal: "lacks_right", sentence: "poplin's key may not change the login list at Example Cloud. Open Domain and press Repair.", noted: true },
-    { refusal: "not_made", sentence: "The login list at Example Cloud is missing. Open Domain and press Repair.", noted: true },
-    { refusal: "unreachable", sentence: "The login list at Example Cloud was not reached; it is tried again by itself.", noted: false },
+    { refusal: "key_refused", sentence: "Example Cloud refused the install's key, so the user list there is as it was. Open Domain and press Repair.", noted: true },
+    { refusal: "lacks_right", sentence: "The install's key may not change the user list at Example Cloud. Open Domain and press Repair.", noted: true },
+    { refusal: "not_made", sentence: "The user list at Example Cloud is missing. Open Domain and press Repair.", noted: true },
+    { refusal: "unreachable", sentence: "The user list at Example Cloud was not reached; it is tried again by itself.", noted: false },
   ];
 
   // Drift: every refusal leaves the stored users as they are and the change waiting, with a sentence that names the provider in the provider's own word. One that no later try mends is a problem of the domain; one that mends itself is none.
@@ -135,12 +135,12 @@ describe("followUsers", () => {
   });
 
   const halves: readonly { readonly refusal: FollowRefusal; readonly why: "half_retried" | "half_refused"; readonly sentence: string; readonly noted: boolean }[] = [
-    { refusal: "unreachable", why: "half_retried", sentence: "The login list at Example Cloud was written, but the change is not complete; the rest is tried again by itself.", noted: false },
-    { refusal: "lacks_right", why: "half_refused", sentence: "The login list at Example Cloud was written, but the change is not complete. Open Domain and press Repair.", noted: true },
-    { refusal: "key_refused", why: "half_refused", sentence: "The login list at Example Cloud was written, but the change is not complete. Open Domain and press Repair.", noted: true },
+    { refusal: "unreachable", why: "half_retried", sentence: "The user list at Example Cloud was written, but the change is not complete; the rest is tried again by itself.", noted: false },
+    { refusal: "lacks_right", why: "half_refused", sentence: "The user list at Example Cloud was written, but the change is not complete. Open Domain and press Repair.", noted: true },
+    { refusal: "key_refused", why: "half_refused", sentence: "The user list at Example Cloud was written, but the change is not complete. Open Domain and press Repair.", noted: true },
   ];
 
-  // Drift: the provider took the list and refused what else follows the users. Told "the login list there is as it was", an admin would think a removed user still gets in, or add a user twice.
+  // Drift: the provider took the list and refused what else follows the users. Told "the user list there is as it was", an admin would think a removed user still gets in, or add a user twice.
   test.each(halves)("a try that wrote the list and was answered $refusal for the rest says the change is not complete, and claims nothing of the list", async ({ refusal, why, sentence, noted }) => {
     const opened = await openOwned();
     await added(opened, BO);
@@ -211,7 +211,7 @@ describe("followUsers", () => {
     await added(opened, BO);
     const followed = await followUsers(opened.install, follow);
 
-    expect(followed).toEqual({ carried: false, why: "changed_again", sentence: "The users changed again meanwhile; the login list at Example Cloud is brought up to date by itself." });
+    expect(followed).toEqual({ carried: false, why: "changed_again", sentence: "The users changed again meanwhile; the user list at Example Cloud is brought up to date by itself." });
     expect([follow.pushed.length, await waits(opened)]).toEqual([2, true]);
   });
 
@@ -256,7 +256,7 @@ describe("followUsers", () => {
     const before = await opened.install.database.readDomainCheck();
     const followed = await followUsers(opened.install, follow);
 
-    expect(followed).toEqual({ carried: false, why: "no_key", sentence: "poplin holds no key for Example Cloud, so the login list there is as it was. Open Domain and press Repair." });
+    expect(followed).toEqual({ carried: false, why: "no_key", sentence: "The install holds no key for Example Cloud, so the user list there is as it was. Open Domain and press Repair." });
     expect([follow.pushed, await opened.install.database.readDomainCheck(), await problems(opened)]).toEqual([[], before, []]);
   });
 
@@ -281,16 +281,16 @@ describe("followUsers", () => {
     await opened.install.database.addLogin(BO, { as: "person", by: opened.owner, at: opened.install.now() });
     const followed = await followUsers(opened.install, fakeFollow(() => "unreachable"));
 
-    expect(followed).toEqual({ carried: false, why: "forgotten", sentence: "The login list at Example Cloud is not up to date. Open Domain and press Repair." });
+    expect(followed).toEqual({ carried: false, why: "forgotten", sentence: "The user list at Example Cloud is not up to date. Open Domain and press Repair." });
     expect(await problems(opened)).toEqual(["users_not_carried"]);
   });
 
-  // Drift: the same install, and a try that wrote the list before it was refused the rest. "The login list is not up to date" would be false: it is the rest that is behind.
+  // Drift: the same install, and a try that wrote the list before it was refused the rest. "The user list is not up to date" would be false: it is the rest that is behind.
   test("on an install that keeps no run of its domain, a try that wrote the list and was refused the rest says the change is not complete", async () => {
     const opened = await openOwned();
     const follow: UsersFollow = { where: "Example Cloud", holdsKey: () => true, push: async () => ({ ok: false, refusal: "unreachable", written: true }) };
 
-    expect(await followUsers(opened.install, follow)).toEqual({ carried: false, why: "half_refused", sentence: "The login list at Example Cloud was written, but the change is not complete. Open Domain and press Repair." });
+    expect(await followUsers(opened.install, follow)).toEqual({ carried: false, why: "half_refused", sentence: "The user list at Example Cloud was written, but the change is not complete. Open Domain and press Repair." });
     expect(await problems(opened)).toEqual(["users_not_carried"]);
   });
 
@@ -316,7 +316,7 @@ describe("followUsers", () => {
     const followed = await followUsers(opened.install, follow);
 
     // The run is kept by now, so the scheduled run carries the users again: the words say so, and no problem is noted.
-    expect(followed).toEqual({ carried: false, why: "half_retried", sentence: "The login list at Example Cloud was written, but the change is not complete; the rest is tried again by itself." });
+    expect(followed).toEqual({ carried: false, why: "half_retried", sentence: "The user list at Example Cloud was written, but the change is not complete; the rest is tried again by itself." });
     expect([provider.held, await waits(opened), await problems(opened)]).toEqual([[opened.owner, BO], true, []]);
   });
 });
@@ -340,7 +340,7 @@ describe("the console", () => {
     await opened.change("/data/domain/repair", { token: "a-token" });
     const answer = await opened.change("/data/people/add", { login: BO });
 
-    expect([answer.status, await answer.json()]).toEqual([200, { ok: true, login: BO, note: "The login list at Example Cloud was not reached; it is tried again by itself." }]);
+    expect([answer.status, await answer.json()]).toEqual([200, { ok: true, login: BO, note: "The user list at Example Cloud was not reached; it is tried again by itself." }]);
     expect((await opened.base.install.database.readSettings())?.users).toEqual([opened.base.owner, BO]);
   });
 

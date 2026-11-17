@@ -32,7 +32,7 @@ test("a double click on Delete for good deletes the site once, and closes the qu
   await page.getByRole("row").getByRole("button", { name: `Details of ${TRASHED.title}`, exact: true }).press("Enter");
   await page.getByRole("dialog", { name: TRASHED.title, exact: true }).getByRole("button", { name: "Delete for good", exact: true }).click();
   const question = page.getByRole("alertdialog", { name: `Delete ${TRASHED.title} for good?`, exact: true });
-  await question.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.name);
+  await question.getByRole("textbox", { name: "Site's label", exact: true }).fill((await question.getByText(new RegExp(`^${TRASHED.name}--[a-z0-9]+$`)).textContent()) ?? "");
   const sent = changesOf(page);
 
   await question.getByRole("button", { name: "Delete for good", exact: true }).dblclick();

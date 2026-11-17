@@ -27,7 +27,7 @@ const GROUP = "mt-5 border-t pt-5 first-of-type:mt-0 first-of-type:border-t-0 fi
 const HEADING = "mb-1 text-base leading-6 font-bold";
 
 /** The setting that starts updates by itself, and what its row says while the install holds no key: the switch then starts nothing. */
-const [AUTO_UPDATE, NEEDS_KEY] = ["auto_update", `Needs poplin's key to work.${GET_KEY}`] as const;
+const [AUTO_UPDATE, NEEDS_KEY] = ["auto_update", `Needs the install's key to work.${GET_KEY}`] as const;
 
 /** The setting the provider's logs follow, and what its row says while the install holds no key: a change then waits for the next upload of the install's code. */
 const [PROVIDER_LOGS, AT_NEXT_UPDATE] = ["provider_logs", "Takes effect at the next update or Repair."] as const;

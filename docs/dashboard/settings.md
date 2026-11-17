@@ -14,16 +14,17 @@ npx poplin config
 npx poplin config trash_days 30
 ```
 
-The dashboard's Settings screen changes the same settings, all but `users`: change them, then press Save in the bar at the foot. Each setting is a row.
+The dashboard's Settings screen changes the same settings, all but `users`: change them, then press Save in the bar at the foot. Each setting is a row, with its key under its name: the name `poplin config` takes.
 
 | In a row                        | Means                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------ |
+| `max_total_size`, in small letters under the name | the setting's key, as text to select and copy             |
 | `(Default: 9,000 MB)`           | the setting's default                                                    |
 | Reset                           | beside a default the row differs from: puts it back                      |
 | a warning under the field, in plain words after a mark | follows the number as it is typed. A number above a free limit earns one: [Limits and cost](../upkeep/cost/what-can-cost-money.md). So does One site above All sites together: `More than all sites together may hold, so that limit is reached first.` And One visitor per minute above One site per minute: `More than one site answers in a minute, so that limit is reached first.` |
 | a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
 | `Use a whole number from 1 to 1,000,000,000.` | such a sentence, for a number typed with a fraction, such as `1.5`, or above its top. A count goes up to 1,000,000,000, but Files per publish to 10,000 and One site's share to 100. A size goes up to 1,000,000,000 MB, days and a span of time to 36,500 days |
-| `Needs poplin's key to work. Open Domain and press Repair.` | under Update automatically, on an install that holds no key |
+| `Needs the install's key to work. Open Domain and press Repair.` | under Update automatically, on an install that holds no key |
 | `Takes effect at the next update or Repair.` | under Keep logs, on an install that holds no key |
 | `Switch on the check above first.` | under Update automatically while Check for new versions is off. Switching the check off switches Update automatically off with it, and its switch takes no change until the check is on again |
 
@@ -78,7 +79,7 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 
 `poplin update` works on an install that holds its key: [Update the install](../upkeep/update.md#with-the-kept-key) shows what it does. An install that holds none answers `no_key`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
-`poplin install`, `poplin doctor --repair`, and `poplin uninstall` work at Cloudflare and need no login of poplin. Each asks for an account token, without showing it; a script gives it in `POPLIN_INSTALL_TOKEN`. `poplin doctor` without `--repair` works with this computer's login, and only reads.
+`poplin install`, `poplin doctor --repair`, and `poplin uninstall` work at Cloudflare and need no login of poplin. Each asks for an account token, without showing it; a script gives it in `POPLIN_INSTALL_TOKEN`. `poplin doctor` without `--repair` works with this machine's login, and only reads.
 
 The settings `poplin config` takes:
 

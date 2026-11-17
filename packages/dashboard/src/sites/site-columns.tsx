@@ -275,7 +275,7 @@ export function siteColumns(
     },
     {
       id: "expires",
-      header: "Deletes itself",
+      header: "Expires",
       hidden: true,
       cell: (site) => <span className="text-muted-foreground">{expiryMoment(site.expires)}</span>,
     },

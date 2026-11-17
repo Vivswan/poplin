@@ -77,7 +77,7 @@ function drawn(expires: Site["expires"], refuses = false, stores: Site["expires"
 
 /** Open the menu and wait for its entries. */
 async function openMenu(): Promise<void> {
-  await act(async () => fireEvent.click(within(document.body).getByRole("button", { name: "Change when it deletes itself" })));
+  await act(async () => fireEvent.click(within(document.body).getByRole("button", { name: "Change when it expires" })));
   await waitFor(() => expect(within(document.body).queryAllByRole("menuitem", { name: "Never" }).length).toBe(1));
 }
 
@@ -190,11 +190,11 @@ describe("when a site deletes itself, in its panel", () => {
     const before = [dialog.getByText("No day picked.").textContent, dialog.getByRole("button", { name: "Save" }).hasAttribute("disabled")];
     const day = dialog.getAllByRole("button").find((button) => button.closest("td") !== null && !button.hasAttribute("disabled"));
     await act(async () => fireEvent.click(day as HTMLElement));
-    const picked = dialog.getByText(/^Deletes itself /).textContent;
+    const picked = dialog.getByText(/^Expires /).textContent;
     await press("button", "Save");
     await waitFor(() => expect(dialog.queryAllByRole("alert").map((alert) => alert.textContent)).toEqual([REFUSAL]));
 
-    expect([before, /^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/.test(picked ?? "")]).toEqual([["No day picked.", true], true]);
+    expect([before, /^Expires \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/.test(picked ?? "")]).toEqual([["No day picked.", true], true]);
     // What was sent is read as the server reads it: the midnight the dialog wrote, in the browser's own time zone.
     const set = new Date(Number(readExpires(String((sent[0]?.body as { readonly expires?: string } | undefined)?.expires), Date.now())));
     const kept = document.querySelectorAll("[data-selected-single='true']").length;

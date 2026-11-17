@@ -64,7 +64,7 @@ export function ExpiryDayDialog({ open, onClose, onSave, returnTo }: ExpiryDayDi
       <DialogContent className="sm:max-w-xs" finalFocus={thenHome(returnTo)} nested>
         <DialogHeader>
           <DialogTitle>Pick a day</DialogTitle>
-          <DialogDescription>The site deletes itself when that day starts.</DialogDescription>
+          <DialogDescription>The site expires when that day starts. Then it moves to the trash.</DialogDescription>
         </DialogHeader>
         <Calendar
           mode="single"
@@ -82,7 +82,7 @@ export function ExpiryDayDialog({ open, onClose, onSave, returnTo }: ExpiryDayDi
         />
         {refusal === undefined ? (
           <p className="text-muted-foreground" aria-live="polite">
-            {picked === undefined ? "No day picked." : `Deletes itself ${momentIn(dayStart(picked, choice), choice)}`}
+            {picked === undefined ? "No day picked." : `Expires ${momentIn(dayStart(picked, choice), choice)}`}
           </p>
         ) : (
           <Field invalid>

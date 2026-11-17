@@ -277,7 +277,7 @@ describe("the scheduled run", () => {
     wait(w, 0.25);
     await sweep(worker, w, keyed);
 
-    expect(refused).toEqual(["Cloudflare refused poplin's key, so the login list there is as it was. Open Domain and press Repair.", true, [[OWNER]], [["users_not_carried", 1, null]]]);
+    expect(refused).toEqual(["Cloudflare refused the install's key, so the user list there is as it was. Open Domain and press Repair.", true, [[OWNER]], [["users_not_carried", 1, null]]]);
     expect([carried, tooSoon, confirmed, asked.length - after]).toEqual([[false, [["bo@example.com", OWNER]]], 0, [["GET"], null], 0]);
     expect(JSON.stringify(added)).not.toContain(TOKEN);
   });

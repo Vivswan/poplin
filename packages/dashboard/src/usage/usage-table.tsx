@@ -320,7 +320,7 @@ function behindWords(behind: number | null): string {
   return behind === null ? "" : ` They run about ${showCount(Math.round(behind / MINUTE_MS))} minutes behind.`;
 }
 
-/** What the line over the table says: when the host's own figures were read, or why the kept key gave none. */
+/** What the line over the table says: when the host's own figures were read, or why the install's key gave none. */
 function officialWords(official: NonNullable<Usage["official"]>, host: string): string {
   // A host may be named by a plain word, which starts both sentences.
   const first = `${host.slice(0, 1).toUpperCase()}${host.slice(1)}`;
@@ -328,9 +328,9 @@ function officialWords(official: NonNullable<Usage["official"]>, host: string): 
 
   if (official.refusal === "unreachable") return `${first} did not answer. ${OWN_COUNT}`;
 
-  if (official.refusal === "key_refused") return `The kept key no longer works. ${NEW_KEY} ${OWN_COUNT}`;
+  if (official.refusal === "key_refused") return `The install's key no longer works. ${NEW_KEY} ${OWN_COUNT}`;
 
-  const lacks = `The kept key has no permission to read usage${official.right === null ? "" : `: ${official.right}`}.`;
+  const lacks = `The install's key has no permission to read usage${official.right === null ? "" : `: ${official.right}`}.`;
 
   return `${lacks} ${NEW_KEY} ${OWN_COUNT}`;
 }

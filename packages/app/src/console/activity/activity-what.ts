@@ -44,7 +44,7 @@ const WITH_DETAIL: Readonly<Partial<Record<keyof typeof WORDS, (detail: AuditEnt
 
 /** What a change of one thing of a site says, by the thing its entry holds. A switch says which way it went. */
 const ONE_DETAIL: Readonly<Record<string, (value: unknown) => string>> = {
-  expires: (value) => (value === "never" ? "Set it to never delete itself" : "Set when it deletes itself"),
+  expires: (value) => (value === "never" ? "Set it to never expire" : "Set when it expires"),
   title: () => "Changed the title",
   name: () => "Changed the name",
   search_engines: (value) => (value === true ? "Let search engines show it" : "Kept it out of search engines"),

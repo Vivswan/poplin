@@ -68,7 +68,7 @@ const OUT_PATH = "/out";
 const NO_OWN_MARK = { activeOptions: { exact: true }, activeProps: {} } as const;
 
 /** What stands where the start of an update would, on an install that holds no key to send one with. */
-const NO_KEY = `poplin holds no key, so it cannot update itself.${GET_KEY}`;
+const NO_KEY = `The install holds no key, so it cannot update itself.${GET_KEY}`;
 
 /** The offer of a frame with nothing to start. */
 const NO_OFFER: Offer = { update: undefined, back: undefined };

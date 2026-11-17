@@ -113,10 +113,10 @@ describe("the row of a setting that does nothing on this install", () => {
 
 describe("the row of a setting", () => {
   // Drift: a Reset, a warning's mark, or the setting's key would stand in the row of a setting that is at its default, or the default would go unsaid.
-  test("shows at rest its name, its one sentence with the default in brackets, its control, and its unit", () => {
+  test("shows at rest its name, its key as a command names it, its one sentence with the default in brackets, its control, and its unit", () => {
     drawn(SIZE);
 
-    expect(document.body.textContent).toBe("All sites togetherThe most all sites hold, the trash included. (Default: 9,000 MB)MB");
+    expect(document.body.textContent).toBe("All sites togethermax_total_sizeThe most all sites hold, the trash included. (Default: 9,000 MB)MB");
   });
 
   // Drift: a changed value would have no way back, Reset would put back something other than the default or be one of many buttons of one name, or the focus would leave with Reset for whatever the page gives it, far from the setting.

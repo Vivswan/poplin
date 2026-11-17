@@ -21,7 +21,7 @@ const OWN_FETCH = globalThis.fetch;
 /** What the server refuses the delete with. */
 const REFUSAL = "The site is not in the trash.";
 
-/** A site in the trash as the server answers it, as far as the control reads it: its title is not its name. */
+/** A site in the trash as the server answers it, as far as the control reads it: its title is not its name, and its name is not its label. */
 const SITE = { label: "trip-notes--abc123def456", name: "trip-notes", title: "Trip notes", state: "trash" } as unknown as Site;
 
 /** What a drawn control did. */
@@ -89,7 +89,7 @@ async function ask(): Promise<Within> {
 
 /** Type into the question's field. */
 async function type(dialog: Within, text: string): Promise<void> {
-  await act(async () => fireEvent.change(dialog.getByRole("textbox", { name: "Site's name" }), { target: { value: text } }));
+  await act(async () => fireEvent.change(dialog.getByRole("textbox", { name: "Site's label" }), { target: { value: text } }));
 }
 
 afterEach(() => {
@@ -100,21 +100,21 @@ afterEach(() => {
 afterAll(clearPage);
 
 describe("deleting a site in the trash for good", () => {
-  // Drift: a press of Enter on an opened question would delete at once, or the title, which a row shows, would arm a button that asks for the name.
-  test("asks first, with the focus on Cancel and the button off until the site's name is typed, not its title", async () => {
+  // Drift: a press of Enter on an opened question would delete at once, or the title, which a row shows, would arm a button that asks for the label; or the bare name would, which two sites may share.
+  test("asks first, with the focus on Cancel and the button off until the site's label is typed, not its title or its name", async () => {
     const done = drawn();
     const dialog = await ask();
     const button = (): boolean => dialog.getByRole("button", { name: "Delete for good" }).hasAttribute("disabled");
     await waitFor(() => expect(document.activeElement?.textContent).toBe("Cancel"));
     const states = [button()];
-    for (const typed of ["Trip notes", "trip-note", "trip-notes"]) {
+    for (const typed of ["Trip notes", "trip-notes", SITE.label]) {
       await type(dialog, typed);
       states.push(button());
     }
 
     expect([dialog.getByRole("heading").textContent, document.querySelector("[data-slot='field-description']")?.textContent, states, [done.sent, done.gone]]).toEqual([
       "Delete Trip notes for good?",
-      "Type trip-notes to delete it.",
+      "Type trip-notes--abc123def456 to delete it.",
       [true, true, true, false],
       [[], 0],
     ]);
@@ -125,10 +125,10 @@ describe("deleting a site in the trash for good", () => {
   test.each([
     ["a shipped build", false],
     ["a development build", true],
-  ] as const)("sends the delete once the name is typed, says it in a line with no button, tells the screen once, and closes, in %s", async (_build, strict) => {
+  ] as const)("sends the delete once the label is typed, says it in a line with no button, tells the screen once, and closes, in %s", async (_build, strict) => {
     const done = drawn({ strict });
     const dialog = await ask();
-    await type(dialog, "trip-notes");
+    await type(dialog, SITE.label);
     await press(dialog.getByRole("button", { name: "Delete for good" }));
     await within(document.body).findAllByText((_text, node) => node?.textContent === "Trip notes deleted for good.");
     await waitFor(() => expect(within(document.body).queryAllByRole("alertdialog").length).toBe(0));
@@ -144,7 +144,7 @@ describe("deleting a site in the trash for good", () => {
     const answer = Promise.withResolvers<void>();
     const done = drawn({ strict, until: answer.promise });
     const dialog = await ask();
-    await type(dialog, "trip-notes");
+    await type(dialog, SITE.label);
     await press(dialog.getByRole("button", { name: "Delete for good" }));
     await act(async () => done.leave());
     await act(async () => answer.resolve());
@@ -153,22 +153,22 @@ describe("deleting a site in the trash for good", () => {
     expect([done.sent.length, done.gone]).toEqual([1, 0]);
   });
 
-  // Drift: a refused delete would be said as done, close the question, or empty the name that was typed.
-  test("says a refusal at the field, with the typed name kept and the site not told as gone", async () => {
+  // Drift: a refused delete would be said as done, close the question, or empty the label that was typed.
+  test("says a refusal at the field, with the typed label kept and the site not told as gone", async () => {
     const done = drawn({ refuses: true });
     const dialog = await ask();
-    await type(dialog, "trip-notes");
+    await type(dialog, SITE.label);
     await press(dialog.getByRole("button", { name: "Delete for good" }));
     await waitFor(() => expect(dialog.queryAllByRole("alert").map((alert) => alert.textContent)).toEqual([REFUSAL]));
 
-    expect([(dialog.getByRole("textbox") as HTMLInputElement).value, done.gone, within(document.body).queryAllByText("Trip notes deleted for good.").length]).toEqual(["trip-notes", 0, 0]);
+    expect([(dialog.getByRole("textbox") as HTMLInputElement).value, done.gone, within(document.body).queryAllByText("Trip notes deleted for good.").length]).toEqual([SITE.label, 0, 0]);
   });
 
-  // Drift: a question asked again for the same site would still hold the name typed before and the refusal of the delete before, or Cancel would leave the focus on nothing.
+  // Drift: a question asked again for the same site would still hold the label typed before and the refusal of the delete before, or Cancel would leave the focus on nothing.
   test("after a refusal and Cancel the focus is back on the button, and the question asked again starts with an empty field and no refusal", async () => {
     drawn({ refuses: true });
     const first = await ask();
-    await type(first, "trip-notes");
+    await type(first, SITE.label);
     await press(first.getByRole("button", { name: "Delete for good" }));
     await waitFor(() => expect(first.queryAllByRole("alert").length).toBe(1));
     await press(first.getByRole("button", { name: "Cancel" }));
@@ -184,7 +184,7 @@ describe("deleting a site in the trash for good", () => {
     const answer = Promise.withResolvers<void>();
     drawn({ refuses: true, until: answer.promise });
     const first = await ask();
-    await type(first, "trip-notes");
+    await type(first, SITE.label);
     await press(first.getByRole("button", { name: "Delete for good" }));
     await press(first.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(within(document.body).queryAllByRole("alertdialog").length).toBe(0));

@@ -26,11 +26,11 @@ In a window a little too narrow for the table, the name in a site's link is cut 
 | a heading of the table   | a press on Site, Who can open it, Updated, or Name puts the list in that order    |
 | By updated, on a phone   | the same orders as a menu: By updated, By title, By name, Who can open it         |
 
-The table starts with the columns Site, Who can open it, Link, and Updated. Columns adds Name, Published by, `Visits, 7 days`, Size, Versions, and Deletes itself.
+The table starts with the columns Site, Who can open it, Link, and Updated. Columns adds Name, Published by, `Visits, 7 days`, Size, Versions, and Expires.
 
 Every heading but Site is dragged to another place, and a heading's edge to another width. Site is always shown. The browser keeps the layout.
 
-For a site that is not in the trash, the panel has the link, who can open it, the versions, and two switches under Settings: Show in search engines, and Allow embedding. It also says the site's Visits, Size, and Updated, and when it Deletes itself. At its foot are New link, Duplicate, and Delete.
+For a site that is not in the trash, the panel has the link, who can open it, the versions, and two switches under Settings: Show in search engines, and Allow embedding. It also says the site's Visits, Size, and Updated, and when it Expires. At its foot are New link, Duplicate, and Delete.
 
 | In the panel                  | Does, or says                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------------- |
@@ -39,15 +39,15 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 | Show in search engines        | on any site, while Let search engines in is off: `Off for every site in Settings.` |
 | Show in search engines        | on a site that is not public, while it is on: `Only a public site is listed.`    |
 | Allow embedding               | on, as a new site has it: `Other pages may show this site in a frame and load its files.` Off stops both; [Between sites](../about/between-sites.md) has the rows |
-| Change, after Deletes itself  | opens a menu; a choice is saved at once, with Undo                               |
+| Change, after Expires         | opens a menu; a choice is saved at once, with Undo                               |
 
-| In the menu           | The site deletes itself                                                              |
+| In the menu           | The site expires                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------ |
 | 1 day, 7 days, 30 days | at the day and time the menu shows beside it: that long after the menu opened        |
 | On a day...           | when the day you pick starts, in the time zone the dashboard shows; shown before Save |
 | Never                 | never                                                                                |
 
-For a site that deletes itself, the panel then shows the day and time, and `Then its link stops working, and it moves to the trash.`
+For a site that expires, the panel then shows the day and time, and `Then its link stops working, and it moves to the trash.`
 
 | From                | To       | The question says                                                                  | Its button       |
 | ------------------- | -------- | ---------------------------------------------------------------------------------- | ---------------- |
@@ -82,7 +82,7 @@ The table of the trash has the column Leaves the trash: the day the site is gone
 | Delete for good       | Does, or says                                                             |
 | --------------------- | ------------------------------------------------------------------------- |
 | the question          | `This cannot be undone, and the site's files go too.`                     |
-| its button            | stays off until you type the site's name, which the question shows        |
+| its button            | stays off until you type the site's label, which the question shows: its name, two dashes, and its id, as `poplin delete` asks for it with `--no-trash` |
 | once it is done       | the site leaves the list; nothing restores it                             |
 
 [Who can open a site](../sites/who-can-open.md) says what a public name is. Let search engines in is in [Settings](settings.md#change-a-setting), under Visitors.
