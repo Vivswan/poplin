@@ -253,6 +253,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "refused: removeUpload, none": [0, 0],
   "refused: abandonUpload, not pending": [1, 0],
   "refused: addUpload, its holder's room is full": [4, 0],
+  "measureUpload, an upload that fits": [5, 0],
   "refused: addToken, the id is taken": [2, 0],
   "refused: revokeToken, none": [3, 0],
   "refused: decideComputerLogin, none waits": [0, 0],
@@ -902,6 +903,12 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
       database.addUpload(
         { id: "0000000000000000" as UploadId, folder: folder(SITES + 9), number: 1, owner: BY_ADA.by, plan: { kind: "import", site: {} }, manifest: numberedFiles(2), created_at: NOW },
         { own: 0, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: null, day: DAY, dayFiles: 1_000_000, writes: 2, dayWrites: 1_000_000 },
+      ),
+    );
+    await cost("measureUpload, an upload that fits", () =>
+      database.measureUpload(
+        { owner: BY_ADA.by, folder: folder(SITES + 9), bytes: 4, files: 2 },
+        { own: 20, folderBytes: 1_000_000, staying: 0, totalBytes: 1_000_000, sites: 1_000, day: DAY, dayFiles: 1_000_000, writes: 2, dayWrites: 1_000_000 },
       ),
     );
     await cost("refused: addToken, the id is taken", () => database.addToken(publisher, BY_ADA));

@@ -53,6 +53,15 @@ const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 /** A word a shell reads as it is written, with no quote around it. It holds no equals sign: zsh takes a word that starts with one as a command to look up. */
 const PLAIN_WORD = /^[A-Za-z0-9@%+:,./_-]+$/;
 
+/** A word cmd.exe and PowerShell both read as it is written, as does the command file `npx` runs through, which reads its arguments by cmd.exe's rules again whatever quotes stood around them. */
+const WINDOWS_WORD = /^[A-Za-z0-9][A-Za-z0-9@+./_-]*$/;
+
+/** The platform whose terminals read a pasted line by the rules of cmd.exe or of PowerShell: a run cannot tell which. */
+const WINDOWS = "win32";
+
+/** The option of a repair's user, as a line that leaves it out names it for a person to add. */
+const ADD_USER = "--add-user <email>";
+
 /** What every stop before the first change ends in, as the one JSON value holds it at the end of a stop's words. */
 export const UNCHANGED = "nothing was changed";
 
@@ -65,7 +74,7 @@ const UNCHANGED_ENDING = /(^|\. |: )nothing was changed\.?$/;
 /** What every dry run of the three commands exits with, as each help says it. */
 export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
 
-/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (the place the run knows or the stop names, or a user, never a consent), then each careful choice. */
+/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (a place, a user, a repair's update, never a consent), then each careful choice. */
 export const NEXT = {
   install: (provider: Provider | undefined, careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id, ...named], careful) }),
   repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({
@@ -147,13 +156,26 @@ export function runningWords(version: string | undefined): string {
 export const REFUSED_AS = { token: "token_refused", no_domain: "no_domain", other_place: "other_place" } as const;
 
 /**
+ * The option of a repair that first brings the install to the newest release, as the command it is named in carries it.
+ *
+ * @param update - whether the line asked for it, or the stop it is named after says that only such a repair goes on
+ */
+export function updateWords(update: boolean): readonly string[] {
+  return update ? ["--update"] : [];
+}
+
+/**
  * What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again.
+ * An install that is behind, with records this poplin does not read as they are, is one only a repair that updates goes on from, so that repair is named.
  *
  * @param careful - the careful choices of the repair's own line; none where another command names the repair
  * @param place - the place the run knows, which is left out where the provider says the install answers elsewhere
+ * @param update - whether the repair's own line asked for the newest release; false where another command names the repair
  */
-export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[]): Next {
-  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, refused.why === "elsewhere" ? [] : place);
+export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean): Next {
+  const named = [...updateWords(update || refused.why === "behind"), ...(refused.why === "elsewhere" ? [] : place)];
+
+  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, named);
 }
 
 /** Write a word so a POSIX shell reads it as that one word: as it is, or in single quotes with each one inside written `'\''`. */
@@ -172,13 +194,31 @@ export function placeOf(provider: Provider, where: unknown): readonly string[] {
 }
 
 /**
- * The option of a repair that lets one more person log in, as the command it is named in carries it.
+ * The option of a repair that lets one more person log in, as the command it is named in carries it on this machine.
+ *
+ * No quoting makes a word safe on Windows: cmd.exe reads `%` inside quotes, PowerShell reads `$`, and the command file `npx` runs through reads the word once more with its quotes gone.
+ * So an email there is written bare where every character of it is plain to both shells, and is left out where one is not.
  *
  * @param login - the email of that person; `undefined` for a line that adds nobody
- * @returns the option and the email as one word of a POSIX shell, or no word
+ * @param platform - the machine's `process.platform`
+ * @returns `words` are the option and the email as one word of the machine's shell, or none; `add` names the option where the line leaves it out for a person to add
  */
-export function userWords(login: Login | undefined): readonly string[] {
-  return login === undefined ? [] : ["--add-user", shellWord(login)];
+export function userOption(login: Login | undefined, platform: string): { readonly words: readonly string[]; readonly add?: string } {
+  if (login === undefined) return { words: [] };
+
+  if (platform !== WINDOWS) return { words: ["--add-user", shellWord(login)] };
+
+  return WINDOWS_WORD.test(login) ? { words: ["--add-user", login] } : { words: [], add: ADD_USER };
+}
+
+/**
+ * Put on a step what its line leaves out for a person to add.
+ *
+ * @param add - the option left out; `undefined` for a line that holds every word
+ * @returns the same step, with `add` where it names a command and something was left out
+ */
+export function leaving(next: Next, add: string | undefined): Next {
+  return add === undefined || next.step === "none" ? next : { ...next, add };
 }
 
 /**
@@ -186,9 +226,12 @@ export function userWords(login: Login | undefined): readonly string[] {
  *
  * @param login - the first login the run did not use
  * @param place - the place of the install, which the line holds before the user
+ * @param platform - the machine's `process.platform`, which says how the email is written
  */
-export function letInNext(login: Login, place: readonly string[]): Next {
-  return NEXT.repair("this", [], [...place, ...userWords(login)]);
+export function letInNext(login: Login, place: readonly string[], platform: string): Next {
+  const user = userOption(login, platform);
+
+  return leaving(NEXT.repair("this", [], [...place, ...user.words]), user.add);
 }
 
 /**
@@ -198,6 +241,18 @@ export function letInNext(login: Login, place: readonly string[]): Next {
  */
 export function unusedLine(login: Login, next: Next): Line {
   return plain(`To let ${login} log in too: ${next.command}`);
+}
+
+/**
+ * Say what the command a run named next leaves out, for the person to add: without it, the line they paste lets nobody in.
+ *
+ * @param login - the email the line leaves out
+ * @returns the line, or none where the command holds every word
+ */
+export function leftOutLines(login: Login, next: Next): Line[] {
+  if (next.step === "none" || next.add === undefined) return [];
+
+  return [plain(`Add ${next.add} to that line yourself, with ${login}: no line a Windows terminal reads holds that email safely.`)];
 }
 
 /** How many objects a run changed, or with a dry run would. */

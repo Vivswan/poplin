@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 
 import { beginPublish } from "../../src/actions/begin-publish";
 import { deleteSite } from "../../src/actions/delete";
-import { duplicateSite } from "../../src/actions/duplicate";
+import { duplicateSite, rehearseDuplicate } from "../../src/actions/duplicate";
 import { finishPublish } from "../../src/actions/finish-publish";
 import { listSites } from "../../src/actions/list";
 import { publishSite } from "../../src/actions/publish";
@@ -391,5 +391,40 @@ describe("duplicateSite", () => {
       { ok: false, code: "in_trash" },
     ]);
     expect([(await world.keys()).length, keys.length, (await world.install.database.readTotals()).sites]).toEqual([1, 300, 1]);
+  });
+});
+
+describe("rehearseDuplicate", () => {
+  // Drift: a copy is bounded by the install's limits in the step that records its upload; a dry run that judged them elsewhere would pass a copy the install refuses, or refuse one it takes.
+  test.each<[string, Parameters<typeof makeWorld>[0], object, object]>([
+    ["a copy that fits", {}, {}, { ok: true, before: null, site: null, copy: { upload: null, copied: null, files: 5 }, name: "report" }],
+    ["a copy under a name of its own", {}, { name: "report-draft" }, { ok: true, name: "report-draft" }],
+    ["a name that is none", {}, { name: "No" }, { ok: false, code: "bad_name", about: "name" }],
+    ["an install that holds as many sites as it may", { max_sites: 1 }, {}, { ok: false, code: "too_many_sites", about: "max_sites" }],
+    ["a copy larger than what the install may hold", { max_total_size: { count: 53, unit: "B" } }, {}, { ok: false, code: "too_large" }],
+    ["a day with no writes left for the copy", { max_storage_writes_per_day: 9 }, {}, { ok: false, code: "allowance_spent", about: "max_storage_writes_per_day" }],
+    ["a day with fewer files left than the copy holds", { max_files_per_day: 9 }, {}, { ok: false, code: "too_large", about: "max_files_per_day" }],
+  ])("a dry run of %s answers as the first call of the copy after it does, begins no upload, and writes no row", async (_name, settings, request, answer) => {
+    const world = await makeWorld(settings);
+    const published = await publishSite(world.install, OWNER, { files: FIVE, name: "report" });
+    const source = published.ok ? published.site.id : "";
+    const [keys, before] = [await world.keys(), await world.written()];
+
+    const rehearsal = await rehearseDuplicate(world.install, OWNER, { site: source, ...request });
+    const left = [(await world.written()) - before, await world.keys()];
+    const run = await duplicateSite(world.install, OWNER, { site: source, ...request }, ASKING, inlineJobs);
+
+    expect([rehearsal, left]).toMatchObject([answer, [0, keys]]);
+    expect<unknown>(rehearsal.ok ? run.ok : rehearsal).toEqual(rehearsal.ok ? true : run);
+  });
+
+  // Drift: a site in the trash is no source, and a publisher is told nothing of another's site; a dry run is asked by the same callers. One that took an upload would look like a call that goes on with a copy.
+  test("a dry run refuses another publisher's site and a source in the trash as a copy does, and takes no upload to go on with", async () => {
+    const world = await makeWorld();
+    const source = await made(world, OWNER, "report");
+    const refused = [await rehearseDuplicate(world.install, STRANGER, { site: source }), await rehearseDuplicate(world.install, OWNER, { site: source, upload: "0000000000000000" })];
+    await deleteSite(world.install, OWNER, { site: source });
+
+    expect([...refused, await rehearseDuplicate(world.install, OWNER, { site: source })]).toEqual([{ ok: false, code: "not_found" }, { ok: false, code: "bad_argument", about: "upload" }, { ok: false, code: "in_trash" }]);
   });
 });

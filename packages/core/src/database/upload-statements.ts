@@ -4,6 +4,7 @@ import { and, eq, type SQL, sql as fragment } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import type { UploadId } from "../records/upload";
+import type { UploadRoom, UploadSize } from "./database";
 import type { Statement } from "./driver";
 import { declaredFiles, sites, totals, uploads, versions } from "./schema";
 import { BUILD, CHANGED, bare, built, insertFrom } from "./statements";
@@ -23,10 +24,10 @@ export const UPLOAD_FIELDS = {
 };
 
 /** The bytes of every pending upload and every kept version together. */
-export const BYTES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.bytes}), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.bytes} FROM ${totals} WHERE ${totals.id} = 1))`;
+const BYTES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.bytes}), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.bytes} FROM ${totals} WHERE ${totals.id} = 1))`;
 
 /** The sites there are and the ones the pending uploads would make. Only a new site's upload has number 1. */
-export const SITES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.number} = 1), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.sites} FROM ${totals} WHERE ${totals.id} = 1))`;
+const SITES_HELD = fragment`((SELECT COALESCE(SUM(${uploads.number} = 1), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending') + (SELECT ${totals.sites} FROM ${totals} WHERE ${totals.id} = 1))`;
 
 /** The `uploads` table as `u`, for a subquery inside a statement on the same table. In the template an alias stands for its short name alone, so a FROM names the table before it. */
 export const AN_UPLOAD = alias(uploads, "u");
@@ -40,6 +41,30 @@ export const A_VERSION = alias(versions, "v");
 /** How many times the store was written to or listed on a day. */
 export function writesOf(day: string): SQL {
   return fragment`(SELECT COALESCE(SUM(${declaredFiles.writes}), 0) FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${day})`;
+}
+
+/** How many files the uploads begun on a day declare. */
+export function filesOf(day: string): SQL {
+  return fragment`(SELECT COALESCE(SUM(${declaredFiles.files}), 0) FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${day})`;
+}
+
+/**
+ * How an upload of a size stands to its room, for one statement to ask.
+ *
+ * @returns `reading`, the columns of what the upload is measured against but for the day's counts, and `fits`, whether it fits every bound, the day's among them
+ */
+export function roomOf(sized: UploadSize, room: UploadRoom): { readonly reading: SQL; readonly fits: SQL } {
+  const own = pendingOf(sized.owner);
+  const folderBytes = bytesIn(sized.folder, room.staying);
+  // The day's one row is read once for both of its bounds: the files declared on it, and the writes to the store counted on it.
+  const overDay = fragment`${declaredFiles.files} + ${sized.files} > ${room.dayFiles} OR ${declaredFiles.writes} + ${room.writes} > ${room.dayWrites}`;
+  const dayFits = fragment`NOT EXISTS (SELECT 1 FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${room.day} AND (${overDay})) AND ${sized.files} <= ${room.dayFiles} AND ${room.writes} <= ${room.dayWrites}`;
+  const bytesFit = fragment`${folderBytes} + ${sized.bytes} <= ${room.folderBytes} AND ${BYTES_HELD} + ${sized.bytes} <= ${room.totalBytes}`;
+
+  return {
+    reading: fragment`${own} AS own, ${folderBytes} AS folder_bytes, ${BYTES_HELD} AS total_bytes, ${SITES_HELD} AS sites`,
+    fits: fragment`${own} < ${room.own} AND ${bytesFit} AND (${room.sites} IS NULL OR ${SITES_HELD} < ${room.sites}) AND ${dayFits}`,
+  };
 }
 
 /** The counts of every day before the one before the given day, dropped. Yesterday's stay: an upload that began just before midnight is still counted against it. */
@@ -66,12 +91,12 @@ export function finishUpload(id: UploadId): Statement {
 }
 
 /** How many pending uploads a holder began. */
-export function pendingOf(owner: string): SQL {
+function pendingOf(owner: string): SQL {
   return fragment`(SELECT COUNT(*) FROM ${uploads} WHERE ${uploads.state} = 'pending' AND ${uploads.owner} = ${owner})`;
 }
 
 /** The bytes a folder would hold: what its pending uploads declare, and the `staying` newest kept versions of its site. */
-export function bytesIn(folder: string, staying: number): SQL {
+function bytesIn(folder: string, staying: number): SQL {
   const pending = fragment`(SELECT COALESCE(SUM(${uploads.bytes}), 0) FROM ${uploads} WHERE ${uploads.state} = 'pending' AND ${uploads.folder} = ${folder})`;
   const newest = fragment`(SELECT ${versions.number} FROM ${versions} WHERE ${versions.folder} = ${folder} ORDER BY ${versions.number} DESC LIMIT ${staying})`;
 

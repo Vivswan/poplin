@@ -62,7 +62,7 @@ const pickerRules = `${AGENTS.map((agent) => `.start[data-picked="${agent.id}"] 
       <section class="step" aria-labelledby="site">
         <div class="say">
           <h2 id="site">It becomes a site</h2>
-          <p>The address you get back opens the page. At first, only you can open it: the p in it means private.</p>
+          <p>The address you get back opens the page. At first, only the users of your install can open it: the p in it means private.</p>
         </div>
         <Browser />
       </section>
@@ -120,7 +120,7 @@ const pickerRules = `${AGENTS.map((agent) => `.start[data-picked="${agent.id}"] 
       <section class="step last" aria-labelledby="start">
         <div class="say">
           <h2 id="start">Start</h2>
-          <p>Paste this into your agent; it guides you through the rest. It needs a free account on <Provider end="." /></p>
+          <p>Paste this into your agent; it guides you through the rest. It needs a free account with a payment method on it, on <Provider end="." /></p>
         </div>
         <Start />
       </section>

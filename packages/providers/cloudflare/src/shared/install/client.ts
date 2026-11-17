@@ -13,11 +13,12 @@ const RATE_LIMITED_STATUS = 429;
 // The plans a zone can be on, as the first word of Cloudflare's name for one.
 const ZONE_PLANS: ReadonlySet<string> = new Set(["free", "pro", "business", "enterprise"]);
 
-/** Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. */
+/** Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. `sleep` waits so many milliseconds between two reads of settings that trail an upload: the platform's own timer where absent. */
 export interface Connection {
   readonly key: string;
   readonly baseUrl?: string | undefined;
   readonly fetch?: ((input: string | URL | Request, init?: RequestInit) => Promise<Response>) | undefined;
+  readonly sleep?: ((milliseconds: number) => Promise<void>) | undefined;
 }
 
 /** One entry of the `errors` list in Cloudflare's reply. */

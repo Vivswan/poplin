@@ -9,22 +9,31 @@ import { exitCode } from "../../commands/exit-codes";
 import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor, STOPPED } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
-import type { Careful, InstallEnds, Provider, Stop } from "../records";
-import { carefulOf, NEXT, placeOf, rowLine, type Unsettled, userWords } from "../report";
+import type { Careful, InstallEnds, Next, Provider, Stop } from "../records";
+import { carefulOf, NEXT, placeOf, rowLine, type Unsettled, updateWords, userOption } from "../report";
 import { parseRepair, REPAIR_COMMAND, type RepairPlan } from "./parse";
 import { foundWords, repairedLines, repairedValue, repairHelp, stopOf, unmended } from "./report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
 
-/** The command as it is typed after `poplin`, what runs it again, and the careful choice it takes. */
-const COMMAND = { name: REPAIR_COMMAND, again: (_provider: Provider | undefined, careful: readonly Careful[], place: readonly string[]) => NEXT.repair("this", careful, place), careful: ["--dry-run"] } as const;
+/** The careful choice the command takes. */
+const CAREFUL = ["--dry-run"] as const;
 
 /** A plan with every answer in: where the install is, and the token. */
 interface Request {
   readonly plan: RepairPlan;
   readonly where: unknown;
   readonly token: Token;
+}
+
+/**
+ * The command as it is typed after `poplin`, what runs it again, and the careful choice it takes.
+ *
+ * @param update - whether the line asked for the newest release: the same command again asks for it too
+ */
+function commandOf(update: boolean): { readonly name: string; readonly again: (provider: Provider | undefined, careful: readonly Careful[], place: readonly string[]) => Next; readonly careful: readonly Careful[] } {
+  return { name: REPAIR_COMMAND, again: (_provider, careful, place) => NEXT.repair("this", careful, [...updateWords(update), ...place]), careful: CAREFUL };
 }
 
 /** Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks. A stop holds the place the run knew by then. */
@@ -58,13 +67,13 @@ async function look(request: Request, ends: InstallEnds, show: Show): Promise<{ 
   });
   if ("problem" in looked) return looked;
 
-  return looked.found.state === "whole" ? { found: looked.found, where: looked.where } : stopOf(looked.found, plan.provider, carefulOf(plan.run), placeOf(plan.provider, looked.where));
+  return looked.found.state === "whole" ? { found: looked.found, where: looked.where } : stopOf(looked.found, plan.provider, carefulOf(plan.run), placeOf(plan.provider, looked.where), plan.update);
 }
 
 /** Settle a plan's open answers, find the install, and mend it or say what a run would change. The token is hidden from the moment it is read. */
-async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
-  const { provider, run } = plan;
-  const line = { command: COMMAND, careful: carefulOf(run), provider, run };
+async function planned(plan: RepairPlan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
+  const { provider, run, update } = plan;
+  const line = { command: commandOf(update), careful: carefulOf(run), provider, run };
   const request = await settled(plan, ends);
   if ("stop" in request) return stopped(request.stop, show, { ...line, place: request.place });
 
@@ -76,16 +85,17 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
   const doing = run === "dry-run" ? "reading what a repair would change" : "mending the install";
   show.working(doing);
 
-  const repaired = await provider.repair(ground.found, ground.where, { run, addUser: plan.addUser }, ends.reach, (row) => {
+  const repaired = await provider.repair(ground.found, ground.where, { run, update, addUser: plan.addUser }, ends.reach, (row) => {
     const { tone, text, hang } = rowLine(row, run);
     show.line(tone, text, hang);
     show.working(doing);
   });
-  if (!repaired.ok) return stopped(unmended(repaired, at.careful, at.place), show, at);
+  if (!repaired.ok) return stopped(unmended(repaired, at.careful, at.place, update), show, at);
 
   for (const line of repairedLines(repaired, run, provider)) show.line(line.tone, line.text);
 
-  show.value(repairedValue(repaired, run, ground.found, [...at.place, ...userWords(plan.addUser)]));
+  const user = userOption(plan.addUser, io.machine.platform);
+  show.value(repairedValue(repaired, run, ground.found, { words: [...updateWords(update), ...at.place, ...user.words], add: user.add }));
 
   return exitCode({ kind: repaired.ready ? "done" : "failed" });
 }
@@ -98,5 +108,5 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
  * @returns the exit code: 0 nothing is left undone, or a dry run says a run would leave nothing; 1 something is, or would be, or no whole install is there; 2 written wrong or an answer missing; 5 no answer. Nothing throws
  */
 export function runRepair(words: readonly string[], io: Io, ends: InstallEnds): Promise<number> {
-  return runCommand({ ...COMMAND, parse: parseRepair, help: repairHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
+  return runCommand({ ...commandOf(words.includes("--update")), parse: parseRepair, help: repairHelp, json: (plan) => plan.json, run: planned }, words, io, ends);
 }

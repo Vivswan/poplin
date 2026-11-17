@@ -2,6 +2,7 @@
 // A client is typed from these declarations, so the two cannot differ. A request carries `Authorization: Bearer <token>`, but for the two routes a computer with no token calls to get one.
 // A JSON body goes with `Content-Type: application/json`, a file's bytes to the address and with the headers the file's ticket names.
 // A done request answers 200 with JSON, or with the bytes of one file; any other answers an `ApiError`.
+// A route that changes a site or the settings takes `?dry_run=true`: its action then answers what the change would come to, or its refusal, and writes nothing.
 
 import { AUDIT_QUERY, listAudit } from "@poplin/core/src/actions/audit-log";
 import { beginImport, type ImportRequest } from "@poplin/core/src/actions/begin-import";
@@ -11,7 +12,7 @@ import { type LOGIN_REQUEST, LOGIN_SECRET, redeemLogin } from "@poplin/core/src/
 import { changeConfig, readConfig } from "@poplin/core/src/actions/config";
 import { DELETE_OPTIONS, deleteSite } from "@poplin/core/src/actions/delete";
 import { domainState } from "@poplin/core/src/actions/domain-state";
-import { cancelCopy, DUPLICATE_REQUEST, duplicateSite } from "@poplin/core/src/actions/duplicate";
+import { cancelCopy, DUPLICATE_REQUEST, duplicateSite, rehearseDuplicate } from "@poplin/core/src/actions/duplicate";
 import { EXPORT_FILE_QUERY, EXPORT_FILES_QUERY, EXPORT_QUERY, EXPORT_SITE_QUERY, exportFile, exportFiles, exportSettings, exportSite, exportSites } from "@poplin/core/src/actions/export";
 import { finishPublish } from "@poplin/core/src/actions/finish-publish";
 import { importSettings, SETTINGS_IMPORT } from "@poplin/core/src/actions/import-settings";
@@ -20,7 +21,7 @@ import { LIST_QUERY, listSites } from "@poplin/core/src/actions/list";
 import { issueToken, listTokens, revokeToken, TOKEN_REQUEST } from "@poplin/core/src/actions/manage-tokens";
 import { newLink } from "@poplin/core/src/actions/new-link";
 import { listProblems, noteProblem } from "@poplin/core/src/actions/problems";
-import type { Install } from "@poplin/core/src/actions/records";
+import { type Install, REHEARSAL, type Rehearsal } from "@poplin/core/src/actions/records";
 import { restoreSite } from "@poplin/core/src/actions/restore";
 import { ROLLBACK_OPTIONS, rollbackSite } from "@poplin/core/src/actions/rollback";
 import { updateSite } from "@poplin/core/src/actions/set";
@@ -132,11 +133,22 @@ async function carried<Answer extends { readonly ok: boolean; readonly values?: 
   return answer;
 }
 
+/** Copy a site, or say what the copy would be where the request asks for a dry run. */
+async function duplicated(
+  asking: { readonly install: Install; readonly actor: Parameters<typeof duplicateSite>[1] },
+  request: Parameters<typeof duplicateSite>[2],
+  how: Rehearsal,
+  jobs: Jobs,
+): Promise<Awaited<ReturnType<typeof duplicateSite | typeof rehearseDuplicate>>> {
+  return how.dry_run === true ? rehearseDuplicate(asking.install, asking.actor, request) : duplicateSite(asking.install, asking.actor, request, TOKEN_CALLS, jobs);
+}
+
 /** Declare every route of one install. The type of what it returns is what a client is typed from, so it is inferred, never written. */
 function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof metered>) {
   const token = authenticate(deps.readToken, deps.now);
   const json = carries("json");
   const noQuery = queried(NO_QUERY);
+  const rehearsal = queried(REHEARSAL);
   const site = namesSite();
   const updating = { self: deps.update, counters: deps.counters };
   const jobs = deps.jobs ?? inlineJobs;
@@ -159,19 +171,19 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
 
     .get("/sites", token, install, queried(LIST_QUERY), async (context) => respond(await listSites(context.var.install, context.var.actor, context.req.valid("query"))))
     .get("/sites/:site", token, install, noQuery, site, async (context) => respond(await getSite(context.var.install, context.var.actor, context.req.param("site"))))
-    .patch("/sites/:site", token, install, json, noQuery, site, sent<SiteChanges>(JSON_BYTES), async (context) => {
-      return respond(await checked(SITE_CHANGES, context.req.valid("json"), (changes) => updateSite(context.var.install, context.var.actor, { ...changes, site: context.req.param("site") })));
+    .patch("/sites/:site", token, install, json, rehearsal, site, sent<SiteChanges>(JSON_BYTES), async (context) => {
+      return respond(await checked(SITE_CHANGES, context.req.valid("json"), (changes) => updateSite(context.var.install, context.var.actor, { ...changes, ...context.req.valid("query"), site: context.req.param("site") })));
     })
-    .post("/sites/:site/rollback", token, install, json, noQuery, site, sent<v.InferInput<typeof ROLLBACK_OPTIONS>>(JSON_BYTES), async (context) => {
-      return respond(await checked(ROLLBACK_OPTIONS, context.req.valid("json"), (options) => rollbackSite(context.var.install, context.var.actor, { ...options, site: context.req.param("site") })));
+    .post("/sites/:site/rollback", token, install, json, rehearsal, site, sent<v.InferInput<typeof ROLLBACK_OPTIONS>>(JSON_BYTES), async (context) => {
+      return respond(await checked(ROLLBACK_OPTIONS, context.req.valid("json"), (options) => rollbackSite(context.var.install, context.var.actor, { ...options, ...context.req.valid("query"), site: context.req.param("site") })));
     })
-    .post("/sites/:site/new-link", token, install, noQuery, site, async (context) => respond(await newLink(context.var.install, context.var.actor, context.req.param("site"))))
+    .post("/sites/:site/new-link", token, install, rehearsal, site, async (context) => respond(await newLink(context.var.install, context.var.actor, context.req.param("site"), context.req.valid("query"))))
     .delete("/sites/:site", token, install, queried(DELETE_OPTIONS), site, async (context) => {
       return respond(await deleteSite(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
     })
-    .post("/sites/:site/restore", token, install, noQuery, site, async (context) => respond(await restoreSite(context.var.install, context.var.actor, context.req.param("site"))))
-    .post("/sites/:site/duplicate", token, install, json, noQuery, site, sent<v.InferInput<typeof DUPLICATE_REQUEST>>(JSON_BYTES), async (context) => {
-      const copy = (asked: v.InferOutput<typeof DUPLICATE_REQUEST>): ReturnType<typeof duplicateSite> => duplicateSite(context.var.install, context.var.actor, { ...asked, site: context.req.param("site") }, TOKEN_CALLS, jobs);
+    .post("/sites/:site/restore", token, install, rehearsal, site, async (context) => respond(await restoreSite(context.var.install, context.var.actor, context.req.param("site"), context.req.valid("query"))))
+    .post("/sites/:site/duplicate", token, install, json, rehearsal, site, sent<v.InferInput<typeof DUPLICATE_REQUEST>>(JSON_BYTES), async (context) => {
+      const copy = (asked: v.InferOutput<typeof DUPLICATE_REQUEST>): ReturnType<typeof duplicated> => duplicated(context.var, { ...asked, site: context.req.param("site") }, context.req.valid("query"), jobs);
 
       return respond(await checked(DUPLICATE_REQUEST, context.req.valid("json"), copy), deps.now());
     })
@@ -213,11 +225,13 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     })
 
     .get("/config", token, install, noQuery, async (context) => respond(await readConfig(context.var.install, context.var.actor)))
-    .patch("/config", token, install, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => {
-      const changes = context.req.valid("json");
-      const named = { logins: typeof changes === "object" && changes !== null && "logins" in changes, rules: namesRule(changes), logs: namesLogs(changes) };
+    .patch("/config", token, install, json, rehearsal, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => {
+      const [changes, how] = [context.req.valid("json"), context.req.valid("query")];
+      // A change that is not stored is carried nowhere.
+      const stored = how.dry_run !== true;
+      const named = { logins: stored && typeof changes === "object" && changes !== null && "logins" in changes, rules: stored && namesRule(changes), logs: stored && namesLogs(changes) };
 
-      return respond(await carried(deps, context, await changeConfig(context.var.install, context.var.actor, changes), named));
+      return respond(await carried(deps, context, await changeConfig(context.var.install, context.var.actor, changes, how), named));
     })
     .delete("/sessions", token, install, noQuery, async (context) => respond(await signEveryoneOut(context.var.install, context.var.actor, deps.endLogins)))
     .get("/audit", token, install, queried(AUDIT_QUERY), async (context) => respond(await listAudit(context.var.install, context.var.actor, context.req.valid("query"))))

@@ -62,8 +62,9 @@ export type InstallRequest = { readonly provider: Provider; readonly json: boole
  * The line holds the place the run knows, so it runs as written where nothing can be asked, and no other answer of the line before it: no token, no account, no proof, no consent. It keeps each careful choice of that line where the same command goes on.
  * A stop that says the install is at another place holds none, or the place its own sentence names, as after a repair on an install that was started for another place. A consent, as `--adopt` is, is never on the line: a person adds it.
  * `install`, `repair`, and `uninstall` are the three commands; `login` logs a computer in to an install that is whole; `none` is an end with nothing left to run.
+ * `add` is an option the line leaves out, which a person adds by hand: the user of a repair, on Windows, where the email holds a character one of its shells gives a meaning.
  */
-export type Next = { readonly step: "install" | "repair" | "uninstall" | "login"; readonly command: string } | { readonly step: "none"; readonly command: null };
+export type Next = { readonly step: "install" | "repair" | "uninstall" | "login"; readonly command: string; readonly add?: string } | { readonly step: "none"; readonly command: null };
 
 /** A choice of a line that makes its run do less: keep the data, or change nothing. A line that goes on without it would remove or change what the line before left alone. */
 export type Careful = "--keep-data" | "--dry-run";

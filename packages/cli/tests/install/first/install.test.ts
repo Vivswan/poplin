@@ -204,7 +204,7 @@ describe("what a look finds", () => {
       "  to update it  npx poplin update              (0.2.0 is out)",
       "  to remove it  npx poplin uninstall stand-in",
     ]);
-    expect<unknown>([account.runs, account.changes, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([[], 0, [[{ kind: "none" }, { run: "dry-run", addUser: undefined }]]]);
+    expect<unknown>([account.runs, account.changes, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([[], 0, [[{ kind: "none" }, { run: "dry-run", update: false, addUser: undefined }]]]);
   });
 
   // Drift: the line once named the repair for every install that is there. A person whose install was whole was sent to mend it, when the way on was to log in.
@@ -492,7 +492,7 @@ describe.each([
     const repair = await runLine(command.replace("npx poplin ", ""), account, { env: HELD });
     const where = place === "--no-place" ? { kind: "none" } : { kind: "place", name: "example.com" };
 
-    expect<unknown>([repair.code, account.finds, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([0, [where], [[where, { run: "apply", addUser: login }]]]);
+    expect<unknown>([repair.code, account.finds, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([0, [where], [[where, { run: "apply", update: false, addUser: login }]]]);
   });
 
   // Drift: the line is one a person pastes into a shell. An email with an apostrophe or a dollar sign, pasted bare, opens a quote that never closes or names a variable, and the repair adds nobody or somebody else.
@@ -504,9 +504,54 @@ describe.each([
     ["=ls@example.com", "'=ls@example.com'"],
   ])("the line that lets %s in too writes the email as one word of a POSIX shell: %s", async (email, word) => {
     const account: Account = { ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: email as Login } };
-    const json = await runLine(`${line} --yes --no-wait --json`, account, { env: HELD });
+    const json = await runLine(`${line} --yes --no-wait --json`, account, { env: HELD, platform: "linux" });
 
     expect((jsonOf(json).next as { readonly command: string }).command).toBe(`npx poplin doctor --repair ${place} --add-user ${word}`);
+  });
+
+  // Drift: on Windows the line is read by cmd.exe or by PowerShell, and `npx` runs through a command file that reads its words by cmd.exe's rules once more, with the quotes gone.
+  // Single quotes mean nothing to cmd.exe, so `'a&calc@example.com'` pasted there runs `calc@example.com'` as a second command. No quoting holds in both shells, so such an email is left out of the line.
+  test.each([
+    ["cmd.exe and the command file end a command at", "a&calc@example.com", "'a&calc@example.com'"],
+    ["cmd.exe pipes at", "a|more@example.com", "'a|more@example.com'"],
+    ["cmd.exe escapes with", "a^b@example.com", "'a^b@example.com'"],
+    ["cmd.exe reads a variable between two of", "%PATH%@example.com", "%PATH%@example.com"],
+    ["both shells open a quote at", 'a"b@example.com', "'a\"b@example.com'"],
+    ["PowerShell opens a quote at", "o'brien@example.com", "'o'\\''brien@example.com'"],
+    ["PowerShell escapes with", "a`b@example.com", "'a`b@example.com'"],
+    ["PowerShell reads a variable at", "pay$roll@example.com", "'pay$roll@example.com'"],
+    ["both shells end a word at", "a b@example.com", "'a b@example.com'"],
+    ["PowerShell splits a list at", "a,b@example.com", "a,b@example.com"],
+  ])("an email with the character %s (%s) is one quoted word on POSIX, and on Windows is left out of the line, which says to add it", async (_reads, email, word) => {
+    const account = (): Account => ({ ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: email as Login } });
+    const posix = await runLine(`${line} --yes --no-wait --json`, account(), { env: HELD, platform: "linux" });
+    const windows = await runLine(`${line} --yes --no-wait --json`, account(), { env: HELD, platform: "win32" });
+    const said = await runLine(`${line} --yes --no-wait`, account(), { env: HELD, platform: "win32" });
+    const bare = `npx poplin doctor --repair ${place}`;
+
+    expect([jsonOf(posix).next, jsonOf(windows).next]).toEqual([
+      { step: "repair", command: `${bare} --add-user ${word}` },
+      { step: "repair", command: bare, add: "--add-user <email>" },
+    ]);
+    expect(said.out.slice(-2)).toEqual([`To let ${email} log in too: ${bare}`, `Add --add-user <email> to that line yourself, with ${email}: no line a Windows terminal reads holds that email safely.`]);
+  });
+
+  // Drift: a run that left a piece undone ends by naming the same repair. With the email left out of it and no word of that, the line a person pastes mends the install and lets nobody in.
+  test("on Windows, a run that left a piece undone names the repair without such an email, and says to add it", async () => {
+    const email = "a&calc@example.com";
+    const undone: Account = { ...accountWith(LEFTOVER), scenes: [LEFTOVER, { state: "whole", place: PLACE, version: "0.1.0", address: ADDRESS, newest: "0.1.0" }], installed: { ...installedOf(FRESH), ready: false, unused: email as Login } };
+    const said = await runLine(`${line} --yes --no-wait`, undone, { env: HELD, platform: "win32" });
+
+    expect([said.code, said.out.at(-1)]).toEqual([1, `Add --add-user <email> to that line yourself, with ${email}: no line a Windows terminal reads holds that email safely.`]);
+    expect(said.out.filter((text) => text.includes("--add-user a")).length).toBe(0);
+  });
+
+  // Drift: an email of plain characters is safe bare in every shell. Left out on Windows too, the line a person pastes there would add nobody, on the one platform where they cannot fix the quoting themselves.
+  test("an email of letters, digits, and `.`, `+`, `_`, `-` is written bare on Windows, as on POSIX", async () => {
+    const account: Account = { ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: "first.last+tag_1-x@example.com" as Login } };
+    const windows = await runLine(`${line} --yes --no-wait --json`, account, { env: HELD, platform: "win32" });
+
+    expect(jsonOf(windows).next).toEqual({ step: "repair", command: `npx poplin doctor --repair ${place} --add-user first.last+tag_1-x@example.com` });
   });
 });
 
@@ -534,7 +579,7 @@ describe("a run that is blocked", () => {
   // Drift: a run that is blocked before its first row has started nothing, so `0 not done` beside exit 1 and `it goes on from what stands` say what is not so, of a project with no release yet as of an account with no address.
   test("before its first row says that nothing was changed and when to run again, and counts nothing: without this a run that started nothing ends `0 not done`", async () => {
     const account = emptyAccount();
-    const none: Blocked = { what: "no_release", words: "No release of poplin is published yet.", address: "https://example.com" };
+    const none: Blocked = { what: "no_release", words: "The project's website names no release now. Run this again in a few minutes.", address: "https://example.com" };
     account.installed = { ...installedOf([], { ready: false, blocked: [none] }), address: undefined, release: undefined };
 
     const plain = await runLine(RUN, account, { env: HELD });
@@ -543,7 +588,7 @@ describe("a run that is blocked", () => {
     expect([plain.code, plain.out.slice(1)]).toEqual([
       1,
       [
-        "No release of poplin is published yet.",
+        "The project's website names no release now. Run this again in a few minutes.",
         "  https://example.com",
         "Nothing was changed. Run this command again once what the lines above say is no longer so.",
         "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",

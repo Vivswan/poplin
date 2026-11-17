@@ -64,7 +64,7 @@ describe("a repair with the account token", () => {
       "the install is as it should be. Nothing was changed.",
       ...ENDED,
     ]);
-    expect<unknown>(account.repairs).toEqual([{ found: WHOLE, where: { kind: "none" }, mend: { run: "apply", addUser: undefined } }]);
+    expect<unknown>(account.repairs).toEqual([{ found: WHOLE, where: { kind: "none" }, mend: { run: "apply", update: false, addUser: undefined } }]);
     expect(account.runs).toEqual([]);
   });
 
@@ -152,14 +152,33 @@ describe("a repair with the account token", () => {
   test.each(["--no-place", "--place example.com"])("a dry run with %s that was given a user to add names the run with that user, as one word of a shell: without this an agent that follows `next` adds nobody", async (place) => {
     const line = `doctor --repair ${place} --yes --dry-run --json`;
     const dry = await runLine(`${line} --add-user new@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
-    const quoted = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
+    const quoted = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD, platform: "linux" });
+    // No quote holds in both of Windows' shells, so there the line leaves the email out and names the option to add.
+    const left = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD, platform: "win32" });
     const undone = await runLine(`${line.replace(" --dry-run", "")} --add-user new@example.com`, installed(repairedOf(ONE_GONE, { ready: false })), { env: HELD });
 
-    expect([dry, quoted, undone].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([
+    expect([dry, quoted, left, undone].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([
       [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
       [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user 'o'\\''brien@example.com'` }],
+      [0, { step: "repair", command: `npx poplin doctor --repair ${place}`, add: "--add-user <email>" }],
       [1, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
     ]);
+  });
+
+  // Drift: a repair mends and an update is asked for. A line that lost --update on its way would mend and take no release, and one that gained it would change the code of an install nobody asked to update. Both kinds of install are held to it.
+  test.each(["--no-place", "--place example.com"])("with %s, --update reaches the provider only where the line gives it, and every next step keeps it: after a dry run, a run not ready, and a line with an answer missing", async (place) => {
+    const line = `doctor --repair ${place} --yes --json`;
+    const [plain, asked] = [installed(repairedOf(ONE_GONE)), installed(repairedOf(ONE_GONE))];
+    const dry = await runLine(`${line} --update --dry-run`, asked, { env: HELD });
+    const run = await runLine(`${line} --update`, asked, { env: HELD });
+    const undone = await runLine(`${line} --update`, installed(repairedOf(ONE_GONE, { ready: false })), { env: HELD });
+    const lacking = await runLine(`${line} --update`, installed());
+    await runLine(line, plain, { env: HELD });
+    const next = { step: "repair", command: `npx poplin doctor --repair --update ${place}` };
+    const [login, unplaced] = [{ step: "login", command: `npx poplin login --server ${ADDRESS}` }, { step: "repair", command: "npx poplin doctor --repair --update" }];
+
+    expect([plain.repairs.map((one) => one.mend.update), asked.repairs.map((one) => [one.mend.run, one.mend.update])]).toEqual([[false], [["dry-run", true], ["apply", true]]]);
+    expect([dry, run, undone, lacking].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([[0, next], [0, login], [1, next], [2, unplaced]]);
   });
 
   test("the email of --add-user reaches the provider in its normal form, and text that is none is refused before any look: without this a typing slip is sent to the provider", async () => {
@@ -227,6 +246,7 @@ describe("what a repair does not go on from", () => {
   test.each([
     ["the install answers elsewhere than the place named", "elsewhere", 1, "other_place", BARE],
     ["the install's records are of another version", "another", 1, "another_version", { step: "repair", command: "npx poplin@latest doctor --repair --no-place" }],
+    ["the install is behind, with records this poplin does not read", "behind", 1, "another_version", { step: "repair", command: "npx poplin doctor --repair --update --no-place" }],
     ["the provider refuses the token at the install", "token", 1, "token_refused", AGAIN],
     ["the provider gives no answer", "unreachable", 5, "unreachable", AGAIN],
   ] as const)("a repair that stops because %s exits with its code, says that nothing was changed, and names what goes on from it", async (_, why, code, problem, next) => {
@@ -234,11 +254,24 @@ describe("what a repair does not go on from", () => {
 
     expect([ran.code, jsonOf(ran)]).toEqual([code, { ok: false, problem, next, words: "The host says why. nothing was changed", run: "apply", ready: false }]);
   });
+
+  // Drift: `--update` is the person's own choice, said on the line that stopped. A next step that dropped it would mend where the person asked for the release, and one at another place would keep the wrong place with it.
+  test.each([
+    ["the install answers elsewhere than the place named", "elsewhere", "npx poplin doctor --repair --update"],
+    ["the install's records are of another version", "another", "npx poplin@latest doctor --repair --update --no-place"],
+    ["the install is behind, with records this poplin does not read", "behind", "npx poplin doctor --repair --update --no-place"],
+    ["the provider refuses the token at the install", "token", "npx poplin doctor --repair --update --no-place"],
+  ] as const)("a repair with --update that stops because %s names a next step that keeps --update, once", async (_, why, command) => {
+    const ran = await runLine(`${RUN} --update --json`, installed({ ok: false, why, words: "The host says why." }), { env: HELD });
+
+    expect(jsonOf(ran).next).toEqual({ step: "repair", command });
+  });
 });
 
 describe("the words of a repair", () => {
   test.each([
     ["doctor --dry-run", "poplin doctor changes nothing already: --dry-run goes with --repair"],
+    ["doctor --update", "--update goes with --repair"],
     ["doctor --add-user you@example.com", "--add-user goes with --repair"],
     ["doctor --token-stdin", "--token-stdin goes with --repair"],
   ])("%s is refused, since the option means something in a repair alone: without this a person believes a check added a user", (line, message) => {
@@ -276,6 +309,6 @@ describe("the words of a repair", () => {
     const [help = ""] = ran.out;
 
     expect([ran.code, help.split("\n")[0]]).toEqual([0, "poplin doctor --repair (--place <name> | --no-place) [options]"]);
-    expect(["--add-user <email>", "--dry-run", "--token-stdin", "--place <name>", "POPLIN_INSTALL_TOKEN", "a token that may only read adds nobody"].filter((part) => !help.includes(part))).toEqual([]);
+    expect(["--add-user <email>", "--update", "--dry-run", "--token-stdin", "--place <name>", "POPLIN_INSTALL_TOKEN", "a token that may only read adds nobody"].filter((part) => !help.includes(part))).toEqual([]);
   });
 });

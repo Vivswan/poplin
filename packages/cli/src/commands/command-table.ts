@@ -20,7 +20,7 @@ const SITE = { name: "site", about: "its label, id, public name, or address" };
 
 /** The settings of a site, the same when it is published and when it is changed. */
 const SITE_SETTINGS: readonly FlagSpec[] = [
-  { name: "--private", about: "only you can open it" },
+  { name: "--private", about: "only the users of your install can open it" },
   { name: "--unlisted", about: "anyone who has the address can open it" },
   { name: "--public", about: "everyone can open it, at its public name" },
   { name: "--public-name", value: "<name>", about: "with --public: its public name, when not its name" },
@@ -88,13 +88,19 @@ export const COMMANDS = [
     group: "one site",
     about: "change a site's settings",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--name", value: "<name>", about: "a new name; its id and every address stay" }, ...SITE_SETTINGS, ...installFlags("the site")],
+    flags: [
+      { name: "--name", value: "<name>", about: "a new name; its id and every address stay" },
+      dryRun("say what would change, and change nothing"),
+      ...SITE_SETTINGS,
+      ...installFlags("the site, or what --dry-run says it would be"),
+    ],
     examples: [
       "poplin set report--k3f9x2ab71qz --unlisted",
       "poplin set report--k3f9x2ab71qz --public",
       "poplin set report--w8t1c5n0ze4u --public --public-name docs",
       "poplin set report--k3f9x2ab71qz --name q3-report",
       'poplin set report--k3f9x2ab71qz --title "Q3 sales"',
+      "poplin set report--k3f9x2ab71qz --public --dry-run",
     ],
   },
   {
@@ -110,15 +116,19 @@ export const COMMANDS = [
     group: "one site",
     about: "go back a version",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--to", value: "<version>", about: "go to that version, not one back" }, ...installFlags("the site")],
-    examples: ["poplin rollback report--k3f9x2ab71qz"],
+    flags: [
+      { name: "--to", value: "<version>", about: "go to that version, not one back" },
+      dryRun("say which version would be live, and change nothing"),
+      ...installFlags("the site, or what --dry-run says it would be"),
+    ],
+    examples: ["poplin rollback report--k3f9x2ab71qz", "poplin rollback report--k3f9x2ab71qz --dry-run"],
   },
   {
     name: "new-link",
     group: "one site",
     about: "give a site a new id, so a new address",
     arguments: [{ ...SITE, required: true }],
-    flags: installFlags("the site"),
+    flags: [dryRun("say which address would stop, and change nothing"), ...installFlags("the site; with --dry-run, the site as it is")],
     examples: ["poplin new-link report--k3f9x2ab71qz"],
   },
   {
@@ -126,7 +136,11 @@ export const COMMANDS = [
     group: "one site",
     about: "make a private copy of a site, with a new address",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--name", value: "<name>", about: "the copy's name; the site's own without it" }, ...installFlags("the copy")],
+    flags: [
+      { name: "--name", value: "<name>", about: "the copy's name; the site's own without it" },
+      dryRun("say what the copy would be, and copy nothing"),
+      ...installFlags("the copy, or what --dry-run says it would be"),
+    ],
     examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report--k3f9x2ab71qz --name report-draft"],
     notes: [
       "The copy holds the live version's files and the site's settings, but for",
@@ -141,15 +155,19 @@ export const COMMANDS = [
     group: "one site",
     about: "move a site into the trash",
     arguments: [{ ...SITE, required: true }],
-    flags: [{ name: "--no-trash", about: "remove it now, after you type its label" }, ...installFlags("the site, or what --no-trash left")],
-    examples: ["poplin delete report--k3f9x2ab71qz", "poplin delete report"],
+    flags: [
+      { name: "--no-trash", about: "remove it now, after you type its label" },
+      dryRun("say what would go, and delete nothing"),
+      ...installFlags("the site, or what --no-trash left"),
+    ],
+    examples: ["poplin delete report--k3f9x2ab71qz", "poplin delete report", "poplin delete report --no-trash --dry-run"],
   },
   {
     name: "restore",
     group: "one site",
     about: "take a site back out of the trash",
     arguments: [{ ...SITE, required: true }],
-    flags: installFlags("the site"),
+    flags: [dryRun("say what would come back, and restore nothing"), ...installFlags("the site, or what --dry-run says it would be")],
     examples: [],
   },
   {
@@ -184,8 +202,8 @@ export const COMMANDS = [
     group: "you, on this machine",
     about: "forget this machine's token",
     arguments: [],
-    flags: installFlags("whether the token was revoked"),
-    examples: ["poplin logout"],
+    flags: [dryRun("say what a logout would do, and keep the login"), ...installFlags("whether the token was revoked, or would be")],
+    examples: ["poplin logout", "poplin logout --dry-run"],
   },
   {
     name: "whoami",
@@ -203,8 +221,8 @@ export const COMMANDS = [
       { name: "key", about: "the setting to show; without it, every setting", required: false },
       { name: "value", about: "the value to give it: 7d, 9GB, 25%, on", required: false },
     ],
-    flags: installFlags("the settings, or the one named as key and value"),
-    examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
+    flags: [dryRun("with a value: say what it would be, change nothing"), ...installFlags("the settings, or the one named as key and value")],
+    examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed", "poplin config trash_days 9 --dry-run"],
     notes: [
       "outside_pages, search_engines_allowed, and block_bots also change your",
       "domain. An install that holds its key writes the rules of the first two",
@@ -218,6 +236,7 @@ export const COMMANDS = [
     arguments: [],
     flags: [
       { name: REPAIR_FLAG, about: "mend the install at its provider, with an account token" },
+      { name: "--update", about: "with --repair: first bring the install to the newest release" },
       { name: "--dry-run", about: "with --repair: say what it would change, and change nothing" },
       { name: "--add-user", value: "<email>", about: "with --repair: let one more person log in" },
       { name: "--yes", about: "with --repair: ask nothing" },
@@ -229,6 +248,8 @@ export const COMMANDS = [
       "--repair needs an account token and no login, so it is the way back in:",
       "  poplin doctor --repair --dry-run",
       "  poplin doctor --repair --add-user you@example.com",
+      "A repair mends, and takes a newer release only with --update:",
+      "  poplin doctor --repair --update",
       "It takes no --server. Its own help lists the options of the provider and",
       "how the token is given: poplin doctor --repair --help",
     ],
@@ -326,6 +347,11 @@ export interface CommandSpec {
 
 /** The word of a command in the table. */
 export type CommandName = (typeof COMMANDS)[number]["name"];
+
+/** The flag that asks what a command would do, with nothing changed, in the words of one command. */
+function dryRun(about: string): FlagSpec {
+  return { name: "--dry-run", about };
+}
 
 /**
  * The flags of a command that talks to an install.

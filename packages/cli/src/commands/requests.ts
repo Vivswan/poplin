@@ -32,8 +32,11 @@ const REFUSALS: Readonly<Record<Refusal, string>> = {
   "no-site-address": "it is not the address of a site, such as report--k3f9x2ab71qz-p-poplin.example.com",
 };
 
+/** The flag that asks what a command would do, with nothing changed. */
+const DRY_RUN = "--dry-run";
+
 /** The options of `poplin doctor` that mean something in a repair alone. */
-const REPAIR_ALONE = ["--add-user", "--yes", "--token-stdin"] as const;
+const REPAIR_ALONE = ["--update", "--add-user", "--yes", "--token-stdin"] as const;
 
 /** The command of every request: each command of the table but `help`, which asks nothing of an install. */
 const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words, now: number) => TypedRequest | UsageError } = {
@@ -41,13 +44,13 @@ const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words
   set,
   show: (words) => oneSite("show", words),
   rollback,
-  "new-link": (words) => oneSite("new-link", words),
+  "new-link": (words) => rehearsable("new-link", words),
   duplicate,
-  delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, noTrash: words.flags.has("--no-trash"), ...install })),
-  restore: (words) => oneSite("restore", words),
+  delete: (words) => withSite(words, (site, install) => ({ kind: "delete", site, noTrash: words.flags.has("--no-trash"), dryRun: words.flags.has(DRY_RUN), ...install })),
+  restore: (words) => rehearsable("restore", words),
   list: (words) => withInstall(words, (install) => ({ kind: "list", trash: words.flags.has("--trash"), ...install })),
   login,
-  logout: (words) => withInstall(words, (install) => ({ kind: "logout", ...install })),
+  logout: (words) => withInstall(words, (install) => ({ kind: "logout", dryRun: words.flags.has(DRY_RUN), ...install })),
   whoami: (words) => withInstall(words, (install) => ({ kind: "whoami", ...install })),
   config,
   doctor,
@@ -72,7 +75,7 @@ interface Words {
 }
 
 /** What `config` does: show every setting, show one, or give one a value in core's text form. */
-type ConfigAction = { readonly kind: "show-all" } | { readonly kind: "show"; readonly key: SettingKey } | { readonly kind: "change"; readonly key: SettingKey; readonly value: string };
+type ConfigAction = { readonly kind: "show-all" } | { readonly kind: "show"; readonly key: SettingKey } | { readonly kind: "change"; readonly key: SettingKey; readonly value: string; readonly dryRun: boolean };
 
 /** What `update` does: take the newest release or the one version `to` names, or say what a start would come to. */
 type UpdateAction = { readonly kind: "start"; readonly to?: string } | { readonly kind: "check" };
@@ -81,20 +84,23 @@ type UpdateAction = { readonly kind: "start"; readonly to?: string } | { readonl
 type PublishTarget<Site> = { readonly kind: "create"; readonly name?: SiteName } | { readonly kind: "update"; readonly site: Site };
 
 /**
- * One command with its checked arguments. `path` and `zip` are as typed: no file has been read.
+ * One command with its checked arguments. `path` and `zip` are as typed: no file has been read. `dryRun` is whether the command only says what it would do.
  *
  * `Site` is what names a site: its label's name and id, its id alone, or a public name, with the domain of an address that was typed. No lookup has been made.
  */
 type Asked<Site> =
   | ({ readonly kind: "publish"; readonly path: string; readonly target: PublishTarget<Site>; readonly settings: SiteSettings; readonly dryRun: boolean } & Install)
-  | ({ readonly kind: "set"; readonly site: Site; readonly settings: SiteSettings } & Install)
-  | ({ readonly kind: "show" | "new-link" | "restore"; readonly site: Site } & Install)
-  | ({ readonly kind: "rollback"; readonly site: Site; readonly to?: number } & Install)
-  | ({ readonly kind: "duplicate"; readonly site: Site; readonly name?: SiteName } & Install)
-  | ({ readonly kind: "delete"; readonly site: Site; readonly noTrash: boolean } & Install)
+  | ({ readonly kind: "set"; readonly site: Site; readonly settings: SiteSettings; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "show"; readonly site: Site } & Install)
+  | ({ readonly kind: "new-link"; readonly site: Site; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "restore"; readonly site: Site; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "rollback"; readonly site: Site; readonly to?: number; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "duplicate"; readonly site: Site; readonly name?: SiteName; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "delete"; readonly site: Site; readonly noTrash: boolean; readonly dryRun: boolean } & Install)
   | ({ readonly kind: "list"; readonly trash: boolean } & Install)
   | ({ readonly kind: "login"; readonly publisher: boolean; readonly computer?: string; readonly browser: boolean } & Install)
-  | ({ readonly kind: "logout" | "whoami" | "doctor" } & Install)
+  | ({ readonly kind: "logout"; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "whoami" | "doctor" } & Install)
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "update"; readonly action: UpdateAction } & Install)
   | ({ readonly kind: "export"; readonly site?: Site; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
@@ -147,8 +153,13 @@ function withSite(words: Words, build: (site: TypedSite, install: Install) => Ty
   return withInstall(words, (install) => build(site, install));
 }
 
-function oneSite(kind: "show" | "new-link" | "restore", words: Words): TypedRequest | UsageError {
+function oneSite(kind: "show", words: Words): TypedRequest | UsageError {
   return withSite(words, (site, install) => ({ kind, site, ...install }));
+}
+
+/** A command that changes one site and takes nothing else but whether it is a dry run. */
+function rehearsable(kind: "new-link" | "restore", words: Words): TypedRequest | UsageError {
+  return withSite(words, (site, install) => ({ kind, site, dryRun: words.flags.has(DRY_RUN), ...install }));
 }
 
 /**
@@ -200,7 +211,7 @@ function publish(words: Words, now: number): TypedRequest | UsageError {
   const plan = planPublish(words.flags, given);
   if (isUsageError(plan)) return plan;
 
-  return withInstall(words, (install) => ({ kind: "publish", path, ...plan, dryRun: words.flags.has("--dry-run"), ...install }));
+  return withInstall(words, (install) => ({ kind: "publish", path, ...plan, dryRun: words.flags.has(DRY_RUN), ...install }));
 }
 
 function set(words: Words, now: number): TypedRequest | UsageError {
@@ -212,28 +223,30 @@ function set(words: Words, now: number): TypedRequest | UsageError {
 
   if (Object.keys(settings).length === 0) return usageError("nothing to change: poplin set needs at least one setting", "poplin help set lists them");
 
-  return withSite(words, (site, install) => ({ kind: "set", site, settings, ...install }));
+  return withSite(words, (site, install) => ({ kind: "set", site, settings, dryRun: words.flags.has(DRY_RUN), ...install }));
 }
 
 function rollback(words: Words): TypedRequest | UsageError {
   const to = flagValue(words.flags, "--to");
-  if (to === undefined) return withSite(words, (site, install) => ({ kind: "rollback", site, ...install }));
+  const dryRun = words.flags.has(DRY_RUN);
+  if (to === undefined) return withSite(words, (site, install) => ({ kind: "rollback", site, dryRun, ...install }));
 
   const version = Number(to);
   if (!VERSION_PATTERN.test(to) || !Number.isSafeInteger(version))
     return usageError(`--to takes a version number such as 4, not ${JSON.stringify(to)}`, "poplin show <site> lists the versions");
 
-  return withSite(words, (site, install) => ({ kind: "rollback", site, to: version, ...install }));
+  return withSite(words, (site, install) => ({ kind: "rollback", site, to: version, dryRun, ...install }));
 }
 
 function duplicate(words: Words): TypedRequest | UsageError {
   const nameText = flagValue(words.flags, "--name");
-  if (nameText === undefined) return withSite(words, (site, install) => ({ kind: "duplicate", site, ...install }));
+  const dryRun = words.flags.has(DRY_RUN);
+  if (nameText === undefined) return withSite(words, (site, install) => ({ kind: "duplicate", site, dryRun, ...install }));
 
   const name = readName("--name", nameText, parseSiteName(nameText));
   if (isUsageError(name)) return name;
 
-  return withSite(words, (site, install) => ({ kind: "duplicate", site, name, ...install }));
+  return withSite(words, (site, install) => ({ kind: "duplicate", site, name, dryRun, ...install }));
 }
 
 function login(words: Words): TypedRequest | UsageError {
@@ -246,7 +259,7 @@ function login(words: Words): TypedRequest | UsageError {
 
 /** A check of the install with this computer's login. The options of a repair are refused here: a line that carries `--repair` is read by the repair's own parser and never comes this far. */
 function doctor(words: Words): TypedRequest | UsageError {
-  if (words.flags.has("--dry-run")) return usageError("poplin doctor changes nothing already: --dry-run goes with --repair");
+  if (words.flags.has(DRY_RUN)) return usageError("poplin doctor changes nothing already: --dry-run goes with --repair");
 
   const stray = REPAIR_ALONE.find((flag) => words.flags.has(flag));
   if (stray !== undefined) return usageError(`${stray} goes with --repair`);
@@ -256,6 +269,9 @@ function doctor(words: Words): TypedRequest | UsageError {
 
 function readConfigAction(words: Words): ConfigAction | UsageError {
   const [key, value] = words.positionals;
+  const dryRun = words.flags.has(DRY_RUN);
+  if (dryRun && value === undefined) return usageError("poplin config changes nothing unless it is given a value: --dry-run goes with one", "poplin config versions_kept 10 --dry-run");
+
   if (key === undefined) return { kind: "show-all" };
 
   if (!isSettingKey(key)) {
@@ -269,7 +285,7 @@ function readConfigAction(words: Words): ConfigAction | UsageError {
   if (readSetting(key, value) === undefined)
     return usageError(`${JSON.stringify(value)} is not a value of ${key}`, `for example: poplin config ${key} ${SETTING_SAMPLES[key]}`);
 
-  return { kind: "change", key, value };
+  return { kind: "change", key, value, dryRun };
 }
 
 function config(words: Words): TypedRequest | UsageError {
@@ -283,7 +299,7 @@ function update(words: Words): TypedRequest | UsageError {
   const to = flagValue(words.flags, "--to");
   if (to !== undefined && !isPlainVersion(to)) return usageError("--to takes a version, such as 0.2.0", "poplin update --to 0.2.0");
 
-  if (words.flags.has("--dry-run")) {
+  if (words.flags.has(DRY_RUN)) {
     if (to !== undefined) return usageError("--dry-run starts nothing, so it takes no --to", "poplin update --dry-run");
 
     return withInstall(words, (install) => ({ kind: "update", action: { kind: "check" }, ...install }));
@@ -311,7 +327,7 @@ function importBackup(words: Words): TypedRequest | UsageError {
   const logins = words.flags.has("--logins");
   if (logins && !settings) return usageError("--logins replaces the logins among the settings, so it needs --settings", "poplin import <zip> --settings --logins");
 
-  const asked = { zip, settings, logins, dryRun: words.flags.has("--dry-run") };
+  const asked = { zip, settings, logins, dryRun: words.flags.has(DRY_RUN) };
   const siteText = flagValue(words.flags, "--site");
   if (siteText === undefined) return withInstall(words, (install) => ({ kind: "import", ...asked, ...install }));
 

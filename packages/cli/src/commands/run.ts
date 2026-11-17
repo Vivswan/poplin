@@ -27,7 +27,7 @@ import { planPublish, previewPublish, sendPublish } from "./publish";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request, TypedRequest } from "./requests";
 import { runSiteCommand } from "./site-commands";
-import { showLine } from "./text";
+import { dryRunText, showLine } from "./text";
 import { runUpdate } from "./update";
 import { guardedScreen, hide, written } from "./util";
 import { readByInstall } from "./wire";
@@ -144,7 +144,11 @@ async function online(request: OnlineRequest, io: Io, run: (session: Session) =>
 
   const session = await connect(request, io);
 
-  if (session === "logged-out" && request.kind === "logout") return { ok: true, value: { revoked: false }, lines: ["no login is saved on this machine"] };
+  if (session === "logged-out" && request.kind === "logout") {
+    const none = "no login is saved on this machine";
+
+    return request.dryRun ? { ok: true, value: { dry_run: true, revoked: false }, lines: [none, dryRunText(false)] } : { ok: true, value: { revoked: false }, lines: [none] };
+  }
 
   if (session === "logged-out") return refused(problem("no_login"));
 

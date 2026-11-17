@@ -236,7 +236,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
       const settings = readSettings(asked);
       if (isProblem(settings)) return refused(settings);
 
-      return onSite(host, site, (reference) => ({ kind: "set", site: reference, settings, json: false }));
+      return onSite(host, site, (reference) => ({ kind: "set", site: reference, settings, dryRun: false, json: false }));
     },
   },
   get_site: {
@@ -255,7 +255,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     description: "Make an earlier kept version of a site the live one. Its settings and addresses stay.",
     parameters: { site: SITE, version: "The version to go to, e.g. 3; get_site lists them. Left out: one back." },
     hints: { destructiveHint: false },
-    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "rollback", site, to: input.version, json: false })),
+    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "rollback", site, to: input.version, dryRun: false, json: false })),
   },
   new_link: {
     description:
@@ -263,7 +263,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
       "The old label and address stop working at once: use the label it answers from then on. A public site keeps its public address.",
     parameters: { site: SITE },
     hints: { destructiveHint: true },
-    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "new-link", site, json: false })),
+    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "new-link", site, dryRun: false, json: false })),
   },
   delete_site: {
     description:
@@ -274,7 +274,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     run: (input, host) => {
       if (input.no_trash === true) return deleteForever(input.site, host);
 
-      return onSite(host, input.site, (site) => ({ kind: "delete", site, noTrash: false, json: false }));
+      return onSite(host, input.site, (site) => ({ kind: "delete", site, noTrash: false, dryRun: false, json: false }));
     },
   },
   duplicate_site: {
@@ -282,18 +282,18 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     parameters: { site: SITE, name: "The copy's name, e.g. q3-draft. Left out: the site's own name." },
     hints: { destructiveHint: false },
     run: (input, host) => {
-      if (input.name === undefined) return onSite(host, input.site, (site) => ({ kind: "duplicate", site, json: false }));
+      if (input.name === undefined) return onSite(host, input.site, (site) => ({ kind: "duplicate", site, dryRun: false, json: false }));
 
       const name = parseSiteName(input.name);
       if (!name.ok) return refused(problem("bad_name", "name"));
 
-      return onSite(host, input.site, (site) => ({ kind: "duplicate", site, name: name.value, json: false }));
+      return onSite(host, input.site, (site) => ({ kind: "duplicate", site, name: name.value, dryRun: false, json: false }));
     },
   },
   restore_site: {
     description: "Take a site back out of the trash, with the settings it had.",
     parameters: { site: SITE },
     hints: { destructiveHint: false },
-    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "restore", site, json: false })),
+    run: (input, host) => onSite(host, input.site, (site) => ({ kind: "restore", site, dryRun: false, json: false })),
   },
 };

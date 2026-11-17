@@ -15,14 +15,14 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import { parseSiteName, type SiteName } from "../names/names";
 import type { Jobs } from "../jobs/jobs";
-import { COUNT, POSITIVE } from "../records/fields";
+import { COUNT, POSITIVE, SITE_NAME } from "../records/fields";
 import type { Site } from "../records/site";
 import { mintSiteFolder } from "../records/site";
 import { type ManifestFile, mintUploadId, parseUploadId, UPLOAD_ID, type Upload, type UploadId } from "../records/upload";
 import { dayOf } from "../records/views";
 import { MAX_LIST_LIMIT, type ObjectStore } from "../storage/storage";
 import { abandonPublish } from "./abandon-publish";
-import { checkManifest, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
+import { checkCount, checkManifest, refuseFull, roomUnder, type UploadLimits } from "./begin-publish";
 import { cutTitle, defaultExpiry, MAX_TITLE_LENGTH } from "./changes";
 import { fileKey, versionPrefix } from "./files";
 import { finishPublish, PUBLISHED_SITE } from "./finish-publish";
@@ -85,8 +85,11 @@ const COPYING = v.object({ before: v.null(), site: v.null(), copy: PROGRESS });
 /** A copy that is a site. */
 const COPIED = v.object({ ...PUBLISHED_SITE.entries, copy: PROGRESS });
 
-/** What a duplicate answers: the copy's progress, and the new site once every file is copied. */
-export const DUPLICATED_SITE = v.union([COPYING, COPIED]);
+/** What a duplicate that changes nothing answers: no upload and no site, the name the copy would have, and how many files it would hold. */
+const REHEARSED_COPY = v.object({ before: v.null(), site: v.null(), copy: v.object({ upload: v.null(), copied: v.null(), files: POSITIVE }), name: SITE_NAME });
+
+/** What a duplicate answers: the copy's progress, and the new site once every file is copied; with `dry_run`, what the copy would be. */
+export const DUPLICATED_SITE = v.union([COPYING, COPIED, REHEARSED_COPY]);
 
 /** The codes a duplicate may be refused with. */
 type DuplicateCode = Extract<Awaited<ReturnType<typeof reachSite | typeof finishPublish>>, { readonly ok: false }>["code"] | "bad_name" | "bad_path" | "no_index" | "too_large" | "too_many_sites" | "allowance_spent" | "no_such_version";
@@ -170,6 +173,15 @@ function copyTitle(site: Site): string | null {
   if (shown === null || shown.endsWith(COPY_MARK)) return site.title;
 
   return `${cutTitle(shown, MAX_TITLE_LENGTH - COPY_MARK.length).trimEnd()}${COPY_MARK}`;
+}
+
+/** The name a copy takes: the one asked for, or its source's own; `undefined` for one asked for that is no name. */
+function copyName(site: Site, asked: string | undefined): SiteName | undefined {
+  if (asked === undefined) return site.name;
+
+  const name = parseSiteName(asked);
+
+  return name.ok ? name.value : undefined;
 }
 
 /** Record the upload of a new copy: the source's live version as it is now, under a new folder, for a private site. */
@@ -329,10 +341,10 @@ async function stageCopy(
     return resumed.ok && resumed.missing !== null ? { ...resumed, fresh: false } : resumed;
   }
 
-  const name = request.name === undefined ? ({ ok: true, value: site.name } as const) : parseSiteName(request.name);
-  if (!name.ok) return refuse("bad_name", "name");
+  const name = copyName(site, request.name);
+  if (name === undefined) return refuse("bad_name", "name");
 
-  const begun = await beginCopy(install, actor, { site, name: name.value, settings, now: signed.at });
+  const begun = await beginCopy(install, actor, { site, name, settings, now: signed.at });
 
   return begun.ok ? { ...begun, fresh: true } : begun;
 }
@@ -383,7 +395,7 @@ async function pendingCopy(install: Install, id: UploadId): Promise<{ readonly u
  * Give up a copy whose round failed for good: its files are removed as an abandoned upload's are, and the failure is noted as the problem `copy_failed`. A copy that is gone or a site already is left as it is.
  *
  * @param failure - what the round threw
- * @throws {Error} the store or the database failed
+ * @throws {Error} the database failed
  */
 export async function failCopy(install: Install, id: UploadId, failure: unknown): Promise<void> {
   const pending = await pendingCopy(install, id);
@@ -434,6 +446,43 @@ export async function cancelCopy(install: Install, actor: Actor, reference: stri
   if (abandoned.ok && upload !== undefined) await jobs.stop({ kind: "copy", upload });
 
   return abandoned;
+}
+
+/**
+ * Say what a duplicate would come to, with nothing changed: the source is reached, and a copy of its live version, sized as the site's record sizes it, is measured against the install's limits as the first call of a duplicate measures it.
+ * No file is listed, so a version whose files are being removed meanwhile, which a duplicate refuses as `no_such_version`, is not seen.
+ * @param request - `site` is a reference to the source, and `name` the copy's; an `upload` is refused, since a dry run begins no copy to go on with
+ * @returns the name the copy would have and how many files it would hold, or the refusal the first call of a duplicate would answer
+ * @throws {Error} the store or the database failed
+ */
+export async function rehearseDuplicate(
+  install: Install,
+  actor: Actor,
+  request: v.InferInput<typeof DUPLICATE_REQUEST> & { readonly site: string },
+): Promise<({ readonly ok: true } & Readonly<v.InferOutput<typeof REHEARSED_COPY>>) | Refused<DuplicateCode>> {
+  const reached = await reachSite(install, actor, request.site);
+  if (!reached.ok) return reached;
+
+  const { site, settings, signed } = reached;
+  if (site.state === "trash") return refuse("in_trash");
+
+  if (request.upload !== undefined) return refuse("bad_argument", "upload");
+
+  const name = copyName(site, request.name);
+  if (name === undefined) return refuse("bad_name", "name");
+
+  const live = site.versions.find((version) => version.number === site.live_version);
+  if (live === undefined || live.files === 0) return refuse("no_such_version");
+
+  const counted = checkCount(live.files, { ...UNBOUNDED, perPublish: settings.max_files_per_publish });
+  if (counted !== undefined) return counted;
+
+  // The run lists the version before it records the copy, and a store that counts its listings has counted the first of them on the day by then.
+  const room = roomUnder(settings, { makesSite: true, writes: live.files * COPY_CALLS + 1 }, signed.at);
+  const fits = await install.database.measureUpload({ owner: actor.holder, folder: mintSiteFolder(), bytes: live.bytes, files: live.files }, room);
+  if (fits.kind !== "done") return refuseFull(install, fits, { dry_run: true });
+
+  return { ok: true, before: null, site: null, copy: { upload: null, copied: null, files: live.files }, name };
 }
 
 /**

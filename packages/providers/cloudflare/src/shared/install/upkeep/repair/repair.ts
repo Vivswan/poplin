@@ -1,7 +1,7 @@
 // `poplin doctor --repair`: an install that is set, mended with an account token from a terminal. It needs no login of the install, so it is the way back in.
 //
 //   the Worker's bindings   which kind of install it is, where it answers, and which database holds its records
-//   the release             an install behind the newest release is brought to it: the one way it takes a release it cannot take by itself
+//   the release             left as it is, with a row that says where a newer one is out; brought to the newest only where the line asks to update
 //   the settings            read from that database with the token, as the Worker's own store reads them
 //   the repair              the one of the install's kind: the code the dashboard's Domain screen runs, with the same settings
 //   one more user           only where asked: the login is written with the email first, and the email is stored after Cloudflare took that write
@@ -23,7 +23,7 @@ import type { BoundInstall } from "../../kind/zone-binding";
 import { isAccessOff, writeLogins } from "../../pieces/access/access";
 import { type ListedBinding, readBindings } from "../../pieces/variables/variables";
 import type { Mode } from "../../sync";
-import { RECORDS_WAIT, syncRelease } from "./release";
+import { NEWEST_POPLIN, RECORDS_WAIT, syncRelease } from "./release";
 import { readStored, type Stored, storeUser, type Untaken } from "./settings";
 
 /** The name of the install's Worker. */
@@ -40,7 +40,7 @@ const WORDS = {
   unreachable: "Cloudflare gave no usable answer.",
   token: "Cloudflare refused the token at the install: it must show the install's own account, and its domain where it has one.",
   changed: "The install changed while it was read. Run this again.",
-  another: "The install's records are not at the schema of this poplin. Run the poplin of the install's own version, or the newest: npx poplin@latest doctor --repair",
+  another: "The install's records are not at the schema of this poplin. Run the poplin of the install's own version, or the newest:",
   noDomain: "The install here has no domain: give --no-domain.",
   noFirst: `${INSTALL_OBJECTS.firstSettingsBinding}: the install stored no settings yet, and the ones its Worker starts with cannot be read`,
   allowance: "the database's free allowance for the day is used up",
@@ -87,6 +87,11 @@ function unread(failure: CloudflareFailure): Repaired {
   const token = failure.failure === "refused" && (failure.status === 401 || failure.status === 403);
 
   return token ? { ok: false, why: "token", words: WORDS.token } : { ok: false, why: "unreachable", words: WORDS.unreachable };
+}
+
+/** Say that the install's records are of another poplin, with the newest poplin's repair that goes on: the one that also updates, where this run was asked to. */
+function anotherWords(update: boolean): string {
+  return `${WORDS.another} ${update ? NEWEST_POPLIN.update : NEWEST_POPLIN.mend}`;
 }
 
 /** Put the option of the install's place after a refusal that ends in the command that goes on, so that the line runs as it is written. */
@@ -156,7 +161,7 @@ function settingsOf(stored: Exclude<Stored, { readonly state: "another" }>, bind
  * @returns `undefined` once the rows are in; else why nothing was read
  */
 async function mended(work: Work, install: BoundInstall, settings: DomainSettings, reach: Reach): Promise<Extract<Repaired, { readonly ok: false }> | undefined> {
-  const parts = { script: SCRIPT, accountId: work.place.accountId, fetch: reach.fetch, now: reach.now };
+  const parts = { script: SCRIPT, accountId: work.place.accountId, fetch: reach.fetch, now: reach.now, sleep: reach.sleep };
   const plug = install.kind === "domain" ? createDomainPlug({ ...parts, layout: install.layout }) : createPathPlug({ ...parts, layout: install.layout });
   const { key } = work.place.connection;
   const reading = await (work.mode === "plan" ? plug.check(key, async () => settings) : plug.repair(key, async () => settings));
@@ -210,12 +215,29 @@ async function userRow(work: Work, stored: Exclude<Stored, { readonly state: "an
  * A dry run that named the steps of a release it did not place reads the records in the run after. Every other run whose rows say nothing of the records yet says so here: a release in place is no mended install.
  */
 function unreadRecords(work: Work, release: Extract<Awaited<ReturnType<typeof syncRelease>>, { readonly rows: readonly Row[] }>, where: Where): Repaired {
+  // Only a run that was asked to update gets here, so the repair its row names updates too.
+  const another = atPlace(anotherWords(true), where);
   const named = work.mode === "plan" && release.rows.some((row) => row.object === RECORDS_WAIT.object && row.state === "change");
   const said = named || release.rows.some((row) => row.object === RECORDS_WAIT.object && UNDONE.has(row.state));
   if (release.state === "unplaced") note(work, RECORDS_WAIT);
-  else if (!said) note(work, { object: RECORDS_WAIT.object, state: "block", detail: atPlace(WORDS.another, where) });
+  else if (!said) note(work, { object: RECORDS_WAIT.object, state: "block", detail: another });
 
   return done(work);
+}
+
+/**
+ * Why an install whose code the run left alone is not mended, where its records are not at this poplin's schema.
+ *
+ * @param behind - the version the install runs and the newer release the run was not asked to take; `undefined` for an install that is not behind one
+ * @returns `behind` with both ways on, the poplin of the install's own version, which mends it as it is, and last the repair that updates; else `another`, which the newest poplin goes on from
+ */
+function unmendedWhole(behind: { readonly runs: string; readonly out: string } | undefined, mend: Mend, where: Where): Repaired {
+  if (behind === undefined) return { ok: false, why: "another", words: atPlace(anotherWords(mend.update), where) };
+
+  const asItIs = atPlace(`To mend it as it is, run the poplin of its version: npx poplin@${behind.runs} doctor --repair`, where);
+  const updated = atPlace(`To take ${behind.out} and mend it: npx poplin doctor --repair --update`, where);
+
+  return { ok: false, why: "behind", words: `The install runs ${behind.runs}, and its records are not at the schema of this poplin. ${asItIs}. ${updated}` };
 }
 
 /**
@@ -234,12 +256,12 @@ export async function repair(found: Whole<Place>, where: Where, mend: Mend, reac
   const { install, databaseId, bindings } = ground;
   const { tokenLink: form } = tokenFacts(install.kind === "domain" ? "domain" : "noDomain");
   const work: Work = { mode: mend.run === "apply" ? "apply" : "plan", place, form, address: found.address, rows: [], steps: [], say };
-  const release = await syncRelease({ found, databaseId, mode: work.mode, reach, rights: { lacks: lacksRight, nameOf: rightFor } });
+  const release = await syncRelease({ found, update: mend.update, databaseId, mode: work.mode, reach, rights: { lacks: lacksRight, nameOf: rightFor } });
   if (release.state === "stop") return { ok: false, why: "another", words: atPlace(release.words, where) };
 
   const stored = await readStored(connection, { accountId, databaseId });
   // An install whose code this run left alone is another poplin's whole. One this run was to bring to its release has its rows to show, and its records are read by the run after.
-  if (stored.state === "another" && release.state === "left") return { ok: false, why: "another", words: atPlace(WORDS.another, where) };
+  if (stored.state === "another" && release.state === "left") return unmendedWhole(release.behind, mend, where);
 
   for (const row of release.rows) note(work, row);
 

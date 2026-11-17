@@ -79,6 +79,7 @@ import type {
   Unchanged,
   UploadedVersion,
   UploadRoom,
+  UploadSize,
   UploadsPage,
 } from "./database";
 import { domainCheckAsked, domainCheckIn, domainCheckKept, rulesCarried, rulesClaimed, rulesReplaced, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
@@ -162,17 +163,15 @@ import { BUILD, CHANGED, ONE, bare, built, insertFrom, qualified, written } from
 import {
   AN_UPLOAD,
   A_VERSION,
-  BYTES_HELD,
-  SITES_HELD,
   UPLOAD_FIELDS,
   addWrites,
-  bytesIn,
+  filesOf,
   canPublish,
   dropEarlierDays,
   finishUpload,
   folderOf,
   hasAccess,
-  pendingOf,
+  roomOf,
   uploadById,
   writesOf,
 } from "./upload-statements";
@@ -769,22 +768,15 @@ export class SqlDatabase implements Database {
     return { kind: "name_taken" };
   }
 
-  async addUpload(upload: NewUpload, room: UploadRoom): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full"> | (Refused<"day_full" | "writes_full"> & { readonly left: number })> {
+  async addUpload(upload: NewUpload, room: UploadRoom): ReturnType<Database["addUpload"]> {
     requireDay(room.day);
     const manifest = manifestToText(upload.manifest);
     const bytes = upload.manifest.reduce((sum, file) => sum + file.size, 0);
     const row = { ...upload, state: "pending", plan: JSON.stringify(upload.plan), bytes, files: upload.manifest.length, dropped: "[]" };
     const checked = uploadFromRow(row);
-    const own = pendingOf(checked.owner);
-    const folderBytes = bytesIn(checked.folder, room.staying);
-    const dayFiles = fragment`(SELECT COALESCE(SUM(${declaredFiles.files}), 0) FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${room.day})`;
-    // The day's one row is read once for both of its bounds: the files declared on it, and the writes to the store counted on it.
-    const overDay = fragment`${declaredFiles.files} + ${checked.files} > ${room.dayFiles} OR ${declaredFiles.writes} + ${room.writes} > ${room.dayWrites}`;
-    const dayFits = fragment`NOT EXISTS (SELECT 1 FROM ${declaredFiles} WHERE ${declaredFiles.day} = ${room.day} AND (${overDay})) AND ${checked.files} <= ${room.dayFiles} AND ${room.writes} <= ${room.dayWrites}`;
+    const { reading, fits } = roomOf(checked, room);
     // What the upload is measured against is read before it is recorded, so a refusal can say which room is full.
-    const held = fragment`SELECT ${checked.id} AS id, ${checked.number} AS number, ${own} AS own, ${folderBytes} AS folder_bytes, ${BYTES_HELD} AS total_bytes, ${SITES_HELD} AS sites`;
-    const bytesFit = fragment`${folderBytes} + ${checked.bytes} <= ${room.folderBytes} AND ${BYTES_HELD} + ${checked.bytes} <= ${room.totalBytes}`;
-    const fits = fragment`${own} < ${room.own} AND ${bytesFit} AND (${room.sites} IS NULL OR ${SITES_HELD} < ${room.sites}) AND ${dayFits}`;
+    const held = fragment`SELECT ${checked.id} AS id, ${checked.number} AS number, ${reading}`;
     const columns = [uploads.id, uploads.folder, uploads.number, uploads.owner, uploads.plan, uploads.manifest, uploads.bytes, uploads.files, uploads.created_at];
     const record = fragment`SELECT ${checked.id}, ${checked.folder}, ${checked.number}, ${checked.owner}, ${row.plan}, ${manifest}, ${checked.bytes}, ${checked.files}, ${checked.created_at} WHERE ${fits}`;
     const [files, writes] = [bare(declaredFiles.files), bare(declaredFiles.writes)];
@@ -796,23 +788,15 @@ export class SqlDatabase implements Database {
       insertFrom(uploads, columns, record),
       insertFrom(declaredFiles, [declaredFiles.day, declaredFiles.files, declaredFiles.writes], counted),
     ]);
-    if (changed(inserted)) return { kind: "done" };
 
-    const measured = before?.rows[0];
-    if (Number(measured?.own) >= room.own) return { kind: "own_full" };
+    return changed(inserted) ? { kind: "done" } : this.#firstFull(before, checked, room, "writes_full");
+  }
 
-    if (Number(measured?.folder_bytes) + checked.bytes > room.folderBytes) return { kind: "folder_full" };
+  async measureUpload(sized: UploadSize, room: UploadRoom): ReturnType<Database["addUpload"]> {
+    requireDay(room.day);
+    const [before] = await this.#driver.batch([written(fragment`SELECT ${roomOf(sized, room).reading}`)]);
 
-    if (Number(measured?.total_bytes) + checked.bytes > room.totalBytes) return { kind: "total_full" };
-
-    if (room.sites !== null && Number(measured?.sites) >= room.sites) return { kind: "sites_full" };
-
-    // Only a refused upload pays for the read that says which bound of the day it did not fit, and how much of that bound is left.
-    const [day] = await this.#driver.batch([written(fragment`SELECT ${dayFiles} AS files, ${writesOf(room.day)} AS writes`)]);
-    const declared = Number(day?.rows[0]?.files);
-    if (declared + checked.files > room.dayFiles) return { kind: "day_full", left: Math.max(0, room.dayFiles - declared) };
-
-    return { kind: "writes_full", left: Math.max(0, room.dayWrites - Number(day?.rows[0]?.writes)) };
+    return this.#firstFull(before, sized, room, "done");
   }
 
   async getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined> {
@@ -1527,6 +1511,24 @@ export class SqlDatabase implements Database {
     const read = await this.#driver.batch([requestsOf(day, ALL_SITES), ...ofSite]);
 
     return { site: requestsIn(read[1]), all: requestsIn(read[0]) };
+  }
+
+  /** The first bound of its room an upload does not fit, from the reading taken before it; the day's bounds are read last. One that fits them all comes to `otherwise`: `writes_full` when the database did not record it, `done` when it was only measured. */
+  async #firstFull(before: StatementResult | undefined, sized: UploadSize, room: UploadRoom, otherwise: "writes_full" | "done"): ReturnType<Database["addUpload"]> {
+    const measured = before?.rows[0];
+    if (Number(measured?.own) >= room.own) return { kind: "own_full" };
+
+    if (Number(measured?.folder_bytes) + sized.bytes > room.folderBytes) return { kind: "folder_full" };
+
+    if (Number(measured?.total_bytes) + sized.bytes > room.totalBytes) return { kind: "total_full" };
+
+    if (room.sites !== null && Number(measured?.sites) >= room.sites) return { kind: "sites_full" };
+
+    const [day] = await this.#driver.batch([written(fragment`SELECT ${filesOf(room.day)} AS files, ${writesOf(room.day)} AS writes`)]);
+    const [declared, spent] = [Number(day?.rows[0]?.files), Number(day?.rows[0]?.writes)];
+    if (declared + sized.files > room.dayFiles) return { kind: "day_full", left: Math.max(0, room.dayFiles - declared) };
+
+    return otherwise === "writes_full" || spent + room.writes > room.dayWrites ? { kind: "writes_full", left: Math.max(0, room.dayWrites - spent) } : { kind: "done" };
   }
 
   /** Move the live site with an id to the trash while a further condition holds for it, with its audit entry: whether it moved, and the read of the site after. */

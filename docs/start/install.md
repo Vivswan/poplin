@@ -375,9 +375,12 @@ With `--json`, the value of a run, and of a run that stopped, names what to run 
 | the place: `--domain example.com`, or `--no-domain`    | the run knew it: from your line, the variable, or your answer         |
 | `--dry-run`, and a removal's `--keep-data`             | `next` names the same command again, after a stop or a run not ready  |
 | `--add-user` and an email                              | an install kept its users and did not use `--login`; or a repair given it has something to mend yet |
+| a repair's `--update`                                  | the repair's own line had it; or a repair stopped at an install that is behind, with records only an update brings to this poplin |
 | no token, no login, no account, no proof, no `--adopt` | always: these are yours to add                                        |
 
 So a repair it names runs as written where nothing can be asked, with the token in `POPLIN_INSTALL_TOKEN`.
+
+On Windows, an email with a character that cmd.exe or PowerShell gives a meaning, such as `&` or `'`, is left out of the `command`. `next.add` is then `--add-user <email>`, and an install that prints the line says under it to add the email yourself.
 
 Some stops name the command with no place. A stop that comes while the line is read does: the line is written wrong, or lacks an answer. So may a command that was stopped, or that failed with no word for it. `other_place` does too: the install is at another place than your line named, and its sentence names the option.
 

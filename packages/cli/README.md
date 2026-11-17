@@ -18,3 +18,7 @@ npx poplin set report--k3f9x2ab71qz --unlisted         # anyone who has the link
 ```
 
 `https://poplin.example.com` stands for the address of your own install: under your own domain, or, without a domain, the `workers.dev` address Cloudflare gives its Worker. `npx poplin install cloudflare --dry-run` lists what an install would make and changes nothing. The [repository](https://github.com/Vivswan/poplin#readme) has every step, and lists every command.
+
+## License
+
+[Individual and Small Organization License 1.1.0](https://github.com/Vivswan/poplin/blob/main/LICENSE.md). Its summary table says who may use poplin, and how.

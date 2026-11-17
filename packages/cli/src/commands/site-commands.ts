@@ -2,6 +2,7 @@
 
 import type * as v from "valibot";
 
+import type { Run } from "../../../core/src/install/installer";
 import { DELETED_SITE } from "../../../core/src/actions/delete";
 import { type DUPLICATE_REQUEST, DUPLICATED_SITE } from "../../../core/src/actions/duplicate";
 import { LISTED_SITES } from "../../../core/src/actions/list";
@@ -12,7 +13,7 @@ import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import type { Line } from "../local/screen";
-import { addressChange, columns, countText, type DoneRow, dayText, doneRows, GAP, searchNotes, siteLines } from "./text";
+import { addressChange, columns, countText, type DoneRow, dayText, doneRows, GAP, REHEARSED, searchNotes, siteLines } from "./text";
 import { abandonUpload, callUnhurried, givenUp, giveUpUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
@@ -40,6 +41,23 @@ const SETTINGS = ["name", "title", "title_typed", "access", "public_name", "expi
 /** A setting of a site as a change names it, where the words differ from the key the install takes. */
 const SETTING_WORDS: Readonly<Record<string, string>> = { search_engines: "search engines", public_name: "public name", title_typed: "title" };
 
+/** The word of what each change did, and of what its dry run says it would do. */
+const WORDS = {
+  changed: { apply: "changed", "dry-run": "would change" },
+  renamed: { apply: "renamed", "dry-run": "would rename" },
+  moved: { apply: "moved", "dry-run": "would move" },
+  rolled: { apply: "rolled back", "dry-run": "would roll back" },
+  linked: { apply: "new link", "dry-run": "would get a new link" },
+  stopped: { apply: "stopped", "dry-run": "would stop" },
+  copied: { apply: "copied", "dry-run": "would copy" },
+  trashed: { apply: "in the trash", "dry-run": "would go to the trash" },
+  removed: { apply: "deleted for good", "dry-run": "would delete for good" },
+  restored: { apply: "restored", "dry-run": "would restore" },
+} as const satisfies Readonly<Record<string, Readonly<Record<Run, string>>>>;
+
+/** What a dry run of a new link says of the address it cannot name. */
+const UNDRAWN = "the new id, and so the new address, is drawn when the link is made";
+
 /** What became of a copy that was not finished, in words. */
 const AFTERMATH = {
   abandoned: "the copy was given up and no site was made",
@@ -53,15 +71,44 @@ type SiteRequest = RequestOf<"set" | "show" | "list" | "rollback" | "new-link" |
 /** One of those commands by its word. */
 type Asked<Kind extends SiteRequest["kind"]> = RequestOf<Kind>;
 
-/** A command that takes a site and nothing else. */
-type OneSite = Asked<"show" | "new-link" | "restore">;
 
 /** The cursor a page of a listing ends with, which asks for the page after it. */
 type Cursor = v.InferOutput<typeof LISTED_SITES>["next"];
 
+/** A command that changes something, which says with `dryRun` what it would do. */
+type Changing = { readonly dryRun: boolean };
+
 /** The problem of a call that failed. A call that changes a site says so, since a change whose answer was lost may have been made. */
 function failed(called: { readonly ok: false; readonly failure: Parameters<typeof problemOf>[0] }, call: "reads" | "changes" = "changes"): Outcome {
   return { ok: false, problem: problemOf(called.failure, call) };
+}
+
+/** Whether a command runs, or only says what a run would do. */
+function runOf(request: Changing): Run {
+  return request.dryRun ? "dry-run" : "apply";
+}
+
+/** What a call that failed is taken as: one of a dry run changed nothing, so its lost answer leaves no change in doubt. */
+function callOf(run: Run): "reads" | "changes" {
+  return run === "apply" ? "changes" : "reads";
+}
+
+/** What the address of a route that changes something holds: `dry_run` for a dry run, and nothing for a run. */
+function asked(request: Changing): { readonly dry_run?: string } {
+  return request.dryRun ? { dry_run: "true" } : {};
+}
+
+/**
+ * What a command that asked the install came to, as a dry run words it: the same value with `dry_run` in front, and the same lines with the line of a dry run after them.
+ *
+ * @returns the outcome as it is for a run, and for a call that failed
+ */
+function rehearsed(outcome: Outcome, run: Run): Outcome {
+  if (!outcome.ok || run === "apply") return outcome;
+
+  const { steps, ...rest } = outcome;
+
+  return { ...rest, value: { dry_run: true, ...(outcome.value as object) }, lines: [...outcome.lines, REHEARSED] };
 }
 
 function switchText(on: boolean): string {
@@ -97,28 +144,37 @@ function changedWords(before: SiteObject | null, site: SiteObject): string {
 /**
  * The answer of an action on one site, printed as what was done, who can open the site, and the site's address, with its old address when the action changed it.
  *
+ * @param done - the words for what was done, and for what a dry run says would be
  * @param more - the rows the action adds under its first
  */
-function answered(called: Called<v.InferOutput<typeof SITE_ANSWER>>, done: string, facts: (site: SiteObject) => readonly string[], notes: readonly string[] = [], more: readonly DoneRow[] = []): Outcome {
-  if (!called.ok) return failed(called);
+function answered(
+  called: Called<v.InferOutput<typeof SITE_ANSWER>>,
+  done: { readonly words: Readonly<Record<Run, string>>; readonly run: Run },
+  facts: (site: SiteObject) => readonly string[],
+  notes: readonly string[] = [],
+  more: readonly DoneRow[] = [],
+): Outcome {
+  const { words, run } = done;
+  if (!called.ok) return failed(called, callOf(run));
 
   const { before, site } = called.value;
 
-  return { ok: true, value: called.value, lines: siteLines(done, site, facts(site), [...more, ...addressChange(before, site)]), notes };
+  return rehearsed({ ok: true, value: called.value, lines: siteLines(words[run], site, facts(site), [...more, ...addressChange(before, site, WORDS.moved[run])]), notes }, run);
 }
 
 async function set(request: Asked<"set">, { client }: Session): Promise<Outcome> {
   const changes = siteChanges(request.settings);
-  const changed = await client.call(SITE_ANSWER, (api) => api.sites[":site"].$patch({ param: { site: siteWord(request.site) }, json: changes }));
-  if (!changed.ok) return failed(changed);
+  const run = runOf(request);
+  const changed = await client.call(SITE_ANSWER, (api) => api.sites[":site"].$patch({ param: { site: siteWord(request.site) }, query: asked(request), json: changes }));
+  if (!changed.ok) return failed(changed, callOf(run));
 
   const { site, before } = changed.value;
-  const renamed: DoneRow[] = before === null || before.name === site.name ? [] : [{ tone: "note", done: "renamed", what: `from ${before.name}` }];
+  const renamed: DoneRow[] = before === null || before.name === site.name ? [] : [{ tone: "note", done: WORDS.renamed[run], what: `from ${before.name}` }];
 
-  return answered(changed, "changed", () => [changedWords(before, site)], searchNotes(changes, site), renamed);
+  return answered(changed, { words: WORDS.changed, run }, () => [changedWords(before, site)], searchNotes(changes, site, run === "apply" ? "is stored" : "would be stored"), renamed);
 }
 
-async function show(request: OneSite, { client }: Session): Promise<Outcome> {
+async function show(request: Asked<"show">, { client }: Session): Promise<Outcome> {
   const shown = await client.call(SITE_ANSWER, (api) => api.sites[":site"].$get({ param: { site: siteWord(request.site) } }));
   if (!shown.ok) return failed(shown, "reads");
 
@@ -135,7 +191,7 @@ async function show(request: OneSite, { client }: Session): Promise<Outcome> {
     ["embeddable", switchText(site.embeddable)],
     ["expires", expiryText(site.expires)],
     ["kept", `${showBytes(site.bytes)} in ${countText(site.files, "file")}, every kept version counted`],
-    ["pages opened", viewsText(site.views)],
+    ["visits", viewsText(site.views)],
   ];
   const versions = site.versions.map((version) => {
     const live = version.number === site.live_version ? "live" : "";
@@ -191,19 +247,23 @@ async function list(request: Asked<"list">, { client }: Session): Promise<Outcom
 async function rollback(request: Asked<"rollback">, { client }: Session): Promise<Outcome> {
   const site = siteWord(request.site);
   const to = request.to === undefined ? {} : { version: request.to };
-  const rolled = await client.call(SITE_ANSWER, (api) => api.sites[":site"].rollback.$post({ param: { site }, json: to }));
+  const run = runOf(request);
+  const rolled = await client.call(SITE_ANSWER, (api) => api.sites[":site"].rollback.$post({ param: { site }, query: asked(request), json: to }));
 
-  return answered(rolled, "rolled back", (now) => [`version ${now.live_version} is live`]);
+  return answered(rolled, { words: WORDS.rolled, run }, (now) => [run === "apply" ? `version ${now.live_version} is live` : `version ${now.live_version} would be live`]);
 }
 
-async function newLink(request: OneSite, { client }: Session): Promise<Outcome> {
-  const linked = await client.call(SITE_ANSWER, (api) => api.sites[":site"]["new-link"].$post({ param: { site: siteWord(request.site) } }));
-  if (!linked.ok) return failed(linked);
+async function newLink(request: Asked<"new-link">, { client }: Session): Promise<Outcome> {
+  const run = runOf(request);
+  const linked = await client.call(SITE_ANSWER, (api) => api.sites[":site"]["new-link"].$post({ param: { site: siteWord(request.site) }, query: asked(request) }));
+  if (!linked.ok) return failed(linked, callOf(run));
 
   const { before, site } = linked.value;
-  const dead: DoneRow[] = before === null ? [] : [{ tone: "warning", done: "stopped", object: before.label, what: before.addresses.site }];
+  const dead: DoneRow[] = before === null ? [] : [{ tone: "warning", done: WORDS.stopped[run], object: before.label, what: before.addresses.site }];
+  if (run === "apply") return { ok: true, value: linked.value, lines: siteLines(WORDS.linked.apply, site, [], dead) };
 
-  return { ok: true, value: linked.value, lines: siteLines("new link", site, [], dead) };
+  // The install draws the new id when it gives it, so a dry run has no new address to end in.
+  return rehearsed({ ok: true, value: linked.value, lines: [...doneRows([{ tone: "done", done: WORDS.linked[run], what: site.label }, ...dead]), UNDRAWN] }, run);
 }
 
 function copied(site: SiteObject): (string | Line)[] {
@@ -242,6 +302,9 @@ function copyOn({ client, io }: Session, site: string, first: v.InferInput<typeo
  * @returns nothing when the call is to be made again, or the failure the copy is given up with: the person stopped the command during the wait, or the call copied nothing more
  */
 async function beforeNextCall(io: Session["io"], copy: v.InferOutput<typeof DUPLICATED_SITE>["copy"], done: number): Promise<Failure | undefined> {
+  // Only a dry run answers no upload, and this is none.
+  if (copy.upload === null) return { kind: "unexpected", status: OK };
+
   if (copy.copied === null) {
     if (io.terminal.progress) io.screen.working(`Copying ${countText(copy.files, "file")} in the background (Ctrl-C stops)`);
 
@@ -254,6 +317,22 @@ async function beforeNextCall(io: Session["io"], copy: v.InferOutput<typeof DUPL
   if (io.terminal.progress) io.screen.working(`Copying ${copy.copied} of ${countText(copy.files, "file")}`);
 
   return undefined;
+}
+
+/** Ask the install what a copy would be: one call, which begins no copy. */
+async function rehearseCopy(request: Asked<"duplicate">, { client, io }: Session): Promise<Outcome> {
+  const site = siteWord(request.site);
+  const first = request.name === undefined ? {} : { name: request.name };
+  // A call the install asks to be made again after a rest is made again, as a copy's own calls are.
+  const called = await callUnhurried(io, () => client.call(DUPLICATED_SITE, (api) => api.sites[":site"].duplicate.$post({ param: { site }, query: { dry_run: "true" }, json: first })));
+  if (!called.ok) return failed(called, "reads");
+
+  const copy = called.value;
+  if (!("name" in copy)) return failed({ ok: false, failure: { kind: "unexpected", status: OK } }, "reads");
+
+  const what = `${countText(copy.copy.files, "file")}, to a new private site named ${copy.name}`;
+
+  return rehearsed({ ok: true, value: copy, lines: doneRows([{ tone: "done", done: WORDS.copied["dry-run"], object: site, what }]) }, "dry-run");
 }
 
 /**
@@ -275,7 +354,7 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
       const { copy } = called.value;
       if (called.value.site !== null) return { ok: true, value: called.value, lines: copied(called.value.site) };
 
-      upload = copy.upload;
+      upload = copy.upload ?? upload;
       const failure = await beforeNextCall(io, copy, done);
       if (failure !== undefined) return await stopCopy(session, upload, failure);
 
@@ -288,6 +367,18 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
   } finally {
     if (io.terminal.progress) io.screen.rest();
   }
+}
+
+/** What removing a site for good took, or in a dry run would take: the site, what it held, and each address that stops working. */
+function goneLines(before: SiteObject, run: Run): (string | Line)[] {
+  const addresses = [before.addresses.site];
+  if (before.addresses.public !== null) addresses.push(before.addresses.public);
+
+  const lost = `${countText(before.files, "file")} in ${countText(before.versions.length, "kept version")}`;
+  const first: Line = { tone: "done", text: `${WORDS.removed[run]}  ${before.label}` };
+  if (run === "apply") return [first, `gone: ${lost}; nothing can restore them`, `stopped working: ${addresses.join(" and ")}`];
+
+  return [first, `would go: ${lost}; nothing could restore them`, `would stop working: ${addresses.join(" and ")}`];
 }
 
 /**
@@ -304,12 +395,7 @@ export async function removeForGood(site: string, { client }: Pick<Session, "cli
   const notes = left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
   if (before === null) return { ok: true, value: deleted.value, lines: [{ tone: "done", text: "deleted for good; nothing can restore it" }], notes };
 
-  const addresses = [before.addresses.site];
-  if (before.addresses.public !== null) addresses.push(before.addresses.public);
-
-  const lost = `${countText(before.files, "file")} in ${countText(before.versions.length, "kept version")}`;
-
-  return { ok: true, value: deleted.value, lines: [{ tone: "done", text: `deleted for good  ${before.label}` }, `gone: ${lost}; nothing can restore them`, `stopped working: ${addresses.join(" and ")}`], notes };
+  return { ok: true, value: deleted.value, lines: goneLines(before, "apply"), notes };
 }
 
 /** Remove a site for good, once its label is typed on a terminal. Without a terminal to ask on, and at a question the person stopped, nothing is removed. */
@@ -330,24 +416,37 @@ async function deleteForever(request: Asked<"delete">, session: Session): Promis
   return removeForGood(label, session);
 }
 
-async function deleteSite(request: Asked<"delete">, session: Session): Promise<Outcome> {
-  if (request.noTrash) return deleteForever(request, session);
+/** Ask the install what removing a site for good would remove. Nothing is typed and no terminal is needed: a dry run removes nothing. */
+async function rehearseRemoval(request: Asked<"delete">, { client }: Session): Promise<Outcome> {
+  const deleted = await client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(request.site) }, query: { no_trash: "true", dry_run: "true" } }));
+  if (!deleted.ok) return failed(deleted, "reads");
 
-  const trashed = await session.client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(request.site) } }));
-  if (!trashed.ok) return failed(trashed);
+  const { before } = deleted.value;
+  if (before === null) return failed({ ok: false, failure: { kind: "unexpected", status: OK } }, "reads");
+
+  return rehearsed({ ok: true, value: deleted.value, lines: [...goneLines(before, "dry-run"), `a run asks you to type ${before.label} first`] }, "dry-run");
+}
+
+async function deleteSite(request: Asked<"delete">, session: Session): Promise<Outcome> {
+  const run = runOf(request);
+  if (request.noTrash) return request.dryRun ? rehearseRemoval(request, session) : deleteForever(request, session);
+
+  const trashed = await session.client.call(DELETED_SITE, (api) => api.sites[":site"].$delete({ param: { site: siteWord(request.site) }, query: asked(request) }));
+  if (!trashed.ok) return failed(trashed, callOf(run));
 
   const { site } = trashed.value;
   if (site === null) return { ok: true, value: trashed.value, lines: [] };
 
   const gone = site.gone_on === undefined ? [] : [`gone for good on ${dayText(site.gone_on)}`];
+  const lines = doneRows([{ tone: "done", done: WORDS.trashed[run], object: site.label, what: gone.join(GAP) }]);
 
-  return { ok: true, value: trashed.value, lines: doneRows([{ tone: "done", done: "in the trash", object: site.label, what: gone.join(GAP) }]), steps: [`to take it back: poplin restore ${site.label}`] };
+  return rehearsed({ ok: true, value: trashed.value, lines, steps: [`to take it back: poplin restore ${site.label}`] }, run);
 }
 
-async function restore(request: OneSite, { client }: Session): Promise<Outcome> {
-  const restored = await client.call(SITE_ANSWER, (api) => api.sites[":site"].restore.$post({ param: { site: siteWord(request.site) } }));
+async function restore(request: Asked<"restore">, { client }: Session): Promise<Outcome> {
+  const restored = await client.call(SITE_ANSWER, (api) => api.sites[":site"].restore.$post({ param: { site: siteWord(request.site) }, query: asked(request) }));
 
-  return answered(restored, "restored", () => []);
+  return answered(restored, { words: WORDS.restored, run: runOf(request) }, () => []);
 }
 
 /**
@@ -368,7 +467,7 @@ export async function runSiteCommand(request: SiteRequest, session: Session): Pr
     case "new-link":
       return newLink(request, session);
     case "duplicate":
-      return duplicate(request, session);
+      return request.dryRun ? rehearseCopy(request, session) : duplicate(request, session);
     case "delete":
       return deleteSite(request, session);
     case "restore":
