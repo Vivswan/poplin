@@ -104,7 +104,7 @@ Every piece of the install has a row. Four matter here:
 
 | Row                  | It is                                                         |
 | -------------------- | ------------------------------------------------------------- |
-| `Worker`             | the version the install runs; `changed` where the repair [brought it to the newest release](../upkeep/update.md#a-release-the-install-cannot-take) |
+| `Worker`             | the version the install runs, and which release is out where it is behind: a repair takes none. `changed` where the line had `--update`, and the repair [brought it to the newest release](../upkeep/update.md#a-release-the-install-cannot-take) |
 | `Access application` | Cloudflare's login page in front of your dashboard            |
 | `Access policy`      | the list of emails that page lets in: the users of the install |
 | `User`               | the email `--add-user` named                                  |
@@ -124,6 +124,8 @@ Every piece of the install has a row. Four matter here:
 | a number, then `not done. Run this command again`     | a row says `stopped`, `failed`, or `not run`  | [When it stops](#when-it-stops), then the same line again    |
 
 The login is mended to the users the install has stored. No site and no setting of yours is changed.
+
+A repair takes no newer release, whatever `auto_update` says: where one is out, the row `Worker` says so. To take it in the same run, add `--update`: [Update](../upkeep/update.md#a-release-the-install-cannot-take).
 
 **To look first**, add `--dry-run`: it lists the same rows as `would make` and `would leave`, and changes nothing. Its last line starts `ready:` and counts what a run would make or change, or says `the install is as it should be`. It starts `not ready:` where a run would be stopped.
 
@@ -173,8 +175,9 @@ The link the command prints chooses every one of them. A token you kept from the
 | a row `stopped`, saying `Access is off for the account`             | Zero Trust, the part of Cloudflare that holds the login page, is not switched on | pick the Free plan at the address under the rows, then run again |
 | a row `stopped`, ending `Add this one:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token), then run again |
 | `The install's records are not at the schema of this poplin.`       | the install is of another version of poplin than the command you ran | run the line it ends with: the newest poplin's repair, `npx poplin@latest doctor --repair`, with the `--domain` or `--no-domain` of the install. The line names a second way: the command of the install's own version |
+| `The install runs`, a version, `and its records are not at the schema of this poplin` | the install is behind, and the command you ran is of a newer poplin than its records: a repair alone cannot read them | run the line it ends with: `npx poplin doctor --repair --update`, with the `--domain` or `--no-domain` of the install. It takes the newest release, then mends |
 | `The install runs`, a version, `and the newest release this poplin reads is`, an older one | the install is of a newer poplin than the command you ran; nothing is put back | run the line it ends with: `npx poplin@latest doctor --repair`, with the `--domain` or `--no-domain` of the install |
-| `The newest release is one this poplin cannot put in place.` | the install is behind a release that needs a newer poplin than the command you ran | run the line it ends with: `npx poplin@latest doctor --repair`, with the `--domain` or `--no-domain` of the install |
+| `The newest release is one this poplin cannot put in place.` | you gave `--update`, and the install is behind a release that needs a newer poplin than the command you ran | run the line it ends with: `npx poplin@latest doctor --repair --update`, with the `--domain` or `--no-domain` of the install |
 | `The install changed while it was read.`                            | something changed at Cloudflare during the run          | run it again                                                    |
 
 A run that stopped changed only what its rows say. Run the same line again, and it goes on from what stands.

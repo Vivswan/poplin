@@ -40,7 +40,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `update_unreachable` | Cloudflare did not answer; the new version may be in         | wait a minute, then `poplin update --dry-run`                    |
 | `no_key`, `key_refused` | the install holds no key, or Cloudflare no longer takes it | press Repair on the dashboard's Domain screen                  |
 | `lacks_right`        | the install's key lacks the permission shown                | press Repair on the dashboard's Domain screen: it makes a key with the permission |
-| `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason. Where its hint says the install cannot take this release by itself, run `npx poplin doctor --repair` |
+| `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason. Where its hint says the install cannot take this release by itself, run `npx poplin doctor --repair --update` |
 | `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, [report it](https://github.com/Vivswan/poplin/issues) |
 
 **Making, mending, and removing an install**
@@ -71,7 +71,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 | `other_place`     | both, and `install` | the install is of another place than the line named; for `install` and the removal, also one that was started and not finished | give `--domain` and its domain, or `--no-domain`, as `words` says: `next.command` holds no place |
 | `changed`         | both               | the account changed between the look and the work; nothing was done      | run it again                                                      |
 | `unfinished`      | the repair         | an install was started and never set, so there is nothing to mend        | finish it with `next.command`: the install at the place of the line. Where it was started for another place than the line named, `next.command` has that place's option |
-| `another_version` | the repair         | the install's records are of another version than this command, or the install runs a newer release than the newest this command reads           | `next.command`: `npx poplin@latest doctor --repair`, with the option of the install's place |
+| `another_version` | the repair         | the install's records are of another version than this command, or the install runs a newer release than the newest this command reads           | `next.command`: `npx poplin@latest doctor --repair`, with the option of the install's place, and `--update` where the line had it. For an install that is behind, with records older than this command reads: `npx poplin doctor --repair --update` |
 | `not_confirmed`   | the removal        | the address typed, or given with `--confirm`, is not the install's own; nothing was removed | give the address a run with `--dry-run` prints |
 
 A repair or a removal that worked through its rows prints them, with `ready` false where a row is left undone. A removal lists in `unlooked` each kind its token could not look for. After a run that lists one, `next` names the removal again: with the permission added to the token, the same line looks for that kind.

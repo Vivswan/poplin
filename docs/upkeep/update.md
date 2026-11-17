@@ -13,7 +13,15 @@ Nothing updates on its own while the setting `auto_update` is off, as it is in a
 | ------------- | -------------------------------------------------------------------------------------- |
 | holds its key | one press, or one command: [With the kept key](#with-the-kept-key)                     |
 | holds no key  | a repair first, which gives it one: Repair on the Domain screen, or `npx poplin doctor --repair` |
-| is refused a release it cannot take by itself | `npx poplin doctor --repair`, which takes it: [A release the install cannot take](#a-release-the-install-cannot-take) |
+| is refused a release it cannot take by itself | `npx poplin doctor --repair --update`, which takes it: [A release the install cannot take](#a-release-the-install-cannot-take) |
+
+Update and repair are two jobs:
+
+| The command                           | Mends the install | Takes a newer release |
+| ------------------------------------- | ----------------- | --------------------- |
+| `poplin update`                       | no                | yes, with the kept key |
+| `npx poplin doctor --repair`          | yes               | no: a row says which release is out |
+| `npx poplin doctor --repair --update` | yes               | yes, with your account token |
 
 The row `Key` of the Domain screen says whether the install holds its key. An install that holds none cannot update itself: `poplin update` answers `no_key`.
 
@@ -83,24 +91,24 @@ A release that changes the database is taken when you start it, never by itself.
 ```text
 Update now, or poplin update
         |
-The install cannot take this release by itself. To take it, run: npx poplin doctor --repair
+The install cannot take this release by itself. To take it, run: npx poplin doctor --repair --update
         |
 the repair, with an account token       the same checked files, in one upload
         |
 the next request runs the new version
 ```
 
-The repair brings an install that is behind to the newest release, with the account token you give it for that one run. It fetches and checks the release as step 1 to 3 above, uploads it once, and then mends the rest of the install as every repair does. [I cannot log in](../fix/cannot-log-in.md#the-steps) has the token and the two questions.
+With `--update`, the repair brings an install that is behind to the newest release, with the account token you give it for that one run. It fetches and checks the release as step 1 to 3 above, uploads it once, and then mends the rest of the install as every repair does. [I cannot log in](../fix/cannot-log-in.md#the-steps) has the token and the two questions.
 
 ```text
-$ npx poplin doctor --repair --dry-run
+$ npx poplin doctor --repair --update --dry-run
 looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
 would change     Worker                poplin: 0.2.0 to 0.3.0
 would leave      DNS record            *.example.com
 ...
 ready: a run would change 1. Nothing was changed.
 
-$ npx poplin doctor --repair
+$ npx poplin doctor --repair --update
 looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
 changed   Worker                poplin: 0.2.0 to 0.3.0
 left      DNS record            *.example.com
@@ -110,9 +118,22 @@ Your dashboard: https://poplin.example.com
 The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
 ```
 
+Without `--update`, the repair mends and uploads no release, whatever `auto_update` says. Where a newer one is out, its row `Worker` says so, and the run ends as it would without that row:
+
+```text
+$ npx poplin doctor --repair
+looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
+left      Worker                poplin, runs 0.2.0; 0.3.0 is out: add --update to take it
+left      DNS record            *.example.com
+...
+the install is as it should be. Nothing was changed.
+Your dashboard: https://poplin.example.com
+The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
+```
+
 The samples are cut short where the dots are. Without a domain the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`.
 
-| The install could not take the release, since            | The repair                                                                 |
+| The install could not take the release, since            | The repair with `--update`                                                 |
 | -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | the running version cannot read the release's manifest   | reads it with the poplin you run, and uploads the release                  |
 | the release needs a binding the Worker does not have     | states that binding in the upload, and keeps every other binding by name   |
@@ -121,16 +142,21 @@ The samples are cut short where the dots are. Without a domain the address ends 
 | The row `Worker` says                                    | Means                                                                      |
 | -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `left`, and `poplin, runs 0.3.0`                         | the install runs the newest release: nothing is uploaded                   |
+| `left`, and `poplin, runs 0.2.0; 0.3.0 is out: add --update to take it` | the line had no `--update`: nothing is uploaded, and the same line with `--update` takes the release |
 | `changed`, and `poplin: 0.2.0 to 0.3.0`                  | the release is in place                                                    |
 | `left`, and `its version is not read`                    | the Worker's `RELEASE` variable is gone or names no release, as after code another tool uploaded: nothing says it is behind, so nothing is uploaded |
-| `stopped` or `failed`, and why                           | the release is not known to be in place; the rest of the install is still mended. Do what the row says, then run the line again |
+| `stopped` or `failed`, and why                           | the release is not known to be in place: an upload with no answer may be in. The rest is mended, unless a row says why it was not. Do what the row says, then run the line again |
 
 | After the upload                                         | The repair                                                                 |
 | -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | the database has steps of the new version to run         | runs them, in a row `Database steps`; the new version runs them itself where the repair could not |
 | the website names the version the install ran            | states the update in the upload, so the install can [go back](#go-back) as after its own update |
 
-An install that runs a newer release than the newest the command reads is never put back to an older one. The repair stops before it changes anything, and names the newest poplin: `npx poplin@latest doctor --repair`. It stops the same way where the newest release is one the command you ran cannot put in place.
+An install that runs a newer release than the newest the command reads is never put back to an older one. The repair stops before it changes anything, with `--update` or without, and names the newest poplin: `npx poplin@latest doctor --repair`, with `--update` where your line had it.
+
+With `--update` it stops the same way where the newest release is one the command you ran cannot put in place, and names `npx poplin@latest doctor --repair --update`.
+
+A repair without `--update` reads the install's records to mend the login. Where the install is behind and its records are of an older poplin than the command you ran, it stops before it changes anything, and names the repair that goes on: `npx poplin doctor --repair --update`.
 
 ## Go back
 

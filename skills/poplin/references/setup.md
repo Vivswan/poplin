@@ -171,7 +171,9 @@ It prints one JSON value:
   "next": { "step": "install", "command": "npx poplin install cloudflare --domain example.com" } }
 ```
 
-Every value of a run of this command, of the repair, and of the removal names what to run next in `next`, and so does a run that stopped. Its `command` holds the place of your line, `--domain example.com` or `--no-domain`, and no other answer your line gave.
+Every value of a run of this command, of the repair, and of the removal names what to run next in `next`, and so does a run that stopped. Its `command` holds the place of your line, `--domain example.com` or `--no-domain`.
+
+A repair named next also holds `--update`, where your line had it or the stop needs it, and your `--add-user` after a run that reached its rows. The `command` holds no other answer your line gave.
 
 | `command` names | It runs as written, with the token in your environment | Add                                   |
 | --------------- | ------------------------------------------------------ | ------------------------------------- |
@@ -389,8 +391,8 @@ Both are commands the user's account token runs, so the rule of part c holds: th
 | The user says                               | The command                                      | You                                                                                   |
 | ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | nobody can log in to the dashboard          | `npx poplin doctor --repair`                     | give the user the line, and read what it printed with them: the table of part f       |
-| an update says the install cannot take the release by itself | the same line                                    | the repair brings the install to the newest release: its row `Worker` says `changed` |
-| their mailbox is gone, or the first email was mistyped | the same, with `--add-user` and the email | add the option only with an email the user gave you for this                        |
+| an update says the install cannot take the release by itself | `npx poplin doctor --repair --update`            | with `--update` the repair first brings the install to the newest release: its row `Worker` says `changed`. Without it a repair only mends, and that row says which release is out |
+| their mailbox is gone, or the first email was mistyped | `npx poplin doctor --repair`, with `--add-user` and the email | add the option only with an email the user gave you for this                        |
 | remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | give the user the line, and read its list with them: it asks for the token. The removal itself is the user's too: they type the install's address at its question |
 
 Never pass `--confirm` on your own: it is the proof that the user means this install, and a removal cannot be undone. The guide has both: [I cannot log in](https://github.com/Vivswan/poplin/blob/main/docs/fix/cannot-log-in.md) and [Remove](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/remove.md).

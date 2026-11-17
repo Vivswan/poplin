@@ -218,6 +218,7 @@ export const COMMANDS = [
     arguments: [],
     flags: [
       { name: REPAIR_FLAG, about: "mend the install at its provider, with an account token" },
+      { name: "--update", about: "with --repair: first bring the install to the newest release" },
       { name: "--dry-run", about: "with --repair: say what it would change, and change nothing" },
       { name: "--add-user", value: "<email>", about: "with --repair: let one more person log in" },
       { name: "--yes", about: "with --repair: ask nothing" },
@@ -229,6 +230,8 @@ export const COMMANDS = [
       "--repair needs an account token and no login, so it is the way back in:",
       "  poplin doctor --repair --dry-run",
       "  poplin doctor --repair --add-user you@example.com",
+      "A repair mends, and takes a newer release only with --update:",
+      "  poplin doctor --repair --update",
       "It takes no --server. Its own help lists the options of the provider and",
       "how the token is given: poplin doctor --repair --help",
     ],

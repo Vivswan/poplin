@@ -33,7 +33,7 @@ const REFUSALS: Readonly<Record<Refusal, string>> = {
 };
 
 /** The options of `poplin doctor` that mean something in a repair alone. */
-const REPAIR_ALONE = ["--add-user", "--yes", "--token-stdin"] as const;
+const REPAIR_ALONE = ["--update", "--add-user", "--yes", "--token-stdin"] as const;
 
 /** The command of every request: each command of the table but `help`, which asks nothing of an install. */
 const BUILDERS: { readonly [Name in Exclude<CommandName, "help">]: (words: Words, now: number) => TypedRequest | UsageError } = {

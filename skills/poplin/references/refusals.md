@@ -22,7 +22,7 @@ Open this when a poplin tool or command answers with a refusal. From a tool, or 
 | `stopped`                                         | the user stopped the command or the server       | the upload is given up or runs out in a day; ask before a retry      |
 | `allowance_spent`                                 | a day's allowance is used up: the database's, or the storage's writes | tell the user; do not try again before 00:00 UTC |
 | `not_set_up`                                      | the install has stored no settings               | try again; if it stays, the user runs `npx poplin doctor --repair`   |
-| `release_refused`, with a hint that names the repair | the install cannot take this release by itself | the user runs `npx poplin doctor --repair`, with their account token |
+| `release_refused`, with a hint that names the repair | the install cannot take this release by itself | the user runs `npx poplin doctor --repair --update`, with their account token |
 | `no_working_login`                                | the new logins would let nobody log in           | the user keeps one email that is a login now in the list             |
 | `needs_update_check`                              | updating by itself would be on with the check for new versions off | the user switches the check on first, or updating by itself off      |
 
@@ -48,6 +48,6 @@ Three commands work with the user's account token: `npx poplin install cloudflar
 | `no_install`             | the repair or the removal found no install in the account; or a removal with `--keep-data` found kept data alone | tell the user what its sentence says: a token of another account, or kept data that a removal without `--keep-data` removes |
 | `other_place`            | the install is of another place than the line named; for the install and the removal, also one started and not finished | give `--domain` and its domain, or `--no-domain`, as the sentence says |
 | `unfinished`             | the repair found an install that was started and never set | finish it with the install command: part e of [`setup.md`](setup.md). Where `next.command` holds `--domain` or `--no-domain`, the install was started for that place: use it, not the one your line gave |
-| `another_version`        | the install's records are of another version than this command, or the install runs a newer release than this command reads | run the repair as `npx poplin@latest` |
+| `another_version`        | the install's records are of another version than this command, or the install runs a newer release than this command reads | run `next.command`: the repair as `npx poplin@latest`, or with `--update` on an install that is behind |
 | `not_confirmed`          | the removal was given an address that is not the install's; nothing was removed | tell the user; the address is theirs to give |
 | `changed`                | the account changed between the look and the work          | run it again                                                      |

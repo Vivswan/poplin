@@ -531,7 +531,7 @@ describe("run", () => {
 
     const [, hint = "no hint"] = (await bench.run("update")).err;
 
-    expect([hint.endsWith("To take it, run: npx poplin doctor --repair"), refusalSentence("release_refused", "needs_hand").endsWith(hint)]).toEqual([true, true]);
+    expect([hint.endsWith("To take it, run: npx poplin doctor --repair --update"), refusalSentence("release_refused", "needs_hand").endsWith(hint)]).toEqual([true, true]);
   });
 
   test.each([
