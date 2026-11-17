@@ -5,6 +5,10 @@
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
 #
 # The caller grants no secrets and caps at contents: read.
+#
+#   upgrade        every call      an install of the last release, on the local fake
+#   fuzz           the release PR  every fuzz target for three minutes, under a new seed
+#   live upgrade   the release PR  the real install on each of the two test accounts, from the last release to this one
 
 name: Release Gate
 
@@ -32,24 +36,43 @@ jobs:
       - name: Upgrade an install of the last release, and hold its schema steps as shipped
         run: bun test ./tests/upgrade/ ./tests/frozen-steps.test.ts
 
-  # A real install of the older build, on each of the two test accounts, must have taken the build of main this release is
-  # cut from as an update and answered as before (packages/providers/cloudflare/live/README.md, "The upgrade"). That run
-  # reads the test accounts' secrets, which a run of main alone may: so it is started by hand on main, with `upgrade`
-  # ticked, and this job reads that both kinds ended green for the commit of main the release's branch stands on.
-  # Only the pull request of a release is asked: the nightly and a dispatch cut no release.
-  live-upgrade:
-    name: live upgrade of both kinds of install
+  # Every fuzz target side by side, three minutes each, under a new random seed that the job `plan` prints (fuzz.yml).
+  # The checks of every pull request and the nightly fuzz run the same file, each under a new seed of its own.
+  fuzz:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-      - name: Read that the live upgrade ended green on both kinds of install
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bun packages/providers/cloudflare/scripts/upgrade/proof.ts
+    uses: ./.github/workflows/fuzz.yml
+    with:
+      seed: ""
+      # The checks of the same run call the file too, and two artifacts of one run cannot share a name.
+      reports: release-fuzz-failures
+
+  # A real install of the older build, on each of the two test accounts, must take the release as it would merge as an
+  # update and answer as before (packages/providers/cloudflare/live/README.md, "The upgrade"). The older build is the
+  # last release, the one before the version being cut. Each call waits in the lane of its kind's live checks.
+  # Only the pull request of a release is asked: the nightly and a dispatch cut no release, and each upgrade removes a
+  # test install and writes hundreds of rows on its account.
+  # The caller hands this file no secret, so these calls hand over names alone: the called job names the environment,
+  # and the value its steps read is that environment's secret.
+  live-upgrade-domain:
+    name: live upgrade (domain)
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  live-upgrade-account-address:
+    name: live upgrade (account address)
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: account address
+      environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}

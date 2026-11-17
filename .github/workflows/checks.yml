@@ -31,15 +31,23 @@ jobs:
         run: bun run lint
       - name: Typecheck
         run: bun run typecheck
+      # The fuzz targets run in the `fuzz` job.
       - name: Test
-        run: bun run test
+        run: bun run test --path-ignore-patterns 'tests/fuzz/**'
       - name: Test the dashboard's client
         run: bun run test:client
       - name: Build the Worker bundle and test the Worker (Workers runtime)
         run: bun run test:worker
 
+  # Every fuzz target side by side, three minutes each (fuzz.yml). The seed is the one input of that file: blank here,
+  # as in the nightly and the release gate, so each run draws a new one and its job `plan` prints it.
+  fuzz:
+    uses: ./.github/workflows/fuzz.yml
+    with:
+      seed: ""
+
   # The product's tests and the three tree guards on every OS a user publishes from. The runtime is the bun that
-  # .bun-version pins: the tests import bun:test, which no other runtime provides. The fuzz tests run in `check` alone.
+  # .bun-version pins: the tests import bun:test, which no other runtime provides. The fuzz tests run in `fuzz` alone.
   # The Worker's tests run in `check` alone too: they need the Workers runtime, and the root `test` script this job
   # calls leaves the Workers-runtime tests of `packages/providers/cloudflare` out.
   matrix:

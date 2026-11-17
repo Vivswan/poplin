@@ -77,8 +77,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Only a run by hand with the box ticked. The release gate calls the same file, for the pull request of a release.
+  upgrade:
+    name: live (domain)
+    if: inputs.upgrade == true
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+    # Only the names the steps read. The called job names the environment, and its secret of a name is the one it reads, not a value handed over here.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # After the upgrade where one was asked for, whatever it came to.
   live:
     name: live (domain)
+    needs: [upgrade]
+    if: ${{ !cancelled() }}
     # The wait of the called job reads the commit's run of CI and the jobs of that run.
     permissions:
       contents: read
@@ -89,7 +106,6 @@ jobs:
       environment: with-domain-ci-tests
       many_files: ${{ inputs.many_files == true }}
       start_over: ${{ inputs.start_over == true }}
-      upgrade: ${{ inputs.upgrade == true }}
       load: ${{ inputs.load == true }}
     # Only the names the steps read. The called jobs name the environment, and its secret of a name is the one they read, not a value handed over here.
     secrets:

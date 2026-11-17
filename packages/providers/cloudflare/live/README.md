@@ -8,6 +8,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
+| check that an install of the last release updates to the next one | the pull request of a release: its `release-gate / live upgrade` checks, one for each kind of install | the same environments |
 | check that a release publishes its built Worker   | a release's own run of main, then the `Release Feed` run that follows it: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
@@ -34,8 +35,8 @@ Live Checks workflows, one for each kind of install
 
 | Workflow                        | File                                                | Install                                  | Checks on the run                                             |
 | ------------------------------- | --------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
-| `Live Checks`                   | `.github/workflows/live-checks.yml`                 | on the account that holds a domain       | `live (domain) / checks`, `live (domain) / reset`, and by hand `live (domain) / upgrade` |
-| `Live Checks (account address)` | `.github/workflows/live-checks-account-address.yml` | on the account that holds none           | `live (account address) / checks`, `live (account address) / reset`, and by hand `live (account address) / upgrade` |
+| `Live Checks`                   | `.github/workflows/live-checks.yml`                 | on the account that holds a domain       | `live (domain) / checks`, `live (domain) / reset`, and by hand `live (domain) / upgrade` first |
+| `Live Checks (account address)` | `.github/workflows/live-checks-account-address.yml` | on the account that holds none           | `live (account address) / checks`, `live (account address) / reset`, and by hand `live (account address) / upgrade` first |
 
 Each workflow runs the same steps on its own install. A push starts the one whose install its files reach, or both. One that fails stops no other.
 
@@ -116,9 +117,14 @@ On an account without the marking bucket the step makes, mends, and removes noth
 
 ## The upgrade
 
-An install the older build made and filled takes the build of main as an update, and is asked again for everything it held. It runs on each of the two test installs, by hand alone.
+An install the older build made and filled takes the run's build as an update, and is asked again for everything it held. It runs on each of the two test installs.
 
-On GitHub: Actions, the workflow of the install, Run workflow on `main`, tick `upgrade`, Run workflow.
+| Started by | The build the install is updated to | Then |
+| ---------- | ----------------------------------- | ---- |
+| hand: Actions, the workflow of the install, Run workflow on `main`, tick `upgrade` | the build of main | the job `checks`, whatever the upgrade came to |
+| the pull request of a release, once its checks are approved to run | the release as it would merge: the pull request's merge commit | nothing more: the next run of main's live checks, or the midnight reset, puts the install back |
+
+Both run the job `upgrade` of `.github/workflows/live-upgrade.yml`, in the lane of the kind's live checks, so an upgrade and a run of main never touch one install together.
 
 ```text
 job upgrade
@@ -129,7 +135,7 @@ job upgrade
                                    -> the older build's own start of an update, fed the build of main as a release
                                    -> the install says the new version 12 times in a row -> one line a check
                                    -> the settings put back, the sites and the token's row removed
-job checks                         the install put back to the commit's own build, every live check on the updated install, the samples
+job checks                         by hand alone: the install put back to the commit's own build, every live check on the updated install, the samples
 ```
 
 | The older build                              | Is                                                                                       |
@@ -181,11 +187,18 @@ A deployed Worker reads releases from the project's website alone, which names n
 the upgrade, as the harness counts it   153 rows and 19 bucket writes and lists on the local fake, of at most 300 and 40
 beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
 a run with upgrade ticked               about 153 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,620 rows, on each account it runs on
+the pull request of a release           about 153 + 20 = about 173 rows, on each account, each time its checks run
 ```
 
-The release gate reads it. `.github/workflows/release-gate.yml` runs on the pull request of a release, where no job may read a test account's secrets.
+The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgrade.yml` once for each kind of install on the pull request of a release, and stands down on its nightly call and on a dispatch. The pull request cannot merge until both ended green.
 
-Its job `live upgrade of both kinds of install` passes once each of the two workflows holds a green run by hand, with a green `upgrade` job, of the commit of main the release's branch stands on. Without one it names the workflow to run.
+| A run reaches a test account when | Held by |
+| --------------------------------- | ------- |
+| it is a run of main | the `if:` of every job that names an environment, and `scripts/upgrade/admit.ts` as a step before the first one that is handed a secret |
+| it is the pull request of a release: the branch `release-please--branches--main`, of this repository, opened by `github-actions[bot]` | the same two |
+| its ref is `main` or `refs/pull/<number>/merge` | the environment's own rule, in `.github/settings.local.yml` |
+
+GitHub judges a pull request's run by the ref `refs/pull/<number>/merge`, which names no branch. So the environments admit the run of every pull request from a branch of this repository, and the `if:` and the step are what keep the other pull requests out. A pull request from a fork reads no secret.
 
 ## The test install
 
@@ -232,12 +245,12 @@ The demo is what `bun run demo:build` writes, at `demo-<public word>.<domain>`. 
 
 The reset writes `sites.json` beside the demo's files: the address of each sample site outside the trash. The demo's links to those sites then lead to the install's own: a public or unlisted one opens, a private one shows the login. No line of a run names an address.
 
-The owner sets these. Each test account has its own environment, and the secrets carry the same names in both. `live-install.yml` declares each name and each workflow hands those names over; the value a step reads is the secret of its job's environment.
+The owner sets these. Each test account has its own environment, and the secrets carry the same names in both. `live-install.yml` and `live-upgrade.yml` declare each name and each caller hands those names over; the value a step reads is the secret of its job's environment.
 
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
-| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and the release gate's `live upgrade (domain)` |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and the release gate's `live upgrade (account address)` |
 
 For each account:
 

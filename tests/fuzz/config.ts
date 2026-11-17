@@ -1,8 +1,9 @@
 // The one place the fuzz targets take their budget, their seed, and their failure reports from.
 //
-//   FUZZ_RUNS     runs of each property; 5000 by default, unlimited once FUZZ_SECONDS is set
+//   FUZZ_RUNS     runs of each property; 5000 by default, unlimited once FUZZ_SECONDS or FUZZ_TARGET_SECONDS is set
 //   FUZZ_SECONDS  wall-clock budget of the whole directory, shared equally by its files and then by a file's properties; 15 by default
 //                 a property goes past its share until ten of its runs have held, so a slow machine still checks it
+//   FUZZ_TARGET_SECONDS  wall-clock budget of each file, in place of its share of FUZZ_SECONDS: for a run that gives every file a process of its own
 //   FUZZ_SEED     replays the seed a failure printed
 //   FUZZ_PATH     with FUZZ_SEED, jumps straight to the counterexample path a failure printed
 //   FUZZ_REPORTS  a directory that receives one `<target>-<n>/report.md` per failing property
@@ -14,16 +15,19 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import fc from "fast-check";
 
-const TARGET_SUFFIX = ".fuzz.test.ts";
-const TARGET_COUNT = Array.from(new Bun.Glob(`*${TARGET_SUFFIX}`).scanSync({ cwd: import.meta.dir })).length;
+import { fuzzTargets, TARGET_SUFFIX } from "./plan";
+
+const TARGET_COUNT = fuzzTargets(import.meta.dir).length;
 const DEFAULT_RUNS = 5000;
 const DEFAULT_SECONDS = 15;
 const SECONDS = numberSetting("FUZZ_SECONDS", (seconds) => Number.isFinite(seconds) && seconds > 0, "a positive number");
-const RUNS = numberSetting("FUZZ_RUNS", (runs) => Number.isSafeInteger(runs) && runs > 0, "a positive whole number") ?? (SECONDS === undefined ? DEFAULT_RUNS : Number.MAX_SAFE_INTEGER);
+const TARGET_SECONDS = numberSetting("FUZZ_TARGET_SECONDS", (seconds) => Number.isFinite(seconds) && seconds > 0, "a positive number");
+const TIMED = SECONDS !== undefined || TARGET_SECONDS !== undefined;
+const RUNS = numberSetting("FUZZ_RUNS", (runs) => Number.isSafeInteger(runs) && runs > 0, "a positive whole number") ?? (TIMED ? Number.MAX_SAFE_INTEGER : DEFAULT_RUNS);
 const SEED = numberSetting("FUZZ_SEED", Number.isInteger, "a whole number");
 const REPLAY_PATH = setting("FUZZ_PATH");
 const REPORTS = setting("FUZZ_REPORTS");
-const TARGET_BUDGET_MS = ((SECONDS ?? DEFAULT_SECONDS) * 1000) / TARGET_COUNT;
+const TARGET_BUDGET_MS = (TARGET_SECONDS ?? (SECONDS ?? DEFAULT_SECONDS) / TARGET_COUNT) * 1000;
 const REPLAYABLE_NAME = /^[\w ,.-]+$/;
 const HUNG_RUN_MS = 5000;
 const FLOOR_RUNS = 10;
