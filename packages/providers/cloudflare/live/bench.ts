@@ -99,6 +99,9 @@ interface BenchParts {
 
   /** Reads the emails the login in front of the install lets in, at the provider itself; absent on a run with no key of the provider. */
   readonly loginList?: (() => Promise<readonly string[]>) | undefined;
+
+  /** Reads whether the provider keeps the lines the install writes, at the provider itself; absent on a run with no key of the provider. */
+  readonly logsKept?: (() => Promise<boolean>) | undefined;
 }
 
 /** A bench and the means to end it. */
@@ -355,6 +358,7 @@ export function openBench(parts: BenchParts): OpenBench {
       missing: parts.missing,
       visit,
       loginList: parts.loginList ?? (async () => Promise.reject(new Error("the run holds no key to read the provider's login list with"))),
+      logsKept: parts.logsKept ?? (async () => Promise.reject(new Error("the run holds no key to read the install's logs at the provider with"))),
       cli,
       asked: () => asked,
       sentFiles: () => ({ ...files }),

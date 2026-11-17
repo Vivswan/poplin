@@ -16,6 +16,7 @@ import type { UsageHost } from "./usage/records";
 import { refusalSentence } from "./notices";
 import type { FreeLimits } from "./settings/free-limits";
 import type { UsersFollow } from "./access/users-follow";
+import type { LogsFollow } from "./settings/logs-follow";
 import type { RulesFollow } from "./settings/rules-follow";
 
 /** The status of the refusals only the console answers. Every other code goes out with the status the API gives it. */
@@ -81,6 +82,9 @@ export interface Shared {
 
     /** The provider's side of the domain's rules, where the console was built with one: a change of a setting they are written from is carried there by itself. */
     rules: RulesFollow | undefined;
+
+    /** The provider's side of the install's logs, where the console was built with one: a change of the setting that keeps them is carried there by itself. */
+    logs: LogsFollow | undefined;
 
     /** The host's part. */
     host: Host;

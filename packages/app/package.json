@@ -16,6 +16,7 @@
     "./src/console/domain/records": "./src/console/domain/records.ts",
     "./src/console/key/records": "./src/console/key/records.ts",
     "./src/console/access/users-follow": "./src/console/access/users-follow.ts",
+    "./src/console/settings/logs-follow": "./src/console/settings/logs-follow.ts",
     "./src/console/settings/rules-follow": "./src/console/settings/rules-follow.ts",
     "./src/limits/limits": "./src/limits/limits.ts",
     "./src/limits/refusal": "./src/limits/refusal.ts",

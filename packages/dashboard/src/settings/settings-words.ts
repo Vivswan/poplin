@@ -10,6 +10,7 @@ const BLOCKS = [
   { id: "publishing", heading: "Publishing" },
   { id: "traffic", heading: "Traffic" },
   { id: "limits", heading: "Other limits" },
+  { id: "logs", heading: "Logs" },
   { id: "updates", heading: "Updates" },
 ] as const;
 
@@ -61,6 +62,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   site_share_of_day: { block: "traffic", label: "One site's share", about: "The part of the requests per day one site may use." },
   site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "The most requests one site answers in a minute.", unit: "requests" },
   visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "The most requests one visitor gets in a minute.", unit: "requests" },
+  provider_logs: { block: "logs", label: "Keep logs", about: "Logs help find a fault; while off, the provider keeps none." },
   update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day." },
   auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above.", needs: "update_check", needsLine: "Switch on the check above first." },
 };
@@ -114,6 +116,8 @@ export interface Block {
 /** The block of a setting that has no words: the one its key reads like. */
 function blockFromKey(key: string): BlockId {
   if (key.includes("update")) return "updates";
+
+  if (key.includes("logs")) return "logs";
 
   if (key.startsWith("max_") || key.includes("requests") || key.includes("_per_")) return "limits";
 

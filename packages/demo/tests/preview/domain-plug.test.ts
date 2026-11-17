@@ -4,7 +4,7 @@ import type { DomainReading, DomainSettings } from "../../../app/src/console/dom
 import { changingPlug, WITH_DOMAIN, WITHOUT_DOMAIN } from "../../src/preview/domain-plug";
 
 /** The settings a run reads, which the preview's plug asks for and does not use. */
-const SETTINGS: DomainSettings = { logins: [], outside_pages: "blocked", search_engines_allowed: false, block_bots: "off" };
+const SETTINGS: DomainSettings = { logins: [], outside_pages: "blocked", search_engines_allowed: false, block_bots: "off", provider_logs: true };
 
 /** The optional rows of a run that read its table, each as its state and its detail. */
 function optionalRows(reading: DomainReading): string[] {

@@ -42,7 +42,7 @@ async function sentBy(first: (lacking: readonly string[]) => readonly (typeof FI
   };
   const upload = await openUpload({ connection: { key: "token-of-the-test", baseUrl: "http://localhost/client/v4", fetch } }, WORKER, { by: "repair", first });
 
-  return { put: upload.ok ? await upload.value.put(BUNDLE, undefined) : upload, sent };
+  return { put: upload.ok ? await upload.value.put(BUNDLE, undefined, undefined) : upload, sent };
 }
 
 // Drift: the key makes no database, so the install's own update refuses such a release. A repair that sent it as the update does would have Cloudflare drop the binding, or refuse the upload.

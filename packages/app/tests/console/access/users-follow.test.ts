@@ -263,7 +263,7 @@ describe("the console", () => {
   // Drift: a user added or taken out on the Access screen is carried only if the route hands the door the list after its own change. Carried before the write, or not at all, the provider keeps the old users.
   test("carries the users after each one is added or taken out, and its answer has no note for a change the provider took", async () => {
     const follow = fakeFollow();
-    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: LOGIN_STANDS, steps: [] })), undefined, follow);
+    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: LOGIN_STANDS, steps: [] })), { follow });
     const answers = [await (await opened.change("/data/people/add", { login: BO })).json(), await (await opened.change("/data/people/remove", { login: BO })).json()];
     await opened.change("/data/people/remove", { login: BO });
     await opened.change("/data/people/remove", { login: opened.base.owner });
@@ -274,7 +274,7 @@ describe("the console", () => {
 
   // Drift: the change is stored whatever the provider says. A refusal that undid it, or that answered as a failure, would lose a user the admin just typed; one that said nothing would leave them waiting for a login that never comes.
   test("keeps a user the provider did not take, and its answer says what to do", async () => {
-    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: LOGIN_STANDS, steps: [] })), undefined, fakeFollow(() => "unreachable"));
+    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: LOGIN_STANDS, steps: [] })), { follow: fakeFollow(() => "unreachable") });
     await opened.change("/data/domain/repair", { token: "a-token" });
     const answer = await opened.change("/data/people/add", { login: BO });
 
@@ -298,7 +298,7 @@ describe("the console", () => {
     ["holds no key", false, [true, "Users changed. Press Repair.", "Users changed. Open Domain and press Repair."]],
   ] as const)("Domain asks for a repair after a change the provider did not take only on an install that %s", async (_name, holdsKey, shown) => {
     const follow = fakeFollow(() => (holdsKey ? "unreachable" : "no_key"), holdsKey);
-    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: LOGIN_STANDS, steps: [] })), undefined, follow);
+    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: LOGIN_STANDS, steps: [] })), { follow });
     await opened.change("/data/domain/repair", { token: "a-token" });
     await opened.change("/data/people/add", { login: BO });
     const { last } = (await (await opened.get("/data/domain")).json()) as { readonly last: { readonly waits: boolean; readonly summary: { readonly line: string } } };

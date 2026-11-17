@@ -344,7 +344,7 @@ async function putCommit(run: Run, world: World, progress: Progress, from: strin
   const checked = await checkedBundle({ fetch: (url, init) => ends.reach.fetch(url, init) }, release.version, release.pin);
   if (!checked.ok) return { kind: "failed", what: `this commit's build was not taken as a release (${checked.why})` };
 
-  const put = await upload.value.put(checked.bundle, { from: from ?? release.version, to: release.version, schema: OWN_SCHEMA, at: ends.reach.now() });
+  const put = await upload.value.put(checked.bundle, { from: from ?? release.version, to: release.version, schema: OWN_SCHEMA, at: ends.reach.now() }, undefined);
   if (!put.ok) return { kind: "failed", what: `Cloudflare did not take the upload (${put.refusal}${put.refusal === "version_refused" ? `, status ${put.status}` : ""})` };
 
   if (put.unset !== undefined) return { kind: "failed", what: "Cloudflare took the upload and not the sweep trigger" };

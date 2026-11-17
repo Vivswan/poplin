@@ -157,7 +157,7 @@ describe("the scheduled run", () => {
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
     const login = { holdsKey: () => true, repair: async () => ({ wrote: [], users: false, calls: 0, refusal: undefined }) };
     const keepAlerts = async (): Promise<{ readonly wrote: readonly string[] }> => ({ wrote: [] });
-    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless };
+    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, logs: keyless };
     const kinds = async (): Promise<string[]> => (await install.database.listProblems(dayOf(w.clock.now))).map((problem) => problem.kind);
     await noteProblem(install, "login_unchecked");
     const noted = await kinds();
@@ -411,7 +411,7 @@ describe("the scheduled run", () => {
 
   // Drift: an install has no build between a release and its running code: the scheduled run is the whole of it.
   // A run that read no key, sent the form another way than workerd does, or cost more queries than counted here would leave the switch dead or pass what D1 answers one invocation.
-  test("with auto_update on and a kept key, the run three days after a release was first seen uploads it once inside a Free invocation, two database calls above a day's first run, and no later run does", async () => {
+  test("with auto_update on and a kept key, the run three days after a release was first seen uploads it once inside a Free invocation, three database calls above a day's first run and one more for the logs stated, and no later run does", async () => {
     const release = await ownRelease("999.0.0");
     const tally = { calls: 0 };
     const run = async (): Promise<number> => {
@@ -437,10 +437,29 @@ describe("the scheduled run", () => {
     const dayAfter = await run();
     const started = (await database.listAudit({ limit: 100 })).filter((entry) => entry.action === "update_started").map(({ by, detail }) => ({ by, detail }));
 
-    expect([early, taking - dayAfter]).toEqual([0, 2]);
+    expect([early, taking - dayAfter]).toEqual([0, 4]);
     expect(release.uploads).toEqual([release.upload]);
     expect(started).toEqual([{ by: "sweep@poplin.invalid", detail: { from: "0.0.0", to: "999.0.0", automatic: true } }]);
     expect(await problemsOf(w)).toEqual([]);
+  });
+
+  // Drift: Cloudflare keeps no observability across an upload, and the release states its own. An update that read no setting would switch the logs back on, on an install that keeps none.
+  test("with provider_logs off and a kept key, the run that begins a day switches the Worker's logs off, and the update the install takes by itself uploads with them off", async () => {
+    const release = await ownRelease("999.0.0");
+    const off = { enabled: false, head_sampling_rate: 1, logs: { enabled: false, invocation_logs: false } };
+    const run = (): Promise<void> => sweep(instance(w, release.cloudflare, release.latest), w, { ...freePlanBindings({ calls: 0 }), KEPT_KEY: OWN_KEY });
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    await database.changeSettings({ auto_update: true, provider_logs: false }, { as: "person", by: OWNER, at: w.clock.now });
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    const made = release.observability();
+
+    await run();
+    const stated = release.observability();
+    wait(w, 3 * 24);
+    await run();
+
+    expect([made, stated, release.uploads, release.observability()]).toEqual([release.upload.observability, off, [{ ...release.upload, observability: off }], off]);
   });
 
   // Drift: a login nobody allowed or collected leaves the table by the sweep alone; a run that never reached the end of the walk would keep every one for good.

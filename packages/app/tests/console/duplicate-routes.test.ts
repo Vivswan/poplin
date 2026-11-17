@@ -177,7 +177,7 @@ describe("a copy on a host that runs jobs", () => {
     const started: Job[] = [];
     const stopped: Job[] = [];
     const jobs: Jobs = { background: true, start: async (job) => void started.push(job), stop: async (job) => void stopped.push(job) };
-    const opened = await openConsole("", undefined, undefined, undefined, undefined, jobs);
+    const opened = await openConsole("", undefined, { jobs });
     const source = await publish(opened, "report", 300);
 
     const begun = await ask(opened, `/sites/${source}/duplicate`, { name: "report-two" });

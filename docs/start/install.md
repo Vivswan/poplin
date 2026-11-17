@@ -268,7 +268,7 @@ Every check it prints starts with `ok`, and its last line says `nothing was chan
 ok  install   https://poplin.example.com answers
 ok  version   install 0.1.0, this poplin 0.1.0
 ok  login     admin token 3f9a1c07b2d84e65, saved on this machine, expires 2026-12-15
-ok  settings  20 settings read
+ok  settings  21 settings read
 ok  sites     0 sites
 ok  trash     0 sites
 ok  problems  none in 7 days

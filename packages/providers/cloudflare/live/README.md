@@ -178,7 +178,7 @@ A deployed Worker reads releases from the project's website alone, which names n
 ```text
 the upgrade, as the harness counts it   153 rows and 19 bucket writes and lists on the local fake, of at most 300 and 40
 beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
-a run with upgrade ticked               about 153 + 20 + 1,006 (the checks) + 430 (a reset that keeps no sample) = about 1,610 rows, on each account it runs on
+a run with upgrade ticked               about 153 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,620 rows, on each account it runs on
 ```
 
 The release gate reads it. `.github/workflows/release-gate.yml` runs on the pull request of a release, where no job may read a test account's secrets.
@@ -434,13 +434,13 @@ A product change that moves a row cost turns that test red, with the database's 
 | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts/live` | set the totals it prints in `self.test.ts` and `reset.test.ts`, and the figures below |
 
 ```text
-the checks, as the harness counts them   947 on the local fake, a few more with the demo's check: every site they publish, change, and remove
-the midnight run's checks                1,050: the copy the install's job finishes, 103 more
+the checks, as the harness counts them   959 on the local fake, a few more with the demo's check: every site they publish, change, and remove
+the midnight run's checks                1,062: the copy the install's job finishes, 103 more
 a reset that keeps every sample          41: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 430
 the harness's own statements             18: three tokens in and out, and the caps
 the wait for the new deployment          0: it asks with the token of the caps, and its request writes no row
-a usual run                              about 1,006 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
+a usual run                              about 1,018 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
 a day of 40 such runs                    about 46,000 of the 100,000
 ```
 
@@ -449,7 +449,7 @@ The install without a domain writes to the database of its own account: the same
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 947 of at most 1250
+Rows written this run: 959 of at most 1250
 ```
 
 ## The load
@@ -532,6 +532,18 @@ The first run after a key is made sends its files through the install: that is a
 
 The list is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The email is taken out again whatever the check met.
 
+## The check of the logs
+
+`logs-follow` proves that Cloudflare keeps the Worker's logs as the setting `provider_logs` says, with the key the install keeps and no Repair.
+
+| Step        | On the install                                                         | Then, at Cloudflare                                               |
+| ----------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| read        | `poplin config provider_logs`, after the run's changes of the settings | the Worker's observability is as the setting says within 20 s     |
+| switch over | `poplin config provider_logs` with the other text                      | the Worker's observability is as the new setting says within 20 s |
+| put back    | `poplin config provider_logs` with the first text                      | the Worker's observability is as it was at the start              |
+
+The observability is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The setting is put back whatever the check met.
+
 ## The check of an assistant's page
 
 `crawler` sends the user agent of a crawler that reads sites in bulk, which the bot switches stop. `assistant-fetch` sends the user agents of two assistants that open one page when their user asks for it, which they do not stop.
@@ -591,7 +603,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | a token permission for a rule, the bot settings, the login, or the key; an object `poplin install` or the repair left out | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
-| `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `duplicate-job`                                          |
+| `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `logs-follow`, `duplicate-job`                           |
 | the Worker's Workflow, which Cloudflare did not make                | `duplicate-job`                                                          |
 | the midnight run, or a run started by hand with the many-files check | `duplicate-job`: a copy of 113 files, so once a day and not on every green main |
 | Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `users-follow`: no login list exists |

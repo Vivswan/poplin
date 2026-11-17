@@ -38,6 +38,7 @@ const WITH_TOKEN = [
   "export-import",
   "backup-drill",
   "users-follow",
+  "logs-follow",
   "outside-page",
   "relative-file",
   "hosts-apart",
@@ -62,7 +63,7 @@ const JOB_COPY_ROWS = 103;
 const RUN_MS = 30_000;
 
 /** The rows a run of every check counts on an install behind a login, which skips none but a person's and the many-files publish: what the README states of a usual run. */
-const CHECKS_ROWS = 947;
+const CHECKS_ROWS = 959;
 
 /** What a run says each time it asks a stranger's request again, before the count of its askings so far. */
 const ASKED_AGAIN = "a stranger's request got no answer, asked again";
@@ -145,8 +146,18 @@ const CASES: readonly Case[] = [
   ["an install said to hold an upload key the bucket takes fails the check of the way a file goes when it hands out none of the bucket's tickets", { noUploadKey: true }, {}, { ...NO_LOGIN, "direct-upload": "failed" }],
   ["a store that refuses the tickets of a key it should take: every publish goes through the install after all, and the check of the way a file goes fails", { storeRefuses: true }, {}, { ...NO_LOGIN, "direct-upload": "failed" }],
   ["a store that refuses the tickets of a key the run itself made is no fault: a new key is refused for its first minutes", { storeRefuses: true }, { "settled-upload-key": "an upload key older than two and a half minutes" }, NO_LOGIN],
-  ["an install that holds no key of its provider fails the check of the users: the login list never takes the one it added", { access: true, noKey: true }, {}, { "users-follow": "failed" }],
-  ["a run with no key to read the provider's login list skips the check of the users", { access: true }, { "login-list": "a key of the provider" }, { "users-follow": "skipped" }],
+  [
+    "an install that holds no key of its provider fails the checks of the users and of the logs: the login list never takes the one it added, and the provider keeps the logs as they were",
+    { access: true, noKey: true },
+    {},
+    { "users-follow": "failed", "logs-follow": "failed" },
+  ],
+  [
+    "a run with no key to read the provider's login list and its logs skips the checks of the users and of the logs",
+    { access: true },
+    { "login-list": "a key of the provider", "provider-logs": "a key of the provider" },
+    { "users-follow": "skipped", "logs-follow": "skipped" },
+  ],
   ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, NO_LOGIN],
   ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, NO_LOGIN],
   ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { ...NO_LOGIN, "burst-rate-rule": "failed" }],
@@ -287,6 +298,7 @@ describe("the live checks, against a local fake", () => {
       say: () => undefined,
       manyFiles: MANY_FILES, largeCopy: LARGE_COPY,
       loginList: fake.loginList,
+      logsKept: fake.logsKept,
       jobRun: fake.jobRun,
     });
     OPENED.push(close);
@@ -322,7 +334,8 @@ describe("the live checks, against a local fake", () => {
     const rows = meterRows(fake.fetch, ROW_CEILINGS.checks);
     const missing: Missing = {};
     const said: string[] = [];
-    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY, loginList: fake.loginList, jobRun: fake.jobRun };
+    const provider = { loginList: fake.loginList, logsKept: fake.logsKept, jobRun: fake.jobRun };
+    const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY, ...provider };
     const { bench, settle, sweep, close } = openBench({ ...parts, say: (line) => said.push(line) });
     OPENED.push(close);
     await settle();

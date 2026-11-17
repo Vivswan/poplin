@@ -131,7 +131,7 @@ export interface FakeSwitches {
   /** One visitor's requests leave from four addresses in turn, and the rate rule counts each for itself, as the edge's does. */
   readonly manyAddresses?: boolean;
 
-  /** The install holds no key of its provider, so a change of the users reaches no login list. */
+  /** The install holds no key of its provider, so a change of the users reaches no login list, and a change of the setting of the logs no provider. */
   readonly noKey?: boolean;
 
   /** The install has no domain: it answers on three hosts of an account's free address, every site is a path, and no rule of a zone stands in front. */
@@ -159,12 +159,13 @@ export interface FakeSwitches {
   readonly storeStumbles?: boolean;
 }
 
-/** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list and the jobs its provider holds, and the pause that moves its time on. */
+/** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list and the jobs its provider holds, whether that provider keeps its logs, and the pause that moves its time on. */
 interface Fake {
   readonly fetch: Fetch;
   readonly addresses: LiveAddresses;
   readonly token: string;
   readonly loginList: () => Promise<readonly string[]>;
+  readonly logsKept: () => Promise<boolean>;
   readonly jobRun: (upload: string) => Promise<JobRun>;
   readonly pause: (ms: number) => Promise<void>;
   readonly now: () => number;
@@ -273,6 +274,14 @@ function freeAddressPlace(install: ApiInstall, jobs: Jobs | undefined): Place {
         return install.users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
       },
     },
+    logs: {
+      holdsKey: () => true,
+      push: async (kept) => {
+        install.logs.pushed.push(kept);
+
+        return { ok: true };
+      },
+    },
     update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
     ...(jobs === undefined ? {} : { jobs }),
     direct: () => install.direct.tickets,
@@ -313,6 +322,8 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   // The fake's provider takes every change of the users, unless a fault says the install holds no key: its list is then the one of the first settings for good.
   install.users.takes = switches.noKey !== true;
   const loginList = async (): Promise<readonly string[]> => (install.users.takes ? (install.users.pushed.at(-1) ?? settings.logins) : settings.logins);
+  // The fake's provider keeps the logs as the last change of their setting says, and on an install that holds no key as the first settings say, for good.
+  const logsKept = async (): Promise<boolean> => (install.users.takes ? (install.logs.pushed.at(-1) ?? settings.provider_logs) : settings.provider_logs);
 
   // The fake's upload key: each ticket names the store, with the headers of the install's own route, which the store hands the file on to.
   if (switches.noUploadKey !== true) {
@@ -466,5 +477,5 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     return { state: run.state, steps: run.steps };
   };
 
-  return { fetch, addresses: place.typed, token: install.tokens.admin, loginList, jobRun, pause, now: () => time };
+  return { fetch, addresses: place.typed, token: install.tokens.admin, loginList, logsKept, jobRun, pause, now: () => time };
 }

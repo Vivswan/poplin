@@ -1,9 +1,10 @@
 // What the checks share: an id no site has, the site a command answered, an address under a site's own, and the one way a refusal is checked.
 
 import { expect } from "bun:test";
+import pRetry from "p-retry";
 
 import type { LiveAddresses } from "./addresses";
-import type { LiveSite, Met, Ran } from "./records";
+import type { Bench, LiveSite, Met, Ran } from "./records";
 
 /** An id no site has: a check asks for it to see what the install answers for a site that is not there. */
 export const GHOST_ID = "0live0check0";
@@ -20,8 +21,43 @@ const NO_CODE = "no code";
 /** How many causes deep a failure's code is looked for: a failure may name itself as its cause. */
 const CAUSES = 4;
 
+/** How long the provider may take to show a change it took, in milliseconds, and how long one look waits for the next. */
+const SHOWN_WITHIN = { ms: 20_000, pause: 2000 } as const;
+
 /** The statuses the install itself refuses a stranger with; each such answer is never cached. */
 const OWN_REFUSALS: ReadonlySet<number> = new Set([302, 303, 401, 403, 404, 405, 429]);
+
+/** A look at the provider that did not show what a check waits for. */
+class NotShown extends Error {}
+
+/**
+ * Look at the provider until it shows what a change asked of it, every two seconds for twenty.
+ *
+ * @param look - one look: whether the provider shows it now. A look that rejects with an `Error` ends the wait, and that error is thrown
+ * @returns whether the provider came to show it in time
+ */
+export async function shownInTime(bench: Pick<Bench, "pause">, look: () => Promise<boolean>): Promise<boolean> {
+  const attempt = async (): Promise<true> => {
+    if (!(await look())) throw new NotShown();
+
+    return true;
+  };
+  const again = async ({ error }: { readonly error: Error }): Promise<boolean> => {
+    if (!(error instanceof NotShown)) return false;
+
+    await bench.pause(SHOWN_WITHIN.pause);
+
+    return true;
+  };
+
+  try {
+    return await pRetry(attempt, { retries: SHOWN_WITHIN.ms / SHOWN_WITHIN.pause, minTimeout: 0, shouldRetry: again });
+  } catch (error) {
+    if (error instanceof NotShown) return false;
+
+    throw error;
+  }
+}
 
 /**
  * Write the address of something inside a site, from the site's own address as the install answered it.

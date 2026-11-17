@@ -262,7 +262,7 @@ async function releaseOf(reach: Reach): Promise<Release | Blocked | "unreachable
 }
 
 /** The Worker's own pieces, in order: its code, its sweep trigger, and whether its free address is switched on. Each stops the ones after it. */
-async function workerPieces(work: Work, target: Target, release: Release, made: { readonly standing: boolean; readonly databaseId: string | undefined }): Promise<boolean> {
+async function workerPieces(work: Work, target: Target, release: Release, made: { readonly standing: boolean; readonly databaseId: string | undefined; readonly logsKept: boolean }): Promise<boolean> {
   const { connection, accountId } = work.place;
   const worker = { accountId, script: SCRIPT };
   const { bundle } = release;
@@ -286,7 +286,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
       const place = placeBinding(target.kind === "domain" ? { kind: "domain", domain: target.layout.domain } : { kind: "no-domain" });
 
-      return putFirst(connection, worker, bundle, [...release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: made.databaseId }), place]);
+      return putFirst(connection, worker, bundle, { bindings: [...release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: made.databaseId }), place], logsKept: made.logsKept });
     },
   );
   if (!uploaded) return false;
@@ -454,7 +454,10 @@ async function madeFirst(work: Work, target: Target, release: Release, login: Lo
   const users = keptUsersRow(login, left?.kept);
   if (users !== undefined) note(work, users);
 
-  return (await workerPieces(work, target, release, { standing, databaseId: database.ok ? database.id : undefined })) && { kept: left?.kept };
+  // A database that stood before the run holds the setting of the logs the Worker goes on with; a new install starts with them kept.
+  const logsKept = left?.kept?.provider_logs ?? true;
+
+  return (await workerPieces(work, target, release, { standing, databaseId: database.ok ? database.id : undefined, logsKept })) && { kept: left?.kept };
 }
 
 /** Make the install, or with a dry run say what a run would make. */

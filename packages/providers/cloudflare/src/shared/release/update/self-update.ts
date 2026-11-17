@@ -49,6 +49,9 @@ interface Parts {
 
   /** Reaches the project's website and the release's page: the platform's own `fetch`, or a stand-in. */
   readonly fetch: Reach["fetch"];
+
+  /** Reads the install's setting of its logs as it is stored at the moment of an upload, which states it. */
+  readonly logsKept: () => Promise<boolean>;
 }
 
 /** The release an update is asked to take. */
@@ -116,7 +119,7 @@ export function createSelfUpdate(parts: Parts): SelfUpdate {
 
       const update = { from: parts.version, to: picked.version, schema: OWN_SCHEMA, at: parts.now() };
 
-      return { ok: true, version: picked.version, put: () => sent(upload.value, checked.bundle, update) };
+      return { ok: true, version: picked.version, put: async () => sent(upload.value, checked.bundle, update, await parts.logsKept()) };
     },
   };
 }

@@ -109,6 +109,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     visitor_requests_per_minute: COUNT_RANGE,
     update_check: "Use on or off.",
     auto_update: "Use on or off.",
+    provider_logs: "Use on or off.",
     outside_pages: "Use blocked or allowed.",
     search_engines_allowed: "Use on or off.",
     block_bots: "Use auto, on, or off.",
