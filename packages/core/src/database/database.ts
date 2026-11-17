@@ -998,13 +998,14 @@ export interface Database {
    *
    * Logins that add or drop a user, or that put another user first, are remembered, in the same step, as changed users by an install that keeps a check of its domain. The same users in another order behind the same first one are not.
    *
-   * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited; it writes nothing
+   * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited; it writes nothing.
+   *   `needs_update_check` for a change that would leave `auto_update` on with `update_check` off, read against the settings as they are in the same step; it writes nothing either, of any key
    * @throws {Error} a value breaks its rule
    */
   changeSettings(
     changes: Partial<SettingValues>,
     signed: Signed,
-  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">>;
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check">>;
 
   /**
    * Let one more email log in. It is one step that reads no list first: of logins added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which holds the logins after it.

@@ -113,11 +113,13 @@ export function endTokensOfRemoved(login: string, signed: Signed): readonly [Sta
 /**
  * End the tokens of every user a new list of logins leaves out, for a signer who stands: it goes before the list replaces the stored logins in a batch, since it reads who was a login.
  * The token that signs is left to `endSignerLeftOut`, so it stands for every statement up to the replacement.
+ *
+ * @param when - what else must hold for the list to be written; left out, nothing else
  */
-export function endTokensOfDropped(next: readonly string[], signed: Signed): readonly [Statement, Statement] {
+export function endTokensOfDropped(next: readonly string[], signed: Signed, when: SQL = fragment`1`): readonly [Statement, Statement] {
   const dropped = fragment`(SELECT was.value FROM ${settings}, json_each(${settings.value}, '$.logins') AS was WHERE ${settings.id} = 1 AND was.value NOT IN (SELECT value FROM json_each(${JSON.stringify(next)})))`;
 
-  return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped} AND ${tokens.id} <> ${signed.by} AND ${signerStands(signed)}`, signed);
+  return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped} AND ${tokens.id} <> ${signed.by} AND ${signerStands(signed)} AND ${when}`, signed);
 }
 
 /** End the token that signs a list of logins which leaves its own user out: it goes right after the audit entry of the list's change in a batch, and does nothing where the list was refused. */

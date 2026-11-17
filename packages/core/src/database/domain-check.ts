@@ -87,8 +87,9 @@ export function usersChanged(at: number, when: SQL = CHANGED): Statement {
  *
  * @param logins - the logins that replace the stored ones
  * @param signed - who signs the change and its moment; a signer who no longer stands remembers nothing
+ * @param when - what else must hold for the replacement to be written; left out, nothing else
  */
-export function usersReplaced(logins: readonly string[], signed: Signed): Statement {
+export function usersReplaced(logins: readonly string[], signed: Signed, when?: SQL): Statement {
   const stored = fragment`json_each(${settings.value}, '$.logins')`;
   const given = fragment`json_each(${JSON.stringify(logins)})`;
   const dropped = fragment`EXISTS (SELECT 1 FROM ${stored} AS was WHERE was.value NOT IN (SELECT value FROM ${given}))`;
@@ -96,7 +97,7 @@ export function usersReplaced(logins: readonly string[], signed: Signed): Statem
   const moved = fragment`json_extract(${settings.value}, '$.logins[0]') IS NOT ${logins[0] ?? null}`;
   const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added} OR ${moved}))`;
 
-  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(signed.at) }).where(and(eq(domainCheck.id, 1), differs, signerStands(signed))));
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(signed.at) }).where(and(eq(domainCheck.id, 1), differs, signerStands(signed), when)));
 }
 
 /**
@@ -132,12 +133,13 @@ export function usersCarried(carried: CarriedUsers, at: number): Statement {
  *
  * @param changes - the settings a change names; the ones no rule is written from are not read
  * @param signed - who signs the change and its moment; a signer who no longer stands remembers nothing
+ * @param when - what else must hold for the change to be written; left out, nothing else
  * @returns the statement, or `undefined` for a change that names no such setting
  */
-export function rulesReplaced(changes: Partial<RuleSettings>, signed: Signed): Statement | undefined {
+export function rulesReplaced(changes: Partial<RuleSettings>, signed: Signed, when?: SQL): Statement | undefined {
   if (RULE_SETTINGS.every((key) => changes[key] === undefined)) return undefined;
 
-  return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(signed.at) }).where(and(eq(domainCheck.id, 1), fragment`NOT ${storedRules(changes)}`, signerStands(signed))));
+  return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(signed.at) }).where(and(eq(domainCheck.id, 1), fragment`NOT ${storedRules(changes)}`, signerStands(signed), when)));
 }
 
 /**

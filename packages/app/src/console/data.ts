@@ -90,11 +90,11 @@ export interface Shared {
   };
 }
 
-/** A refusal of an action: its code, and the field, setting, or limit it is about. `each` names every field of a request that is refused about more than one, `about` among them. */
+/** A refusal of an action: its code, and the field, setting, or limit it is about. `each` names every field of a request that is refused about more than one, `about` among them, with the code that field is refused by. */
 interface Refusal {
   readonly code: string;
   readonly about?: string;
-  readonly each?: readonly string[];
+  readonly each?: readonly { readonly code: string; readonly about: string }[];
 }
 
 /** A refusal as the client reads it: the code, what it is about, and the sentence to show. `each` is there only for a request refused about several fields: every one of them with its own sentence. */
@@ -122,7 +122,7 @@ function statusFor(code: string): (typeof OWN_STATUSES)[string] | NonNullable<Re
  * @returns the status the API answers the same code with, so a refusal reads the same wherever it is met; the console's own for the codes only it answers; 400 for any other code
  */
 export function refused(context: Context<Shared>, refusal: Refusal): Response & TypedResponse<RefusalBody, ReturnType<typeof statusFor>, "json"> {
-  const each = refusal.each?.map((about) => ({ about, sentence: refusalSentence(refusal.code, about) }));
+  const each = refusal.each?.map(({ code, about }) => ({ about, sentence: refusalSentence(code, about) }));
 
   return context.json(
     { ok: false as const, code: refusal.code, about: refusal.about ?? null, sentence: refusalSentence(refusal.code, refusal.about), ...(each === undefined ? {} : { each }) },

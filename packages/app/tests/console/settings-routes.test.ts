@@ -161,6 +161,37 @@ describe("a save", () => {
     expect(await textsOf(opened)).toEqual(before);
   });
 
+  // Drift: the screen locks the switch, and a save sent while another is on its way is not held by it. Refused in the sentence of a switch, "Use on or off.", it would tell of a form that was kept.
+  test.each([
+    ["automatic updates on while the check is stored off", { update_check: "off" }, { auto_update: "on" }],
+    ["the check off while automatic updates are stored on", { auto_update: "on" }, { update_check: "off" }],
+  ])("refuses %s at the switch of automatic updates, in words of the pair, and changes nothing", async (_what, stored, texts) => {
+    const opened = await openConsole();
+    await opened.change("/data/settings", { texts: stored });
+    const before = await textsOf(opened);
+    const response = await opened.change("/data/settings", { texts: { ...texts, trash_days: "30" } });
+    const sentence = "Updating by itself needs the check for new versions, so nothing was changed. Switch the check on, or automatic updates off.";
+
+    expect([response.status, await response.json()]).toEqual([409, { ok: false, code: "needs_update_check", about: "auto_update", sentence, each: [{ about: "auto_update", sentence }] }]);
+    expect(await textsOf(opened)).toEqual(before);
+  });
+
+  // Drift: every refused field gets the sentence of the code the save was refused with first; the switch would be told "Use on or off." beside a number refused for its range.
+  test("tells each refused field in the words of its own refusal when a number and the pair are refused together", async () => {
+    const opened = await openConsole();
+    const response = await opened.change("/data/settings", { texts: { trash_days: "0", update_check: "off", auto_update: "on" } });
+    const refusal = (await response.json()) as { readonly code: string; readonly each: readonly { readonly about: string; readonly sentence: string }[] };
+
+    expect([response.status, refusal.code, refusal.each.map((one) => [one.about, one.sentence.split(",")[0]])]).toEqual([
+      400,
+      "bad_argument",
+      [
+        ["trash_days", "Use a whole number"],
+        ["auto_update", "Updating by itself needs the check for new versions"],
+      ],
+    ]);
+  });
+
   // Drift: a save of several refused values would name one of them, so the screen would mark one field a press and Save would be pressed once for each.
   test("is refused about every setting whose text it refuses, each with its own sentence, and about the first as any refusal is", async () => {
     const opened = await openConsole();

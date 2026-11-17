@@ -48,7 +48,7 @@ const CHANGED = {
   site_share_of_day: "100%",
   site_requests_per_minute: "1",
   visitor_requests_per_minute: "2",
-  update_check: "off",
+  update_check: "on",
   auto_update: "on",
 };
 const CHANGED_VALUES = {
@@ -70,7 +70,7 @@ const CHANGED_VALUES = {
   site_share_of_day: 100,
   site_requests_per_minute: 1,
   visitor_requests_per_minute: 2,
-  update_check: false,
+  update_check: true,
   auto_update: true,
 };
 
@@ -177,6 +177,17 @@ describe("settingsFromText and settingsToText", () => {
     const read = settingsFromText({ ...rest, trash_days: "" });
 
     expect<unknown>(read.ok ? undefined : [read.key, read.refusal]).toEqual(["trash_days", "bad-form"]);
+  });
+
+  // Drift: the import of a backup and the dashboard's save tell the two refusals apart by this name, and a screen that marks every refused field at the first Save would mark the switch only at the second.
+  test("names auto_update on beside update_check off by a refusal of its own, beside every other refused setting", () => {
+    const read = settingsFromText({ ...PUBLISHED_DEFAULTS, trash_days: "", versions_kept: "0", update_check: "off", auto_update: "on" });
+
+    expect<unknown>(read.ok ? undefined : read.every).toEqual([
+      { key: "versions_kept", refusal: "out-of-range" },
+      { key: "trash_days", refusal: "bad-form" },
+      { key: "auto_update", refusal: "needs-update-check" },
+    ]);
   });
 
   test("drift: a change is checked against every key, so a setting left out is named instead of silently keeping an unknown value", () => {

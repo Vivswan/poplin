@@ -245,7 +245,7 @@ npx poplin config auto_update on
 
 | It starts an update when all of these hold               | Otherwise                                             |
 | -------------------------------------------------------- | ----------------------------------------------------- |
-| `auto_update` and `update_check` are both on             | nothing starts by itself                              |
+| `auto_update` is on, which it is only beside `update_check` | nothing starts by itself                           |
 | the project's website answered that day                  | nothing starts that day                               |
 | a version newer than the install's is out                | nothing starts                                        |
 | the release does not change the database                 | it never starts by itself: you start it               |
@@ -290,4 +290,5 @@ nothing was changed
 | Where it shows       | the foot of the dashboard's side, on every page: `0.2.0 is out` and a link, What changed           |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
+| With `auto_update` on | switching `update_check` off is refused with `needs_update_check`: switch `auto_update` off first  |
 | Updating to it       | `poplin update`, on an install that holds its key; [Update the install](#update-the-install) says what one without a key does first |

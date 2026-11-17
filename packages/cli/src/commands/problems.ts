@@ -44,6 +44,11 @@ const API_ROWS = {
     hint: "keep one email that is a login now in the list",
     exit: "failed",
   },
+  needs_update_check: {
+    sentence: "auto_update is on only while update_check is on",
+    hint: "to update by itself: poplin config update_check on, then auto_update on; to stop the check: poplin config auto_update off first",
+    exit: "failed",
+  },
   already_a_login: { sentence: "that email is a login already", hint: "poplin config logins shows the logins", exit: "failed" },
   not_a_login: { sentence: "that email is no login", hint: "poplin config logins shows the logins", exit: "failed" },
   no_update: { sentence: "there is no newer version the install can take", hint: "poplin update --dry-run says which version the install runs", exit: "failed" },

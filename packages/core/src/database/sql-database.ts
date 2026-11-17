@@ -255,6 +255,13 @@ function settingsAndSigner(signed: Signed): Statement {
   return built(BUILD.select({ value: settings.value, stands: fragment<number>`${signerStands(signed)}`.as("stands") }).from(settings).where(eq(settings.id, 1)));
 }
 
+/** Whether the settings a change comes to keep `auto_update` on only beside `update_check`. It reads the stored settings by itself, so a statement on any table can wait on it. */
+function updatePairKept(patched: SQL): SQL {
+  const alone = fragment`json_extract(${patched}, '$.auto_update') = 1 AND json_extract(${patched}, '$.update_check') = 0`;
+
+  return fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND NOT (${alone}))`;
+}
+
 /** Whether the read of `settingsAndSigner` found a signer who no longer stands. */
 function signerGone(read: StatementResult | undefined): boolean {
   return read?.rows[0]?.stands !== 1;
@@ -1316,15 +1323,17 @@ export class SqlDatabase implements Database {
   async changeSettings(
     changes: Partial<SettingValues>,
     signed: Signed,
-  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">> {
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check">> {
     const checked = v.parse(SETTING_CHANGES, changes);
     // A merge patch: each key it names is replaced and every other key stays, only when a value differs.
     const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
-    const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed), fragment`json(${patched}) <> json(${settings.value})`)));
+    // Only a change of an update setting can part the two, and such a change writes nothing at all then: every statement of it waits on the pair.
+    const fits = checked.update_check === undefined && checked.auto_update === undefined ? undefined : updatePairKept(patched);
+    const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed), fits, fragment`json(${patched}) <> json(${settings.value})`)));
     // The marks of changed users and of changed rules read the settings as they still are, so they run before the change.
-    const rules = rulesReplaced(checked, signed);
+    const rules = rulesReplaced(checked, signed, fits);
     // So do the tokens of the users the new logins leave out, which end in the same step.
-    const users = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed), ...endTokensOfDropped(checked.logins, signed)];
+    const users = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed, fits), ...endTokensOfDropped(checked.logins, signed, fits)];
     const marks = [...users, ...(rules === undefined ? [] : [rules])];
     // The token that signs ends after the change, where the new logins leave its own user out: it stands for every statement before.
     const own = checked.logins === undefined ? [] : endSignerLeftOut(signed);
@@ -1335,7 +1344,11 @@ export class SqlDatabase implements Database {
 
     if (changed(updated)) return { kind: "done", values };
 
-    return signerGone(read) ? { kind: "signer_gone" } : { kind: "unchanged", values };
+    if (signerGone(read)) return { kind: "signer_gone" };
+
+    const asked = { ...values, ...checked };
+
+    return asked.auto_update && !asked.update_check ? { kind: "needs_update_check" } : { kind: "unchanged", values };
   }
 
   async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">> {

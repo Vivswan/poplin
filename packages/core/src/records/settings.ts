@@ -64,11 +64,17 @@ const VALUES = {
   auto_update: v.boolean(),
 };
 
-/** Every setting, as the settings are stored and read. */
-export const SETTING_VALUES = v.strictObject(VALUES);
+/** Every setting, as the settings are stored and read. An install that never asks for the newest release starts no update by itself, so `auto_update` is on only beside `update_check`: checked once those two are typed, whatever another key holds. */
+export const SETTING_VALUES = v.pipe(
+  v.strictObject(VALUES),
+  v.forward(
+    v.partialCheck([["update_check"], ["auto_update"]], (values) => values.update_check || !values.auto_update, "auto_update is on only while update_check is on"),
+    ["auto_update"],
+  ),
+);
 
-/** Some of the settings, as a change to them is checked before it is written. */
-export const SETTING_CHANGES = v.partial(SETTING_VALUES);
+/** Some of the settings, as a change to them is checked before it is written. Whether the two update settings go together after it is the store's to decide: it holds the ones a change leaves out. */
+export const SETTING_CHANGES = v.partial(v.strictObject(VALUES));
 
 /** Every key, in the order of `VALUES`. */
 const SETTING_KEYS = Object.keys(VALUES) as readonly SettingKey[];
@@ -126,8 +132,8 @@ interface Install {
   readonly installer: Login;
 }
 
-/** Why settings text was refused: a key that is no setting, a setting left out, text not in the key's form, or a value outside its range. */
-type SettingRefusal = "unknown-key" | "missing" | "bad-form" | "out-of-range";
+/** Why settings text was refused: a key that is no setting, a setting left out, text not in the key's form, a value outside its range, or `auto_update` on beside `update_check` off. */
+type SettingRefusal = "unknown-key" | "missing" | "bad-form" | "out-of-range" | "needs-update-check";
 
 /** One key that was refused, and why. */
 interface RefusedSetting {
@@ -300,12 +306,18 @@ function refusedAlone(refused: RefusedSetting): CheckedSettings {
   return { ok: false, ...refused, every: [refused] };
 }
 
+/** Why the schema refused a key whose text was read. A switch has no range, so `auto_update` is refused there for one reason. */
+function refusedValue(key: string): RefusedSetting {
+  return { key, refusal: key === "auto_update" ? "needs-update-check" : "out-of-range" };
+}
+
 /**
  * Read every setting from its text form.
  *
  * @param texts - one text for every key; to change one setting, print the current ones and replace that key
- * @returns the typed values, or the first refused key: a key that is no setting; else, in the order of the settings, the first that is left out or whose text is not in its form; else the first value outside its range.
- *   `every` holds each text not in its form and each value outside its range, in the order of the settings; for a key that is no setting or is left out, that key alone
+ * @returns the typed values, or the first refused key: a key that is no setting; else, in the order of the settings, the first that is left out or whose text is not in its form; else the first value its rule refuses.
+ *   `auto_update` on beside `update_check` off is such a value of `auto_update`, refused as `needs-update-check`.
+ *   `every` holds each text not in its form and each value the schema refuses, in the order of the settings; for a key that is no setting or is left out, that key alone
  */
 export function settingsFromText(texts: Readonly<Record<string, string>>): CheckedSettings {
   const unknown = Object.keys(texts).find((key) => !Object.hasOwn(VALUES, key));
@@ -329,7 +341,7 @@ export function settingsFromText(texts: Readonly<Record<string, string>>): Check
 
   // A text that was not read leaves its key out of the values, which the schema names too: such a key is told once, by its form.
   const named = checked.issues.map((issue) => v.getDotPath(issue)?.split(".")[0] ?? "");
-  const outside = [...new Set(named)].filter((key) => !unread.some((refused) => refused.key === key)).map((key): RefusedSetting => ({ key, refusal: "out-of-range" }));
+  const outside = [...new Set(named)].filter((key) => !unread.some((refused) => refused.key === key)).map(refusedValue);
   const order = (refused: RefusedSetting): number => SETTING_KEYS.indexOf(refused.key as SettingKey);
   const every = [...unread.filter((refused) => refused.refusal === "bad-form"), ...outside].sort((left, right) => order(left) - order(right));
 
