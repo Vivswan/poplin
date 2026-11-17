@@ -12,7 +12,7 @@
 // No answer, and nothing this file hands on, holds the key or a text Cloudflare sent.
 
 import type { Keyed } from "@poplin/app/src/console/key/records";
-import { pickRelease } from "@poplin/core/src/actions/pick-release";
+import { pickRelease } from "@poplin/core/src/actions/update/pick-release";
 import { type Refused, refuse } from "@poplin/core/src/actions/records";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";

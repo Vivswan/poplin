@@ -11,9 +11,9 @@ import { createStore, del, get, set } from "idb-keyval";
 import { base64ToUint8Array } from "uint8array-extras";
 
 import type { ClientFiles } from "../../../app/src/console/shell";
-import { SERVED_PREFIX } from "../preview/mount";
-import { REAL_SITES_FILE, type RealSites, readRealSites } from "../preview/real-sites";
-import type { Samples } from "../preview/seed";
+import { SERVED_PREFIX } from "../preview/addresses/mount";
+import { REAL_SITES_FILE, type RealSites, readRealSites } from "../preview/world/real-sites";
+import type { Samples } from "../preview/world/seed";
 // The first module of the bundle to run: every other one builds its requests and responses with the classes this one puts in place.
 import { plainResponse } from "./free-headers";
 import { openKeptDemo, type SavedDemo } from "./kept-demo";

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { COPY_CALLS } from "@poplin/core/src/actions/duplicate";
+import { COPY_CALLS } from "@poplin/core/src/actions/sites/duplicate";
 import { defaultSettings, type SettingValues, sizeBytes } from "@poplin/core/src/records/settings";
 
 import { freeLimitMarks } from "../../../src/console/settings/free-limits";

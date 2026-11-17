@@ -14,19 +14,19 @@
 import { mkdtempDisposableSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DELETED_SITE } from "@poplin/core/src/actions/delete";
-import { LISTED_SITES } from "@poplin/core/src/actions/list";
-import { SETTINGS_ANSWER } from "@poplin/core/src/actions/store-settings";
+import { DELETED_SITE } from "@poplin/core/src/actions/sites/delete";
+import { LISTED_SITES } from "@poplin/core/src/actions/sites/list";
+import { SETTINGS_ANSWER } from "@poplin/core/src/actions/install/store-settings";
 import type * as v from "valibot";
 
 import { type Client, createClient, type Failure, type Fetch } from "../../../../cli/src/client/client";
 import type { Io } from "../../../../cli/src/commands/records";
 import { run as runCli } from "../../../../cli/src/commands/run";
 import { plainScreen } from "../../../../cli/src/local/screen";
-import { callUnhurried } from "../../../../cli/src/commands/upload";
+import { callUnhurried } from "../../../../cli/src/commands/sites/upload";
 import { buildDemo } from "../../../../demo/scripts/build";
-import { REAL_SITES_FILE, type RealSites } from "../../../../demo/src/preview/real-sites";
-import { standingSites, THE_DEMO } from "../../../../demo/src/preview/sample-sites";
+import { REAL_SITES_FILE, type RealSites } from "../../../../demo/src/preview/world/real-sites";
+import { standingSites, THE_DEMO } from "../../../../demo/src/preview/world/sample-sites";
 import { CEILINGS, meterBucket } from "./budget";
 import { type Orphans, removeOrphans } from "./orphans";
 import { meterRows, ROW_CEILINGS } from "./rows";

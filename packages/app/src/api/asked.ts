@@ -1,6 +1,6 @@
 // What a route checks before its handler runs, beside who asks and the query: the count of a request that takes no token, the content type, the site its path names, and the JSON it carries. It also hands the handler the install whose listings are counted.
 
-import { meterNoted } from "@poplin/core/src/actions/problems";
+import { meterNoted } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import { siteReference } from "@poplin/core/src/sites/labels";

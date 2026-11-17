@@ -5,7 +5,7 @@ import type { Called, Client, Fetch } from "../client/client";
 import type { Machine } from "../local/login-file";
 import type { Line, Screen } from "../local/screen";
 import type { Problem } from "./problems";
-import type { Request } from "./requests";
+import type { Request } from "./line/requests";
 
 /** One shape of the parser's requests, kept when it is of a command named and narrowed to those commands. */
 type Narrowed<One, Kind> = One extends { readonly kind: infer Kinds } ? ([Kind & Kinds] extends [never] ? never : Omit<One, "kind"> & { readonly kind: Kind & Kinds }) : never;

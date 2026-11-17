@@ -1,9 +1,9 @@
 // The scheduled run, driven as Cloudflare's cron trigger drives it. Nothing else ever moves an expired site to the trash or empties the trash.
 
 import { reset } from "cloudflare:test";
-import { noteProblem } from "@poplin/core/src/actions/problems";
-import { publishSite } from "@poplin/core/src/actions/publish";
-import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
+import { noteProblem } from "@poplin/core/src/actions/install/problems";
+import { publishSite } from "@poplin/core/src/actions/publish/publish";
+import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/install/sweep";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";

@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { readFiles } from "../../cli/src/files/read";
 import { readTitle } from "../../cli/src/files/title";
-import type { Samples } from "../src/preview/seed";
+import type { Samples } from "../src/preview/world/seed";
 
 /** The page a site opens with, whose own title a publish sends. */
 const ENTRY_PAGE = "index.html";

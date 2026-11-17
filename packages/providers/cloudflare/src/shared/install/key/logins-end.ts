@@ -7,7 +7,7 @@
 //
 // One person's logins are not ended here: that call needs a right the key is not made with. No answer carries the key or a text Cloudflare sent.
 
-import type { EndLogins } from "@poplin/core/src/actions/sign-out";
+import type { EndLogins } from "@poplin/core/src/actions/access/sign-out";
 import { revokeLogins } from "../pieces/access/access";
 import { type KeptKey, keyed } from "./kept-key";
 

@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import mime from "mime";
 
 import { nameFromEntry, type SiteName } from "../../../core/src/names/names";
-import { checkFilePath } from "../../../core/src/actions/files";
+import { checkFilePath } from "../../../core/src/actions/sites/files";
 
 const ENTRY_PAGE = "index.html";
 const HTML_FILE = /\.html$/i;

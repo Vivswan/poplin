@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { type AddressInfo, createServer } from "node:net";
 
 import { answered, bytes, ORIGIN, openApi } from "../../../app/tests/api/support/install";
-import { LISTED_SITES } from "../../../core/src/actions/list";
-import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
-import { SITE_ANSWER } from "../../../core/src/actions/site-object";
-import { BEGUN_UPLOAD } from "../../../core/src/actions/uploads";
+import { LISTED_SITES } from "../../../core/src/actions/sites/list";
+import { WHOAMI_ANSWER } from "../../../core/src/actions/access/manage-tokens";
+import { SITE_ANSWER } from "../../../core/src/actions/sites/site-object";
+import { BEGUN_UPLOAD } from "../../../core/src/actions/publish/uploads";
 import { type Client, createClient, type Fetch } from "../../src/client/client";
 
 /** A token in the form of one, which no install knows. */

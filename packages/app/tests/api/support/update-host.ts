@@ -1,6 +1,6 @@
 // The tests' stand-in for the host's side of an update: a host a test sets up by hand, which fetches nothing and replaces no code.
 
-import { NEWEST } from "@poplin/core/src/actions/pick-release";
+import { NEWEST } from "@poplin/core/src/actions/update/pick-release";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 
 /** What a host answers a release it does not take. */

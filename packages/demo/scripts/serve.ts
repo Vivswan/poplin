@@ -17,7 +17,7 @@ import concurrently, { type CloseEvent } from "concurrently";
 import manifest from "../../cli/package.json" with { type: "json" };
 import type { ClientFiles } from "../../app/src/console/shell";
 import { BunSqliteDriver } from "../../core/tests/database/support/bun-sqlite-driver";
-import type { LocalOrigins } from "../src/preview/kind";
+import type { LocalOrigins } from "../src/preview/world/kind";
 import { createPreview } from "../src/preview/preview";
 import { buildClient, CLIENT as CONSOLE, readClient } from "../../dashboard/scripts/client-build";
 import { readSamples } from "./samples";

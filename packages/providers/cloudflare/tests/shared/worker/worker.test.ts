@@ -3,8 +3,8 @@
 
 import { reset } from "cloudflare:test";
 import type { Api } from "@poplin/app/src/api/api";
-import type { ExportedSite } from "@poplin/core/src/actions/export";
-import { publishSite } from "@poplin/core/src/actions/publish";
+import type { ExportedSite } from "@poplin/core/src/actions/backup/export";
+import { publishSite } from "@poplin/core/src/actions/publish/publish";
 import { mintToken } from "@poplin/core/src/auth/tokens";
 import { parseUploadId } from "@poplin/core/src/records/upload";
 import { settingsFromText } from "@poplin/core/src/records/settings";

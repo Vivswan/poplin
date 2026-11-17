@@ -1,15 +1,15 @@
 // What a route's handler does beyond calling its one action: it checks what was sent against the action's schema, and joins what only the request knows to the action's answer. No rule lives here.
 
-import type { UploadLimits } from "@poplin/core/src/actions/begin-publish";
-import { beginLogin, LOGIN_REQUEST } from "@poplin/core/src/actions/computer-logins";
-import { wayBack } from "@poplin/core/src/actions/go-back";
-import { issueTickets, type TICKETS_REQUEST } from "@poplin/core/src/actions/issue-tickets";
-import { tokenObject, type WHOAMI_ANSWER } from "@poplin/core/src/actions/manage-tokens";
-import { noteProblem } from "@poplin/core/src/actions/problems";
+import type { UploadLimits } from "@poplin/core/src/actions/publish/begin-publish";
+import { beginLogin, LOGIN_REQUEST } from "@poplin/core/src/actions/access/computer-logins";
+import { wayBack } from "@poplin/core/src/actions/update/go-back";
+import { issueTickets, type TICKETS_REQUEST } from "@poplin/core/src/actions/publish/issue-tickets";
+import { tokenObject, type WHOAMI_ANSWER } from "@poplin/core/src/actions/access/manage-tokens";
+import { noteProblem } from "@poplin/core/src/actions/install/problems";
 import { type Install, type Refused, refuse } from "@poplin/core/src/actions/records";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
-import { type UPDATE_STATE, updateOf } from "@poplin/core/src/actions/update";
-import { uploadFile } from "@poplin/core/src/actions/upload-file";
+import { type UPDATE_STATE, updateOf } from "@poplin/core/src/actions/update/update";
+import { uploadFile } from "@poplin/core/src/actions/publish/upload-file";
 import { REVIEW_PAGE } from "@poplin/core/src/api/routes";
 import { parseLoginSecret } from "@poplin/core/src/auth/computer-logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";

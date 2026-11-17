@@ -1,7 +1,7 @@
 // The words of the commands that work at a provider, which a page may name: `poplin install`, `poplin uninstall`, and `poplin doctor --repair`. Their options, the problems they stop with, what they name as blocking a run, and the next step.
 // Each command's own parser reads its provider's options when it runs, so the CLI's table lists none of them: the pages' guards read them here.
 
-import type { ProviderCommand } from "../../packages/cli/src/commands/parse-command";
+import type { ProviderCommand } from "../../packages/cli/src/commands/line/parse-command";
 import { parseInstall, SHARED_OPTIONS } from "../../packages/cli/src/install/first/parse";
 import type { Next, Parsed, Stop } from "../../packages/cli/src/install/records";
 import { parseUninstall, UNINSTALL_OPTIONS } from "../../packages/cli/src/install/remove/parse";

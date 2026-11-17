@@ -226,7 +226,7 @@ The demo's site is kept by the same rule, on its title, its expiry, and the file
 | in the trash                    | 1                                          |
 | with three versions             | 1; every other has one                     |
 
-Each site, its title, and who opens it come from one table, `packages/demo/src/preview/sample-sites.ts`. The demo's seed plays its whole history, and the reset publishes what it ends in, so the install's Sites screen and the demo's list the same sites.
+Each site, its title, and who opens it come from one table, `packages/demo/src/preview/world/sample-sites.ts`. The demo's seed plays its whole history, and the reset publishes what it ends in, so the install's Sites screen and the demo's list the same sites.
 
 The demo is what `bun run demo:build` writes, at `demo-<public word>.<domain>`. The install serves its files, and the demo's worker answers every address inside it.
 

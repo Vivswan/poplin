@@ -1,6 +1,6 @@
 // Run one command line: read it, find who to talk to, run the command, print what it came to, and choose the exit code.
 
-import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
+import { WHOAMI_ANSWER } from "../../../core/src/actions/access/manage-tokens";
 import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import { type Client, createClient } from "../client/client";
 import { currentLogin, TOKEN_VARIABLES } from "../local/current-login";
@@ -16,21 +16,21 @@ import { runUninstall } from "../install/remove/uninstall";
 import { runRepair } from "../install/repair/repair";
 import type { InstallEnds } from "../install/records";
 import { exitCode } from "./exit-codes";
-import { runExport } from "./export";
-import { helpText } from "./help";
-import { runImport } from "./import";
-import { runInstallCommand } from "./install-commands";
-import { logIn } from "./login";
-import { type ProviderCommand, parseCommand } from "./parse-command";
+import { runExport } from "../backup/export";
+import { helpText } from "./line/help";
+import { runImport } from "../backup/import";
+import { runInstallCommand } from "./install/install-commands";
+import { logIn } from "./install/login";
+import { type ProviderCommand, parseCommand } from "./line/parse-command";
 import { type Problem, problem, problemLines } from "./problems";
-import { planPublish, previewPublish, sendPublish } from "./publish";
+import { planPublish, previewPublish, sendPublish } from "./sites/publish";
 import type { Io, Outcome, RequestOf, Session } from "./records";
-import type { Request, TypedRequest } from "./requests";
-import { runSiteCommand } from "./site-commands";
+import type { Request, TypedRequest } from "./line/requests";
+import { runSiteCommand } from "./sites/site-commands";
 import { dryRunText, showLine } from "./text";
-import { runUpdate } from "./update";
-import { guardedScreen, hide, written } from "./util";
-import { readByInstall } from "./wire";
+import { runUpdate } from "./install/update";
+import { guardedScreen, hide, written } from "./line/util";
+import { readByInstall } from "./sites/wire";
 
 /** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
 export const AFTER_STOP_TIMEOUT_MS = 4000;

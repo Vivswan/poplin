@@ -9,7 +9,7 @@ import { createConsole } from "../../packages/app/src/console/console";
 import { type ApiInstall, ORIGIN, openApi, VISITOR_HEADER } from "../../packages/app/tests/api/support/install";
 import { CLIENT } from "../../packages/app/tests/console/support/console";
 import { FREE_LIMITS, KINDS, USAGE_HOST } from "../../packages/app/tests/console/support/install";
-import { plainComputerName } from "../../packages/core/src/actions/computer-logins";
+import { plainComputerName } from "../../packages/core/src/actions/access/computer-logins";
 import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, showUserCode } from "../../packages/core/src/auth/computer-logins";
 import type { Login } from "../../packages/core/src/auth/logins";
 import { fuzzTarget } from "./config";

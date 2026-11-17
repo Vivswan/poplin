@@ -11,7 +11,7 @@
 // One that does not is a version something else made: nothing is changed, and no older version is looked for, since an older one may lack a variable or a key written since.
 // The bindings of the version before are the ones the update inherited minutes ago. Cloudflare serves it some ten seconds after the call.
 
-import { backAfterFailedStep, noteWentBack } from "@poplin/core/src/actions/go-back";
+import { backAfterFailedStep, noteWentBack } from "@poplin/core/src/actions/update/go-back";
 import type { Database } from "@poplin/core/src/database/database";
 import { BaseDeployments } from "cloudflare/resources/workers/scripts/deployments";
 import { BaseVersions } from "cloudflare/resources/workers/scripts/versions";

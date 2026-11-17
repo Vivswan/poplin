@@ -3,9 +3,9 @@
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { duplicateSite } from "../../packages/core/src/actions/duplicate";
-import { checkFilePath } from "../../packages/core/src/actions/files";
-import { publishSite } from "../../packages/core/src/actions/publish";
+import { duplicateSite } from "../../packages/core/src/actions/sites/duplicate";
+import { checkFilePath } from "../../packages/core/src/actions/sites/files";
+import { publishSite } from "../../packages/core/src/actions/publish/publish";
 import { inlineJobs } from "../../packages/core/src/jobs/inline-jobs";
 import { parseUploadId } from "../../packages/core/src/records/upload";
 import { isContentType } from "../../packages/core/src/storage/storage";

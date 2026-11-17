@@ -7,12 +7,12 @@
 import * as v from "valibot";
 
 import type { SITE_ACTIONS } from "../actions";
-import { PUBLISH_REQUEST } from "./begin-publish";
-import { SITE_CHANGES } from "./changes";
-import { DELETE_OPTIONS } from "./delete";
-import { DUPLICATE_REQUEST } from "./duplicate";
-import { LIST_QUERY } from "./list";
-import { ROLLBACK_OPTIONS } from "./rollback";
+import { PUBLISH_REQUEST } from "./publish/begin-publish";
+import { SITE_CHANGES } from "./sites/changes";
+import { DELETE_OPTIONS } from "./sites/delete";
+import { DUPLICATE_REQUEST } from "./sites/duplicate";
+import { LIST_QUERY } from "./sites/list";
+import { ROLLBACK_OPTIONS } from "./sites/rollback";
 
 /** What a tool about one site takes: a reference to the site, and nothing else. */
 const ONE_SITE = v.strictObject({ site: v.string() });

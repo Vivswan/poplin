@@ -3,7 +3,7 @@
 
 import { expect, test } from "bun:test";
 import type { DomainReading, DomainSettings } from "@poplin/app/src/console/domain/records";
-import { runDone } from "../../../../app/src/console/domain-answers";
+import { runDone } from "../../../../app/src/console/domain/domain-answers";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { createPathPlug, givePathKey } from "../../src/without-domain/path-plug";
 import { withFake } from "../shared/install/support/fake-cloudflare";

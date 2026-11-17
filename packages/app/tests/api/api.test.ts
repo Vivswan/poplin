@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 
-import { decideLogin } from "@poplin/core/src/actions/computer-logins";
-import { publishSite } from "@poplin/core/src/actions/publish";
+import { decideLogin } from "@poplin/core/src/actions/access/computer-logins";
+import { publishSite } from "@poplin/core/src/actions/publish/publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { mintToken } from "@poplin/core/src/auth/tokens";

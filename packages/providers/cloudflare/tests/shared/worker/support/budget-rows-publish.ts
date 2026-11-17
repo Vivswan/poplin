@@ -1,6 +1,6 @@
 // What publishing may cost: a publish's three steps, a copy's rounds, and a backup put back.
 
-import type { ImportRequest } from "@poplin/core/src/actions/begin-import";
+import type { ImportRequest } from "@poplin/core/src/actions/backup/begin-import";
 import { sha256Of } from "@poplin/core/src/storage/storage";
 import { done, type Published, page, sendFile } from "./install";
 import { adminToken, apiOf, type BudgetRow, published, type Stage, unmeasured } from "./budget-stage";

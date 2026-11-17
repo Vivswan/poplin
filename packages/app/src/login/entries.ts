@@ -5,7 +5,7 @@
 //
 // The dashboard keeps no session, so the provider's login is told apart by the moment it began. What an instance has noted it asks the database about no more.
 
-import { noteProblem } from "@poplin/core/src/actions/problems";
+import { noteProblem } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 

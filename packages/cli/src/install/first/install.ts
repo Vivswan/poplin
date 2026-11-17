@@ -6,7 +6,7 @@
 
 import type { Found, Installed, Startable, Whole } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
-import { logIn } from "../../commands/login";
+import { logIn } from "../../commands/install/login";
 import { problemLines } from "../../commands/problems";
 import type { Io } from "../../commands/records";
 import { installAnswers } from "./answers";
