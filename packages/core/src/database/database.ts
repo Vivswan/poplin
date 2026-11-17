@@ -341,6 +341,9 @@ export interface UploadRoom {
   readonly dayWrites: number;
 }
 
+/** What an upload is measured against its room by: who began it, the folder it goes under, and the bytes and the files it declares. */
+export type UploadSize = Pick<Upload, "owner" | "folder" | "bytes" | "files">;
+
 /** Where a page of old uploads ended. */
 interface UploadsCursor {
   readonly created_at: number;
@@ -721,6 +724,14 @@ export interface Database {
     upload: NewUpload,
     room: UploadRoom,
   ): Promise<{ readonly kind: "done" } | Refused<"own_full" | "folder_full" | "total_full" | "sites_full"> | (Refused<"day_full" | "writes_full"> & { readonly left: number })>;
+
+  /**
+   * Measure an upload of a size against the room it is given, as `addUpload` measures one, and record nothing: no upload, and no count of its day.
+   *
+   * @returns what `addUpload` would answer of the room as it is read
+   * @throws {RangeError} the day of the room is not a date
+   */
+  measureUpload(sized: UploadSize, room: UploadRoom): ReturnType<Database["addUpload"]>;
 
   /** The upload with this id and its manifest, which is empty once the upload is finished or abandoned. */
   getUpload(id: UploadId): Promise<{ readonly upload: Upload; readonly manifest: readonly ManifestFile[] } | undefined>;

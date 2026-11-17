@@ -16,13 +16,16 @@ import { readSetting } from "./install-settings";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
 import type { Line } from "../local/screen";
-import { columns, countText, dayText, GAP } from "./text";
+import { columns, countText, dayText, GAP, REHEARSED } from "./text";
 
 /** What the login is still good for after a logout that the install did not answer: an install that was removed answers none, and its tokens went with it. */
 const STILL_LIVE = "if the install still stands, the token may still be live: revoke it on the install's dashboard";
 
 /** What a change of the logins still needs on an install that did not carry it to the login page by itself: that page keeps a list of its own. */
 const LOGINS_STEP = "one more step: on the dashboard's Domain screen, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
+
+/** What a dry run of a change of the logins says of that step: whether it is needed shows only once the change is stored. */
+const LOGINS_MAY_STEP = "a run may need one more step, which it names: a Repair on the dashboard's Domain screen, so the login page lets a new email in";
 
 /** What follows the two versions of an install and a command that differ, in the words the list of problems has for them. */
 const TWO_VERSIONS = "the install and this poplin are of two versions; update the older one";
@@ -79,6 +82,22 @@ function isRevoked(failure: Failure | undefined): boolean {
 }
 
 /**
+ * Say what a logout would do: the install is asked who the token is, which tells a live token from a dead one, and nothing is revoked or forgotten.
+ *
+ * @returns what a logout would say, or why the install gave no answer to go by
+ */
+async function rehearseLogout({ client, server, source }: Session): Promise<Outcome> {
+  const answered = await client.call(WHOAMI_ANSWER, (api) => api.whoami.$get());
+  const failure = answered.ok ? undefined : answered.failure;
+  if (failure !== undefined && !isRevoked(failure)) return failed(failure);
+
+  const local = source === "file" ? "the saved login would be removed from this machine" : "POPLIN_SERVER and POPLIN_TOKEN would still be set in this shell";
+  const lines = [{ tone: "done", text: `would log out of ${server}` } as const, failure === undefined ? "the token would be revoked" : "the token is dead already", local, REHEARSED];
+
+  return { ok: true, value: { dry_run: true, server, revoked: failure === undefined }, lines };
+}
+
+/**
  * Revoke the token on the install, then forget the saved login. The saved login goes even when the install gave no answer.
  *
  * A login from the environment has no file of its own, so the saved login of this machine, which may be another one, is left alone.
@@ -106,7 +125,31 @@ function oneSetting(key: SettingKey, values: v.InferOutput<typeof SETTINGS_ANSWE
   return { key, value: values[key] };
 }
 
-async function config(action: ConfigAction, { client }: Session): Promise<Outcome> {
+/** Give one setting a value, or with a dry run ask the install what the setting would be. */
+async function changeSetting(action: Extract<ConfigAction, { readonly kind: "change" }>, { client }: Session): Promise<Outcome> {
+  const value = readSetting(action.key, action.value);
+  if (value === undefined) return { ok: false, problem: problem("bad_argument", action.key) };
+
+  const query = action.dryRun ? { dry_run: "true" } : {};
+  const changed = await client.call(SETTINGS_ANSWER, (api) => api.config.$patch({ query, json: { [action.key]: value } }));
+  if (!changed.ok) return failed(changed.failure, action.dryRun ? "reads" : "changes");
+
+  const shown = [action.key, settingsToText(changed.value.values)[action.key]];
+  const lines = action.dryRun ? [...columns([["would set", ...shown]]), REHEARSED] : columns([shown]);
+  const answer = action.dryRun ? { dry_run: true, ...oneSetting(action.key, changed.value.values) } : oneSetting(action.key, changed.value.values);
+  if (action.key !== "logins") return { ok: true, value: answer, lines, notes: [] };
+
+  if (action.dryRun) return { ok: true, value: answer, lines, notes: [LOGINS_MAY_STEP] };
+
+  // The install says whether the change still waits for a repair. One that does not say, or that remembers no run of its domain to say it by, is taken to wait.
+  const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
+  const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
+
+  return { ok: true, value: answer, lines, notes: settled ? [] : [LOGINS_STEP] };
+}
+
+async function config(action: ConfigAction, session: Session): Promise<Outcome> {
+  const { client } = session;
   if (action.kind !== "change") {
     const read = await client.call(SETTINGS_ANSWER, (api) => api.config.$get());
     if (!read.ok) return failed(read.failure);
@@ -117,21 +160,7 @@ async function config(action: ConfigAction, { client }: Session): Promise<Outcom
     return { ok: true, value: read.value, lines: columns(Object.entries(texts)) };
   }
 
-  const value = readSetting(action.key, action.value);
-  if (value === undefined) return { ok: false, problem: problem("bad_argument", action.key) };
-
-  const changed = await client.call(SETTINGS_ANSWER, (api) => api.config.$patch({ json: { [action.key]: value } }));
-  if (!changed.ok) return failed(changed.failure, "changes");
-
-  const lines = columns([[action.key, settingsToText(changed.value.values)[action.key]]]);
-  const answer = oneSetting(action.key, changed.value.values);
-  if (action.key !== "logins") return { ok: true, value: answer, lines, notes: [] };
-
-  // The install says whether the change still waits for a repair. One that does not say, or that remembers no run of its domain to say it by, is taken to wait.
-  const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
-  const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
-
-  return { ok: true, value: answer, lines, notes: settled ? [] : [LOGINS_STEP] };
+  return changeSetting(action, session);
 }
 
 /** A check that reads something an admin alone may read: a publisher's refusal is a finding, not a failure. */
@@ -237,7 +266,7 @@ export async function runInstallCommand(request: InstallRequest, session: Sessio
     case "whoami":
       return whoami(session);
     case "logout":
-      return logout(session);
+      return request.dryRun ? rehearseLogout(session) : logout(session);
     case "doctor":
       return doctor(session);
     case "config":

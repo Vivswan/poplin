@@ -6,7 +6,7 @@ import { importSettings } from "../../src/actions/import-settings";
 import type { Login } from "../../src/auth/logins";
 import type { Actor } from "../../src/auth/scopes";
 import type { TokenId } from "../../src/auth/tokens";
-import { ADMIN, makeWorld } from "./support/actions-fixture";
+import { ADMIN, makeWorld, rehearsedThenRun } from "./support/actions-fixture";
 
 const TOKEN: Actor = { scope: "admin", holder: "00000000000000cc" as TokenId };
 const ADA = "ada@example.com" as Login;
@@ -85,5 +85,34 @@ describe("a change of the logins", () => {
 
     expect([refused, untouched.ok && [untouched.values.logins, untouched.values.trash_days]]).toEqual([{ ok: false, code: "no_working_login", about: "logins" }, [[ADA], 7]]);
     expect(taken).toMatchObject({ ok: true, values: { logins: [ADA], trash_days: 30 } });
+  });
+});
+
+describe("a change of the settings with dry_run", () => {
+  // Drift: the settings are patched by the database, and a dry run lays the change over them itself; one that laid it otherwise, or let through a pair or logins the run refuses, would show settings no run stores.
+  test("a dry run answers the settings or the refusal the run after it answers, and writes no row", async () => {
+    const world = await makeWorld({ logins: [ADA, BO] });
+    const asked: readonly unknown[] = [
+      { trash_days: 9, versions_kept: 5 },
+      { default_expires: { count: 12, unit: "h" } },
+      { default_expires: "never", max_sites: 3 },
+      { update_check: false },
+      { auto_update: false, update_check: false },
+      { auto_update: true },
+      { logins: [BO, CY] },
+      { logins: [CY] },
+      { trash_days: 9 },
+      { trash_days: undefined, versions_kept: 4 },
+      { trash_days: 0 },
+      {},
+    ];
+    const steps = [];
+    for (const changes of asked) steps.push(await rehearsedThenRun(world, (how) => changeConfig(world.install, ADMIN, changes, how)));
+    const asToken = await rehearsedThenRun(world, (how) => changeConfig(world.install, { scope: "publisher", holder: TOKEN.holder }, { trash_days: 3 }, how));
+
+    expect([...steps, asToken].map((step) => [step.written, step.rehearsal])).toEqual([...steps, asToken].map((step) => [0, step.run]));
+    expect([...steps, asToken].map((step) => (step.run.ok ? "stored" : step.run.code))).toEqual(
+      ["stored", "stored", "stored", "stored", "stored", "needs_update_check", "no_working_login", "no_working_login", "stored", "stored", "bad_argument", "bad_argument", "not_allowed"],
+    );
   });
 });

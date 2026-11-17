@@ -63,6 +63,7 @@ async function uploadOf(response: Pick<Response, "json">): Promise<string> {
 function pathsOf({ site, upload, trash, limit, noTrash }: Named): Readonly<Record<keyof ExtractSchema<Api>, readonly string[]>> {
   const one = { param: { site }, query: {} };
   const held = { param: { upload }, query: {} };
+  const dry = { ...one, query: { dry_run: "true" } };
   const file = { version: "1", path: PAGE.path };
 
   return {
@@ -73,11 +74,11 @@ function pathsOf({ site, upload, trash, limit, noTrash }: Named): Readonly<Recor
     "/api/logins": [ROUTES.logins.$path()],
     "/api/logins/token": [ROUTES.logins.token.$path()],
     "/api/sites": [ROUTES.sites.$path({ query: { trash, limit } })],
-    "/api/sites/:site": [ROUTES.sites[":site"].$path(one), ROUTES.sites[":site"].$path({ ...one, query: { no_trash: noTrash } })],
-    "/api/sites/:site/rollback": [ROUTES.sites[":site"].rollback.$path(one)],
-    "/api/sites/:site/new-link": [ROUTES.sites[":site"]["new-link"].$path(one)],
-    "/api/sites/:site/restore": [ROUTES.sites[":site"].restore.$path(one)],
-    "/api/sites/:site/duplicate": [ROUTES.sites[":site"].duplicate.$path(one)],
+    "/api/sites/:site": [ROUTES.sites[":site"].$path(one), ROUTES.sites[":site"].$path({ ...one, query: { no_trash: noTrash } }), ROUTES.sites[":site"].$path(dry)],
+    "/api/sites/:site/rollback": [ROUTES.sites[":site"].rollback.$path(one), ROUTES.sites[":site"].rollback.$path(dry)],
+    "/api/sites/:site/new-link": [ROUTES.sites[":site"]["new-link"].$path(one), ROUTES.sites[":site"]["new-link"].$path(dry)],
+    "/api/sites/:site/restore": [ROUTES.sites[":site"].restore.$path(one), ROUTES.sites[":site"].restore.$path(dry)],
+    "/api/sites/:site/duplicate": [ROUTES.sites[":site"].duplicate.$path(one), ROUTES.sites[":site"].duplicate.$path(dry)],
     "/api/uploads": [ROUTES.uploads.$path()],
     "/api/uploads/:upload": [ROUTES.uploads[":upload"].$path(held)],
     "/api/uploads/:upload/tickets": [ROUTES.uploads[":upload"].tickets.$path(held)],
@@ -90,7 +91,7 @@ function pathsOf({ site, upload, trash, limit, noTrash }: Named): Readonly<Recor
     "/api/export/sites/:site/file": [ROUTES.export.sites[":site"].file.$path({ ...one, query: file })],
     "/api/import/settings": [ROUTES.import.settings.$path()],
     "/api/import/sites": [ROUTES.import.sites.$path()],
-    "/api/config": [ROUTES.config.$path()],
+    "/api/config": [ROUTES.config.$path(), ROUTES.config.$path({ query: dry.query })],
     "/api/sessions": [ROUTES.sessions.$path()],
     "/api/audit": [ROUTES.audit.$path({ query: { limit, site } })],
     "/api/domain": [ROUTES.domain.$path()],

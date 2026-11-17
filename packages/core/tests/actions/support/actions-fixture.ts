@@ -41,13 +41,21 @@ interface Faults {
   failRemoval?: boolean;
 }
 
-/** One install, with what a test reads back from it. */
+/** One install, with what a test reads back from it: `written` is how many rows the database has inserted, changed, and removed since it was opened. */
 export interface World {
   readonly install: Install;
   readonly faults: Faults;
   readonly clock: { now: number };
   readonly keys: () => Promise<string[]>;
   readonly audit: () => Promise<unknown[]>;
+  readonly written: () => Promise<number>;
+}
+
+/** What an action answered as a dry run, how many rows that dry run wrote, and what the run after it answered. */
+export interface Rehearsed<Answer> {
+  readonly rehearsal: Answer;
+  readonly written: number;
+  readonly run: Answer;
 }
 
 /** The SHA-256 a file that holds `text` declares. */
@@ -117,7 +125,21 @@ export async function makeWorld(overrides: Partial<SettingValues> = {}): Promise
     keys: async () => (await list({ prefix: "" })).objects.map((object) => object.key),
     // The first entry is the settings of the new install.
     audit: async () => (await driver.batch([{ sql: "SELECT action FROM audit WHERE seq > 1 ORDER BY seq", params: [] }]))[0]?.rows.map((row) => row.action) ?? [],
+    written: async () => Number((await driver.batch([{ sql: "SELECT total_changes() AS rows", params: [] }]))[0]?.rows[0]?.rows),
   };
+}
+
+/**
+ * Ask an action for a dry run, and then run it with the same request.
+ *
+ * @param act - calls the action, with `dry_run` or with nothing
+ */
+export async function rehearsedThenRun<Answer>(world: World, act: (how: { readonly dry_run?: true }) => Promise<Answer>): Promise<Rehearsed<Answer>> {
+  const before = await world.written();
+  const rehearsal = await act({ dry_run: true });
+  const written = (await world.written()) - before;
+
+  return { rehearsal, written, run: await act({}) };
 }
 
 /** Publish a new site and answer its id; the test fails here when the publish is refused. */

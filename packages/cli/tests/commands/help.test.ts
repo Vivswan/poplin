@@ -57,6 +57,8 @@ const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "set --public-name": ["--public"],
   "publish --public-name": ["--public"],
   "set --json": ["--private"],
+  "set --dry-run": ["--private"],
+  "config --dry-run": ["versions_kept", "10"],
   "set --server": ["--private"],
   "import --logins": ["--settings"],
   "doctor --dry-run": ["--repair"],

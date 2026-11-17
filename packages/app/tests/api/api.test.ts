@@ -636,6 +636,64 @@ describe("createApi", () => {
     expect([refused.status, part(refused, "error").code, install.users.pushed]).toEqual([403, "not_allowed", []]);
   });
 
+  // Drift: a dry run is asked before a change nothing undoes. A route that dropped `dry_run` on its way to the action would make the change, and a change of the settings that is not stored would still be carried to the provider.
+  test("every route that changes a site or the settings takes dry_run: it answers what the run would, changes nothing, and carries nothing outside", async () => {
+    const install = await openApi();
+    install.users.takes = true;
+    const site = await published(install, { name: "report" });
+    await published(install, { site }, { "index.html": "<h1>second</h1>" });
+    const [owner, admin] = [install.as(install.tokens.owner), install.as(install.tokens.admin)];
+    const query = { dry_run: "true" };
+    const settings = { logins: ["ada@example.com" as Login, "bo@example.com" as Login], outside_pages: "allowed" as const, provider_logs: false };
+    const before = [await stateOf(install), (await answered(admin.config.$get({ query: {} }))).body];
+
+    const rehearsed = [
+      await answered(owner.sites[":site"].$patch({ param: { site }, query, json: { access: "public", name: "renamed" } })),
+      await answered(owner.sites[":site"].rollback.$post({ param: { site }, query, json: {} })),
+      await answered(owner.sites[":site"]["new-link"].$post({ param: { site }, query })),
+      await answered(owner.sites[":site"].duplicate.$post({ param: { site }, query, json: { name: "report-draft" } })),
+      await answered(owner.sites[":site"].$delete({ param: { site }, query })),
+      await answered(owner.sites[":site"].$delete({ param: { site }, query: { ...query, no_trash: "true" } })),
+      await answered(owner.sites[":site"].restore.$post({ param: { site }, query })),
+      await answered(admin.config.$patch({ query, json: settings })),
+    ];
+    const refused = [
+      await answered(owner.sites[":site"].restore.$post({ param: { site }, query: { dry_run: "yes" } })),
+      await answered(install.api.fetch(raw(install, `/api/sites/${site}?dry_run=true`, { headers: { Authorization: `Bearer ${install.tokens.owner}` } }))),
+    ];
+
+    expect(rehearsed.map((answer) => [answer.status, part(answer, "site")?.label ?? part(answer, "error")?.code ?? Object.keys(answer.body as object)])).toEqual([
+      [200, `renamed--${site}`],
+      [200, `report--${site}`],
+      [200, `report--${site}`],
+      [200, ["before", "site", "copy", "name"]],
+      [200, `report--${site}`],
+      [200, ["before", "site", "left"]],
+      [409, "not_in_trash"],
+      [200, ["values"]],
+    ]);
+    expect(part(rehearsed[7] as Answered, "values")).toMatchObject(settings);
+    expect(refused.map((answer) => [answer.status, part(answer, "error").about])).toEqual([
+      [400, "dry_run"],
+      [400, "query"],
+    ]);
+    expect([await stateOf(install), (await answered(admin.config.$get({ query: {} }))).body]).toEqual(before);
+    expect([install.users.pushed, install.rules.pushed, install.logs.pushed]).toEqual([[], [], []]);
+  });
+
+  // Drift: a copy lists its source before it is recorded, and each listing is a write of the day. A dry run that left the listing out passed a copy the day had no room for.
+  test.each([3, 4, 5, 6, 7, 8, 9])("with %d writes of the store a day, a dry run of a copy is answered the status the copy after it is", async (writes) => {
+    const install = await openApi();
+    const site = await published(install, { name: "report" });
+    await answered(install.as(install.tokens.admin).config.$patch({ query: {}, json: { max_storage_writes_per_day: writes } }));
+    const copy = install.as(install.tokens.owner).sites[":site"].duplicate;
+
+    const rehearsed = await answered(copy.$post({ param: { site }, query: { dry_run: "true" }, json: {} }));
+    const run = await answered(copy.$post({ param: { site }, query: {}, json: {} }));
+
+    expect([rehearsed.status, part(rehearsed, "error")?.code]).toEqual([run.status, part(run, "error")?.code]);
+  });
+
   // Drift: a host ends a request past 50 calls to the database, and the route reads the token first, in a request that may also start the host. A copy told nothing of that passes 50 on a host that just started.
   test.each([
     [1, 1],

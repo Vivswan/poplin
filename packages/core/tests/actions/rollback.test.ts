@@ -4,7 +4,7 @@ import { deleteSite } from "../../src/actions/delete";
 import { publishSite } from "../../src/actions/publish";
 import { rollbackSite } from "../../src/actions/rollback";
 import { getSite } from "../../src/actions/show";
-import { made, makeWorld, OWNER, pages } from "./support/actions-fixture";
+import { made, makeWorld, OWNER, pages, rehearsedThenRun } from "./support/actions-fixture";
 
 describe("rollbackSite", () => {
   // Drift: rollback is the undo of a bad publish; one that moved to a version whose files were dropped would serve nothing.
@@ -51,5 +51,25 @@ describe("rollbackSite", () => {
 
     expect(await rollbackSite(world.install, OWNER, { site: id })).toEqual({ ok: false, code: "in_trash" });
     expect(await getSite(world.install, OWNER, id)).toMatchObject({ site: { live_version: 2 } });
+  });
+});
+
+describe("rollbackSite with dry_run", () => {
+  // Drift: a dry run picks the version a rollback would go to beside the statement that moves it; one that picked another would name a version the run does not make live.
+  test("a dry run answers the version or the refusal the run after it answers, and writes no row", async () => {
+    const world = await makeWorld();
+    const site = await made(world, OWNER, "report");
+    await publishSite(world.install, OWNER, { files: pages("report v2"), site });
+    await publishSite(world.install, OWNER, { files: pages("report v3"), site });
+    world.clock.now += 1000;
+    const asked = [{}, {}, {}, { version: 3 }, { version: 3 }, { version: 4 }, { version: 1.5 }, { version: 1 }];
+    const steps = [];
+    for (const request of asked) steps.push(await rehearsedThenRun(world, (how) => rollbackSite(world.install, OWNER, { site, ...request, ...how })));
+
+    await deleteSite(world.install, OWNER, { site });
+    steps.push(await rehearsedThenRun(world, (how) => rollbackSite(world.install, OWNER, { site, ...how })));
+
+    expect(steps.map((step) => [step.written, step.rehearsal])).toEqual(steps.map((step) => [0, step.run]));
+    expect(steps.map((step) => (step.run.ok ? step.run.site.live_version : step.run.code))).toEqual([2, 1, "no_such_version", 3, 3, "no_such_version", "bad_argument", 1, "in_trash"]);
   });
 });

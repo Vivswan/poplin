@@ -21,6 +21,9 @@ const DONE_WIDTH = 8;
 /** Who can open a site, by its access. */
 const ACCESS_WORDS = { private: "only your users can open it", unlisted: "anyone with the link can open it", public: "anyone can open it" } as const;
 
+/** The last line of a dry run that asked the install what a change would come to. */
+export const REHEARSED = "nothing was changed: --dry-run asked the install what this would come to";
+
 /** One row of what a command did: what kind of line it is, the word of what was done, and what it was done to. */
 export interface DoneRow {
   /** What kind of line the row is. */
@@ -156,21 +159,23 @@ export function siteLines(done: string, site: SiteObject, facts: readonly string
  * The row for a change of access that moved a site to another address: a private site's address carries `-p-`, every other `-u-`.
  *
  * @param before - the site as the action found it, `null` for a site the action made
+ * @param moved - the word of the row: what a dry run says the site would do
  * @returns one row with the old address, or none when the site kept its address
  */
-export function addressChange(before: SiteObject | null, site: SiteObject): DoneRow[] {
+export function addressChange(before: SiteObject | null, site: SiteObject, moved = "moved"): DoneRow[] {
   if (before === null || before.id !== site.id || before.addresses.site === site.addresses.site) return [];
 
-  return [{ tone: "note", done: "moved", what: `from ${before.addresses.site}` }];
+  return [{ tone: "note", done: moved, what: `from ${before.addresses.site}` }];
 }
 
 /**
  * The note for a search-engine switch that was turned on for a site that is not public.
  *
+ * @param stored - what became of the setting: a dry run says what would
  * @returns one note, or none when the switch was not turned on or the site is public
  */
-export function searchNotes(changes: { readonly search_engines?: boolean | undefined }, site: SiteObject): string[] {
+export function searchNotes(changes: { readonly search_engines?: boolean | undefined }, site: SiteObject, stored = "is stored"): string[] {
   if (changes.search_engines !== true || site.access === "public") return [];
 
-  return ["search engines list a site only once it is public; the setting is stored"];
+  return [`search engines list a site only once it is public; the setting ${stored}`];
 }
