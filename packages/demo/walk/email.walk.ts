@@ -1,4 +1,4 @@
-// The email at the foot of the side menu: blurred where it rests, and sharp only under a pointer, with the focus the keys give it, or after a tap on a phone.
+// The email at the foot of the side menu, which is the button of the account's menu: blurred where it rests, and sharp only under a pointer, with the focus the keys give it, or after a tap on a phone.
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
@@ -13,9 +13,14 @@ const SCREENS = [
 /** How a blurred email is drawn. A sharp one has no filter. */
 const BLURRED = /^blur\(/u;
 
-/** The email that is in sight: the side menu's, or the one in a phone's sheet. Its hint holds it whole. */
-function email(page: Page): Locator {
+/** The button the email is, where it is in sight: the side menu's, or the one in a phone's sheet. Its hint holds the email whole. */
+function account(page: Page): Locator {
   return page.getByTitle(/@/u).filter({ visible: true });
+}
+
+/** The email's own words in its button, which are what is blurred. */
+function email(page: Page): Locator {
+  return account(page).locator("span").first();
 }
 
 for (const size of SCREENS) {
@@ -34,10 +39,10 @@ for (const size of SCREENS) {
       await expect(shown).toHaveCSS("filter", BLURRED);
 
       // The keys reach it: one step back from it and one forward again is a focus the keys gave.
-      await shown.focus();
+      await account(page).focus();
       await page.keyboard.press("Shift+Tab");
       await page.keyboard.press("Tab");
-      await expect(shown).toBeFocused();
+      await expect(account(page)).toBeFocused();
       await expect(shown).toHaveCSS("filter", "none");
       await page.keyboard.press("Shift+Tab");
       await expect(shown).toHaveCSS("filter", BLURRED);
@@ -55,7 +60,7 @@ test.describe("on a phone, the email at the foot of the sections", () => {
     const shown = email(page);
     await expect(shown).toHaveCSS("filter", BLURRED);
 
-    await shown.tap();
+    await account(page).tap();
     await expect(shown).toHaveCSS("filter", "none");
   });
 });

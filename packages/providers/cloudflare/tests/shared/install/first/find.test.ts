@@ -57,10 +57,10 @@ interface Sought {
   readonly slept: readonly number[];
 }
 
-/** Find with a token. */
-async function found(account: Account, where: Where, token = TOKEN): Promise<Sought> {
+/** Find with a token, as a look that reads the buckets or as a repair's, which reads none. */
+async function found(account: Account, where: Where, token = TOKEN, buckets = true): Promise<Sought> {
   const world = await worldOf(account);
-  const state = await findInstall(token as Token, where, world.reach, { lacks: lacksRight, nameOf: rightFor });
+  const state = await findInstall(token as Token, where, world.reach, { lacks: lacksRight, nameOf: rightFor, buckets });
   const { place: _, ...shown } = { place: undefined, ...state };
 
   return { found: state, shown, calls: world.asked.map((entry) => `${entry.method} ${entry.path.split("?")[0]}`), slept: world.slept };
@@ -162,7 +162,7 @@ describe("the states of an account", () => {
 
   // Drift: the reads again are for a Worker that reads as not poplin's alone, and they end. More of them make every refusal of a stranger's Worker slower, and none on a whole install keeps each command as fast as it was.
   test("a Worker that is not poplin's is held after three more reads over 4.5 seconds, one that is gone by then is no Worker, a wait that is stopped stops the find, and a whole install is read once with no wait", async () => {
-    const rights = { lacks: lacksRight, nameOf: rightFor };
+    const rights = { lacks: lacksRight, nameOf: rightFor, buckets: true };
     const theirs = await found(fresh({ noWorker: false, bindings: [] }), NONE);
     const gone = fresh({ noWorker: false, bindings: [] });
     const world = await worldOf(gone);
@@ -193,6 +193,34 @@ describe("the states of an account", () => {
     expect([(await found(fresh(), NONE)).calls, (await found(fresh(), DOMAIN)).calls]).toEqual([
       ["GET /accounts", "GET /accounts", ...reads],
       ["GET /zones", "GET /zones", ...reads],
+    ]);
+  });
+});
+
+describe("a repair's look, with a token that has no storage permission", () => {
+  const storage = { refuse: `GET /accounts/${ACCOUNT}/r2/buckets` };
+  const reads = [READ_WORKER, `GET /accounts/${ACCOUNT}/d1/database`, `GET /accounts/${ACCOUNT}/access/apps`];
+
+  // Drift: a repair's token is asked for no storage permission. A look that still listed the buckets answers such a token "add a permission" for an install that only `poplin install` finishes, and a repair never says so.
+  test.each([
+    ["under a domain", DOMAIN, STARTED_FOR.domain, ["GET /zones", "GET /zones"]],
+    ["without a domain", NONE, STARTED_FOR.none, ["GET /accounts", "GET /accounts"]],
+  ] as const)("finds an install that was started %s in five calls, none of them to the buckets, where an install's look with that token is blocked", async (_, where, started, first) => {
+    const account = (): Account => fresh({ noWorker: false, bindings: [...MARKS, started], ...storage });
+    const [repair, install] = [await found(account(), where, TOKEN, false), await found(account(), where)];
+
+    expect([repair.shown, repair.calls]).toEqual([{ state: "started", notes: [] }, [...first, ...reads]]);
+    expect(install.found).toMatchObject({ state: "blocked", blocked: [{ what: "right_lacking", right: "Workers R2 Storage: Edit" }] });
+  });
+
+  // Drift: with no Worker, the database alone says something was left: a bucket of the name is not looked for, and its absence from the words must not read as a block.
+  test("finds an account with no Worker as holding nothing, or a database that was left, and never as blocked", async () => {
+    const [nothing, left] = [await found(fresh(storage), NONE, TOKEN, false), await found(fresh({ ...storage, databases: [{ uuid: "database-9", name: "poplin" }], buckets: [{ name: "poplin-sites" }] }), NONE, TOKEN, false)];
+
+    expect([nothing.shown, left.shown.state, left.shown.words]).toEqual([
+      { state: "none", notes: [] },
+      "leftover",
+      "There is a database named poplin in this account, and no poplin runs. It may hold an earlier install's sites and records. It is matched by its name alone.",
     ]);
   });
 });

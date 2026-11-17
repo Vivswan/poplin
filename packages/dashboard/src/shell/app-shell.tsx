@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { cn } from "cn";
 import {
   ActivityIcon,
+  ChevronsUpDownIcon,
   GaugeIcon,
   GlobeIcon,
   KeyRoundIcon,
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
@@ -50,8 +52,9 @@ const NAME = "poplin";
 /** The look of the way past the sections: over the page's corner, and in sight only while it holds the focus after a key. */
 const SKIP_LOOK = "pointer-events-none absolute top-2 left-2 z-50 opacity-0 focus-visible:pointer-events-auto focus-visible:opacity-100";
 
-/** The look of the email where it rests: blurred, and sharp under a pointer, with the focus the keys give it, and with the focus a tap gives it where a finger is the pointer. */
-const EMAIL_AT_REST = "blur-xs transition-[filter] hover:blur-none focus-visible:blur-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:focus:blur-none";
+/** The look of the email where it rests: blurred, and sharp while a pointer is over its button, while the button holds the focus the keys give it or the one a tap gives it where a finger is the pointer, and while its menu is open. */
+const EMAIL_AT_REST =
+  "blur-xs transition-[filter] group-hover/account:blur-none group-focus-visible/account:blur-none group-aria-expanded/account:blur-none pointer-coarse:group-focus/account:blur-none";
 
 /** What the way out of this browser's login is called. */
 const SIGN_OUT = "Sign out";
@@ -110,34 +113,30 @@ function SectionLink({ section, current }: { readonly section: (typeof SECTIONS)
 }
 
 /**
- * The email of who is logged in, whole: where one line is too short for it, it goes on at the "@" on a second line. What follows the "@" is quieter either way.
+ * Who is logged in: the email, whole, as the button of a small menu that opens over it and holds the way out of this browser's login.
+ * Where one line is too short for the email, it goes on at the "@" on a second line. What follows the "@" is quieter either way.
  *
- * It is blurred where it rests, so a shared screen or a screenshot does not show it. A pointer over it, the focus the keys give it, or a tap on a phone shows it sharp. A screen reader reads it either way.
+ * The email is blurred where it rests, so a shared screen or a screenshot does not show it, and sharp as `EMAIL_AT_REST` says. A screen reader reads it either way.
+ * The way out is a link to the console's own path that sends the browser on to where the provider ends the login. It asks the server for the page, as no screen of the dashboard answers there.
  */
-function Email({ className }: { readonly className?: string }): ReactNode {
+function Account(): ReactNode {
   const at = Math.max(BOOT.email.lastIndexOf("@"), 0);
 
   return (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: the keys must reach the email to show it sharp, and it does nothing a button does.
-    <span title={BOOT.email} tabIndex={0} className={cn("flex min-w-0 flex-wrap rounded-sm text-xs leading-4 font-normal outline-none", EMAIL_AT_REST, className)}>
-      <span className="max-w-full break-all text-foreground">{BOOT.email.slice(0, at)}</span>
-      <span className="max-w-full break-all text-muted-foreground">{BOOT.email.slice(at)}</span>
-    </span>
-  );
-}
-
-/**
- * Who is logged in, and beside the email the way out of this browser's login: a link to the console's own path that sends the browser on to where the provider ends the login.
- * It asks the server for the page, as no screen of the dashboard answers there.
- */
-function Account(): ReactNode {
-  return (
-    <div className="flex items-start gap-1">
-      <Email className="px-2.5 py-1" />
-      <Button variant="link" size="xs" nativeButton={false} className="mt-1 mr-2.5 ml-auto h-4 px-0 text-muted-foreground" render={<Link to={OUT_PATH} reloadDocument {...NO_OWN_MARK} />}>
-        {SIGN_OUT}
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" title={BOOT.email} className="group/account h-auto w-full justify-start gap-2 px-2.5 py-1 text-left text-xs leading-4 font-normal whitespace-normal pointer-coarse:min-h-10" />}
+      >
+        <span className={cn("flex min-w-0 flex-1 flex-wrap", EMAIL_AT_REST)}>
+          <span className="max-w-full break-all text-foreground">{BOOT.email.slice(0, at)}</span>
+          <span className="max-w-full break-all text-muted-foreground">{BOOT.email.slice(at)}</span>
+        </span>
+        <ChevronsUpDownIcon className="text-muted-foreground" aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-(--anchor-width) min-w-40">
+        <DropdownMenuItem render={<Link to={OUT_PATH} reloadDocument {...NO_OWN_MARK} />}>{SIGN_OUT}</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

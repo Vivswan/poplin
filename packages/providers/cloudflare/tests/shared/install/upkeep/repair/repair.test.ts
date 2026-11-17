@@ -100,7 +100,7 @@ function letThrough(account: Account): string[] {
 async function wholeInstall(kind: keyof typeof KINDS, changes: Partial<Account> = {}, stored: Login | "nothing" = OWNER): Promise<Omit<Account, "store"> & { store: Store }> {
   const account: Account = { ...emptyAccount(), bindings: [], noWorker: true, ...changes };
   const world = await worldOf(account);
-  const found = await installer.find(KEY, KINDS[kind].where, world.reach);
+  const found = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
   if (found.state !== "none") throw new Error(`the test's account was not empty: ${found.state}`);
 
   await installer.install(found, KINDS[kind].where, OWNER, APPLY, world.reach, () => undefined);
@@ -119,7 +119,7 @@ interface Outcome {
 /** Find the install, then repair it, in one stand-in world. */
 async function repaired(account: Account, kind: keyof typeof KINDS, mend: Partial<Mend> = {}, where: Where = KINDS[kind].where): Promise<Outcome> {
   const world = await worldOf(account);
-  const found = await installer.find(KEY, where, world.reach);
+  const found = await installer.find(KEY, where, world.reach, "repair");
   if (found.state !== "whole") throw new Error(`no whole install to repair: ${found.state}`);
 
   const sought = world.asked.length;

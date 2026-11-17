@@ -575,7 +575,7 @@ describe("on a terminal", () => {
 
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual(["Which account? 1) First  2) Second", "Which account? 1) First  2) Second"]);
-    expect(account.finds).toEqual([{ kind: "none" }, { kind: "none", account: "second" }]);
+    expect([account.finds, account.looks]).toEqual([[{ kind: "none" }, { kind: "none", account: "second" }], ["install", "install"]]);
     expect(account.runs[0]?.where).toEqual({ kind: "none", account: "second" });
   });
 

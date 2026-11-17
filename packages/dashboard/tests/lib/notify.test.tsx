@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { sayDone } from "@/lib/notify";
+import { sayDone, sayRefused, sayWorking } from "@/lib/notify";
 
 /** How long a line may take to leave after its button, in milliseconds: the library takes it away a moment after it is dismissed. */
 const LEAVES_WITHIN_MS = 3000;
@@ -71,5 +71,33 @@ describe("a line with a button", () => {
       expect(closed).toEqual([]);
     },
     LEAVES_WITHIN_MS * 3,
+  );
+});
+
+describe("the lines on show", () => {
+  // Drift: a wide screen would stack its results again, up to as many as the library shows, each over more of the header and the controls under it; or a line of work would leave with the results, and its button is the one way to stop the work.
+  test(
+    "are the newest result alone, with a button or without, and beside it a line of work that goes on",
+    async () => {
+      render(
+        <ThemeProvider storageKey="test.theme">
+          <TooltipProvider>
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>,
+      );
+      const shown = (): (string | null)[] => [...document.querySelectorAll("[data-sonner-toast]:not([data-removed='true']) [data-title]")].map((words) => words.textContent);
+      const say = async (line: () => void, then: readonly string[]): Promise<void> => {
+        await act(async () => line());
+        await waitFor(() => expect(shown().sort()).toEqual([...then].sort()), { timeout: LEAVES_WITHIN_MS });
+      };
+
+      await say(() => sayWorking("Copying.", { label: "Stop", run: () => undefined, id: "copy" }), ["Copying."]);
+      await say(() => sayDone("First moved to the trash.", { run: () => undefined }), ["Copying.", "First moved to the trash."]);
+      await say(() => sayDone("Second moved to the trash.", { run: () => undefined }), ["Copying.", "Second moved to the trash."]);
+      await say(() => sayDone("Saved."), ["Copying.", "Saved."]);
+      await say(() => sayRefused("That name is taken."), ["Copying.", "That name is taken."]);
+    },
+    LEAVES_WITHIN_MS * 5,
   );
 });

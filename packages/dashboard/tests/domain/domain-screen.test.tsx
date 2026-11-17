@@ -13,6 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { CHECK_FRESH_MS } from "@/domain/domain-queries";
 import { DomainScreen } from "@/domain/domain-screen";
 import { BOOT } from "@/lib/boot";
+import { FRAME_KEY } from "@/lib/frame";
 
 import { drawAt } from "../lib/support/router";
 
@@ -34,6 +35,9 @@ const FOUND = { ok: true, rows: ROWS.found, steps: [], summary: { line: "1 to re
 /** The refusal of a check the provider did not answer. */
 const UNREACHED = { ok: false, code: "unreachable", about: null, sentence: "No answer from the provider. Try again." };
 
+/** What the frame says the problems of the domain ask for, until a test sets it: nothing. */
+const frame: { asks: { line: string; tone: string } | null } = { asks: null };
+
 /** The body of every check the screen sent. */
 const checks: unknown[] = [];
 
@@ -50,19 +54,19 @@ function lastOf(minutes: number): Record<string, unknown> {
  *
  * @param alone - whether a check needs no token
  * @param last - the run the install remembers, or `null`
- * @param answers - whether the provider answers a check, and whether a check waits until a test lets it through
+ * @param answers - whether the provider answers a check, whether a check waits until a test lets it through, and what a check finds where it is not the one missing piece
  */
-function serve(alone: boolean, last: Record<string, unknown> | null, answers: { now: boolean; holds?: boolean } = { now: true }): void {
+function serve(alone: boolean, last: Record<string, unknown> | null, answers: { now: boolean; holds?: boolean; found?: Record<string, unknown> } = { now: true }): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
-    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
+    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: frame.asks });
 
     if (init?.method !== "POST") return Response.json({ ok: true, form: FORM, words: { thing: "the domain", line: null }, checks_alone: alone, last });
 
     checks.push(JSON.parse(String(init.body)));
     if (answers.holds === true) await new Promise<void>((resolve) => held.push(resolve));
 
-    return answers.now ? Response.json(FOUND) : Response.json(UNREACHED, { status: 502 });
+    return answers.now ? Response.json(answers.found ?? FOUND) : Response.json(UNREACHED, { status: 502 });
   }) as typeof fetch;
 }
 
@@ -111,6 +115,7 @@ afterEach(() => {
   globalThis.fetch = OWN_FETCH;
   checks.length = 0;
   held.length = 0;
+  frame.asks = null;
 });
 afterAll(async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -158,6 +163,42 @@ describe("on an install whose check needs no token", () => {
     await waitFor(() => expect(shown(page).line.startsWith("Users changed. Press Repair.")).toBe(true));
 
     expect(checks).toEqual([]);
+  });
+
+  // Drift: the problems of the domain are drawn under the line from the frame, which is read again as it grows old. A line taken from the run alone would say "Nothing to repair" over a problem that says "press Repair",
+  // one kept from the moment of the run would go on asking for a repair after the problem left, and one that let the frame's count stand over a run with work of its own would hide that work.
+  test("the line of a run with nothing left is the frame's count of the problems that ask for a repair, for as long as the frame holds them; a run with work left keeps its own line", async () => {
+    serve(true, lastOf(1));
+    const page = await drawn();
+    const lines = [shown(page).line];
+    const reread = async (asks: typeof frame.asks): Promise<void> => {
+      frame.asks = asks;
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: FRAME_KEY });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    await reread({ line: "3 to repair", tone: "bad" });
+    lines.push(shown(page).line);
+    await reread(null);
+    lines.push(shown(page).line);
+    await reread({ line: "3 to repair", tone: "bad" });
+    await press(page, "Check");
+    await waitFor(() => expect(shown(page).details).toEqual([ROWS.found[0].detail]));
+    lines.push(shown(page).line);
+
+    expect(lines.map((line) => line.slice(0, line.indexOf("repair") + "repair".length))).toEqual(["Nothing to repair", "3 to repair", "Nothing to repair", "1 to repair"]);
+  });
+
+  // Drift: a check that left nothing would be said in the words of the run alone, "Nothing to repair.", beside a line and a problem that ask for a repair.
+  test("a pressed check that leaves nothing, over problems that ask for a repair, is said in the line the screen then shows", async () => {
+    serve(true, lastOf(1), { now: true, found: { ok: true, rows: ROWS.remembered, steps: [], summary: { line: "Nothing to repair", tone: "good" } } });
+    frame.asks = { line: "1 to repair", tone: "bad" };
+    const page = await drawn();
+    await press(page, "Check");
+    await waitFor(() => page.getByText("1 to repair."));
+
+    expect([shown(page).line.startsWith("1 to repair"), page.queryByText("Nothing to repair.")]).toEqual([true, null]);
   });
 
   // Drift: Check would open the token dialog again, or a pressed check would be told to the server as one nobody pressed and leave no line in Activity.

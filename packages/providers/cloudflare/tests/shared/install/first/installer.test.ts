@@ -146,7 +146,7 @@ interface Outcome {
 async function installed(account: Account, kind: keyof typeof KINDS, run: Run, meets: Parameters<typeof worldOf>[1] = {}): Promise<Outcome> {
   const world = await worldOf(account, meets);
   const { where } = KINDS[kind];
-  const found = await installer.find(KEY, where, world.reach);
+  const found = await installer.find(KEY, where, world.reach, "install");
   const sought = world.asked.length;
   const said: string[] = [];
   const done = await installer.install(startable(found), where, LOGIN, run, world.reach, (row) => said.push(`${row.object} | ${row.state} | ${row.detail}`));
@@ -217,7 +217,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
 
     const world = await worldOf(account);
 
-    expect(await installer.find(KEY, KINDS[kind].where, world.reach)).toMatchObject({ state: "whole", version: RELEASE, address: KINDS[kind].address, newest: RELEASE });
+    expect(await installer.find(KEY, KINDS[kind].where, world.reach, "install")).toMatchObject({ state: "whole", version: RELEASE, address: KINDS[kind].address, newest: RELEASE });
     expect(world.asked.filter((entry) => entry.method !== "GET")).toEqual([]);
   });
 
@@ -323,7 +323,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     expect([rows.filter((row) => row.startsWith("Bot settings") || row.includes("outside pages")), account.switches]).toEqual([followed, { ai_bots_protection: "disabled", fight_mode: false }]);
 
     const world = await worldOf(account);
-    const found = await installer.find(KEY, KINDS[kind].where, world.reach);
+    const found = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
     const mended = found.state === "whole" ? await installer.repair(found, KINDS[kind].where, { run: DRY, addUser: undefined }, world.reach, () => undefined) : undefined;
 
     expect(mended?.ok === true ? mended.rows.filter((row) => row.state !== "leave" && row.state !== "leave-out") : mended).toEqual([]);
@@ -342,11 +342,26 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     expect(rows).toEqual([`First login | leave-out | ${LOGIN}: not used. The database holds its 7 users already, and they are who logs in: ${named}. To let this person in too: npx poplin doctor --repair --add-user ${LOGIN}`]);
   });
 
+  // Drift: the line is one a person pastes into a shell. An email with an apostrophe or a dollar sign, pasted bare, opens a quote that never closes or names a variable, and the repair adds nobody or somebody else.
+  test.each([
+    ["o'brien@example.com", "'o'\\''brien@example.com'"],
+    ["pay$roll&co@example.com", "'pay$roll&co@example.com'"],
+    ["first.last+tag@example.com", "first.last+tag@example.com"],
+  ])("the line that lets %s in too writes the email as one word of a POSIX shell: %s", async (email, word) => {
+    const account = await keptData();
+    const world = await worldOf(account);
+    const { where } = KINDS[kind];
+    const done = await installer.install(startable(await installer.find(KEY, where, world.reach, "install")), where, loginOf(email), DRY, world.reach, () => undefined);
+    const row = shown(done).find((line) => line.startsWith("First login"));
+
+    expect(row?.slice(row.indexOf("npx"))).toBe(`npx poplin doctor --repair --add-user ${word}`);
+  });
+
   // Drift: a person who types their own email again is a user already, and the database may hold others somebody else put there. With no row, the run lets them in and names nobody.
   test("a first login that is one of the stored users is told beside every user the database lets in, and every stored user is let in", async () => {
     const account = await keptData();
     const world = await worldOf(account);
-    const found = await installer.find(KEY, KINDS[kind].where, world.reach);
+    const found = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
     const done = await installer.install(startable(found), KINDS[kind].where, second, APPLY, world.reach, () => undefined);
 
     const told = `First login | leave | ${second}: a user already. The database holds its 2 users already, and they are who logs in: ${first} and ${second}.`;
@@ -412,15 +427,29 @@ test.each([
   delete account.refuse;
   const made = { records: account.records.length, forwarders: account.workers.length };
   const world = await worldOf(account);
-  const looked = await installer.find(KEY, KINDS[other].where, world.reach);
+  const looked = await installer.find(KEY, KINDS[other].where, world.reach, "install");
 
   expect([stopped.done.ok && stopped.done.ready, looked, world.asked.filter((entry) => entry.method !== "GET")]).toEqual([false, { state: "refused", why: "other_place", words }, []]);
   expect(made).toEqual(kind === "domain" ? { records: 2, forwarders: 0 } : { records: 0, forwarders: 1 });
 
-  const own = await installer.find(KEY, KINDS[kind].where, world.reach);
+  const own = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
   const removed = own.state === "started" ? await installer.remove(own, KINDS[kind].where, { run: "apply", confirmed: `poplin@${ACCOUNT}`, data: "remove" }, world.reach, () => undefined) : undefined;
 
   expect([own.state, removed?.ok === true && removed.ready, account.records.length, account.workers.length, account.noWorker]).toEqual(["started", true, 0, 0, true]);
+});
+
+// Drift: the token a repair asks for has no storage permission, and an install's and a removal's have it. A look that read the buckets for every work blocks a repair on its own token, and one that read them for none misses the bucket a removal takes.
+test.each(["domain", "no-domain"] as const)("a run that stopped after its upload, %s, is found started by a repair's look with a token that may not list the buckets, which an install's and a removal's look are blocked for", async (kind) => {
+  const account = fresh({ refuse: kind === "domain" ? "POST /zones/zone-1/workers/routes" : `PUT /accounts/${ACCOUNT}/workers/scripts/poplin-private`, refuseAs: { status: 400, code: 10001 } });
+  await installed(account, kind, APPLY);
+  account.refuse = `GET /accounts/${ACCOUNT}/r2/buckets`;
+  delete account.refuseAs;
+  const world = await worldOf(account);
+  const looks = [];
+
+  for (const work of ["repair", "install", "remove"] as const) looks.push((await installer.find(KEY, KINDS[kind].where, world.reach, work)).state);
+
+  expect([looks, world.asked.filter((entry) => entry.method !== "GET")]).toEqual([["started", "blocked", "blocked"], []]);
 });
 
 describe("what stops a run before it changes anything", () => {

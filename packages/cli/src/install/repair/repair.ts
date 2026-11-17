@@ -50,7 +50,7 @@ async function settled(plan: RepairPlan, ends: InstallEnds): Promise<Request | S
  */
 async function look(request: Request, ends: InstallEnds, show: Show): Promise<{ readonly found: Whole<unknown>; readonly where: unknown } | Stop> {
   const { plan, token, where } = request;
-  const looked = await lookFor({ provider: plan.provider, token, where, asking: plan.asking }, ends, {
+  const looked = await lookFor({ provider: plan.provider, token, where, asking: plan.asking, work: "repair" }, ends, {
     looking: () => show.working(LOOKING),
     found: (found) => {
       if (found.state === "whole") show.line("note", `${LOOKING} ... ${foundWords(found)}`);

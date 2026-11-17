@@ -238,8 +238,8 @@ export interface Installer<Where, Place> {
   /** What its form for a new token is and asks for, at that place, for the work the token is made for: a repair makes less than an install, and a removal takes away all an install made. */
   facts(where: Where, work: "install" | "repair" | "remove"): TokenFacts;
 
-  /** Look for an install with the token, in the account that place is in. It only reads. */
-  find(token: Token, where: Where, reach: Reach): Promise<Found<Where, Place>>;
+  /** Look for an install with the token, in the account that place is in, for the work the token is made for: a look reads nothing that needs a permission that work's token is not asked for. It only reads. */
+  find(token: Token, where: Where, reach: Reach, work: "install" | "repair" | "remove"): Promise<Found<Where, Place>>;
 
   /** Make the install, or with a dry run say what a run would make. `say` is told each row as it is settled. */
   install(found: Startable<Place>, where: Where, login: Login, run: Run, reach: Reach, say: (row: Row) => void): Promise<Installed>;

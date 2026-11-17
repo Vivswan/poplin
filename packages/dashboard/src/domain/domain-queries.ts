@@ -3,6 +3,9 @@
 //   an install whose check needs no token    the remembered run shows at once; opening the screen checks again when there is none, or it is older than `CHECK_FRESH_MS`
 //   an install whose check needs a token     the remembered run shows until a run is made from the dialog
 //
+// The line of a run is its own count of its pieces. Where that says nothing is left while the frame holds problems of the domain that say to press Repair, the frame's count of those is the line:
+// the problems are drawn under it from the same frame, so the two never say different things.
+//
 // The pieces on show are forgotten when the screen is left, so the screen always opens on what the install remembers.
 
 import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +13,7 @@ import type { InferResponseType } from "hono/client";
 import { useRef, useState } from "react";
 
 import { answerOf, api } from "@/lib/api";
-import { FRAME_KEY } from "@/lib/frame";
+import { FRAME_KEY, type Frame, useFrame } from "@/lib/frame";
 
 /** The key the screen's data is kept under: a run marks it stale, so it is read again. */
 export const DOMAIN_KEY = ["domain"] as const;
@@ -44,11 +47,16 @@ interface Pieces {
   /** Why the last such check read nothing, in the server's sentence. */
   readonly failure: string | undefined;
 
-  /** Check again with no token, as a press does. It answers the run, or nothing for a check that read no pieces, which `failure` then says. */
+  /** Check again with no token, as a press does. It answers the run as it is then shown, or nothing for a check that read no pieces, which `failure` then says. */
   readonly check: () => Promise<Ran | undefined>;
 
-  /** Take a run made from the dialog as the pieces on show. */
-  readonly take: (ran: Ran) => void;
+  /** Take a run made from the dialog as the pieces on show. It answers the run as it is then shown. */
+  readonly take: (ran: Ran) => Promise<Ran>;
+}
+
+/** A run as the screen shows it: with its own line, or, where that says nothing is left, with what the problems drawn under it ask for. */
+function shownOf(ran: Ran, asks: Frame["domainAsks"]): Ran {
+  return ran.summary.tone === "good" && asks !== null ? { ...ran, summary: asks } : ran;
 }
 
 /** Read what the Domain screen opens with. */
@@ -68,11 +76,13 @@ export function useDomainPieces(domain: Domain): Pieces {
   // When the remembered run was as the newest run here ended: that run is named beside the count only once the screen's data holds a newer one.
   const [before, setBefore] = useState<{ readonly at: number | undefined }>();
   const { last } = domain;
+  const { domainAsks } = useFrame().data;
+  // The side says what the domain needs, which a run changes, and a repair ends the problems that asked for it: the frame is read again before the run is shown, so its line is never said over problems that are gone.
+  const framed = (): Promise<void> => client.invalidateQueries({ queryKey: FRAME_KEY });
+  const asksNow = (): Frame["domainAsks"] => client.getQueryData<Frame>(FRAME_KEY)?.domainAsks ?? null;
   const ended = (): void => {
     setBefore({ at: last?.ran_at });
     void client.invalidateQueries({ queryKey: DOMAIN_KEY });
-    // The side says what the domain needs, which a run changes.
-    void client.invalidateQueries({ queryKey: FRAME_KEY });
   };
 
   const pieces = useQuery({
@@ -81,6 +91,7 @@ export function useDomainPieces(domain: Domain): Pieces {
       const unasked = !pressed.current;
       pressed.current = false;
       const ran = await answerOf(api.domain.check.$post({ json: { unasked } }));
+      await framed();
       ended();
 
       return ran;
@@ -91,9 +102,11 @@ export function useDomainPieces(domain: Domain): Pieces {
     gcTime: 0,
   });
 
+  // Until a run ends here the remembered run is shown as the screen's data has it now, which another screen's change may have read again.
+  const ran: Ran | undefined = before === undefined && last !== null ? { ok: true, rows: last.rows, steps: [], summary: last.summary } : pieces.data;
+
   return {
-    // Until a run ends here the remembered run is shown as the screen's data has it now, which another screen's change may have read again.
-    ran: before === undefined && last !== null ? { ok: true, rows: last.rows, steps: [], summary: last.summary } : pieces.data,
+    ran: ran === undefined ? undefined : shownOf(ran, domainAsks),
     last: last !== null && (before === undefined || last.ran_at !== before.at) ? last : undefined,
     checking: pieces.isFetching,
     failure: pieces.error?.message,
@@ -101,11 +114,14 @@ export function useDomainPieces(domain: Domain): Pieces {
       pressed.current = true;
       const again = await pieces.refetch();
 
-      return again.status === "success" ? again.data : undefined;
+      return again.status === "success" ? shownOf(again.data, asksNow()) : undefined;
     },
-    take: (ran) => {
-      client.setQueryData(PIECES_KEY, ran);
+    take: async (taken) => {
+      await framed();
+      client.setQueryData(PIECES_KEY, taken);
       ended();
+
+      return shownOf(taken, asksNow());
     },
   };
 }

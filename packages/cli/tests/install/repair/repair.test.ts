@@ -152,7 +152,7 @@ describe("a repair with the account token", () => {
 
     expect<unknown>([ran.code, ran.out[1], account.repairs.map((asked) => asked.mend.addUser)]).toEqual([0, "made      User                  lost@example.com", ["lost@example.com"]]);
     expect(refused).toMatchObject({ code: 2, out: [], err: ["poplin doctor --repair: --add-user takes an email address", "for example: --add-user you@example.com"] });
-    expect(account.finds.length).toBe(1);
+    expect([account.finds.length, account.looks]).toEqual([1, ["repair"]]);
   });
 
   test("a row that quotes the token, as a provider's refusal may, is printed and written as JSON without it: without this the token lands in a log", async () => {

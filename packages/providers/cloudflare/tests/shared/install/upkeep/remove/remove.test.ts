@@ -97,7 +97,7 @@ async function installedAccount(kind: Kind, changes: Partial<Account> = {}): Pro
   const account: Account = { ...emptyAccount(), bindings: [], noWorker: true };
   const world = await worldOf(account);
   const login = parseLogin("owner@example.com");
-  const found = await installer.find(KEY, KINDS[kind].where, world.reach);
+  const found = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
   if (!login.ok || found.state !== "none") throw new Error(`the test's install could not start: ${found.state}`);
 
   const made = await installer.install(found, KINDS[kind].where, login.value, "apply", world.reach, () => undefined);
@@ -126,7 +126,7 @@ function shown(done: Removed): string[] {
 /** Find, then remove, in one stand-in world. A question to the database is a read sent as a POST. */
 async function removed(account: Account, kind: Kind, removal: Removal, where: Where = KINDS[kind].where): Promise<Outcome> {
   const world = await worldOf(account);
-  const found = await installer.find(KEY, where, world.reach);
+  const found = await installer.find(KEY, where, world.reach, "remove");
   const sought = world.asked.length;
   const said: string[] = [];
   const done = await installer.remove(removable(found), where, removal, world.reach, (row) => said.push(`${row.object} | ${row.state}`));
@@ -356,7 +356,7 @@ describe("an account that changed between the look and the removal", () => {
   ])("where %s, nothing is removed and the run says to look again", async (_what, kind, change) => {
     const account = await installedAccount(kind);
     const world = await worldOf(account);
-    const found = removable(await installer.find(KEY, KINDS[kind].where, world.reach));
+    const found = removable(await installer.find(KEY, KINDS[kind].where, world.reach, "remove"));
     change(account);
     const before = structuredClone(account);
     const sought = world.asked.length;
@@ -369,7 +369,7 @@ describe("an account that changed between the look and the removal", () => {
     const account = await installedAccount("no-domain");
     await removed(account, "no-domain", applyOf(KINDS["no-domain"].confirm, "keep"));
     const world = await worldOf(account);
-    const found = removable(await installer.find(KEY, KINDS["no-domain"].where, world.reach));
+    const found = removable(await installer.find(KEY, KINDS["no-domain"].where, world.reach, "remove"));
     Object.assign(account, { noWorker: false, bindings: [{ name: "SHOP", type: "plain_text", text: "shop" }] });
     const done = await installer.remove(found, KINDS["no-domain"].where, applyOf("poplin-sites"), world.reach, () => undefined);
 
