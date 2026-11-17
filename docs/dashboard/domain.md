@@ -28,17 +28,16 @@ An install that holds [its key](../about/security.md#the-kept-key) reads every p
 | press Check                                            | checks again, with no dialog                                           |
 | press Repair                                           | opens the dialog that asks for an account token                        |
 
-The check the screen opens on is a remembered one. Its State column has five words of its own:
+The check the screen opens on is a remembered one. Its State column has four words:
 
 | State          | Means                                                                                  |
 | -------------- | -------------------------------------------------------------------------------------- |
-| `Present`      | the piece stood as it should                                                           |
+| `Unchanged`    | the piece stood as it should                                                           |
 | `Needs repair` | the piece was missing, or differed: press Repair. Detail of a remembered row ends in `missing or changed`: the install keeps no more of why |
-| `Optional`     | an optional piece the run left as it is: Detail says why. Nothing is wrong, and the install works without it |
 | `Failed`       | the run could not read the piece, or could not change it. Detail says why, such as a permission that is lacking |
-| `Not run`      | the run did not get to the piece: a piece it rests on stopped the run, or was not read |
+| `Skipped`      | the run left the piece as it is: an optional piece, where Detail says why, nothing is wrong, and the install works without it; or a piece the run did not get to, since a piece it rests on stopped the run |
 
-A run you press writes its own words there: `Missing` and `Differs` for a piece to repair, and `Created`, `Changed`, or `Removed` for what a Repair did. The screen writes each word with a capital, and the tables below write them small.
+A run you press writes more words there: `Missing` and `Differs` for a piece to repair, and `Created`, `Updated`, or `Removed` for what a Repair did. They are the words `poplin doctor` prints for the same rows. The screen writes each word with a capital, and the tables below write them small.
 
 No other screen starts a check. A check sends Cloudflare requests that only read: fewer where a piece is missing, more where a list fills more than one page or a request is sent again. A check the screen ran by itself writes no line into Activity, and a pressed one writes one.
 
@@ -47,10 +46,10 @@ Five rows read otherwise in a check made with the key:
 | Row                                  | It says                                                                                                         |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | a piece the key has no permission to read | `failed`, with the permission and `Press Repair.` The other pieces are still read, and Repair makes a key with every permission |
-| `D1 database`                        | `present`, with `the install is running on it`. The key holds no permission for a database, so Cloudflare is not asked |
-| an optional piece that is not set up | `optional`, with the permission that switches it on                                                             |
-| `Key`                                | `present` while Cloudflare takes the key, and `differs` once Cloudflare refused it or a piece lacked a permission    |
-| `Upload key`                         | `present` where the install holds one, and `missing` where it holds none. The key reads no token of the account, so Cloudflare is not asked |
+| `D1 database`                        | `unchanged`, with `the install is running on it`. The key holds no permission for a database, so Cloudflare is not asked |
+| an optional piece that is not set up | `skipped`, with the permission that switches it on                                                              |
+| `Key`                                | `unchanged` while Cloudflare takes the key, and `differs` once Cloudflare refused it or a piece lacked a permission    |
+| `Upload key`                         | `unchanged` where the install holds one, and `missing` where it holds none. The key reads no token of the account, so Cloudflare is not asked |
 
 An install that holds no key says `Not checked yet` before any run, and its Check opens the same dialog as Repair. It holds a key after a Repair on this screen.
 
@@ -69,13 +68,14 @@ The key may not change a DNS record, a route, or a redirect, so Repair opens a d
 | 1    | Make an account token | press Open the account token form, or take the token you kept from [step 3](../start/install.md#3-make-the-account-token) |
 | 2    | Paste it              | paste the token into the box Account token, then press the dialog's Repair                                 |
 
-Three rows are Cloudflare's login:
+Four rows are Cloudflare's login, two objects twice:
 
 | Piece                | It is                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `Access application` | the login in front of every address of the dashboard and of every private site                                     |
-| `Access policy`      | who that login lets in: your users                                                                                 |
-| `Access open paths`  | the one path of the dashboard's address that passes the login: `/api`, where a caller gives its own token |
+| `Access application`, named `poplin` | the login in front of every address of the dashboard and of every private site |
+| `Access policy`, named "poplin logins" | who that login lets in: your users |
+| `Access application`, named "poplin open paths" | the one path of the dashboard's address that passes the login: `/api`, where a caller gives its own token |
+| `Access policy`, named "poplin open paths policy" | what lets every caller reach that path |
 
 The row `Key` is the key poplin keeps at Cloudflare. Repair makes one where the install has none, or one Cloudflare no longer takes: [The kept key](../about/security.md#the-kept-key).
 
@@ -92,13 +92,13 @@ On an install [without a domain](../start/without-a-domain.md) the screen is the
 | Forwarder          | one for the unlisted and public sites, one for the private sites: its row names the address |
 | Access application | the login in front of the dashboard and of every private site         |
 | Access policy      | who may log in: your users only                                        |
-| Access open paths  | the paths a program reaches without the login                          |
+| Access application and Access policy, a second time | the paths a program reaches without the login: Detail names them "poplin open paths" |
 | Worker variable    | what the Worker reads at its start                                     |
 | Key                | [the key poplin keeps](../about/security.md#the-kept-key)              |
 | Upload key         | [the key that sends files straight to the bucket](../about/security.md#the-upload-key) |
-| Worker logs        | whether Cloudflare keeps the Worker's lines, as [the setting](activity.md#switch-the-logs-off) says: `kept` or `not kept` |
+| Worker logs        | whether Cloudflare keeps the Worker's lines, as [the setting](activity.md#switch-the-logs-off) says: `enabled` or `disabled` |
 | D1 database        | the database of the install                                            |
-| Budget alert       | [the email when charges reach 1 dollar](#optional-an-email-when-charges-reach-1-dollar): `optional` until the key or a Repair made it |
+| Budget alert       | [the email when charges reach 1 dollar](#optional-an-email-when-charges-reach-1-dollar): `skipped` until the key or a Repair made it |
 | Workflow           | what runs the install's background jobs: the copy of a large site      |
 
 It has no DNS record, route, or rule, and its account token needs no permission of a zone. The optional rules below are of an install under a domain alone. The optional email is of both kinds.
@@ -164,7 +164,7 @@ Four permissions on the token are optional. Three of them let Repair make the ru
 | 2    | the token's form                   | for each row above, press Add more and choose in its three boxes; then save |
 | 3    | the dashboard, Domain              | press Repair, paste the token, and press Repair in the dialog               |
 
-A row that said `optional` now says what Repair did, such as `created`.
+A row that said `skipped` now says what Repair did, such as `created`.
 
 Three settings save without these permissions. The dashboard has them in Settings, under Visitors. What Cloudflare does for `block_bots` starts once you press Repair, in step 3 of this table.
 
@@ -189,7 +189,7 @@ The fourth optional permission on the account token lets Repair make the alert a
 
 | First box | Second box    | Third box | With it, Repair                                      | Without it                                                        |
 | --------- | ------------- | --------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| Account   | Notifications | Edit      | makes the alert, and sends it to your first user     | makes no alert, and leaves one that is there. Its row says `optional` |
+| Account   | Notifications | Edit      | makes the alert, and sends it to your first user     | makes no alert, and leaves one that is there. Its row says `skipped` |
 
 The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what can cost money.
 
@@ -203,7 +203,7 @@ Under a domain the install keeps a second alert: Cloudflare emails your first us
 | ---------------------- | -------------------------------------------------------------------------------------------------------- |
 | What it covers         | every domain of the account, not this install's alone: Cloudflare takes no narrower choice for this alert |
 | Who makes it           | the install's key, when and as it makes the budget alert; or a Repair at once, with Notifications: Edit   |
-| Its row                | `Certificate alert`: `optional` until the key or a Repair made it                                         |
+| Its row                | `Certificate alert`: `skipped` until the key or a Repair made it                                          |
 | Its name at Cloudflare | `poplin: certificates of every domain of the account`, under Notifications                                |
 | Without a domain       | there is none: the address is Cloudflare's own, and so is its certificate                                 |
 

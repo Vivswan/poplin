@@ -25,7 +25,7 @@ const FORM = { tokenRights: ["Records: Edit"], tokenLink: "https://provider.exam
 
 /** The one piece of the remembered run, and the one a check made now finds. */
 const ROWS = {
-  remembered: [{ piece: "Record", state: "present", tone: "good", detail: "the remembered record" }],
+  remembered: [{ piece: "Record", state: "unchanged", tone: "good", detail: "the remembered record" }],
   found: [{ piece: "Record", state: "missing", tone: "bad", detail: "the record a check found" }],
 } as const;
 

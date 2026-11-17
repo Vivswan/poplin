@@ -9,9 +9,9 @@ import { Pieces } from "@/domain/pieces";
 
 /** A run with one piece of each way a state is read. */
 const ROWS = [
-  { piece: "DNS record", state: "present", tone: "good", detail: "every site" },
+  { piece: "DNS record", state: "unchanged", tone: "good", detail: "every site" },
   { piece: "Login policy", state: "differs", tone: "bad", detail: "the users of the settings" },
-  { piece: "Rate rule", state: "optional", tone: "idle", detail: "sample-rate-rule: The provider stops floods before they reach a site. To switch this on, add this permission to the account token and press Repair: Rules: Edit" },
+  { piece: "Rate rule", state: "skipped", tone: "idle", detail: "sample-rate-rule: The provider stops floods before they reach a site. To switch this on, add this permission to the account token and press Repair: Rules: Edit" },
 ] as const;
 
 afterEach(cleanup);

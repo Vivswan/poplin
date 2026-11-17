@@ -30,12 +30,12 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker route | ${state("routes", usual)} | poplin.example.com/*`,
     `Access application | ${state("access", usual)} | poplin: poplin.example.com, *-p-poplin.example.com`,
     `Access policy | ${state("access", usual)} | poplin logins`,
-    `Access open paths | ${state("access", usual)} | poplin open paths: poplin.example.com/api`,
-    `Access open paths | ${state("access", usual)} | poplin open paths policy`,
+    `Access application | ${state("access", usual)} | poplin open paths: poplin.example.com/api`,
+    `Access policy | ${state("access", usual)} | poplin open paths policy`,
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key", usual)} | poplin kept key`,
     `Upload key | ${state("upload", state("key", usual))} | poplin upload key`,
-    `Worker logs | ${states.logs ?? "present"} | kept`,
+    `Worker logs | ${states.logs ?? "present"} | enabled`,
     `Redirect rule | ${state("https", usual)} | https redirect`,
     `WAF rule | ${state("guards", usual)} | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin`,
     `WAF rule | ${state("guards", usual)} | outside pages rule`,
@@ -165,7 +165,7 @@ test("an install whose application covers the login path alone: the check says i
   const account = emptyAccount();
   const guarded = (): Readonly<Record<string, unknown>> | undefined => account.applications.find((application) => application.name === "poplin");
   const rows = (application: string, open: string): string[] =>
-    table({}).map((row) => row.replace("Access application | present", `Access application | ${application}`).replace("Access open paths | present", `Access open paths | ${open}`));
+    table({}).map((row) => (row.includes("poplin open paths") ? row.replace("| present |", `| ${open} |`) : row.replace("Access application | present", `Access application | ${application}`)));
 
   await withAccount(account, async (plug, asked) => {
     await plug.repair(TOKEN, SETTINGS);
@@ -296,7 +296,8 @@ test("one object taken away and one changed by hand: the check names exactly tho
 
 test("Access that was never switched on is no failure: both runs go on past it, mark its three rows, and hand over the one step with the address to open", async () => {
   const account = { ...emptyAccount(), accessOff: true };
-  const said = ["Access application", "Access policy", "Access open paths"].map((object) => `${object} | missing | Access is off for the account`);
+  // The open paths are named as the application they are, so their row says which one it is of.
+  const said = ["Access application | missing | Access is off for the account", "Access policy | missing | Access is off for the account", "Access application | missing | poplin open paths: Access is off for the account"];
   const off = (states: Readonly<Record<string, string>>): string[] => {
     const rows = table(states);
     const first = rows.findIndex((row) => row.startsWith("Access "));
@@ -555,8 +556,8 @@ test("Access refused as not switched on after the policy was already made is a s
     expect(rows.slice(6, 15)).toEqual([
       "Access application | not-run | poplin: poplin.example.com, *-p-poplin.example.com",
       "Access policy | not-run | poplin logins",
-      "Access open paths | created | poplin open paths policy",
-      "Access open paths | failed | poplin open paths: refused with status 403 and codes 10000",
+      "Access policy | created | poplin open paths policy",
+      "Access application | failed | poplin open paths: refused with status 403 and codes 10000",
       "Worker variable | not-run | ",
       "Key | not-run | ",
       "Upload key | not-run | ",
@@ -578,11 +579,13 @@ test("every row says what its object is for, and a row refused for a missing rig
     const checked = await plug.check(TOKEN, SETTINGS);
     const rows = [made, checked].flatMap((reading) => (reading.ok ? reading.rows : []));
 
-    const objectsOf = (part: string): string[] => [...new Set(rows.filter((row) => row.part === part).map((row) => row.object))];
+    // The open paths carry the names of the login's two objects: what tells them apart is what each row names.
+    const named = (row: DomainRow): string => (row.detail.startsWith("poplin open paths") ? `${row.object} of the open paths` : row.object);
+    const objectsOf = (part: string): string[] => [...new Set(rows.filter((row) => row.part === part).map(named))];
 
     expect([objectsOf("login"), objectsOf("reach")]).toEqual([
       ["Access application", "Access policy", "Worker variable"],
-      ["DNS record", "Worker route", "Access open paths"],
+      ["DNS record", "Worker route", "Access application of the open paths", "Access policy of the open paths"],
     ]);
     expect(rows.filter((row) => row.right !== undefined).map((row) => [row.object, row.state, row.right])).toEqual([["Worker route", "failed", "Workers Routes: Edit"]]);
   });
@@ -1251,7 +1254,7 @@ describe("a check the install makes with the key it holds", () => {
         ...table({ all: "missing" }).slice(0, 11),
         "Key | present | poplin kept key",
         "Upload key | present | poplin upload key",
-        "Worker logs | present | kept",
+        "Worker logs | present | enabled",
         `Redirect rule | optional | https redirect: ${OPTIONAL.redirect}`,
         `WAF rule | optional | bots rule: ${OPTIONAL.waf}`,
         `WAF rule | optional | outside pages rule: ${OPTIONAL.waf}`,
@@ -1413,13 +1416,11 @@ describe("an alert left out for its permission, as a command line words it", () 
   });
 });
 
-describe("the Worker's logs, as a command line words them", () => {
-  // Drift: the row said `kept`, which reads as something left alone. Worded apart from the other rows, a refusal for a permission kept the dashboard's words for it, which name a button.
-  test.each([
-    ["kept", "enabled"],
-    ["not kept", "disabled"],
-    ["kept: refused with status 403 and codes 10000. Add this permission to the account token: Workers Scripts: Edit", "enabled: refused with status 403 and codes 10000. The account token lacks Workers Scripts: Edit"],
-  ])("`%s` reads `%s`", (detail, said) => {
-    expect(commandRows([{ object: "Worker logs", state: "present", detail, part: "rest" }])[0]?.detail).toBe(said);
+describe("a row refused for a permission, as a command line words it", () => {
+  // Drift: a row worded apart from the others kept the dashboard's sentence for a missing permission, which names a button no command line has.
+  test("says that the token lacks the permission, in place of the sentence that names Repair", () => {
+    const detail = "enabled: refused with status 403 and codes 10000. Add this permission to the account token: Workers Scripts: Edit";
+
+    expect(commandRows([{ object: "Worker logs", state: "present", detail, part: "rest" }])[0]?.detail).toBe("enabled: refused with status 403 and codes 10000. The account token lacks Workers Scripts: Edit");
   });
 });

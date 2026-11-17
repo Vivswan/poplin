@@ -39,12 +39,12 @@ const REPAIRED: readonly DomainState[] = ["created", "changed", "removed"];
 
 /** How a remembered piece is drawn, by its state or by why it was not read, and the state of a run's row it is counted as. A piece no run reached is counted as not done, as one that failed is: nothing says it stands. */
 const KEPT: Readonly<Record<Exclude<KeptPiece["state"], "unread"> | UnreadReason, Pick<ShownRow, "state" | "tone"> & { readonly counts: DomainState }>> = {
-  ok: { state: "present", tone: "good", counts: "present" },
+  ok: { state: domainStateWords("present"), tone: "good", counts: "present" },
   needs_repair: { state: "needs repair", tone: "bad", counts: "missing" },
-  not_set_up: { state: "optional", tone: "idle", counts: "left-out" },
-  failed: { state: "failed", tone: "bad", counts: "failed" },
-  missing_right: { state: "failed", tone: "bad", counts: "failed" },
-  not_run: { state: "not run", tone: "idle", counts: "failed" },
+  not_set_up: { state: domainStateWords("optional"), tone: "idle", counts: "left-out" },
+  failed: { state: domainStateWords("failed"), tone: "bad", counts: "failed" },
+  missing_right: { state: domainStateWords("failed"), tone: "bad", counts: "failed" },
+  not_run: { state: domainStateWords("not-run"), tone: "idle", counts: "failed" },
 };
 
 /** Why a remembered piece needs a repair, said after what names it: the install keeps that a piece was missing or had changed, and not which. */

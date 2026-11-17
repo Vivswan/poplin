@@ -33,7 +33,7 @@ import { syncDatabase } from "../shared/install/pieces/database/database";
 import { syncDns } from "./pieces/dns/dns";
 import { INSTALL_OBJECTS } from "../shared/install/install-objects";
 import { syncJobs } from "../shared/install/pieces/jobs/jobs";
-import { LOGS_SUBJECTS, syncLogs } from "../shared/install/pieces/worker-logs/worker-logs";
+import { syncLogs } from "../shared/install/pieces/worker-logs/worker-logs";
 import { HTTPS_SWITCH, syncHttps } from "./pieces/https/https";
 import { uploadKeyText } from "../shared/install/key/upload-key";
 import { type HeldKey, type HeldKeys, type KeyRead, readBucket, readKeyStates } from "../shared/install/key/key-state";
@@ -101,9 +101,6 @@ const COMMAND_WORDS = { lacks: "The account token lacks", repair: "run npx popli
 
 /** The states of the kept key's row that say the install holds a key Cloudflare takes: read as standing, or made by the run. */
 const KEY_WORKS: ReadonlySet<DomainRow["state"]> = new Set(["present", "created", "changed"]);
-
-/** What the row of the Worker's logs says on a command line in place of each of its own words: the state of the setting, as the row of the workers.dev route words its own. */
-const LOGS_WORDS = { [LOGS_SUBJECTS.kept]: "enabled", [LOGS_SUBJECTS.dropped]: "disabled" } as const;
 
 /** What a repair that wrote the variable tells the person to do next. */
 const LOGIN_READY = "The login is ready. Open your dashboard and log in:";
@@ -927,6 +924,18 @@ function keySettled(rows: readonly Found[], fault: "refused" | "lacking"): Found
 }
 
 /**
+ * Name a row as its reader sees it. The open paths are named as what they are at Cloudflare: an Access application and its Access policy.
+ * On an account whose Access is off they say only that: named, their row is not the login application's row twice.
+ */
+function shownAs(row: Found): Pick<DomainRow, "object" | "detail"> {
+  if (row.object !== "Access open paths") return { object: row.object, detail: row.detail };
+
+  if (row.detail === ACCESS_OFF) return { object: "Access application", detail: `${OPEN_PATHS}: ${ACCESS_OFF}` };
+
+  return { object: row.detail.startsWith(INSTALL_OBJECTS.accessOpenPolicy) ? "Access policy" : "Access application", detail: row.detail };
+}
+
+/**
  * Write the rows of a finished run as a reading.
  *
  * @returns every row with what its object is for, and the steps only a person can do
@@ -934,7 +943,7 @@ function keySettled(rows: readonly Found[], fault: "refused" | "lacking"): Found
 export function readingOf(progress: Progress): DomainReading {
   const rows = progress.own?.fault === undefined ? progress.rows : keySettled(progress.rows, progress.own.fault);
 
-  return { ok: true, rows: rows.map((row) => ({ ...row, part: PART[row.object], ...(HOLDS_USERS.includes(row.object) ? { users: true as const } : {}) })), steps: progress.steps };
+  return { ok: true, rows: rows.map((row) => ({ ...row, ...shownAs(row), part: PART[row.object], ...(HOLDS_USERS.includes(row.object) ? { users: true as const } : {}) })), steps: progress.steps };
 }
 
 /** Read every piece of an install whose zone is found, or make each match. The settings are read here and no earlier: a token has proven itself by now. */
@@ -1102,39 +1111,24 @@ function optionalOf(object: string): Optional | undefined {
   return right !== undefined && "adds" in right ? right : undefined;
 }
 
-/** The detail of the row of the Worker's logs on a command line: the word the row starts with, where it is one of the piece's own, as the state of the setting. */
-function logsDetail(detail: string): string {
-  const said = [LOGS_SUBJECTS.dropped, LOGS_SUBJECTS.kept].find((subject) => detail === subject || detail.startsWith(`${subject}:`));
-
-  return said === undefined ? detail : `${LOGS_WORDS[said]}${detail.slice(said.length)}`;
-}
-
 /**
  * Word a row of a check or a repair for a command line, whose reader runs commands and knows Cloudflare's names.
  *
- * The open paths are named as what they are at Cloudflare: an Access application and its Access policy.
  * A row that names a permission to add says that the token lacks it, as the run's last lines do.
  * A piece left out for an optional permission names the permission the token lacks and the command that makes the piece, in place of what the piece adds.
- * The Worker's logs are named by the state of their setting.
  *
  * @param keyed - whether the install holds a key Cloudflare takes: only then does the row of an alert say that the install makes it too
  */
 function commandRow(row: DomainRow, keyed: boolean): DomainRow {
-  const open = row.detail.startsWith(INSTALL_OBJECTS.accessOpenPolicy) ? "Access policy" : "Access application";
-  const object = row.object === "Access open paths" ? open : row.object;
   const right = row.state === "optional" ? optionalOf(row.object) : undefined;
-  // On an account whose Access is off the open paths say only that: named, their row is not the login application's row twice.
-  if (row.object === "Access open paths" && row.detail === ACCESS_OFF) return { ...row, object, detail: `${OPEN_PATHS}: ${ACCESS_OFF}` };
-
-  const said = row.object === "Worker logs" ? logsDetail(row.detail) : row.detail;
-  if (right === undefined) return { ...row, object, detail: said.replace(`${ADD_PERMISSION}: `, `${COMMAND_WORDS.lacks} `) };
+  if (right === undefined) return { ...row, detail: row.detail.replace(`${ADD_PERMISSION}: `, `${COMMAND_WORDS.lacks} `) };
 
   const added = switchOn(right);
   const subject = row.detail.endsWith(added) ? row.detail.slice(0, -added.length) : "";
   const fix = `${COMMAND_WORDS.lacks} ${right.name}. Fix: add it, then ${COMMAND_WORDS.repair}`;
   const detail = right.how === undefined || !keyed ? fix : `${fix}, ${COMMAND_WORDS.itself}`;
 
-  return { ...row, object, detail: `${subject}${detail}` };
+  return { ...row, detail: `${subject}${detail}` };
 }
 
 /** Word the rows of a check or a repair for a command line, each as `commandRow` words it. The row of the kept key among them says whether the install holds a key Cloudflare takes. */

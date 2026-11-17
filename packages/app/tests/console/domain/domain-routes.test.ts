@@ -86,10 +86,10 @@ describe("what the screen opens with", () => {
       stale: false,
       waits: false,
       rows: [
-        { piece: "DNS record", state: "present", tone: "good", detail: "*.example.com" },
+        { piece: "DNS record", state: "unchanged", tone: "good", detail: "*.example.com" },
         { piece: "DNS record", state: "needs repair", tone: "bad", detail: "poplin.example.com: missing or changed" },
-        { piece: "Worker route", state: "present", tone: "good", detail: "poplin.example.com/*" },
-        { piece: "Rate rule", state: "optional", tone: "idle", detail: "rate rule: the domain has other hostnames" },
+        { piece: "Worker route", state: "unchanged", tone: "good", detail: "poplin.example.com/*" },
+        { piece: "Rate rule", state: "skipped", tone: "idle", detail: "rate rule: the domain has other hostnames" },
       ],
       summary: { line: "1 to repair", tone: "bad" },
       waiting: 1,
@@ -160,10 +160,10 @@ describe("a run", () => {
 
     expect(answer.status).toBe(200);
     expect(ran.rows).toEqual([
-      { piece: "DNS record", state: "present", tone: "good", detail: "*.example.com" },
+      { piece: "DNS record", state: "unchanged", tone: "good", detail: "*.example.com" },
       { piece: "DNS record", state: "missing", tone: "bad", detail: "poplin.example.com" },
-      { piece: "Worker route", state: "present", tone: "good", detail: "poplin.example.com/*" },
-      { piece: "Rate rule", state: "left out", tone: "idle", detail: "rate rule: the domain has other hostnames" },
+      { piece: "Worker route", state: "unchanged", tone: "good", detail: "poplin.example.com/*" },
+      { piece: "Rate rule", state: "skipped", tone: "idle", detail: "rate rule: the domain has other hostnames" },
     ]);
     expect(ran.summary).toEqual({ line: "1 to repair", tone: "bad" });
     expect(plug.calls).toMatchObject([{ run: "check", token: TOKEN, settings: { outside_pages: "blocked", users: [opened.base.owner] } }]);
@@ -281,9 +281,9 @@ describe("the line that counts a run's rows", () => {
   });
 
   // Drift: an optional piece that is not set up would read as a failure.
-  test("draws an optional piece as idle, in the words the install guide quotes", () => {
+  test("draws an optional piece as idle, in the word a command says of a row it left as it is", () => {
     expect(runDone("check", { ok: true, rows: rowsIn("optional"), steps: [] }, false).rows).toEqual([
-      { piece: "Piece 0", state: "optional", tone: "idle", detail: "detail 0" },
+      { piece: "Piece 0", state: "skipped", tone: "idle", detail: "detail 0" },
     ]);
   });
 });
@@ -314,10 +314,10 @@ describe("the run the install remembers", () => {
       stale: true,
       waits: true,
       rows: [
-        { piece: "DNS record", state: "present", tone: "good", detail: "every site" },
+        { piece: "DNS record", state: "unchanged", tone: "good", detail: "every site" },
         { piece: "Login policy", state: "needs repair", tone: "bad", detail: "the users: missing or changed" },
-        { piece: "Rate rule", state: "optional", tone: "idle", detail: "left out" },
-        { piece: "Route", state: "not run", tone: "idle", detail: "never reached" },
+        { piece: "Rate rule", state: "skipped", tone: "idle", detail: "left out" },
+        { piece: "Route", state: "skipped", tone: "idle", detail: "never reached" },
       ],
       summary: { line: "2 not done", tone: "bad" },
       waiting: 0,
@@ -330,7 +330,7 @@ describe("the run the install remembers", () => {
   test.each([
     ["failed", "failed"],
     ["missing_right", "failed"],
-    ["not_run", "not run"],
+    ["not_run", "skipped"],
   ] as const)("counts a piece unread for %s as not done", (reason, state) => {
     const kept = keptAnswer({ stale: false, waits: false, check: { ran_at: 1, by: BY, run: "check", pieces: [unread(reason)] } });
 
