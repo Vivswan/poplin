@@ -1,6 +1,7 @@
 // `poplin doctor --repair`: an install that is set, mended with an account token from a terminal. It needs no login of the install, so it is the way back in.
 //
 //   the Worker's bindings   which kind of install it is, where it answers, and which database holds its records
+//   the release             an install behind the newest release is brought to it: the one way it takes a release it cannot take by itself
 //   the settings            read from that database with the token, as the Worker's own store reads them
 //   the repair              the one of the install's kind: the code the dashboard's Domain screen runs, with the same settings
 //   one more user           only where asked: the login is written with the email first, and the email is stored after Cloudflare took that write
@@ -22,6 +23,7 @@ import type { BoundInstall } from "../../kind/zone-binding";
 import { isAccessOff, writeLogins } from "../../pieces/access/access";
 import { type ListedBinding, readBindings } from "../../pieces/variables/variables";
 import type { Mode } from "../../sync";
+import { RECORDS_WAIT, syncRelease } from "./release";
 import { readStored, type Stored, storeUser, type Untaken } from "./settings";
 
 /** The name of the install's Worker. */
@@ -59,6 +61,13 @@ interface Work {
   readonly say: (row: Row) => void;
 }
 
+/** What a repair stands on, read from the Worker: its bindings, the kind of install they say it is, and the id of the database that holds its records. */
+interface Ground {
+  readonly bindings: readonly ListedBinding[];
+  readonly install: BoundInstall;
+  readonly databaseId: string;
+}
+
 /** Add a row to the run and tell the command. */
 function note(work: Work, row: Row): void {
   work.rows.push(row);
@@ -88,6 +97,25 @@ function elsewhere(install: BoundInstall, where: Where): string | undefined {
   const named = where.kind === "domain" && where.layout.domain === domain;
 
   return named ? undefined : `The install here is under the domain ${domain}: give --domain ${domain}.`;
+}
+
+/**
+ * Read what the repair stands on.
+ *
+ * @param where - the place a person named
+ * @returns the Worker's bindings with what they say; or why nothing is mended: no answer, a Worker that is no whole install now, or an install at another place than the one named
+ */
+async function groundOf(place: Place, where: Where): Promise<Ground | Repaired> {
+  const bindings = await readBindings(place.connection, { accountId: place.accountId, script: SCRIPT });
+  if (!bindings.ok) return unread(bindings);
+
+  const install = boundInstall(bindings.value);
+  const databaseId = bindings.value.find((binding) => binding.name === INSTALL_OBJECTS.databaseBinding && binding.type === "d1")?.id;
+  if (install === undefined || databaseId === undefined) return { ok: false, why: "changed", words: WORDS.changed };
+
+  const other = elsewhere(install, where);
+
+  return other === undefined ? { bindings: bindings.value, install, databaseId } : { ok: false, why: "elsewhere", words: other };
 }
 
 /** Why a call the database did not take failed. */
@@ -172,31 +200,47 @@ async function userRow(work: Work, stored: Exclude<Stored, { readonly state: "an
 }
 
 /**
+ * End a run whose release step left rows, on records this poplin does not read.
+ *
+ * A dry run that named the steps of a release it did not place reads the records in the run after. Every other run whose rows say nothing of the records yet says so here: a release in place is no mended install.
+ */
+function unreadRecords(work: Work, release: Extract<Awaited<ReturnType<typeof syncRelease>>, { readonly rows: readonly Row[] }>): Repaired {
+  const named = work.mode === "plan" && release.rows.some((row) => row.object === RECORDS_WAIT.object && row.state === "change");
+  const said = named || release.rows.some((row) => row.object === RECORDS_WAIT.object && UNDONE.has(row.state));
+  if (release.state === "unplaced") note(work, RECORDS_WAIT);
+  else if (!said) note(work, { object: RECORDS_WAIT.object, state: "block", detail: WORDS.another });
+
+  return done(work);
+}
+
+/**
  * Mend an install that is set, or with a dry run say what a run would change.
  *
  * @param where - the place a person named: one that is not the install's own stops the repair before it reads the settings
  * @param say - told each row as it is settled
- * @returns every row of the kind's own repair, then the row of the user it was asked to add; or why nothing was mended
+ * @returns the row of the Worker's code, every row of the kind's own repair, then the row of the user it was asked to add; or why nothing was mended
  */
 export async function repair(found: Whole<Place>, where: Where, mend: Mend, reach: Reach, say: (row: Row) => void): Promise<Repaired> {
   const { place } = found;
   const { connection, accountId } = place;
-  const bindings = await readBindings(connection, { accountId, script: SCRIPT });
-  if (!bindings.ok) return unread(bindings);
+  const ground = await groundOf(place, where);
+  if ("ok" in ground) return ground;
 
-  const install = boundInstall(bindings.value);
-  const databaseId = bindings.value.find((binding) => binding.name === INSTALL_OBJECTS.databaseBinding && binding.type === "d1")?.id;
-  if (install === undefined || databaseId === undefined) return { ok: false, why: "changed", words: WORDS.changed };
-
-  const other = elsewhere(install, where);
-  if (other !== undefined) return { ok: false, why: "elsewhere", words: other };
-
-  const stored = await readStored(connection, { accountId, databaseId });
-  if (stored.state === "another") return { ok: false, why: "another", words: WORDS.another };
-
+  const { install, databaseId, bindings } = ground;
   const { tokenLink: form } = tokenFacts(install.kind === "domain" ? "domain" : "noDomain");
   const work: Work = { mode: mend.run === "apply" ? "apply" : "plan", place, form, address: found.address, rows: [], steps: [], say };
-  const settings = settingsOf(stored, bindings.value);
+  const release = await syncRelease({ found, databaseId, mode: work.mode, reach, rights: { lacks: lacksRight, nameOf: rightFor } });
+  if (release.state === "stop") return { ok: false, why: "another", words: release.words };
+
+  const stored = await readStored(connection, { accountId, databaseId });
+  // An install whose code this run left alone is another poplin's whole. One this run was to bring to its release has its rows to show, and its records are read by the run after.
+  if (stored.state === "another" && release.state === "left") return { ok: false, why: "another", words: WORDS.another };
+
+  for (const row of release.rows) note(work, row);
+
+  if (stored.state === "another") return unreadRecords(work, release);
+
+  const settings = settingsOf(stored, bindings);
   if ("object" in settings) {
     note(work, settings);
 
@@ -204,7 +248,14 @@ export async function repair(found: Whole<Place>, where: Where, mend: Mend, reac
   }
 
   const stopped = await mended(work, install, settings, reach);
-  if (stopped !== undefined) return stopped;
+  // A stop after this run sent a release, or said why it sent none, is no run that changed nothing: its rows stand, and one more says what was not read.
+  if (stopped !== undefined) {
+    if (release.state === "left" || work.mode === "plan") return stopped;
+
+    note(work, { object: "Rest of the install", state: "fail", detail: `${stopped.words} Run this again` });
+
+    return done(work);
+  }
 
   if (mend.addUser !== undefined) note(work, await userRow(work, stored, mend.addUser, reach.now()));
 

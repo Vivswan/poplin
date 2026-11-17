@@ -30,6 +30,12 @@ const BUILT = { [MODULE_FILE]: new TextEncoder().encode("export default {};\n"),
 interface Meets {
   /** Answers a request to the project's website or the release's page in place of the published release; `undefined` leaves it to the release. */
   readonly website?: (address: string) => Response | undefined;
+
+  /** The schema the release states, on the website and in its manifest; this code's own when left out. */
+  readonly schema?: number;
+
+  /** Older versions the website names beside the release, each with the schema it states. */
+  readonly older?: Readonly<Record<string, number>>;
 }
 
 /** A stand-in world: the reach to hand a run, every call it sent to Cloudflare, every other address it asked, and each wait it asked for, in milliseconds, none of which takes time. */
@@ -41,9 +47,11 @@ interface World {
 }
 
 /** The files of the release, by the last part of the address each is fetched at. */
-async function published(): Promise<Readonly<Record<string, string | Uint8Array<ArrayBuffer>>>> {
-  const manifest = await bundleManifest({ version: RELEASE, schema: OWN_SCHEMA, config: CONFIG, files: BUILT });
-  const pins = { [RELEASE]: { bundle: await releaseDigest(new TextEncoder().encode(manifest)), schema: OWN_SCHEMA } };
+async function published(meets: Pick<Meets, "schema" | "older">): Promise<Readonly<Record<string, string | Uint8Array<ArrayBuffer>>>> {
+  const schema = meets.schema ?? OWN_SCHEMA;
+  const manifest = await bundleManifest({ version: RELEASE, schema, config: CONFIG, files: BUILT });
+  const older = Object.entries(meets.older ?? {}).map(([version, stated]) => [version, { bundle: "0".repeat(64), schema: stated }]);
+  const pins = { ...Object.fromEntries(older), [RELEASE]: { bundle: await releaseDigest(new TextEncoder().encode(manifest)), schema } };
 
   return {
     "releases.json": JSON.stringify(pins),
@@ -60,7 +68,7 @@ async function published(): Promise<Readonly<Record<string, string | Uint8Array<
  * @returns the reach, and what was asked through it
  */
 export async function worldOf(account: Account, meets: Meets = {}): Promise<World> {
-  const files = await published();
+  const files = await published(meets);
   const asked: Asked[] = [];
   const fetched: string[] = [];
   const slept: number[] = [];

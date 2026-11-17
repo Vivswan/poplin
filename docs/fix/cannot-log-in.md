@@ -81,6 +81,7 @@ An **account token** is a long password that lets a program change your Cloudfla
 
    ```text
    looking for an install ... found: poplin 0.1.0, at https://poplin.example.com
+   left      Worker                poplin, runs 0.1.0
    left      DNS record            poplin.example.com
    ...
    made      Access application    poplin: poplin.example.com, *-p-poplin.example.com
@@ -101,10 +102,11 @@ An **account token** is a long password that lets a program change your Cloudfla
 
 ## What the rows say
 
-Every piece of the install has a row. Three matter here:
+Every piece of the install has a row. Four matter here:
 
 | Row                  | It is                                                         |
 | -------------------- | ------------------------------------------------------------- |
+| `Worker`             | the version the install runs; `changed` where the repair [brought it to the newest release](../upkeep/update.md#a-release-the-install-cannot-take) |
 | `Access application` | Cloudflare's login page in front of your dashboard            |
 | `Access policy`      | the list of emails that page lets in: the users of the install |
 | `User`               | the email `--add-user` named                                  |
@@ -173,6 +175,8 @@ The link the command prints chooses every one of them. A token you kept from the
 | a row `stopped`, saying `Access is off for the account`             | Zero Trust, the part of Cloudflare that holds the login page, is not switched on | pick the Free plan at the address under the rows, then run again |
 | a row `stopped`, ending `Add this one:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token), then run again |
 | `The install's records are not at the schema of this poplin.`       | the install is of another version of poplin than the command you ran | run the newest: `npx poplin@latest doctor --repair`. The line names a second way: the command of the install's own version |
+| `The install runs`, a version, `and the newest release this poplin reads is`, an older one | the install is of a newer poplin than the command you ran; nothing is put back | run the newest: `npx poplin@latest doctor --repair` |
+| `The newest release is one this poplin cannot put in place.` | the install is behind a release that needs a newer poplin than the command you ran | run the newest: `npx poplin@latest doctor --repair` |
 | `The install changed while it was read.`                            | something changed at Cloudflare during the run          | run it again                                                    |
 
 A run that stopped changed only what its rows say. Run the same line again, and it goes on from what stands.

@@ -38,6 +38,12 @@ const ELSEWHERE = {
 /** The account an install that is set runs in, as its Worker holds it. */
 const IN_ACCOUNT = { name: "ACCOUNT_ID", type: "plain_text", text: ACCOUNT };
 
+/** The place of an install under a domain, and the release an upload of 0.2.0 states. */
+const [UNDER_DOMAIN, STATED] = [
+  { name: "ZONE", type: "json", json: { domain: "example.com" } },
+  { name: "RELEASE", type: "plain_text", text: "0.2.0" },
+];
+
 /** The variables of an install that is set, on the account's free address. */
 const SET = [{ name: "ZONE", type: "json", json: JSON.stringify({ account_address: "example" }) }, IN_ACCOUNT];
 
@@ -141,14 +147,23 @@ describe("the states of an account", () => {
   });
 
   // Drift: a whole install is never touched by an install. Its version and its address are what the command tells the person in place of making anything.
-  test("a set install is found whole, with the version its latest upload was tagged with, its dashboard's address, and the newest release; one with no tag is whole with no version", async () => {
-    const account = fresh({ noWorker: false, bindings: [...MARKS, ...SET], versions: [{ id: "version-2", number: 2, annotations: { "workers/tag": "0.2.0" } }, { id: "version-1", number: 1, annotations: { "workers/tag": "0.1.0" } }] });
+  // Cloudflare tags no version a change of the settings makes, and lists no version with its tag: a version read from either is read on no install that was ever mended.
+  test("a set install is found whole, with the release its bindings state, its dashboard's address, and the newest release, in no call of its own, whatever its versions are tagged", async () => {
+    const versions = [{ id: "version-3", number: 3 }, { id: "version-2", number: 2 }, { id: "version-1", number: 1, annotations: { "workers/tag": "0.1.0" } }];
+    const account = fresh({ noWorker: false, bindings: [...MARKS, ...SET, STATED], versions });
     const whole = await found(account, NONE);
 
     expect(whole.shown).toEqual({ state: "whole", version: "0.2.0", address: "https://poplin.example.workers.dev", newest: RELEASE });
-    expect(whole.calls).toEqual(["GET /accounts", "GET /accounts", `GET /accounts/${ACCOUNT}/workers/scripts/poplin/settings`, `GET /accounts/${ACCOUNT}/workers/scripts/poplin/versions`]);
-    expect((await found({ ...account, versions: [{ id: "version-1", number: 1 }] }, NONE)).found).toMatchObject({ state: "whole", version: undefined });
-    expect((await found({ ...account, bindings: [...MARKS, { name: "ZONE", type: "json", json: { domain: "example.com" } }, IN_ACCOUNT] }, DOMAIN)).found).toMatchObject({ state: "whole", address: "https://poplin.example.com" });
+    expect(whole.calls).toEqual(["GET /accounts", "GET /accounts", `GET /accounts/${ACCOUNT}/workers/scripts/poplin/settings`]);
+    expect((await found({ ...account, bindings: [...MARKS, UNDER_DOMAIN, IN_ACCOUNT, STATED] }, DOMAIN)).found).toMatchObject({ state: "whole", version: "0.2.0", address: "https://poplin.example.com" });
+  });
+
+  // Drift: an upload by another tool states no release. Read as the tag of an older version, its code would be told as poplin's, and a repair would say the install runs it.
+  test("a set install whose bindings state no release is whole with no version, of either kind, where an older version carries a tag", async () => {
+    const versions = [{ id: "version-2", number: 2 }, { id: "version-1", number: 1, annotations: { "workers/tag": "0.2.0" } }];
+
+    expect((await found(fresh({ noWorker: false, bindings: [...MARKS, ...SET], versions }), NONE)).found).toMatchObject({ state: "whole", version: undefined });
+    expect((await found(fresh({ noWorker: false, bindings: [...MARKS, UNDER_DOMAIN, IN_ACCOUNT], versions }), DOMAIN)).found).toMatchObject({ state: "whole", version: undefined });
   });
 
   // Drift: Cloudflare's settings list a Worker without its new version's bindings for about a second after an upload. Told as held on that one read, a person's own install is called somebody else's right after its update.
@@ -296,9 +311,9 @@ describe("a text the account holds, which whoever may write there chose", () => 
     for (const where of [DOMAIN, NONE]) expect((await found(fresh({ noWorker: false, bindings }), where)).shown).toMatchObject({ state: "held", words: unplaced, after: "install" });
   });
 
-  // Drift: the tag is printed in the line that says which poplin an install runs, on a terminal. One that is no version could carry an escape sequence and a line of its own.
-  test.each(["9.9.9\u001b[2K\nThe way on: npx poplin uninstall cloudflare", "0.2.0-rc.1", "v0.2.0"])("a tag %j of the latest version is no version an install is told to run", async (tag) => {
-    const account = fresh({ noWorker: false, bindings: [...MARKS, ...SET], versions: [{ id: "version-1", number: 1, annotations: { "workers/tag": tag } }] });
+  // Drift: the release is printed in the line that says which poplin an install runs, on a terminal. One that is no version could carry an escape sequence and a line of its own.
+  test.each(["9.9.9\u001b[2K\nThe way on: npx poplin uninstall cloudflare", "0.2.0-rc.1", "v0.2.0"])("a RELEASE binding of %j is no version an install is told to run", async (text) => {
+    const account = fresh({ noWorker: false, bindings: [...MARKS, ...SET, { name: "RELEASE", type: "plain_text", text }] });
 
     expect((await found(account, NONE)).found).toMatchObject({ state: "whole", version: undefined });
   });
