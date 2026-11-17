@@ -4,7 +4,7 @@
 //   every needed piece ok              note none
 //   the login needs repair             login_broken        private sites may be locked
 //   a piece sites answer through       sites_unreachable   sites may not open; the sentence names the piece
-//   the users changed since a repair   users_changed       the domain's login still lets in the users of the last repair
+//   the users changed since a repair   users_changed       the login still lets in the users of the last repair; so does a change of who gets the alerts, mailed as that repair left them
 //   any other piece needs repair       needs_repair
 //   a piece could not be read          not_read
 //   any of the four found, 30 days old check_again         the memory is too old to raise an alarm
@@ -27,7 +27,7 @@ const STALE_AFTER_MS = 30 * DAY_MS;
 const SENTENCES: Readonly<Record<DomainNote["code"], (thing: string, about: string | null) => string>> = {
   login_broken: () => "The login for private sites is missing or changed, so private sites may be locked. Open Domain and press Repair.",
   sites_unreachable: (_thing, about) => `The ${about} is missing or changed, so sites may not open. Open Domain and press Repair.`,
-  users_changed: () => "Users changed. Open Domain and press Repair.",
+  users_changed: () => "Users or alerts changed. Open Domain and press Repair.",
   needs_repair: (thing) => `A piece of ${thing} is missing or changed. Open Domain and press Repair.`,
   not_read: (thing) => `A piece of ${thing} could not be read. Open Domain and press Check.`,
   check_again: (thing) => `The last check of ${thing} is over 30 days old. Open Domain and press Check.`,

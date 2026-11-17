@@ -280,8 +280,8 @@ export const COMMANDS = [
     arguments: [{ name: "zip", about: "A zip made by export", required: true }],
     flags: [
       { name: "--site", value: "<site>", about: "Import only this site" },
-      { name: "--settings", about: "Replace the install's settings, except the users" },
-      { name: "--users", about: "Replace the users too", with: "--settings" },
+      { name: "--settings", about: "Replace the install's settings\nKeeps users and alert_users" },
+      { name: "--users", about: "Replace users and alert_users too", with: "--settings" },
       DRY_RUN,
       ...INSTALL_FLAGS,
     ],

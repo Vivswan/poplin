@@ -18,7 +18,7 @@
     "category": "Developer Tools",
     "capabilities": ["Read", "Bash"],
     "websiteURL": "https://github.com/Vivswan/poplin/tree/main/skills/poplin",
-    "defaultPrompt": ["Put this report online.", "Update the report I shared yesterday.", "Set up poplin on this computer."],
+    "defaultPrompt": ["Put this report online.", "Update the report I shared yesterday.", "Set up poplin on this machine."],
     "brandColor": "#3B66D6"
   }
 }

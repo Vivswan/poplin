@@ -7,7 +7,7 @@ order: 40
 
 The tools an agent calls, each with one example input and the command that does the same; the agent's rules are not here but in the skill.
 
-`npx poplin mcp` runs the MCP server on this computer. An agent starts it and calls these tools:
+`npx poplin mcp` runs the MCP server on this machine. An agent starts it and calls these tools:
 
 | Tool            | Example input                                              | Same as                                       |
 | --------------- | ---------------------------------------------------------- | --------------------------------------------- |

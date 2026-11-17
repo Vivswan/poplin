@@ -15,7 +15,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | ---------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
 | `no_login`, `no_server`                        | this machine has no login                         | `npx poplin login --server https://poplin.example.com`        |
 | `not_logged_in`                                | the login ran out                                  | `poplin login`                                                |
-| `login_denied`, `login_expired`, `interrupted` | the login was not allowed; nothing was stored       | `poplin login` again, and allow it in the browser             |
+| `login_denied`, `login_expired`, `interrupted` | the login was not approved; nothing was stored      | `poplin login` again, and approve it in the browser           |
 | `bad_login`                                    | the stored login cannot be used                     | `poplin login` again                                          |
 | `bad_server`                                   | `--server` takes an `https://` URL, host only      | `--server https://poplin.example.com`                         |
 | `wrong_server`                                 | the login is for another install                   | log in to this one with `--server`                            |

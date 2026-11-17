@@ -1,6 +1,6 @@
 // What the Domain screen is answered after a run: every piece as a row to draw, one line that counts what is left, and the steps only a person can do. A run that read no table is answered as a refusal that names the box it is about.
 //
-//   2 to repair                      or, with nothing to repair after a user was added or removed: Users changed. Press Repair.
+//   2 to repair                      or, with nothing to repair after the users or the choice of who gets the alerts changed: Users or alerts changed. Press Repair.
 //   Piece         State          Detail
 //   DNS record    missing        poplin.example.com
 //   DNS record    needs repair   poplin.example.com: missing or changed      as the install remembers a run: it keeps no more of why
@@ -55,8 +55,8 @@ const RUN_SENTENCES: Readonly<Record<string, string>> = {
   allowance_spent: "The database takes no more today: its free allowance for the day is used up. Try again after midnight UTC.",
 };
 
-/** The line of a domain with nothing to repair whose users changed since the last repair: the login lets in the users of that repair. */
-const USERS_CHANGED: Summary = { line: "Users changed. Press Repair.", tone: "bad" };
+/** The line of a domain with nothing to repair whose users, or the users its alerts go to, changed since the last repair: the provider still holds what that repair wrote. */
+const USERS_CHANGED: Summary = { line: "Users or alerts changed. Press Repair.", tone: "bad" };
 
 /** The box of the form each refusal is about. A refusal missing here is about no box. */
 const ABOUT: Readonly<Record<string, string>> = { token: "token" };

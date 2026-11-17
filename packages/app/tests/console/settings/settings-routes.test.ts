@@ -9,7 +9,7 @@ import type { UsersFollow } from "../../../src/console/access/users-follow";
 import type { DomainPlug } from "../../../src/console/domain/records";
 import { CONTROL_KINDS, controlOf } from "../../../src/console/settings/setting-controls";
 import { openConsole } from "../support/console";
-import { usualPlug } from "../support/fake-plug";
+import { TOKEN, usualPlug } from "../support/fake-plug";
 
 /** The provider's side of a setting on an install that holds its key: every change is taken. */
 const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const, rules: "written" as const }) };
@@ -177,6 +177,20 @@ describe("the setting of who the alerts go to", () => {
     const saved = await opened.change("/data/settings", { texts: { alert_users: opened.base.owner, trash_days: "30" } });
 
     expect([marked, await saved.json(), follow.sent]).toEqual([keyed ? [] : ["alert_users"], { ok: true, waits, carried }, Array.from({ length: tries }, () => [opened.base.owner])]);
+  });
+
+  // Drift: a choice saved where nothing carries it would be told as a change of the users alone, where no user changed; or said on an install that carries it by itself.
+  test.each([
+    ["that holds no key", false, ["Users or alerts changed", "Users or alerts changed. Open Domain and press Repair.", "Users or alerts changed. Press Repair."]],
+    ["that holds a key", true, [null, null, "Nothing to repair"]],
+  ] as const)("saved after a repair on an install %s, is told by the side and by Domain as a change of the users or the alerts", async (_name, keyed, shown) => {
+    const opened = await openConsole("", PLUG, { follow: following(keyed) });
+    await opened.change("/data/domain/repair", { token: TOKEN });
+    await opened.change("/data/settings", { texts: { alert_users: opened.base.owner } });
+    const { domainNote } = (await (await opened.get("/data/frame")).json()) as { readonly domainNote: { readonly label: string; readonly sentence: string } | null };
+    const { last } = (await (await opened.get("/data/domain")).json()) as { readonly last: { readonly summary: { readonly line: string } } };
+
+    expect([domainNote?.label ?? null, domainNote?.sentence ?? null, last.summary.line]).toEqual([...shown]);
   });
 
   // Drift: an address that is no user would be stored, or refused in words about a login list this screen does not show.

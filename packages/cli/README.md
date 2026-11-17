@@ -7,7 +7,7 @@ npx poplin install cloudflare                          # once: your own install,
 ```
 
 ```sh
-npx poplin login --server https://poplin.example.com   # once on each computer
+npx poplin login --server https://poplin.example.com   # once on each machine
 npx poplin mcp                                         # the MCP server an agent starts
 ```
 
