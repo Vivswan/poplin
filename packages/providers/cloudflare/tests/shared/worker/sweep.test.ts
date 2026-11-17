@@ -161,7 +161,7 @@ describe("the scheduled run", () => {
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
     const login = { holdsKey: () => true, repair: async () => ({ wrote: [], users: false, calls: 0, refusal: undefined }) };
     const keepAlerts = async (): Promise<{ readonly wrote: readonly string[] }> => ({ wrote: [] });
-    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, logs: keyless };
+    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, dailyLogs: keyless };
     const kinds = async (): Promise<string[]> => (await install.database.listProblems(dayOf(w.clock.now))).map((problem) => problem.kind);
     await noteProblem(install, "login_unchecked");
     const noted = await kinds();

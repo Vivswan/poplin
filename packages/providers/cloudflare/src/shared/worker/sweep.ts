@@ -95,7 +95,7 @@ interface Running {
   readonly follow: UsersFollow;
   readonly keepAlerts: (email: string) => Promise<KeptAlerts>;
   readonly rules: RulesFollow;
-  readonly logs: LogsFollow;
+  readonly dailyLogs: LogsFollow;
 }
 
 /** The calls a run has made so far. A call to the database is one query to D1, and one to the web is the request for the newest version. */
@@ -196,11 +196,11 @@ async function carryWaiting(install: Install, running: Pick<Running, "follow" | 
 }
 
 /** State the setting of the logs to Cloudflare, where the install holds a key to state it with: a change that did not reach Cloudflare is carried so, within a day. A refusal is left for the next day's run. */
-async function stateLogs(install: Install, running: Pick<Running, "logs">, tally: Tally, kept: boolean): Promise<void> {
-  if (!running.logs.holdsKey()) return;
+async function stateLogs(install: Install, running: Pick<Running, "dailyLogs">, tally: Tally, kept: boolean): Promise<void> {
+  if (!running.dailyLogs.holdsKey()) return;
 
   tally.web += LOGS_CALLS;
-  await followLogs(install, running.logs, kept);
+  await followLogs(install, running.dailyLogs, kept);
 }
 
 /**
