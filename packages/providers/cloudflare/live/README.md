@@ -4,9 +4,10 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 
 | To                                                | Run                                                                       | Needs                                                                     |
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| check the checks themselves, against a local fake | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts/live`                                                   | nothing                                                                   |
+| check the checks themselves, against a local fake | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts`                                                        | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
+| check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
 | check that a release publishes its built Worker   | a release's own run of main, then the next one: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
@@ -33,8 +34,8 @@ Live Checks workflows, one for each kind of install
 
 | Workflow                        | File                                                | Install                                  | Checks on the run                                             |
 | ------------------------------- | --------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
-| `Live Checks`                   | `.github/workflows/live-checks.yml`                 | on the account that holds a domain       | `live (domain) / checks`, `live (domain) / reset`             |
-| `Live Checks (account address)` | `.github/workflows/live-checks-account-address.yml` | on the account that holds none           | `live (account address) / checks`, `live (account address) / reset` |
+| `Live Checks`                   | `.github/workflows/live-checks.yml`                 | on the account that holds a domain       | `live (domain) / checks`, `live (domain) / reset`, and by hand `live (domain) / upgrade` |
+| `Live Checks (account address)` | `.github/workflows/live-checks-account-address.yml` | on the account that holds none           | `live (account address) / checks`, `live (account address) / reset`, and by hand `live (account address) / upgrade` |
 
 Each workflow runs the same steps on its own install. A push starts the one whose install its files reach, or both. One that fails stops no other.
 
@@ -71,6 +72,8 @@ The files are those of the one push, first commit to last. GitHub reads the firs
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
 | a run started by hand                                  | deploy and checks, with no wait for CI                               |
 | a run started by hand with `start_over` ticked         | first removes the install with `poplin uninstall`, then the same     |
+| a run started by hand with `upgrade` ticked            | first the job `upgrade`, then deploy and checks, whatever the upgrade came to |
+| a run started by hand with `load` ticked               | the same, and [the load](#the-load) after the checks                 |
 | a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
 | the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
 | a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
@@ -110,6 +113,77 @@ The same removal runs with nobody asking where another build made the install, s
 | a Worker of an install that was started and never finished               | `Start over: another build made it: a Worker of an install that was never finished` |
 
 On an account without the marking bucket the step makes, mends, and removes nothing: it stops red before its first command.
+
+## The upgrade
+
+An install the older build made and filled takes the build of main as an update, and is asked again for everything it held. It runs on each of the two test installs, by hand alone.
+
+On GitHub: Actions, the workflow of the install, Run workflow on `main`, tick `upgrade`, Run workflow.
+
+```text
+job upgrade
+  scripts/upgrade/older-build.ts   the older build in a folder of its own, its packages installed, its Worker built: no secret reaches this step
+                                   this checkout told one patch above the older build's version, then built
+  scripts/upgrade/upgrade.ts       a test account alone -> the older build's own poplin uninstall and poplin install
+                                   -> the older build's command line: 3 sites, a second version, a setting, a user; a token of its making
+                                   -> the older build's own start of an update, fed the build of main as a release
+                                   -> the install says the new version 12 times in a row -> one line a check
+                                   -> the settings put back, the sites and the token's row removed
+job checks                         the install put back to the commit's own build, every live check on the updated install, the samples
+```
+
+| The older build                              | Is                                                                                       |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| once a release is among the ancestors of main | the highest `vX.Y.Z` tag                                                                 |
+| before the first release                     | the commit `STAND_IN` of `older-build.ts`, which npm holds as a pre-release of the command |
+
+A pre-release on npm is the command alone: no built Worker and no line of the website's `releases.json` exists for one. So the Worker of the older build is built from its commit, and its own harness installs it.
+
+| Check        | Holds when                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------ |
+| `Version`    | the install says the version the build of main was published under                                           |
+| `Sites`      | each site is shown to its holder as before, a stranger is answered the same status, bytes, and media type, and a backup of it holds the same files in every version |
+| `Token`      | the token made before the update read every site, the settings, and the log                                  |
+| `Settings`   | every setting is as before, the changed one and the added user among them                                    |
+| `Activity`   | every entry from before is there, and one `update_started` entry names both versions                         |
+| `Database`   | it holds every schema step of main, as main applies them                                                     |
+| `Doctor`     | `poplin doctor --repair --dry-run` would change nothing, once the two settings were put back                 |
+| `Going back` | the version before is offered; or none is, where the update changed the database                             |
+| `Cleanup`    | the two settings were put back, and the sites and the token's row removed                                    |
+
+```text
+Older install: made by the older build's own poplin install, which says the version 0.0.0
+Older install: filled with 3 sites, a second version, a setting, and a user
+Update: the older build took 0.0.1 over 0.0.0, by its own start of an update
+Bucket writes and lists the upgrade asked for: 19 of at most 40
+Rows written this run: 144 of at most 300
+Version: runs 0.0.1, and ran 0.0.0
+Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte
+Going back: offered, to 0.0.0
+Cleanup: the two settings put back, the sites and the token's row removed
+```
+
+A check that fails says `FAILED` and what differs, by a site's place and access or a setting's key: never a name, an address, or a value.
+
+| What the start of the update is                  | Whose                                                             |
+| ------------------------------------------------ | ----------------------------------------------------------------- |
+| the release picked, its files fetched and checked | the older build's code                                            |
+| the `update_started` entry, the upload            | the older build's code, over the database's API                   |
+| the key the upload is sent with                   | the run's token, where a deployed install uses the key it keeps   |
+| the release                                       | the build of main, answered in the run's own process              |
+| the count of starts a minute                      | left out: a binding of the Worker keeps it                        |
+
+A deployed Worker reads releases from the project's website alone, which names no build of a commit. So no run shows a deployed Worker that fetches a release and uploads itself with its kept key: the `self-update` row of the checklist does, once two releases are out.
+
+```text
+the upgrade, as the harness counts it   144 rows and 19 bucket writes and lists on the local fake, of at most 300 and 40
+beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
+a run with upgrade ticked               about 144 + 20 + 922 (the checks) + 390 (a reset that keeps no sample) = about 1,480 rows, on each account it runs on
+```
+
+The release gate reads it. `.github/workflows/release-gate.yml` runs on the pull request of a release, where no job may read a test account's secrets.
+
+Its job `live upgrade of both kinds of install` passes once each of the two workflows holds a green run by hand, with a green `upgrade` job, of the commit of main the release's branch stands on. Without one it names the workflow to run.
 
 ## The test install
 
@@ -278,9 +352,9 @@ Each account has its own allowances, and every ceiling below holds for each inst
 | the zone's plan is Free, where the account holds a zone, and every subscription of the account that has not ended is at a price of 0 | `plan.ts`, before anything is made | the run stops red |
 | a budget alert at 1 US dollar of usage charges, to the run's login | the repair, with the token permission Notifications: Edit; without it, the install's own key within a day | Cloudflare emails the login. Nothing is stopped |
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
-| bucket writes and lists: 150 by the checks, 300 by the midnight run's, 2,300 with the many-files check, 150 by a reset | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
+| bucket writes and lists: 150 by the checks, 300 by the midnight run's, 2,300 with the many-files check, 80 more with the load, 150 by a reset, 40 by an upgrade | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | bucket lists and deletes: 300 together by the removal of the files no record names | `orphans.ts`, around every call to Cloudflare for the bucket | the removal stops, and the next run goes on |
-| rows written to the database: 1,100 by the checks, 600 by a reset | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
+| rows written to the database: 1,100 by the checks, 600 more with the load, 600 by a reset, 300 by an upgrade | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
 | the sample sites and the demo: 12 sites, 120 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
@@ -377,6 +451,34 @@ The harness's count is the most each request writes for a site a run made, so it
 ```text
 Rows written this run: 866 of at most 1100
 ```
+
+## The load
+
+A run started by hand with `load` ticked adds one check after all the others: some of the requests of the [load test](../README.md), at small, fixed sizes. No push and no midnight run makes it.
+
+| Step | Requests | Rows written, at most | Bucket writes and lists |
+| --- | --- | --- | --- |
+| publish 5 sites of one page | one publish each | 20 each | 2 each |
+| publish one site of 20 files | one publish | 20 | 21 |
+| open its page | 30 one after another, then 50 at once | 2 each | none |
+| ask for a file it does not hold | 10 one after another, then 10 at once | 2 each | none |
+| list the sites | 5 one after another | none | none |
+| copy the site of 20 files | one command | 21 | 22 |
+| the run's sweep removes the 7 sites | one removal each | 13 each | 1 each |
+
+```text
+load: at most 432 rows written of a ceiling of 600, 60 bucket writes and lists of a ceiling of 80, and 100 visits of one visitor's 120 a minute
+```
+
+| The load | What happens |
+| --- | --- |
+| says its plan before it sends anything | the first line above: the rows, the bucket writes and lists, and the visits it makes at the most |
+| plans more than a ceiling, or more visits than one visitor's minute holds | it sends nothing, and the check fails with the number that is over |
+| waits 61 seconds before its first visit | the checks of the edge before it used up its visitor's minute |
+| is answered a visitor's refusal, status 429 with `Retry-After` and the install's own words | counted as refused, and no failure |
+| is answered anything else that is not what the step asks for | the check fails, with the statuses alone |
+
+The plan counts each file a copy writes; the run's own meter counts a copy as one request, so its line of bucket writes and lists reads 21 under the plan. The times are those of the runner's requests over the network, and no measure of the Worker's processing. `live/checks/load.ts` holds the sizes, and `tests/live/checks/load.test.ts` runs the load against the local fake of both kinds of install.
 
 ## The backup drill
 
@@ -501,6 +603,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | one data center that takes more than 300 of the runner's requests in ten seconds | `burst-rate-rule`                                           |
 | a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
+| a run started by hand with the load switched on                     | `load`: it is no row of any other run's table                            |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`, `download`: the checklist below        |
 | a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` |
 

@@ -5,6 +5,7 @@
 //   POPLIN_LIVE_TOKEN     an admin's token of the install; absent, the checks that need one are skipped
 //   POPLIN_LIVE_LOGIN     a login the install is told to let in; absent, its logins stay as they are
 //   POPLIN_LIVE_MANY_FILES  1 to publish two thousand small files; any other value skips that check
+//   POPLIN_LIVE_LOAD      1 to add the load after the checks: a few publishes, a hundred visits in a row and at once, and a copy; any other value leaves it out
 //   POPLIN_LIVE_JOB_COPY  1 to copy a site too large for one request, which the install's job finishes; any other value skips that check
 //   POPLIN_LIVE_RUN       what tells this run's sites from another's; `local` when absent
 //   POPLIN_LIVE_MISSING   a JSON object of what the install is known to lack, each with its reason
@@ -27,11 +28,18 @@ import { type LiveInstall, liveAddresses } from "./addresses";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
 import { CHECKS } from "./checks";
+import { loadChecks } from "./checks/load";
 import type { Missing, Outcome } from "./records";
 import { outcomeTable, runCheck } from "./report";
 
 /** Whether the suite runs at all. */
 const LIVE = process.env.POPLIN_LIVE === "1";
+
+/** Whether the run adds the load to its checks. */
+const LOAD = process.env.POPLIN_LIVE_LOAD === "1";
+
+/** The checks of this run: the load comes last, after a wait of its own, since the checks of the edge before it use up its visitor's minute. */
+const RUN = LOAD ? [...CHECKS, ...loadChecks()] : CHECKS;
 
 /** How long one check may take: the publish of many files is thousands of requests, and the burst waits out the rate rule's block. */
 const CHECK_TIMEOUT_MS = 900_000;
@@ -98,11 +106,17 @@ function knownMissing(): Missing {
   return known;
 }
 
-/** The most bucket writes and lists this run's checks may ask for: by the costliest check it was asked to make. */
+/** The most bucket writes and lists this run's checks may ask for: by the costliest check it was asked to make, and the load's own on top where the run adds it. */
 function bucketCeiling(): number {
-  if (setting("POPLIN_LIVE_MANY_FILES") === "1") return CEILINGS.manyFiles;
+  const load = LOAD ? CEILINGS.load : 0;
+  if (setting("POPLIN_LIVE_MANY_FILES") === "1") return CEILINGS.manyFiles + load;
 
-  return setting("POPLIN_LIVE_JOB_COPY") === "1" ? CEILINGS.jobCopy : CEILINGS.checks;
+  return (setting("POPLIN_LIVE_JOB_COPY") === "1" ? CEILINGS.jobCopy : CEILINGS.checks) + load;
+}
+
+/** The most rows this run's checks may make the install write: the load's own on top where the run adds it. */
+function rowCeiling(): number {
+  return ROW_CEILINGS.checks + (LOAD ? ROW_CEILINGS.load : 0);
 }
 
 describe.skipIf(!LIVE)("a deployed install", () => {
@@ -110,7 +124,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
   const outcomes: Outcome[] = [];
   // A request past the ceiling of bucket writes and lists is held back, which fails its check, and the run says so in one line.
   const meter = meterBucket(sendLive, bucketCeiling());
-  const rows = meterRows(meter.fetch, ROW_CEILINGS.checks);
+  const rows = meterRows(meter.fetch, rowCeiling());
   const provider = providerOf();
   const install = installOf();
   // A run told no install opens no bench: the checks then fail before they send anything.
@@ -154,7 +168,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
     );
     opened?.close();
     console.log(`Bucket writes and lists the checks asked for: ${meter.spent()}`);
-    console.log(`Rows written this run: ${rows.written()} of at most ${ROW_CEILINGS.checks}`);
+    console.log(`Rows written this run: ${rows.written()} of at most ${rowCeiling()}`);
 
     const stopped = meter.stopped() ?? rows.stopped();
     if (stopped === undefined && swept !== undefined) throw swept.error;
@@ -165,7 +179,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
     throw new Error(`The live checks ${stopped}.`);
   }, CHECK_TIMEOUT_MS);
 
-  for (const check of CHECKS) {
+  for (const check of RUN) {
     test(
       `${check.id}: ${check.name}`,
       async () => {

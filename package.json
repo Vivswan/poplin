@@ -15,7 +15,7 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "typecheck": "tsc -p . && tsc -p website && bun run --cwd packages/providers/cloudflare typecheck && bun run --cwd packages/demo typecheck && bun run --cwd packages/dashboard typecheck",
-    "test": "bun test --pass-with-no-tests --path-ignore-patterns 'packages/providers/cloudflare/tests/shared/{worker,storage,database,limits,jobs}/**' --path-ignore-patterns 'packages/dashboard/**'",
+    "test": "bun test --pass-with-no-tests --path-ignore-patterns 'packages/providers/cloudflare/tests/shared/{worker,storage,database,limits,jobs}/**' --path-ignore-patterns 'packages/providers/cloudflare/tests/load/**' --path-ignore-patterns 'packages/dashboard/**'",
     "test:client": "bun run --cwd packages/dashboard test",
     "test:worker": "bun run --cwd packages/providers/cloudflare test",
     "live": "POPLIN_LIVE=1 bun test ./packages/providers/cloudflare/live/live.test.ts",

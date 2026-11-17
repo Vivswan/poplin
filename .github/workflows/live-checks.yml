@@ -59,6 +59,14 @@ on:
         description: First remove the test install with poplin uninstall, then make it from nothing with poplin install
         type: boolean
         default: false
+      upgrade:
+        description: First install the older build, fill it, and update it to the build of main (removes the test install, and writes about 1,500 database rows)
+        type: boolean
+        default: false
+      load:
+        description: Also run the small load after the checks (at most 600 rows written and 80 bucket writes and lists on the test account)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -81,6 +89,8 @@ jobs:
       environment: with-domain-ci-tests
       many_files: ${{ inputs.many_files == true }}
       start_over: ${{ inputs.start_over == true }}
+      upgrade: ${{ inputs.upgrade == true }}
+      load: ${{ inputs.load == true }}
     # Only the names the steps read. The called jobs name the environment, and its secret of a name is the one they read, not a value handed over here.
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

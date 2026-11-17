@@ -18,9 +18,12 @@
     "test": "bun run build && vitest run",
     "costs": "bun run build && vitest run tests/shared/worker/request-budget.test.ts",
     "costs:compare": "bun scripts/action-costs.ts",
+    "load": "bun run build && POPLIN_LOAD=full vitest run",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",
-    "live:reset": "bun scripts/live/reset.ts"
+    "live:reset": "bun scripts/live/reset.ts",
+    "live:upgrade-builds": "bun scripts/upgrade/older-build.ts",
+    "live:upgrade": "bun scripts/upgrade/upgrade.ts"
   },
   "dependencies": {
     "@poplin/app": "workspace:*",
@@ -35,8 +38,10 @@
   "devDependencies": {
     "@actions/core": "3.0.1",
     "@cloudflare/vitest-plugin": "1.8.2",
+    "@types/semver": "7.8.0",
     "es-module-lexer": "2.3.2",
     "hono": "4.13.18",
+    "semver": "7.8.6",
     "vitest": "5.1.0",
     "wrangler": "4.162.0"
   }

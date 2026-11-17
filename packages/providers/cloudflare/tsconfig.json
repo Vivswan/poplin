@@ -8,6 +8,6 @@
     // Core's contract suite imports its test functions from bun; here they are Vitest's, as vitest.config.ts resolves them.
     "paths": { "bun:test": ["./node_modules/vitest"] }
   },
-  "include": ["src/shared/worker", "src/shared/storage", "src/shared/database", "src/shared/limits", "src/shared/jobs", "tests/shared/worker", "tests/shared/storage", "tests/shared/database", "tests/shared/limits", "tests/shared/jobs", "vitest.config.ts"],
+  "include": ["src/shared/worker", "src/shared/storage", "src/shared/database", "src/shared/limits", "src/shared/jobs", "tests/shared/worker", "tests/shared/storage", "tests/shared/database", "tests/shared/limits", "tests/shared/jobs", "load", "tests/load", "vitest.config.ts"],
   "exclude": []
 }

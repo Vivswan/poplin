@@ -134,8 +134,8 @@ declare module "vitest" {
   }
 }
 
-/** A row's stage on an empty install that has started once: its schema, its first settings, and its visitor key are there. */
-async function stageOf(): Promise<Stage> {
+/** A stage on an empty install that has started once: its schema, its first settings, and its visitor key are there. */
+export async function stageOf(): Promise<Stage> {
   const w = await world();
   await ask(instance(w), `${ADMIN}/api/whoami`);
 
