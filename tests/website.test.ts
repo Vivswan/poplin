@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { publishedPins } from "../packages/core/src/records/release";
 import { publishedRelease } from "../packages/core/src/records/update";
 import { newestRelease } from "../website/src/lib/changelog";
+import { demoEntry } from "../website/src/lib/demo";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -12,17 +13,45 @@ const WEBSITE = join(ROOT, "website");
 
 const SITE = { PAGES_ORIGIN: "https://site.example.com", PAGES_BASE_PATH: "/poplin/" };
 
-const BUILD_SETTINGS = ["DEMO_URL", "POPLIN_CHANGELOG", "POPLIN_RELEASE_PINS", "PAGES_ORIGIN", "PAGES_BASE_PATH"];
+const BUILD_SETTINGS = ["DEMO_URL", "DEMO_URL_NO_DOMAIN", "POPLIN_CHANGELOG", "POPLIN_RELEASE_PINS", "PAGES_ORIGIN", "PAGES_BASE_PATH"];
 
 const DEMO = "https://demo-page.example.com/";
 
 const PAGES = ["index.html", "404.html"];
 
-const BUILDS: readonly (readonly [what: string, value: string | undefined, links: readonly string[]])[] = [
-  ["no value", undefined, []],
-  ["an https address", DEMO, [DEMO]],
-  ["an address that is not https", "http://demo-page.example.com/", []],
-  ["a value that is no address", "demo-page", []],
+const DEMO_NO_DOMAIN = "https://demo-page.example.workers.dev/demo/";
+
+const WITH = { label: "With a domain", href: DEMO };
+
+const WITHOUT = { label: "Without a domain", href: DEMO_NO_DOMAIN };
+
+const ENTRIES: readonly (readonly [what: string, domain: string | undefined, noDomain: string | undefined, entry: ReturnType<typeof demoEntry>])[] = [
+  ["neither value", undefined, undefined, { kind: "none" }],
+  ["two empty values", "", "", { kind: "none" }],
+  ["the domain's alone", DEMO, undefined, { kind: "one", link: WITH }],
+  ["the other's alone", undefined, DEMO_NO_DOMAIN, { kind: "one", link: WITHOUT }],
+  ["both", DEMO, DEMO_NO_DOMAIN, { kind: "two", links: [WITH, WITHOUT] }],
+  ["both, the domain's not https", "http://demo-page.example.com/", DEMO_NO_DOMAIN, { kind: "one", link: WITHOUT }],
+  ["both, the other's no address", DEMO, "demo-page", { kind: "one", link: WITH }],
+  ["both, neither https", "ftp://demo-page.example.com/", "demo-page", { kind: "none" }],
+  ["an address with no closing slash", "https://demo-page.example.com", undefined, { kind: "one", link: WITH }],
+];
+
+const BUILDS: readonly {
+  readonly what: string;
+  readonly domain?: string;
+  readonly noDomain?: string;
+  readonly bar: readonly string[];
+  readonly menu: readonly string[];
+  readonly scriptless: readonly string[];
+  readonly home: readonly string[];
+}[] = [
+  { what: "no value", bar: [], menu: [], scriptless: [], home: [] },
+  { what: "an https address", domain: DEMO, bar: [DEMO], menu: [], scriptless: [], home: [DEMO] },
+  { what: "an address that is not https", domain: "http://demo-page.example.com/", bar: [], menu: [], scriptless: [], home: [] },
+  { what: "a value that is no address", domain: "demo-page", bar: [], menu: [], scriptless: [], home: [] },
+  { what: "the address without a domain alone", noDomain: DEMO_NO_DOMAIN, bar: [DEMO_NO_DOMAIN], menu: [], scriptless: [], home: [] },
+  { what: "both addresses", domain: DEMO, noDomain: DEMO_NO_DOMAIN, bar: [], menu: [DEMO, DEMO_NO_DOMAIN], scriptless: [DEMO], home: [DEMO] },
 ];
 
 const FIRST_RELEASE = `## 0.1.0 (2026-11-20)
@@ -114,6 +143,38 @@ function demoLinks(html: string, part: "header nav" | "main"): string[] {
   return links.filter((link) => link.includes("demo-page"));
 }
 
+/** The demo's addresses a piece of a page names, in the order it names them. */
+function named(piece: string): string[] {
+  return [DEMO, DEMO_NO_DOMAIN].filter((address) => piece.includes(address)).sort((one, other) => piece.indexOf(one) - piece.indexOf(other));
+}
+
+/** The addresses the top bar's menu is built holding, in its order: the menu's own links exist only once a browser opens it. */
+function menuLinks(html: string): string[] {
+  const held: string[] = [];
+  const islands = new HTMLRewriter().on("header nav li:first-child astro-island[props]", { element: (island) => void held.push(island.getAttribute("props") ?? "") });
+  islands.transform(html);
+
+  return named(held.join(""));
+}
+
+/** The addresses the top bar links where no script runs, and so no menu opens. */
+function scriptlessLinks(html: string): string[] {
+  const held: string[] = [];
+  const reader = new HTMLRewriter().on("header nav li:first-child noscript", { text: (chunk) => void held.push(chunk.text) });
+  reader.transform(html);
+
+  return named(held.join(""));
+}
+
+/** The address of the first link of the top bar. */
+function firstLink(html: string): string | undefined {
+  const links: string[] = [];
+  const anchors = new HTMLRewriter().on("header nav a[href]", { element: (anchor) => void links.push(anchor.getAttribute("href") ?? "") });
+  anchors.transform(html);
+
+  return links[0];
+}
+
 /** The line of a page's footer that names the product and its newest version. */
 function footLine(html: string): string {
   let line = "";
@@ -129,15 +190,18 @@ function footLine(html: string): string {
 
 describe("the built website", () => {
   test.each(BUILDS)(
-    "holds no copy of the demo, and links to the running one, from the top of every page and from the home page, only at an https address it was given (%s): without this a build puts the demo back on the site, or a page gets a dead link",
-    (what, value, links) => {
+    "holds no copy of the demo, and links to the running one first in the top bar and from the home page, only at an https address it was given, with a menu when given both ($what): without this a page gets a dead link, or one kind's demo is not offered",
+    ({ what, domain, noDomain, bar, menu, scriptless, home }) => {
       using site = mkdtempDisposableSync(join(tmpdir(), "poplin-website-"));
-      build(site.path, { DEMO_URL: value });
+      build(site.path, { DEMO_URL: domain, DEMO_URL_NO_DOMAIN: noDomain });
       const pages = PAGES.map((page) => readFileSync(join(site.path, page), "utf8"));
 
       expect(existsSync(join(site.path, "demo")), what).toBe(false);
-      expect(pages.map((page) => demoLinks(page, "header nav"))).toEqual(PAGES.map(() => [...links]));
-      expect(demoLinks(pages[0] ?? "", "main")).toEqual([...links]);
+      expect(pages.map((page) => demoLinks(page, "header nav"))).toEqual(PAGES.map(() => [...bar]));
+      expect(pages.map((page) => menuLinks(page))).toEqual(PAGES.map(() => [...menu]));
+      expect(pages.map((page) => scriptlessLinks(page))).toEqual(PAGES.map(() => [...scriptless]));
+      if (bar[0] !== undefined) expect(pages.map((page) => firstLink(page))).toEqual(PAGES.map(() => bar[0]));
+      expect(demoLinks(pages[0] ?? "", "main")).toEqual([...home]);
     },
     120_000,
   );
@@ -163,6 +227,12 @@ describe("the built website", () => {
     },
     120_000,
   );
+});
+
+describe("the top bar's demo entry", () => {
+  test.each(ENTRIES)("is nothing, one link, or a menu of two, from the https addresses among the build's two values (%s): without this the bar offers a dead link, or a menu with one item", (what, domain, noDomain, entry) => {
+    expect(demoEntry({ domain, noDomain }), what).toEqual(entry);
+  });
 });
 
 describe("the changelog", () => {

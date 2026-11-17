@@ -142,6 +142,7 @@ jobs:
       - name: Build
         env:
           DEMO_URL: ${{ vars.DEMO_URL }}
+          DEMO_URL_NO_DOMAIN: ${{ vars.DEMO_URL_NO_DOMAIN }}
         run: |
           export PAGES_BASE_PATH="/${GITHUB_REPOSITORY#*/}/"
           export PAGES_ORIGIN="https://${GITHUB_REPOSITORY_OWNER}.github.io"
