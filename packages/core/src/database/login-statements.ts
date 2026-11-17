@@ -1,4 +1,4 @@
-// The statements that read tokens and the logins of computers, the ones that make room for a new login, and the one that removes the tokens that ended long ago.
+// The statements that read tokens and the logins of computers, the ones that make room for a new login, the one that removes the tokens that ended long ago, and what a change of the settings is written and read back with.
 
 import { and, asc, count, eq, gt, inArray, isNull, lt, or, type SQL, sql as fragment } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -8,8 +8,9 @@ import type { PendingLogin } from "../auth/computer-logins";
 import type { TokenId } from "../auth/tokens";
 import { HISTORY_KEPT_MS } from "../records/audit";
 import { TOKEN_ID } from "../records/fields";
+import type { SettingValues } from "../records/settings";
 import type { Signed } from "./database";
-import type { Statement } from "./driver";
+import type { Statement, StatementResult } from "./driver";
 import { audit, logins, settings, tokens } from "./schema";
 import { BUILD, built, CHANGED, insertFrom } from "./statements";
 
@@ -78,6 +79,45 @@ export function signerStands(signed: Signed): SQL {
     case "repair":
       return fragment`1`;
   }
+}
+
+/** Whether an email is one of the stored logins, for a statement on the settings row. */
+export function isStoredLogin(email: string): SQL {
+  return fragment`EXISTS (SELECT 1 FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${email})`;
+}
+
+/** The settings, and whether who signs a change of them still stands. */
+export function settingsAndSigner(signed: Signed): Statement {
+  return built(BUILD.select({ value: settings.value, stands: fragment<number>`${signerStands(signed)}`.as("stands") }).from(settings).where(eq(settings.id, 1)));
+}
+
+/** Whether the settings a change comes to keep `auto_update` on only beside `update_check`. It reads the stored settings by itself, so a statement on any table can wait on it. */
+export function updatePairKept(patched: SQL): SQL {
+  const alone = fragment`json_extract(${patched}, '$.auto_update') = 1 AND json_extract(${patched}, '$.update_check') = 0`;
+
+  return fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND NOT (${alone}))`;
+}
+
+/** Whether the read of `settingsAndSigner` found a signer who no longer stands. */
+export function signerGone(read: StatementResult | undefined): boolean {
+  return read?.rows[0]?.stands !== 1;
+}
+
+/** The logins of one list that another does not hold, as a JSON array. Each list is a `json_each` of an array, which the engine walks in the array's order. */
+function loginsApart(held: SQL, missing: SQL): SQL {
+  return fragment`(SELECT json_group_array(one.value) FROM ${held} AS one WHERE one.value NOT IN (SELECT value FROM ${missing}))`;
+}
+
+/**
+ * The audit entry of a change of the settings, with the values it sets. New logins are held with who they add and who they leave out, as `added` and `removed`.
+ * It goes before the change in a batch, under the change's own condition: it reads the logins still stored.
+ */
+export function auditOfSettings(signed: Signed, changes: Partial<SettingValues>, lands: SQL | undefined): Statement {
+  const [stored, given] = [fragment`json_each(${settings.value}, '$.logins')`, fragment`json_each(${JSON.stringify(changes.logins ?? [])})`];
+  const users = fragment`json_set(${JSON.stringify(changes)}, '$.added', json(${loginsApart(given, stored)}), '$.removed', json(${loginsApart(stored, given)}))`;
+  const detail = changes.logins === undefined ? fragment`${JSON.stringify(changes)}` : users;
+
+  return insertFrom(audit, [audit.at, audit.actor, audit.action, audit.detail], fragment`SELECT ${signed.at}, ${signed.by}, 'settings_changed', ${detail} FROM ${settings} WHERE ${lands}`);
 }
 
 /** The tokens that work at a moment, counted by the user behind them. */
