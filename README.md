@@ -60,11 +60,19 @@ One command makes your install. A domain is your choice: take it if you have one
 $ npx poplin install cloudflare
 Your own domain (example.com), or Enter for none: example.com
 Your email, the first login: you@example.com
+...
 Account token (not shown):
+looking for an install ... none
+made      R2 bucket             poplin-sites
+made      D1 database           poplin
 made      Worker                poplin, runs 0.1.0
+...
 poplin 0.1.0 is installed.
 Your dashboard: https://poplin.example.com
+...
 ```
+
+The sample is cut short where the dots are.
 
 Have ready a Cloudflare account with a payment method on it, and Node.js 24. An option answers a question before it is asked. The command prints a link to the form that makes the account token, and `--dry-run` lists what a run would make and changes nothing. [Install](docs/start/install.md) has every step for both kinds.
 

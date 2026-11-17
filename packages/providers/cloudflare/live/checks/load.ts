@@ -1,12 +1,12 @@
 // The load of a live run: some of the scenarios of the load test, at small, fixed sizes, against a deployed install. It runs only on a run started by hand with the load switched on.
 //
 //   step                                      requests                                  rows written, at most    bucket writes and lists
-//   publish `sites` sites of one page         one publish each                          20 each                  2 each
-//   publish one site of `files` files         one publish                               20                       1 a file, and 1
+//   publish `sites` sites of one page         one publish each                          23 each                  2 each
+//   publish one site of `files` files         one publish                               23                       1 a file, and 1
 //   open its page                             `row` one after another, `burst` at once  2 each                   none
 //   ask for a file it does not hold           `missing` in a row, `missing` at once     2 each                   none
 //   list the sites                            `lists` one after another                 none                     none
-//   copy the site of `files` files            one command                               21                       1 a file, and 2
+//   copy the site of `files` files            one command                               24                       1 a file, and 2
 //   the run's sweep removes every site        one removal each                          13 each                  1 each
 //
 // Before it sends anything it says what it will write at the most, and it sends nothing where that is over a ceiling, or where its visits are more than one visitor's minute holds.

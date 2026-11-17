@@ -29,12 +29,13 @@ The login could not be checked     15 Nov 2026, 11:59 once        Domain
 
 An opened problem says when it came, how often, and what to do. Copy the details copies its kind, its times, the version, and the failure for a report.
 
-```text
-$ poplin doctor
-ok      problems  none in 7 days
-ok      problems  none today; in 7 days: sweep_failed
-failed  problems  2 kinds today: request_failed, sweep_failed
-```
+`poplin doctor` prints one of these as its `problems` row:
+
+| The row                                                         | When                                |
+| --------------------------------------------------------------- | ----------------------------------- |
+| `ok  problems  none in 7 days`                                  | no problem came in 7 days           |
+| `ok  problems  none today; in 7 days: sweep_failed`             | none came today; older kinds follow |
+| `failed  problems  2 kinds today: request_failed, sweep_failed` | a problem came today                |
 
 ## What is noted
 
