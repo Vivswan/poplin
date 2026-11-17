@@ -66,3 +66,24 @@ test("a limit typed above the limit that bounds it says so under its field, befo
   await expect(page.getByText(ABOVE.oneSite, { exact: true })).toHaveCount(0);
   expect([all > 0, site > 0]).toEqual([true, true]);
 });
+
+// Drift: the warning was measured against the bounding limit as it was saved, so a site's limit lowered under a visitor's in its own field warned of nothing until Save.
+test("the limit that bounds another, typed under it, puts the warning under the other field before any Save, and takes it away once typed back", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  const field = (name: string): Locator => page.getByRole("textbox", { name, exact: true });
+  const count = async (name: string): Promise<number> => Number((await field(name).inputValue()).replaceAll(",", ""));
+  const [site, visitor, all, one] = [await count("One site per minute"), await count("One visitor per minute"), await count("All sites together"), await count("One site")];
+  const warnings = page.locator("[data-slot='setting-warnings']");
+
+  await field("One site per minute").fill(String(visitor - 1));
+  await field("All sites together").fill(String(one - 1));
+  await expect(warnings.getByText(ABOVE.oneSite, { exact: true })).toBeVisible();
+  await expect(warnings.getByText(ABOVE.allSites, { exact: true })).toBeVisible();
+
+  await field("One site per minute").fill(String(site));
+  await field("All sites together").fill(String(all));
+  await expect(page.getByText(ABOVE.oneSite, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(ABOVE.allSites, { exact: true })).toHaveCount(0);
+  expect([visitor > 1, one > 1]).toEqual([true, true]);
+});

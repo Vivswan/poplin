@@ -41,6 +41,30 @@ export function partsOf(row: Row, text: string): Parts {
 }
 
 /**
+ * A row whose limits follow the settings that bound it, as their controls hold them, saved or not.
+ *
+ * @param shown - the text each row's control holds
+ * @returns the row itself where no other setting bounds it; a limit keeps the saved bound while the bounding control holds no number, or a unit the server sent no size of
+ */
+export function boundedBy(row: Row, rows: readonly Row[], shown: (row: Row) => string): Row {
+  if (row.limits.every((limit) => limit.bound === undefined)) return row;
+
+  const limits = row.limits.map((limit) => {
+    const bounding = rows.find((other) => other.key === limit.bound?.key);
+    if (limit.bound === undefined || bounding === undefined) return limit;
+
+    const { count, unit } = partsOf(bounding, shown(bounding));
+    const times = limit.bound.times[unit];
+    if (count === null || times === undefined) return limit;
+
+    // The base units of what is typed are whole: a count with a fraction, such as 1.001 MB, would else come out a hair under them.
+    return { ...limit, over: Math.floor(Math.round(count * times) / limit.bound.per) };
+  });
+
+  return { ...row, limits };
+}
+
+/**
  * The text of a number: `partsOf` read back.
  *
  * @returns the count with its unit. No count is the word of no number where the row has one and no choice of its own for it, and otherwise the unit alone, which the server refuses
