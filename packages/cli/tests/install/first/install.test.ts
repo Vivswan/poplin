@@ -12,14 +12,14 @@ const HELD = { [TOKEN_VARIABLE]: TOKEN };
 /** A run that gives every answer and asks nothing. */
 const RUN = "install stand-in --no-place --login you@example.com --yes";
 
-/** What runs the command again, as the one JSON value names it. */
-const AGAIN = { step: "install", command: "npx poplin install stand-in" };
+/** What runs the command again at the place of `RUN`, as the one JSON value names it. */
+const AGAIN = { step: "install", command: "npx poplin install stand-in --no-place" };
 
 /** An object a repair is stopped at. */
 const STOPPED_AT: Row = { object: "Program", state: "block", detail: "the token lacks Programs: Edit" };
 
-/** The repair, as the one JSON value names it for the next step. */
-const REPAIR = { step: "repair", command: "npx poplin doctor --repair" };
+/** The repair at the place of `RUN`, as the one JSON value names it for the next step. */
+const REPAIR = { step: "repair", command: "npx poplin doctor --repair --no-place" };
 
 /** What the made-up provider found with the token. */
 const PLACE: Place = { token: TOKEN as Token };
@@ -209,23 +209,24 @@ describe("what a look finds", () => {
   // Drift: the line once named the repair for every install that is there. A person whose install was whole was sent to mend it, when the way on was to log in.
   test.each([
     ["needs nothing mended", undefined, { mend: "nothing" }, ", and it is as it should be", [`The way on: npx poplin login --server ${ADDRESS}`], { step: "login", command: `npx poplin login --server ${ADDRESS}` }],
-    ["lacks an object a repair makes", repairedOf([{ object: "Guard rule", state: "make", detail: "bots" }]), { mend: "something" }, ", and it is not as it should be", ["The way on: npx poplin doctor --repair"], REPAIR],
-    ["has an object a repair is stopped at", repairedOf([STOPPED_AT], { ready: false }), { mend: "something" }, ", and it is not as it should be", ["The way on: npx poplin doctor --repair"], REPAIR],
+    ["lacks an object a repair makes", repairedOf([{ object: "Guard rule", state: "make", detail: "bots" }]), { mend: "something" }, ", and it is not as it should be", [`The way on: ${REPAIR.command}`], REPAIR],
+    ["has an object a repair is stopped at", repairedOf([STOPPED_AT], { ready: false }), { mend: "something" }, ", and it is not as it should be", [`The way on: ${REPAIR.command}`], REPAIR],
     [
       "answers at another place than the one named",
       { ok: false, why: "elsewhere", words: "The install here is at a place: give --place example.com." },
       { mend: "unread", unread: "The install here is at a place: give --place example.com." },
       "",
+      // The place of the line is the wrong one, so the repair named holds none: the sentence names the option.
       ["Whether it is as it should be was not read: The install here is at a place: give --place example.com.", "To see: npx poplin doctor --repair --dry-run"],
-      REPAIR,
+      { step: "repair", command: "npx poplin doctor --repair" },
     ],
     [
       "holds records of another version",
       { ok: false, why: "another", words: "The install's records are of a newer poplin." },
       { mend: "unread", unread: "The install's records are of a newer poplin." },
       "",
-      ["Whether it is as it should be was not read: The install's records are of a newer poplin.", "To see: npx poplin@latest doctor --repair --dry-run"],
-      { step: "repair", command: "npx poplin@latest doctor --repair" },
+      ["Whether it is as it should be was not read: The install's records are of a newer poplin.", "To see: npx poplin@latest doctor --repair --no-place --dry-run"],
+      { step: "repair", command: "npx poplin@latest doctor --repair --no-place" },
     ],
   ] as const)("a whole install that %s is the problem already_installed with the way on that is true of it, in a run and in a dry run: without this an agent cannot tell it from a failure", async (_name, repaired, mend, state, way, next) => {
     const account = { ...accountWith({ state: "whole", place: PLACE, version: undefined, address: ADDRESS, newest: undefined }), repaired };
@@ -355,7 +356,7 @@ describe("what a run comes to", () => {
       return [String(ran.code), ...ran.out.filter((line) => line.includes("then run") || line.includes("not done"))];
     };
 
-    expect(await lastLines(whole)).toEqual(["1", "Do this in your browser, then run npx poplin doctor --repair:", "1 not done. Run npx poplin doctor --repair: it goes on from what stands."]);
+    expect(await lastLines(whole)).toEqual(["1", `Do this in your browser, then run ${REPAIR.command}:`, `1 not done. Run ${REPAIR.command}: it goes on from what stands.`]);
     expect(await lastLines({ state: "started", place: PLACE, notes: [] })).toEqual(["1", "Do this in your browser, then run this command again:", "1 not done. Run this command again: it goes on from what stands."]);
   });
 
@@ -374,7 +375,7 @@ describe("what a run comes to", () => {
       "poplin 0.1.0 is made, and its address does not answer yet.",
       `Your dashboard: ${ADDRESS}`,
       `Once it answers, log in: npx poplin login --server ${ADDRESS}`,
-      "If it still does not: npx poplin doctor --repair",
+      `If it still does not: ${REPAIR.command}`,
       "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",
     ]);
   });
@@ -423,14 +424,18 @@ describe("what a run comes to", () => {
   });
 });
 
-describe("a first login the run did not use", () => {
+// Drift: the repair named next once held no place. Run as written where nothing can be asked, it stopped with exit 2 for the answer of where, which the install had just been given. Both kinds of install are held to it.
+describe.each([
+  ["at no place", "--no-place"],
+  ["at a place", "--place example.com"],
+])("a first login the run did not use, in an install %s", (_kind, place) => {
   const login = "new@example.com" as Login;
-  const line = "install stand-in --no-place --login new@example.com --adopt";
+  const line = `install stand-in ${place} --login new@example.com --adopt`;
   const unusedAt = (): Account => ({ ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: login } });
 
   // Drift: the install kept the users its records hold, and the email of the line is none of them. An ending that offers the login asks a person in who gets no code, and a `next` of `login` sends a program the same way.
   test("ends with the repair that lets that person in, as its last line and as the next step, and offers no login: without this a person is asked to log in who gets no code", async () => {
-    const letIn = "npx poplin doctor --repair --add-user new@example.com";
+    const letIn = `npx poplin doctor --repair ${place} --add-user new@example.com`;
     const plain = await runLine(`${line} --no-wait`, unusedAt(), { env: HELD, asks: true });
     const told = await runLine(`${line} --yes --log-in --no-wait`, unusedAt(), { env: HELD });
     const json = await runLine(`${line} --yes --no-wait --json`, unusedAt(), { env: HELD });
@@ -456,8 +461,26 @@ describe("a first login the run did not use", () => {
     const ran = await runLine(`${line} --yes --no-wait`, account, { env: HELD });
     const json = await runLine(`${line} --yes --no-wait --json`, { ...account, scenes: [LEFTOVER, whole] }, { env: HELD });
 
-    expect([ran.code, ran.out.at(-2)]).toEqual([1, "1 not done. Run npx poplin doctor --repair --add-user new@example.com: it goes on from what stands."]);
-    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, next: { step: "repair", command: "npx poplin doctor --repair --add-user new@example.com" } });
+    expect([ran.code, ran.out.at(-2)]).toEqual([1, `1 not done. Run npx poplin doctor --repair ${place} --add-user new@example.com: it goes on from what stands.`]);
+    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, next: { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` } });
+  });
+
+  // Drift: a dry run of such an install is followed by the run, and a next step with no place stops that run for the answer of where, with nobody there to give it.
+  test("names the run at the same place after its dry run, and says nothing of the repair: without this the run an agent starts from `next` asks where", async () => {
+    const dry = await runLine(`${line} --dry-run --json`, unusedAt(), { env: HELD });
+
+    expect([dry.code, jsonOf(dry).next, dry.err.filter((text) => text.includes("--add-user"))]).toEqual([0, { step: "install", command: `npx poplin install stand-in ${place}` }, []]);
+  });
+
+  // Drift: the line names the repair, and the repair is what must take it. A place written as the install's line takes it and the repair's does not would be read as a refusal.
+  test("the line it names runs as it is written, where nothing can be asked, and adds that person at the same place", async () => {
+    const json = await runLine(`${line} --yes --no-wait --json`, unusedAt(), { env: HELD });
+    const { command } = jsonOf(json).next as { readonly command: string };
+    const account = accountWith({ state: "whole", place: PLACE, version: "0.1.0", address: ADDRESS, newest: "0.1.0" });
+    const repair = await runLine(command.replace("npx poplin ", ""), account, { env: HELD });
+    const where = place === "--no-place" ? { kind: "none" } : { kind: "place", name: "example.com" };
+
+    expect<unknown>([repair.code, account.finds, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([0, [where], [[where, { run: "apply", addUser: login }]]]);
   });
 
   // Drift: the line is one a person pastes into a shell. An email with an apostrophe or a dollar sign, pasted bare, opens a quote that never closes or names a variable, and the repair adds nobody or somebody else.
@@ -471,7 +494,7 @@ describe("a first login the run did not use", () => {
     const account: Account = { ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: email as Login } };
     const json = await runLine(`${line} --yes --no-wait --json`, account, { env: HELD });
 
-    expect((jsonOf(json).next as { readonly command: string }).command).toBe(`npx poplin doctor --repair --add-user ${word}`);
+    expect((jsonOf(json).next as { readonly command: string }).command).toBe(`npx poplin doctor --repair ${place} --add-user ${word}`);
   });
 });
 
@@ -514,7 +537,7 @@ describe("a run that is blocked", () => {
         "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",
       ],
     ]);
-    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, rows: [], blocked: [{ what: "no_release" }], next: { step: "install", command: "npx poplin install stand-in" } });
+    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, rows: [], blocked: [{ what: "no_release" }], next: AGAIN });
   });
 });
 

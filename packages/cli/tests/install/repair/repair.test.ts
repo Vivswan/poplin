@@ -22,8 +22,11 @@ const WHOLE: Found<Where, Place> = { state: "whole", place: PLACE, version: "0.1
 /** Records an earlier install left behind. */
 const LEFTOVER: Found<Where, Place> = { state: "leftover", place: PLACE, notes: [], words: "Records named poplin are in this account.", address: "https://host.example.com/records" };
 
-/** What runs the command again, as the one JSON value names it. */
-const AGAIN = { step: "repair", command: "npx poplin doctor --repair" };
+/** What runs the command again, as the one JSON value names it: at the place of `RUN`, and of a line that gave no place. */
+const [AGAIN, BARE] = [
+  { step: "repair", command: "npx poplin doctor --repair --no-place" },
+  { step: "repair", command: "npx poplin doctor --repair" },
+];
 
 /** The line that says which install was found. */
 const FOUND = `looking for an install ... found: poplin 0.1.0, at ${ADDRESS}`;
@@ -145,6 +148,20 @@ describe("a repair with the account token", () => {
     ]);
   });
 
+  // Drift: a dry run is followed by the run. A next step that dropped the user the line named would mend the install and add nobody, with no line to say so. Both kinds of install are held to it.
+  test.each(["--no-place", "--place example.com"])("a dry run with %s that was given a user to add names the run with that user, as one word of a shell: without this an agent that follows `next` adds nobody", async (place) => {
+    const line = `doctor --repair ${place} --yes --dry-run --json`;
+    const dry = await runLine(`${line} --add-user new@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
+    const quoted = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
+    const undone = await runLine(`${line.replace(" --dry-run", "")} --add-user new@example.com`, installed(repairedOf(ONE_GONE, { ready: false })), { env: HELD });
+
+    expect([dry, quoted, undone].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([
+      [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
+      [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user 'o'\\''brien@example.com'` }],
+      [1, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
+    ]);
+  });
+
   test("the email of --add-user reaches the provider in its normal form, and text that is none is refused before any look: without this a typing slip is sent to the provider", async () => {
     const account = installed(repairedOf([{ object: "User", state: "make", detail: "lost@example.com" }]));
     const ran = await runLine(`${RUN} --add-user Lost@Example.com`, account, { env: HELD });
@@ -176,12 +193,12 @@ describe("a repair with the account token", () => {
 });
 
 describe("what a repair does not go on from", () => {
-  const install = "npx poplin install stand-in";
+  const [install, bare] = ["npx poplin install stand-in --no-place", "npx poplin install stand-in"];
   const MAKE = { step: "install", command: install };
 
   // Drift: every state a look can find has one command that takes it. A state this command neither mends nor sends on would leave a person with no way on.
   // After data left behind the sentence names `--adopt`, and the next step does not hold it: a program that runs `next.command` would give a consent no person gave, and take up a database matched by its name alone.
-  // An install started for another place is sent to the install at that place at once: a repair there would only stop again, as unfinished.
+  // An install started for another place is sent to the install at that place at once: a repair there would only stop again, as unfinished. Its line holds that place alone, never the one the repair named.
   test.each([
     ["nothing", { state: "none", place: PLACE, notes: [] }, 1, "no_install", `No install is in this account. To make one: ${install}`, MAKE],
     ["data left behind", LEFTOVER, 1, "no_install", `Records named poplin are in this account. To make an install that uses it: ${install} --adopt`, MAKE],
@@ -192,8 +209,8 @@ describe("what a repair does not go on from", () => {
       { state: "refused", why: "other_place", words: "An install was started here for another place: give --place example.com.", give: "--place example.com" },
       1,
       "unfinished",
-      `An install was started here for another place: give --place example.com. To finish it: ${install} --place example.com`,
-      { step: "install", command: `${install} --place example.com` },
+      `An install was started here for another place: give --place example.com. To finish it: ${bare} --place example.com`,
+      { step: "install", command: `${bare} --place example.com` },
     ],
     ["a provider that gives no answer", { state: "refused", why: "unreachable", words: "The host gave no answer." }, 5, "unreachable", "The host gave no answer. nothing was changed", AGAIN],
   ] as const)("%s is said in one line with what to run next, and nothing is repaired", async (_, scene, code, problem, line, next) => {
@@ -206,9 +223,10 @@ describe("what a repair does not go on from", () => {
   });
 
   // Drift: each of these is the provider's own refusal of a repair it began. Worded as a failure with no code, a program could not tell a wrong option from a lost connection.
+  // An install that answers elsewhere is the one stop whose next step holds no place: the place of the line is the wrong one, and the sentence names the option.
   test.each([
-    ["the install answers elsewhere than the place named", "elsewhere", 1, "other_place", AGAIN],
-    ["the install's records are of another version", "another", 1, "another_version", { step: "repair", command: "npx poplin@latest doctor --repair" }],
+    ["the install answers elsewhere than the place named", "elsewhere", 1, "other_place", BARE],
+    ["the install's records are of another version", "another", 1, "another_version", { step: "repair", command: "npx poplin@latest doctor --repair --no-place" }],
     ["the provider refuses the token at the install", "token", 1, "token_refused", AGAIN],
     ["the provider gives no answer", "unreachable", 5, "unreachable", AGAIN],
   ] as const)("a repair that stops because %s exits with its code, says that nothing was changed, and names what goes on from it", async (_, why, code, problem, next) => {
@@ -250,7 +268,7 @@ describe("the words of a repair", () => {
       "poplin doctor --repair: an answer is missing: where it answers. Give --place <name> or --no-place (or POPLIN_PLACE).",
       "poplin doctor --repair: an answer is missing: the account token. Set POPLIN_INSTALL_TOKEN, or pipe it with --token-stdin.",
     ]);
-    expect([ran.code, jsonOf(ran)]).toEqual([2, { ok: false, problem: "missing_answer", next: AGAIN, missing: ["where", "token"] }]);
+    expect([ran.code, jsonOf(ran)]).toEqual([2, { ok: false, problem: "missing_answer", next: BARE, missing: ["where", "token"] }]);
   });
 
   test("the help of a repair lists its own options, the provider's, and how the token is given: without this --repair has options no help shows", async () => {

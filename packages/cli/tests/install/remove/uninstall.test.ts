@@ -17,8 +17,8 @@ const NAME = "poplin.example.com";
 /** A whole install, as a look finds it. */
 const INSTALL: Found<Where, Place> = { state: "whole", place: PLACE, version: "0.1.0", address: ADDRESS, newest: "0.1.0" };
 
-/** What runs the command again, as the one JSON value names it. */
-const AGAIN = { step: "uninstall", command: "npx poplin uninstall stand-in" };
+/** What runs the command again at the place of every line here, as the one JSON value names it. */
+const AGAIN = { step: "uninstall", command: "npx poplin uninstall stand-in --no-place" };
 
 /** The line of a look that found the install. */
 const FOUND = `looking for an install ... found: poplin 0.1.0, at ${ADDRESS}`;
@@ -221,7 +221,7 @@ describe("a run", () => {
       ],
     ]);
     // The sentence says to run the command again with the permission added, so the next step is that command: a program that goes by `next` alone would stop at `none`.
-    expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, unlooked: ["Guard rule", "Alert"], next: { step: "uninstall", command: "npx poplin uninstall stand-in" } }]);
+    expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, unlooked: ["Guard rule", "Alert"], next: AGAIN }]);
     expect([dry.code, dry.out.slice(-2)]).toEqual([0, [`2 kinds would not be looked for, ${unlooked}`, "ready: a run would remove 4 kinds. nothing was removed"]]);
   });
 
@@ -253,7 +253,7 @@ describe("a run", () => {
 
     // A run names this command again, with `--keep-data` in its sentence as on its line; a dry run's sentence names no next run, and neither does its value.
     expect(nexts.map((stop) => [stop.next, String(stop.words).includes("run this command again with --keep-data")])).toEqual([
-      [{ step: "uninstall", command: "npx poplin uninstall stand-in --keep-data" }, true],
+      [{ step: "uninstall", command: `${AGAIN.command} --keep-data` }, true],
       [{ step: "none", command: null }, false],
     ]);
   });

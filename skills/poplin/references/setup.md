@@ -168,10 +168,18 @@ It prints one JSON value:
 { "ok": true, "run": "dry-run", "ready": true, "address": "https://poplin.example.com",
   "rows": [{ "object": "R2 bucket", "will": "make", "detail": "poplin-sites" }],
   "blocked": [], "steps": [],
-  "next": { "step": "install", "command": "npx poplin install cloudflare" } }
+  "next": { "step": "install", "command": "npx poplin install cloudflare --domain example.com" } }
 ```
 
-Every value of a run of this command, of the repair, and of the removal names what to run next in `next`, and so does a run that stopped. Its `command` has none of the answers your line gave: add them.
+Every value of a run of this command, of the repair, and of the removal names what to run next in `next`, and so does a run that stopped. Its `command` holds the place of your line, `--domain example.com` or `--no-domain`, and no other answer your line gave.
+
+| `command` names | It runs as written, with the token in your environment | Add                                   |
+| --------------- | ------------------------------------------------------ | ------------------------------------- |
+| the repair      | yes                                                    | `--json`, to read its value           |
+| the install     | once it has the login                                  | `--login`, `--yes`, `--json`          |
+| the removal     | never by you: the user runs it                         | nothing                               |
+
+Some stops name the command with no place. One that comes while the line is read does, as `usage` and a `missing_answer` do, and `stopped` and `crashed` may. `other_place` does too: the install is at another place than your line named, and its sentence names the option to give.
 
 Where `next.step` is the command you just ran, its `command` keeps `--keep-data` of a removal, and `--dry-run` of a dry run that stopped or is not ready: leave both on the line.
 
@@ -180,7 +188,7 @@ A consent is never in `command`. Where a repair found kept data and no install, 
 | `next.step` | Run next                                                        |
 | ----------- | --------------------------------------------------------------- |
 | `install`   | the line of part e                                              |
-| `repair`    | the repair of part f, with `npx poplin@latest` where `command` has it |
+| `repair`    | the repair of part f, as `command` writes it                    |
 | `login`     | step 4, with the address in `command`                           |
 | `uninstall` | a removal's own line again: the user's to run                   |
 | `none`      | nothing                                                         |
@@ -253,7 +261,7 @@ npx poplin install cloudflare --domain example.com --login you@example.com --yes
 
 Where `next.step` is `repair` and its `command` holds `--add-user`, the install kept the users its database holds, and the email of `--login` is none of them. Tell the user who logs in, as the row `First login` names them.
 
-Run that `command` as it is written, in place of step 4 and of the repair of part f: it mends what is undone, and lets the email in. Without the option the email stays out.
+Run that `command` as it is written, in place of step 4 and of the repair of part f: it holds the install's place, mends what is undone, and lets the email in. Without `--add-user` the email stays out.
 
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
 
@@ -282,7 +290,7 @@ The user first does what `blocked` and `steps` name, such as switching Zero Trus
 
 A run without `--json`, as the user's is, names the same in its last line: it ends `Run this command again`, or names the repair.
 
-`poplin install` only makes a new install: a second run on one that is set answers `already_installed` and changes nothing. The repair mends it, with the same token and the option of the install's kind:
+`poplin install` only makes a new install: a second run on one that is set answers `already_installed` and changes nothing. The repair mends it, with the same token and the option of the install's kind. `next.command` is that line, and `--yes` and `--json` are yours to add:
 
 ```sh
 npx poplin doctor --repair --domain example.com --yes --json
@@ -296,7 +304,7 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. When 
 | `ok` is true                                | 0         | nothing is left undone: keep `address` under `found`, and go to step 4 |
 | `ready` is false, and no `problem`          | 1         | tell the user each row that did not come to make, change, or leave, and each entry of `blocked` and `steps`; then this line again |
 
-With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits as the run after it would: with 0 where a run would go through, also while `changes` is above 0. `next.step` is `repair` then, and `login` once nothing is left to mend.
+With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits as the run after it would: with 0 where a run would go through, also while `changes` is above 0. `next.step` is `repair` then, with `--add-user` where your line had it, and `login` once nothing is left to mend.
 
 ## 4. Log this computer in
 

@@ -374,7 +374,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     const { done } = await installed(other, kind, APPLY);
     const unread =
       "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps; its records are not at the schema of this poplin, so the users it holds were not read, and --login is used. " +
-      "Once the install answers, npx poplin doctor --repair mends the login to the users it holds)";
+      `Once the install answers, npx poplin doctor --repair ${kind === "domain" ? "--domain example.com" : "--no-domain"} mends the login to the users it holds)`;
 
     expect([shown(done)[1], shown(done).filter((row) => row.startsWith("First login")), usersAt(other).login]).toEqual([unread, [], [LOGIN]]);
 
@@ -505,6 +505,18 @@ describe("the provider's own answers", () => {
     const read = placeOf(given);
 
     expect<unknown>(read.kind === "domain" ? { kind: read.kind, domain: read.layout.domain, account: read.account } : read).toEqual(where);
+  });
+
+  // Drift: a command named as the next step carries these words, and the next run reads them. Words that read back as another place would send that run to an install that is not there.
+  test.each([
+    ["under a domain", { flags: [["domain", "Example.com"]], env: { POPLIN_ACCOUNT: ACCOUNT } }, ["--domain", "example.com"]],
+    ["without a domain", { env: { POPLIN_DOMAIN: "none" } }, ["--no-domain"]],
+  ] as const)("writes the place of an install %s as the option a line gives it by, with no account, and reads it back as the same place", (_, given, words) => {
+    const where = placeOf(given);
+    const [flag = "", value] = installer.placeWords(where);
+
+    expect(installer.placeWords(where)).toEqual([...words]);
+    expect(placeOf({ flags: [[flag.slice(2), value ?? true]] })).toEqual({ ...where, account: undefined });
   });
 
   test.each([
