@@ -83,7 +83,7 @@ A site that is refused for one of these two has a line that says `failed` in ste
 | a site's address              | built from the site's name and id, which stay, and the new install's address. It changes when the domain or the kind of install changes, and stays the same under the same domain |
 | a link you shared             | stops where the address is new, once the old install is removed. Nothing sends it on: send the new one |
 | a public name                 | comes back with its site, at the new install's address                                          |
-| each machine's login         | made anew: the zip holds no token. Run `npx poplin login`, with `--server` and the new address, on each one |
+| each machine's login         | made anew: the zip holds no token. Run `npx poplin login`, with `--server` and the new URL, on each one     |
 | the users                     | the first login of the new install. `--settings --users` puts the old list in its place, where that list holds a login of the new install. Else it is refused with `no_working_login` |
 | the install's keys            | made anew by the new install: the zip holds none                                                |
 | the activity log              | starts anew                                                                                     |

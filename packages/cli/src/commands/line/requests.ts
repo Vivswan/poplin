@@ -251,7 +251,7 @@ function duplicate(words: Words): TypedRequest | UsageError {
 
 function login(words: Words): TypedRequest | UsageError {
   const asked = { kind: "login", publisher: words.flags.has("--publisher"), browser: !words.flags.has("--no-browser") } as const;
-  const computer = flagValue(words.flags, "--name");
+  const computer = flagValue(words.flags, "--machine");
   if (computer === undefined) return withInstall(words, (install) => ({ ...asked, ...install }));
 
   return withInstall(words, (install) => ({ ...asked, computer, ...install }));

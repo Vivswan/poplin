@@ -17,7 +17,7 @@ Providers:
 
 Options:
   --dry-run                Show what would change. Change nothing.
-  --confirm <address>      Confirm the removal with the address --dry-run shows
+  --confirm <text>         Confirm the removal with the text --dry-run shows
   --keep-data              Keep the site files and the database
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin
@@ -43,7 +43,7 @@ Options:
   --account <id>           Account id, if the token can access several accounts
                            Or set POPLIN_ACCOUNT.
   --dry-run                Show what would change. Change nothing.
-  --confirm <address>      Confirm the removal with the address --dry-run shows
+  --confirm <text>         Confirm the removal with the text --dry-run shows
   --keep-data              Keep the site files and the database
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin

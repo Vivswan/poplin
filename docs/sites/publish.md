@@ -16,7 +16,7 @@ report--k3f9x2ab71qz
 the name: taken from the folder or the file
 ```
 
-That is the label. Every command and tool takes it to name one site. The bare id (`k3f9x2ab71qz`) works too, and so do the public name of a public site (`docs`) and the site's address, pasted whole (`https://report--k3f9x2ab71qz-p-poplin.example.com/`).
+That is the label. Every command and tool takes it to name one site. The bare id (`k3f9x2ab71qz`) works too, and so do the public name of a public site (`docs`) and the site's URL, pasted whole (`https://report--k3f9x2ab71qz-p-poplin.example.com/`).
 
 ## Publish
 
@@ -24,7 +24,7 @@ That is the label. Every command and tool takes it to name one site. The bare id
 | ---------------------------------------------- | --------------------------------------------------- |
 | `npx poplin ./report`                          | makes a new site, private, from a folder            |
 | `poplin ./report.html`                         | makes a new site from one HTML file                 |
-| `poplin ./report --site report--k3f9x2ab71qz`  | puts new content on that site; the address stays    |
+| `poplin ./report --site report--k3f9x2ab71qz`  | puts new content on that site; the URL stays        |
 | `poplin ./report --name q3-report`             | makes a new site with that name                     |
 | `poplin ./demo --unlisted --expires 7d`        | makes a new site with [settings](manage.md#other-settings-of-a-site)     |
 | `poplin ./report --dry-run`                    | lists the files and the name, and uploads nothing   |

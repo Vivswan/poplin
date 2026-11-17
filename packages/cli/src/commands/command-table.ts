@@ -36,7 +36,7 @@ const INSTALL_FLAGS: readonly FlagSpec[] = installFlags(FLAG_WORDS.server);
 
 /** The variables a command reads beside its flags, for the help of `poplin` itself. */
 export const ENVIRONMENT: readonly (readonly [name: string, about: string])[] = [
-  ["POPLIN_SERVER", "Address of the install, set with POPLIN_TOKEN"],
+  ["POPLIN_SERVER", "URL of the install, set with POPLIN_TOKEN"],
   ["POPLIN_TOKEN", "Token used instead of the stored login"],
   ["POPLIN_CONFIG_DIR", "Folder of the stored login"],
 ];
@@ -199,11 +199,11 @@ export const COMMANDS = [
     arguments: [],
     flags: [
       { name: "--publisher", about: "Store a publisher token, limited to its own sites" },
-      { name: "--name", value: "<name>", about: "Machine name in the dashboard" },
+      { name: "--machine", value: "<name>", about: "Machine name in the dashboard" },
       { name: "--no-browser", about: "" },
       ...installFlags("Install to log in to (default: the stored login's)"),
     ],
-    examples: ["poplin login --server https://poplin.example.com", "poplin login --publisher --name ci-runner"],
+    examples: ["poplin login --server https://poplin.example.com", "poplin login --publisher --machine ci-runner"],
   },
   {
     name: "logout",

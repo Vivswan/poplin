@@ -16,7 +16,7 @@ import { readByInstall, siteWord } from "../commands/sites/wire";
 import type { Host } from "./records";
 
 /** What a `site` argument may be, for the hint of a refused one. */
-const SITE_FORMS = "a site is the label a publish answered, such as report--k3f9x2ab71qz, its id k3f9x2ab71qz, a public site's public name, or its address (url)";
+const SITE_FORMS = "a site is the label a publish answered, such as report--k3f9x2ab71qz, its id k3f9x2ab71qz, a public site's public name, or its URL";
 
 /** The names this machine keeps back: which ones an install keeps depends on its address layout, so the install answers for them. */
 const NOTHING_RESERVED: ReadonlySet<string> = new Set();
@@ -28,13 +28,13 @@ const SWITCH = { on: "on", off: "off" } as const;
 const HOW_TO_LOG_IN = "run `poplin login --server <url>` on this machine";
 
 /** What every tool says of its `site`. */
-const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, its address (url), or a public site's public name.";
+const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, its URL, or a public site's public name.";
 
 /** What `publish_site` and `update_site` say of each setting. */
 const SETTINGS = {
   name: "A new name, e.g. q3-report. Renaming never breaks a link.",
-  access: "private: only the owner. unlisted: anyone with the address. public: everyone. E.g. unlisted.",
-  public_name: "With access public: the public address's name, e.g. docs. Left out: kept, or the site's name.",
+  access: "private: only the owner. unlisted: anyone with the URL. public: everyone. E.g. unlisted.",
+  public_name: "With access public: the public URL's name, e.g. docs. Left out: kept, or the site's name.",
   title: "Its title on the dashboard, e.g. Q3 sales. null: the page's own title.",
   search_engines: "true: search engines may list it once it is public.",
   embeddable: "false: other pages cannot show it in a frame or load its files.",
@@ -216,12 +216,12 @@ async function publish(input: InputOf<"publish_site">, host: Host): Promise<Outc
 export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
   publish_site: {
     description:
-      "Publish a folder or one HTML file from this machine and answer the site with its address (url). " +
+      "Publish a folder or one HTML file from this machine and answer the site with its URL. " +
       "Without site it ALWAYS makes a new site: keep the label it answers and pass it as site to update that site later. " +
       "A new site is private: ask the user before access unlisted or public. Hidden files and node_modules are never uploaded.",
     parameters: {
       path: "A folder with an index.html, or one .html file, e.g. ./report. Relative to the server's working directory; the answer names the absolute path read.",
-      site: "To update: the label an earlier publish answered, e.g. report--k3f9x2ab71qz, or its address (url). Left out: a new site.",
+      site: "To update: the label an earlier publish answered, e.g. report--k3f9x2ab71qz, or its URL. Left out: a new site.",
       ...SETTINGS,
       name: "The site's name, e.g. q3-report: 3 to 40 lowercase letters, digits, single dashes. New site, left out: the folder or file name. With site: renames it.",
     },
@@ -240,27 +240,27 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     },
   },
   get_site: {
-    description: "Show one site: its address (url), access, settings, kept versions, and about how often its pages were opened (views: estimates, not exact).",
+    description: "Show one site: its URL, access, settings, kept versions, and about how often its pages were opened (views: estimates, not exact).",
     parameters: { site: SITE },
     hints: { readOnlyHint: true },
     run: (input, host) => onSite(host, input.site, (site) => ({ kind: "show", site, json: false })),
   },
   list_sites: {
-    description: "List the sites, each with its label, access, and address (url); views in the data are about how often its pages were opened.",
+    description: "List the sites, each with its label, access, and URL; views in the data are about how often its pages were opened.",
     parameters: { trash: "true: list the deleted sites restore_site can still take back." },
     hints: { readOnlyHint: true },
     run: (input, host) => online(host, (session) => runSiteCommand({ kind: "list", trash: input.trash, json: false }, session)),
   },
   rollback_site: {
-    description: "Make an earlier kept version of a site the live one. Its settings and addresses stay.",
+    description: "Make an earlier kept version of a site the live one. Its settings and URLs stay.",
     parameters: { site: SITE, version: "The version to go to, e.g. 3; get_site lists them. Left out: one back." },
     hints: { destructiveHint: false },
     run: (input, host) => onSite(host, input.site, (site) => ({ kind: "rollback", site, to: input.version, dryRun: false, json: false })),
   },
   new_link: {
     description:
-      "Give a site a new id, so a new label and address, when its address reached someone it should not have. " +
-      "The old label and address stop working at once: use the label it answers from then on. A public site keeps its public address.",
+      "Give a site a new id, so a new label and URL, when its URL reached someone it should not have. " +
+      "The old label and URL stop working at once: use the label it answers from then on. A public site keeps its public URL.",
     parameters: { site: SITE },
     hints: { destructiveHint: true },
     run: (input, host) => onSite(host, input.site, (site) => ({ kind: "new-link", site, dryRun: false, json: false })),
@@ -278,7 +278,7 @@ export const TOOLS: { readonly [Name in ToolName]: Tool<Name> } = {
     },
   },
   duplicate_site: {
-    description: "Make a private copy of a site, with a new label and address, titled as the site with (copy) after it. The original is untouched.",
+    description: "Make a private copy of a site, with a new label and URL, titled as the site with (copy) after it. The original is untouched.",
     parameters: { site: SITE, name: "The copy's name, e.g. q3-draft. Left out: the site's own name." },
     hints: { destructiveHint: false },
     run: (input, host) => {

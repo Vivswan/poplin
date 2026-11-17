@@ -20,7 +20,7 @@ The three kinds of access, the address each gives a site, and what a visitor see
 | `poplin set report--k3f9x2ab71qz --public`              | public at its own name: `report-page.example.com`      |
 | `poplin set report--k3f9x2ab71qz --public --public-name docs` | public at another name: `docs-page.example.com`  |
 
-Every other example runs the same way, with `npx` before `poplin`. A change of access prints the site's address, and the old one when it changed:
+Every other example runs the same way, with `npx` before `poplin`. A change of access prints the site's URL, and the old one when it changed:
 
 ```text
 $ npx poplin set report--k3f9x2ab71qz --unlisted
@@ -80,7 +80,7 @@ To or from private, the hostname changes in place of the letter, and the old add
 Only the id finds a site. Any name before it, or none, opens the same site: `k3f9x2ab71qz-u-poplin.example.com` works too. Commands take the label without the letter: `report--k3f9x2ab71qz`.
 
 ```text
-poplin new-link report--k3f9x2ab71qz   ->  the site gets a new id; the old address stops at once
+poplin new-link report--k3f9x2ab71qz   ->  the site gets a new id; the old URL stops at once
 ```
 
 The owner's private page that lists every site is the dashboard, at `poplin.example.com`. [Security](../about/security.md#what-unlisted-covers) says what an unlisted site's address covers.

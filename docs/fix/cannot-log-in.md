@@ -148,7 +148,7 @@ It adds one email and takes none away. Once you are in, in this order:
 | Do                                         | Where                                                                           |
 | ------------------------------------------ | ------------------------------------------------------------------------------- |
 | 1. remove the lost or mistyped email       | the dashboard, Access, Users: the menu at the end of that email's row, then Remove |
-| 2. log your machines in again             | `npx poplin login`, with `--server` and your dashboard's address: removing an email ends every login that email allowed |
+| 2. log your machines in again             | `npx poplin login`, with `--server` and your dashboard's URL: removing an email ends every login that email allowed     |
 | 3. delete the account token, or keep it    | at Cloudflare, under My Profile, then API Tokens. Keep it where you keep passwords until step 1 is done |
 
 The dashboard's Activity lists the new user as `Added a user:` and the email, by `doctor-repair@poplin.invalid`. No user of yours has that email: it marks a change made from a terminal.

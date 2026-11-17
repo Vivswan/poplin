@@ -17,15 +17,15 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `not_logged_in`                                | the login ran out                                  | `poplin login`                                                |
 | `login_denied`, `login_expired`, `interrupted` | the login was not allowed; nothing was stored       | `poplin login` again, and allow it in the browser             |
 | `bad_login`                                    | the stored login cannot be used                     | `poplin login` again                                          |
-| `bad_server`                                   | `--server` takes an `https://` address, host only  | `--server https://poplin.example.com`                         |
+| `bad_server`                                   | `--server` takes an `https://` URL, host only      | `--server https://poplin.example.com`                         |
 | `wrong_server`                                 | the login is for another install                   | log in to this one with `--server`                            |
 | `not_allowed`                                  | this login may not do that                         | `poplin whoami` shows the login; use an admin's               |
 | `not_set_up`                                   | the install has stored no settings                 | try again; if it stays, run `npx poplin doctor --repair`       |
 | `no_working_login`                             | the new logins would let nobody log in             | keep one email that is a login now in the list                |
 | `needs_update_check`                           | `auto_update` would be on with `update_check` off  | `poplin config update_check on` first, or `auto_update off` first |
 | `already_a_login`, `not_a_login`               | the email is a login already, or is none           | `poplin config logins` shows the logins                       |
-| `unreachable`, `timeout`                       | no answer came                                     | check the address and the network; `poplin list` before a retry |
-| `not_json`, `unexpected_answer`                | the answer is not a poplin install's               | `poplin whoami` shows the address in use                      |
+| `unreachable`, `timeout`                       | no answer came                                     | check the URL and the network; `poplin list` before a retry     |
+| `not_json`, `unexpected_answer`                | the answer is not a poplin install's               | `poplin whoami` shows the URL in use                          |
 | `method_not_allowed`, `unsupported_media_type` | the install and this poplin are of two versions    | update the older one                                          |
 | `too_many_requests`                            | asked too often                                    | wait a minute                                                 |
 | `allowance_spent`                              | a day's allowance is used up: the database's, or `max_storage_writes_per_day` | wait until 00:00 UTC; asking sooner is refused the same way  |
@@ -72,7 +72,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 | `changed`         | both               | the account changed between the look and the work; nothing was done      | run it again                                                      |
 | `unfinished`      | the repair         | an install was started and never set, so there is nothing to mend        | finish it with `next.command`: the install at the place of the line. Where it was started for another place than the line named, `next.command` has that place's option |
 | `another_version` | the repair         | the install's records are of another version than this command, or the install runs a newer release than the newest this command reads           | `next.command`: `npx poplin@latest doctor --repair`, with the option of the install's place, and `--update` where the line had it. For an install that is behind, with records older than this command reads: `npx poplin doctor --repair --update`, and `words` also names the poplin of the install's version, which mends without updating |
-| `not_confirmed`   | the removal        | the address typed, or given with `--confirm`, is not the install's own; nothing was removed | give the address a run with `--dry-run` prints |
+| `not_confirmed`   | the removal        | the text typed, or given with `--confirm`, is not the install's own; nothing was removed    | give the text a run with `--dry-run` prints    |
 
 A repair or a removal that worked through its rows prints them, with `ready` false where a row is left undone. A removal lists in `unlooked` each kind its token could not look for. After a run that lists one, `next` names the removal again: with the permission added to the token, the same line looks for that kind.
 

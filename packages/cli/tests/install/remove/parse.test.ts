@@ -42,7 +42,7 @@ describe("the proof of a removal", () => {
 
   test("a line with no token and no proof names both, and --yes alone is refused in its own words: without this an agent reads --yes as a yes", () => {
     expect(read("uninstall stand-in --no-place", {})).toEqual({ missing: ["token", "confirm"] });
-    expect(read("uninstall stand-in --no-place --yes")).toEqual({ problem: "usage", exit: 2, lines: ["--yes does not confirm an uninstall", "Fix: pass --confirm <address>, which a run with --dry-run prints"] });
+    expect(read("uninstall stand-in --no-place --yes")).toEqual({ problem: "usage", exit: 2, lines: ["--yes does not confirm an uninstall", "Fix: pass --confirm <text>, which a run with --dry-run prints"] });
   });
 
   test("on a terminal the proof is typed unless the line gave it, and a dry run asks for none: without this a person is asked to confirm a list", () => {
@@ -56,8 +56,8 @@ describe("a line that is written wrong", () => {
   // Drift: each refusal is one line a person acts on. Commander's own words would name neither the command nor the way out.
   test.each([
     ["uninstall stand-in --no-place --dry-run --confirm poplin.example.com", ["--dry-run and --confirm are mutually exclusive"]],
-    ["uninstall stand-in --no-place --confirm=", ["--confirm requires the install's address", "Fix: get the address from a run with --dry-run"]],
-    ["uninstall stand-in --no-place --force", ["Unknown option --force", "Fix: confirm with --confirm <address>"]],
+    ["uninstall stand-in --no-place --confirm=", ["--confirm requires the text --dry-run shows", "Fix: get the text from a run with --dry-run"]],
+    ["uninstall stand-in --no-place --force", ["Unknown option --force", "Fix: confirm with --confirm <text>"]],
     ["uninstall stand-in --no-place --user you@example.com", ["Unknown option --user", "Fix: remove --user"]],
     ["uninstall stand-in --place example.com --no-place --dry-run", ["--place and --no-place are mutually exclusive"]],
     ["uninstall nowhere --dry-run", ['Unknown provider "nowhere"', "See: poplin uninstall"]],

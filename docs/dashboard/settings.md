@@ -70,7 +70,7 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 | `poplin doctor --repair`                                             | mends the install at Cloudflare, the way back in when nobody can log in; `--dry-run` lists what it would change: [I cannot log in](../fix/cannot-log-in.md) |
 | `poplin doctor --repair --add-user new@example.com`                  | the same, and lets one more email log in          |
 | `poplin uninstall cloudflare --domain example.com --dry-run`         | lists what a removal would remove; changes nothing |
-| `poplin uninstall cloudflare --no-domain`                            | removes the install, after you type its address; `--keep-data` leaves the sites' files and the database: [Remove](../upkeep/remove.md) |
+| `poplin uninstall cloudflare --no-domain`                            | removes the install, after you type its host; `--keep-data` leaves the sites' files and the database: [Remove](../upkeep/remove.md)    |
 | `poplin help rollback`                                               | shows the help of one command                     |
 | `poplin --full-help`                                                 | shows the help of every command on one page       |
 
