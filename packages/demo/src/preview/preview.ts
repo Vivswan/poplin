@@ -29,7 +29,7 @@ import { type Entry, galleryOf, STAGES } from "./gallery";
 import { rebased, unbased } from "./base";
 import { type Kind, kindOf, type LocalOrigins } from "./kind";
 import { askMount, type Mount, previewValue, SERVED_PREFIX } from "./mount";
-import { galleryPage, missingPage, plainPage, terminalPage } from "./own-pages";
+import { galleryPage, missingPage, plainPage, signedOutPage, terminalPage } from "./own-pages";
 import { type RealSites, realAddresses } from "./real-sites";
 import { keepLoginsWaiting, SEEDED_DAYS, type Samples, seedWorld } from "./seed";
 import { openWorld, type World } from "./world";
@@ -120,6 +120,12 @@ const RESET_PATH = "/reset";
 /** Every address a reset is posted to: the mount of the empty install writes its own prefix before the path its dashboard names. */
 const RESET_PATHS = [RESET_PATH, `${EMPTY_PREFIX}${RESET_PATH}`];
 
+/** Where the dashboard's Sign out leads: the preview's own page of a browser whose login was ended. */
+const SIGNED_OUT_PATH = "/state/signed-out";
+
+/** Every address that page is asked at: the mount of the empty install writes its own prefix before the path its dashboard names. */
+const SIGNED_OUT_PATHS = [SIGNED_OUT_PATH, `${EMPTY_PREFIX}${SIGNED_OUT_PATH}`];
+
 /** Who the address asked as, when not as the sample admin, and why the stand-in for the provider's login then admits nobody. */
 const REFUSED_AS = { visitor: "no-proof", removed: "not-a-user", unchecked: "unchecked" } as const;
 
@@ -173,6 +179,11 @@ export interface Preview {
   readonly secrets: () => readonly string[];
 }
 
+/** The version an install of the preview says it runs. An update the dashboard starts changes it. */
+interface Running {
+  version: string;
+}
+
 /** The two installs and the pieces built over them. A reset makes all of it anew. */
 interface Scene {
   /** The kind of install both are. */
@@ -197,15 +208,49 @@ interface Scene {
   readonly mounts: readonly Mount[];
 }
 
-/** The stand-in for the host's update: it holds a key, and answers a start as the release the install knows of put in place. Nothing is fetched, and no code is replaced. */
-function sampleUpdate(world: World): SelfUpdate {
+/**
+ * The stand-in for the host's update: it holds a key, and answers a start as the release the install knows of put in place. Nothing is fetched, and no code is replaced:
+ * the install says from then on that it runs the release's version, so the page loaded again shows the update as done.
+ */
+function sampleUpdate(world: World, running: Running): SelfUpdate {
   return {
     holdsKey: () => true,
     ready: async () => {
       const news = (await world.install.database.readUpdateCheck())?.news ?? null;
+      if (news === null || news.version === running.version) return { ok: false, code: "no_update" };
 
-      return news === null ? { ok: false, code: "no_update" } : { ok: true, version: news.version, put: async () => ({ ok: true }) };
+      const put = async (): Promise<{ readonly ok: true }> => {
+        running.version = news.version;
+
+        return { ok: true };
+      };
+
+      return { ok: true, version: news.version, put };
     },
+  };
+}
+
+/**
+ * The version an install of the preview says it runs: the one its last update named, or the host's own where it took none.
+ *
+ * It is read from the install's log, so a demo that is opened again from what it kept still runs the version it was updated to. A reset empties the log.
+ */
+async function runningOf(world: World, version: string): Promise<Running> {
+  const { entries } = await world.install.database.searchAudit({ limit: 1, actions: ["update_started"] });
+  const to = entries[0]?.detail.to;
+
+  return { version: typeof to === "string" ? to : version };
+}
+
+/** Hand each request to the piece built for the version the install runs then: a piece is built once for each version. */
+function byVersion(running: Running, build: (version: string) => Mount["answer"]): Mount["answer"] {
+  const built = new Map<string, Mount["answer"]>();
+
+  return (request) => {
+    const answer = built.get(running.version) ?? build(running.version);
+    built.set(running.version, answer);
+
+    return answer(request);
   };
 }
 
@@ -240,35 +285,40 @@ function admitOf(world: World): Parameters<typeof createConsole>[0]["admit"] {
  *
  * The base path is the browser's own, the host's path before the place: the dashboard's client reads it from the page and asks its data there.
  */
-function dashboardMount(world: World, prefix: string, host: Host): Mount {
+function dashboardMount(world: World, prefix: string, host: Host, running: Running): Mount {
   const base = `${host.base ?? ""}${prefix}`;
-  const dashboard = createConsole({
-    install: world.install,
-    version: host.version,
-    layout: world.kind.layout,
-    admit: admitOf(world),
-    // No login happens here, so Activity gains no line of one.
-    entered: async () => undefined,
-    base,
-    client: host.client,
-    freeLimits: FREE_LIMITS,
-    // The install that holds nothing stands for one that keeps no key, so both kinds of the Usage screen can be seen.
-    usage: prefix === EMPTY_PREFIX ? OWN_USAGE_HOST : USAGE_HOST,
-    update: sampleUpdate(world),
-    demo: { reset: `${base}${RESET_PATH}` },
-    domain: changingPlug(world.kind.provider),
-    endLogins: END_LOGINS,
-    ...countsOf(world),
-  });
-  return { prefix, origin: world.kind.adminOrigin, base, holds: "pages", answer: dashboard.fetch };
+  // The stand-in for the provider's side of the domain keeps what was repaired: one is made for the mount, whatever version it says it runs.
+  const domain = changingPlug(world.kind.provider);
+  const dashboard = (version: string): ReturnType<typeof createConsole> =>
+    createConsole({
+      install: world.install,
+      version,
+      layout: world.kind.layout,
+      admit: admitOf(world),
+      // No login happens here, so Activity gains no line of one.
+      entered: async () => undefined,
+      base,
+      client: host.client,
+      freeLimits: FREE_LIMITS,
+      // The install that holds nothing stands for one that keeps no key, so both kinds of the Usage screen can be seen.
+      usage: prefix === EMPTY_PREFIX ? OWN_USAGE_HOST : USAGE_HOST,
+      update: sampleUpdate(world, running),
+      demo: { reset: `${base}${RESET_PATH}` },
+      signOut: `${base}${SIGNED_OUT_PATH}`,
+      domain,
+      endLogins: END_LOGINS,
+      ...countsOf(world),
+    });
+  return { prefix, origin: world.kind.adminOrigin, base, holds: "pages", answer: byVersion(running, (version) => dashboard(version).fetch) };
 }
 
-function apiMount(world: World, version: string): Mount {
+function apiMount(world: World, running: Running): Mount {
   const { database } = world.install;
-  const said = { version, layout: world.kind.layout, report: (error: unknown) => console.error("preview: an API request failed", error) };
-  const api = createApi({ ...world.install, ...said, readToken: (id) => database.getToken(id), limits: API_LIMITS, update: sampleUpdate(world), endLogins: END_LOGINS, ...countsOf(world) });
+  const said = { layout: world.kind.layout, report: (error: unknown) => console.error("preview: an API request failed", error) };
+  const api = (version: string): ReturnType<typeof createApi> =>
+    createApi({ ...world.install, ...said, version, readToken: (id) => database.getToken(id), limits: API_LIMITS, update: sampleUpdate(world, running), endLogins: END_LOGINS, ...countsOf(world) });
 
-  return { prefix: "/api", origin: world.kind.adminOrigin, base: "/api", holds: "json", answer: api.fetch };
+  return { prefix: "/api", origin: world.kind.adminOrigin, base: "/api", holds: "json", answer: byVersion(running, (version) => api(version).fetch) };
 }
 
 /** The mount of the sites at one place of the preview: the origin the kind names for it, asked through serving with the settings as they are now. */
@@ -300,7 +350,8 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
   const { token } = resumed ? { token: "" } : await seedWorld(seeded, host.samples);
   // The seeded install alone learns of a newer version: the empty one shows a dashboard with no notice.
   if (!resumed) await checkForUpdate(seeded.install, { fetch: sampleLatest(host.version) });
-  const pages = dashboardMount(seeded, "", host);
+  const running = await runningOf(seeded, host.version);
+  const pages = dashboardMount(seeded, "", host, running);
   const computers = keepLoginsWaiting(seeded, resumed ? (host.secrets ?? []) : []);
   // A login runs out ten minutes after the seed: a visitor who comes later still finds one to review.
   const answer: Mount["answer"] = async (request) => {
@@ -308,7 +359,7 @@ async function openScene(host: Host, resumed: boolean): Promise<Scene> {
 
     return pages.answer(request);
   };
-  const mounts = [dashboardMount(empty, EMPTY_PREFIX, host), apiMount(seeded, host.version)];
+  const mounts = [dashboardMount(empty, EMPTY_PREFIX, host, await runningOf(empty, host.version)), apiMount(seeded, running)];
 
   return { kind, seeded, token, secrets: computers.secrets, keepLogins: computers.keep, dashboard: { ...pages, answer }, mounts };
 }
@@ -324,6 +375,9 @@ function isUnder(path: string, prefix: string): boolean {
 
 /** The mount a path of the dashboard's side belongs to: one under a prefix of its own, or the dashboard. None for a path the preview answers itself. */
 function mountOf(scene: Scene, path: string): Mount | undefined {
+  // The page of a browser that signed out is the preview's own, also under the prefix of the empty install's mount.
+  if (SIGNED_OUT_PATHS.includes(path)) return undefined;
+
   const fixed = scene.mounts.find((mount) => isUnder(path, mount.prefix));
   if (fixed !== undefined) return fixed;
 
@@ -375,8 +429,13 @@ function redirectOf(url: URL): Response | undefined {
   return undefined;
 }
 
-/** Play the stage at a path over a scene: its own answer, the page of what the sample computers' terminals print, or `undefined` for a path of no stage. Only the logins the sample computers hold the secrets of are printed. */
+/**
+ * Play the stage at a path over a scene: its own answer, the page of a browser that signed out, the page of what the sample computers' terminals print, or `undefined` for a path of no stage.
+ * Only the logins the sample computers hold the secrets of are printed.
+ */
 async function stagedAt(path: string, scene: Scene): Promise<Response | undefined> {
+  if (SIGNED_OUT_PATHS.includes(path)) return new Response(await signedOutPage(), { headers: OWN_HEADERS });
+
   const stage = stageAt(path);
   if (stage === undefined) return undefined;
 

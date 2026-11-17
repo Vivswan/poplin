@@ -174,7 +174,7 @@ describe("a page of the log", () => {
       { ok: true, total: 3, whole: true },
       { ok: true, total: 0, whole: true },
       { ok: true, from: "9", after: null },
-      ["When (UTC),Who,What,Site,Title,Action", ...["Made a new link,trip-notes,,new_id", "Changed the site's settings,trip-notes,,details", "Made the site,field-notes,,create"].map((end) => `${when},${owner},${end}`), ""].join("\r\n"),
+      ["When (UTC),Who,What,Site,Title,Action", ...["Made a new link,trip-notes,,new_id", "Changed the name,trip-notes,,details", "Made the site,field-notes,,create"].map((end) => `${when},${owner},${end}`), ""].join("\r\n"),
     ]);
   });
 
@@ -340,7 +340,7 @@ describe("the log as a file", () => {
   // Drift: the file would hold other entries than the screen's filters show, name a token by its id where the screen names it by its note, or say something else was done than the screen says.
   test.each([
     ["?kind=access", ['"Added the token ""the laptop""",,,token_added']],
-    ["?site=notes", ["Changed the site's settings,trip-notes,,details", "Made the site,field-notes,,create"]],
+    ["?site=notes", ["Changed the name,trip-notes,,details", "Made the site,field-notes,,create"]],
     ["?kind=access&site=notes", []],
   ])("under %p holds a heading and the entries of that narrowing, the newest first, in the screen's words", async (query, ends) => {
     const { opened } = await openWithHistory();

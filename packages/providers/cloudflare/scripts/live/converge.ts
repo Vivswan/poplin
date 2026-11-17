@@ -7,6 +7,7 @@
 //     no install          -> `poplin install`: the bucket, the database, the first upload of this commit's build, then the repair of its kind
 //     an install          -> this commit's build by the upload an install updates itself with -> `poplin doctor --repair`
 //                            a repair that refuses a database a schema step behind runs again after the first wait below, once the new Worker brought it forward
+//     -> `poplin install` once more, which makes nothing on an install that stands: it must read the release this commit's build stated
 //     -> wait for the install to answer and its database to hold this commit's schema -> wait for the new deployment to answer the run's token -> the test install's caps
 //
 // The commands run in this process and take the commit's build as the newest release: commands.ts says how. Nothing here makes, mends, or removes a piece of an install itself.
@@ -448,7 +449,27 @@ async function mend(run: Run, found: Found, world: World, progress: Progress, st
 }
 
 /**
- * Bring the account to an install that runs this commit's build: `poplin install` where none is, and the upload and the repair where one is.
+ * Read which release the install runs once the run changed it, by the look `poplin install` begins with: on an install that stands the command makes nothing.
+ *
+ * Cloudflare makes a version of the Worker for every change of its settings, and tags none the change does not tag. A release read from a tag is no longer read after the first such change.
+ *
+ * @param words - the words of the run's own `poplin install`
+ * @param after - what the run did last to the Worker, as the summary's row says it
+ * @returns what stopped the run, where the command read another release than this commit's build, or none
+ */
+async function checkRelease(run: Run, world: World, progress: Progress, words: readonly string[], after: string): Promise<Stop | undefined> {
+  // The command tells an install that stands in lines the summary has no use for a second time.
+  const looked = await command({ ...run, say: () => undefined }, "install", words, world.ends);
+  const read = looked.kind === "stopped" && looked.problem === ALREADY_INSTALLED && looked.version === world.release.version;
+  if (!read) return { kind: "failed", what: `poplin install did not read the install as this commit's build after ${after}` };
+
+  note(run, progress, { piece: "Release", result: `read as ${world.release.version} after ${after}` });
+
+  return undefined;
+}
+
+/**
+ * Bring the account to an install that runs this commit's build: `poplin install` where none is, and the upload and the repair where one is. Then read its release back.
  *
  * @param login - the first login of an install the run makes
  * @param current - whether a database that stands held every schema step of this commit
@@ -456,24 +477,34 @@ async function mend(run: Run, found: Found, world: World, progress: Progress, st
  */
 async function settle(run: Run, found: Found, login: string, current: boolean, world: World, progress: Progress): Promise<Made | Stop> {
   const words = ["cloudflare", ...placeWords(run, found), `--login=${login}`, "--yes", "--adopt", "--no-log-in", "--json"];
+  const made = await makeOrMend(run, found, { words, current }, world, progress);
+  if (isStop(made.made)) return made.made;
+
+  return (await checkRelease(run, world, progress, words, made.after)) ?? made.made;
+}
+
+/** Run `poplin install`, and mend the install it finds; `after` is what the run did last to the Worker. */
+async function makeOrMend(run: Run, found: Found, asked: { readonly words: readonly string[]; readonly current: boolean }, world: World, progress: Progress): Promise<{ readonly made: Made | Stop; readonly after: string }> {
+  const { words, current } = asked;
   const installed = await command(run, "install", words, world.ends);
   if (installed.kind === "stopped" && installed.problem === ALREADY_INSTALLED) {
-    // The version is a tag anybody with the account's token can write, so only one written as a release's is told.
+    // The version is a text anybody with the account's token can write, so only one written as a release's is told.
     const version = installed.version !== undefined && isPlainVersion(installed.version) ? installed.version : undefined;
     note(run, progress, { piece: "Install", result: `found, runs ${version ?? "no released version"}` });
 
-    return mend(run, found, world, progress, { version, current });
+    return { made: await mend(run, found, world, progress, { version, current }), after: "the upload and the repair" };
   }
 
-  if (installed.kind !== "rows") return stopOf("install", installed);
+  const after = "the install wrote its settings";
+  if (installed.kind !== "rows") return { made: stopOf("install", installed), after };
 
   note(run, progress, { piece: "Install", result: "none found, so poplin install ran" });
   const stopped = sortRows(run, progress, installed.rows);
-  if (stopped !== undefined) return stopped;
+  if (stopped !== undefined) return { made: stopped, after };
 
   const database = await readyDatabase(run, found, world);
 
-  return typeof database === "string" ? { id: database, strandsOlder: true } : database;
+  return { made: typeof database === "string" ? { id: database, strandsOlder: true } : database, after };
 }
 
 /** Ask the install who the token is, on a connection of its own, and answer the status; 0 for no answer in time. */

@@ -15,7 +15,7 @@ import type { rollbackSite } from "@poplin/core/src/actions/rollback";
 import type { updateSite } from "@poplin/core/src/actions/set";
 import type { getSite } from "@poplin/core/src/actions/show";
 import type { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
-import type { startUpdate } from "@poplin/core/src/actions/start-update";
+import { type startUpdate, TAKEN_BY_REPAIR } from "@poplin/core/src/actions/start-update";
 
 import type { DomainReading } from "./domain/records";
 
@@ -115,7 +115,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     digest_differs: "The files fetched for the release are not the files poplin published. Nothing was changed. Try again; if it says this again, tell the project.",
     other_version: "The files published for the release say they are of another version. Nothing was changed. Tell the project.",
     database: "That release changes the database, and the version asked for cannot read it. Nothing was changed.",
-    needs_hand: "The install cannot put this release in place by itself. Nothing was changed: the install goes on with the version it runs.",
+    needs_hand: `Nothing was changed. ${TAKEN_BY_REPAIR}`,
     host: "The host did not answer before anything was sent. Nothing was changed. Try again in a few minutes.",
   },
   version_refused: {

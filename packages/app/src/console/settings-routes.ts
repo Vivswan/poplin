@@ -1,6 +1,6 @@
 // The data of the Settings screen: every setting as a row, a save of some of them, and the sign-out of every browser.
 //
-//   GET  /settings                         every setting with its control, its text, its default, and the free limits it can be put above
+//   GET  /settings                         every setting with its control, its text, its default, and the limits it can be put above: the host's free ones, and the install's own that bound it
 //   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting.
 //                                          A saved setting the domain's rules are written from is then carried to them, on an install that holds a key
 //   POST /settings/sign-everyone-out       end every login of the dashboard at the provider; a refusal says why they are not known to have ended
@@ -14,6 +14,7 @@ import * as v from "valibot";
 
 import { ACCESS_SETTINGS } from "./settings/constants";
 import { type FreeLimits, type FreeMark, freeLimitMarks } from "./settings/free-limits";
+import { pairMarks } from "./settings/pair-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 import type { DomainPlug } from "./domain/records";
 import { type Control, controlOf, screenText, unitOf } from "./setting-controls";
@@ -42,7 +43,7 @@ interface Row {
   /** Its default, in the form of `text`. */
   readonly fallback: string;
 
-  /** The free limits of the host the setting can be put above: the largest count that earns no warning, the unit that count is typed in, and the host's sentence for a count above it. A size has each once for its text's unit and once for its default's. */
+  /** What the setting can be put above: the host's free limits, and the install's limit that bounds it. Each is the largest count with no warning, its unit, and the sentence above it; a size has each for its text's unit and its default's. */
   readonly limits: readonly (FreeMark & { readonly unit: string })[];
 
   /** `true` for a setting a repair carries to the provider, in a dashboard that has the Domain screen, where that half waits for the next repair. `false` for one the install carries there by itself, or that no repair carries. */
@@ -90,7 +91,7 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
   const texts = screenTexts(values);
   const [installer] = values.logins;
   const defaults = installer === undefined ? texts : screenTexts(defaultSettings({ installer }));
-  const marks = freeLimitMarks(values, facts.freeLimits);
+  const [free, pairs] = [freeLimitMarks(values, facts.freeLimits), pairMarks(values)];
   const shown = (Object.keys(texts) as Key[]).filter((key) => !ACCESS_SETTINGS.includes(key));
   const carried: readonly string[] = facts.domain?.carriedSettings ?? [];
   const idle: Readonly<Record<string, string | undefined>> = facts.domain?.idleSettings ?? {};
@@ -104,7 +105,7 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
       text: texts[key],
       unit: control.kind === "number" ? unitOf(SETTING_VALUES.entries[key], texts[key]) : "",
       fallback: defaults[key],
-      limits: limitsOf(marks[key] ?? [], values[key], [texts[key], defaults[key]]),
+      limits: limitsOf([...(free[key] ?? []), ...(pairs[key] ?? [])], values[key], [texts[key], defaults[key]]),
       repair: carried.includes(key) && !isCarried(key, facts.carries),
       needs: idle[key] ?? null,
     };

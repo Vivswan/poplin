@@ -20,10 +20,11 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | ------------------------------- | ------------------------------------------------------------------------ |
 | `(Default: 9,000 MB)`           | the setting's default                                                    |
 | Reset                           | beside a default the row differs from: puts it back                      |
-| a warning mark after the field  | follows the number as it is typed; [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what earns one |
+| a warning under the field, in plain words after a mark | follows the number as it is typed. A number above a free limit earns one: [Limits and cost](../upkeep/cost/what-can-cost-money.md). So does One site above All sites together: `More than all sites together may hold, so that limit is reached first.` And One visitor per minute above One site per minute: `More than one site answers in a minute, so that limit is reached first.` |
 | a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
 | `Use a whole number, 1 or more.` | such a sentence, for a number typed with a fraction, such as `1.5`      |
 | `Needs poplin's key to work. Open Domain and press Repair.` | under Update automatically, on an install that holds no key |
+| `Switch on the check above first.` | under Update automatically while Check for new versions is off. Switching the check off switches Update automatically off with it, and its switch takes no change until the check is on again |
 
 | Heading    | Settings                                                                                           |
 | ---------- | -------------------------------------------------------------------------------------------------- |

@@ -4,6 +4,7 @@ import { type RefObject, useRef, useState } from "react";
 
 import type { DomainRun } from "@/domain/domain-queries";
 import type { Refused } from "@/lib/api";
+import { useOnePress } from "@/dialog/one-press";
 
 /** The name of the token's box, and what it says when a run is asked with nothing in it. */
 const TOKEN = { name: "token", empty: "Paste an account token first." } as const;
@@ -32,8 +33,8 @@ interface TokenRun {
   /** The form the boxes are read from. */
   readonly sheet: RefObject<HTMLFormElement | null>;
 
-  /** The run on its way. */
-  readonly busy: DomainRun | undefined;
+  /** Whether a run is on its way. */
+  readonly busy: boolean;
 
   /** The sentence to show at a box, by the box's name. */
   readonly saidAt: (name: string) => string | undefined;
@@ -41,8 +42,8 @@ interface TokenRun {
   /** The sentence of a refusal about no box of this form. */
   readonly saidElsewhere: string | undefined;
 
-  /** Send one run. A box that must be filled and is empty says so, takes the focus, and nothing is sent. */
-  readonly send: (run: DomainRun) => Promise<void>;
+  /** Send one run, unless one is on its way. A box that must be filled and is empty says so, takes the focus, and nothing is sent. */
+  readonly send: (run: DomainRun) => void;
 
   /** Forget what was said, as a form that is opened again does. */
   readonly forget: () => void;
@@ -57,12 +58,11 @@ interface TokenRun {
 export function useTokenRun(boxes: readonly Box[], onRun: (run: DomainRun, sent: Sent) => Promise<Refused | undefined>): TokenRun {
   const sheet = useRef<HTMLFormElement>(null);
   const [said, setSaid] = useState<Said>();
-  const [busy, setBusy] = useState<DomainRun>();
   const names: readonly string[] = [TOKEN.name, ...boxes.map((box) => box.name)];
 
-  const send = async (run: DomainRun): Promise<void> => {
+  const { press: send, busy } = useOnePress(async (run: DomainRun): Promise<void> => {
     const form = sheet.current;
-    if (form === null || busy !== undefined) return;
+    if (form === null) return;
 
     const typed = new FormData(form);
     const text = (name: string): string => String(typed.get(name) ?? "");
@@ -79,9 +79,8 @@ export function useTokenRun(boxes: readonly Box[], onRun: (run: DomainRun, sent:
 
     const sent = { token: text(TOKEN.name), ...Object.fromEntries(boxes.map((box) => [box.name, text(box.name)])) };
     (form.elements.namedItem(TOKEN.name) as HTMLInputElement).value = "";
-    setBusy(run);
-    say(await onRun(run, sent).finally(() => setBusy(undefined)));
-  };
+    say(await onRun(run, sent));
+  });
 
   return {
     sheet,

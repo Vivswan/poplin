@@ -235,9 +235,10 @@ describe("the local preview", () => {
     expect(await Promise.all(strangers.map(async (answer) => (await answer.text()).includes("<script")))).toEqual([false, false, false]);
     // Drift: the page of an email that is no user names the way out. Named at the sample install's own address, it would lead a person out of the preview.
     expect(await (await ask(first, `${base}/settings?as=removed`)).text()).toContain(`To log in with another email, open ${ORIGIN}${base}/out`);
-    // Drift: no login is here to end, so the way out sends a browser nowhere: it answers what a request with no login behind it gets.
+    // Drift: no login is here to end. The way out would answer what a request with no login behind it gets, a page headed 403 that reads as a failure, or lead out of the base.
     const out = await ask(first, `${base}/out`);
-    expect([out.status, out.headers.get("Location"), (await out.text()).includes("No login was checked for this request.")]).toEqual([403, null, true]);
+    const signedOut = await ask(first, `${base}/state/signed-out`);
+    expect([out.status, out.headers.get("Location"), signedOut.status, (await signedOut.text()).includes("<h1>Signed out</h1>")]).toEqual([302, `${base}/state/signed-out`, 200, true]);
     expect(await Promise.all(strangersData.map(async (answer) => [answer.status, ((await answer.json()) as { code: string }).code]))).toEqual([
       [401, "no_login"],
       [403, "not_a_user"],
@@ -499,7 +500,8 @@ function changeAt(preview: Preview, path: string, body: unknown): Promise<Respon
 
 describe("the local preview of an install without a domain", () => {
   // Drift: the three hosts are three origins only while each answers its own side. A site host that answered the dashboard's data, or a dashboard host that served a site's page, would put a site's script and the dashboard on one origin.
-  test("each host answers its own side alone: the dashboard's serves no site, a site host serves no path of the dashboard, the API, or the preview, and a site's address without its slash, or with an id from before a reset, leads to the site", async () => {
+  // Drift: a link with a made-up id would lead on to an unlisted site, which a link alone opens.
+  test("each host answers its own side alone: the dashboard's serves no site, a site host serves no path of the dashboard, the API, or the preview, and a site's address without its slash, or a private one's from before a reset, leads there", async () => {
     const preview = await openLocal();
     const sites = await listedAt(preview);
     const [deck, report] = [sites["launch-deck"]?.label, sites["sales-report"]?.label];
@@ -511,7 +513,10 @@ describe("the local preview of an install without a domain", () => {
       [`${LOCAL.sites}/lisbon/`, [200, null, false]],
       [`${LOCAL.sites}/${deck}/`, [200, null, false]],
       [`${LOCAL.sites}/${deck}`, [302, `/${deck}/`, false]],
-      [`${LOCAL.sites}/launch-deck--000000000000/deck.js?x=1`, [302, `/${deck}/deck.js?x=1`, false]],
+      [`${LOCAL.private}/sales-report--000000000000/q3.html?x=1`, [302, `/${report}/q3.html?x=1`, false]],
+      // A link alone opens an unlisted site: one with another id is sent to the login's side, as the product sends it, and finds nothing there.
+      [`${LOCAL.sites}/launch-deck--000000000000/deck.js?x=1`, [302, `${LOCAL.private}/launch-deck--000000000000/deck.js?x=1`, false]],
+      [`${LOCAL.private}/launch-deck--000000000000/deck.js?x=1`, [404, null, false]],
       [`${LOCAL.private}/${report}/`, [200, null, false]],
       [`${LOCAL.private}/${report}/?as=visitor`, [404, null, false]],
       [`${LOCAL.private}/lisbon/`, [404, null, false]],

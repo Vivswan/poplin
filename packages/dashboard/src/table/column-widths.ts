@@ -6,6 +6,9 @@
 /** The narrowest any column is drawn, in pixels: room for the first letters of its heading and for the edge that resizes it. */
 export const NARROWEST = 48;
 
+/** The narrowest the column that stays in place is drawn in a table a person resizes, in pixels: its edge lies inside it, and in a narrower column would lie under the heading's own button, out of a pointer's reach. */
+const NARROWEST_FIXED = 120;
+
 /** The widest a column is drawn for its values' sake when it names no cap of its own, in pixels: one long value does not push the other columns out. */
 const WIDEST_FITTED = 320;
 
@@ -22,6 +25,9 @@ export interface SizedColumn {
 
   /** The one column that is always first and stays in place. */
   readonly fixed?: boolean;
+
+  /** The narrowest it is drawn, in pixels. Left out, the narrowest of any column. */
+  readonly narrowest?: number;
 }
 
 /** What a table measured of its columns, each in pixels by column id. A column not measured yet is in neither. */
@@ -42,6 +48,20 @@ export interface ColumnWidths {
   readonly spare: number;
 }
 
+/** The narrowest a column is drawn, in pixels. */
+export function narrowestOf(column: Pick<SizedColumn, "narrowest"> | undefined): number {
+  return column?.narrowest ?? NARROWEST;
+}
+
+/**
+ * A column as a table draws it whose columns a person resizes: the one that stays in place is held wide enough for its edge to stay in reach.
+ *
+ * @returns the column itself where it is not the fixed one
+ */
+export function withEdgeInReach<Column extends SizedColumn>(column: Column): Column {
+  return column.fixed === true ? { ...column, narrowest: NARROWEST_FIXED } : column;
+}
+
 /**
  * The widths of columns that need more than their room, with the columns nobody sized drawn as much narrower as their values give.
  *
@@ -58,7 +78,7 @@ function fitting(
     const width = drawn.get(column.id) ?? 0;
     if (sizes[column.id] !== undefined) return 0;
 
-    return Math.max(0, width - Math.max(NARROWEST, Math.ceil(fitted.least.get(column.id) ?? width)));
+    return Math.max(0, width - Math.max(narrowestOf(column), Math.ceil(fitted.least.get(column.id) ?? width)));
   };
   const narrower = new Map(drawn);
   let left = over;
@@ -88,13 +108,13 @@ export function widthsForRoom(
   free: number,
 ): ColumnWidths {
   const own = (column: SizedColumn): number =>
-    Math.max(NARROWEST, sizes[column.id] ?? Math.min(Math.ceil(fitted.needs.get(column.id) ?? 0), column.widest ?? WIDEST_FITTED));
+    Math.max(narrowestOf(column), sizes[column.id] ?? Math.min(Math.ceil(fitted.needs.get(column.id) ?? 0), column.widest ?? WIDEST_FITTED));
   const drawn = new Map(shown.map((column) => [column.id, own(column)]));
   if (free <= 0) return { drawn, spare: 0 };
 
   const fixed = shown.filter((column) => column.fixed === true);
   const others = shown.length === fixed.length ? 0 : NARROWEST;
-  for (const column of fixed) drawn.set(column.id, Math.min(own(column), Math.max(NARROWEST, Math.floor((free - others) / fixed.length))));
+  for (const column of fixed) drawn.set(column.id, Math.min(own(column), Math.max(narrowestOf(column), Math.floor((free - others) / fixed.length))));
 
   const spare = free - [...drawn.values()].reduce((sum, width) => sum + width, 0);
   if (spare < 0) return { drawn: fitting(shown, drawn, { fitted, sizes, over: -spare }), spare: 0 };

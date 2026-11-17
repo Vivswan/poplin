@@ -79,7 +79,7 @@ function installOf(harness: Awaited<ReturnType<typeof HarnessOf>>, fault: Fault)
     const answered = await harness.world.fetch(input, init);
     if (new URL(input).pathname !== "/api/update" || answered.status !== 200) return answered;
 
-    return Response.json({ ...(await answered.json()), ...stateOf(harness.account.versions.length > 1, fault) });
+    return Response.json({ ...(await answered.json()), ...stateOf(harness.account.uploads.length > 1, fault) });
   };
 }
 
@@ -104,7 +104,7 @@ async function upgrade(kind: Found["kind"], fault: Fault = {}): Promise<Ran> {
   };
   const code = await upgradeInstall(harness.run, { env, older, release: harness.world.release, ends: harness.world.ends, fetch: installOf(harness, fault) });
 
-  return { code, lines: harness.lines.slice(installed), uploads: harness.account.versions.length };
+  return { code, lines: harness.lines.slice(installed), uploads: harness.account.uploads.length };
 }
 
 describe.each(["domain", "account address"] as const)("the live upgrade of an install on its %s, on a fake account in memory", (kind) => {

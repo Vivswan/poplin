@@ -3,12 +3,13 @@
 
 import { describe, expect, test } from "bun:test";
 import { type Login, parseLogin } from "@poplin/core/src/auth/logins";
+import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import type { Mend, Repaired, Run, Token, Whole } from "@poplin/core/src/install/installer";
 import type { Place, Where } from "../../../../../src/shared/install/first/find";
 import { installer } from "../../../../../src/shared/install/first/installer";
-import { ACCOUNT, type Account, emptyAccount, KEY_VALUE_START, TOKEN } from "../../support/fake-install";
+import { ACCOUNT, type Account, answer, emptyAccount, KEY_VALUE_START, TOKEN } from "../../support/fake-install";
 import { type Store, storeOf } from "../../support/fake-store";
-import { worldOf } from "../../support/fake-reach";
+import { RELEASE, worldOf } from "../../support/fake-reach";
 import type { Asked } from "../../support/replies";
 
 /** The first login of every install here, and the email a repair is asked to add. */
@@ -28,6 +29,15 @@ const [DRY, APPLY]: readonly [Run, Run] = ["dry-run", "apply"];
 
 /** The calls a repair that changes nothing sends, pinned for each kind: all of them read. */
 const CALLS: Readonly<Record<keyof typeof KINDS, number>> = { domain: 30, "no-domain": 26 };
+
+/** A version below the release the website names, which an install that is behind runs. */
+const OLDER = "0.2.0";
+
+/** The upload of the install's Worker, and a call of its database's query route, as a change is told. */
+const [UPLOAD, QUERY] = [`PUT /accounts/${ACCOUNT}/workers/scripts/poplin`, `POST /accounts/${ACCOUNT}/d1/database/made-0/query`];
+
+/** The calls a repair sends to bring an install to the newest release, beside the ones of a repair that changes nothing, pinned: the cron list, the bindings, the upload, and how the database stands. */
+const UPLOAD_CALLS = 4;
 
 /** The alerts of each kind that are mailed to the first user, each with the call that changes it once that user is another: a row, then a call. */
 const FOLLOWS: Readonly<Record<keyof typeof KINDS, readonly (readonly [string, string])[]>> = {
@@ -108,6 +118,19 @@ async function wholeInstall(kind: keyof typeof KINDS, changes: Partial<Account> 
   return Object.assign(account, { store: await storeOf(stored === "nothing" ? undefined : stored) });
 }
 
+/**
+ * Make a whole install whose Worker states another release than the one the website names, as one that could not take that release by itself.
+ * Its latest version is the one the install's change of the settings made, as on every real install.
+ *
+ * @param version - the release its Worker's `RELEASE` binding names
+ */
+async function behindInstall(kind: keyof typeof KINDS, version: string = OLDER, stored: Login | "nothing" = OWNER): ReturnType<typeof wholeInstall> {
+  const account = await wholeInstall(kind, {}, stored);
+  account.bindings = account.bindings.map((binding) => (binding.name === "RELEASE" ? { ...binding, text: version } : binding));
+
+  return account;
+}
+
 /** What one find and one repair left behind: what the repair came to and told on the way, and every call it sent. */
 interface Outcome {
   readonly done: Repaired;
@@ -117,8 +140,8 @@ interface Outcome {
 }
 
 /** Find the install, then repair it, in one stand-in world. */
-async function repaired(account: Account, kind: keyof typeof KINDS, mend: Partial<Mend> = {}, where: Where = KINDS[kind].where): Promise<Outcome> {
-  const world = await worldOf(account);
+async function repaired(account: Account, kind: keyof typeof KINDS, mend: Partial<Mend> = {}, where: Where = KINDS[kind].where, meets: Parameters<typeof worldOf>[1] = {}): Promise<Outcome> {
+  const world = await worldOf(account, meets);
   const found = await installer.find(KEY, where, world.reach, "repair");
   if (found.state !== "whole") throw new Error(`no whole install to repair: ${found.state}`);
 
@@ -214,6 +237,151 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
   });
 });
 
+describe.each(BOTH)("the release an install runs, where Cloudflare tags no version it is not told to, %s", (kind) => {
+  // Drift: every variable and key a person or a repair writes makes a latest version with no tag. An install read by that tag is one whose version is not read from its first repair on, so no repair ever brings it to a release.
+  test("a variable and a secret written by hand each make a latest version with no tag, and the install still reads as the release it runs, and as behind one", async () => {
+    const [current, behind] = [await wholeInstall(kind), await behindInstall(kind)];
+    for (const account of [current, behind]) {
+      const kept = account.bindings.map((binding) => ({ name: binding.name, type: "inherit" }));
+      for (const written of [{ name: "BY_HAND", type: "plain_text", text: "set in the dashboard" }, { name: "A_SECRET", type: "secret_text", text: "set in the dashboard" }]) {
+        answer(account, { method: "PATCH", path: `/accounts/${ACCOUNT}/workers/scripts/poplin/settings`, key: `Bearer ${TOKEN}`, body: { settings: { bindings: [...kept, written] } } });
+      }
+    }
+    const dry = await repaired(behind, kind, { run: DRY }, KINDS[kind].where, { older: { [OLDER]: OWN_SCHEMA } });
+
+    expect(current.versions.map((version) => (version.annotations as { readonly "workers/tag"?: string } | undefined)?.["workers/tag"])).toEqual([undefined, undefined, RELEASE, RELEASE]);
+    expect([shown((await repaired(current, kind)).done)[0], shown(dry.done)[0]]).toEqual([`Worker | leave | poplin, runs ${RELEASE}`, `Worker | change | poplin: ${OLDER} to ${RELEASE}`]);
+  });
+
+  // Drift: code another tool uploads is not poplin's release. Read as the tag an older version carries, it would be told as that release, and left in place as the newest.
+  test("an upload by another tool, which keeps poplin's marks and states no release, is read as no version: never as the tag of the version under it", async () => {
+    const account = await wholeInstall(kind);
+    const kept = account.bindings.filter((binding) => binding.name !== "RELEASE").map((binding) => ({ name: binding.name, type: "inherit" }));
+    answer(account, { method: "PUT", path: `/accounts/${ACCOUNT}/workers/scripts/poplin`, key: `Bearer ${TOKEN}`, body: { metadata: { bindings: kept }, "index.js": "" } });
+    const { done, changes } = await repaired(account, kind);
+
+    expect(account.versions.map((version) => (version.annotations as { readonly "workers/tag"?: string } | undefined)?.["workers/tag"])).toEqual([undefined, RELEASE, RELEASE]);
+    expect([shown(done)[0], changes]).toEqual(["Worker | leave | poplin: its version is not read, so no release is put in place", []]);
+  });
+});
+
+describe.each(BOTH)("a release the install is behind, %s", (kind) => {
+  // Drift: this is the one way an install takes a release it cannot take by itself. An upload that named a binding anew would drop the bucket or the key, and one with no tag or no update stated would leave no way back.
+  test("a dry run names the change and sends none; the run sends one upload that keeps every binding by name, tags the version, and states the update, in the pinned calls; the run after it sends none", async () => {
+    const account = await behindInstall(kind);
+    const names = account.bindings.map((binding) => binding.name);
+    const meets = { older: { [OLDER]: OWN_SCHEMA } };
+    const dry = await repaired(account, kind, { run: DRY }, KINDS[kind].where, meets);
+    const run = await repaired(account, kind, {}, KINDS[kind].where, meets);
+    const again = await repaired(account, kind, {}, KINDS[kind].where, meets);
+    const { metadata } = account.uploads.at(-1) as { readonly metadata: { readonly bindings: readonly { readonly name: string; readonly type: string; readonly json?: unknown; readonly text?: unknown }[]; readonly annotations: unknown } };
+    const stated = metadata.bindings.filter((binding) => binding.type !== "inherit");
+
+    expect([dry.changes, shown(dry.done), shown(dry.done)[0], dry.done.ok && dry.done.ready]).toEqual([[], shown(run.done), `Worker | change | poplin: ${OLDER} to ${RELEASE}`, true]);
+    expect([run.changes, run.calls.length - CALLS[kind], run.done.ok && run.done.ready]).toEqual([[UPLOAD], UPLOAD_CALLS, true]);
+    expect([metadata.annotations, stated.map((binding) => binding.name), stated.find((binding) => binding.name === "LAST_UPDATE")?.json]).toEqual([
+      { "workers/tag": RELEASE, "workers/message": `poplin ${RELEASE}, by a repair` },
+      ["MINUTE_LIMITS", "LAST_UPDATE", "RELEASE"],
+      { from: OLDER, to: RELEASE, schema: OWN_SCHEMA, at: 0 },
+    ]);
+    expect([account.bindings.map((binding) => binding.name).filter((name) => name !== "LAST_UPDATE").sort(), account.uploads.length]).toEqual([[...names].sort(), 2]);
+    // The release is stated once, by its value: named as kept beside it, Cloudflare would be told one binding twice.
+    expect(metadata.bindings.filter((binding) => binding.name === "RELEASE")).toEqual([{ name: "RELEASE", type: "plain_text", text: RELEASE }]);
+    expect([again.changes, shown(again.done)[0], again.calls.length]).toEqual([[], `Worker | leave | poplin, runs ${RELEASE}`, CALLS[kind]]);
+  });
+
+  // Drift: a website that does not name the version the install ran publishes no files to go back to. An update stated for it would offer a way back that every start refuses.
+  test("where the website does not name the version the install ran, the upload states no update, so the release's code offers no way back", async () => {
+    const account = await behindInstall(kind);
+    await repaired(account, kind);
+    const { metadata } = account.uploads.at(-1) as { readonly metadata: { readonly bindings: readonly { readonly name: string }[] } };
+
+    expect([account.uploads.length, metadata.bindings.some((binding) => binding.name === "LAST_UPDATE")]).toEqual([2, false]);
+  });
+
+  // Drift: a person runs the repair to get back in. One that stopped at an upload it could not send would leave the login unmended, and one that said nothing of the upload would leave the release untaken with no word.
+  test.each([
+    ["a token without the permission to upload", {}, `Worker | block | poplin: ${OLDER} to ${RELEASE}: The token lacks a permission. Add this one: Workers Scripts: Edit`],
+    ["code that stops as it starts", { refuseAs: { status: 400, code: 10021 } }, `Worker | fail | poplin: ${OLDER} to ${RELEASE}: Cloudflare refused the release's code: it stops as it starts. The install runs the version it ran`],
+    ["code Cloudflare refuses otherwise", { refuseAs: { status: 400, code: 10068 } }, `Worker | fail | poplin: ${OLDER} to ${RELEASE}: refused with status 400`],
+  ])("an upload refused for %s gets a row that says so, the piece that was gone is still made, and the run is not ready", async (_name, refused, row) => {
+    const account = await behindInstall(kind);
+    account.workflows = [];
+    Object.assign(account, { refuse: UPLOAD, ...refused });
+    const { done } = await repaired(account, kind);
+
+    expect([shown(done).filter((entry) => !entry.includes(" | leave | ")), done.ok && done.ready, account.uploads.length]).toEqual([[row, "Workflow | make | poplin-jobs"], false, 1]);
+  });
+
+  // Drift: files that are not the published ones must reach no Worker, whoever holds the token, and a person who came to get back in must still get in.
+  test.each([
+    ["a website that does not answer", "releases.json", new Response("down", { status: 500 }), "the project's website named no release, so nothing says whether a newer one is out. Run this again"],
+    ["a manifest that is not the published one", "worker.json", new Response("{}"), "the release's files are not the ones the project published. Nothing was uploaded"],
+  ])("%s uploads nothing and says why in the Worker's row, and the rest of the install is still read", async (_name, file, answer, why) => {
+    const account = await behindInstall(kind);
+    const { done, changes } = await repaired(account, kind, {}, KINDS[kind].where, { website: (address) => (address.endsWith(file) ? answer.clone() : undefined) });
+
+    expect([shown(done)[0], changes, done.ok && done.ready, shown(done).length > 1]).toEqual([`Worker | fail | poplin, runs ${OLDER}: ${why}`, [], false, true]);
+  });
+
+  // Drift: an older poplin mends the pieces to what it knows. Run on an install of a newer release, or on one behind a release it cannot place, it would put older keys and older variables back.
+  test.each([
+    ["runs a newer release than the newest this poplin reads", "0.4.0", {}, `The install runs 0.4.0, and the newest release this poplin reads is ${RELEASE}. Nothing is put back to an older release.`],
+    ["is behind a release of another schema than this poplin's", OLDER, { schema: OWN_SCHEMA + 1 }, "The newest release is one this poplin cannot put in place."],
+  ])("an install that %s is left whole: the repair stops before it reads the records, and names the newest poplin", async (_name, version, meets, why) => {
+    const account = await behindInstall(kind, version);
+    const { done, calls, changes } = await repaired(account, kind, {}, KINDS[kind].where, meets);
+    const words = `${why} Run the newest poplin: npx poplin@latest doctor --repair`;
+
+    expect([done, changes, calls.some((entry) => entry.path.endsWith("/query"))]).toEqual([{ ok: false, why: "another", words }, [], false]);
+  });
+
+  // Drift: the release's code runs the database's steps at its first request. A repair that waited for that request could not read the settings it mends to in the same run.
+  test("after the upload, a database with steps to run is brought to the release's schema by core's own runner, in a row of its own, which a dry run names and does not run", async () => {
+    const account = await behindInstall(kind, OLDER, "nothing");
+    const dry = await repaired(account, kind, { run: DRY });
+    const run = await repaired(account, kind);
+    const steps = `Database steps | change | poplin: schema 0 to ${OWN_SCHEMA}`;
+
+    expect([dry.changes, shown(dry.done), shown(dry.done)[1]]).toEqual([[], shown(run.done), steps]);
+    expect([run.changes.slice(0, 2), run.done.ok && run.done.ready, (await account.store.call("SELECT step FROM schema_steps", []))[0]?.results]).toEqual([[UPLOAD, QUERY], true, [{ step: OWN_SCHEMA }]]);
+  });
+
+  // Drift: records another build wrote are not this release's to change. A run that read them anyway, or that dropped the rows of an upload it made, would say nothing of where the install stands.
+  test("records of another poplin are left as they are: after an upload the rows say so, and where no upload was sent the row says what waits", async () => {
+    const placed = await behindInstall(kind);
+    await placed.store.call("UPDATE schema_steps SET fingerprint = 'another'", []);
+    const unplaced = await behindInstall(kind);
+    await unplaced.store.call("UPDATE schema_steps SET fingerprint = 'another'", []);
+    unplaced.refuse = UPLOAD;
+
+    expect(shown((await repaired(placed, kind)).done)).toEqual([`Worker | change | poplin: ${OLDER} to ${RELEASE}`, "Database steps | block | poplin: its records are of another poplin than this release's, so no step was run"]);
+    expect(shown((await repaired(unplaced, kind)).done)).toEqual([
+      `Worker | block | poplin: ${OLDER} to ${RELEASE}: The token lacks a permission. Add this one: Workers Scripts: Edit`,
+      "Database steps | not-run | poplin: its records are read once the release is in place",
+    ]);
+  });
+
+  // Drift: a release in place is no mended install. A run that uploaded and then could not read the settings, and ended on the upload's row alone, would say the install is mended with its login unread.
+  test("after an upload, settings this poplin cannot read end the run not ready, with the upload's row kept and a row that says the records were not read", async () => {
+    const account = await behindInstall(kind);
+    await account.store.call("UPDATE settings SET value = '{}' WHERE id = 1", []);
+    const { done } = await repaired(account, kind);
+
+    expect([shown(done).map((row) => row.split(" | ").slice(0, 2).join(" | ")), done.ok && done.ready, account.uploads.length]).toEqual([["Worker | change", "Database steps | block"], false, 2]);
+  });
+});
+
+// Drift: a stop words itself as a run that changed nothing. After an upload that would be false, and the upload's row would be lost from what the command prints.
+test("Cloudflare refusing the token after the upload keeps the upload's row and adds one for what was not read, without a domain, where the kind's first read can be refused", async () => {
+  const account = await behindInstall("no-domain");
+  const website = (address: string): undefined => {
+    if (address.endsWith("worker.js")) account.refuse = `GET /accounts/${ACCOUNT}/workers/subdomain`;
+  };
+  const { done } = await repaired(account, "no-domain", {}, KINDS["no-domain"].where, { website });
+
+  expect([shown(done).map((row) => row.split(": ")[0]), done.ok && done.ready]).toEqual([["Worker | change | poplin", "Rest of the install | fail | Cloudflare refused the token at the install"], false]);
+});
 describe.each(BOTH)("one more user, %s", (kind) => {
   // Drift: a user that is stored and not in the login gets no code, and one in the login and not stored is turned away by the Worker: both must be written, the login first.
   test("the email is written into the login with the token, then stored with an entry of the change, in three calls in that order", async () => {

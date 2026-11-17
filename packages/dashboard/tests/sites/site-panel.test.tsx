@@ -4,7 +4,7 @@ import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, within } from "@testing-library/react";
+import { act, cleanup, waitFor, within } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { SiteActions } from "@/sites/site-actions";
@@ -114,5 +114,56 @@ describe("the visits of a site", () => {
     await draw("private", true, views);
 
     expect(within(document.body).getByText("Visits").nextElementSibling?.textContent).toBe(said);
+  });
+});
+
+describe("a panel whose site is no longer there", () => {
+  /** What the server answers for a label no site has. */
+  const GONE = { ok: false, code: "not_found", about: null, sentence: "No site is at this address. It may have been deleted, or the link is an old one." };
+
+  /** Draw the panel over a server that answers the site while `there` holds, and count how often the panel asks to be closed. */
+  async function drawn(there: { on: boolean }): Promise<{ readonly client: QueryClient; readonly closed: () => number }> {
+    let closed = 0;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    globalThis.fetch = (async () =>
+      there.on ? Response.json({ ok: true, site: SITE, logins: {}, search_engines_allowed: true }) : Response.json(GONE, { status: 404 })) as unknown as typeof fetch;
+    await drawAt(
+      "/",
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <SitePanel
+            label={SITE.label}
+            actions={{} as SiteActions}
+            reveal={{ shows: () => false, toggle: () => undefined }}
+            onAsk={() => undefined}
+            closeLink={<a href="/">Close</a>}
+            onClose={() => {
+              closed += 1;
+            }}
+            opener={() => undefined}
+            onMoved={() => undefined}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    return { client, closed: () => closed };
+  }
+
+  // Drift: a site deleted for good while its panel is open, here or in another tab, would leave a panel headed "Site" that says no site is at this address, over a list the site has left.
+  test("closes once the site it showed is gone, and an address that never named a site keeps its sentence", async () => {
+    const there = { on: true };
+    const shown = await drawn(there);
+    await within(document.body).findByText("Show in search engines");
+    there.on = false;
+    // The site's read is made again and refused, with the site it read before still held, as after a delete in another tab.
+    await act(async () => shown.client.invalidateQueries());
+    await waitFor(() => expect(shown.closed() > 0).toBe(true));
+    cleanup();
+
+    const never = await drawn(there);
+    await within(document.body).findByText(GONE.sentence);
+
+    expect(never.closed()).toBe(0);
   });
 });

@@ -81,6 +81,7 @@ const METADATA = {
     ...["SITES", "DB", "JOBS", "WORKER_NAME", "ACCOUNT_ID", "ZONE", "ACCESS", "FIRST_SETTINGS", "KEPT_KEY"].map((name) => ({ name, type: "inherit" })),
     { type: "ratelimit", namespace_id: "1001", simple: { limit: 1_000_000, period: 60 }, name: "MINUTE_LIMITS" },
     { name: "LAST_UPDATE", type: "json", json: { from: "0.2.0", to: "0.3.0", schema: OWN_SCHEMA, at: NOW } },
+    { name: "RELEASE", type: "plain_text", text: "0.3.0" },
   ],
   observability: OBSERVABILITY,
   annotations: { "workers/tag": "0.3.0", "workers/message": "poplin 0.3.0, by its own update" },

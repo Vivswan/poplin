@@ -5,11 +5,16 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { NO_PRESS_WHILE_CLOSING } from "@/dialog/closing"
+import { useClosesWithRoute } from "@/dialog/dialog-route"
 import { useUnsavedTyping } from "@/lib/unsaved"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+// A dialog closes when the address leaves the place it was opened at.
+function Dialog<Payload>({ ...props }: DialogPrimitive.Root.Props<Payload>) {
+  const closing = useClosesWithRoute<DialogPrimitive.Root.ChangeEventDetails>(props)
+
+  return <DialogPrimitive.Root data-slot="dialog" {...props} {...closing} />
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -41,6 +46,7 @@ function DialogOverlay({
 }
 
 // Drawn only while the dialog is: what is typed into it counts as unsaved until it closes.
+// A dialog that is closing takes no press.
 function DialogPopup({ onInput, ...props }: DialogPrimitive.Popup.Props) {
   const typed = useUnsavedTyping()
 
@@ -50,6 +56,7 @@ function DialogPopup({ onInput, ...props }: DialogPrimitive.Popup.Props) {
         typed()
         onInput?.(event)
       }}
+      {...NO_PRESS_WHILE_CLOSING}
       {...props}
     />
   )

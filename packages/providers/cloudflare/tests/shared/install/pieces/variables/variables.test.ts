@@ -60,6 +60,28 @@ test.each([
   );
 });
 
+// Drift: Cloudflare gives the version a change makes no annotation the change does not state. Untagged, the newest version of a release is one from before its variables and keys, and the install goes back to that one.
+test.each([
+  ["of a Worker that states its release tags the version it makes with it", [{ name: "RELEASE", type: "plain_text", text: "0.3.0" }], { "workers/tag": "0.3.0", "workers/message": "poplin 0.3.0, with its settings changed" }],
+  ["of a Worker that states none tags nothing", [], undefined],
+  ["of a Worker whose release is no version tags nothing", [{ name: "RELEASE", type: "plain_text", text: "v0.3.0" }], undefined],
+] as const)("a change %s, and keeps the release as every other binding", async (_, stated, annotations) => {
+  const account = { ...emptyAccount(), bindings: [...emptyAccount().bindings, ...stated] };
+
+  await withFake(
+    (asked) => answer(account, asked),
+    async (connection, asked) => {
+      const secrets = [{ name: "KEPT_KEY", text: "a-key-of-the-test" }];
+
+      expect(await syncVariables({ ...connection, key: TOKEN }, { accountId: ACCOUNT, script: "poplin" }, [{ name: "ACCOUNT_ID", value: ACCOUNT }], "apply", secrets)).toMatchObject({ ok: true });
+      const change = asked.at(-1)?.body as { readonly settings: { readonly annotations?: unknown } } | undefined;
+
+      expect(change?.settings.annotations).toEqual(annotations);
+      expect([account.versions[0]?.annotations, account.bindings.filter((binding) => binding.name === "RELEASE")]).toEqual([annotations, [...stated]]);
+    },
+  );
+});
+
 // Drift: a dry run of an install reads the Worker before it exists. Read as a failure, every row after it would say "not run" where a run makes each one.
 test("a Worker that does not exist is told apart from one with no binding, reads as one with none in a plan of its variables, and any other refusal stays a failure", async () => {
   const worker = { accountId: ACCOUNT, script: "poplin" };

@@ -15,6 +15,7 @@ import { copy } from "@/lib/notify";
 import { addressParts, expiryOf, type Site, shownName } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
 import { RefreshButton } from "@/shared/icon-button";
+import { useOnePress } from "@/dialog/one-press";
 import { PAGE_WAY, Pages, queryWith, useFirstRowFocus, useShownPlace, useTopOfPlace } from "@/shared/pages";
 import { ResultLine, rowsSaid } from "@/shared/result-line";
 import { SearchBox } from "@/shared/search-box";
@@ -129,11 +130,12 @@ function NewSite(): ReactNode {
 }
 
 /** The way back from the trash, at the end of a trashed site's row. A row that still shows a site of the list before, while the trash is read, has none. */
-function RestoreButton({ site, onRestore }: { readonly site: Site; readonly onRestore: () => void }): ReactNode {
+function RestoreButton({ site, onRestore }: { readonly site: Site; readonly onRestore: () => Promise<unknown> }): ReactNode {
+  const { press, busy } = useOnePress(onRestore);
   if (site.state !== "trash") return null;
 
   return (
-    <Button variant="outline" size="sm" aria-label={`Restore ${shownName(site)}`} onClick={onRestore}>
+    <Button variant="outline" size="sm" aria-label={`Restore ${shownName(site)}`} disabled={busy} onClick={press}>
       Restore
     </Button>
   );
@@ -485,7 +487,7 @@ export function SitesScreen(): ReactNode {
   const { columns, layout, label, actionsWidth } = useShownTable(filter, { onCopy: copy, reveal, logins });
   const { asked, asker, ask, leave } = useQuestion();
   // Every change of a site is made in its panel. A row of the trash alone ends with a button: the way back, at one press.
-  const restore = filter === "trash" ? (site: Site): ReactNode => <RestoreButton site={site} onRestore={() => void actions.restore(site)} /> : undefined;
+  const restore = filter === "trash" ? (site: Site): ReactNode => <RestoreButton site={site} onRestore={() => actions.restore(site)} /> : undefined;
   const sites = page?.sites ?? [];
   const pages = (
     <Pages

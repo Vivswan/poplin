@@ -10,13 +10,15 @@ import {
   DndContext,
   type DragEndEvent,
   DragOverlay,
+  type DragStartEvent,
+  type KeyboardCoordinateGetter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
-import { arrayMove, horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
+import { arrayMove, horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import {
   columnOrderingFeature,
   columnResizingFeature,
@@ -44,7 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type ColumnWidths, type Fitted, NARROWEST, type SizedColumn, widthsForRoom } from "@/table/column-widths";
+import { type ColumnWidths, type Fitted, narrowestOf, type SizedColumn, widthsForRoom, withEdgeInReach } from "@/table/column-widths";
 import type { TableLayout } from "@/table/layout";
 import { useFitted, useRoom, useTopOfPage, widestOf } from "@/table/measure";
 
@@ -56,6 +58,9 @@ const DRAG_AFTER = 6;
 
 /** The width of the last column where a row's actions are one icon, and how far one press of an arrow key moves a column's edge. */
 const [ICON_ACTIONS_WIDTH, NUDGE] = [56, 16];
+
+/** How many columns an arrow key moves a heading that is picked up, by the key. */
+const STEPS: Readonly<Record<string, number>> = { ArrowLeft: -1, ArrowRight: 1 };
 
 /** How many rows stand in for the rows being read. */
 const LOADING_ROWS = 6;
@@ -257,15 +262,24 @@ function endRoom(cells: readonly unknown[], at: number, withoutActions: boolean)
 function ColumnEdge({
   header,
   name,
+  least,
   inside,
   onNudge,
 }: {
   readonly header: Head;
   readonly name: string;
+  readonly least: number;
   readonly inside: boolean;
   readonly onNudge: (by: number) => void;
 }): ReactNode {
   const width = Math.round(header.getSize());
+  const resize = header.getResizeHandler();
+  // A press the browser also takes for its own marks the page's text as the edge is dragged, and the next press, on marked text, drags that text in WebKit and not the edge.
+  const onPress = (event: MouseEvent<HTMLElement>): void => {
+    event.preventDefault();
+    event.currentTarget.focus();
+    resize(event);
+  };
   const onKey = (event: KeyboardEvent): void => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Enter") return;
 
@@ -280,12 +294,12 @@ function ColumnEdge({
       tabIndex={0}
       aria-label={`Resize the ${name} column`}
       aria-valuenow={width}
-      aria-valuemin={NARROWEST}
+      aria-valuemin={least}
       aria-valuemax={Number.MAX_SAFE_INTEGER}
       aria-valuetext={`${width} pixels`}
       title={EDGE_HINT}
-      onMouseDown={header.getResizeHandler()}
-      onTouchStart={header.getResizeHandler()}
+      onMouseDown={onPress}
+      onTouchStart={resize}
       onDoubleClick={() => header.column.resetSize()}
       onKeyDown={onKey}
       className={cn(EDGE_LOOK, inside ? EDGE_INSIDE : EDGE_BETWEEN, header.column.getIsResizing() && "after:w-0.5 after:bg-ring")}
@@ -391,7 +405,7 @@ function ArrangedHeadCell<Row>({ onNudge, ...shared }: HeadCellProps<Row> & { re
     grip,
   };
 
-  return <HeadCell {...shared} moves={moves} edge={<ColumnEdge header={header} name={spec.header} inside={ends || fixed} onNudge={(by) => onNudge(spec.id, by)} />} />;
+  return <HeadCell {...shared} moves={moves} edge={<ColumnEdge header={header} name={spec.header} least={narrowestOf(spec)} inside={ends || fixed} onNudge={(by) => onNudge(spec.id, by)} />} />;
 }
 
 function BodyRow<Row>({
@@ -547,7 +561,7 @@ function Widths<Row>({
 function definitionOf<Row>(column: ColumnSpec<Row>) {
   return {
     id: column.id,
-    minSize: NARROWEST,
+    minSize: narrowestOf(column),
     enableHiding: column.fixed !== true,
     enableSorting: column.sortable !== undefined,
     sortDescFirst: column.sortable === "desc",
@@ -561,11 +575,13 @@ function definitionOf<Row>(column: ColumnSpec<Row>) {
  *
  * @param told - the widths as drawn, which the library started from
  * @param next - the widths the library asks for
+ * @param least - the narrowest a column can be made, by its id
  */
-function keepSizes(layout: TableLayout, told: Readonly<Record<string, number>>, next: Readonly<Record<string, number>>): void {
-  // An edge dragged past the narrowest keeps the narrowest: a smaller width would not be drawn, and would not be kept.
+function keepSizes(layout: TableLayout, told: Readonly<Record<string, number>>, next: Readonly<Record<string, number>>, least: (id: string) => number): void {
+  // An edge dragged past the narrowest keeps the narrowest: a smaller width would not be drawn, and would not be kept. A width the library did not touch is no change, whatever the narrowest of its column.
   const changed = Object.entries(next)
-    .map(([id, size]) => [id, Math.max(NARROWEST, size)] as const)
+    .filter(([id, size]) => size !== told[id])
+    .map(([id, size]) => [id, Math.max(least(id), size)] as const)
     .filter(([id, size]) => size !== told[id]);
   const reset = Object.keys(told).filter((id) => !(id in next));
   if (changed.length === 0 && reset.length === 0) return;
@@ -656,16 +672,37 @@ function ColumnMoves<Row>({
   readonly children: ReactNode;
 }): ReactNode {
   const [dragged, setDragged] = useState<string>();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: DRAG_AFTER } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // The column a heading moved by keys stands at: none while a pointer drags, or nothing is moved.
+  const keyed = useRef<string | undefined>(undefined);
+  // One arrow moves the heading one column on, to the middle of the next column that can be moved, and nowhere at an end. The headings stay where they are while one is moved,
+  // and are of many widths, so the library's own steps for a list that shifts under the moved item land a column short or a column far.
+  const byKeys: KeyboardCoordinateGetter = (event, { currentCoordinates, context: { active, collisionRect, droppableRects } }) => {
+    const step = STEPS[event.code];
+    if (step === undefined || active === null || collisionRect === null) return undefined;
+
+    event.preventDefault();
+    const next = movable[movable.indexOf(keyed.current ?? String(active.id)) + step];
+    const place = next === undefined ? undefined : droppableRects.get(next);
+    if (next === undefined || place === undefined) return undefined;
+
+    keyed.current = next;
+
+    return { ...currentCoordinates, x: currentCoordinates.x + place.left + place.width / 2 - (collisionRect.left + collisionRect.width / 2) };
+  };
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_AFTER } }), useSensor(KeyboardSensor, { coordinateGetter: byKeys }));
+  const onDragStart = ({ active, activatorEvent }: DragStartEvent): void => {
+    keyed.current = activatorEvent instanceof globalThis.KeyboardEvent ? String(active.id) : undefined;
+    setDragged(String(active.id));
+  };
   const onDragEnd = ({ active, over }: DragEndEvent): void => {
+    // A heading moved by keys lands at the column the keys brought it to; one a pointer dragged, at the column it is over.
+    const landed = keyed.current ?? (over === null ? undefined : String(over.id));
+    keyed.current = undefined;
     setDragged(undefined);
     // The fixed column is no place to drop: a column let go over it stays where it was.
-    if (over === null || active.id === over.id || !movable.includes(String(over.id))) return;
+    if (landed === undefined || active.id === landed || !movable.includes(landed)) return;
 
-    const [from, to] = [layout.order.indexOf(String(active.id)), layout.order.indexOf(String(over.id))];
+    const [from, to] = [layout.order.indexOf(String(active.id)), layout.order.indexOf(landed)];
     if (from !== -1 && to !== -1) layout.setOrder(arrayMove([...layout.order], from, to));
   };
 
@@ -674,8 +711,11 @@ function ColumnMoves<Row>({
       sensors={sensors}
       collisionDetection={closestCenter}
       modifiers={[restrictToHorizontalAxis]}
-      onDragStart={({ active }) => setDragged(String(active.id))}
-      onDragCancel={() => setDragged(undefined)}
+      onDragStart={onDragStart}
+      onDragCancel={() => {
+        keyed.current = undefined;
+        setDragged(undefined);
+      }}
       onDragEnd={onDragEnd}
       accessibility={{ announcements: announcementsOf(specs) }}
     >
@@ -688,7 +728,7 @@ function ColumnMoves<Row>({
 /** Draw a table: headings that sort, and that move and resize where the table has a layout, the first column and the rows' actions held in place, and one row per item. */
 export function DataTable<Row>({
   label,
-  columns,
+  columns: given,
   rows,
   rowId,
   layout,
@@ -705,7 +745,11 @@ export function DataTable<Row>({
   alongside,
   onFitted,
 }: DataTableProps<Row>): ReactNode {
+  // Only a table whose columns are arranged has edges to keep in reach.
+  const resized = layout !== undefined;
+  const columns = useMemo(() => (resized ? given.map(withEdgeInReach) : given), [given, resized]);
   const specs = useMemo(() => new Map(columns.map((column) => [column.id, column])), [columns]);
+  const least = (id: string): number => narrowestOf(specs.get(id));
   const definitions = useMemo(() => columns.map(definitionOf), [columns]);
   const data = useMemo(() => [...rows] as object[], [rows]);
   const [frame, room] = useRoom();
@@ -731,7 +775,7 @@ export function DataTable<Row>({
       columnSizing: sizing,
       sorting: [{ id: sort.key, desc: sort.descending }],
     },
-    onColumnSizingChange: layout === undefined ? undefined : (updater) => keepSizes(layout, sizing, typeof updater === "function" ? updater(sizing) : updater),
+    onColumnSizingChange: layout === undefined ? undefined : (updater) => keepSizes(layout, sizing, typeof updater === "function" ? updater(sizing) : updater, least),
   });
   const headers = (table.getHeaderGroups()[0]?.headers ?? []) as readonly Head[];
   const arranged: Arranged | undefined =
@@ -740,7 +784,7 @@ export function DataTable<Row>({
       : {
           layout,
           movable: shown.filter((spec) => spec.fixed !== true).map((spec) => spec.id),
-          onNudge: (id, by) => layout.setSizes({ ...layout.sizes, [id]: Math.max(NARROWEST, (drawn.get(id) ?? NARROWEST) + by) }),
+          onNudge: (id, by) => layout.setSizes({ ...layout.sizes, [id]: Math.max(least(id), (drawn.get(id) ?? least(id)) + by) }),
         };
   const drawnTable = (
     <>

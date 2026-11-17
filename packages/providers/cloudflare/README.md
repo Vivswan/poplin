@@ -9,7 +9,7 @@ The Worker that runs a poplin install on Cloudflare, the installer `poplin insta
 | measure what requests cost as an install grows | `bun run --cwd packages/providers/cloudflare load` | [the load test](#the-load-test): a table for each request, a row for each size of install, then every place a number crosses or nears a limit of Cloudflare's free plan |
 | measure what each action costs | `bun run --cwd packages/providers/cloudflare costs` | a table of the database queries and storage calls of every request. On GitHub, the Action Costs workflow adds it to its run's summary, keeps it as the `action-costs` artifact, and comments on a pull request with the rows that changed against main |
 
-The Worker's configuration is `wrangler.jsonc` at the repository's root. It holds no value of any install: the installer uploads a release's built files as the Worker's first version, with `INSTALL_PLACE`, the place the install is started for, then writes `ZONE`, `FIRST_SETTINGS`, `ACCOUNT_ID`, and `ACCESS` onto it. [Install](../../../docs/start/install.md) has the steps.
+The Worker's configuration is `wrangler.jsonc` at the repository's root. It holds no value of any install: the installer uploads a release's built files as the Worker's first version, with `INSTALL_PLACE`, the place the install is started for, and `RELEASE`, the version of those files, then writes `ZONE`, `FIRST_SETTINGS`, `ACCOUNT_ID`, and `ACCESS` onto it. [Install](../../../docs/start/install.md) has the steps.
 
 The Worker reads two secrets: `KEPT_KEY`, the Cloudflare API token poplin keeps, and `UPLOAD_KEY`, the key a publish's files are signed for the bucket with. No file names them, and an update's upload leaves them as they are.
 

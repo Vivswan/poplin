@@ -8,9 +8,10 @@
 // Every binding the Worker has is named `inherit`, so its bucket, its database, its variables, and its key stay as they are; one the release states whole is sent by value.
 // `strict` makes Cloudflare refuse the upload when it cannot keep a binding so named, in place of dropping it.
 // Cloudflare keeps no observability setting across an upload, so every upload states it: the release's, or else the Worker's own.
+// Every upload states the release its code is of, in the binding `RELEASE` and in the tag of the version it makes.
 // Every update states one variable of its own, `LAST_UPDATE`: the version the install ran, the version it takes, the schema its database is at, and when.
 // It comes in with the code or not at all, so the new code reads which version it can go back to.
-// A release never states the key's own binding, nor that variable: one that does is refused, as one that names a binding the Worker lacks.
+// A release never states the key's own binding, nor either of those: one that does is refused, as one that names a binding the Worker lacks.
 // A read of the bindings that lacks the Worker's own name is a read in part, and an upload after it would drop every binding it did not list: nothing is sent, and the update can be asked for again.
 // The upload is whole or not at all. Code that throws as it loads is refused by Cloudflare, and the Worker goes on running what it ran.
 //
@@ -19,6 +20,8 @@
 //   PUT  .../workers/scripts/{name}                                  nothing to inherit, so each binding the release keeps by name is stated by its first value
 //
 // A first upload is no update, so it states no `LAST_UPDATE`: there is no version to go back to.
+//
+// A repair is an update sent with a person's token in place of the key: the same four calls. That token can make what the key cannot, so a binding the release keeps and the Worker lacks is stated by its first value.
 
 import type { Keyed } from "@poplin/app/src/console/key/records";
 import { LAST_UPDATE, type LastUpdate } from "@poplin/core/src/records/update";
@@ -31,6 +34,7 @@ import { type CloudflareResult, type Connection, callCloudflare } from "../../in
 import { INSTALL_OBJECTS } from "../../install/install-objects";
 import * as v from "valibot";
 import type { CheckedBundle } from "./bundle-files";
+import { releaseBinding, taggedAs } from "./release-mark";
 
 /** Cloudflare's name of the right every call here needs. */
 const RIGHT = "Workers Scripts Write";
@@ -47,11 +51,11 @@ const NOT_ABOUT_CODE: ReadonlySet<number> = new Set([401, 403, 408, 429]);
 /** The first status that is a failure of Cloudflare's own. */
 const SERVER_FAILURE = 500;
 
-/** The bindings no release states: the key's, and the variable an update states itself. */
-const OWN_BINDINGS: ReadonlySet<string> = new Set([INSTALL_OBJECTS.keyBinding, LAST_UPDATE_BINDING]);
+/** The bindings no release states: the key's, the variable an update states itself, and the release every upload states. */
+const OWN_BINDINGS: ReadonlySet<string> = new Set([INSTALL_OBJECTS.keyBinding, LAST_UPDATE_BINDING, INSTALL_OBJECTS.releaseBinding]);
 
 /** What the version an upload makes says made it, after the release's version. */
-const MADE_BY = { update: "by its own update", install: "by its install" } as const;
+const MADE_BY = { update: "by its own update", install: "by its install", repair: "by a repair" } as const;
 
 /** The observability of a first upload whose release states none. */
 const FIRST_OBSERVABILITY = {
@@ -82,15 +86,22 @@ type Put =
 
 /** An opened way to the Worker: the key was taken for it. */
 export interface Upload {
-  /** Reads the Worker's bindings, then sends the one upload of a release's files with the update it is, then the schedule when the release's differs. */
-  readonly put: (bundle: CheckedBundle, update: LastUpdate) => Promise<Put>;
+  /** Reads the Worker's bindings, then sends the one upload of a release's files with the update it is, then the schedule when the release's differs. An `update` of `undefined` states none: the code it puts in place knows no version to go back to. */
+  readonly put: (bundle: CheckedBundle, update: LastUpdate | undefined) => Promise<Put>;
 }
 
-/** What one update sends: the release's files, the update it is, and the Worker's cron list as it was read. */
+/** States the first value of each binding a release keeps by name and the Worker lacks; `undefined` when one of them has none. */
+type FirstValues = (lacking: readonly string[]) => readonly SentBinding[] | undefined;
+
+/** Who sends an update: the install itself with its key, or a repair with a person's token, which can state a binding the Worker lacks. */
+type Sender = { readonly by: "update" } | { readonly by: "repair"; readonly first: FirstValues };
+
+/** What one update sends: the release's files, the update it is, the Worker's cron list as it was read, and who sends it. */
 interface Sending {
   readonly bundle: CheckedBundle;
-  readonly update: LastUpdate;
+  readonly update: LastUpdate | undefined;
   readonly crons: readonly string[];
+  readonly sender: Sender;
 }
 
 /** One binding as an upload sends it. */
@@ -103,39 +114,59 @@ interface Beside {
   readonly by: keyof typeof MADE_BY;
 }
 
-/** The bindings a release states whole, or `undefined` for one that states the key's own or an update's own variable. */
+/** The bindings a release states whole, or `undefined` for one that states a binding no release may. */
 function statedOf(bundle: CheckedBundle): readonly SentBinding[] | undefined {
   const stated = bundle.deploy.bindings.flatMap((binding) => (binding.kind === "stated" ? [{ ...binding.binding, name: binding.name }] : []));
 
   return stated.some((binding) => OWN_BINDINGS.has(binding.name)) ? undefined : stated;
 }
 
-/** The metadata of an upload, as JSON text: the one writer of an update and of an install. */
+/**
+ * Tell whether a release states a binding no release may state: the key's own, or the variable an update states itself.
+ *
+ * @returns `true` for a release no upload places, whoever sends it
+ */
+export function statesOwnBinding(bundle: CheckedBundle): boolean {
+  return statedOf(bundle) === undefined;
+}
+
+/** The metadata of an upload, as JSON text: the one writer of an update and of an install, so the one place that states the release of the code, as a binding and as the version's tag. */
 function metadataOf(bundle: CheckedBundle, stated: readonly SentBinding[], beside: Beside): string {
   const { deploy, version } = bundle;
   const observability = deploy.observability ?? beside.observability ?? undefined;
+  const release = releaseBinding(version);
 
   return JSON.stringify({
     main_module: deploy.main_module,
     compatibility_date: deploy.compatibility_date,
     compatibility_flags: deploy.compatibility_flags,
-    bindings: [...beside.kept, ...stated],
+    bindings: [...beside.kept.filter((binding) => binding.name !== release.name), ...stated, release],
     ...(observability === undefined ? {} : { observability }),
-    annotations: { "workers/tag": version, "workers/message": `poplin ${version}, ${MADE_BY[beside.by]}` },
+    annotations: taggedAs(version, MADE_BY[beside.by]),
   });
 }
 
-/** The metadata of an update, where every binding the Worker has is kept by name; `undefined` for a release that names a kept binding the Worker lacks, or states the key's own or the update's own variable. */
-function updateMetadata(sending: Pick<Sending, "bundle" | "update">, current: { readonly bindings: readonly string[]; readonly observability: unknown }): string | undefined {
-  const { bundle } = sending;
-  const released = statedOf(bundle);
-  const lacking = bundle.deploy.bindings.some((binding) => binding.kind === "kept" && !current.bindings.includes(binding.name));
-  if (lacking || released === undefined) return undefined;
+/** The first value of each binding a release keeps and the Worker lacks; `undefined` where there is one and the sender states none: the install itself, whose key makes no bucket and no database. */
+function firstOf(sender: Sender, lacking: readonly string[]): readonly SentBinding[] | undefined {
+  if (lacking.length === 0) return [];
 
-  const stated = [...released, { name: LAST_UPDATE_BINDING, type: "json", json: sending.update }];
+  return sender.by === "repair" ? sender.first(lacking) : undefined;
+}
+
+/** The metadata of an update, where every binding the Worker has is kept by name; `undefined` for a release that names a kept binding the Worker lacks and nothing states, or that states the key's own or the update's own variable. */
+function updateMetadata(sending: Pick<Sending, "bundle" | "update" | "sender">, current: { readonly bindings: readonly string[]; readonly observability: unknown }): string | undefined {
+  const { bundle, update, sender } = sending;
+  const released = statedOf(bundle);
+  const first = firstOf(
+    sender,
+    bundle.deploy.bindings.flatMap((binding) => (binding.kind === "kept" && !current.bindings.includes(binding.name) ? [binding.name] : [])),
+  );
+  if (first === undefined || released === undefined) return undefined;
+
+  const stated = [...released, ...first, ...(update === undefined ? [] : [{ name: LAST_UPDATE_BINDING, type: "json", json: update }])];
   const inherited = current.bindings.filter((name) => !stated.some((binding) => binding.name === name)).map((name) => ({ name, type: "inherit" }));
 
-  return metadataOf(bundle, stated, { kept: inherited, observability: current.observability, by: "update" });
+  return metadataOf(bundle, stated, { kept: inherited, observability: current.observability, by: sender.by });
 }
 
 /** Send the one request that carries a release's files and its metadata. With `inherit`, Cloudflare refuses it when it cannot keep a binding the metadata names as kept. */
@@ -218,14 +249,15 @@ export async function putFirst(connection: Connection, worker: OwnWorker, bundle
 /**
  * Open the way to the Worker's own code: one small read with the kept key, so a key that is absent, refused, or without the right is known before a file is fetched.
  *
- * @param key - the kept key, or `undefined` on an install that holds none
+ * @param key - the kept key, or `undefined` on an install that holds none; a repair hands a person's token in its place
+ * @param sender - `by` is which of the two ways sends, as the version it makes says; `first` states a binding the release keeps and the Worker lacks, and left out, such a release is `needs_hand`
  * @returns what sends the upload, or the key's refusal: `lacks_right` names the right. Nothing is changed, and no answer holds the key or a text Cloudflare sent
  */
-export async function openUpload(key: KeptKey | undefined, worker: OwnWorker): Promise<Keyed<Upload>> {
+export async function openUpload(key: KeptKey | undefined, worker: OwnWorker, sender: Sender = { by: "update" }): Promise<Keyed<Upload>> {
   const crons = await keyed(key, RIGHT, (connection) => readCrons(connection, worker));
   if (!crons.ok) return crons;
 
-  return { ok: true, value: { put: (bundle, update) => put(key, worker, { bundle, update, crons: crons.value }) } };
+  return { ok: true, value: { put: (bundle, update) => put(key, worker, { bundle, update, crons: crons.value, sender }) } };
 }
 
 /**

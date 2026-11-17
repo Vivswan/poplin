@@ -21,10 +21,10 @@ const FORMATS = [
 /** How many entries one file holds, as the screen writes it. */
 const A_FILE = showCount(MOST_IN_FILE);
 
-/** What the screen says after a file that is not the last, and how it names the way to the next: by the count for a file of the whole log, which is full, and as a part for a file of a filtered log, which may end sooner. */
+/** What the screen says after a file that is not the last, and the one name of the way to the next: by the count for a file of the whole log, which is full, and as a part for a filtered one, which may end sooner. */
 const FILE_WORDS = {
-  whole: { done: `Downloaded ${A_FILE}.`, more: `Download the next ${A_FILE}`, next: `Next ${A_FILE}` },
-  filtered: { done: "Downloaded a part.", more: "Download the next part", next: "Next part" },
+  whole: { done: `Downloaded ${A_FILE}.`, next: `Next ${A_FILE}` },
+  filtered: { done: "Downloaded a part.", next: "Next part" },
 } as const;
 
 /** What the name of a file's result starts with, before the file's number. Each has its own name: a result that was pressed is still leaving when the next is said. */
@@ -133,7 +133,7 @@ export function DownloadMenu({ query, fitsOne, empty }: DownloadMenuProps): Reac
     const name = `${RESULT}-${part}`;
     replaceResult(name);
 
-    return sayDone(words.done, { label: words.more, run: () => void save(format, then), id: name });
+    return sayDone(words.done, { label: words.next, run: () => void save(format, then), id: name });
   };
 
   return (

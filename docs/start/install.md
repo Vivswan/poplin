@@ -104,7 +104,9 @@ Account token (not shown):
 | `Your email, the first login:`                      | an email whose inbox you can read                                  |
 | `Account token (not shown):`                        | leave the terminal at this question, and make the token: step 3    |
 
-An **account token** is a long password that lets a program change your Cloudflare account. You give it at this question and nowhere else: what you paste there is not shown, and nothing keeps it.
+An **account token** is a long password that lets a program change your Cloudflare account. Cloudflare lists it under My Profile, then API Tokens. You give it at this question. Later, [three things ask for one again](#4-read-what-it-made), and one of them is the Domain screen of your own dashboard. Nothing else takes it: no chat, and no other page. What you paste is not shown, and nothing keeps it.
+
+After the token, where Zero Trust is still off, the command says `until then nobody can log in` and asks one thing more, `Go on all the same?`. Answer no, and finish step 1.
 
 An option answers a question before it is asked: with `--domain example.com` on the line, the first is not asked. To see what a run would make before it makes anything, read [the dry run](#check-first-the-dry-run) first.
 
@@ -210,7 +212,7 @@ An install that works needs none of them: log this computer in, as step 5 shows.
 
 **After the run, delete the token** at Cloudflare, under My Profile, then API Tokens, unless you keep it where you keep passwords. The install and every site keep working without it.
 
-Three things ask for a token again: Repair on the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. Each shows the link that makes a new one.
+Three things ask for a token again: the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. Each shows the link that makes a new one. The screen asks for a Repair, and for a Check on an install that holds no key. A token pasted there goes to your own install, which uses it for that one run and stores it nowhere.
 
 ## 5. Log this computer in, and check
 
@@ -362,7 +364,7 @@ npx poplin install cloudflare --no-domain --login you@example.com --yes
 | `--yes`       | asks nothing. A missing answer stops the run before any change, and is named             |
 | `--json`      | prints one JSON value, and nothing else on standard output                               |
 | `--adopt`     | uses a bucket or a database named like poplin's that no install holds, with what it holds. Where the database holds users, they log in, and [`--login` is not used](../upkeep/remove.md#keep-the-data) |
-| `--log-in`    | logs this computer in when the install is made; `--no-log-in` does not, and does not ask |
+| `--log-in`    | logs this computer in when the install is made; `--no-log-in` does not, and does not ask. It is not `--login`, which names the email |
 | `--no-wait`   | does not wait for the new install to answer                                              |
 
 A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--login` logs no computer in. It ends with the line that lets that email in, also where its address does not answer yet.

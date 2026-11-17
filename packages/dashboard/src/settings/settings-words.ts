@@ -62,7 +62,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "The most requests one site answers in a minute.", unit: "requests" },
   visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "The most requests one visitor gets in a minute.", unit: "requests" },
   update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day." },
-  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above." },
+  auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above.", needs: "update_check", needsLine: "Switch on the check above first." },
 };
 
 /** A block's id. */
@@ -96,6 +96,12 @@ interface Words {
 
   /** What the options of a choice are called, by option. */
   readonly choices?: Readonly<Record<string, string>>;
+
+  /** For a switch that does nothing while another one is off: the key of that other switch. */
+  readonly needs?: string;
+
+  /** What such a switch says under its control while the other one is off. */
+  readonly needsLine?: string;
 }
 
 /** One block as it is drawn: its heading and its rows, in the order of the words; a setting that has none comes last. */
