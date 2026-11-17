@@ -1,4 +1,4 @@
-// The review of one waiting login: what it asks for, the name it gave, what it may change once allowed, the letters of its code that the person types from their terminal, and Allow or Deny. The page never holds those letters: the server checks them.
+// The review of one waiting login: what it asks for, the name it gave, the role it has once approved, the letters of its code that the person types from their terminal, and Approve or Deny. The page never holds those letters: the server checks them.
 //
 // Anyone can begin a login, so nothing the login says of itself is the page's own words: its name is a quoted fact, and what it may change starts at the least, whatever it asked for.
 
@@ -6,7 +6,7 @@ import { type FormEvent, type ReactNode, type RefObject, useRef, useState } from
 
 import type { AccessActions } from "@/access/access-actions";
 import type { Review } from "@/access/access-queries";
-import { SCOPE_WORDS } from "@/access/access-values";
+import { ROLE_WORDS, SCOPE_WORDS } from "@/access/access-values";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -20,13 +20,13 @@ import { PanelFact, PanelFacts } from "@/shared/side-panel";
 /** The scopes a computer that asked for everything can be let in with, the least first. */
 const CHOICES = ["publisher", "admin"] as const;
 
-/** What the wider choice gives, said where it is chosen. */
-const EVERYTHING_GIVES = "Everything means every site, the settings, and who has access.";
+/** What each role of the choice may change, said where it is chosen. */
+const ROLES_GIVE = "A publisher changes its own sites only. An admin changes every site, the settings, and who has access.";
 
 /** What the review says first, by how the person came: one who came by an address, and pressed nothing here, is told that a link proves nothing. */
 const SAYS_FIRST = {
-  listed: "Allow it only if you started this login yourself.",
-  linked: "Anyone can start a login and send its link. Allow this one only if you just started it, and its code is on your screen.",
+  listed: "Approve it only if you started this login yourself.",
+  linked: "Anyone can start a login and send its link. Approve this one only if you just started it, and its code is on your screen.",
 } as const;
 
 /** How many letters at the end of a code the person types. */
@@ -67,7 +67,7 @@ function GivenName({ computer }: { readonly computer: string }): ReactNode {
   );
 }
 
-/** What an allowed computer may change: the choice of two for one that asked for everything, plain words for one that did not. */
+/** The role an approved machine has: the choice of two for one that asked for everything, plain words for one that did not. */
 function ScopeChoice({
   asked,
   scope,
@@ -91,7 +91,7 @@ function ScopeChoice({
     >
       {CHOICES.map((choice) => (
         <ToggleGroupItem key={choice} value={choice} className="w-31 aria-pressed:bg-chosen aria-pressed:font-bold max-md:min-h-10 max-md:w-auto max-md:flex-1">
-          {SCOPE_WORDS[choice]}
+          {ROLE_WORDS[choice]}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
@@ -135,7 +135,7 @@ function TypedCode({
       </div>
       <div className="min-h-5 max-md:min-h-10">
         {refusal === undefined ? (
-          <FieldDescription className="text-[13px]">Type them to allow.</FieldDescription>
+          <FieldDescription className="text-[13px]">Type them to approve.</FieldDescription>
         ) : (
           <FieldError className="text-[13px]">{refusal}</FieldError>
         )}
@@ -179,7 +179,7 @@ function ReviewForm({
     setRefusal(undefined);
   };
 
-  // Enter in the field does what Allow does, and nothing while Allow is off.
+  // Enter in the field does what Approve does, and nothing while Approve is off.
   const allow = (event: FormEvent): void => {
     event.preventDefault();
     decide(true);
@@ -188,7 +188,7 @@ function ReviewForm({
   return (
     <form onSubmit={allow} className="contents">
       <DialogHeader>
-        <DialogTitle className="pr-8">Allow this login?</DialogTitle>
+        <DialogTitle className="pr-8">Approve this login?</DialogTitle>
         <DialogDescription className={byLink ? "text-foreground" : undefined}>{SAYS_FIRST[byLink ? "linked" : "listed"]}</DialogDescription>
       </DialogHeader>
       <PanelFacts>
@@ -207,14 +207,14 @@ function ReviewForm({
           <ScopeChoice asked={login.scope} scope={scope} onChoose={setScope} />
         </dd>
       </PanelFacts>
-      {login.scope === "admin" ? <p className="text-[13px] text-muted-foreground">{EVERYTHING_GIVES}</p> : null}
+      {login.scope === "admin" ? <p className="text-[13px] text-muted-foreground">{ROLES_GIVE}</p> : null}
       <TypedCode typed={typed} refusal={refusal} field={field} onType={type} />
       <DialogFooter>
         <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>
           Deny
         </Button>
         <Button type="submit" disabled={busy || lettersIn(typed) < TYPED_LETTERS}>
-          Allow
+          Approve
         </Button>
       </DialogFooter>
     </form>

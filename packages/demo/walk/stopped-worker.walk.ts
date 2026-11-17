@@ -181,7 +181,7 @@ test("a login listed before the browser stops the worker can still be reviewed a
   await stopWorker(page);
   await review.click();
 
-  await expect(page.getByRole("dialog", { name: "Allow this login?", exact: true }).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Approve this login?", exact: true }).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true })).toBeVisible();
 });
 
 test("a forced reload of a deep page, around the worker, comes back to it", async ({ page, baseURL }) => {

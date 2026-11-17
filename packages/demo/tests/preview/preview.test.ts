@@ -131,7 +131,7 @@ async function openPreview(gallery: boolean, real?: Parameters<typeof createPrev
 
 describe("the local preview", () => {
   // Drift: the page that stands in for the sample computers' terminals would print the code of every login that waits, so a person at the preview could allow a login a real terminal began without seeing that terminal.
-  test("the page of what the waiting computers print holds the sample logins alone: a login a real terminal began is not on it, by its id or by its code", async () => {
+  test("the page of what the waiting machines print holds the sample logins alone: a login a real terminal began is not on it, by its id or by its code", async () => {
     const preview = await openPreview(false);
     const ask = (path: string, init?: RequestInit): Promise<Response> => preview.fetch(new Request(`${ORIGIN}${path}`, init));
     const { logins } = (await (await ask("/data/logins")).json()) as { readonly logins: readonly { readonly id: string }[] };
@@ -147,7 +147,7 @@ describe("the local preview", () => {
   });
 
   // Drift: the page of the terminals, asked before any page of the dashboard, says no login waits: only a page of the dashboard began the sample logins.
-  test("the page of what the waiting computers print, as the first thing asked of a preview, holds the sample logins the dashboard then lists", async () => {
+  test("the page of what the waiting machines print, as the first thing asked of a preview, holds the sample logins the dashboard then lists", async () => {
     const preview = await openPreview(false);
     const ask = (path: string): Promise<Response> => preview.fetch(new Request(`${ORIGIN}${path}`));
     const printed = await (await ask("/state/allow/waiting")).text();

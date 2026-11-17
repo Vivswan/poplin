@@ -59,7 +59,7 @@ the old install  ->  backup.zip  ->  a new install, where you want it
 | 2    | check the zip: it lists its sites, and sends nothing                  | `npx poplin import backup.zip --dry-run`                |
 | 3    | in the same account: remove the old install, whole                    | [Remove](remove.md) from its step 2, without `--keep-data` |
 | 4    | install anew, where you want it                                       | `npx poplin install cloudflare`, as [Install](../start/install.md) has it |
-| 5    | log this machine in to the new install, with Can change: Everything  | `npx poplin login --server https://poplin.example.com`  |
+| 5    | log this machine in to the new install, with Can change: Admin       | `npx poplin login --server https://poplin.example.com`  |
 | 6    | bring the sites and the settings back                                 | `npx poplin import backup.zip --settings`               |
 | 7    | to another account: remove the old install                            | [Remove](remove.md) from its step 3                     |
 
@@ -117,5 +117,5 @@ The restore also undoes what was removed after the moment it goes back to. Go th
 
 | After the restore                                             | So                                                         | Do                                                                           |
 | ------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| a token removed after that moment is a token again            | it works again, unless it ran out since                    | Access, Tokens: remove it again. It is in the list above Removed tokens      |
+| a token revoked after that moment is a token again            | it works again, unless it expired since                    | Access, Tokens: revoke it again. It is in the list above Revoked tokens      |
 | a user removed after that moment is a user again              | their email is in `users` again                            | Access, Users: remove them again, before the next Repair                     |

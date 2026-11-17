@@ -121,13 +121,13 @@ describe("the removed tokens under the list", () => {
     window.localStorage.setItem("poplin.tokens.removed", "true");
     render(<Tab ended={ENDED} />);
     HTMLElement.prototype.getBoundingClientRect = own;
-    const widths = ["Tokens", "Removed tokens"].map((name) =>
+    const widths = ["Tokens", "Revoked tokens"].map((name) =>
       [...(within(document.body).getAllByRole("table", { name })[0]?.querySelectorAll("col") ?? [])].slice(0, 4).map((column) => column.style.width),
     );
 
     expect(widths).toEqual([
-      ["48px", "50px", "100px", "70px"],
-      ["48px", "50px", "120px", "70px"],
+      ["48px", "50px", "100px", "80px"],
+      ["48px", "50px", "120px", "80px"],
     ]);
   });
 
@@ -140,6 +140,6 @@ describe("the removed tokens under the list", () => {
   ] as const)("they are offered %s", (_where, tokens, waits, ended, offered) => {
     render(<Tab tokens={tokens} waits={waits} ended={ended} />);
 
-    expect(within(document.body).queryAllByRole("button", { name: /^Removed tokens/ }).length > 0).toBe(offered);
+    expect(within(document.body).queryAllByRole("button", { name: /^Revoked tokens/ }).length > 0).toBe(offered);
   });
 });

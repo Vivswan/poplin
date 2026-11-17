@@ -25,24 +25,24 @@ const ACTION_WIDTH = 104;
 
 /** The orders a phone offers, where no heading can be pressed: the columns the server orders by. */
 const ORDERS = [
-  { value: "allowed", label: "By allowed" },
+  { value: "allowed", label: "By approved" },
   { value: "name", label: "By name" },
 ];
 
-/** The columns of the list. A waiting login has no day it was allowed and none it runs out. */
+/** The columns of the list. A waiting login has no day it was approved and none it expires. */
 const COLUMNS: readonly ColumnSpec<TokenRow>[] = [
   { id: "name", header: "Name", fixed: true, sortable: TOKEN_ORDERS.first.name, cell: (row) => <Name row={row} /> },
   { id: "state", header: "State", cell: (row) => (row.kind === "waiting" ? <WaitingMark login={row.login} /> : <span className="text-muted-foreground">Working</span>) },
   { id: "scope", header: "Can change", cell: (row) => <span className="text-muted-foreground">{SCOPE_WORDS[row.scope]}</span> },
   {
     id: "allowed",
-    header: "Allowed",
+    header: "Approved",
     sortable: TOKEN_ORDERS.first.allowed,
     cell: (row) => (row.kind === "allowed" ? <Allowed token={row.token} /> : null),
   },
   {
     id: "expires",
-    header: "Runs out",
+    header: "Expires",
     cell: (row) => (row.kind === "allowed" ? <span className="text-muted-foreground">{expiryOf(row.token.expires)}</span> : null),
   },
 ];
@@ -149,10 +149,10 @@ function AddToken({ onCopy }: { readonly onCopy: AccessActions["copyCommand"] })
       <PopoverContent align="end" className="w-88 max-w-[calc(100vw-2rem)]">
         <PopoverHeader>
           <PopoverTitle>Add a token</PopoverTitle>
-          <PopoverDescription>Run this on the computer or agent:</PopoverDescription>
+          <PopoverDescription>Run this on the machine or agent:</PopoverDescription>
         </PopoverHeader>
         <LoginCommand onCopy={onCopy} />
-        <p className="text-[13px] text-muted-foreground">It then waits here: press Review to allow it.</p>
+        <p className="text-[13px] text-muted-foreground">It then waits here: press Review to approve it.</p>
       </PopoverContent>
     </Popover>
   );
@@ -189,7 +189,7 @@ function PhoneFacts({ row }: { readonly row: TokenRow }): ReactNode {
     <>
       {scope}
       <span className="truncate text-[13px] text-muted-foreground">
-        Allowed <Allowed token={token} />, {token.expires === "never" ? "never runs out" : `runs out ${expiryOf(token.expires)}`}
+        Approved <Allowed token={token} />, {token.expires === "never" ? "never expires" : `expires ${expiryOf(token.expires)}`}
       </span>
     </>
   );
@@ -211,18 +211,18 @@ function afterRows(more: number, unread: string | undefined): ReactNode {
   );
 }
 
-/** The name of each token that has one, by its id: what a token removed by another token is said to be removed by. */
+/** The name of each token that has one, by its id: what a token revoked by another token is said to be revoked by. */
 function namesOf(tokens: readonly Token[], ended: Ended | undefined): Record<string, string> {
   const named = [...tokens, ...(ended?.tokens ?? [])].filter((token) => token.note.trim() !== "");
 
   return Object.fromEntries(named.map((token) => [token.id, token.note]));
 }
 
-/** The question before a token is removed. */
+/** The question before a token is revoked. */
 function leavingQuestion(token: Token | undefined): Question | undefined {
   if (token === undefined) return undefined;
 
-  return { title: `Remove ${computerName(token.note).shown}?`, says: "Its token stops working at once.", yes: "Remove", removes: true };
+  return { title: `Revoke ${computerName(token.note).shown}?`, says: "Its token stops working at once.", yes: "Revoke", removes: true };
 }
 
 /** Draw the Tokens tab. */
@@ -257,7 +257,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
       );
     }
 
-    return <RowMenu name={computerName(row.name).shown} onRemove={() => setLeaving(row.token)} />;
+    return <RowMenu name={computerName(row.name).shown} word="Revoke" onRemove={() => setLeaving(row.token)} />;
   };
   const answer = (yes: boolean): void => {
     if (yes && leaving !== undefined) void actions.removeToken(leaving);
@@ -273,7 +273,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
           <Empty className="flex-none py-16">
             <EmptyHeader>
               <EmptyTitle>{removed === undefined ? "No tokens yet" : "No tokens"}</EmptyTitle>
-              <EmptyDescription>Run this on a computer or agent:</EmptyDescription>
+              <EmptyDescription>Run this on a machine or agent:</EmptyDescription>
             </EmptyHeader>
             <EmptyContent className="max-w-full">
               <LoginCommand onCopy={actions.copyCommand} />
@@ -329,7 +329,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
     <section aria-label="Tokens" className="flex min-w-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 py-3 max-md:px-4">
         <p className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground max-md:basis-full max-md:whitespace-normal">
-          A token lets a computer or an agent publish.
+          A token lets a machine or an agent publish.
         </p>
         <div className="ml-auto flex items-center gap-2">
           {tokens === undefined || tokens.length < 2 ? null : <OrderSelect sort={sort} onSort={onSort} />}
