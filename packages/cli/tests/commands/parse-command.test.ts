@@ -187,6 +187,7 @@ describe("parseCommand", () => {
     [`poplin set ${LABEL} --expires 2026-11-01`, refusal("--expires 2026-11-01 is not ahead: that day has started", EXPIRY_FORMS)],
     ["poplin ./demo --expires 100000000000d", refusal("--expires 100000000000d is too far ahead", EXPIRY_FORMS)],
     ["poplin ./demo --expires 100000000d", refusal("--expires 100000000d is too far ahead", EXPIRY_FORMS)],
+    ["poplin ./demo --expires 36501d", refusal("--expires 36501d is too far ahead", EXPIRY_FORMS)],
     ["poplin set", refusal("poplin set needs a site", "poplin set <site>")],
     [`poplin show ${LABEL} ${SECOND_LABEL}`, refusal(`too many arguments for poplin show: "${SECOND_LABEL}"`, "poplin show <site>")],
     ["poplin ./one ./two", refusal('too many arguments for poplin publish: "./two"', "poplin publish <path>")],

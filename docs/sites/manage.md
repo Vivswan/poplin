@@ -15,7 +15,7 @@ A publish takes these flags too.
 | ------------------------------------------------------- | ------------------------------------------------- |
 | `npx poplin set report--k3f9x2ab71qz --name q3-report`  | renames it; its id stays, and [every older address still opens it](who-can-open.md) |
 | `poplin set report--k3f9x2ab71qz --title "Q3 sales"`    | sets the title your dashboard shows: one line, 200 characters at most |
-| `poplin set report--k3f9x2ab71qz --expires 7d`          | moves it to the trash in 7 days                   |
+| `poplin set report--k3f9x2ab71qz --expires 7d`          | moves it to the trash in 7 days; a span is 36,500 days at the most |
 | `poplin set report--k3f9x2ab71qz --expires 2026-12-01`  | moves it to the trash on that day                 |
 | `poplin set report--k3f9x2ab71qz --expires never`       | keeps it                                          |
 | `poplin set report--k3f9x2ab71qz --search-engines on`   | lets search engines list it, once it is public and Let search engines in is on |
