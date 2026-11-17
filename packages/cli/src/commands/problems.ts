@@ -20,100 +20,84 @@ const ISSUES: string = manifest.bugs.url;
 
 /** The codes the API refuses with, in the API's own spelling. */
 const API_ROWS = {
-  not_logged_in: { sentence: "no token was sent, or it expired", hint: "to log in again: poplin login", exit: "failed" },
-  not_allowed: { sentence: "this token may not do that", hint: "a publisher's token manages only the sites it published; poplin whoami shows the token", exit: "failed" },
-  not_found: { sentence: "no site with that id or public name", hint: "poplin list shows every site", exit: "failed" },
-  no_such_version: { sentence: "the site keeps no such version", hint: "poplin show <site> lists the versions", exit: "failed" },
-  method_not_allowed: { sentence: "the install does not take that request", hint: "the install may be of another version than this poplin", exit: "failed" },
-  unsupported_media_type: { sentence: "the install does not take that request", hint: "the install may be of another version than this poplin", exit: "failed" },
-  bad_argument: { sentence: "an argument is missing, unknown, or of the wrong form", exit: "failed" },
-  bad_name: { sentence: "the name breaks the rules of a name", hint: "a name holds lowercase letters, digits, and single dashes, 3 to 40 characters", exit: "failed" },
-  reserved_name: { sentence: "the install keeps that public name for itself", hint: "to pick another: --public-name <public name>", exit: "failed" },
-  bad_path: { sentence: "a file's path is one no site can serve", hint: "rename or remove the file", exit: "failed" },
-  no_index: { sentence: "a site needs an index.html at its top", exit: "failed" },
-  size_mismatch: { sentence: "a file changed while it was sent", hint: "publish again once the folder is still", exit: "failed" },
-  hash_mismatch: { sentence: "a file changed after it was read, or was damaged on its way", hint: "publish again once the folder is still", exit: "failed" },
-  name_taken: { sentence: "another site holds that public name", hint: "to pick another: poplin set <site> --public --public-name <public name>", exit: "failed" },
-  in_trash: { sentence: "the site sits in the trash", hint: "to take it back: poplin restore <site>", exit: "failed" },
-  id_taken: { sentence: "a site of the install already has that id", hint: "the site is already there: poplin show <site> shows it", exit: "failed" },
-  backup_too_new: { sentence: "the backup was made by a newer poplin than the install runs", hint: "update the install, then import again", exit: "failed" },
-  not_in_trash: { sentence: "the site is not in the trash", exit: "failed" },
-  stale_version: { sentence: "a newer publish of the site went live first", hint: "publish again", exit: "failed" },
-  missing_files: { sentence: "a file of the publish did not arrive", hint: "publish again", exit: "failed" },
-  upload_finished: { sentence: "the publish is already live", exit: "failed" },
-  too_many_sites: { sentence: "the install holds as many sites as it may", hint: "poplin config max_sites shows the limit; poplin list --trash shows what still counts", exit: "failed" },
-  not_set_up: { sentence: "the install has stored no settings", hint: "the install stores them when it starts: try again, and if this stays, run poplin doctor --repair", exit: "failed" },
-  no_working_login: {
-    sentence: "the change would leave no login that works",
-    hint: "keep one email that is a login now in the list",
-    exit: "failed",
-  },
+  not_logged_in: { sentence: "The token is missing or expired", hint: "Fix: poplin login", exit: "failed" },
+  not_allowed: { sentence: "The token's role does not allow this", hint: "See: poplin whoami (a publisher token manages only the sites it published)", exit: "failed" },
+  not_found: { sentence: "Site not found", hint: "See: poplin list", exit: "failed" },
+  no_such_version: { sentence: "Version not found", hint: "See: poplin show <site>", exit: "failed" },
+  method_not_allowed: { sentence: "The install rejected the request", hint: "See: poplin doctor (the install may be of another version than this CLI)", exit: "failed" },
+  unsupported_media_type: { sentence: "The install rejected the request", hint: "See: poplin doctor (the install may be of another version than this CLI)", exit: "failed" },
+  bad_argument: { sentence: "Invalid argument", exit: "failed" },
+  bad_name: { sentence: "Invalid name", hint: "Fix: use 3 to 40 characters: lowercase letters, digits, and single dashes", exit: "failed" },
+  reserved_name: { sentence: "The public name is reserved by the install", hint: "Fix: use --public-name <public name>", exit: "failed" },
+  bad_path: { sentence: "The file path cannot be served", hint: "Fix: rename or remove the file", exit: "failed" },
+  no_index: { sentence: "No index.html at the site root", exit: "failed" },
+  size_mismatch: { sentence: "A file changed during the upload", hint: "Fix: publish again once the files stop changing", exit: "failed" },
+  hash_mismatch: { sentence: "A file changed after it was read, or was corrupted in transit", hint: "Fix: publish again once the files stop changing", exit: "failed" },
+  name_taken: { sentence: "The public name is taken", hint: "Fix: poplin set <site> --public --public-name <public name>", exit: "failed" },
+  in_trash: { sentence: "The site is in the trash", hint: "Fix: poplin restore <site>", exit: "failed" },
+  id_taken: { sentence: "The site id already exists on the install", hint: "See: poplin show <site>", exit: "failed" },
+  backup_too_new: { sentence: "The backup format is newer than the install supports", hint: "Fix: poplin update, then import again", exit: "failed" },
+  not_in_trash: { sentence: "The site is not in the trash", exit: "failed" },
+  stale_version: { sentence: "A newer version went live first", hint: "Fix: publish again", exit: "failed" },
+  missing_files: { sentence: "The upload is missing a file", hint: "Fix: publish again", exit: "failed" },
+  upload_finished: { sentence: "The upload is already published", exit: "failed" },
+  too_many_sites: { sentence: "The site limit is reached", hint: "See: poplin config max_sites and poplin list --trash (trashed sites count)", exit: "failed" },
+  not_set_up: { sentence: "The install has no stored settings", hint: "Fix: retry. If it persists: poplin doctor --repair", exit: "failed" },
+  no_working_login: { sentence: "The change would leave no user who can log in", hint: "Fix: keep one current user in the list", exit: "failed" },
   needs_update_check: {
-    sentence: "auto_update is on only while update_check is on",
-    hint: "to update by itself: poplin config update_check on, then auto_update on; to stop the check: poplin config auto_update off first",
+    sentence: "auto_update requires update_check",
+    hint: "Fix: set update_check on before auto_update on, or auto_update off before update_check off",
     exit: "failed",
   },
-  already_a_login: { sentence: "that email is a login already", hint: "poplin config logins shows the logins", exit: "failed" },
-  not_a_login: { sentence: "that email is no login", hint: "poplin config logins shows the logins", exit: "failed" },
-  no_update: { sentence: "there is no newer version the install can take", hint: "poplin update --dry-run says which version the install runs", exit: "failed" },
-  update_unreachable: { sentence: "the install's host did not answer the update", hint: "the update may be in all the same: wait a minute, then poplin update --dry-run", exit: "failed" },
-  no_key: { sentence: "the install holds no key of its host, so it cannot update itself", hint: "open Domain on the dashboard and press Repair", exit: "failed" },
-  key_refused: { sentence: "the install's host no longer takes the install's key", hint: "open Domain on the dashboard and press Repair", exit: "failed" },
-  lacks_right: { sentence: "the install's key lacks this permission at its host", hint: "open Domain on the dashboard and press Repair: it makes a key with the permission", exit: "failed" },
-  release_refused: { sentence: "the release cannot be taken, and nothing was changed, for this reason", hint: "poplin update --dry-run says which version the install runs", exit: "failed" },
-  version_refused: { sentence: "the install's host refused the new version, so the install runs the version it ran before", hint: `try again; if it comes back, report it at ${ISSUES}`, exit: "failed" },
-  logins_not_ended: { sentence: "the install's provider did not end the dashboard's logins, or gave no answer", hint: "the dashboard's Domain screen has Repair, which gives the install its key", exit: "failed" },
-  too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
-  too_many_requests: { sentence: "the install is asked too often", hint: "wait a minute, then try again", exit: "failed" },
-  internal: { sentence: "the install failed to do that", hint: "try again; poplin doctor reports on the install", exit: "failed" },
-  allowance_spent: { sentence: "a day's allowance of the install is used up until 00:00 UTC", hint: "wait until then: asking again sooner is refused the same way", exit: "failed" },
+  already_a_login: { sentence: "The email is already a user", hint: "See: poplin config logins", exit: "failed" },
+  not_a_login: { sentence: "The email is not a user", hint: "See: poplin config logins", exit: "failed" },
+  no_update: { sentence: "No version to update to", hint: "See: poplin update --dry-run", exit: "failed" },
+  update_unreachable: { sentence: "The provider did not respond to the update", hint: "See: poplin update --dry-run in a minute (the update may still have applied)", exit: "failed" },
+  no_key: { sentence: "The install has no provider key, so it cannot update itself", hint: "Fix: open Domain on the dashboard and press Repair", exit: "failed" },
+  key_refused: { sentence: "The provider rejected the install's key", hint: "Fix: open Domain on the dashboard and press Repair", exit: "failed" },
+  lacks_right: { sentence: "The install's provider key lacks a permission", hint: "Fix: open Domain on the dashboard and press Repair to create a key that has it", exit: "failed" },
+  release_refused: { sentence: "The release was rejected and nothing changed", hint: "See: poplin update --dry-run", exit: "failed" },
+  version_refused: { sentence: "The provider rejected the new version and the install runs the previous one", hint: `Fix: retry. If it recurs, report it at ${ISSUES}`, exit: "failed" },
+  logins_not_ended: { sentence: "The provider did not end the dashboard sessions, or did not respond", hint: "Fix: open Domain on the dashboard and press Repair", exit: "failed" },
+  too_large: { sentence: "The size limit is exceeded", hint: "See: poplin config", exit: "failed" },
+  too_many_requests: { sentence: "Rate limited by the install", hint: "Fix: retry in a minute", exit: "failed" },
+  internal: { sentence: "Internal error on the install", hint: "Fix: retry. If it persists: poplin doctor", exit: "failed" },
+  allowance_spent: { sentence: "The install's daily quota is exhausted", hint: "Fix: retry after 00:00 UTC", exit: "failed" },
 } as const satisfies Readonly<Record<string, Row>>;
 
 /** The codes of what goes wrong on this machine, or between it and the install. */
 const LOCAL_ROWS = {
-  no_login: { sentence: "not logged in", hint: "to log in: poplin login --server <the install's address>", exit: "no-install" },
-  no_server: { sentence: "login needs the address of the install", hint: "poplin login --server https://<the install's address>", exit: "no-install" },
-  login_denied: { sentence: "the login was denied on the dashboard", hint: "nothing was saved on this machine", exit: "failed" },
-  login_expired: { sentence: "nobody allowed the login before it ran out", hint: "nothing was saved on this machine; to ask again: poplin login", exit: "failed" },
-  interrupted: { sentence: "the login was stopped", hint: "nothing was saved on this machine", exit: "failed" },
-  bad_login: { sentence: "the login cannot be used", exit: "no-install" },
-  bad_server: { sentence: "--server takes an https:// address with nothing after the host", hint: "for example: --server https://poplin.example.com; http:// is taken for this machine alone, as 127.0.0.1, localhost, or [::1]", exit: "usage-error" },
-  wrong_server: {
-    sentence: "there is no token for that install",
-    hint: "a token is sent only to the install it was saved for; to log in to the other one: poplin login --server <its address>",
-    exit: "no-install",
-  },
-  unreadable: { sentence: "nothing can be published", exit: "failed" },
-  no_name: { sentence: "the path gives the site no name", exit: "failed" },
+  no_login: { sentence: "Not logged in", hint: "Fix: poplin login --server <url>", exit: "no-install" },
+  no_server: { sentence: "--server is required: there is no stored login", hint: "Fix: poplin login --server <url>", exit: "no-install" },
+  login_denied: { sentence: "The login was denied on the dashboard", hint: "Nothing was stored.", exit: "failed" },
+  login_expired: { sentence: "The login expired before approval", hint: "Nothing was stored. Fix: rerun this command", exit: "failed" },
+  interrupted: { sentence: "Cancelled", hint: "Nothing was stored.", exit: "failed" },
+  bad_login: { sentence: "The login is unusable", exit: "no-install" },
+  bad_server: { sentence: "--server expects an https:// origin without a path", hint: "Usage: --server https://poplin.example.com (http:// only for 127.0.0.1, localhost, and [::1])", exit: "usage-error" },
+  wrong_server: { sentence: "No token for this install", hint: "Fix: poplin login --server <url>", exit: "no-install" },
+  unreadable: { sentence: "Cannot publish", exit: "failed" },
+  no_name: { sentence: "Cannot derive a site name from the path", exit: "failed" },
   root_links: {
-    sentence: 'this install has no domain, so a link that starts with "/" would not open',
-    hint: "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css",
+    sentence: 'A link starting with "/" breaks on an install without a domain',
+    hint: "Nothing was uploaded. Fix: link relative to the page, such as css/site.css or ../css/site.css",
     exit: "failed",
   },
-  copy_gone: { sentence: "the copy stopped", hint: "if poplin list does not show the site, copy it again: poplin duplicate <site>", exit: "failed" },
-  not_confirmed: { sentence: "what was typed is not the site's label, so nothing was deleted", exit: "failed" },
-  no_terminal: {
-    sentence: "delete --no-trash asks for the site's label to be typed, and there is no terminal to ask on",
-    hint: "without --no-trash the site goes to the trash, and is gone for good when its days there are over",
-    exit: "failed",
-  },
-  file_exists: { sentence: "a file is already there", hint: "to replace it: --overwrite; to write another: --out <file>", exit: "failed" },
-  unwritable: { sentence: "the backup cannot be written", exit: "failed" },
-  other_format: { sentence: "the install's backups are of a format this poplin does not write", hint: "update poplin", exit: "failed" },
-  site_changed: { sentence: "a version's files are not the ones its site's record counts", hint: "export again", exit: "failed" },
-  bad_backup: { sentence: "the file is not a backup", hint: "nothing was sent to the install", exit: "failed" },
-  no_settings: { sentence: "the backup holds no settings: it is the backup of one site", hint: "import it without --settings", exit: "failed" },
-  not_in_backup: { sentence: "the backup holds no such site", hint: "poplin import <zip> --dry-run lists its sites", exit: "failed" },
-  unreachable: { sentence: "the install could not be reached", hint: "check the address and the network; to log in at another address: poplin login --server <address>", exit: "unreachable" },
-  timeout: { sentence: "the install took too long to answer", hint: "try again", exit: "unreachable" },
-  not_json: { sentence: "the answer is not the install's", exit: "unreachable" },
-  unexpected_answer: {
-    sentence: "the install answered in a form this poplin does not know",
-    hint: "a login page in front of the install answers this way, and so does an install of another version",
-    exit: "unreachable",
-  },
-  stopped: { sentence: "the command was stopped", exit: "failed" },
-  crashed: { sentence: "poplin failed in a way it has no word for", exit: "failed" },
+  copy_gone: { sentence: "The install stopped the copy", hint: "Fix: if poplin list lacks the site, run poplin duplicate <site> again", exit: "failed" },
+  not_confirmed: { sentence: "The confirmation does not match the site's label. Nothing changed.", exit: "failed" },
+  no_terminal: { sentence: "delete --no-trash requires a terminal to prompt for the site's label", hint: "Fix: run it in a terminal, or omit --no-trash", exit: "failed" },
+  file_exists: { sentence: "File already exists", hint: "Fix: pass --overwrite, or another --out <file>", exit: "failed" },
+  unwritable: { sentence: "Cannot write the backup", exit: "failed" },
+  other_format: { sentence: "This CLI does not write the install's backup format", hint: "Fix: update the poplin CLI", exit: "failed" },
+  site_changed: { sentence: "A version's files do not match its record", hint: "Fix: export again", exit: "failed" },
+  bad_backup: { sentence: "Not a backup", hint: "Nothing was uploaded.", exit: "failed" },
+  no_settings: { sentence: "The backup has no settings: it holds one site", hint: "Fix: import without --settings", exit: "failed" },
+  not_in_backup: { sentence: "Site not found in the backup", hint: "See: poplin import <zip> --dry-run", exit: "failed" },
+  unreachable: { sentence: "Cannot reach the install", hint: "Fix: check the URL and the network, or poplin login --server <url>", exit: "unreachable" },
+  timeout: { sentence: "The install did not respond in time", hint: "Fix: retry", exit: "unreachable" },
+  not_json: { sentence: "The response is not from a poplin install", exit: "unreachable" },
+  unexpected_answer: { sentence: "Unexpected response from the install", hint: "A login page in front of the install or a version mismatch can cause this.", exit: "unreachable" },
+  stopped: { sentence: "Cancelled", exit: "failed" },
+  crashed: { sentence: "Unexpected error", exit: "failed" },
 } as const satisfies Readonly<Record<string, Row>>;
 
 /** Every row, by its code. */
@@ -122,21 +106,27 @@ const ROWS: Readonly<Record<string, Row>> = { ...API_ROWS, ...LOCAL_ROWS };
 /** The hint of a code whose way out hangs on what it is about: each reason a release is refused for says what it means, and whether trying again helps. */
 const HINTS_ABOUT: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   release_refused: {
-    no_digest: "no built files are published for that version, so the install cannot take it by itself; to take the newest release: poplin update",
-    unreachable: "the release could not be fetched; try again in a few minutes",
-    digest_differs: `the files fetched for the release are not the files the project published; try again, and if it comes back, report it at ${ISSUES}`,
-    other_version: `the files published for the release name another version or schema than the project's website; trying again gives the same answer, so report it at ${ISSUES}`,
-    database: "that release changes the database, and the version asked for cannot read it; trying again gives the same answer",
+    no_digest: "No build is published for that version. Fix: poplin update installs the latest release",
+    unreachable: "The release download failed. Fix: retry in a few minutes",
+    digest_differs: `Release checksum mismatch. Fix: retry. If it recurs, report it at ${ISSUES}`,
+    other_version: `The release files name another version or schema than the release index. Retrying fails the same way. Fix: report it at ${ISSUES}`,
+    database: "That release migrates the database, and the requested version cannot read it. Retrying fails the same way.",
     needs_hand: TAKEN_BY_REPAIR,
-    host: "the install's host did not answer before anything was sent; try again in a few minutes",
+    host: "The provider did not respond, and nothing was sent. Fix: retry in a few minutes",
   },
 };
 
-/** What goes with a change whose answer never came: the install may have made it. */
-const MAY_HAVE_CHANGED = "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are";
+/** The field a code's sentence already names: a screen leaves such an `about` out, and `--json` keeps it. */
+const FIELD_SAID: Readonly<Record<string, string>> = { name_taken: "public_name", id_taken: "id", needs_update_check: "auto_update" };
 
-/** What goes with a change that never left this computer: the install had nothing of it. */
-const NOTHING_SENT = "nothing was sent, so nothing was changed; check the address and the network";
+/** A hint that is one statement that nothing was done, such as `Nothing was stored.` or `Nothing changed.` */
+const NOTHING_DONE = /^Nothing (?:was \w+|changed)\.$/;
+
+/** What goes with a change whose answer never came: the install may have made it. */
+const MAY_HAVE_CHANGED = "The request may have arrived, so the change may have applied. See: poplin list";
+
+/** What goes with a change that never left this machine: the install had nothing of it. */
+const NOTHING_SENT = "No request was sent, so nothing changed. Fix: check the URL and the network";
 
 /** A code of the table. */
 type Code = keyof typeof API_ROWS | keyof typeof LOCAL_ROWS;
@@ -192,7 +182,7 @@ export function problem(code: Code, about?: string, hint?: string): Problem {
 export function problemOf(failure: Failure, call: "reads" | "changes" = "reads"): Problem {
   const hint = call === "changes" ? MAY_HAVE_CHANGED : undefined;
 
-  if (failure.kind === "timeout") return problem("timeout", `${failure.seconds} seconds`, hint);
+  if (failure.kind === "timeout") return problem("timeout", `${failure.seconds} s`, hint);
 
   // The address that was tried is said: no other command can show it while the install gives no answer.
   if (failure.kind === "unreachable") return problem("unreachable", failure.address, hint === undefined || failure.left ? hint : NOTHING_SENT);
@@ -200,9 +190,9 @@ export function problemOf(failure: Failure, call: "reads" | "changes" = "reads")
   if (failure.kind === "stopped") return problem("stopped", undefined, hint);
 
   // An answer in plain text says in its own words what is wrong, as an install that cannot start does: the words are shown, and the address is not put in doubt.
-  if (failure.kind === "not-json" && failure.said !== undefined) return build("not_json", { sentence: `the answer is plain text, status ${failure.status}`, exit: LOCAL_ROWS.not_json.exit }, failure.said, hint);
+  if (failure.kind === "not-json" && failure.said !== undefined) return build("not_json", { sentence: `The install responded with plain text, status ${failure.status}`, exit: LOCAL_ROWS.not_json.exit }, failure.said, hint);
 
-  if (failure.kind === "not-json") return problem("not_json", `status ${failure.status} from ${failure.address}`, hint ?? "is that the address of your poplin install?");
+  if (failure.kind === "not-json") return problem("not_json", `status ${failure.status} from ${failure.address}`, hint ?? "Fix: check that the URL is the install's");
 
   if (failure.kind !== "refused") return problem("unexpected_answer", `status ${failure.status}`, hint);
 
@@ -213,13 +203,24 @@ export function problemOf(failure: Failure, call: "reads" | "changes" = "reads")
 }
 
 /**
+ * What a problem is about, as a person reads it.
+ *
+ * @returns `about`, or nothing where it only repeats the field the sentence names
+ */
+export function aboutOf(said: Problem): string | undefined {
+  return said.about !== undefined && FIELD_SAID[said.code] === said.about ? undefined : said.about;
+}
+
+/**
  * Word a problem for a person.
  *
  * @returns the sentence with what it is about, then the hint when there is one, a line each
  */
 export function problemLines(said: Problem): string[] {
-  const sentence = said.about === undefined ? said.message : `${said.message}: ${said.about}`;
+  const about = aboutOf(said);
+  const sentence = about === undefined ? said.message : `${said.message}: ${about}`;
   if (said.hint === undefined) return [sentence];
 
-  return [sentence, said.hint];
+  // A hint that only says nothing was done ends the sentence's own line: it names nothing to run.
+  return NOTHING_DONE.test(said.hint) ? [`${sentence}. ${said.hint}`] : [sentence, said.hint];
 }

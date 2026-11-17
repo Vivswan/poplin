@@ -25,7 +25,7 @@ const NOTHING_RESERVED: ReadonlySet<string> = new Set();
 const SWITCH = { on: "on", off: "off" } as const;
 
 /** What to do about a missing login. The server reads the login anew on every call, so the next call finds it. */
-const HOW_TO_LOG_IN = "run `poplin login --server <address>` on this computer";
+const HOW_TO_LOG_IN = "run `poplin login --server <url>` on this machine";
 
 /** What every tool says of its `site`. */
 const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, its address (url), or a public site's public name.";

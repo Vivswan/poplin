@@ -40,22 +40,22 @@ const STEPS = "Database steps";
 
 /** What a row says, after the Worker's or the database's name. */
 const WORDS = {
-  unread: "its version is not read, so no release is put in place",
-  unreadLeft: "its version is not read",
-  out: `is out: add ${UPDATE} to take it`,
-  noNewest: "the project's website named no release, so nothing says whether a newer one is out. Run this again",
-  unreachable: "the release's files could not be fetched. Run this again",
-  no_release: "the project's website names no release now. Run this again",
-  bad_release: "the release's files are not the ones the project published. Nothing was uploaded",
-  newer_release: `this release needs a newer poplin: ${NEWEST_POPLIN.update}`,
-  token: "Cloudflare refused the token",
-  silent: "no answer from Cloudflare. The release may be in: run this again",
-  part: "the Worker's bindings were not read whole. Run this again",
-  load: "Cloudflare refused the release's code: it stops as it starts. The install runs the version it ran",
-  schedule: "Cloudflare did not take it. The install sets it with its next update",
-  another: "its records are of another poplin than this release's, so no step was run",
-  waits: "its records are read once the release is in place",
-  allowance: "the database's free allowance for the day is used up. The install runs its steps when it next answers",
+  unread: "its version is unknown, so no release is deployed",
+  unreadLeft: "its version is unknown",
+  out: `is available: pass ${UPDATE} to deploy it`,
+  noNewest: "the project website listed no release, so whether a newer one exists is unknown. Rerun this command",
+  unreachable: "the release files could not be downloaded. Rerun this command",
+  no_release: "the project website lists no release. Rerun this command",
+  bad_release: "the release files failed validation. Nothing was uploaded",
+  newer_release: `this release requires a newer CLI: ${NEWEST_POPLIN.update}`,
+  token: "Cloudflare refused the account token",
+  silent: "no answer from Cloudflare. The release may be deployed: rerun this command",
+  part: "the Worker's bindings were read incompletely. Rerun this command",
+  load: "Cloudflare refused the release's code: it fails at startup. The install still runs its previous version",
+  schedule: "Cloudflare refused it. The install sets it on its next update",
+  another: "its schema does not match this release's, so no step ran",
+  waits: "its schema is read after the release is deployed",
+  allowance: "the D1 free daily quota is exhausted. The install runs its steps on its next request",
 } as const;
 
 /** The row that says the install's records wait for a release that is not in place, where they are of another schema than this poplin's. */
@@ -115,7 +115,7 @@ function stepsRow(stepped: Stepped, rights: Asked["rights"]): Row | undefined {
 
   if (stepped.state === "another") return { object: STEPS, state: "block", detail: `${name}: ${WORDS.another}` };
 
-  if (stepped.state === "failed") return { object: STEPS, state: "fail", detail: `${name}: step ${stepped.step} did not run, and nothing of it was kept. The install runs it when it next answers` };
+  if (stepped.state === "failed") return { object: STEPS, state: "fail", detail: `${name}: step ${stepped.step} failed and was rolled back. The install reruns it on its next request` };
 
   const { failure } = stepped;
   if (failure.failure === "allowance") return { object: STEPS, state: "fail", detail: `${name}: ${WORDS.allowance}` };
@@ -160,7 +160,7 @@ async function uploaded(asked: Asked, release: Release, from: string): Promise<E
 async function taken(asked: Asked, from: string): Promise<Settled> {
   const release = await newestRelease(asked.reach);
   // A release this code cannot read as an upload, or of another schema than its own, is one whose steps it cannot run and whose pieces it cannot mend: the newest poplin does both.
-  if (release === "newer_release" || (typeof release !== "string" && release.schema !== OWN_SCHEMA)) return { state: "stop", words: `The newest release is one this poplin cannot put in place. Run the newest poplin: ${NEWEST_POPLIN.update}` };
+  if (release === "newer_release" || (typeof release !== "string" && release.schema !== OWN_SCHEMA)) return { state: "stop", words: `This CLI cannot deploy the latest release. Run the latest CLI: ${NEWEST_POPLIN.update}` };
 
   if (typeof release === "string") return { state: "unplaced", rows: [workerRow("fail", `, runs ${from}: ${WORDS[release]}`)] };
 
@@ -189,7 +189,7 @@ export async function syncRelease(asked: Asked): Promise<Settled> {
   if (newest !== undefined && isAbove(version, newest)) {
     const command = asked.update ? NEWEST_POPLIN.update : NEWEST_POPLIN.mend;
 
-    return { state: "stop", words: `The install runs ${version}, and the newest release this poplin reads is ${newest}. Nothing is put back to an older release. Run the newest poplin: ${command}` };
+    return { state: "stop", words: `The install runs ${version}, newer than the latest release this CLI knows, ${newest}. Nothing is downgraded. Run the latest CLI: ${command}` };
   }
 
   if (!asked.update) return newest === undefined ? left(`, runs ${version}`) : left(`, runs ${version}; ${newest} ${WORDS.out}`, { runs: version, out: newest });

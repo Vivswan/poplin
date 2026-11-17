@@ -12,11 +12,11 @@ const SECOND = { kind: "site", name: "report", id: "w8t1c5n0ze4u" };
 const PLAIN = { json: false };
 const ADDRESS = `https://${LABEL}-p-poplin.example.com`;
 const ADDRESSED = { ...REPORT, under: "example.com" };
-const SITE_FORMS = "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, a public site's public name, or its address";
+const SITE_FORMS = "A site is a label (report--k3f9x2ab71qz), an id (k3f9x2ab71qz), a public name, or a URL.";
 const SWAPPED = misspelled("list");
 const CREATE = { kind: "publish", target: { kind: "create" }, settings: {}, dryRun: false, ...PLAIN };
 const SEVEN_DAYS = { kind: "span", span: { count: 7, unit: "d" } };
-const EXPIRY_FORMS = "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01";
+const EXPIRY_FORMS = "A duration is a count of s, m, h, or d, such as 7d. A date is written 2026-12-01.";
 const NOW = Date.UTC(2026, 10, 1);
 const KINDS = new Set<string>([...COMMANDS.map((spec) => spec.name), "version", "usage-error"]);
 
@@ -120,13 +120,13 @@ describe("parseCommand", () => {
 
   // Drift: a typo that became a publish would upload a folder nobody meant to share, and one that became another command would change a site.
   const bareForm: readonly Row[] = [
-    [`poplin ${SWAPPED}`, refusal(`unknown command "${SWAPPED}"`, `Did you mean: poplin list? To publish a folder with that name: poplin ./${SWAPPED}`)],
-    ["poplin report", refusal('unknown command "report"', "To publish a folder with that name: poplin ./report")],
-    ["poplin report.html", refusal('unknown command "report.html"', "To publish a file with that name: poplin ./report.html")],
-    ["poplin publissh ./report", refusal('unknown command "publissh"', "Did you mean: poplin publish? To publish a folder with that name: poplin ./publissh")],
-    ["poplin rotate report", refusal('unknown command "rotate"', "To publish a folder with that name: poplin ./rotate")],
-    [`poplin site delete ${LABEL}`, refusal('unknown command "site"', "To publish a folder with that name: poplin ./site")],
-    ["poplin instal doctor", refusal('unknown command "instal"', "Did you mean: poplin install? To publish a folder with that name: poplin ./instal")],
+    [`poplin ${SWAPPED}`, refusal(`Unknown command "${SWAPPED}"`, `Did you mean poplin list? To publish a folder of that name: poplin ./${SWAPPED}`)],
+    ["poplin report", refusal('Unknown command "report"', "To publish a folder of that name: poplin ./report")],
+    ["poplin report.html", refusal('Unknown command "report.html"', "To publish a file of that name: poplin ./report.html")],
+    ["poplin publissh ./report", refusal('Unknown command "publissh"', "Did you mean poplin publish? To publish a folder of that name: poplin ./publissh")],
+    ["poplin rotate report", refusal('Unknown command "rotate"', "To publish a folder of that name: poplin ./rotate")],
+    [`poplin site delete ${LABEL}`, refusal('Unknown command "site"', "To publish a folder of that name: poplin ./site")],
+    ["poplin instal doctor", refusal('Unknown command "instal"', "Did you mean poplin install? To publish a folder of that name: poplin ./instal")],
     ["poplin install", { kind: "provider", command: "install", words: [] }],
     ["poplin install somewhere --no-such-flag --user you@example.com", { kind: "provider", command: "install", words: ["somewhere", "--no-such-flag", "--user", "you@example.com"] }],
     ["poplin --json install somewhere", { kind: "provider", command: "install", words: ["--json", "somewhere"] }],
@@ -154,105 +154,105 @@ describe("parseCommand", () => {
   });
 
   test("an unknown word with characters a shell or a terminal reads gets no line to copy", () => {
-    expect<unknown>(parseCommand(["a;b\u001b[2J"])).toEqual(refusal('unknown command "a;b\\u001b[2J"', "poplin --help lists the commands"));
+    expect<unknown>(parseCommand(["a;b\u001b[2J"])).toEqual(refusal('Unknown command "a;b\\u001b[2J"', "See: poplin --help"));
   });
 
   // Drift: each of these is a mistake a person makes at the keyboard; one that slips through runs a command they did not write.
   const refused: readonly Row[] = [
-    [`poplin set ${LABEL} --unlistd`, refusal('unknown flag "--unlistd"', "did you mean --unlisted?")],
-    [`poplin show ${LABEL} --unlisted`, refusal('unknown flag "--unlisted"', "poplin help show lists the flags")],
-    ["poplin ./report --tittle x", refusal('unknown flag "--tittle"', "did you mean --title?")],
-    ["poplin ./report --search on", refusal('unknown flag "--search"', "poplin help publish lists the flags")],
-    ["poplin ./report --embed-from example.com", refusal('unknown flag "--embed-from"', "poplin help publish lists the flags")],
-    ["poplin doctor --fix", refusal('unknown flag "--fix"', "poplin help doctor lists the flags")],
-    ["poplin mcp --server poplin.example.com", refusal('unknown flag "--server"', "poplin help mcp lists the flags")],
-    ["poplin mcp --json", refusal('unknown flag "--json"', "poplin help mcp lists the flags")],
-    ["poplin list -h", refusal('unknown flag "-h"', "poplin help list lists the flags")],
-    ["poplin --bogus value ./report", refusal('unknown flag "--bogus"', "poplin help <command> lists the flags")],
-    ["poplin --jsno", refusal('unknown flag "--jsno"', "did you mean --json?")],
-    ["poplin --json", refusal("--json needs a command or a path before or after it", "poplin --help lists the commands")],
-    ["poplin --title list", refusal("--title needs a command or a path before or after it", "poplin --help lists the commands")],
-    ["poplin migrate", refusal('unknown command "migrate"', "To publish a folder with that name: poplin ./migrate")],
-    ["poplin list --trash --trash", refusal("--trash was given twice")],
-    [`poplin set ${LABEL} --title a --title b`, refusal("--title was given twice")],
-    [`poplin set ${LABEL} --title`, refusal("--title needs a value: --title <title>")],
+    [`poplin set ${LABEL} --unlistd`, refusal('Unknown option --unlistd', "Did you mean --unlisted?")],
+    [`poplin show ${LABEL} --unlisted`, refusal('Unknown option --unlisted', "See: poplin show --help")],
+    ["poplin ./report --tittle x", refusal('Unknown option --tittle', "Did you mean --title?")],
+    ["poplin ./report --search on", refusal('Unknown option --search', "See: poplin publish --help")],
+    ["poplin ./report --embed-from example.com", refusal('Unknown option --embed-from', "See: poplin publish --help")],
+    ["poplin doctor --fix", refusal('Unknown option --fix', "See: poplin doctor --help")],
+    ["poplin mcp --server poplin.example.com", refusal('Unknown option --server', "See: poplin mcp --help")],
+    ["poplin mcp --json", refusal('Unknown option --json', "See: poplin mcp --help")],
+    ["poplin list -h", refusal('Unknown option -h', "See: poplin list --help")],
+    ["poplin --bogus value ./report", refusal('Unknown option --bogus', "See: poplin <command> --help")],
+    ["poplin --jsno", refusal('Unknown option --jsno', "Did you mean --json?")],
+    ["poplin --json", refusal("--json requires a command or a path", "See: poplin --help")],
+    ["poplin --title list", refusal("--title requires a command or a path", "See: poplin --help")],
+    ["poplin migrate", refusal('Unknown command "migrate"', "To publish a folder of that name: poplin ./migrate")],
+    ["poplin list --trash --trash", refusal("--trash specified more than once")],
+    [`poplin set ${LABEL} --title a --title b`, refusal("--title specified more than once")],
+    [`poplin set ${LABEL} --title`, refusal("--title requires a value: --title <title>")],
     [
       `poplin set ${LABEL} --title --public`,
-      refusal("--title needs a value: --title <title>", "for a value that starts with a dash, join the two with =: --title=<title>"),
+      refusal("--title requires a value: --title <title>", "For a value starting with a dash: --title=<title>"),
     ],
     [`poplin set ${LABEL} --public=yes`, refusal("--public takes no value")],
-    [`poplin set ${LABEL} --private --public`, refusal("--private and --public cannot go together: a site has one access")],
-    ["poplin ./report --unlisted --public", refusal("--unlisted and --public cannot go together: a site has one access")],
-    [`poplin set ${LABEL}`, refusal("nothing to change: poplin set needs at least one setting", "poplin help set lists them")],
+    [`poplin set ${LABEL} --private --public`, refusal("--private and --public are mutually exclusive")],
+    ["poplin ./report --unlisted --public", refusal("--unlisted and --public are mutually exclusive")],
+    [`poplin set ${LABEL}`, refusal("poplin set requires at least one setting", "See: poplin set --help")],
     [
       `poplin set ${LABEL} --public-name docs`,
-      refusal("--public-name gives a public site its public name, so it needs --public", "poplin set <site> --public --public-name <public name>"),
+      refusal("--public-name requires --public", "Usage: poplin set <site> --public --public-name <public name>"),
     ],
-    [`poplin set ${LABEL} --search-engines yes`, refusal('--search-engines takes on or off, not "yes"')],
-    [`poplin set ${LABEL} --embeddable ON`, refusal('--embeddable takes on or off, not "ON"')],
-    [`poplin set ${LABEL} --expires 2026-02-30`, refusal('--expires takes a span, a date, or never, not "2026-02-30"', EXPIRY_FORMS)],
-    [`poplin set ${LABEL} --expires 0d`, refusal('--expires takes a span, a date, or never, not "0d"', EXPIRY_FORMS)],
-    [`poplin set ${LABEL} --expires 7w`, refusal('--expires takes a span, a date, or never, not "7w"', EXPIRY_FORMS)],
-    [`poplin set ${LABEL} --expires 2020-01-01`, refusal("--expires 2020-01-01 is not ahead: that day has started", EXPIRY_FORMS)],
-    [`poplin set ${LABEL} --expires 2026-11-01`, refusal("--expires 2026-11-01 is not ahead: that day has started", EXPIRY_FORMS)],
-    ["poplin ./demo --expires 100000000000d", refusal("--expires 100000000000d is too far ahead", EXPIRY_FORMS)],
-    ["poplin ./demo --expires 100000000d", refusal("--expires 100000000d is too far ahead", EXPIRY_FORMS)],
-    ["poplin ./demo --expires 36501d", refusal("--expires 36501d is too far ahead", EXPIRY_FORMS)],
-    ["poplin set", refusal("poplin set needs a site", "poplin set <site>")],
-    [`poplin show ${LABEL} ${SECOND_LABEL}`, refusal(`too many arguments for poplin show: "${SECOND_LABEL}"`, "poplin show <site>")],
-    ["poplin ./one ./two", refusal('too many arguments for poplin publish: "./two"', "poplin publish <path>")],
-    ["poplin list extra", refusal('too many arguments for poplin list: "extra"', "poplin list")],
-    ["poplin delete ./report", refusal('"./report" is a path. Give the site\'s label; poplin list shows it.')],
-    ["poplin delete .\\report", refusal('".\\\\report" is a path. Give the site\'s label; poplin list shows it.')],
+    [`poplin set ${LABEL} --search-engines yes`, refusal('--search-engines expects on or off, got "yes"')],
+    [`poplin set ${LABEL} --embeddable ON`, refusal('--embeddable expects on or off, got "ON"')],
+    [`poplin set ${LABEL} --expires 2026-02-30`, refusal('--expires expects a duration, a date, or never, got "2026-02-30"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 0d`, refusal('--expires expects a duration, a date, or never, got "0d"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 7w`, refusal('--expires expects a duration, a date, or never, got "7w"', EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 2020-01-01`, refusal("--expires 2020-01-01 is not a future date", EXPIRY_FORMS)],
+    [`poplin set ${LABEL} --expires 2026-11-01`, refusal("--expires 2026-11-01 is not a future date", EXPIRY_FORMS)],
+    ["poplin ./demo --expires 100000000000d", refusal("--expires 100000000000d is too long a duration", EXPIRY_FORMS)],
+    ["poplin ./demo --expires 100000000d", refusal("--expires 100000000d is too long a duration", EXPIRY_FORMS)],
+    ["poplin ./demo --expires 36501d", refusal("--expires 36501d is too long a duration", EXPIRY_FORMS)],
+    ["poplin set", refusal("Missing argument <site>", "Usage: poplin set <site>")],
+    [`poplin show ${LABEL} ${SECOND_LABEL}`, refusal(`Unexpected argument "${SECOND_LABEL}"`, "Usage: poplin show <site>")],
+    ["poplin ./one ./two", refusal('Unexpected argument "./two"', "Usage: poplin publish <path>")],
+    ["poplin list extra", refusal('Unexpected argument "extra"', "Usage: poplin list")],
+    ["poplin delete ./report", refusal('"./report" is a path, not a site. See: poplin list')],
+    ["poplin delete .\\report", refusal('".\\\\report" is a path, not a site. See: poplin list')],
     [
       "poplin show Report",
       refusal(
-        '<site> "Report" is not a site: a name holds lowercase letters, digits, and single dashes',
+        'Invalid <site> "Report": only lowercase letters, digits, and single dashes are allowed',
         SITE_FORMS,
       ),
     ],
     [
       "poplin show report--k3f9",
       refusal(
-        '<site> "report--k3f9" is not a site: the part after the two dashes is not an id of 12 lowercase letters and digits',
+        'Invalid <site> "report--k3f9": the part after -- is not an id of 12 lowercase letters and digits',
         SITE_FORMS,
       ),
     ],
     [
       "poplin show https://example.com/report.html",
-      refusal('<site> "https://example.com/report.html" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
+      refusal('Invalid <site> "https://example.com/report.html": it is a URL, but not a site URL such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
     ],
     [
       "poplin show <https://example.com/report.html>",
-      refusal('<site> "<https://example.com/report.html>" is not a site: it is an address, but not a site\'s, such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
+      refusal('Invalid <site> "<https://example.com/report.html>": it is a URL, but not a site URL such as https://report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS),
     ],
-    ["poplin show report.html", refusal('<site> "report.html" is not a site: it is not the address of a site, such as report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS)],
-    ["poplin ./report --site ./other", refusal('"./other" is a path. Give the site\'s label; poplin list shows it.')],
+    ["poplin show report.html", refusal('Invalid <site> "report.html": it is not a site URL such as report--k3f9x2ab71qz-p-poplin.example.com', SITE_FORMS)],
+    ["poplin ./report --site ./other", refusal('"./other" is a path, not a site. See: poplin list')],
     [
       `poplin ./report --site ${LABEL} --unlisted --public-name docs`,
-      refusal("--public-name gives a public site its public name, so it needs --public", "poplin set <site> --public --public-name <public name>"),
+      refusal("--public-name requires --public", "Usage: poplin set <site> --public --public-name <public name>"),
     ],
-    [`poplin set ${LABEL} --public --public-name Q3`, refusal('--public-name "Q3" is not a name: a name has at least 3 characters')],
-    [`poplin set ${LABEL} --name Q3`, refusal('--name "Q3" is not a name: a name has at least 3 characters')],
-    ["poplin ./report --name Q3", refusal('--name "Q3" is not a name: a name has at least 3 characters')],
-    [`poplin rollback ${LABEL} --to 0`, refusal('--to takes a version number such as 4, not "0"', "poplin show <site> lists the versions")],
-    [`poplin rollback ${LABEL} --to=-1`, refusal('--to takes a version number such as 4, not "-1"', "poplin show <site> lists the versions")],
-    ["poplin update --to latest", refusal("--to takes a version, such as 0.2.0", "poplin update --to 0.2.0")],
-    ["poplin update --to v0.2.0", refusal("--to takes a version, such as 0.2.0", "poplin update --to 0.2.0")],
-    ["poplin config --dry-run", refusal("poplin config changes nothing unless it is given a value: --dry-run goes with one", "poplin config versions_kept 10 --dry-run")],
-    ["poplin config trash_days --dry-run", refusal("poplin config changes nothing unless it is given a value: --dry-run goes with one", "poplin config versions_kept 10 --dry-run")],
-    ["poplin update --dry-run --to 0.2.0", refusal("--dry-run starts nothing, so it takes no --to", "poplin update --dry-run")],
-    ["poplin config versions_kep", refusal('unknown setting "versions_kep"', "did you mean versions_kept?")],
-    ["poplin config colour", refusal('unknown setting "colour"', "poplin config shows every setting")],
-    ["poplin config versions_kept 0", refusal('"0" is not a value of versions_kept', "for example: poplin config versions_kept 3")],
-    ["poplin config default_expires soon", refusal('"soon" is not a value of default_expires', "for example: poplin config default_expires never")],
-    ["poplin config versions_kept --reset", refusal('unknown flag "--reset"', "poplin help config lists the flags")],
-    ["poplin list --server=", refusal("--server needs the address of an install")],
-    ["poplin export --out=", refusal("--out needs the path of the zip to write", "poplin export --out backup.zip")],
-    ["poplin import backup.zip --users", refusal("--users replaces the logins among the settings, so it needs --settings", "poplin import <zip> --settings --users")],
-    ["poplin import backup.zip --site ./report", refusal('"./report" is a path. Give the site\'s label; poplin list shows it.')],
-    [`poplin help ${SWAPPED}`, refusal(`unknown command "${SWAPPED}"`, "Did you mean: poplin list?")],
-    ["poplin help set show", refusal('too many arguments for poplin help: "show"', "poplin help [<command>]")],
+    [`poplin set ${LABEL} --public --public-name Q3`, refusal('Invalid --public-name "Q3": the minimum is 3 characters')],
+    [`poplin set ${LABEL} --name Q3`, refusal('Invalid --name "Q3": the minimum is 3 characters')],
+    ["poplin ./report --name Q3", refusal('Invalid --name "Q3": the minimum is 3 characters')],
+    [`poplin rollback ${LABEL} --to 0`, refusal('--to expects a version number such as 4, got "0"', "See: poplin show <site>")],
+    [`poplin rollback ${LABEL} --to=-1`, refusal('--to expects a version number such as 4, got "-1"', "See: poplin show <site>")],
+    ["poplin update --to latest", refusal("--to expects a version such as 0.2.0", "Usage: poplin update --to <version>")],
+    ["poplin update --to v0.2.0", refusal("--to expects a version such as 0.2.0", "Usage: poplin update --to <version>")],
+    ["poplin config --dry-run", refusal("--dry-run requires a <value>", "Usage: poplin config <key> <value> --dry-run")],
+    ["poplin config trash_days --dry-run", refusal("--dry-run requires a <value>", "Usage: poplin config <key> <value> --dry-run")],
+    ["poplin update --dry-run --to 0.2.0", refusal("--dry-run and --to are mutually exclusive", "Usage: poplin update --dry-run")],
+    ["poplin config versions_kep", refusal('Unknown setting "versions_kep"', "Did you mean versions_kept?")],
+    ["poplin config colour", refusal('Unknown setting "colour"', "See: poplin config")],
+    ["poplin config versions_kept 0", refusal('Invalid value "0" for versions_kept', "Usage: poplin config versions_kept 3")],
+    ["poplin config default_expires soon", refusal('Invalid value "soon" for default_expires', "Usage: poplin config default_expires never")],
+    ["poplin config versions_kept --reset", refusal('Unknown option --reset', "See: poplin config --help")],
+    ["poplin list --server=", refusal("--server requires an install URL")],
+    ["poplin export --out=", refusal("--out requires a file path", "Usage: poplin export --out <file>")],
+    ["poplin import backup.zip --users", refusal("--users requires --settings", "Usage: poplin import <zip> --settings --users")],
+    ["poplin import backup.zip --site ./report", refusal('"./report" is a path, not a site. See: poplin list')],
+    [`poplin help ${SWAPPED}`, refusal(`Unknown command "${SWAPPED}"`, "Did you mean poplin list?")],
+    ["poplin help set show", refusal('Unexpected argument "show"', "Usage: poplin help [<command>]")],
   ];
 
   test.each(refused)("the mistake in `%s` is refused with what to type", (line, expected) => {
@@ -272,12 +272,12 @@ describe("parseCommand", () => {
     expect<unknown>(orders.map((line) => parseCommand(words(line), NOW))).toEqual(orders.map(() => expected));
   });
 
-  // Drift: a title the install refuses came back as "an argument is missing, unknown, or of the wrong form: title", exit 1, with no rule named, where every other flag is refused on this machine with exit 2.
+  // Drift: a title the install refuses came back as "Invalid argument: title", exit 1, with no rule named, where every other flag is refused on this machine with exit 2.
   test.each([
-    ["longer than a title may be", "x".repeat(201), "--title is 201 characters long: a title has at most 200"],
-    ["of two lines", "two\nlines", "--title holds a line break or a control character: a title is one line"],
+    ["longer than a title may be", "x".repeat(201), "--title is 201 characters, the maximum is 200"],
+    ["of two lines", "two\nlines", "--title has a line break or a control character"],
   ])("a title %s is refused before anything is sent, with the rule it breaks, on a publish and on a set alike", (_name, title, message) => {
-    const refused = refusal(message, 'a title is one line of at most 200 characters; "" is the page\'s own');
+    const refused = refusal(message, 'A title is one line of at most 200 characters. "" uses the page title.');
 
     expect<unknown>([parseCommand(["set", LABEL, "--title", title], NOW), parseCommand(["./report", "--title", title], NOW)]).toEqual([refused, refused]);
     expect(parseCommand(["set", LABEL, "--title", "x".repeat(200)], NOW)).toMatchObject({ kind: "set", settings: { title: "x".repeat(200) } });
@@ -333,7 +333,7 @@ describe("parseCommand", () => {
       { kind: "version" },
       { kind: "help", topic: "set", asked: true },
       { kind: "version" },
-      refusal(`unknown command "${SWAPPED}"`, `Did you mean: poplin list? To publish a folder with that name: poplin ./${SWAPPED}`),
+      refusal(`Unknown command "${SWAPPED}"`, `Did you mean poplin list? To publish a folder of that name: poplin ./${SWAPPED}`),
     ]);
   });
 

@@ -3,8 +3,7 @@
 // The provider is no real one: its options, its words, and its token's form are its own, so the command is proven to work through the interface alone.
 
 import type { Login } from "../../../../core/src/auth/logins";
-import type { TokenFacts } from "../../../../core/src/install/token-facts";
-import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, Whole } from "../../../../core/src/install/installer";
+import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, Whole, WorkTokenFacts } from "../../../../core/src/install/installer";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
 import type { InstallEnds } from "../../../src/install/records";
@@ -110,13 +109,14 @@ interface Options {
 }
 
 /** What the stand-in's form for a new token asks for at a place. */
-function factsAt(where: Where): TokenFacts {
+function factsAt(where: Where): WorkTokenFacts {
   return {
     tokenRights: where.kind === "place" ? ["Places: Read", "Programs: Edit"] : ["Programs: Edit"],
     tokenLink: "https://host.example.com/tokens/new?rights=chosen",
     tokenOptional: [{ right: "Rules: Edit", adds: "a guard rule" }],
     tokenNote: "The form asks which account the token is for.",
     tokenFor: where.kind === "place" ? "this account and this place" : "this account",
+    tokenByHand: where.kind === "place" ? ["Places: Read"] : [],
   };
 }
 
@@ -139,9 +139,9 @@ export interface Ran {
 function placeQuestion(account: string | undefined): Question<Where> {
   return {
     key: "where",
-    name: "where it answers",
+    name: "place",
     ask: "Your own place (example.com), or Enter for none:",
-    give: "Give --place <name> or --no-place (or POPLIN_PLACE).",
+    give: "pass --place <name> or --no-place, or set POPLIN_PLACE",
     answer: (text) => readPlace(text, account),
   };
 }
@@ -159,7 +159,7 @@ function readPlace(text: string, account: string | undefined): Read<Where> {
 function readGiven(given: Given): Read<Where> {
   const typed = given.flags.get("account") ?? given.env.POPLIN_ACCOUNT;
   const account = typeof typed === "string" ? typed : undefined;
-  if (given.flags.has("place") && given.flags.has("no-place")) return { ok: false, why: "refused", refused: "give one of --place <name> and --no-place" };
+  if (given.flags.has("place") && given.flags.has("no-place")) return { ok: false, why: "refused", refused: "--place and --no-place are mutually exclusive" };
 
   if (given.flags.has("no-place")) return readPlace("none", account);
 
@@ -173,11 +173,11 @@ function readGiven(given: Given): Read<Where> {
 export function accountQuestion(where: Where, ask = "Which account? 1) First  2) Second"): Question<Where> {
   return {
     key: "account",
-    name: "the account",
+    name: "account",
     ask,
-    give: "Give --account <id> (or POPLIN_ACCOUNT).",
+    give: "pass --account <id> or set POPLIN_ACCOUNT",
     answer: (text) => {
-      if (text !== "1" && text !== "2") return { ok: false, why: "refused", refused: "type 1 or 2" };
+      if (text !== "1" && text !== "2") return { ok: false, why: "refused", refused: "The input is not 1 or 2" };
 
       return { ok: true, where: { ...where, account: text === "1" ? "first" : "second" } };
     },

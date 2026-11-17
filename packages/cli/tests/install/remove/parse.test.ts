@@ -42,7 +42,7 @@ describe("the proof of a removal", () => {
 
   test("a line with no token and no proof names both, and --yes alone is refused in its own words: without this an agent reads --yes as a yes", () => {
     expect(read("uninstall stand-in --no-place", {})).toEqual({ missing: ["token", "confirm"] });
-    expect(read("uninstall stand-in --no-place --yes")).toEqual({ problem: "usage", exit: 2, lines: ["poplin uninstall: --yes does not confirm a removal. Give --confirm <the install's address>", "a run with --dry-run shows it"] });
+    expect(read("uninstall stand-in --no-place --yes")).toEqual({ problem: "usage", exit: 2, lines: ["--yes does not confirm an uninstall", "Fix: pass --confirm <address>, which a run with --dry-run prints"] });
   });
 
   test("on a terminal the proof is typed unless the line gave it, and a dry run asks for none: without this a person is asked to confirm a list", () => {
@@ -55,13 +55,13 @@ describe("the proof of a removal", () => {
 describe("a line that is written wrong", () => {
   // Drift: each refusal is one line a person acts on. Commander's own words would name neither the command nor the way out.
   test.each([
-    ["uninstall stand-in --no-place --dry-run --confirm poplin.example.com", ["poplin uninstall: --dry-run removes nothing: leave out --confirm"]],
-    ["uninstall stand-in --no-place --confirm=", ["poplin uninstall: --confirm takes the install's address", "a run with --dry-run shows it"]],
-    ["uninstall stand-in --no-place --force", ["poplin uninstall: no option --force", "The proof of a removal is the install's address: --confirm <address>"]],
-    ["uninstall stand-in --no-place --user you@example.com", ["poplin uninstall: no option --user", "uninstall takes no login: the install that is there says who logs in"]],
-    ["uninstall stand-in --place example.com --no-place --dry-run", ["poplin uninstall: give one of --place <name> and --no-place"]],
-    ["uninstall nowhere --dry-run", ['poplin uninstall: no provider "nowhere"', "poplin uninstall lists the providers"]],
-    ["uninstall stand-in --no-place --dry-run --token-stdin", [`poplin uninstall: the token is given twice: ${TOKEN_VARIABLE} is set, and --token-stdin was given`]],
+    ["uninstall stand-in --no-place --dry-run --confirm poplin.example.com", ["--dry-run and --confirm are mutually exclusive"]],
+    ["uninstall stand-in --no-place --confirm=", ["--confirm requires the install's address", "Fix: get the address from a run with --dry-run"]],
+    ["uninstall stand-in --no-place --force", ["Unknown option --force", "Fix: confirm with --confirm <address>"]],
+    ["uninstall stand-in --no-place --user you@example.com", ["Unknown option --user", "Fix: remove --user"]],
+    ["uninstall stand-in --place example.com --no-place --dry-run", ["--place and --no-place are mutually exclusive"]],
+    ["uninstall nowhere --dry-run", ['Unknown provider "nowhere"', "See: poplin uninstall"]],
+    ["uninstall stand-in --no-place --dry-run --token-stdin", [`${TOKEN_VARIABLE} and --token-stdin are mutually exclusive`]],
   ])("%s", (line, lines) => {
     expect(read(line)).toEqual({ problem: "usage", exit: 2, lines });
   });

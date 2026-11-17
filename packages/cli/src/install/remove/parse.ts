@@ -20,9 +20,9 @@ export const UNINSTALL_OPTIONS: readonly OptionRow[] = [
 
 /** The options a person may reach for that this command has none of, each with the line that says what to give. */
 const ELSEWHERE: Readonly<Record<string, string>> = {
-  "--force": "The proof of a removal is the install's address: --confirm <address>",
-  "--user": "uninstall takes no login: the install that is there says who logs in",
-  "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
+  "--force": "Fix: confirm with --confirm <address>",
+  "--user": "Fix: remove --user",
+  "--token": `Fix: pass --token-stdin or set ${TOKEN_VARIABLE}`,
 };
 
 /** The option of a real run alone, which a dry run refuses: a dry run removes nothing, and takes no proof. */
@@ -32,7 +32,7 @@ const RUN_ALONE = "--confirm";
 const COMMAND: CommandWords = { name: "uninstall", options: UNINSTALL_OPTIONS, elsewhere: ELSEWHERE };
 
 /** The proof a run that asks nothing lacks, as a missing answer. */
-const MISSING_PROOF: Missing = { key: "confirm", name: "the install's address, as proof you mean this one", give: "Give --confirm <address>: a run with --dry-run shows it." };
+const MISSING_PROOF: Missing = { key: "confirm", name: "confirmation", give: "pass --confirm <address>, which a run with --dry-run prints" };
 
 /** What the switches say of how the run goes: a dry run, or a run with the proof `--confirm` gave, if it gave one; and for both whether the data stays. */
 type Switches =
@@ -47,9 +47,9 @@ type Switches =
 function switchesOf(shared: Typed): Switches | Stop {
   const data = shared.has("keep-data") ? "keep" : "remove";
   const typed = shared.get("confirm");
-  if (shared.has("dry-run")) return typed === undefined ? { mode: "dry-run", data } : usage(COMMAND, `--dry-run removes nothing: leave out ${RUN_ALONE}`);
+  if (shared.has("dry-run")) return typed === undefined ? { mode: "dry-run", data } : usage(`--dry-run and ${RUN_ALONE} are mutually exclusive`);
 
-  if (typeof typed === "string" && typed.trim() === "") return usage(COMMAND, "--confirm takes the install's address", "a run with --dry-run shows it");
+  if (typeof typed === "string" && typed.trim() === "") return usage("--confirm requires the install's address", "Fix: get the address from a run with --dry-run");
 
   return { mode: "apply", given: typeof typed === "string" ? { by: "flag", typed } : undefined, data };
 }
@@ -67,12 +67,12 @@ function fixedPlan(read: Named, env: Variables, json: boolean): UninstallPlan | 
   if ("problem" in switches) return switches;
 
   const mode = fixedMode(switches);
-  if (mode === undefined && read.shared.has("yes")) return usage(COMMAND, "--yes does not confirm a removal. Give --confirm <the install's address>", "a run with --dry-run shows it");
+  if (mode === undefined && read.shared.has("yes")) return usage("--yes does not confirm an uninstall", "Fix: pass --confirm <address>, which a run with --dry-run prints");
 
   const where = read.provider.read({ flags: read.own, env });
-  if (!where.ok && where.why === "refused") return usage(COMMAND, where.refused);
+  if (!where.ok && where.why === "refused") return usage(where.refused);
 
-  const held = heldToken(read, env, COMMAND);
+  const held = heldToken(read, env);
   if (typeof held === "object") return held;
 
   const piped: GivenToken | undefined = read.shared.has("token-stdin") ? { from: "stdin" } : undefined;
@@ -93,9 +93,9 @@ function askingPlan(read: Named, env: Variables, json: boolean): UninstallPlan |
   if ("problem" in switches) return switches;
 
   const place = read.provider.read({ flags: read.own, env });
-  if (!place.ok && place.why === "refused") return usage(COMMAND, place.refused);
+  if (!place.ok && place.why === "refused") return usage(place.refused);
 
-  const token = heldToken(read, env, COMMAND);
+  const token = heldToken(read, env);
   if (typeof token === "object") return token;
 
   const mode = switches.mode === "dry-run" ? switches : ({ mode: "apply", confirm: switches.given ?? { by: "typing" }, data: switches.data } as const);

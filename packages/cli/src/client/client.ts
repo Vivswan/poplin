@@ -44,16 +44,16 @@ const REDIRECT = 300;
 const CUT_CODES: ReadonlySet<unknown> = new Set(["ECONNRESET", "UND_ERR_SOCKET"]);
 
 /** The line told when a request is sent once more. */
-const SENT_AGAIN = "the connection to the install was cut before any answer: sending the request again";
+const SENT_AGAIN = "Connection closed before a response: resending the request";
 
-/** The codes of a request that never left this computer: no name found, or no connection opened. Bun names `ENOTFOUND` and `ConnectionRefused` on the error its `fetch` throws, Node `ENOTFOUND`, `EAI_AGAIN`, and `ECONNREFUSED` on that error's `cause`. */
+/** The codes of a request that never left this machine: no name found, or no connection opened. Bun names `ENOTFOUND` and `ConnectionRefused` on the error its `fetch` throws, Node `ENOTFOUND`, `EAI_AGAIN`, and `ECONNREFUSED` on that error's `cause`. */
 const NEVER_LEFT_CODES: ReadonlySet<unknown> = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ConnectionRefused"]);
 
 /** How long a request that never left waits before it is tried once more, in milliseconds: a name a moment old is not known everywhere at once. */
 const NEVER_LEFT_PAUSE_MS = 1000;
 
 /** The line told when a request that never left is tried once more. */
-const TRIED_AGAIN = `no connection to the install: trying once more in ${NEVER_LEFT_PAUSE_MS / 1000} s`;
+const TRIED_AGAIN = `No connection to the install: retrying once in ${NEVER_LEFT_PAUSE_MS / 1000} s`;
 
 /** The status another place than the install answers a file it stored nothing of, because its ticket writes once and something is there, or because the bytes are not the ones the ticket binds. */
 const NOT_WRITTEN = 412;

@@ -100,7 +100,7 @@ async function answerOf<Name extends ToolName>(name: Name, input: unknown, host:
   try {
     return resultOf(await TOOLS[name].run(checked.output, host));
   } catch (error) {
-    const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
+    const what = error instanceof Error ? `${error.name}: ${error.message}` : "unknown failure";
 
     return resultOf({ ok: false, problem: problem("crashed", what) });
   }

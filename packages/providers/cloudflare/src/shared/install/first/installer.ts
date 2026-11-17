@@ -27,7 +27,7 @@ import { BY_NAME, INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
-import { createDomainPlug, lacksRight, rightFor, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
+import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, placeWords, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { placeBinding } from "../kind/started-place";
@@ -53,24 +53,24 @@ const OPTIONS: readonly OptionRow[] = [
 
 /** What a line of the run says, where no row of a piece's own says it. */
 const WORDS = {
-  both: "give one of --domain <name> and --no-domain",
-  noName: "--domain takes a name, such as example.com",
-  account: "--account takes an account's id: 32 characters of 0-9 and a-f",
-  domain: { "bad-domain": "is no domain name", "domain-too-long": "is too long: an address of the login under it passes 63 characters", "bad-public-word": "is no domain name" },
-  noRelease: "The project's website names no release now. Run this again in a few minutes.",
-  badRelease: "The release's files are not the ones the project published. Nothing was uploaded.",
-  newerRelease: "This release needs a newer poplin: run npx poplin@latest install",
-  noAddress: "This account has no free address yet, or one whose name is too long for the login. Open Workers & Pages in your browser and set the account's subdomain.",
+  both: "--domain and --no-domain are mutually exclusive",
+  noName: "--domain requires a domain name, such as example.com",
+  account: "--account requires an account id: 32 lowercase hex characters",
+  domain: { "bad-domain": "is not a domain name", "domain-too-long": "is too long: a login hostname under it exceeds 63 characters", "bad-public-word": "is not a domain name" },
+  noRelease: "The project website lists no release. Rerun in a few minutes.",
+  badRelease: "The release files failed validation. Nothing was uploaded.",
+  newerRelease: "This release requires a newer CLI: npx poplin@latest install",
+  noAddress: "This account has no workers.dev subdomain, or one too long for the login hostname. Set it under Workers & Pages in the Cloudflare dashboard.",
   lacks: LACKS,
-  refusedLater: "Cloudflare refused the token before the install was finished",
-  notUsed: "it is not used, and an install needs a database of this name",
-  unchecked: "its code was there before this run, and this run did not check it",
-  allowance: "the database's free allowance for the day is used up",
-  unreadUsers: "its records are not at the schema of this poplin, so the users it holds were not read, and --user is used",
+  refusedLater: "Cloudflare refused the account token before the install finished",
+  notUsed: "not reused, but an install needs a database with this name",
+  unchecked: "its code predates this run and was not checked against a release",
+  allowance: "the D1 free daily quota is exhausted",
+  unreadUsers: "its schema does not match this CLI, so its users were not read and --user is used",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
-const UNREACHABLE: Installed = { ok: false, why: "unreachable", words: "Cloudflare or the project's website gave no usable answer." };
+const UNREACHABLE: Installed = { ok: false, why: "unreachable", words: "Cloudflare or the project website gave no valid response" };
 
 /** What an install makes that no repair does, so that its token needs the permission for it. */
 const MADE_FIRST = ["R2 bucket"] as const;
@@ -122,9 +122,9 @@ function whereOf(text: string, account: string | undefined): Read<Where> {
 function whichPlace(account: string | undefined): Question<Where> {
   return {
     key: "where",
-    name: "where it answers",
-    ask: "Your own domain (example.com), or Enter for none:",
-    give: "Give --domain <name> or --no-domain (or POPLIN_DOMAIN).",
+    name: "domain",
+    ask: "Custom domain (Enter for workers.dev):",
+    give: "pass --domain <name> or --no-domain, or set POPLIN_DOMAIN",
     answer: (text) => whereOf(text, account),
   };
 }
@@ -169,7 +169,7 @@ function whyOf(failure: NotWritten): string {
 
   if (failure.failure === "allowance") return WORDS.allowance;
 
-  return failure.failure === "needs-hand" ? WORDS.newerRelease : "Cloudflare named no database";
+  return failure.failure === "needs-hand" ? WORDS.newerRelease : "Cloudflare returned no database id";
 }
 
 /** Add a row to the run and tell the command. */
@@ -299,7 +299,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
   return workerPiece(
     work,
-    { object: "Worker address", detail: target.kind === "no-domain" ? `on: ${target.layout.adminHost}` : "off: the install answers under its domain" },
+    { object: "Worker address", detail: target.kind === "no-domain" ? `on: ${target.layout.adminHost}` : "off: the install is served on its domain" },
     reads(
       () => callCloudflare(connection, (api) => new BaseSubdomain(api).get(SCRIPT, { account_id: accountId })),
       (current) => current.enabled === wanted.enabled && current.previews_enabled === wanted.previews_enabled,
@@ -361,7 +361,7 @@ async function prepared(work: Work, where: Where, reach: Reach): Promise<{ reado
 
 /** Say that the users a kept database holds were not read, and name the repair that mends the login to them, at the place of the install. */
 function unreadUsers(target: Target): string {
-  return `${WORDS.unreadUsers}. Once the install answers, ${["npx poplin doctor --repair", ...placeWords(target)].join(" ")} mends the login to the users it holds`;
+  return `${WORDS.unreadUsers}. When the install responds, ${["npx poplin doctor --repair", ...placeWords(target)].join(" ")} syncs the login to its stored users`;
 }
 
 /**
@@ -420,10 +420,10 @@ function keptUsersRow(login: Login, kept: SettingValues | undefined): Row | unde
   if (kept === undefined) return undefined;
 
   const users = kept.logins.length === 1 ? "its user" : `its ${kept.logins.length} users`;
-  const held = `The database holds ${users} already, and they are who logs in: ${namedUsers(kept.logins)}.`;
-  if (unusedLogin(login, kept) === undefined) return { object: "First login", state: "leave", detail: `${login}: a user already. ${held}` };
+  const held = `The database already has ${users}, and only they can log in: ${namedUsers(kept.logins)}.`;
+  if (unusedLogin(login, kept) === undefined) return { object: "First user", state: "leave", detail: `${login}: already a user. ${held}` };
 
-  return { object: "First login", state: "leave-out", detail: `${login}: not used. ${held}` };
+  return { object: "First user", state: "leave-out", detail: `${login}: not used. ${held}` };
 }
 
 /**
@@ -483,7 +483,11 @@ export const installer: Installer<Where, Place> = {
   token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
   read,
   placeWords,
-  facts: (where, work) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST),
+  facts: (where, work) => {
+    const [kind, also] = [where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST] as const;
+
+    return { ...tokenFacts(kind, also), tokenByHand: rightsByHand(kind, also) };
+  },
   find: (token, where, reach, work) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor, buckets: work !== "repair" }),
   install,
   remove: (found, where, removal, _reach, say) => removeInstall(found, where, removal, tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST).tokenLink, say),

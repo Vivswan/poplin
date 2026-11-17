@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { problem } from "../../src/commands/problems";
 import { pasted, runnerOf } from "../../src/local/invoked";
 
 describe("runnerOf", () => {
@@ -40,5 +41,12 @@ describe("pasted", () => {
     ["The last check of the install is over 30 days old. Open Domain and press Check.", "The last check of the install is over 30 days old. Run poplin doctor --repair --dry-run."],
   ])("a button of the dashboard is named as the command that does the same: %s", (text, worded) => {
     expect(pasted(text, "poplin")).toBe(worded);
+  });
+
+  // Drift: a hint of the problem table is reworded, the pattern of its button no longer matches, and a terminal is told to press a button it does not have.
+  test.each(["no_key", "key_refused", "lacks_right", "logins_not_ended"] as const)("the hint of %s names the repair command, and no button", (code) => {
+    const said = pasted(problem(code).hint ?? "", "poplin");
+
+    expect([said.includes("run poplin doctor --repair"), /press|Domain|dashboard/.test(said)]).toEqual([true, false]);
   });
 });

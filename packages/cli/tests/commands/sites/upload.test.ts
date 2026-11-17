@@ -77,12 +77,12 @@ interface Told {
 
 /** The line before a pause of so many seconds, after which the one file is sent for the `next` time, as a pipe is sent it. */
 function againPiped(seconds: number, next: number): string {
-  return `sending index.html again in ${seconds} s, try ${next} of 4`;
+  return `Retrying index.html in ${seconds} s, attempt ${next} of 4`;
 }
 
 /** The same line as a terminal's progress line shows it. */
 function again(seconds: number, next: number): string {
-  return `${againPiped(seconds, next)} (Ctrl-C stops)`;
+  return `${againPiped(seconds, next)} (Ctrl-C cancels)`;
 }
 
 function isPut(request: Request): boolean {
@@ -171,7 +171,7 @@ describe("upload", () => {
         command: "publish",
         moment: { matches: pathEnds("/api/uploads"), held: 1, stops: "a moment later" },
         sent: () => ["GET /api/whoami", "POST /api/uploads"],
-        err: ["the command was stopped: no site changed; an upload the install began all the same runs out by itself within a day"],
+        err: ["Cancelled: no site changed. An upload the install started anyway expires within 24 h"],
         left: [],
       },
     ],
@@ -181,7 +181,7 @@ describe("upload", () => {
         command: "publish",
         moment: { matches: isPut, held: 1, stops: "at once" },
         sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(1), "DELETE /api/uploads/:upload"],
-        err: ["the command was stopped: the upload was given up and no site changed"],
+        err: ["Cancelled: upload aborted, no site changed"],
         left: ["create abandoned"],
       },
     ],
@@ -191,7 +191,7 @@ describe("upload", () => {
         command: "publish",
         moment: { matches: isPut, held: 4, stops: "a moment later" },
         sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(4), "DELETE /api/uploads/:upload"],
-        err: ["the command was stopped: the upload was given up and no site changed"],
+        err: ["Cancelled: upload aborted, no site changed"],
         left: ["create abandoned"],
       },
     ],
@@ -201,7 +201,7 @@ describe("upload", () => {
         command: "publish",
         moment: { matches: pathEnds("/finish"), held: 1, stops: "a moment later" },
         sent: () => ["GET /api/whoami", "POST /api/uploads", ...puts(6), "POST /api/uploads/:upload/finish", "DELETE /api/uploads/:upload"],
-        err: ["the command was stopped: the upload was given up and no site changed"],
+        err: ["Cancelled: upload aborted, no site changed"],
         left: ["create abandoned"],
       },
     ],
@@ -211,7 +211,7 @@ describe("upload", () => {
         command: "duplicate",
         moment: { matches: pathEnds("/duplicate"), held: 1, stops: "a moment later" },
         sent: (label) => [`POST /api/sites/${label}/duplicate`],
-        err: ["the command was stopped", "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are"],
+        err: ["Cancelled", "The request may have arrived, so the change may have applied. See: poplin list"],
         left: [],
       },
     ],
@@ -221,7 +221,7 @@ describe("upload", () => {
         command: "duplicate",
         moment: { matches: pathEnds("/duplicate"), answered: 1, held: 1, stops: "a moment later" },
         sent: (label) => [`POST /api/sites/${label}/duplicate`, `POST /api/sites/${label}/duplicate`, "DELETE /api/uploads/:upload"],
-        err: ["the command was stopped: the copy was given up and no site was made"],
+        err: ["Cancelled: copy aborted, no site created"],
         left: ["duplicate abandoned"],
       },
     ],
@@ -251,7 +251,7 @@ describe("upload", () => {
 
     const stopped = await bench.run(folderOf("notes", SIX));
 
-    expect([stopped.code, stopped.err]).toEqual([1, ["the command was stopped: the upload could not be given up: it runs out by itself within a day, and poplin list shows whether a site changed"]]);
+    expect([stopped.code, stopped.err]).toEqual([1, ["Cancelled: the abort is unconfirmed, and an upload left open expires within 24 h. See: poplin list"]]);
     expect(bench.sent.filter((line) => line.startsWith("DELETE"))).toHaveLength(1);
   });
 
@@ -265,7 +265,7 @@ describe("upload", () => {
 
     const stopped = await bench.run(folderOf("notes", SIX));
 
-    expect([stopped.code, stopped.err]).toEqual([1, ["a file changed while it was sent", "the upload was given up and no site changed; publish again once the folder is still"]]);
+    expect([stopped.code, stopped.err]).toEqual([1, ["A file changed during the upload", "Upload aborted, no site changed. Fix: publish again once the files stop changing"]]);
     expect([(await unfinished(bench)).said, bench.sent.filter((line) => line.startsWith("DELETE")).length]).toEqual([["create abandoned"], 2]);
     expect(await stateOf(bench)).toEqual(before);
   });
@@ -350,7 +350,7 @@ describe("upload", () => {
         code: 5,
         waits: [1500, 3000, 6000],
         status: ["Publishing notes", again(2, 2), again(3, 3), again(6, 4), ""],
-        err: [`the answer is not the install's: status 502 from ${ORIGIN}`, "the upload was given up and no site changed; is that the address of your poplin install?"],
+        err: [`The response is not from a poplin install: status 502 from ${ORIGIN}`, "Upload aborted, no site changed. Fix: check that the URL is the install's"],
         out: 0,
       },
     ],
@@ -385,7 +385,7 @@ describe("upload", () => {
 
     const stopped = await bench.run(folderOf("notes", pages));
 
-    expect([stopped.code, stopped.err, sent, stopped.waits]).toEqual([1, [againPiped(2, 2), "the command was stopped: the upload was given up and no site changed"], puts, [1500]]);
+    expect([stopped.code, stopped.err, sent, stopped.waits]).toEqual([1, [againPiped(2, 2), "Cancelled: upload aborted, no site changed"], puts, [1500]]);
     expect((await unfinished(bench)).said).toEqual(["create abandoned"]);
   });
 
@@ -405,7 +405,7 @@ describe("upload", () => {
 
     const ran = await bench.run(folderOf("notes", { ...ONE, [named]: "x" }));
 
-    expect([ran.code, ran.err]).toEqual([0, ["sending [token].txt again in 2 s, try 2 of 4"]]);
+    expect([ran.code, ran.err]).toEqual([0, ["Retrying [token].txt in 2 s, attempt 2 of 4"]]);
   });
 
   // Drift: an agent that runs a publish in a pipe sees nothing for as long as the install asks it to rest, and takes the command for hung.
@@ -416,7 +416,7 @@ describe("upload", () => {
 
     const ran = await bench.run(`${folderOf("notes", SIX)} --json`);
 
-    expect([ran.code, ran.waits, ran.status, ran.err, ran.out.length]).toEqual([0, [3000], [], ["the install asks for a pause: going on in 3 s"], 1]);
+    expect([ran.code, ran.waits, ran.status, ran.err, ran.out.length]).toEqual([0, [3000], [], ["Rate limited by the install: resuming in 3 s"], 1]);
   });
 
   // Drift: the line of a rest is written over by the upload's progress; a start that is refused after its rest has no progress, and its refusal would be printed onto the end of that line.
@@ -427,7 +427,7 @@ describe("upload", () => {
 
     const ran = await bench.run(folderOf("notes", SIX), { terminal: { asks: false, progress: true } });
 
-    expect([ran.code === 0, ran.waits, ran.status]).toEqual([false, [1000], ["the install asks for a pause: going on in 1 s (Ctrl-C stops)", ""]]);
+    expect([ran.code === 0, ran.waits, ran.status]).toEqual([false, [1000], ["Rate limited by the install: resuming in 1 s (Ctrl-C cancels)", ""]]);
   });
 
   // Drift: a copy's progress line that is never cleared has "copied ..." printed onto its end, and a pipe is sent a line no one watches.
@@ -544,7 +544,7 @@ describe("upload", () => {
 
     const made = await bench.run(folderOf("notes", ONE));
 
-    expect([made.code, made.err, made.waits]).toEqual([0, ["the store did not take a file sent straight to it: sending the files through the install"], []]);
+    expect([made.code, made.err, made.waits]).toEqual([0, ["Storage rejected a direct upload. Uploading through the install instead."], []]);
     expect([asked, await notedBy(bench)]).toEqual([[{ paths: ["index.html"] }, { paths: ["index.html"], through: "install" }], [["direct_upload_refused", 1]]]);
     expect(callsOf(bench)).toEqual([
       "GET /api/whoami",
@@ -566,7 +566,7 @@ describe("upload", () => {
     const made = await bench.run(folderOf("notes", SIX));
     const turned = asked.findIndex((body) => body.through !== undefined);
 
-    expect([made.code, made.err, await notedBy(bench)]).toEqual([0, ["the store did not take a file sent straight to it: sending the files through the install"], [["direct_upload_refused", 1]]]);
+    expect([made.code, made.err, await notedBy(bench)]).toEqual([0, ["Storage rejected a direct upload. Uploading through the install instead."], [["direct_upload_refused", 1]]]);
     expect([turned >= 0, asked.slice(turned).every((body) => body.through === "install"), new Set(asked.slice(turned).flatMap((body) => body.paths)).size]).toEqual([true, true, 6]);
   });
 
@@ -589,7 +589,7 @@ describe("upload", () => {
 
     const made = await bench.run(folderOf("notes", ONE));
 
-    expect([made.code, made.out, made.err.some((line) => line.includes("a file of the publish did not arrive")), made.err.join().includes("its own word")]).toEqual([1, [], true, false]);
+    expect([made.code, made.out, made.err.some((line) => line.includes("The upload is missing a file")), made.err.join().includes("its own word")]).toEqual([1, [], true, false]);
     expect(callsOf(bench).filter((line) => line.endsWith("/finish"))).toHaveLength(3);
     expect(await stateOf(bench)).toEqual(before);
   });
@@ -601,7 +601,7 @@ describe("upload", () => {
 
     const made = await bench.run(folderOf("notes", ONE));
 
-    expect([made.code, made.waits, made.err, asked]).toEqual([0, [3000], ["the install asks for a pause: going on in 3 s"], []]);
+    expect([made.code, made.waits, made.err, asked]).toEqual([0, [3000], ["Rate limited by the install: resuming in 3 s"], []]);
   });
 
   // Drift: one answer holds a hundred tickets. A publish of more files that asked for a ticket a file would spend a request a file, as it did before tickets; one that asked for none would send nothing.
@@ -644,7 +644,7 @@ describe("upload", () => {
     expect([made.code, made.out, made.err]).toEqual([
       1,
       [],
-      ["a file changed after it was read, or was damaged on its way: index.html", "the upload was given up and no site changed; publish again once the folder is still"],
+      ["A file changed after it was read, or was corrupted in transit: index.html", "Upload aborted, no site changed. Fix: publish again once the files stop changing"],
     ]);
     expect([bench.sent.filter((line) => line.startsWith("PUT")).length, await stateOf(bench)]).toEqual([1, before]);
   });

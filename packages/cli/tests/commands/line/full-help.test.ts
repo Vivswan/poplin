@@ -51,6 +51,6 @@ describe("fullHelp", () => {
     expect<unknown>(parseCommand(["--full-help"])).toEqual({ kind: "help", asked: true, full: true });
     expect(helpText()).toContain("\n  --full-help               Show every command's help\n");
     expect([ran.code, ran.err, ran.out.length, ran.out[0]?.split(RULE)[0], ran.out[0]?.split(RULE).length]).toEqual([0, [], 1, helpText(), fullHelp([], PLAIN).split(RULE).length]);
-    expect(refused.kind === "usage-error" ? refused.message : refused.kind).toBe('unknown flag "--full-help"');
+    expect(refused.kind === "usage-error" ? refused.message : refused.kind).toBe("Unknown option --full-help");
   });
 });

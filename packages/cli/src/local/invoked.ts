@@ -1,7 +1,7 @@
 // How a line names a command a person may paste, whoever worded it: the CLI, the install, or a provider.
 //
-//   run through npx     npx poplin login --server <address>
-//   installed           poplin login --server <address>
+//   run through npx     npx poplin login --server <url>
+//   installed           poplin login --server <url>
 //
 // A text of the install or of a provider may name a button of the dashboard, which a terminal does not have: the command that does the same stands in its place.
 // The one JSON value of a command is never rewritten, so a program reads the same value however the command was started.

@@ -84,12 +84,11 @@ const [READ_MADE, READ_MENDED] = [`Release: read as ${COMMIT} after the install 
 
 /** The lines of `poplin install` on an account that holds an install, which the command says beside its value: the address with the account's own name hidden. */
 const ALREADY = [
-  `This account already holds poplin ${COMMIT}, at https://poplin.[hidden], and it is as it should be. Nothing was changed.`,
-  "The way on: npx poplin login --server https://poplin.[hidden]",
-  "  to check it   npx poplin doctor",
-  "  to mend it    npx poplin doctor --repair",
-  "  to update it  npx poplin update",
-  "  to remove it  npx poplin uninstall cloudflare",
+  `poplin ${COMMIT} is already installed at https://poplin.[hidden] and needs no repair. Nothing changed.`,
+  "Next: npx poplin login --server https://poplin.[hidden]",
+  "  check   npx poplin doctor",
+  "  update  npx poplin update",
+  "  remove  npx poplin uninstall cloudflare",
 ];
 
 /** The login, the variables, and the keys, which both kinds make alike. */
@@ -659,6 +658,14 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
       missing: {},
       uploads: [],
     });
+  });
+
+  // Drift: a row words such a refusal as "refused with status 403", and names no permission. Were the row reworded, the run would call a token's lack a failure of the product.
+  test("a refusal with status 403 that names no permission is still a lack of the token, told with the object it was refused for", async () => {
+    const standing = await standingOn(freshAccount({ refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workers/scripts/poplin/schedules`, refuseAs: { status: 403, code: 7003 } }), kind);
+    const ran = await standing.again();
+
+    expect([ran.code, ran.lines.filter((line) => line.startsWith("Sweep trigger"))]).toEqual([1, ["Sweep trigger: failed (refused with status 403 and codes 7003): needs the token permission for the Sweep trigger"]]);
   });
 
   // Drift: every line of a run is public. The commands word their rows with the install's addresses, and one of them printed whole would name the test account.

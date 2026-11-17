@@ -95,19 +95,19 @@ function asRefusal(error: unknown): string | undefined {
 
   if (error.code === MISSING) return `${quote(String(error.path))} does not exist`;
 
-  return `${quote(String(error.path))} cannot be read (${codeOf(error)})`;
+  return `cannot read ${quote(String(error.path))} (${codeOf(error)})`;
 }
 
 function defaultName(entry: string): DefaultName {
   const name = nameFromEntry(entry);
   if (name.ok) return name;
 
-  return { ok: false, reason: `no usable name, pass --name: ${quote(entry)} cannot name a site (${name.refusal})` };
+  return { ok: false, reason: `${quote(entry)} is not a valid name (${name.refusal}). Pass --name <name>.` };
 }
 
 async function publishFile(path: string, source: string): Promise<PublishFile> {
   const checked = checkFilePath(path);
-  if (!checked.ok) throw new Refusal(`the file ${quote(path)} has a name that cannot be stored (${checked.refusal}); rename or remove it`);
+  if (!checked.ok) throw new Refusal(`file ${quote(path)} has a name that cannot be stored (${checked.refusal}). Rename or remove it.`);
 
   const { size } = await fs.stat(source);
 
@@ -120,15 +120,15 @@ async function publishFile(path: string, source: string): Promise<PublishFile> {
 /** The real path a link leads to, refused unless a walk of the root could have reached that path without the link. */
 async function followLink(link: string, path: string, root: string): Promise<string> {
   const target = await fs.realpath(link).catch((error: unknown) => {
-    throw new Refusal(`the link ${quote(path)} cannot be followed (${codeOf(error)}); fix or remove it`);
+    throw new Refusal(`symlink ${quote(path)} cannot be resolved (${codeOf(error)}). Fix or remove it.`);
   });
 
   const inside = relative(root, target);
   const segments = inside.split(sep);
-  if (isAbsolute(inside) || segments[0] === "..") throw new Refusal(`the link ${quote(path)} points outside the folder, at ${quote(target)}; remove it`);
+  if (isAbsolute(inside) || segments[0] === "..") throw new Refusal(`symlink ${quote(path)} points outside the folder, to ${quote(target)}. Remove it.`);
 
   if (segments.some(isLeftOut))
-    throw new Refusal(`the link ${quote(path)} points at ${quote(inside)}, which is hidden or under ${DEPENDENCY_FOLDER}; remove it`);
+    throw new Refusal(`symlink ${quote(path)} points to ${quote(inside)}, which is hidden or under ${DEPENDENCY_FOLDER}. Remove it.`);
 
   return target;
 }
@@ -143,7 +143,7 @@ async function walk(folder: string, prefix: string, listing: Walk): Promise<void
     }
 
     const path = `${prefix}${entry.name}`;
-    if (entry.name.includes(UNDECODED)) throw new Refusal(`${quote(path)} has a name that is not valid text; rename or remove it`);
+    if (entry.name.includes(UNDECODED)) throw new Refusal(`${quote(path)} has a name with an invalid character. Rename or remove it.`);
 
     let source = join(folder, entry.name);
     let kind: { isDirectory(): boolean; isFile(): boolean } = entry;
@@ -154,13 +154,13 @@ async function walk(folder: string, prefix: string, listing: Walk): Promise<void
     }
 
     if (kind.isDirectory()) {
-      if (listing.open.has(source)) throw new Refusal(`the link ${quote(path)} loops back to a folder that holds it; remove it`);
+      if (listing.open.has(source)) throw new Refusal(`symlink ${quote(path)} loops back to a parent folder. Remove it.`);
 
       await walk(source, `${path}${KEY_SEPARATOR}`, listing);
       continue;
     }
 
-    if (!kind.isFile()) throw new Refusal(`${quote(path)} is neither a file nor a folder; remove it`);
+    if (!kind.isFile()) throw new Refusal(`${quote(path)} is not a regular file or a folder. Remove it.`);
 
     listing.files.push(await publishFile(path, source));
   }
@@ -172,9 +172,9 @@ async function listFolder(root: string): Promise<Walk> {
   const listing: Walk = { root, open: new Set(), files: [], skipped: 0 };
   await walk(root, "", listing);
 
-  if (listing.files.length === 0) throw new Refusal(`the folder ${quote(root)} holds nothing to publish; hidden files and ${DEPENDENCY_FOLDER} are never sent`);
+  if (listing.files.length === 0) throw new Refusal(`folder ${quote(root)} has no files to publish. Hidden files and ${DEPENDENCY_FOLDER} are skipped.`);
 
-  if (!listing.files.some((file) => file.path === ENTRY_PAGE)) throw new Refusal(`the folder ${quote(root)} has no ${ENTRY_PAGE} at its top`);
+  if (!listing.files.some((file) => file.path === ENTRY_PAGE)) throw new Refusal(`folder ${quote(root)} has no ${ENTRY_PAGE} at its root`);
 
   listing.files.sort(compareByBytes);
 
@@ -183,7 +183,7 @@ async function listFolder(root: string): Promise<Walk> {
 
 async function singlePage(target: string, source: string): Promise<PublishFile> {
   const named = await fs.lstat(target);
-  if (named.isSymbolicLink()) throw new Refusal(`${quote(target)} is a link, to ${quote(source)}; name the page itself`);
+  if (named.isSymbolicLink()) throw new Refusal(`${quote(target)} is a symlink to ${quote(source)}. Pass the file itself.`);
 
   return await publishFile(ENTRY_PAGE, source);
 }

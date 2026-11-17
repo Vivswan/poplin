@@ -12,7 +12,7 @@ import { type Flags, flagValue, isUsageError, looksLikePath, nearest, type Usage
 const VERSION_PATTERN = /^[1-9]\d*$/;
 
 /** What a site argument may be, for the hint of a refused one. */
-const SITE_FORMS = "a site is its label report--k3f9x2ab71qz, its id k3f9x2ab71qz, a public site's public name, or its address";
+const SITE_FORMS = "A site is a label (report--k3f9x2ab71qz), an id (k3f9x2ab71qz), a public name, or a URL.";
 
 /** The names the parser keeps back: which ones an install keeps depends on its address layout, so the install answers for them. */
 const NOTHING_RESERVED: ReadonlySet<string> = new Set();
@@ -20,16 +20,16 @@ const NOTHING_RESERVED: ReadonlySet<string> = new Set();
 /** Why core refused a name or a site, in words. A refusal missing here does not compile. */
 const REFUSALS: Readonly<Record<Refusal, string>> = {
   empty: "it is empty",
-  "too-short": "a name has at least 3 characters",
-  "too-long": "a name has at most 40 characters",
-  "bad-character": "a name holds lowercase letters, digits, and single dashes",
-  "leading-dash": "a name does not start with a dash",
-  "trailing-dash": "a name does not end with a dash",
-  "double-dash": "a name holds single dashes only",
-  reserved: "the install keeps that name for itself",
-  "bad-id": "the part after the two dashes is not an id of 12 lowercase letters and digits",
-  "no-site-url": "it is an address, but not a site's, such as https://report--k3f9x2ab71qz-p-poplin.example.com",
-  "no-site-address": "it is not the address of a site, such as report--k3f9x2ab71qz-p-poplin.example.com",
+  "too-short": "the minimum is 3 characters",
+  "too-long": "the maximum is 40 characters",
+  "bad-character": "only lowercase letters, digits, and single dashes are allowed",
+  "leading-dash": "it starts with a dash",
+  "trailing-dash": "it ends with a dash",
+  "double-dash": "it has two dashes in a row",
+  reserved: "the install reserves that name",
+  "bad-id": "the part after -- is not an id of 12 lowercase letters and digits",
+  "no-site-url": "it is a URL, but not a site URL such as https://report--k3f9x2ab71qz-p-poplin.example.com",
+  "no-site-address": "it is not a site URL such as report--k3f9x2ab71qz-p-poplin.example.com",
 };
 
 /** The flag that asks what a command would do, with nothing changed. */
@@ -118,7 +118,7 @@ function readInstall(flags: Flags): Install | UsageError {
   const server = flagValue(flags, "--server");
   if (server === undefined) return { json };
 
-  if (server === "") return usageError("--server needs the address of an install");
+  if (server === "") return usageError("--server requires an install URL");
 
   return { json, server };
 }
@@ -128,13 +128,13 @@ function readSite(raw: string, what: string): TypedSite | UsageError {
   if (reference.ok) return reference.value;
 
   // An address holds a slash and a dot as a path does, so a path is one only once it read as no site, and never when a scheme was typed.
-  if (reference.refusal !== "no-site-url" && looksLikePath(raw)) return usageError(`${JSON.stringify(raw)} is a path. Give the site's label; poplin list shows it.`);
+  if (reference.refusal !== "no-site-url" && looksLikePath(raw)) return usageError(`${JSON.stringify(raw)} is a path, not a site. See: poplin list`);
 
-  return usageError(`${what} ${JSON.stringify(raw)} is not a site: ${REFUSALS[reference.refusal]}`, SITE_FORMS);
+  return usageError(`Invalid ${what} ${JSON.stringify(raw)}: ${REFUSALS[reference.refusal]}`, SITE_FORMS);
 }
 
 function readName<Name>(flag: "--name" | "--public-name", raw: string, parsed: Checked<Name>): Name | UsageError {
-  if (!parsed.ok) return usageError(`${flag} ${JSON.stringify(raw)} is not a name: ${REFUSALS[parsed.refusal]}`);
+  if (!parsed.ok) return usageError(`Invalid ${flag} ${JSON.stringify(raw)}: ${REFUSALS[parsed.refusal]}`);
 
   return parsed.value;
 }
@@ -173,7 +173,7 @@ function withNames(flags: Flags, given: SiteSettings): SiteSettings | UsageError
   if (isUsageError(name)) return name;
 
   if (publicText !== undefined && given.access !== "public") {
-    return usageError("--public-name gives a public site its public name, so it needs --public", "poplin set <site> --public --public-name <public name>");
+    return usageError("--public-name requires --public", "Usage: poplin set <site> --public --public-name <public name>");
   }
 
   const publicName = publicText === undefined ? undefined : readName("--public-name", publicText, parsePublicName(publicText, NOTHING_RESERVED));
@@ -203,7 +203,7 @@ function planPublish(flags: Flags, given: SiteSettings): { readonly target: Publ
 
 function publish(words: Words, now: number): TypedRequest | UsageError {
   const [path = ""] = words.positionals;
-  if (path === "") return usageError("the path is empty", "to publish the current folder: poplin .");
+  if (path === "") return usageError("The path is empty", "To publish the current folder: poplin .");
 
   const given = readSiteSettings(words.flags, now);
   if (isUsageError(given)) return given;
@@ -221,7 +221,7 @@ function set(words: Words, now: number): TypedRequest | UsageError {
   const settings = withNames(words.flags, given);
   if (isUsageError(settings)) return settings;
 
-  if (Object.keys(settings).length === 0) return usageError("nothing to change: poplin set needs at least one setting", "poplin help set lists them");
+  if (Object.keys(settings).length === 0) return usageError("poplin set requires at least one setting", "See: poplin set --help");
 
   return withSite(words, (site, install) => ({ kind: "set", site, settings, dryRun: words.flags.has(DRY_RUN), ...install }));
 }
@@ -233,7 +233,7 @@ function rollback(words: Words): TypedRequest | UsageError {
 
   const version = Number(to);
   if (!VERSION_PATTERN.test(to) || !Number.isSafeInteger(version))
-    return usageError(`--to takes a version number such as 4, not ${JSON.stringify(to)}`, "poplin show <site> lists the versions");
+    return usageError(`--to expects a version number such as 4, got ${JSON.stringify(to)}`, "See: poplin show <site>");
 
   return withSite(words, (site, install) => ({ kind: "rollback", site, to: version, dryRun, ...install }));
 }
@@ -259,10 +259,10 @@ function login(words: Words): TypedRequest | UsageError {
 
 /** A check of the install with this computer's login. The options of a repair are refused here: a line that carries `--repair` is read by the repair's own parser and never comes this far. */
 function doctor(words: Words): TypedRequest | UsageError {
-  if (words.flags.has(DRY_RUN)) return usageError("poplin doctor changes nothing already: --dry-run goes with --repair");
+  if (words.flags.has(DRY_RUN)) return usageError("--dry-run requires --repair");
 
   const stray = REPAIR_ALONE.find((flag) => words.flags.has(flag));
-  if (stray !== undefined) return usageError(`${stray} goes with --repair`);
+  if (stray !== undefined) return usageError(`${stray} requires --repair`);
 
   return withInstall(words, (install) => ({ kind: "doctor", ...install }));
 }
@@ -270,20 +270,20 @@ function doctor(words: Words): TypedRequest | UsageError {
 function readConfigAction(words: Words): ConfigAction | UsageError {
   const [key, value] = words.positionals;
   const dryRun = words.flags.has(DRY_RUN);
-  if (dryRun && value === undefined) return usageError("poplin config changes nothing unless it is given a value: --dry-run goes with one", "poplin config versions_kept 10 --dry-run");
+  if (dryRun && value === undefined) return usageError("--dry-run requires a <value>", "Usage: poplin config <key> <value> --dry-run");
 
   if (key === undefined) return { kind: "show-all" };
 
   if (!isSettingKey(key)) {
     const meant = nearest(key, Object.keys(SETTING_SAMPLES));
 
-    return usageError(`unknown setting ${JSON.stringify(key)}`, meant === undefined ? "poplin config shows every setting" : `did you mean ${meant}?`);
+    return usageError(`Unknown setting ${JSON.stringify(key)}`, meant === undefined ? "See: poplin config" : `Did you mean ${meant}?`);
   }
 
   if (value === undefined) return { kind: "show", key };
 
   if (readSetting(key, value) === undefined)
-    return usageError(`${JSON.stringify(value)} is not a value of ${key}`, `for example: poplin config ${key} ${SETTING_SAMPLES[key]}`);
+    return usageError(`Invalid value ${JSON.stringify(value)} for ${key}`, `Usage: poplin config ${key} ${SETTING_SAMPLES[key]}`);
 
   return { kind: "change", key, value, dryRun };
 }
@@ -297,10 +297,10 @@ function config(words: Words): TypedRequest | UsageError {
 
 function update(words: Words): TypedRequest | UsageError {
   const to = flagValue(words.flags, "--to");
-  if (to !== undefined && !isPlainVersion(to)) return usageError("--to takes a version, such as 0.2.0", "poplin update --to 0.2.0");
+  if (to !== undefined && !isPlainVersion(to)) return usageError("--to expects a version such as 0.2.0", "Usage: poplin update --to <version>");
 
   if (words.flags.has(DRY_RUN)) {
-    if (to !== undefined) return usageError("--dry-run starts nothing, so it takes no --to", "poplin update --dry-run");
+    if (to !== undefined) return usageError("--dry-run and --to are mutually exclusive", "Usage: poplin update --dry-run");
 
     return withInstall(words, (install) => ({ kind: "update", action: { kind: "check" }, ...install }));
   }
@@ -310,7 +310,7 @@ function update(words: Words): TypedRequest | UsageError {
 
 function exportSites(words: Words): TypedRequest | UsageError {
   const out = flagValue(words.flags, "--out");
-  if (out === "") return usageError("--out needs the path of the zip to write", "poplin export --out backup.zip");
+  if (out === "") return usageError("--out requires a file path", "Usage: poplin export --out <file>");
 
   const asked = { allVersions: words.flags.has("--all-versions"), overwrite: words.flags.has("--overwrite"), ...(out === undefined ? {} : { out }) };
   const [siteText] = words.positionals;
@@ -321,11 +321,11 @@ function exportSites(words: Words): TypedRequest | UsageError {
 
 function importBackup(words: Words): TypedRequest | UsageError {
   const [zip = ""] = words.positionals;
-  if (zip === "") return usageError("the path of the zip is empty", "poplin import <zip>");
+  if (zip === "") return usageError("The zip path is empty", "Usage: poplin import <zip>");
 
   const settings = words.flags.has("--settings");
   const logins = words.flags.has("--users");
-  if (logins && !settings) return usageError("--users replaces the logins among the settings, so it needs --settings", "poplin import <zip> --settings --users");
+  if (logins && !settings) return usageError("--users requires --settings", "Usage: poplin import <zip> --settings --users");
 
   const asked = { zip, settings, logins, dryRun: words.flags.has(DRY_RUN) };
   const siteText = flagValue(words.flags, "--site");

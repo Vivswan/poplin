@@ -120,7 +120,7 @@ function permissions(path: string): number {
 }
 
 describe("loginFilePath", () => {
-  test.each(LOCATIONS)("drift: each platform has its own per-user config folder, and a wrong one strands a saved login: $name", ({ machine, path }) => {
+  test.each(LOCATIONS)("drift: each platform has its own per-user config folder, and a wrong one strands a stored login: $name", ({ machine, path }) => {
     expect(loginFilePath(machine)).toBe(path);
   });
 });
@@ -143,7 +143,7 @@ describe("parseLogin", () => {
 });
 
 describe("the login file", () => {
-  test("drift: no file is 'not logged in', and a saved login reads back as saved", async () => {
+  test("drift: no file is 'not logged in', and a stored login reads back as saved", async () => {
     using dir = scratchDir();
     const machine = machineIn(join(dir.path, "not", "made", "yet"));
 
@@ -191,8 +191,8 @@ describe("the login file", () => {
 
     const answer = await readLoginFile(machine);
 
-    expect(answer).toEqual({ state: "refused", message: expect.stringContaining("run `chmod 600` on it") });
-    expect(answer).toEqual({ state: "refused", message: expect.stringContaining("`poplin login`") });
+    expect(answer).toEqual({ state: "refused", message: expect.stringContaining("readable by other users"), fix: expect.stringContaining("chmod 600 the file") });
+    expect(answer).toEqual({ state: "refused", message: expect.any(String), fix: expect.stringContaining("poplin login") });
   });
 
   test.each(DAMAGED_FILES)("drift: a damaged file is refused whole, with the fix and without the token: $name", async ({ text }) => {
@@ -203,7 +203,7 @@ describe("the login file", () => {
 
     const answer = await readLoginFile(machine);
 
-    expect(answer).toEqual({ state: "refused", message: expect.stringContaining("run `poplin login` again") });
+    expect(answer).toEqual({ state: "refused", message: expect.stringContaining("is not a stored login"), fix: "Fix: rerun poplin login" });
     expect(JSON.stringify(answer)).not.toContain(TOKEN);
     expect(readFileSync(loginFilePath(machine), "utf8")).toBe(text);
   });
@@ -214,7 +214,7 @@ describe("the login file", () => {
 
     mkdirSync(loginFilePath(machine));
 
-    expect(await readLoginFile(machine)).toEqual({ state: "refused", message: expect.stringContaining("is not a file") });
+    expect(await readLoginFile(machine)).toEqual({ state: "refused", message: expect.stringContaining("is not a file"), fix: "Fix: remove it and rerun poplin login" });
   });
 
   test.skipIf(!HAS_MODES)("drift: opening a named pipe waits for a writer, so one where the file should be must be refused without waiting", async () => {
@@ -223,7 +223,7 @@ describe("the login file", () => {
 
     execFileSync("mkfifo", ["-m", "600", loginFilePath(machine)]);
 
-    expect(await readLoginFile(machine)).toEqual({ state: "refused", message: expect.stringContaining("is not a file") });
+    expect(await readLoginFile(machine)).toEqual({ state: "refused", message: expect.stringContaining("is not a file"), fix: "Fix: remove it and rerun poplin login" });
   });
 
   test("drift: a save that was cut short leaves its half-written file beside the login, and that file is never read", async () => {
@@ -266,7 +266,7 @@ describe("the login file", () => {
 });
 
 describe("currentLogin", () => {
-  test("drift: with no environment the saved login answers, and with none saved the answer is 'logged out'", async () => {
+  test("drift: with no environment the stored login answers, and with none saved the answer is 'logged out'", async () => {
     using dir = scratchDir();
     const machine = machineIn(dir.path);
 
@@ -282,7 +282,7 @@ describe("currentLogin", () => {
     });
   });
 
-  test("drift: CI sets both variables, and they must win over a saved login and over a damaged one", async () => {
+  test("drift: CI sets both variables, and they must win over a stored login and over a damaged one", async () => {
     using dir = scratchDir();
     const machine = machineIn(dir.path, { POPLIN_SERVER: OTHER_SERVER, POPLIN_TOKEN: OTHER_TOKEN });
     const fromEnvironment = { state: "logged-in", login: login(OTHER_SERVER, OTHER_TOKEN), source: "environment" } as const;
@@ -301,7 +301,7 @@ describe("currentLogin", () => {
   test.each([
     { set: "POPLIN_SERVER", value: OTHER_SERVER, missing: "POPLIN_TOKEN" },
     { set: "POPLIN_TOKEN", value: OTHER_TOKEN, missing: "POPLIN_SERVER" },
-  ])("drift: $set alone must not fall back to the saved login, which may be for another server", async ({ set, value, missing }) => {
+  ])("drift: $set alone must not fall back to the stored login, which may be for another server", async ({ set, value, missing }) => {
     using dir = scratchDir();
     const machine = machineIn(dir.path, { [set]: value });
 
@@ -309,7 +309,7 @@ describe("currentLogin", () => {
 
     const answer = await currentLogin(machine);
 
-    expect(answer).toEqual({ state: "refused", message: expect.stringContaining(`set ${missing} too`) });
+    expect(answer).toEqual({ state: "refused", message: expect.stringContaining(`without ${missing}`), fix: expect.stringContaining(`set ${missing} too`) });
     expect(JSON.stringify(answer)).not.toContain(OTHER_TOKEN);
   });
 
@@ -317,7 +317,7 @@ describe("currentLogin", () => {
     { name: "a server with a path", env: { POPLIN_SERVER: `${OTHER_SERVER}/mcp`, POPLIN_TOKEN: OTHER_TOKEN } },
     { name: "a server over http", env: { POPLIN_SERVER: "http://other.example.com", POPLIN_TOKEN: OTHER_TOKEN } },
     { name: "a token with a space", env: { POPLIN_SERVER: OTHER_SERVER, POPLIN_TOKEN: `${OTHER_TOKEN} ` } },
-  ])("drift: variables that are not a login are refused by name, never passed to the saved login: $name", async ({ env }) => {
+  ])("drift: variables that are not a login are refused by name, never passed to the stored login: $name", async ({ env }) => {
     using dir = scratchDir();
     const machine = machineIn(dir.path, env);
 
@@ -325,7 +325,7 @@ describe("currentLogin", () => {
 
     const answer = await currentLogin(machine);
 
-    expect(answer).toEqual({ state: "refused", message: expect.stringContaining("POPLIN_SERVER and POPLIN_TOKEN are not a login") });
+    expect(answer).toEqual({ state: "refused", message: expect.stringContaining("POPLIN_SERVER and POPLIN_TOKEN are invalid"), fix: expect.stringContaining("set both again") });
     expect(JSON.stringify(answer)).not.toContain(OTHER_TOKEN);
   });
 
@@ -335,6 +335,6 @@ describe("currentLogin", () => {
 
     writeFileSync(loginFilePath(machine), "{", { mode: 0o600 });
 
-    expect(await currentLogin(machine)).toEqual({ state: "refused", message: expect.stringContaining("run `poplin login` again") });
+    expect(await currentLogin(machine)).toEqual({ state: "refused", message: expect.any(String), fix: "Fix: rerun poplin login" });
   });
 });

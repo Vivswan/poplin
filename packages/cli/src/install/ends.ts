@@ -108,7 +108,7 @@ function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<s
  */
 export function processEnds(io: Io): InstallEnds {
   const sleep = async (milliseconds: number): Promise<void> => {
-    if ((await io.pause(milliseconds)) === "interrupted") throw new Error("the command was stopped");
+    if ((await io.pause(milliseconds)) === "interrupted") throw new Error("the command was interrupted");
   };
 
   return {
@@ -126,7 +126,7 @@ export function processEnds(io: Io): InstallEnds {
 
 /** Say why the command stopped before its work was done, and choose its exit code. A program reads `ready` of a stop that came after the plan as it does of a run. */
 export function stopped(stop: Stop, show: Show, at: StoppedAt): number {
-  for (const line of stopLines(stop, at.provider, at.command.name)) show.aside(line.tone, line.text);
+  for (const line of stopLines(stop, at.provider)) show.aside(line.tone, line.text);
 
   const place = ELSEWHERE.has(stop.problem) ? [] : (at.place ?? []);
   const value = stopValue(stop, at.command.again(at.provider, at.careful, place));
@@ -156,7 +156,7 @@ async function picked(providers: readonly Provider[], ends: InstallEnds): Promis
   if (others.length === 0) return first;
 
   const id = await ends.screen.choose(
-    "Where?",
+    "Provider:",
     providers.map((one) => ({ value: one.id, label: one.name, hint: one.about })),
   );
 
@@ -178,7 +178,7 @@ async function answered<Planned>(line: Line<Planned>, parsed: Parsed<Planned>, p
   }
 
   const show = showOf(parsed.kind === "plan" ? command.json(parsed.plan) : parsed.json, io, ends, secrets);
-  if (providers.length === 0) return stopped({ problem: "no_provider", exit: 1, lines: [`this build of poplin carries no provider to ${name} at`, `install the published package: npx poplin ${name}`] }, show, line);
+  if (providers.length === 0) return stopped({ problem: "no_provider", exit: 1, lines: ["This build of poplin includes no provider", `Fix: use the published package: npx poplin ${name}`] }, show, line);
 
   if (parsed.kind === "list") return list(command, providers, parsed.json, io);
 
@@ -210,8 +210,10 @@ export async function runCommand<Planned>(command: CommandRun<Planned>, words: r
     return await answered(line, command.parse(words, providers, io.machine.env, io.terminal.asks), providers, io, ends, secrets);
   } catch (error) {
     const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
-    const said = io.stopped.aborted ? "the command was stopped. Run it again: it goes on from what stands." : `poplin ${command.name} failed in a way it has no word for: ${what}. Run it again: it goes on from what stands.`;
+    const show = showOf(words.includes("--json"), io, ends, secrets);
+    const code = stopped(io.stopped.aborted ? { problem: "stopped", exit: 1, words: "Cancelled" } : { problem: "crashed", exit: 1, words: `Unexpected error: ${what}` }, show, line);
+    show.aside("plain", "Rerun to resume");
 
-    return stopped({ problem: io.stopped.aborted ? "stopped" : "crashed", exit: 1, words: said }, showOf(words.includes("--json"), io, ends, secrets), line);
+    return code;
   }
 }

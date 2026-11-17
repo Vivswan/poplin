@@ -32,10 +32,10 @@ const hangs: Fetch = (_input, init) => new Promise((_resolve, reject) => init.si
 const NOT_THERE = { kind: "refused", status: 404, code: "not_found", message: "there is no such thing here" } as const;
 
 /** The line a request that is sent once more is told with. */
-const SENT_AGAIN = "the connection to the install was cut before any answer: sending the request again";
+const SENT_AGAIN = "Connection closed before a response: resending the request";
 
 /** The line a request that never left is told with when it is tried once more. */
-const TRIED_AGAIN = "no connection to the install: trying once more in 1 s";
+const TRIED_AGAIN = "No connection to the install: retrying once in 1 s";
 
 /** One request of each kind a cut may meet: a read, the begin of an upload, a change, a file, and a download. */
 const ASKS = {

@@ -27,17 +27,17 @@ const HASHED_AT_ONCE = 4;
 const NAME_TAKEN = "name_taken";
 
 /** What to do about a taken public name on a publish. */
-const ANOTHER_NAME = "to pick another: publish again with --public-name <public name>";
+const ANOTHER_NAME = "Fix: publish again with --public-name <public name>";
 
 /** What became of a publish that was stopped while its files were read. */
-const STOPPED_UNSENT = "nothing was sent and no site changed";
+const STOPPED_UNSENT = "nothing uploaded, no site changed";
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
-  abandoned: "the upload was given up and no site changed",
-  unknown: "the upload could not be given up: it runs out by itself within a day, and poplin list shows whether a site changed",
-  live: "the publish went live all the same, and its answer was lost; poplin list shows the site",
-  unbegun: "no site changed; an upload the install began all the same runs out by itself within a day",
+  abandoned: "upload aborted, no site changed",
+  unknown: "the abort is unconfirmed, and an upload left open expires within 24 h. See: poplin list",
+  live: "the publish went live but the response was lost. See: poplin list",
+  unbegun: "no site changed. An upload the install started anyway expires within 24 h",
 } as const;
 
 /** The `publish` command as the parser read it. */
@@ -71,7 +71,7 @@ interface Progress {
 }
 
 function summary(plan: PublishPlan): string {
-  const skipped = plan.skipped === 0 ? "" : ` (${plan.skipped} skipped as hidden or node_modules)`;
+  const skipped = plan.skipped === 0 ? "" : ` (${plan.skipped} skipped: hidden or node_modules)`;
 
   return `${countText(plan.files.length, "file")}, ${showBytes(plan.bytes)}${skipped}`;
 }
@@ -117,7 +117,7 @@ async function declare(files: readonly PublishFile[], stopped: AbortSignal): Pro
 
   const declared = settled.flatMap((file) => (file.status === "fulfilled" ? [file.value] : []));
   const unread = files[settled.findIndex((file) => file.status === "rejected")];
-  if (unread !== undefined) return { ok: false, problem: problem("unreadable", `${JSON.stringify(unread.path)} cannot be read`) };
+  if (unread !== undefined) return { ok: false, problem: problem("unreadable", `cannot read ${JSON.stringify(unread.path)}`) };
 
   return { ok: true, declared };
 }
@@ -125,8 +125,8 @@ async function declare(files: readonly PublishFile[], stopped: AbortSignal): Pro
 function published(plan: PublishPlan, answer: Published): Outcome {
   const { site } = answer;
   const facts = site.created ? [] : [`version ${site.live_version}`];
-  const sent = doneRows([{ tone: "done", done: "sent", what: summary(plan) }]);
-  const lines = [...sent, ...siteLines(site.created ? "made" : "updated", site, facts, addressChange(answer.before, site))];
+  const sent = doneRows([{ tone: "done", done: "uploaded", what: summary(plan) }]);
+  const lines = [...sent, ...siteLines(site.created ? "created" : "updated", site, facts, addressChange(answer.before, site))];
 
   return { ok: true, value: answer, lines, notes: searchNotes(plan.manifest, site) };
 }
@@ -190,13 +190,13 @@ export async function planPublish(request: PublishRequest, stopped: AbortSignal)
  */
 export function previewPublish(plan: PublishPlan, addressRead: boolean): Outcome {
   const { files, ...asked } = plan.manifest;
-  const target = asked.site === undefined ? `would make a new site named ${asked.name}` : `would update ${asked.site}`;
+  const target = asked.site === undefined ? ["would create", `${asked.name}`] : ["would update", `${asked.site}`];
   const rows = files.map((file) => [`  ${file.path}`, showBytes(file.size), file.content_type]);
 
   return {
     ok: true,
     value: { dry_run: true, ...asked, count: files.length, bytes: plan.bytes, skipped: plan.skipped, files },
-    lines: [target, `would upload ${summary(plan)}`, ...columns(rows), dryRunText(addressRead)],
+    lines: [...columns([target, ["would upload", summary(plan)]]), ...columns(rows), dryRunText(addressRead)],
   };
 }
 

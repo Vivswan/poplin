@@ -10,7 +10,7 @@ import type { CloudflareFailure } from "../client";
 import type { Mode } from "../sync";
 
 /** What a row says before the permission a token lacks. */
-export const LACKS = "The token lacks a permission. Add this one";
+export const LACKS = "The account token lacks this permission";
 
 /** The states of a row that leave a run not done. */
 export const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);

@@ -87,19 +87,19 @@ const TOKENS_PAGE = "https://dash.cloudflare.com/profile/api-tokens";
 
 /** What a line says, where no object's own name says it. */
 const WORDS = {
-  lacks: "the token lacks a permission. Add this one",
-  optional: "the token lacks an optional permission, so this was not looked for. If the install has one, delete it by hand, or add this one",
-  workerStands: "the Worker still stands: it goes first",
-  applicationsStand: "an application still stands: it goes first",
-  notOwn: "not this install's: the Worker is bound to another",
-  stays: "it stays",
-  strangers: "a Worker of this name is not poplin's, and stays",
-  othersRules: "it holds rules that are not poplin's, and stays",
-  bots: "the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
+  lacks: "the account token lacks this permission",
+  optional: "the account token lacks an optional permission, so this was not checked. If the install has one, delete it manually, or add the permission",
+  workerStands: "the Worker must be removed first",
+  applicationsStand: "an Access application must be removed first",
+  notOwn: "not this install's: the Worker binds another",
+  stays: "left in place",
+  strangers: "a Worker with this name is not poplin's and is left in place",
+  othersRules: "it has rules that are not poplin's and is left in place",
+  bots: "AI crawler blocking and Bot Fight Mode are zone settings and keep their values",
   token: `delete it at Cloudflare: ${TOKENS_PAGE}`,
-  unreachable: "Cloudflare gave no usable answer. Nothing was removed.",
-  notConfirmed: "What was typed is not this install's",
-  changed: "The account changed since it was looked at. Run this again. Nothing was removed.",
+  unreachable: "Cloudflare gave no valid response. Nothing changed.",
+  notConfirmed: "The confirmation does not match",
+  changed: "The account changed after it was checked. Rerun this command. Nothing changed.",
 } as const;
 
 /** The row of a kind of rule, or of the ruleset poplin makes for it. */
@@ -468,7 +468,7 @@ async function removeDatabase(work: Work, why: { readonly boundId: string | unde
   const { connection, accountId } = work.place;
   const name = INSTALL_OBJECTS.database;
   const found = await syncDatabase(connection, accountId, "plan");
-  if (!found.ok) return found.failure === "no-id" ? note(work, { object: "Database", state: "fail", detail: "Cloudflare named no database" }) : failed(work, "Database", found);
+  if (!found.ok) return found.failure === "no-id" ? note(work, { object: "Database", state: "fail", detail: "Cloudflare returned no database id" }) : failed(work, "Database", found);
 
   const { id } = found;
   if (id === undefined) return true;
@@ -536,7 +536,7 @@ function otherPlace(found: Removable<Place>, where: Where): string | undefined {
 
   const named = where.kind === "domain" ? `under ${where.layout.domain}` : "without a domain";
 
-  return `The install in this account answers at ${found.address}, and that is none ${named}. Say where it is with --domain <name> or --no-domain. Nothing was removed.`;
+  return `The install in this account is at ${found.address}, not ${named}. Pass the matching --domain <name> or --no-domain. Nothing changed.`;
 }
 
 /** What points at the Worker, by the kind of install: the zone's routes, records, and rules, or the two forwarders. */
@@ -572,7 +572,7 @@ export async function removeInstall(found: Removable<Place>, where: Where, remov
   if (other !== undefined) return { ok: false, why: "other_place", words: other };
 
   const confirm = confirmOf(found);
-  if (removal.run === "apply" && typedOf(removal.confirmed) !== confirm) return { ok: false, why: "not_confirmed", words: `${WORDS.notConfirmed}: this install is ${confirm}. Nothing was removed.` };
+  if (removal.run === "apply" && typedOf(removal.confirmed) !== confirm) return { ok: false, why: "not_confirmed", words: `${WORDS.notConfirmed} ${confirm}. Nothing changed.` };
 
   const zone = await zoneOf(place, where);
   if (!zone.ok) return { ok: false, why: "unreachable", words: WORDS.unreachable };

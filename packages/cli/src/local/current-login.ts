@@ -12,14 +12,14 @@ const SERVER = "POPLIN_SERVER";
 /** The variable the login's token is read from. */
 const TOKEN = TOKEN_VARIABLES.login;
 
-/** Who the command is talking to. `source` says where a login came from; `refused` carries a message that names the fix. */
+/** Who the command is talking to. `source` says where a login came from; `refused` carries what is wrong and the line that names the fix. */
 type CurrentLogin =
   | { readonly state: "logged-in"; readonly login: Login; readonly source: "environment" | "file" }
   | { readonly state: "logged-out" }
-  | { readonly state: "refused"; readonly message: string };
+  | { readonly state: "refused"; readonly message: string; readonly fix: string };
 
-function refuse(message: string): { readonly state: "refused"; readonly message: string } {
-  return { state: "refused", message };
+function refuse(message: string, fix: string): { readonly state: "refused"; readonly message: string; readonly fix: string } {
+  return { state: "refused", message, fix: `Fix: ${fix}` };
 }
 
 /** A variable's value, with an empty one counted as not set. */
@@ -32,7 +32,7 @@ function setting(machine: Machine, name: string): string | undefined {
 function fromEnvironment(server: string, token: string): CurrentLogin {
   const parsed = parseLogin({ server, token });
 
-  if (!parsed.ok) return refuse(`${SERVER} and ${TOKEN} are not a login (${parsed.problem}); set both again, or unset both to use the saved login`);
+  if (!parsed.ok) return refuse(`${SERVER} and ${TOKEN} are invalid: ${parsed.problem}`, "set both again, or unset both to use the stored login");
 
   return { state: "logged-in", login: parsed.login, source: "environment" };
 }
@@ -49,9 +49,9 @@ export async function currentLogin(machine: Machine = thisMachine()): Promise<Cu
 
   if (server !== undefined && token !== undefined) return fromEnvironment(server, token);
 
-  if (server !== undefined) return refuse(`${SERVER} is set and ${TOKEN} is not; set ${TOKEN} too, or unset ${SERVER} to use the saved login`);
+  if (server !== undefined) return refuse(`${SERVER} is set without ${TOKEN}`, `set ${TOKEN} too, or unset ${SERVER} to use the stored login`);
 
-  if (token !== undefined) return refuse(`${TOKEN} is set and ${SERVER} is not; set ${SERVER} too, or unset ${TOKEN} to use the saved login`);
+  if (token !== undefined) return refuse(`${TOKEN} is set without ${SERVER}`, `set ${SERVER} too, or unset ${TOKEN} to use the stored login`);
 
   const saved = await readLoginFile(machine);
 

@@ -16,10 +16,10 @@ const ACCESS_FLAGS = [
 ] as const;
 
 /** What `--expires` takes, for the hint of a refused one. */
-const EXPIRY_FORMS = "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01";
+const EXPIRY_FORMS = "A duration is a count of s, m, h, or d, such as 7d. A date is written 2026-12-01.";
 
 /** What `--title` takes, for the hint of a refused one. */
-const TITLE_FORM = `a title is one line of at most ${MAX_TITLE_LENGTH} characters; "" is the page's own`;
+const TITLE_FORM = `A title is one line of at most ${MAX_TITLE_LENGTH} characters. "" uses the page title.`;
 
 /** A time span as core counts one: a count of seconds, minutes, hours, or days. */
 type Span = Exclude<SettingValues["default_expires"], "never">;
@@ -43,7 +43,7 @@ function readSwitch(flags: Flags, name: string): boolean | undefined | UsageErro
   if (word === undefined) return undefined;
 
   // Core reads `on` and `off` for the switch a new site gets, and a site's own switches are typed the same way.
-  return readSetting("default_search_engines", word) ?? usageError(`${name} takes on or off, not ${JSON.stringify(word)}`);
+  return readSetting("default_search_engines", word) ?? usageError(`${name} expects on or off, got ${JSON.stringify(word)}`);
 }
 
 function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError {
@@ -54,7 +54,7 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
   const taken = readExpires(when, now) !== undefined;
 
   if (dayStart(when) !== undefined) {
-    if (!taken) return usageError(`--expires ${when} is not ahead: that day has started`, EXPIRY_FORMS);
+    if (!taken) return usageError(`--expires ${when} is not a future date`, EXPIRY_FORMS);
 
     return { kind: "date", date: when };
   }
@@ -65,9 +65,9 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
   if (span !== undefined && taken) return { kind: "span", span };
 
   // A span in its form that core does not take is longer than a span may be.
-  if (isSpan(when)) return usageError(`--expires ${when} is too far ahead`, EXPIRY_FORMS);
+  if (isSpan(when)) return usageError(`--expires ${when} is too long a duration`, EXPIRY_FORMS);
 
-  return usageError(`--expires takes a span, a date, or never, not ${JSON.stringify(when)}`, EXPIRY_FORMS);
+  return usageError(`--expires expects a duration, a date, or never, got ${JSON.stringify(when)}`, EXPIRY_FORMS);
 }
 
 /** Read `--title` by core's own rule of a typed title, so a title the install would refuse is refused here, with the rule it breaks. */
@@ -77,9 +77,9 @@ function readTitle(flags: Flags): string | null | undefined | UsageError {
 
   if (title === "") return null;
 
-  if (title.length > MAX_TITLE_LENGTH) return usageError(`--title is ${title.length} characters long: a title has at most ${MAX_TITLE_LENGTH}`, TITLE_FORM);
+  if (title.length > MAX_TITLE_LENGTH) return usageError(`--title is ${title.length} characters, the maximum is ${MAX_TITLE_LENGTH}`, TITLE_FORM);
 
-  if (!v.is(TITLE_TEXT, title)) return usageError("--title holds a line break or a control character: a title is one line", TITLE_FORM);
+  if (!v.is(TITLE_TEXT, title)) return usageError("--title has a line break or a control character", TITLE_FORM);
 
   return title;
 }
@@ -88,7 +88,7 @@ function readAccess(flags: Flags): SiteSettings["access"] | UsageError {
   const given = ACCESS_FLAGS.filter(([flag]) => flags.has(flag));
   const [first, second] = given;
 
-  if (first !== undefined && second !== undefined) return usageError(`${first[0]} and ${second[0]} cannot go together: a site has one access`);
+  if (first !== undefined && second !== undefined) return usageError(`${first[0]} and ${second[0]} are mutually exclusive`);
 
   return first?.[1];
 }

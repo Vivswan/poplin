@@ -20,20 +20,20 @@ import { afterRemoval, listedLines, removalLine, removalValue, removedLines, unl
 /** The command as it is typed after `poplin`, what runs it again, and the careful choices it takes. */
 const COMMAND = { name: "uninstall", again: NEXT.uninstall, careful: ["--keep-data", "--dry-run"] } as const;
 
-/** What the look for an install is called while it runs and in its line. */
-const LOOKING = "looking for an install";
+/** What the look for an install is called while it runs. */
+const LOOKING = "Checking the account for an install";
 
 /** What ends the line of every stop here. */
-const UNTOUCHED = "Nothing was removed.";
+const UNTOUCHED = "Nothing changed.";
 
 /** What a run that met nothing to remove says is there: nothing of an install, or with a run told to keep the data, the data alone. */
-const NOTHING = { none: "No install is in this account.", data: "Only the data is left here, and --keep-data keeps it." } as const;
+const NOTHING = { none: "This account has no install.", data: "Only the data remains, and --keep-data keeps it." } as const;
 
 /** The states of a row that is nothing a removal does or was to do: it stays, is kept, or is not this install's. */
 const UNTOUCHED_STATES: readonly RemovalRow["state"][] = ["stay", "keep", "skip"];
 
 /** The stop of a run whose person ended a question, which is before any removal. */
-const ENDED: Stop = { problem: "stopped", exit: 1, words: `stopped. ${UNTOUCHED}` };
+const ENDED: Stop = { problem: "stopped", exit: 1, words: `Cancelled. ${UNTOUCHED}` };
 
 /** What a removal starts from, with the place the provider was last asked about. */
 interface Ground {
@@ -54,7 +54,7 @@ async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<Uninstal
   const { provider, json } = plan;
 
   if (plan.asking === "never") {
-    const token = await givenToken(plan.token, provider, ends.input, COMMAND.name);
+    const token = await givenToken(plan.token, provider, ends.input);
 
     return typeof token === "object" ? { stop: token, place: placeOf(provider, plan.where) } : { provider, json, asking: "never", mode: plan.mode, where: plan.where, token };
   }
@@ -67,13 +67,13 @@ async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<Uninstal
   return token === undefined ? { stop: ENDED, place: placeOf(provider, where.where) } : { provider, json, asking: "terminal", mode: plan.mode, where: where.where, token };
 }
 
-/** What a look found, in the line that says so. */
-function foundWords(found: Found<unknown, unknown>): string {
-  if (found.state === "whole") return `found: ${runningWords(found.version)}, at ${found.address}`;
+/** What a look found that a removal goes on from, in the line that says so; `undefined` for a state the stop or the question that follows says. */
+function foundWords(found: Found<unknown, unknown>): string | undefined {
+  if (found.state === "whole") return `${runningWords(found.version)} is installed at ${found.address}`;
 
-  const words = { none: "none that is whole", leftover: "none, but something was left behind", started: "one that was started and not finished", held: "a name is held", blocked: "blocked", choice: "more than one place", refused: "no" } as const;
+  if (found.state === "started") return "This account has an incomplete install";
 
-  return words[found.state];
+  return found.state === "leftover" ? "This account has no install, only resources with poplin's names" : undefined;
 }
 
 /** The stop a look that found nothing a removal can start from is. */
@@ -91,7 +91,10 @@ function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held"
 async function look(request: UninstallRequest, ends: InstallEnds, show: Show): Promise<Ground | Stop> {
   const looked = await lookFor({ ...request, work: "remove" }, ends, {
     looking: () => show.working(LOOKING),
-    found: (found) => show.line(found.state === "whole" ? "note" : "warning", `${LOOKING} ... ${foundWords(found)}`),
+    found: (found) => {
+      const words = foundWords(found);
+      if (words !== undefined) show.line(found.state === "whole" ? "note" : "warning", words);
+    },
   });
   if ("problem" in looked) return looked;
 
@@ -106,7 +109,7 @@ async function look(request: UninstallRequest, ends: InstallEnds, show: Show): P
  * @param show - shows each row: as a result, or beside it where the list only precedes the question of the proof
  */
 async function removal(ground: Ground, request: UninstallRequest, how: Removal, ends: InstallEnds, show: Pick<Show, "working" | "line">): Promise<Listed | Stop> {
-  const doing = how.run === "dry-run" ? "reading what a run would remove" : "removing the install";
+  const doing = how.run === "dry-run" ? "Planning the removal" : "Removing the install";
   show.working(doing);
 
   const removed = await request.provider.remove(ground.found, ground.where, how, ends.reach, (row: RemovalRow) => {
@@ -122,23 +125,23 @@ async function removal(ground: Ground, request: UninstallRequest, how: Removal, 
   const there = removed.rows.some((row) => row.state === "keep") ? NOTHING.data : NOTHING.none;
   const careful = choicesOf(request.mode);
   const unlooked = unlookedWords(removed, how.run, careful);
-  const words = unlooked === undefined ? `${there} ${UNTOUCHED}` : `${there} ${unlooked} ${UNTOUCHED}`;
+  const words = unlooked === undefined ? `${there} ${UNTOUCHED}` : followed(`${there} ${unlooked}`, UNTOUCHED);
 
   return { problem: "no_install", exit: 1, words, next: afterRemoval(removed, how.run, NEXT.uninstall(request.provider, careful, placeOf(request.provider, ground.where))) };
 }
 
 /** Warn, then take the proof: what the person types once they saw what goes. `undefined` once they ended the question, or typed nothing. */
-async function typedProof(listed: Listed, data: "remove" | "keep", ends: InstallEnds, show: Show): Promise<string | undefined> {
-  for (const line of warningLines(listed, data)) show.aside(line.tone, line.text);
+async function typedProof(listed: Listed, ends: InstallEnds, show: Show): Promise<string | undefined> {
+  for (const line of warningLines(listed)) show.aside(line.tone, line.text);
 
-  const typed = await ends.screen.ask(`Type ${listed.confirm} to go on:`);
+  const typed = await ends.screen.ask(`Type ${listed.confirm} to confirm:`);
 
   return typed === undefined || typed.trim() === "" ? undefined : typed;
 }
 
 function ended(removed: Listed, run: Run, ground: Ground, request: UninstallRequest, show: Show): number {
   const careful = choicesOf(request.mode);
-  const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, request.provider, careful);
+  const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, careful);
   for (const line of lines) show.line(line.tone, line.text, line.hang);
 
   show.value(removalValue(removed, run, ground.found.state, NEXT.uninstall(request.provider, carried(careful, removed.ready), placeOf(request.provider, ground.where))));
@@ -166,7 +169,7 @@ async function work(request: UninstallRequest, ends: InstallEnds, show: Show): P
 
   if (mode.mode === "dry-run") return ended(listed, "dry-run", ground, request, show);
 
-  const typed = await typedProof(listed, mode.data, ends, show);
+  const typed = await typedProof(listed, ends, show);
 
   return typed === undefined ? stopped(ENDED, show, at) : remove(typed, mode.data);
 }

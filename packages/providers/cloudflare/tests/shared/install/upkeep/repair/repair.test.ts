@@ -21,8 +21,8 @@ const KEY = tokenOf(TOKEN);
 
 /** The two kinds of install: where each goes, the other kind's place, and the dashboard's address. */
 const KINDS = {
-  domain: { where: placeOf([["domain", "example.com"]]), other: placeOf([["no-domain", true]]), address: "https://poplin.example.com", elsewhere: "The install here is under the domain example.com: give --domain example.com." },
-  "no-domain": { where: placeOf([["no-domain", true]]), other: placeOf([["domain", "example.com"]]), address: "https://poplin.example.workers.dev", elsewhere: "The install here has no domain: give --no-domain." },
+  domain: { where: placeOf([["domain", "example.com"]]), other: placeOf([["no-domain", true]]), address: "https://poplin.example.com", elsewhere: "This install is under example.com. Pass --domain example.com." },
+  "no-domain": { where: placeOf([["no-domain", true]]), other: placeOf([["domain", "example.com"]]), address: "https://poplin.example.workers.dev", elsewhere: "This install has no domain. Pass --no-domain." },
 } as const;
 
 /** A dry run, and a run. */
@@ -32,7 +32,7 @@ const [DRY, APPLY]: readonly [Run, Run] = ["dry-run", "apply"];
 const UPDATE = { update: true } as const;
 
 /** What a repair says of an install of a newer release than the newest this poplin reads, before the command it names. */
-const NEWER = `The install runs 0.4.0, and the newest release this poplin reads is ${RELEASE}. Nothing is put back to an older release.`;
+const NEWER = `The install runs 0.4.0, newer than the latest release this CLI knows, ${RELEASE}. Nothing is downgraded.`;
 
 /** The option of each kind's place, as a sentence that names a command carries it. */
 const PLACED = { domain: "--domain example.com", "no-domain": "--no-domain" } as const;
@@ -62,7 +62,7 @@ const FOLLOWS: Readonly<Record<keyof typeof KINDS, readonly (readonly [string, s
 const ADD_CALLS = [`GET /accounts/${ACCOUNT}/access/policies`, `PUT /accounts/${ACCOUNT}/access/policies/made-1`, `POST /accounts/${ACCOUNT}/d1/database/made-0/query`];
 
 /** What the row of a user says where the token may not write the login. */
-const LACKS_ACCESS = "User | block | lost@example.com: The token lacks a permission. Add this one: Access: Apps and Policies: Edit";
+const LACKS_ACCESS = "User | block | lost@example.com: The account token lacks this permission: Access: Apps and Policies: Edit";
 
 /** The kinds, for a test of each. */
 const BOTH = Object.keys(KINDS) as (keyof typeof KINDS)[];
@@ -273,9 +273,9 @@ describe.each(BOTH)("the release an install runs, where Cloudflare tags no versi
 
     expect(account.versions.map((version) => (version.annotations as { readonly "workers/tag"?: string } | undefined)?.["workers/tag"])).toEqual([undefined, RELEASE, RELEASE]);
     expect([shown(done)[0], changes, shown((await repaired(account, kind)).done)[0]]).toEqual([
-      "Worker | leave | poplin: its version is not read, so no release is put in place",
+      "Worker | leave | poplin: its version is unknown, so no release is deployed",
       [],
-      "Worker | leave | poplin: its version is not read",
+      "Worker | leave | poplin: its version is unknown",
     ]);
   });
 });
@@ -355,8 +355,8 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
 
   // Drift: a person runs the repair to get back in. One that stopped at an upload it could not send would leave the login unmended, and one that said nothing of the upload would leave the release untaken with no word.
   test.each([
-    ["a token without the permission to upload", {}, `Worker | block | poplin: ${OLDER} to ${RELEASE}: The token lacks a permission. Add this one: Workers Scripts: Edit`],
-    ["code that stops as it starts", { refuseAs: { status: 400, code: 10021 } }, `Worker | fail | poplin: ${OLDER} to ${RELEASE}: Cloudflare refused the release's code: it stops as it starts. The install runs the version it ran`],
+    ["a token without the permission to upload", {}, `Worker | block | poplin: ${OLDER} to ${RELEASE}: The account token lacks this permission: Workers Scripts: Edit`],
+    ["code that stops as it starts", { refuseAs: { status: 400, code: 10021 } }, `Worker | fail | poplin: ${OLDER} to ${RELEASE}: Cloudflare refused the release's code: it fails at startup. The install still runs its previous version`],
     ["code Cloudflare refuses otherwise", { refuseAs: { status: 400, code: 10068 } }, `Worker | fail | poplin: ${OLDER} to ${RELEASE}: refused with status 400`],
   ])("an upload refused for %s gets a row that says so, the piece that was gone is still made, and the run is not ready", async (_name, refused, row) => {
     const account = await behindInstall(kind);
@@ -369,8 +369,8 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
 
   // Drift: files that are not the published ones must reach no Worker, whoever holds the token, and a person who came to get back in must still get in.
   test.each([
-    ["a website that does not answer", "releases.json", new Response("down", { status: 500 }), "the project's website named no release, so nothing says whether a newer one is out. Run this again"],
-    ["a manifest that is not the published one", "worker.json", new Response("{}"), "the release's files are not the ones the project published. Nothing was uploaded"],
+    ["a website that does not answer", "releases.json", new Response("down", { status: 500 }), "the project website listed no release, so whether a newer one exists is unknown. Rerun this command"],
+    ["a manifest that is not the published one", "worker.json", new Response("{}"), "the release files failed validation. Nothing was uploaded"],
   ])("%s uploads nothing and says why in the Worker's row, and the rest of the install is still read", async (_name, file, answer, why) => {
     const account = await behindInstall(kind);
     const { done, changes } = await repaired(account, kind, UPDATE, KINDS[kind].where, { website: (address) => (address.endsWith(file) ? answer.clone() : undefined) });
@@ -382,12 +382,12 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
   test.each([
     ["runs a newer release than the newest this poplin reads, with no update asked", "0.4.0", {}, {}, NEWER, "npx poplin@latest doctor --repair"],
     ["runs a newer release than the newest this poplin reads", "0.4.0", UPDATE, {}, NEWER, "npx poplin@latest doctor --repair --update"],
-    ["is behind a release of another schema than this poplin's", OLDER, UPDATE, { schema: OWN_SCHEMA + 1 }, "The newest release is one this poplin cannot put in place.", "npx poplin@latest doctor --repair --update"],
-  ])("an install that %s is left whole: the repair stops before it reads the records, and names the newest poplin", async (_name, version, mend, meets, why, command) => {
+    ["is behind a release of another schema than this poplin's", OLDER, UPDATE, { schema: OWN_SCHEMA + 1 }, "This CLI cannot deploy the latest release.", "npx poplin@latest doctor --repair --update"],
+  ])("an install that %s is left whole: the repair stops before it reads the records, and names the latest CLI", async (_name, version, mend, meets, why, command) => {
     const account = await behindInstall(kind, version);
     const { done, calls, changes } = await repaired(account, kind, mend, KINDS[kind].where, meets);
     // The command holds the option of the install's place, so the line runs as it is written where nobody can be asked.
-    const words = `${why} Run the newest poplin: ${command} ${PLACED[kind]}`;
+    const words = `${why} Run the latest CLI: ${command} ${PLACED[kind]}`;
 
     expect([done, changes, calls.some((entry) => entry.path.endsWith("/query"))]).toEqual([{ ok: false, why: "another", words }, [], false]);
   });
@@ -411,10 +411,10 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
     await unplaced.store.call("UPDATE schema_steps SET fingerprint = 'another'", []);
     unplaced.refuse = UPLOAD;
 
-    expect(shown((await repaired(placed, kind, UPDATE)).done)).toEqual([`Worker | change | poplin: ${OLDER} to ${RELEASE}`, "Database steps | block | poplin: its records are of another poplin than this release's, so no step was run"]);
+    expect(shown((await repaired(placed, kind, UPDATE)).done)).toEqual([`Worker | change | poplin: ${OLDER} to ${RELEASE}`, "Database steps | block | poplin: its schema does not match this release's, so no step ran"]);
     expect(shown((await repaired(unplaced, kind, UPDATE)).done)).toEqual([
-      `Worker | block | poplin: ${OLDER} to ${RELEASE}: The token lacks a permission. Add this one: Workers Scripts: Edit`,
-      "Database steps | not-run | poplin: its records are read once the release is in place",
+      `Worker | block | poplin: ${OLDER} to ${RELEASE}: The account token lacks this permission: Workers Scripts: Edit`,
+      "Database steps | not-run | poplin: its schema is read after the release is deployed",
     ]);
   });
 
@@ -436,7 +436,11 @@ test("Cloudflare refusing the token after the upload keeps the upload's row and 
   };
   const { done } = await repaired(account, "no-domain", UPDATE, KINDS["no-domain"].where, { website });
 
-  expect([shown(done).map((row) => row.split(": ")[0]), done.ok && done.ready]).toEqual([["Worker | change | poplin", "Rest of the install | fail | Cloudflare refused the token at the install"], false]);
+  const rest =
+    "Rest of the install | fail | Cloudflare refused the account token for this install. " +
+    "It must cover the install's account, and its zone if the install has a domain. Rerun this command";
+
+  expect([shown(done).map((row) => row.split(": ")[0]), done.ok && done.ready]).toEqual([["Worker | change | poplin", rest], false]);
 });
 describe.each(BOTH)("a repair that was not asked to update, %s", (kind) => {
   // Drift: a repair mends, and an update is a person's own choice. One that took a release unasked would change the code of an install whose owner switched updates off.
@@ -448,7 +452,7 @@ describe.each(BOTH)("a repair that was not asked to update, %s", (kind) => {
     const dry = await repaired(account, kind, { run: DRY }, KINDS[kind].where, { website });
     const run = await repaired(account, kind, {}, KINDS[kind].where, { website });
     const again = await repaired(account, kind);
-    const row = `Worker | leave | poplin, runs ${OLDER}; ${RELEASE} is out: add --update to take it`;
+    const row = `Worker | leave | poplin, runs ${OLDER}; ${RELEASE} is available: pass --update to deploy it`;
 
     expect([dry.changes, shown(dry.done), shown(run.done)[0], dry.done.ok && dry.done.ready]).toEqual([[], shown(run.done), row, true]);
     expect([run.changes, account.uploads.length, run.done.ok && run.done.ready]).toEqual([[`PUT /accounts/${ACCOUNT}/workflows/poplin-jobs`], 1, true]);
@@ -470,9 +474,9 @@ describe.each(BOTH)("a repair that was not asked to update, %s", (kind) => {
     const account = await behindInstall(kind);
     await account.store.call("UPDATE schema_steps SET fingerprint = 'another'", []);
     const { done, changes } = await repaired(account, kind);
-    const words = `The install runs ${OLDER}, and its records are not at the schema of this poplin.`;
+    const words = `The install runs ${OLDER}, and its database schema does not match this CLI.`;
     // Each way ends in its command, so the command line can write the user it was given to add after either.
-    const ways = [`To mend it as it is, run the poplin of its version: npx poplin@${OLDER} doctor --repair ${PLACED[kind]}`, `To take ${RELEASE} and mend it: npx poplin doctor --repair --update ${PLACED[kind]}`];
+    const ways = [`To repair it as is, run the CLI of its version: npx poplin@${OLDER} doctor --repair ${PLACED[kind]}`, `To update it to ${RELEASE} and repair it: npx poplin doctor --repair --update ${PLACED[kind]}`];
 
     expect([done, changes, account.uploads.length]).toEqual([{ ok: false, why: "behind", words, ways }, [], 1]);
   });
@@ -481,7 +485,7 @@ describe.each(BOTH)("a repair that was not asked to update, %s", (kind) => {
   test("an install that runs the newest release, with records this poplin does not read, names the newest poplin's repair, which updates only where the line did", async () => {
     const account = await wholeInstall(kind);
     await account.store.call("UPDATE schema_steps SET fingerprint = 'another'", []);
-    const said = "The install's records are not at the schema of this poplin. Run the poplin of the install's own version, or the newest: npx poplin@latest doctor --repair";
+    const said = "The install's database schema does not match this CLI. Run the CLI of the install's version, or the latest: npx poplin@latest doctor --repair";
     const [mend, update] = [await repaired(account, kind), await repaired(account, kind, UPDATE)];
 
     expect([mend.done, update.done]).toEqual([
@@ -550,7 +554,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
     };
     const { done } = await repaired(account, kind, { addUser: LOST });
 
-    expect(shown(done).at(-1)).toBe("User | fail | lost@example.com: the login lets the email in, and the install did not store it. Run this again: refused with status 400 and codes 7500");
+    expect(shown(done).at(-1)).toBe("User | fail | lost@example.com: the login admits the email, but the install did not store it. Rerun this command: refused with status 400 and codes 7500");
     expect([letThrough(account), (await account.store.database.readSettings())?.logins, (await account.store.database.listAudit({ limit: 10 })).length]).toEqual([[LOST, OWNER], [OWNER], 1]);
   });
 
@@ -561,7 +565,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
     const known = await repaired(account, kind, { addUser: OWNER });
 
     expect([shown(dry.done).at(-1), dry.changes, letThrough(account)]).toEqual(["User | make | lost@example.com", [], [OWNER]]);
-    expect([shown(known.done).at(-1), known.changes, (await account.store.database.listAudit({ limit: 10 })).length]).toEqual(["User | leave | owner@example.com: a user already", [`PUT /accounts/${ACCOUNT}/access/policies/made-1`], 1]);
+    expect([shown(known.done).at(-1), known.changes, (await account.store.database.listAudit({ limit: 10 })).length]).toEqual(["User | leave | owner@example.com: already a user", [`PUT /accounts/${ACCOUNT}/access/policies/made-1`], 1]);
   });
 
   // Drift: an install that never answered a request has stored no users, so there is no list to add to. A person who is shut out cannot open the dashboard to make it answer: the address named must be one the login lets through.
@@ -571,7 +575,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
 
     const ask = `${KINDS[kind].address}/api/whoami`;
 
-    expect([shown(done).at(-1), changes]).toEqual([`User | block | lost@example.com: the install has stored no users yet. It stores them when it first answers: ask this address once, then run this again: ${ask}`, []]);
+    expect([shown(done).at(-1), changes]).toEqual([`User | block | lost@example.com: the install has stored no users yet. It stores them on its first request: open its URL once, then rerun this command: ${ask}`, []]);
   });
 });
 

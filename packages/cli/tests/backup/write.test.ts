@@ -116,7 +116,7 @@ describe("createBackup", () => {
     await writer.finish();
 
     expect(slashed).toEqual(nowhere);
-    expect([refused, linked, nowhere]).toEqual([{ ok: false, reason: "exists" }, { ok: false, reason: "exists" }, { ok: false, reason: "unwritable", why: `the folder "${join(folder, "absent")}" does not exist` }]);
+    expect([refused, linked, nowhere]).toEqual([{ ok: false, reason: "exists" }, { ok: false, reason: "exists" }, { ok: false, reason: "unwritable", why: `folder "${join(folder, "absent")}" does not exist` }]);
     expect(kept).toEqual([["backup.zip", "link.zip"], "the last good backup"]);
     expect((await readZip(target)).map(([name]) => name)).toEqual(["a.json"]);
   });

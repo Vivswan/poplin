@@ -29,7 +29,7 @@ import { planPublish, previewPublish, sendPublish } from "./sites/publish";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request, TypedRequest } from "./line/requests";
 import { runSiteCommand } from "./sites/site-commands";
-import { dryRunText, showLine } from "./text";
+import { showLine } from "./text";
 import { runUpdate } from "./install/update";
 import { guardedScreen, hide, written } from "./line/util";
 import { readByInstall } from "./sites/wire";
@@ -116,7 +116,7 @@ async function connect(request: { readonly server?: string }, io: Io): Promise<S
   const current = await currentLogin(io.machine);
   if (current.state === "logged-out") return "logged-out";
 
-  if (current.state === "refused") return problem("bad_login", current.message);
+  if (current.state === "refused") return problem("bad_login", `${current.message}. ${current.fix}`);
 
   const { server, token } = current.login;
 
@@ -147,9 +147,9 @@ async function online(request: OnlineRequest, io: Io, run: (session: Session) =>
   const session = await connect(request, io);
 
   if (session === "logged-out" && request.kind === "logout") {
-    const none = "no login is saved on this machine";
+    const none = "No stored login on this machine";
 
-    return request.dryRun ? { ok: true, value: { dry_run: true, revoked: false }, lines: [none, dryRunText(false)] } : { ok: true, value: { revoked: false }, lines: [none] };
+    return request.dryRun ? { ok: true, value: { dry_run: true, revoked: false }, lines: [none, "Dry run: no request was sent"] } : { ok: true, value: { revoked: false }, lines: [none] };
   }
 
   if (session === "logged-out") return refused(problem("no_login"));
@@ -356,7 +356,7 @@ export async function run(
   try {
     return print(await execute(parsed, safe), json, safe, tokens);
   } catch (error) {
-    const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
+    const what = error instanceof Error ? `${error.name}: ${error.message}` : "unknown failure";
 
     return print(refused(problem("crashed", what)), json, safe, tokens);
   }

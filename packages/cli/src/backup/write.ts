@@ -52,7 +52,7 @@ function standsAt(path: string): Promise<"nothing" | "folder" | "file"> {
 
 /** Why the file `part` cannot be made, in the command's words where the cause is known: a missing folder is named, not the system's error about a file the person never typed. */
 function reasonOf(error: unknown, part: string): string {
-  if (error instanceof Error && "code" in error && error.code === MISSING) return `the folder "${dirname(part)}" does not exist`;
+  if (error instanceof Error && "code" in error && error.code === MISSING) return `folder "${dirname(part)}" does not exist`;
 
   return error instanceof Error ? error.message : String(error);
 }
@@ -81,7 +81,7 @@ function givenOnce(bytes: Buffer): Readable {
  */
 export async function createBackup(target: string, overwrite: boolean): Promise<{ readonly ok: true; readonly writer: BackupWriter } | NotWritable> {
   const there = await standsAt(target);
-  if (there === "folder") return { ok: false, reason: "unwritable", why: `"${target}" is a folder; --out names the file to write` };
+  if (there === "folder") return { ok: false, reason: "unwritable", why: `"${target}" is a folder, and --out expects a file` };
 
   if (!overwrite && there === "file") return { ok: false, reason: "exists" };
 
@@ -125,7 +125,7 @@ export async function createBackup(target: string, overwrite: boolean): Promise<
       zip.end();
       await Promise.race([written, broken]);
 
-      if (!overwrite && (await standsAt(target)) !== "nothing") throw new Error(`a file appeared at "${target}" while the backup was written`);
+      if (!overwrite && (await standsAt(target)) !== "nothing") throw new Error(`a file appeared at "${target}" during the export`);
 
       await fs.rename(part, target);
 

@@ -103,32 +103,32 @@ describe("a line on a terminal", () => {
 
 describe("a line that is refused", () => {
   test.each([
-    ["both forms of one answer", "install stand-in --place example.com --no-place --user you@example.com", ["poplin install: give one of --place <name> and --no-place"]],
-    ["both forms of the login offer", `install stand-in ${ANSWERS} --log-in --no-log-in`, ["poplin install: give one of --log-in and --no-log-in"]],
-    ["a dry run that logs in", `install stand-in ${ANSWERS} --dry-run --log-in`, ["poplin install: --dry-run changes nothing: leave out --log-in"]],
-    ["a dry run that does not log in", `install stand-in ${ANSWERS} --dry-run --no-log-in`, ["poplin install: --dry-run changes nothing: leave out --no-log-in"]],
-    ["a dry run that does not wait", `install stand-in ${ANSWERS} --dry-run --no-wait`, ["poplin install: --dry-run changes nothing: leave out --no-wait"]],
-    ["the token given twice", `install stand-in ${ANSWERS} --token-stdin`, [`poplin install: the token is given twice: ${TOKEN_VARIABLE} is set, and --token-stdin was given`]],
-    ["an option twice", "install stand-in --no-place --no-place", ["poplin install: --no-place was given twice"]],
-    ["a shared option twice", `install stand-in ${ANSWERS} --yes --yes`, ["poplin install: --yes was given twice"]],
-    ["an email that is none", "install stand-in --no-place --user you", ["poplin install: --user takes an email address", "for example: --user you@example.com"]],
-    ["an email with nothing in it", 'install stand-in --no-place --user ""', ["poplin install: --user takes an email address", "for example: --user you@example.com"]],
-    ["a place the provider refuses", "install stand-in --place UPPER --user you@example.com", ['poplin install: --place takes a name alone, such as example.com: "UPPER"']],
-    ["an option with no value", "install stand-in --no-place --user", ["poplin install: --user needs a value: --user <email>"]],
-    ["a repair", `install stand-in ${ANSWERS} --repair`, ["poplin install: no option --repair", "To mend an install: poplin doctor --repair"]],
-    ["an update", `install stand-in ${ANSWERS} --update`, ["poplin install: no option --update", "To update an install: poplin update"]],
-    ["a force", `install stand-in ${ANSWERS} --force`, ["poplin install: no option --force", "install changes no install that is there. To remove one: poplin uninstall <provider>"]],
-    ["the token as an argument", `install stand-in ${ANSWERS} --token=abc`, ["poplin install: no option --token", `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`]],
-    ["an option of another provider", `install stand-in ${ANSWERS} --region west`, ["poplin install: --region is no option of stand-in", "it is an option of other-host"]],
-    ["a provider's option given to the other", "install other-host --place example.com", ["poplin install: --place is no option of other-host", "it is an option of stand-in"]],
-    ["a provider's option before any provider", "install --no-place", ["poplin install: --no-place is an option of stand-in", "name the provider first: poplin install stand-in --no-place"]],
-    ["a provider's option before its provider", "install --no-place stand-in --user you@example.com", ["poplin install: --no-place is an option of stand-in", "name the provider first: poplin install stand-in --no-place"]],
-    ["a value that starts with a dash, unjoined", `install stand-in ${ANSWERS} --account --yes`, ["poplin install: --account needs a value: --account <id>"]],
-    ["an option nothing has", `install stand-in ${ANSWERS} --loud`, ["poplin install: no option --loud", "poplin install stand-in --help lists the options"]],
-    ["an option one letter off", `install stand-in ${ANSWERS} --dry-rum`, ["poplin install: no option --dry-rum", "did you mean --dry-run?"]],
-    ["a provider that is none", "install nowhere --yes", ['poplin install: no provider "nowhere"', "poplin install lists the providers"]],
-    ["a provider one letter off", "install stand-on", ['poplin install: no provider "stand-on"', "did you mean: poplin install stand-in?"]],
-    ["a word too many", `install stand-in extra ${ANSWERS}`, ["poplin install: too many words after stand-in", "poplin install stand-in --help lists the options"]],
+    ["both forms of one answer", "install stand-in --place example.com --no-place --user you@example.com", ["--place and --no-place are mutually exclusive"]],
+    ["both forms of the login offer", `install stand-in ${ANSWERS} --log-in --no-log-in`, ["--log-in and --no-log-in are mutually exclusive"]],
+    ["a dry run that logs in", `install stand-in ${ANSWERS} --dry-run --log-in`, ["--dry-run and --log-in are mutually exclusive"]],
+    ["a dry run that does not log in", `install stand-in ${ANSWERS} --dry-run --no-log-in`, ["--dry-run and --no-log-in are mutually exclusive"]],
+    ["a dry run that does not wait", `install stand-in ${ANSWERS} --dry-run --no-wait`, ["--dry-run and --no-wait are mutually exclusive"]],
+    ["the token given twice", `install stand-in ${ANSWERS} --token-stdin`, [`${TOKEN_VARIABLE} and --token-stdin are mutually exclusive`]],
+    ["an option twice", "install stand-in --no-place --no-place", ["--no-place is given twice"]],
+    ["a shared option twice", `install stand-in ${ANSWERS} --yes --yes`, ["--yes is given twice"]],
+    ["an email that is none", "install stand-in --no-place --user you", ["--user requires an email address"]],
+    ["an email with nothing in it", 'install stand-in --no-place --user ""', ["--user requires an email address"]],
+    ["a place the provider refuses", "install stand-in --place UPPER --user you@example.com", ['--place takes a name alone, such as example.com: "UPPER"']],
+    ["an option with no value", "install stand-in --no-place --user", ["--user requires a value", "Usage: --user <email>"]],
+    ["a repair", `install stand-in ${ANSWERS} --repair`, ["Unknown option --repair", "Fix: poplin doctor --repair"]],
+    ["an update", `install stand-in ${ANSWERS} --update`, ["Unknown option --update", "Fix: poplin update"]],
+    ["a force", `install stand-in ${ANSWERS} --force`, ["Unknown option --force", "Fix: remove the existing install first with poplin uninstall <provider>"]],
+    ["the token as an argument", `install stand-in ${ANSWERS} --token=abc`, ["Unknown option --token", `Fix: pass --token-stdin or set ${TOKEN_VARIABLE}`]],
+    ["an option of another provider", `install stand-in ${ANSWERS} --region west`, ["--region is an option of other-host, not of stand-in"]],
+    ["a provider's option given to the other", "install other-host --place example.com", ["--place is an option of stand-in, not of other-host"]],
+    ["a provider's option before any provider", "install --no-place", ["--no-place is an option of stand-in", "Usage: poplin install stand-in --no-place"]],
+    ["a provider's option before its provider", "install --no-place stand-in --user you@example.com", ["--no-place is an option of stand-in", "Usage: poplin install stand-in --no-place"]],
+    ["a value that starts with a dash, unjoined", `install stand-in ${ANSWERS} --account --yes`, ["--account requires a value", "Usage: --account <id>"]],
+    ["an option nothing has", `install stand-in ${ANSWERS} --loud`, ["Unknown option --loud", "See: poplin install stand-in --help"]],
+    ["an option one letter off", `install stand-in ${ANSWERS} --dry-rum`, ["Unknown option --dry-rum", "Did you mean --dry-run?"]],
+    ["a provider that is none", "install nowhere --yes", ['Unknown provider "nowhere"', "See: poplin install"]],
+    ["a provider one letter off", "install stand-on", ['Unknown provider "stand-on"', "Did you mean poplin install stand-in?"]],
+    ["a word too many", `install stand-in extra ${ANSWERS}`, ["Unexpected argument after stand-in", "See: poplin install stand-in --help"]],
   ])("%s is refused with one line that says what to type: without this a contradiction would reach the run", (_name, line, lines) => {
     expect(refusal(line, HELD)).toEqual(lines);
     expect(parsed(line, HELD)).toMatchObject({ kind: "stop", stop: { exit: 2 } });
@@ -137,7 +137,7 @@ describe("a line that is refused", () => {
   test("a token of the wrong form in the variable is refused before any request, and is not quoted: without this a mistyped token is sent, or printed", () => {
     const lines = refusal(`install stand-in ${ANSWERS}`, { [TOKEN_VARIABLE]: "not-a-token" });
 
-    expect(lines).toEqual([`poplin install: ${TOKEN_VARIABLE} does not hold an account token of Stand-In Host`]);
+    expect(lines).toEqual([`${TOKEN_VARIABLE} is not a Stand-In Host account token`]);
   });
 
   test.each([

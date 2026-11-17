@@ -49,7 +49,7 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     ...SHARED.slice(0, 3),
     "Certificate alert | remove | poplin: certificates of every domain of the account",
     ...SHARED.slice(3, -1),
-    "Bot settings | stay | the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
+    "Bot settings | stay | AI crawler blocking and Bot Fight Mode are zone settings and keep their values",
     ...SHARED.slice(-1),
   ],
   "no-domain": ["Forwarder | remove | poplin-sites, poplin-private", ...SHARED],
@@ -224,7 +224,7 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
 
   // Drift: with no Worker, a database is poplin's by its name alone, and the name is a common one. One that holds tables and none of poplin's schema steps is somebody else's records, which no run may delete.
   test.each([
-    ["tables that are not poplin's", { tables: ["invoices"] }, "Database | skip | poplin: matched by its name alone, and it holds tables that are not poplin's: it stays", { databases: 1, counted: 0, ready: true }],
+    ["tables that are not poplin's", { tables: ["invoices"] }, "Database | skip | poplin: matched by its name alone, and it holds tables that are not poplin's: left in place", { databases: 1, counted: 0, ready: true }],
     ["no table", { tables: [] }, "Database | remove | poplin (empty; matched by its name alone)", { databases: 0, counted: 0, ready: true }],
     ["poplin's schema steps", {}, "Database | remove | poplin (sites: 3; matched by its name alone; poplin's by its schema steps) | 3", { databases: 0, counted: 1, ready: true }],
     ["an answer that is no list of tables", { tables: "failed" }, "Database | fail | no answer from Cloudflare", { databases: 1, counted: 0, ready: false }],
@@ -257,7 +257,7 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     account.buckets.push({ name: "photos" });
     account.databases.push({ uuid: "database-x", name: "shop" });
     const strangers = { ...NOTHING, records: 1, routes: 1, rules: kind === "domain" ? 3 : 0, rulesets: kind === "domain" ? 3 : 0, applications: 1, policies: 1, alerts: 1, tokens: 1, workflows: 1, workers: 1, buckets: 1, databases: 1 };
-    const kept = ["Redirect ruleset | stay | poplin redirect rule", "WAF ruleset | stay | poplin guard rules", "Rate ruleset | stay | poplin rate rule"].map((row) => `${row}: it holds rules that are not poplin's, and stays`);
+    const kept = ["Redirect ruleset | stay | poplin redirect rule", "WAF ruleset | stay | poplin guard rules", "Rate ruleset | stay | poplin rate rule"].map((row) => `${row}: it has rules that are not poplin's and is left in place`);
     const run = await removed(account, kind, applyOf(KINDS[kind].confirm));
 
     expect([run.done.ok && run.done.ready, shown(run.done).filter((row) => row.includes(" | skip | ")), left(account)]).toEqual([true, [], strangers]);
@@ -289,7 +289,7 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     const before = structuredClone(account);
     const wrong = await removed(account, kind, applyOf("poplin.example.org"));
 
-    expect([wrong.done, wrong.writes, account]).toEqual([{ ok: false, why: "not_confirmed", words: `What was typed is not this install's: this install is ${KINDS[kind].confirm}. Nothing was removed.` }, [], before]);
+    expect([wrong.done, wrong.writes, account]).toEqual([{ ok: false, why: "not_confirmed", words: `The confirmation does not match ${KINDS[kind].confirm}. Nothing changed.` }, [], before]);
 
     const typed = await removed(account, kind, applyOf(` HTTPS://${KINDS[kind].confirm.toUpperCase()}/ `));
 
@@ -323,8 +323,8 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
 
   // Drift: a Worker bound to another bucket or database does not own the ones of poplin's names, and an object deleted by hand while a run goes on is no failure.
   test.each([
-    ["the Worker's bucket is another", (account: Account) => rebound(account, "SITES", { bucket_name: "photos" }), "Sites' files | skip | poplin-sites: not this install's: the Worker is bound to another", { buckets: 1, objects: 2 }],
-    ["the Worker's database is another", (account: Account) => rebound(account, "DB", { id: "database-x" }), "Database | skip | poplin: not this install's: the Worker is bound to another", { databases: 1 }],
+    ["the Worker's bucket is another", (account: Account) => rebound(account, "SITES", { bucket_name: "photos" }), "Sites' files | skip | poplin-sites: not this install's: the Worker binds another", { buckets: 1, objects: 2 }],
+    ["the Worker's database is another", (account: Account) => rebound(account, "DB", { id: "database-x" }), "Database | skip | poplin: not this install's: the Worker binds another", { databases: 1 }],
     ["the Workflow of the name runs another Worker", (account: Account) => Object.assign(account.workflows[0] ?? {}, { script_name: "shop" }), "Workflow | skip | poplin-jobs: it runs the Worker shop, which is not poplin's", { workflows: 1 }],
     ["the bucket is gone when the run reaches it", (account: Account) => gone(account, `GET /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects`), "Sites' files | gone | poplin-sites", { buckets: 1, objects: 2 }],
     ["the Workflow is gone when the run reaches it", (account: Account) => gone(account, `DELETE /accounts/${ACCOUNT}/workflows/poplin-jobs`), "Workflow | gone | poplin-jobs", { workflows: 1 }],
@@ -362,7 +362,7 @@ describe("an account that changed between the look and the removal", () => {
     const sought = world.asked.length;
     const done = await installer.remove(found, KINDS[kind].where, applyOf(KINDS[kind].confirm), world.reach, () => undefined);
 
-    expect([done, world.asked.slice(sought).filter((entry) => entry.method !== "GET"), account]).toEqual([{ ok: false, why: "changed", words: "The account changed since it was looked at. Run this again. Nothing was removed." }, [], before]);
+    expect([done, world.asked.slice(sought).filter((entry) => entry.method !== "GET"), account]).toEqual([{ ok: false, why: "changed", words: "The account changed after it was checked. Rerun this command. Nothing changed." }, [], before]);
   });
 
   test("where a Worker came to an account whose data was left behind, the data stays", async () => {
@@ -414,7 +414,7 @@ describe("what one kind alone has", () => {
 
   // Drift: the ruleset goes by a call of its own after its rules, so that call can be refused or find nothing where the rules' calls did not: the row must say which, and name the permission.
   test.each([
-    ["a token that may not remove it", { status: 403, code: 10000 }, "Rate ruleset | block | the token lacks a permission. Add this one: Zone WAF: Edit", false],
+    ["a token that may not remove it", { status: 403, code: 10000 }, "Rate ruleset | block | the account token lacks this permission: Zone WAF: Edit", false],
     ["one that went before the run reached it", { status: 404, code: 10003 }, "Rate ruleset | gone | poplin rate rule", true],
   ])("with a domain, a ruleset's removal answered as for %s leaves its row saying so, and the rest is removed", async (_what, refuseAs, row, ready) => {
     const account = await installedAccount("domain", { refuse: "DELETE /zones/zone-1/rulesets/set-http_ratelimit", refuseAs });
@@ -446,7 +446,7 @@ describe("what one kind alone has", () => {
     Object.assign(account.workers.find((worker) => worker.id === "poplin-sites") ?? {}, { tags: [] });
     const run = await removed(account, "no-domain", applyOf(KINDS["no-domain"].confirm));
 
-    const rows = ["Forwarder | remove | poplin-private", "Forwarder | skip | poplin-sites: a Worker of this name is not poplin's, and stays"];
+    const rows = ["Forwarder | remove | poplin-private", "Forwarder | skip | poplin-sites: a Worker with this name is not poplin's and is left in place"];
 
     expect([shown(run.done).slice(0, 2), run.done.ok && run.done.ready, left(account)]).toEqual([rows, true, { ...NOTHING, workers: 1 }]);
   });

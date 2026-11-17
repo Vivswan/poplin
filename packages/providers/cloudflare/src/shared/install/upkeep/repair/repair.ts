@@ -37,17 +37,17 @@ const USER = "User";
 
 /** What a line of the run says, where no row of a piece's own says it. */
 const WORDS = {
-  unreachable: "Cloudflare gave no usable answer.",
-  token: "Cloudflare refused the token at the install: it must show the install's own account, and its domain where it has one.",
-  changed: "The install changed while it was read. Run this again.",
-  another: "The install's records are not at the schema of this poplin. Run the poplin of the install's own version, or the newest:",
-  noDomain: "The install here has no domain: give --no-domain.",
-  noFirst: `${INSTALL_OBJECTS.firstSettingsBinding}: the install stored no settings yet, and the ones its Worker starts with cannot be read`,
-  allowance: "the database's free allowance for the day is used up",
-  already: "a user already",
-  noUsers: "the install has stored no users yet. It stores them when it first answers: ask this address once, then run this again",
-  noLogin: "the login is not made yet: the rows above say why",
-  unstored: "the login lets the email in, and the install did not store it. Run this again",
+  unreachable: "Cloudflare gave no valid response.",
+  token: "Cloudflare refused the account token for this install. It must cover the install's account, and its zone if the install has a domain.",
+  changed: "The install changed while it was read. Rerun this command.",
+  another: "The install's database schema does not match this CLI. Run the CLI of the install's version, or the latest:",
+  noDomain: "This install has no domain. Pass --no-domain.",
+  noFirst: `${INSTALL_OBJECTS.firstSettingsBinding}: the install has stored no settings yet, and its Worker's initial settings cannot be read`,
+  allowance: "the D1 free daily quota is exhausted",
+  already: "already a user",
+  noUsers: "the install has stored no users yet. It stores them on its first request: open its URL once, then rerun this command",
+  noLogin: "the login does not exist yet: see the rows above",
+  unstored: "the login admits the email, but the install did not store it. Rerun this command",
 } as const;
 
 /** What one run gathers. `form` is the address of the token's form, where a permission is added, and `address` where the install's dashboard is. */
@@ -106,7 +106,7 @@ function elsewhere(install: BoundInstall, where: Where): string | undefined {
   const { domain } = install.layout;
   const named = where.kind === "domain" && where.layout.domain === domain;
 
-  return named ? undefined : `The install here is under the domain ${domain}: give --domain ${domain}.`;
+  return named ? undefined : `This install is under ${domain}. Pass --domain ${domain}.`;
 }
 
 /**
@@ -234,10 +234,10 @@ function unreadRecords(work: Work, release: Extract<Awaited<ReturnType<typeof sy
 function unmendedWhole(behind: { readonly runs: string; readonly out: string } | undefined, mend: Mend, where: Where): Repaired {
   if (behind === undefined) return { ok: false, why: "another", words: atPlace(anotherWords(mend.update), where) };
 
-  const asItIs = atPlace(`To mend it as it is, run the poplin of its version: npx poplin@${behind.runs} doctor --repair`, where);
-  const updated = atPlace(`To take ${behind.out} and mend it: npx poplin doctor --repair --update`, where);
+  const asItIs = atPlace(`To repair it as is, run the CLI of its version: npx poplin@${behind.runs} doctor --repair`, where);
+  const updated = atPlace(`To update it to ${behind.out} and repair it: npx poplin doctor --repair --update`, where);
 
-  return { ok: false, why: "behind", words: `The install runs ${behind.runs}, and its records are not at the schema of this poplin.`, ways: [asItIs, updated] };
+  return { ok: false, why: "behind", words: `The install runs ${behind.runs}, and its database schema does not match this CLI.`, ways: [asItIs, updated] };
 }
 
 /**
@@ -279,7 +279,7 @@ export async function repair(found: Whole<Place>, where: Where, mend: Mend, reac
   if (stopped !== undefined) {
     if (release.state === "left" || work.mode === "plan") return stopped;
 
-    note(work, { object: "Rest of the install", state: "fail", detail: `${stopped.words} Run this again` });
+    note(work, { object: "Rest of the install", state: "fail", detail: `${stopped.words} Rerun this command` });
 
     return done(work);
   }

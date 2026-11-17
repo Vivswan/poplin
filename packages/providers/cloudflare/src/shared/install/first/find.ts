@@ -65,13 +65,13 @@ const CONTROL_RUN = /\p{Cc}+/gu;
 
 /** What each state is told in. */
 const WORDS = {
-  token: "Cloudflare refused the token, or the token shows no account.",
-  otherAccount: "The token does not show that account.",
-  unreachable: "Cloudflare gave no usable answer.",
-  held: `A Worker named ${SCRIPT} is in this account and does not carry poplin's name, so nothing here touches it. If you just installed or updated poplin, wait a minute and run this again. Else give it another name in your browser, then run this again.`,
-  storage: "R2 is not switched on for this account, or the token may not use it. Switch R2 on in your browser, and check that the token has Workers R2 Storage: Edit.",
-  loginOff: "Access is not switched on for this account. Open Zero Trust and pick a plan (Free works): until then nobody can log in.",
-  lacks: "The token lacks a permission. Add this one",
+  token: "Cloudflare refused the account token, or it can access no account.",
+  otherAccount: "The account token cannot access that account.",
+  unreachable: "Cloudflare gave no valid response.",
+  held: `This account has a Worker named ${SCRIPT} that is not marked as poplin's, so nothing changes it. If you just installed or updated poplin, wait a minute and rerun. Otherwise rename it in the Cloudflare dashboard, then rerun.`,
+  storage: "R2 is not enabled for this account, or the account token cannot use it. Enable R2 in the Cloudflare dashboard, and check that the token has Workers R2 Storage: Edit.",
+  loginOff: "Access is not enabled for this account. Open Zero Trust and choose a plan (Free works). Until then nobody can log in.",
+  lacks: "The account token lacks this permission",
 } as const;
 
 /** Where an install goes: under a domain of the person's own, or on the account's free address; `account` is the account a person named, where the token shows more than one. */
@@ -149,13 +149,13 @@ function whichAccount(where: Where, shown: readonly Shown[]): Question<Where> {
 
   return {
     key: "account",
-    name: "the account",
-    ask: `The token shows more than one account:\n${list}\nWhich one?`,
-    give: "Give --account <id> (or POPLIN_ACCOUNT).",
+    name: "account",
+    ask: `The account token can access several accounts:\n${list}\nAccount:`,
+    give: "pass --account <id> or set POPLIN_ACCOUNT",
     answer: (text): Read<Where> => {
       const account = chosen(text, shown);
 
-      return account === undefined ? { ok: false, why: "refused", refused: "that is none of the accounts the token shows" } : { ok: true, where: { ...where, account } };
+      return account === undefined ? { ok: false, why: "refused", refused: "The input is not one of the account token's accounts" } : { ok: true, where: { ...where, account } };
     },
   };
 }
@@ -188,7 +188,7 @@ async function accountOf(connection: Connection, where: Where): Promise<string |
 
   if (where.kind !== "domain") return { state: "refused", why: "token", words: WORDS.token };
 
-  return { state: "refused", why: "no_domain", words: `The token shows no active domain ${where.layout.domain}. Add the domain to the account, or choose it under Zone Resources on the token's form.` };
+  return { state: "refused", why: "no_domain", words: `The account token can access no active zone for ${where.layout.domain}. Add the domain to the account, or select it under Zone Resources on the token's form.` };
 }
 
 /** Whether a Worker says it is poplin's: its `WORKER_NAME` is the install's own name. */
@@ -236,8 +236,8 @@ function heldBy(bindings: readonly ListedBinding[], where: Where): Pick<Extract<
   // With its bindings back, a Worker that is set is found whole, which a repair takes; one that is not set is found started, which an install goes on from.
   const after = boundInstall(bindings) === undefined ? "install" : "repair";
   const words =
-    `A Worker named ${SCRIPT} is in this account. It carries poplin's name and lacks ${LISTED.format(lacked)}: it looks like an install that was deployed again by hand. ` +
-    `Keep it: it may hold the install's keys. Put ${back} back on the Worker's Bindings page in your browser, then run ${[HELD_COMMANDS[after], ...placeWords(where)].join(" ")}.`;
+    `This account has a Worker named ${SCRIPT} that is marked as poplin's but lacks ${LISTED.format(lacked)}. It looks like an install redeployed manually. ` +
+    `Keep it: it may hold the install's keys. Restore ${back} on the Worker's Bindings page, then run ${[HELD_COMMANDS[after], ...placeWords(where)].join(" ")}.`;
 
   return { words, after };
 }
@@ -286,13 +286,13 @@ function startedElsewhere(bindings: readonly ListedBinding[], where: Where): Pic
   if (started.kind === "no-domain") {
     const give = "--no-domain";
 
-    return where.kind === "domain" ? { words: `An install was started in this account without a domain, and not finished: give ${give}.`, give } : undefined;
+    return where.kind === "domain" ? { words: `This account has an incomplete install without a domain. Pass ${give}.`, give } : undefined;
   }
 
   const named = where.kind === "domain" && where.layout.domain === started.domain;
   const give = `--domain ${started.domain}`;
 
-  return named ? undefined : { words: `An install was started in this account under the domain ${started.domain}, and not finished: give ${give}.`, give };
+  return named ? undefined : { words: `This account has an incomplete install under ${started.domain}. Pass ${give}.`, give };
 }
 
 /** A whole install: the release its bindings state, and the newest release the project's website names. */
@@ -320,9 +320,9 @@ function withoutWorker(place: Place, notes: readonly Blocked[], held: { readonly
   if (!held.database && !held.bucket) return { state: "none", place, notes };
 
   const pages = pagesOf(place.accountId);
-  const things = [...(held.database ? [`a database named ${INSTALL_OBJECTS.database}`] : []), ...(held.bucket ? [`a bucket named ${INSTALL_OBJECTS.bucket}`] : [])].join(" and ");
+  const things = [...(held.database ? [`a D1 database named ${INSTALL_OBJECTS.database}`] : []), ...(held.bucket ? [`an R2 bucket named ${INSTALL_OBJECTS.bucket}`] : [])].join(" and ");
   const both = held.database && held.bucket;
-  const words = `There is ${things} in this account, and no poplin runs. ${both ? "They" : "It"} may hold an earlier install's sites and records. ${both ? "They are matched by their names alone." : "It is matched by its name alone."}`;
+  const words = `This account has ${things} but no poplin Worker. ${both ? "They" : "It"} may hold an earlier install's sites and records. ${both ? "They are" : "It is"} matched by name only.`;
 
   return { state: "leftover", place, notes, words, address: held.database ? pages.database : pages.storage };
 }

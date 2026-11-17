@@ -1048,7 +1048,7 @@ function usedRights(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[]): Rig
  * @param kind - the kind of install the token is for
  * @param also - the objects the token is to make beside the ones a repair of that kind makes
  */
-function rightsByHand(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): string[] {
+export function rightsByHand(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): string[] {
   return usedRights(kind, also).flatMap((right) => ("chosen" in right ? [right.name] : []));
 }
 

@@ -45,7 +45,7 @@ describe("publish", () => {
 
     expect(made).toMatchObject({
       code: 0,
-      out: ["sent      2 files, 46 B (1 skipped as hidden or node_modules)", `made      ${label}`, "private   only your users can open it", "", `https://${label}-p-poplin.example.com`],
+      out: ["uploaded  2 files, 46 B (1 skipped: hidden or node_modules)", `created   ${label}`, "private   login required", "", `https://${label}-p-poplin.example.com`],
       err: [],
       status: [],
     });
@@ -59,7 +59,7 @@ describe("publish", () => {
 
     const human = await bench.run(`${folder} --site ${label}`);
 
-    expect(human.out).toEqual(["sent      2 files, 27 B (1 skipped as hidden or node_modules)", `updated   ${label}  version 3`, "unlisted  anyone with the link can open it", "", `https://${label}-u-poplin.example.com`]);
+    expect(human.out).toEqual(["uploaded  2 files, 27 B (1 skipped: hidden or node_modules)", `updated   ${label}  version 3`, "unlisted  open to anyone with the URL", "", `https://${label}-u-poplin.example.com`]);
   });
 
   test("an update leaves a typed title alone, takes a new one only from --title, and --title \"\" goes back to the page's own: without this every update undoes set --title", async () => {
@@ -100,7 +100,7 @@ describe("publish", () => {
 
     const refused = await bench.run(`${folderOf("guide", { "index.html": "<title>Guide</title>" })} --public --public-name docs`);
 
-    expect([refused.code, refused.err]).toEqual([1, ["another site holds that public name: public_name", "to pick another: publish again with --public-name <public name>"]]);
+    expect([refused.code, refused.err]).toEqual([1, ["The public name is taken", "Fix: publish again with --public-name <public name>"]]);
     expect(await stateOf(bench)).toEqual(before);
   });
 
@@ -115,11 +115,11 @@ describe("publish", () => {
     expect(human).toMatchObject({
       code: 0,
       out: [
-        "would make a new site named notes",
-        "would upload 2 files, 46 B (1 skipped as hidden or node_modules)",
+        "would create  notes",
+        "would upload  2 files, 46 B (1 skipped: hidden or node_modules)",
         "  css/site.css  6 B   text/css",
         "  index.html    40 B  text/html",
-        "nothing was sent: --dry-run calls no install",
+        "Dry run: no request was sent",
       ],
     });
     expect(json).toEqual({
@@ -170,14 +170,14 @@ describe("publish", () => {
     const failed = await bench.run(folder);
 
     expect(bench.sent.filter((line) => line.startsWith("PUT ")).length).toBe(1);
-    expect([failed.code, failed.err[0]]).toEqual([1, "a day's allowance of the install is used up until 00:00 UTC: writing"]);
-    expect(failed.err[1]).toEndWith("wait until then: asking again sooner is refused the same way");
+    expect([failed.code, failed.err[0]]).toEqual([1, "The install's daily quota is exhausted: writing"]);
+    expect(failed.err[1]).toEndWith("Fix: retry after 00:00 UTC");
   });
 
   test.each([
-    ["a file that is never stored", (request: Request) => (request.method === "PUT" ? answer(500, { error: { code: "internal", message: "no" } }) : undefined), "the install failed to do that", 1],
-    ["a file the install refuses", (request: Request) => (request.method === "PUT" ? answer(400, { error: { code: "size_mismatch", message: "no", about: "index.html" } }) : undefined), "a file changed while it was sent: index.html", 1],
-    ["a finish that is never answered", (request: Request) => (request.url.endsWith("/finish") ? new Response("<html>bad gateway</html>", { status: 502 }) : undefined), `the answer is not the install's: status 502 from ${ORIGIN}`, 5],
+    ["a file that is never stored", (request: Request) => (request.method === "PUT" ? answer(500, { error: { code: "internal", message: "no" } }) : undefined), "Internal error on the install", 1],
+    ["a file the install refuses", (request: Request) => (request.method === "PUT" ? answer(400, { error: { code: "size_mismatch", message: "no", about: "index.html" } }) : undefined), "A file changed during the upload: index.html", 1],
+    ["a finish that is never answered", (request: Request) => (request.url.endsWith("/finish") ? new Response("<html>bad gateway</html>", { status: 502 }) : undefined), `The response is not from a poplin install: status 502 from ${ORIGIN}`, 5],
   ])("%s gives the upload up, changes no site, and says so: without this a failed publish leaves files and a pending upload behind", async (_name, hook, sentence, code) => {
     const bench = await openBench();
     const folder = folderOf("notes", PAGES);
@@ -193,7 +193,7 @@ describe("publish", () => {
     const said = failed.err.slice(failed.waits.length);
 
     expect(said[0]).toBe(sentence);
-    expect(said[1]).toStartWith("the upload was given up and no site changed");
+    expect(said[1]).toStartWith("Upload aborted, no site changed");
     expect(jsonOf(failed)).toMatchObject({ error: { message: sentence.split(":")[0] } });
     expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
     expect(await stateOf(bench)).toEqual(before);
@@ -216,12 +216,12 @@ describe("publish", () => {
     const made = await bench.run(folder);
 
     expect(made.code).toBe(0);
-    expect(made.out[1]).toMatch(/^made {6}notes--[0-9a-z]{12}$/);
+    expect(made.out[1]).toMatch(/^created {3}notes--[0-9a-z]{12}$/);
   });
 
   test.each([
-    ["a path that is not there", "./nowhere-at-all", /^nothing can be published: ".*nowhere-at-all" does not exist$/],
-    ["a folder with no index.html", "", /^nothing can be published: the folder .* has no index\.html at its top$/],
+    ["a path that is not there", "./nowhere-at-all", /^Cannot publish: ".*nowhere-at-all" does not exist$/],
+    ["a folder with no index.html", "", /^Cannot publish: folder .* has no index\.html at its root$/],
   ])("%s is refused before any install is called", async (_name, path, sentence) => {
     const bench = await openBench();
     const target = path === "" ? folderOf("empty", { "page.html": "x" }) : path;
@@ -240,8 +240,8 @@ describe("publish", () => {
       { kind: "path", sites_host: "sites.example.net", private_host: "private.example.net" },
       1,
       [
-        'this install has no domain, so a link that starts with "/" would not open: /css/site.css in about.html',
-        "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css",
+        'A link starting with "/" breaks on an install without a domain: /css/site.css in about.html',
+        "Nothing was uploaded. Fix: link relative to the page, such as css/site.css or ../css/site.css",
       ],
       ["GET"],
     ],
@@ -286,8 +286,8 @@ describe("publish", () => {
     const lost = await bench.run(folder);
 
     expect(lost.code).toBe(5);
-    expect(lost.err[0]).toBe(`the answer is not the install's: status 502 from ${ORIGIN}`);
-    expect(lost.err[1]).toStartWith("no site changed; an upload the install began all the same runs out by itself within a day");
+    expect(lost.err[0]).toBe(`The response is not from a poplin install: status 502 from ${ORIGIN}`);
+    expect(lost.err[1]).toStartWith("No site changed. An upload the install started anyway expires within 24 h");
     expect(bench.sent).toEqual(["GET /api/whoami", "POST /api/uploads"]);
     expect(await stateOf(bench)).toEqual(before);
   });
@@ -327,7 +327,7 @@ describe("publish", () => {
     const made = await bench.run(folder, { terminal: { asks: false, progress: true } });
 
     expect([made.code, made.err, made.waits]).toEqual([0, [], waits]);
-    expect(made.status.filter((line) => line.startsWith("the install asks for a pause"))).toEqual(waits.map((ms) => `the install asks for a pause: going on in ${ms / 1000} s (Ctrl-C stops)`));
+    expect(made.status.filter((line) => line.startsWith("Rate limited by the install"))).toEqual(waits.map((ms) => `Rate limited by the install: resuming in ${ms / 1000} s (Ctrl-C cancels)`));
     expect((await bench.install.keys()).length).toBe(1);
   });
 
@@ -350,7 +350,7 @@ describe("publish", () => {
     const made = await bench.run(folder);
 
     expect({ code: made.code, begins: bench.sent.filter((sent) => sent === "POST /api/uploads").length, stored: (await bench.install.keys()).length }).toEqual(expected);
-    expect(made.err.filter((line) => line.includes("sending the request again"))).toEqual(["the connection to the install was cut before any answer: sending the request again"]);
+    expect(made.err.filter((line) => line.includes("resending the request"))).toEqual(["Connection closed before a response: resending the request"]);
   });
 
   // Drift: a request whose name lookup fails never left, so its finish, which no cut connection may send twice, is safe to try again. Without this a publish in the minute after an install's records are made fails in milliseconds.
@@ -370,7 +370,7 @@ describe("publish", () => {
     };
 
     const made = await bench.run(folder);
-    const told = made.err.filter((line) => line === "no connection to the install: trying once more in 1 s").length;
+    const told = made.err.filter((line) => line === "No connection to the install: retrying once in 1 s").length;
 
     const sites = ((await answered(bench.install.routes.sites.$get())).body.sites as unknown[]).length;
 
@@ -451,13 +451,13 @@ describe("publish", () => {
 
     const made = await bench.run(folder, { terminal: { asks: false, progress: true } });
 
-    expect([made.code, shown, made.status[2]]).toEqual([0, [["Publishing notes", "the install asks for a pause: going on in 4 s (Ctrl-C stops)"]], "Publishing notes: 1/2 files, 14 B of 17 B"]);
+    expect([made.code, shown, made.status[2]]).toEqual([0, [["Publishing notes", "Rate limited by the install: resuming in 4 s (Ctrl-C cancels)"]], "Publishing notes: 1/2 files, 14 B of 17 B"]);
   });
 
   // Drift: a zone that never lets up, or a person who stops the command, must end the upload; a rest with no bound would hang a script for good.
   test.each<[string, "over" | "interrupted", number[], number, number, string]>([
-    ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7, 5, `the answer is not the install's: status 429 from ${ORIGIN}`],
-    ["is stopped by the person during the first rest", "interrupted", [2000], 1, 1, "the command was stopped: the upload was given up and no site changed"],
+    ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7, 5, `The response is not from a poplin install: status 429 from ${ORIGIN}`],
+    ["is stopped by the person during the first rest", "interrupted", [2000], 1, 1, "Cancelled: upload aborted, no site changed"],
   ])("an upload whose zone %s is given up after its rests and says why", async (_name, paused, waits, puts, code, line) => {
     const bench = await openBench();
     const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });
@@ -467,7 +467,7 @@ describe("publish", () => {
 
     const failed = await bench.run(folder);
 
-    expect([failed.code, failed.err.slice(0, waits.length), failed.err[waits.length], failed.waits]).toEqual([code, waits.map((wait) => `the install asks for a pause: going on in ${wait / 1000} s`), line, waits]);
+    expect([failed.code, failed.err.slice(0, waits.length), failed.err[waits.length], failed.waits]).toEqual([code, waits.map((wait) => `Rate limited by the install: resuming in ${wait / 1000} s`), line, waits]);
     expect(bench.sent.filter((line) => line.startsWith("PUT")).length).toBe(puts);
     expect(bench.sent.at(-1)).toStartWith("DELETE /api/uploads/");
     expect(await stateOf(bench)).toEqual(before);
@@ -481,6 +481,6 @@ describe("publish", () => {
     const planned = await planPublish(request as never, AbortSignal.abort(new Error("stopped by the person")));
     const unstopped = await planPublish(request as never, new AbortController().signal);
 
-    expect([planned.ok ? "a plan" : [planned.problem.code, planned.problem.about], unstopped.ok]).toEqual([["stopped", "nothing was sent and no site changed"], true]);
+    expect([planned.ok ? "a plan" : [planned.problem.code, planned.problem.about], unstopped.ok]).toEqual([["stopped", "nothing uploaded, no site changed"], true]);
   });
 });

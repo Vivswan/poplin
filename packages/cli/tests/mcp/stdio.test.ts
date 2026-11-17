@@ -131,6 +131,6 @@ describe("poplin mcp over stdio", () => {
     const { uploads } = await bench.install.database.listUploads({ before: Number.MAX_SAFE_INTEGER, limit: 10 });
 
     expect(code).toBe(1);
-    expect([bench.sent.at(-1)?.slice(0, 20), uploads.map((upload) => upload.state), bench.logged]).toEqual(["DELETE /api/uploads/", ["abandoned"], ["poplin mcp: the server was stopped"]]);
+    expect([bench.sent.at(-1)?.slice(0, 20), uploads.map((upload) => upload.state), bench.logged]).toEqual(["DELETE /api/uploads/", ["abandoned"], ["poplin mcp: server stopped"]]);
   });
 });

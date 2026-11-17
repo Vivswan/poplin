@@ -96,7 +96,7 @@ describe("helpText", () => {
     const accepted = foreign.filter(({ spec, flag }) => {
       const parsed = parseCommand(lineWith(spec, flag));
 
-      return parsed.kind !== "usage-error" || !parsed.message.startsWith("unknown flag");
+      return parsed.kind !== "usage-error" || !parsed.message.startsWith("Unknown option");
     });
 
     expect(foreign.length).toBeGreaterThan(0);
@@ -144,7 +144,7 @@ describe("helpText", () => {
 
     expect(under.map(({ flag }) => flag.name)).toEqual(["--update", "--dry-run", "--add-user", "--yes", "--token-stdin"]);
     expect(under.filter(({ flag }) => isPrinted(options, flag))).toEqual([]);
-    expect(refused.map((parsed) => parsed.kind === "usage-error" && parsed.message.endsWith("goes with --repair"))).toEqual(under.map(() => true));
+    expect(refused.map((parsed) => parsed.kind === "usage-error" && parsed.message.endsWith("requires --repair"))).toEqual(under.map(() => true));
   });
 
   test("every example a help text prints runs the command it is printed under: a copied example must not be refused", () => {

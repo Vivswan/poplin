@@ -52,7 +52,7 @@ function shared(host: string, sites: string): string[] {
 const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
   domain: [
     ...OWN,
-    "Worker address | make | off: the install answers under its domain",
+    "Worker address | make | off: the install is served on its domain",
     "Public word | leave | page (public sites answer at <name>-page.example.com)",
     "DNS record | make | *.example.com",
     "DNS record | make | poplin.example.com",
@@ -109,7 +109,7 @@ function placeOf(given: { readonly flags?: readonly (readonly [string, string | 
 }
 
 /** What the look says of data that was left behind: no mark says who made it. */
-const BY_NAME = "It is matched by its name alone.";
+const BY_NAME = "It is matched by name only.";
 
 /** What a row says of a database of poplin's name that somebody else filled. */
 const OTHERS_TABLES = "matched by its name alone, and it holds tables that are not poplin's";
@@ -212,7 +212,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
 
     delete account.refuse;
     const again = await installed(account, kind, APPLY);
-    const stood = ["R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", "Worker | leave | poplin: its code was there before this run, and this run did not check it", "Sweep trigger | change | */15 * * * *"];
+    const stood = ["R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", "Worker | leave | poplin: its code predates this run and was not checked against a release", "Sweep trigger | change | */15 * * * *"];
 
     expect([again.found.state, shown(again.done).slice(0, 4), shown(again.done).slice(5), again.done.ok && again.done.ready]).toEqual(["started", stood, ROWS[kind].slice(5), true]);
     expect([account.uploads.length, account.buckets.length, account.databases.length]).toEqual([1, 1, 1]);
@@ -244,7 +244,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const { found, done } = await installed(account, kind, APPLY);
     const [upload] = account.uploads as { metadata: { bindings: { name: string; id?: string }[] } }[];
 
-    const words = `There is a database named poplin in this account, and no poplin runs. It may hold an earlier install's sites and records. ${BY_NAME}`;
+    const words = `This account has a D1 database named poplin but no poplin Worker. It may hold an earlier install's sites and records. ${BY_NAME}`;
     const bound = upload?.metadata.bindings.find((binding) => binding.name === "DB")?.id;
 
     expect(found).toMatchObject({ state: "leftover", words, address: `https://dash.cloudflare.com/${ACCOUNT}/workers/d1` });
@@ -253,7 +253,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
 
   // Drift: the name is a common one. A database that holds tables and none of poplin's schema steps is somebody else's records: a run that took it would let the Worker write its schema beside them, and a later removal would delete all of it.
   test.each([
-    ["tables that are not poplin's", { tables: ["invoices"] }, [], [`D1 database | block | poplin: ${OTHERS_TABLES}: it is not used, and an install needs a database of this name`], false, 0],
+    ["tables that are not poplin's", { tables: ["invoices"] }, [], [`D1 database | block | poplin: ${OTHERS_TABLES}: not reused, but an install needs a database with this name`], false, 0],
     ["an answer that is no list of tables", { tables: "failed" }, [], ["D1 database | fail | poplin: no answer from Cloudflare"], false, 0],
     [
       "poplin's schema steps, beside a bucket of the name",
@@ -304,7 +304,7 @@ function usersAt(account: Account): { readonly login: string[]; readonly alerts:
 
 describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the data an uninstall kept, %s", (kind) => {
   const [first, second] = KEPT_USERS;
-  const unused = `First login | leave-out | ${LOGIN}: not used. The database holds its 2 users already, and they are who logs in: ${first} and ${second}.`;
+  const unused = `First user | leave-out | ${LOGIN}: not used. The database already has its 2 users, and only they can log in: ${first} and ${second}.`;
   const alerts = kind === "domain" ? [first, first] : [first];
 
   // Drift: the Worker stores its first settings only in a database that holds none. Mended to the first login a person typed, Cloudflare would let in an email the install turns away, and send no code to the users it knows.
@@ -339,11 +339,11 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     const more = ["third", "fourth", "fifth", "sixth", "seventh"].map((name) => loginOf(`${name}@example.com`));
     for (const login of more) await account.store.database.addLogin(login, { as: "person", by: first, at: 2 });
 
-    const rows = shown((await installed(account, kind, DRY)).done).filter((row) => row.startsWith("First login"));
+    const rows = shown((await installed(account, kind, DRY)).done).filter((row) => row.startsWith("First user"));
 
     const named = `${first}, ${second}, third@example.com, fourth@example.com, fifth@example.com, and 2 more`;
 
-    expect(rows).toEqual([`First login | leave-out | ${LOGIN}: not used. The database holds its 7 users already, and they are who logs in: ${named}.`]);
+    expect(rows).toEqual([`First user | leave-out | ${LOGIN}: not used. The database already has its 7 users, and only they can log in: ${named}.`]);
   });
 
   // Drift: a person who types their own email again is a user already, and the database may hold others somebody else put there. With no row, the run lets them in and names nobody.
@@ -353,9 +353,9 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     const found = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
     const done = await installer.install(startable(found), KINDS[kind].where, second, APPLY, world.reach, () => undefined);
 
-    const told = `First login | leave | ${second}: a user already. The database holds its 2 users already, and they are who logs in: ${first} and ${second}.`;
+    const told = `First user | leave | ${second}: already a user. The database already has its 2 users, and only they can log in: ${first} and ${second}.`;
 
-    expect([shown(done).filter((row) => row.startsWith("First login")), usersAt(account), done.ok && done.unused]).toEqual([[told], { login: [first, second], alerts }, undefined]);
+    expect([shown(done).filter((row) => row.startsWith("First user")), usersAt(account), done.ok && done.unused]).toEqual([[told], { login: [first, second], alerts }, undefined]);
   });
 
   // Drift: a run that stopped after its upload is found as one that was started, with no word that its database was kept. Finished to the typed login, it would be the same wrong install by two runs.
@@ -374,10 +374,10 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     await other.store.call("UPDATE schema_steps SET fingerprint = ?1", ["of another build"]);
     const { done } = await installed(other, kind, APPLY);
     const unread =
-      "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps; its records are not at the schema of this poplin, so the users it holds were not read, and --user is used. " +
-      `Once the install answers, npx poplin doctor --repair ${kind === "domain" ? "--domain example.com" : "--no-domain"} mends the login to the users it holds)`;
+      "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps; its schema does not match this CLI, so its users were not read and --user is used. " +
+      `When the install responds, npx poplin doctor --repair ${kind === "domain" ? "--domain example.com" : "--no-domain"} syncs the login to its stored users)`;
 
-    expect([shown(done)[1], shown(done).filter((row) => row.startsWith("First login")), usersAt(other).login]).toEqual([unread, [], [LOGIN]]);
+    expect([shown(done)[1], shown(done).filter((row) => row.startsWith("First user")), usersAt(other).login]).toEqual([unread, [], [LOGIN]]);
 
     const refused = await keptData();
     const { call } = refused.store;
@@ -399,7 +399,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     const account = await keptData();
     await account.store.call("DELETE FROM settings", []);
     const { done } = await installed(account, kind, APPLY);
-    const said = shown(done).filter((row) => row.startsWith("D1 database") || row.startsWith("First login"));
+    const said = shown(done).filter((row) => row.startsWith("D1 database") || row.startsWith("First user"));
 
     expect([await account.store.database.readSettings(), said]).toEqual([undefined, ["D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"]]);
     expect([usersAt(account).login, account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json]).toEqual([[LOGIN], { logins: LOGIN }]);
@@ -408,8 +408,8 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
 
 // Drift: a run that stopped after its upload has made records and routes under a domain, or forwarders without one. Gone on with as the other kind, or removed as it, those stay in the account, and no command has a row for them.
 test.each([
-  ["domain", "no-domain", "POST /zones/zone-1/workers/routes", "An install was started in this account under the domain example.com, and not finished: give --domain example.com.", "--domain example.com"],
-  ["no-domain", "domain", `PUT /accounts/${ACCOUNT}/workers/scripts/poplin-private`, "An install was started in this account without a domain, and not finished: give --no-domain.", "--no-domain"],
+  ["domain", "no-domain", "POST /zones/zone-1/workers/routes", "This account has an incomplete install under example.com. Pass --domain example.com.", "--domain example.com"],
+  ["no-domain", "domain", `PUT /accounts/${ACCOUNT}/workers/scripts/poplin-private`, "This account has an incomplete install without a domain. Pass --no-domain.", "--no-domain"],
 ] as const)("a run that stopped after its upload, %s, is gone on with and removed as that kind alone: a look for the other kind (%s) is refused and changes nothing, and its own kind removes what it made", async (kind, other, refuse, words, give) => {
   const account = fresh({ refuse, refuseAs: { status: 400, code: 10001 } });
   const stopped = await installed(account, kind, APPLY);
@@ -521,11 +521,11 @@ describe("the provider's own answers", () => {
   });
 
   test.each([
-    ["both options", { flags: [["domain", "example.com"], ["no-domain", true]] }, "give one of --domain <name> and --no-domain"],
-    ["a domain option with no name", { flags: [["domain", true]] }, "--domain takes a name, such as example.com"],
-    ["a domain option with an empty name, which is not the word for none", { flags: [["domain", ""]] }, "--domain takes a name, such as example.com"],
-    ["text that is no domain", { flags: [["domain", "not a domain"]] }, "not a domain is no domain name"],
-    ["an account that is no id", { flags: [["no-domain", true], ["account", "mine"]] }, "--account takes an account's id: 32 characters of 0-9 and a-f"],
+    ["both options", { flags: [["domain", "example.com"], ["no-domain", true]] }, "--domain and --no-domain are mutually exclusive"],
+    ["a domain option with no name", { flags: [["domain", true]] }, "--domain requires a domain name, such as example.com"],
+    ["a domain option with an empty name, which is not the word for none", { flags: [["domain", ""]] }, "--domain requires a domain name, such as example.com"],
+    ["text that is no domain", { flags: [["domain", "not a domain"]] }, "not a domain is not a domain name"],
+    ["an account that is no id", { flags: [["no-domain", true], ["account", "mine"]] }, "--account requires an account id: 32 lowercase hex characters"],
   ] as const)("refuses %s", (_, given, refused) => {
     expect(installer.read({ flags: new Map<string, string | true>(given.flags), env: {} })).toEqual({ ok: false, why: "refused", refused });
   });
@@ -535,9 +535,9 @@ describe("the provider's own answers", () => {
     const read = installer.read({ flags: new Map(), env: {} });
     const [question] = read.ok || read.why !== "open" ? [] : read.open;
 
-    expect([question?.key, question?.name, question?.give]).toEqual(["where", "where it answers", "Give --domain <name> or --no-domain (or POPLIN_DOMAIN)."]);
+    expect([question?.key, question?.name, question?.give]).toEqual(["where", "domain", "pass --domain <name> or --no-domain, or set POPLIN_DOMAIN"]);
     expect([question?.answer(""), question?.answer(" example.com ")]).toMatchObject([{ ok: true, where: { kind: "no-domain" } }, { ok: true, where: { kind: "domain", layout: { domain: "example.com" } } }]);
-    expect(question?.answer("no domain")).toEqual({ ok: false, why: "refused", refused: "no domain is no domain name" });
+    expect(question?.answer("no domain")).toEqual({ ok: false, why: "refused", refused: "no domain is not a domain name" });
     // A variable set to nothing must not read as the word for none: a run would then install at another kind of address than the person meant.
     expect(installer.read({ flags: new Map(), env: { POPLIN_DOMAIN: "" } })).toMatchObject({ ok: false, why: "open" });
   });

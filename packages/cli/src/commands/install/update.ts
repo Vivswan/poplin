@@ -7,8 +7,8 @@ import type { Outcome, RequestOf, Session } from "../records";
 
 /** What the check says of an install by whether it holds its key. */
 const KEY_LINES = {
-  held: "the install holds its key",
-  none: "the install holds no key, so it cannot update itself: open Domain on the dashboard and press Repair",
+  held: "The install has its provider key",
+  none: "The install has no provider key, so it cannot update itself. Fix: open Domain on the dashboard and press Repair",
 } as const;
 
 async function start({ client }: Session, asked: string | undefined): Promise<Outcome> {
@@ -18,7 +18,7 @@ async function start({ client }: Session, asked: string | undefined): Promise<Ou
 
   const { from, to } = started.value;
 
-  return { ok: true, value: { started: true, from, to }, lines: [{ tone: "done", text: `the install now runs ${to}; it ran ${from}` }] };
+  return { ok: true, value: { started: true, from, to }, lines: [{ tone: "done", text: `Updated the install from ${from} to ${to}` }] };
 }
 
 /** Say what a start would come to, with one call that only reads: the newer version when one is out, whether the install holds the key an update is sent with, and the version it can go back to. */
@@ -28,10 +28,10 @@ async function check({ client }: Session): Promise<Outcome> {
 
   const { version, update, key, back } = state.value;
   const lines = [
-    update === null ? `no newer version is known; the install runs ${version}` : `${update.newest} is out; the install runs ${version}`,
+    update === null ? `No newer version is known. The install runs ${version}.` : `${update.newest} is available. The install runs ${version}.`,
     key ? KEY_LINES.held : KEY_LINES.none,
-    ...(back === null ? [] : [`the install can go back to ${back.to}: poplin update --to ${back.to}`]),
-    "nothing was started",
+    ...(back === null ? [] : [`To go back to ${back.to}: poplin update --to ${back.to}`]),
+    "Dry run: no update was started",
   ];
 
   const release = update === null ? null : { current: update.current, newest: update.newest, notes: update.notes };

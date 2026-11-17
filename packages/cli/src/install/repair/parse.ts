@@ -24,10 +24,10 @@ export const REPAIR_OPTIONS: readonly OptionRow[] = [
 
 /** The options a person may reach for that a repair does not take, each with the line that says why or where. */
 const ELSEWHERE: Readonly<Record<string, string>> = {
-  "--server": "--repair works with the account token, not a login: leave out --server",
-  "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
-  "--user": "a repair keeps the users the install has. To let one more person in: --add-user <email>",
-  "--remove": "To remove an install: poplin uninstall <provider>",
+  "--server": "Fix: remove --server",
+  "--token": `Fix: pass --token-stdin or set ${TOKEN_VARIABLE}`,
+  "--user": "Fix: add a user with --add-user <email>",
+  "--remove": "Fix: poplin uninstall <provider>",
 };
 
 /** The command, as its words are read. */
@@ -57,18 +57,18 @@ function readUser(read: Named): Login | undefined | Stop {
 
   const login = parseLogin(typed);
 
-  return login.ok ? login.value : usage(COMMAND, "--add-user takes an email address", "for example: --add-user you@example.com");
+  return login.ok ? login.value : usage("--add-user requires an email address");
 }
 
 /** Read every answer the options and the variables gave, each checked once: the provider's own, the email of the person to let in, and the token of the variable. */
 function readAnswers(read: Named, env: Variables): Answers | Stop {
   const where = read.provider.read({ flags: read.own, env });
-  if (!where.ok && where.why === "refused") return usage(COMMAND, where.refused);
+  if (!where.ok && where.why === "refused") return usage(where.refused);
 
   const addUser = readUser(read);
   if (typeof addUser === "object") return addUser;
 
-  const token = heldToken(read, env, COMMAND);
+  const token = heldToken(read, env);
   if (typeof token === "object") return token;
 
   return { where, addUser, token };
