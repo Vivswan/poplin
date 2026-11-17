@@ -70,6 +70,18 @@ describe("the way out of the login", () => {
 
     expect([before, items.map((item) => [item.textContent, item.getAttribute("href")]), account.getAttribute("aria-expanded")]).toEqual([0, [["Sign out", `${BOOT.base}/out`]], "true"]);
   });
+
+  // Drift: the menu would open beside the email again, over the working area, where it covers what the screen shows.
+  test("opens over the email, from the email's left edge", async () => {
+    await drawWith(null);
+    await act(async () => {
+      fireEvent.click(screen.getByTitle(BOOT.email));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const menu = screen.getByRole("menu");
+
+    expect([menu.getAttribute("data-side"), menu.getAttribute("data-align")]).toEqual(["top", "start"]);
+  });
 });
 
 describe("the mark at a section of the side", () => {

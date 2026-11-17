@@ -17,14 +17,26 @@ function signOut(page: Page): Locator {
   return page.getByRole("menu").getByRole("menuitem", { name: "Sign out", exact: true });
 }
 
-// Drift: Sign out would stand as a loose word beside the email again, where it reads as part of the address; or the menu would open with no key, keep the focus after Escape, or lead to a page headed "403", which reads as a failure.
-test("the email opens a menu with Enter, Escape closes it and leaves the focus on the email, and Sign out in it leaves the dashboard for a page headed Signed out", async ({ page }) => {
+/** Hold that the open menu stands over the email, from the email's left edge, and inside the screen. It grows into its place as it opens: it is measured until it has come to rest. */
+async function standsOver(page: Page): Promise<void> {
+  await expect(async () => {
+    const [menu, button] = await Promise.all([page.getByRole("menu").boundingBox(), account(page).boundingBox()]);
+
+    expect((menu?.y ?? Number.NaN) + (menu?.height ?? Number.NaN)).toBeLessThanOrEqual(button?.y ?? Number.NaN);
+    expect(Math.abs((menu?.x ?? Number.NaN) - (button?.x ?? Number.NaN))).toBeLessThanOrEqual(1);
+    expect(menu?.x).toBeGreaterThanOrEqual(0);
+  }).toPass();
+}
+
+// Drift: Sign out would stand as a loose word beside the email again, where it reads as part of the address; or the menu would open over the working area, open with no key, keep the focus after Escape, or lead to a page headed "403".
+test("the email opens a menu over it with Enter, Escape closes it and leaves the focus on the email, and Sign out in it leaves the dashboard for a page headed Signed out", async ({ page }) => {
   await arrive(page);
   await expect(page.getByText("Sign out", { exact: true })).toHaveCount(0);
 
   await account(page).focus();
   await page.keyboard.press("Enter");
   await expect(signOut(page)).toBeVisible();
+  await standsOver(page);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(account(page)).toBeFocused();
@@ -48,13 +60,7 @@ test.describe("on a phone", () => {
     await arrive(page);
     await page.getByRole("button", { name: SECTIONS_BUTTON }).click();
     await account(page).tap();
-    // The menu grows into its place as it opens: it is measured until it has come to rest.
-    await expect(async () => {
-      const [item, button] = await Promise.all([signOut(page).boundingBox(), account(page).boundingBox()]);
-
-      expect((item?.y ?? Number.NaN) + (item?.height ?? Number.NaN)).toBeLessThanOrEqual(button?.y ?? Number.NaN);
-      expect(item?.x).toBeGreaterThanOrEqual(0);
-    }).toPass();
+    await standsOver(page);
 
     await signOut(page).tap();
     await expect(page.locator("body")).toContainText(SIGNED_OUT);
