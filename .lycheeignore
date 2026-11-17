@@ -1,0 +1,2 @@
+# The provider's token form opens only after a login, so a link check without one always gets 403.
+^https://dash\.cloudflare\.com/profile/api-tokens

@@ -8,7 +8,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
-| check that an install of the last release updates to the next one | the pull request of a release: its `release-gate / live upgrade` checks, one for each kind of install | the same environments |
+| check that an install of the last release updates to the next one | the pull request of a release: the checks `live upgrade (domain)` and `live upgrade (account address)` of its `Release Live Upgrade` run | the same environments |
 | check that a release publishes its built Worker   | a release's own run of main, then the `Release Feed` run that follows it: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
@@ -198,7 +198,9 @@ a run with upgrade ticked               about 212 + 20 + 1,018 (the checks) + 43
 the pull request of a release           about 212 + 20 = about 232 rows, on each account, each time its checks run
 ```
 
-The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgrade.yml` once for each kind of install on the pull request of a release, and stands down on its nightly call and on a dispatch. The pull request cannot merge until both ended green.
+The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` once for each kind of install on the pull request of a release alone. Its two checks stand beside `all-green` on the pull request, and `all-green` does not wait for them: read both before merging a release.
+
+It is no job of the release gate: GitHub hands a called workflow only the secrets its caller passes, and the gate's caller passes none.
 
 | A run reaches a test account when | Held by |
 | --------------------------------- | ------- |
@@ -277,8 +279,8 @@ The owner sets these. Each test account has its own environment, and the secrets
 
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
-| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and the release gate's `live upgrade (domain)` |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and the release gate's `live upgrade (account address)` |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` of `Release Live Upgrade` |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` of `Release Live Upgrade` |
 
 For each account:
 

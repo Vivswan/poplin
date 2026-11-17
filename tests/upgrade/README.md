@@ -15,7 +15,7 @@ then          = this code opens the same database and the same objects, and is a
 | check that no released step changed | `bun test ./tests/frozen-steps.test.ts` |
 | run both as a release does          | the `Release Gate` workflow             |
 
-Both run on every push, inside `bun run test`, and again in `release-gate.yml` on the pull request of a release, beside the fuzz run and the upgrade of the two real test installs. A shallow checkout fails with the command that fetches the history.
+Both run on every push, inside `bun run test`, and again in `release-gate.yml` on the pull request of a release, beside the fuzz run. The upgrade of the two real test installs is `release-live-upgrade.yml`, on the same pull request. A shallow checkout fails with the command that fetches the history.
 
 ## What is checked
 
