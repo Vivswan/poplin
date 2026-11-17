@@ -210,6 +210,20 @@ describe("the table", () => {
     expect(seen.layout?.sizes).toEqual({});
     expect(said()).toEqual(first);
   });
+
+  // Drift: a press on an edge would start a selection again: the drag marks the page's text, and the next press, which lands on marked text, drags that text in WebKit, so the edge hears one move and no release.
+  test("takes a press on a column's edge for its own, with the edge in focus, and drags the column by it", () => {
+    roomOf(600);
+    render(<Harness />);
+    const edge = (): HTMLElement => page().getByRole("separator", { name: "Resize the Colour column" });
+    const from = Number(edge().getAttribute("aria-valuenow"));
+
+    const untaken = fireEvent.mouseDown(edge(), { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 130 });
+    fireEvent.mouseUp(document, { clientX: 140 });
+
+    expect([untaken, document.activeElement === edge(), seen.layout?.sizes]).toEqual([false, true, { colour: from + 40 }]);
+  });
 });
 
 describe("a table with no layout", () => {

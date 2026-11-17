@@ -49,9 +49,11 @@ test.describe("on a wide screen, the columns of the Sites table", () => {
 
     await drag(page, edge, -900);
     await expect(edge).toHaveAttribute("aria-valuenow", "120");
+    // A drag that marked the page's text leaves the edge on marked text, and WebKit on Linux then drags that text in the edge's place.
+    expect(await page.evaluate(() => String(document.getSelection()))).toBe("");
     await drag(page, edge, 100);
 
-    expect(await width()).toBeGreaterThanOrEqual(215);
+    await expect.poll(width).toBeGreaterThanOrEqual(215);
   });
 
   // Drift: the headings are of many widths and stay in place while one is moved, so one arrow key carried a heading two places to the left, and none to the right.

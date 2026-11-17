@@ -273,6 +273,13 @@ function ColumnEdge({
   readonly onNudge: (by: number) => void;
 }): ReactNode {
   const width = Math.round(header.getSize());
+  const resize = header.getResizeHandler();
+  // A press the browser also takes for its own marks the page's text as the edge is dragged, and the next press, on marked text, drags that text in WebKit and not the edge.
+  const onPress = (event: MouseEvent<HTMLElement>): void => {
+    event.preventDefault();
+    event.currentTarget.focus();
+    resize(event);
+  };
   const onKey = (event: KeyboardEvent): void => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Enter") return;
 
@@ -291,8 +298,8 @@ function ColumnEdge({
       aria-valuemax={Number.MAX_SAFE_INTEGER}
       aria-valuetext={`${width} pixels`}
       title={EDGE_HINT}
-      onMouseDown={header.getResizeHandler()}
-      onTouchStart={header.getResizeHandler()}
+      onMouseDown={onPress}
+      onTouchStart={resize}
       onDoubleClick={() => header.column.resetSize()}
       onKeyDown={onKey}
       className={cn(EDGE_LOOK, inside ? EDGE_INSIDE : EDGE_BETWEEN, header.column.getIsResizing() && "after:w-0.5 after:bg-ring")}
