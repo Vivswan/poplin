@@ -87,12 +87,20 @@ describe("processScreen", () => {
   ])("%s while the spinner shows stops the command by its own stop, and the process does not end as done", async (_name, key) => {
     const child = spawn(process.execPath, ["-e", SPINNING], { stdio: ["pipe", "pipe", "ignore"] });
     let said = "";
+    let typed = false;
+    // A child that ended before the key reached it closed the pipe: that is no failure of its own, and the exit code and the output below say how it ended.
+    child.stdin.on("error", () => undefined);
     child.stdout.on("data", (chunk: Buffer) => {
       said += chunk.toString();
-      if (said.includes("spinning")) child.stdin.write(key);
+      // The child says `spinning` once its spinner is up and listens for a key. The key is typed once: what the child says after it is no cue to type again.
+      if (typed || !said.includes("spinning")) return;
+
+      typed = true;
+      child.stdin.write(key);
     });
 
-    const [code] = await once(child, "exit");
+    // `close` comes after the child ended and its output was read to the end.
+    const [code] = await once(child, "close");
 
     expect([code, said.includes("stopped by the command")]).toEqual([1, true]);
   });
