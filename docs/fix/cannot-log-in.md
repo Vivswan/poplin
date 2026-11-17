@@ -94,7 +94,7 @@ An **account token** is a long password that lets a program change your Cloudfla
    created    User                  new@example.com
    The repair is complete
    Dashboard: https://poplin.example.com
-   The account token was not stored. Delete it at Cloudflare.
+   The account token was not stored
    ```
 
    Without a domain, the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`. Where the login page was fine, its rows say `unchanged`.
@@ -116,7 +116,7 @@ Every piece of the install has a row. Four matter here:
 | -------------------- | --------------------------------------------------------------------- |
 | `unchanged`          | the piece was as it should be                                         |
 | `created`, `updated` | the piece was missing or differed, and is mended                      |
-| `skipped`            | an optional piece the token cannot reach: it stays as it is. Nothing is wrong. Saying `an earlier row stopped the run`: the piece was not reached |
+| `skipped`            | an optional piece the token cannot reach: it stays as it is. Nothing is wrong. Saying `not attempted`, the run did not reach it |
 | `blocked`            | it cannot be mended until you act: [When it stops](#when-it-stops)    |
 | `failed`             | Cloudflare refused the piece                                          |
 
@@ -124,7 +124,7 @@ Every piece of the install has a row. Four matter here:
 | ----------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
 | `The repair is complete`                              | what was missing is made, the new user too    | log in                                                       |
 | `The install needs no repair`                         | nothing was broken, and no user was added     | if no code arrives, run the line with `--add-user`           |
-| `The run is incomplete:`, a count of rows, and `Next: rerun this command`      | a row says `blocked` or `failed`             | [When it stops](#when-it-stops), then the same line again    |
+| `The run is incomplete:`, a count of rows, and `Next: rerun this command`, after `add the permission, then` where the token lacks one | a row says `blocked` or `failed` | [When it stops](#when-it-stops), then the same line again    |
 
 The login is mended to the users the install has stored. No site and no setting of yours is changed.
 
@@ -169,14 +169,14 @@ The link the command prints chooses every one of them. A token you kept from the
 
 | It says                                                             | Means                                                   | Do                                                              |
 | ------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------- |
-| `This account has no install.`                                      | the token is of an account with no install              | make the token in the account the install is in                 |
+| `This account has no install. Nothing changed.`                     | the token is of an account with no install              | make the token in the account the install is in                 |
 | `This install has no domain. Pass --no-domain.`                     | you named a domain, and the install has none            | run it again, and press Enter at the first question             |
 | `This install is under example.com. Pass --domain example.com.`     | you named no domain, or another one          | run it again, and type that domain at the first question        |
-| `This account has an incomplete install.`                           | the install was never set, so there is no login to mend | finish it with the line it prints: `npx poplin install cloudflare`, with the `--domain` or `--no-domain` of your line |
+| `This account has an incomplete install. Nothing changed.`          | the install was never set, so there is no login to mend | finish it with the line it prints: `npx poplin install cloudflare`, with the `--domain` or `--no-domain` of your line |
 | `This account has an incomplete install`, and a place               | the same, and it was started for another place than you named | finish it with the line it prints: `npx poplin install cloudflare`, with `--no-domain` or `--domain` and that domain |
 | `Cloudflare refused the account token for this install`             | the token does not reach the install's account, or its domain | on the token's form, choose that account, and that domain |
 | a row `blocked`, saying `Access is off for the account`             | Zero Trust, the part of Cloudflare that holds the login page, is not switched on | pick the Free plan at the address under the rows, then run again |
-| a row `blocked`, ending `lacks this permission:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token), then run again |
+| a row `blocked`, saying `The account token lacks` and a name        | the token lacks the permission of that name             | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token), then run again |
 | `The install's database schema does not match this CLI.`            | the install is of another version of poplin than the command you ran | run the line it ends with: the newest poplin's repair, `npx poplin@latest doctor --repair`, with the `--domain` or `--no-domain` of the install. The line names a second way: the command of the install's own version |
 | `The install runs`, a version, `and its database schema does not match this CLI` | the install is behind, and the command you ran is of a newer poplin than its records: a repair alone cannot read them | to mend only, run the first line it names: the poplin of the install's version, as `npx poplin@0.2.0 doctor --repair`. To take the newest release too, run the line it ends with: `npx poplin doctor --repair --update`. Both hold the `--domain` or `--no-domain` of the install, and the `--add-user` of your line where the terminal can hold its email |
 | `The install runs`, a version, `newer than the latest release this CLI knows`, and an older one | the install is of a newer poplin than the command you ran; nothing is put back | run the line it ends with: `npx poplin@latest doctor --repair`, with the `--domain` or `--no-domain` of the install |

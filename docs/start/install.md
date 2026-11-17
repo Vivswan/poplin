@@ -102,7 +102,7 @@ See: npx poplin install cloudflare --help for 4 optional permissions
 Create the account token here:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
 On the form, limit it to this account and this domain
-Select manually: Workers R2 Storage: Edit
+Add on the form: Workers R2 Storage: Edit
 Account token (hidden):
 ```
 
@@ -168,7 +168,7 @@ created    Key                   poplin kept key
 Waiting for https://poplin.example.com to respond
 poplin 0.1.0 is installed
 Dashboard: https://poplin.example.com
-The account token was not stored. Delete it at Cloudflare.
+The account token was not stored
 Log this machine in now?
 ```
 
@@ -180,7 +180,7 @@ Log this machine in now?
 | -------------------- | -------------------------------------------------------------------- |
 | `created`, `updated` | the thing was not there, or differed, and now is as it should be     |
 | `unchanged`          | it was there already, as it should be                                |
-| `skipped`            | it is optional and was not made: the token lacks its permission, or the domain or its plan has no room for it. Nothing is wrong. `First user` is skipped where a kept database holds its own users and the email is none of them A `skipped` row that says `an earlier row stopped the run` was not reached |
+| `skipped`            | it is optional and was not made: the token lacks its permission, or the domain or its plan has no room for it. Nothing is wrong. `First user` is skipped where a kept database holds its own users and the email is none of them. A `skipped` row that says `not attempted` was not reached by the run |
 | `blocked`            | it cannot be made until you act: the lines under the rows say where  |
 | `failed`             | it could not be made, and the row says why                           |
 

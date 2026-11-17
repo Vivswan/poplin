@@ -35,7 +35,7 @@ const API_ROWS = {
   hash_mismatch: { sentence: "A file changed after it was read, or was corrupted in transit", hint: "Fix: publish again once the files stop changing", exit: "failed" },
   name_taken: { sentence: "The public name is taken", hint: "Fix: poplin set <site> --public --public-name <public name>", exit: "failed" },
   in_trash: { sentence: "The site is in the trash", hint: "Fix: poplin restore <site>", exit: "failed" },
-  id_taken: { sentence: "The site id already exists on the install", hint: "See: poplin show <site>", exit: "failed" },
+  id_taken: { sentence: "The site id already exists", hint: "See: poplin show <site>", exit: "failed" },
   backup_too_new: { sentence: "The backup format is newer than the install supports", hint: "Fix: poplin update, then import again", exit: "failed" },
   not_in_trash: { sentence: "The site is not in the trash", exit: "failed" },
   stale_version: { sentence: "A newer version went live first", hint: "Fix: publish again", exit: "failed" },
@@ -92,7 +92,7 @@ const LOCAL_ROWS = {
   bad_backup: { sentence: "Not a backup", hint: "Nothing was uploaded.", exit: "failed" },
   no_settings: { sentence: "The backup has no settings: it holds one site", hint: "Fix: import without --settings", exit: "failed" },
   not_in_backup: { sentence: "Site not found in the backup", hint: "See: poplin import <zip> --dry-run", exit: "failed" },
-  unreachable: { sentence: "Cannot reach the install", hint: "Fix: check the URL and the network, or poplin login --server <url>", exit: "unreachable" },
+  unreachable: { sentence: "Cannot reach the install", hint: "Fix: poplin login --server <url> if the URL changed", exit: "unreachable" },
   timeout: { sentence: "The install did not respond in time", hint: "Fix: retry", exit: "unreachable" },
   not_json: { sentence: "The response is not from a poplin install", exit: "unreachable" },
   unexpected_answer: { sentence: "Unexpected response from the install", hint: "A login page in front of the install or a version mismatch can cause this.", exit: "unreachable" },
@@ -126,7 +126,7 @@ const NOTHING_DONE = /^Nothing (?:was \w+|changed)\.?$/;
 const MAY_HAVE_CHANGED = "See: poplin list (the request may have been applied)";
 
 /** What goes with a change that never left this machine: the install had nothing of it. */
-const NOTHING_SENT = "No request was sent, so nothing changed. Fix: check the URL and the network";
+const NOTHING_SENT = "No request was sent, so nothing changed. Fix: poplin login --server <url> if the URL changed";
 
 /** A code of the table. */
 type Code = keyof typeof API_ROWS | keyof typeof LOCAL_ROWS;

@@ -16,7 +16,7 @@ import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, refusedWords, repairAfter, rowLine, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, refusedWords, repairAfter, rowWording, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
 
 /** What the look for an install is called while it runs. */
 const LOOKING = "Checking the account for an install";
@@ -217,7 +217,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
   const value = runValue(installed, mode.mode, ground.found.state, answers, next);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
   const done = doneWords(installed.release, answers);
-  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next, again: NEXT.install(request.provider), repair: NEXT.repair("this", [], placeOf(request.provider, ground.where)) });
+  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, answers, { done, next, again: NEXT.install(request.provider), repair: NEXT.repair("this", [], placeOf(request.provider, ground.where)) });
 
   const { unused } = installed;
   const letIn = unused !== undefined && installed.ready && mode.mode === "apply" ? [unusedLine(unused, next)] : [];
@@ -240,8 +240,9 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
   const doing = mode.mode === "dry-run" ? "Planning the install" : "Installing";
   show.working(doing);
 
+  const worded = rowWording(mode.mode);
   const installed = await provider.install(ground.found, ground.where, request.login, mode.mode, ends.reach, (row) => {
-    const { tone, text, hang } = rowLine(row, mode.mode);
+    const { tone, text, hang } = worded(row);
     show.line(tone, text, hang);
     show.working(doing);
   });

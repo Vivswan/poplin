@@ -161,16 +161,16 @@ export function siteLines(done: string, site: SiteObject, facts: readonly string
 }
 
 /**
- * The row for a change of access that moved a site to another address: a private site's address carries `-p-`, every other `-u-`.
+ * The row for a change of access that moved a site to another address: a private site's address carries `-p-`, every other `-u-`. The old address sends visitors on.
  *
  * @param before - the site as the action found it, `null` for a site the action made
- * @param moved - the word of the row: what a dry run says the site would do
+ * @param redirects - the word of the row: what a dry run says the old address would do
  * @returns one row with the old address, or none when the site kept its address
  */
-export function addressChange(before: SiteObject | null, site: SiteObject, moved = "moved"): DoneRow[] {
+export function addressChange(before: SiteObject | null, site: SiteObject, redirects = "redirects"): DoneRow[] {
   if (before === null || before.id !== site.id || before.addresses.site === site.addresses.site) return [];
 
-  return [{ tone: "note", done: moved, what: `from ${before.addresses.site}` }];
+  return [{ tone: "note", done: redirects, what: `from ${before.addresses.site}` }];
 }
 
 /**
@@ -182,5 +182,5 @@ export function addressChange(before: SiteObject | null, site: SiteObject, moved
 export function searchNotes(changes: { readonly search_engines?: boolean | undefined }, site: SiteObject, stored = "is saved"): string[] {
   if (changes.search_engines !== true || site.access === "public") return [];
 
-  return [`Search engines index only a public site. The setting ${stored}.`];
+  return [`The setting ${stored}, but search engines index only a public site`];
 }

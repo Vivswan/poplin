@@ -59,11 +59,11 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
   const next = NEXT.install(provider, [], place);
   const install = next.command;
 
-  if (found.state === "none") return { problem: "no_install", exit: 1, words: `This account has no install. Fix: ${install}`, next };
+  if (found.state === "none") return { problem: "no_install", exit: 1, words: `This account has no install. ${UNCHANGED}. Fix: ${install}`, next };
 
   if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To reuse them: ${install} ${ADOPT}`), next };
 
-  if (found.state === "started") return { problem: "unfinished", exit: 1, words: `This account has an incomplete install. Fix: ${install}`, next };
+  if (found.state === "started") return { problem: "unfinished", exit: 1, words: `This account has an incomplete install. ${UNCHANGED}. Fix: ${install}`, next };
 
   if (found.state === "held") return heldStop(found, repair("this", careful, [...updateWords(update), ...place]), provider, place, repair);
 
@@ -102,17 +102,16 @@ export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, ca
 /**
  * Word what a repair came to.
  *
- * @param provider - the provider, whose name says where the token can be deleted
  * @returns the last lines: of a dry run whether a run would go through and what it would do, and of a run what only a person can do and whether anything is left undone
  */
-export function repairedLines(repaired: Mended, run: Run, provider: Provider): Line[] {
+export function repairedLines(repaired: Mended, run: Run): Line[] {
   const same = changesIn(repaired.rows) === 0;
   if (run === "dry-run") return repaired.ready && same ? [{ tone: "done", text: DONE.same }] : dryRunLines(repaired);
 
   // What a person is told to do after a run that mended everything stands before its last lines. A step at the dashboard's own address is left to the line that names the dashboard; the JSON value keeps it.
   const told = repaired.ready ? repaired.steps.filter((step) => step.address !== repaired.address).flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
 
-  return [...told, ...runLines(repaired, provider, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair(), repair: NEXT.repair() })];
+  return [...told, ...runLines(repaired, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair(), repair: NEXT.repair() })];
 }
 
 /**

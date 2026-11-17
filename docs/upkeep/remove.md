@@ -88,7 +88,7 @@ would remove  Worker                poplin
 would remove  R2 bucket             poplin-sites (files: 2, 15 B)
 would remove  D1 database           poplin (sites: 3)
 unchanged     Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
-Without --dry-run, pass --confirm poplin.your-name.workers.dev or type it at the prompt
+A real run prompts for poplin.your-name.workers.dev, or accepts --confirm poplin.your-name.workers.dev
 Uninstall does not log machines out. Run npx poplin logout on each machine first.
 A run would remove 10 resource types
 ```
@@ -142,19 +142,18 @@ removed    Worker route          *-poplin.example.com/*, *-page.example.com/*, p
 ...
 removed    D1 database           poplin (sites: 3)
 The install is removed: 18 resource types removed, 2 unchanged
-Next: npx poplin logout on each machine still logged in
+Next: npx poplin logout on each machine with a stored login, to delete it
 ```
 
 Nothing is removed before you type the address. Another text than the install's own removes nothing.
 
 ## What stays, and what to do
 
-The last lines count the rows that say `removed` or `not found`, and the rows that say `skipped` or `unchanged`. Where the token lacks an optional permission, they name each kind it skipped:
+The line that ends the rows counts the ones that say `removed` or `not found`, then the ones that say `skipped` and `unchanged`. Where the token lacks an optional permission, the line under it names the permission and each kind the run skipped:
 
 ```text
 The install is removed: 16 resource types removed, 2 skipped, 2 unchanged
-Budget alert and Certificate alert may still exist: the account token lacks an optional permission
-Fix: add the permission and rerun this command, or delete them manually
+Fix: add Notifications: Edit and rerun this command, or delete Budget alert and Certificate alert at Cloudflare
 ```
 
 The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
@@ -190,7 +189,7 @@ This is for an install of the same kind, made again in the same account over the
 
 The list before the question says `unchanged` for both, and so do their rows after it. The two keys go with the rest.
 
-A run that left a kind undone ends `rerun this command with --keep-data.`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
+A run that left a kind undone ends `Next: rerun this command with --keep-data`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
 
 | Then                                   | Do                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------- |
@@ -218,8 +217,8 @@ A dry run with `--keep-data` lists the same. The kept bucket and database stay i
 | `The install in this account is at`, and an address      | the line named another place than the install's: `--no-domain` for an install under a domain, the other way round, or another domain | run it again with the install's own domain after `--domain`, or with `--no-domain` |
 | `This account has an incomplete install`, and a place    | an install that was never finished was started for another place than the line named | run it again with the option the line names: `--domain` and that domain, or `--no-domain` |
 | `The confirmation does not match`, and the address       | the address you typed is not the install's own       | run it again, and type the address the line names                             |
-| `removed and`, a number, and `rerun this command`        | a row says `blocked`, `failed`, or `skipped`        | fix what the row names, then run the same line again: it removes what is left |
-| a row `blocked`, ending `lacks this permission:` and a name | the token lacks the permission of that name          | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |
+| `The run is incomplete:`, a count of rows, and `Next: rerun this command` | a row says `blocked`, `failed`, or `skipped` | fix what the row names, then run the same line again: it removes what is left |
+| a row `blocked`, saying `The account token lacks` and a name | the token lacks the permission of that name         | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |
 | `The account changed after it was checked.`              | something changed at Cloudflare during the run       | run it again                                                                  |
 | `--dry-run and --confirm are mutually exclusive`             | the two options were on one line                     | take one of them off                                                          |
 

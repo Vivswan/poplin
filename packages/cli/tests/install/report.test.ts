@@ -151,18 +151,25 @@ describe.each(["--no-place", "--place example.com"])("a careful choice of the li
   test("a removal that keeps the data and left a kind tells a person to rerun it with --keep-data", async () => {
     const ran = await runLine(placed(`${REMOVAL} --keep-data`), half, { env: HELD });
 
-    expect([ran.code, ran.out.slice(-2)]).toEqual([1, ["1 resource type was removed and 1 remains", "Next: rerun this command with --keep-data"]]);
+    expect([ran.code, ran.out.slice(-2)]).toEqual([1, ["The run is incomplete: 1 resource type removed, 1 failed", "Next: rerun this command with --keep-data"]]);
   });
 });
 
 describe("a piece the run never reached", () => {
-  // Drift: a provider gives such a row no words, so the line said `skipped` and a name and nothing of why. The value a program reads keeps the empty detail.
-  test("says on the screen that an earlier row stopped the run, and keeps its empty detail in the JSON value", async () => {
+  // Drift: a provider gives such a row no words, so the line said `skipped` and a name and nothing of why, or said that a row stopped the run while later rows still ran. The value a program reads keeps the empty detail.
+  test("says on the screen that it was not attempted, and that an earlier row was blocked or failed only where one was, and keeps its empty detail in the JSON value", async () => {
+    const rows: Row[] = [
+      { object: "Jobs", state: "not-run", detail: "" },
+      { object: "Login", state: "block", detail: "refused with status 403", right: "Logins: Edit" },
+      { object: "Jobs", state: "not-run", detail: "" },
+    ];
+    const stopped = await runLine(INSTALL, { ...emptyAccount(), installed: installedOf(rows, { ready: false }) }, { env: HELD });
     const account = { ...emptyAccount(), installed: installedOf([{ object: "Jobs", state: "not-run", detail: "" }], { ready: false }) };
     const ran = await runLine(INSTALL, account, { env: HELD });
     const json = await runLine(`${INSTALL} --json`, account, { env: HELD });
 
-    expect(ran.out.filter((line) => line.startsWith("skipped"))).toEqual(["skipped    Jobs                  an earlier row stopped the run"]);
+    expect(stopped.out.filter((line) => line.startsWith("skipped")).map((line) => line.split(/ {2,}/)[2])).toEqual(["not attempted", "not attempted after a blocked or failed row"]);
+    expect(ran.out.filter((line) => line.startsWith("skipped"))).toEqual(["skipped    Jobs                  not attempted"]);
     expect(jsonOf(json).rows).toEqual([{ object: "Jobs", did: "not-run", detail: "" }]);
   });
 });

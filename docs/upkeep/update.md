@@ -48,8 +48,8 @@ No build runs, at Cloudflare or anywhere. The install takes the built Worker the
 
 ```text
 $ npx poplin update --dry-run
-0.3.1 is available. The install runs 0.3.0.
-The install holds a key to update itself with
+The install runs 0.3.0 and 0.3.1 is available
+The install has the key an update requires
 Dry run: no update was started
 
 $ npx poplin update
@@ -115,7 +115,7 @@ unchanged  Public word           page (public sites answer at <name>-page.exampl
 ...
 The repair is complete
 Dashboard: https://poplin.example.com
-The account token was not stored. Delete it at Cloudflare.
+The account token was not stored
 ```
 
 Without `--update`, the repair mends and uploads no release, whatever `auto_update` says. Where a newer one is out, its row `Worker` says so, and the run ends as it would without that row:
@@ -128,7 +128,7 @@ unchanged  Public word           page (public sites answer at <name>-page.exampl
 ...
 The install needs no repair
 Dashboard: https://poplin.example.com
-The account token was not stored. Delete it at Cloudflare.
+The account token was not stored
 ```
 
 The samples are cut short where the dots are. Without a domain the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`.
@@ -189,8 +189,8 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 
 ```text
 $ npx poplin update --dry-run
-No newer version is known. The install runs 0.3.1.
-The install holds a key to update itself with
+The install runs 0.3.1 and no newer version is known
+The install has the key an update requires
 To go back to 0.3.0: npx poplin update --to 0.3.0
 Dry run: no update was started
 

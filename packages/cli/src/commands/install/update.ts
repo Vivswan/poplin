@@ -7,8 +7,8 @@ import type { Outcome, RequestOf, Session } from "../records";
 
 /** What the check says of an install by whether it holds its key. */
 const KEY_LINES = {
-  held: "The install holds a key to update itself with",
-  none: "The install has no key, so it cannot update itself. Fix: open Domain on the dashboard and press Repair",
+  held: ["The install has the key an update requires"],
+  none: ["The install has no key, so it cannot update itself", "Fix: open Domain on the dashboard and press Repair"],
 } as const;
 
 async function start({ client }: Session, asked: string | undefined): Promise<Outcome> {
@@ -28,8 +28,8 @@ async function check({ client }: Session): Promise<Outcome> {
 
   const { version, update, key, back } = state.value;
   const lines = [
-    update === null ? `No newer version is known. The install runs ${version}.` : `${update.newest} is available. The install runs ${version}.`,
-    key ? KEY_LINES.held : KEY_LINES.none,
+    update === null ? `The install runs ${version} and no newer version is known` : `The install runs ${version} and ${update.newest} is available`,
+    ...(key ? KEY_LINES.held : KEY_LINES.none),
     ...(back === null ? [] : [`To go back to ${back.to}: poplin update --to ${back.to}`]),
     "Dry run: no update was started",
   ];

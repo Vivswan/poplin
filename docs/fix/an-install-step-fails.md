@@ -26,7 +26,7 @@ stopped part way             rows say blocked, failed, or skipped: what is made 
 | `R2 is not enabled for this account, or the account token cannot use it.` | R2 is off, or the token lacks Workers R2 Storage: Edit          | finish the R2 row of [step 1](../start/install.md#1-switch-on-what-no-command-can); check the token's row Workers R2 Storage |
 | `Access is not enabled for this account.`                              | Zero Trust is off: nobody could log in                          | answer no at `Continue anyway?`, pick the Free plan at the address it prints, then run again |
 | `This account has no workers.dev subdomain, or one too long for the login hostname.` | without a domain: the account has no `workers.dev` subdomain, or one of more than 36 characters | open Workers & Pages at the address it prints, and set a subdomain of 36 characters at most |
-| a line that ends `The account token lacks this permission:` and a name | the token lacks the permission of that name                  | add it to the token: [the table below](#add-a-permission-to-the-token) |
+| a line that says `The account token lacks` and a name                  | the token lacks the permission of that name                  | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `This account has a D1 database named poplin but no poplin Worker.` | an earlier install left its database, its bucket, or both      | answer yes at `Reuse these resources and their data?` to keep its sites; or delete it at the address it prints |
 | `This account has a Worker named poplin that is not marked as poplin's` | the name the install needs is taken, or poplin's own Worker was uploaded a moment ago and Cloudflare does not show its marks yet | right after an install or an update: wait a minute, and run the line again. Else rename that Worker at the address it prints |
 | `This account has a Worker named poplin that is marked as poplin's but lacks`, and a list | an install whose Worker lost a binding, as one deployed again by hand does | keep it. Put the bindings back on the Worker's Bindings page, then run the command the line names |
@@ -43,13 +43,13 @@ A row says what happened to one piece. [Step 4 of Install](../start/install.md#4
 
 | A row                                                              | Means                                                   | Do                                                                |
 | ------------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------- |
-| `skipped`, saying `The account token lacks` and a name, or `The install creates it within a day` | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
-| `blocked`, ending `lacks this permission:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | add it to the token: [the table below](#add-a-permission-to-the-token) |
+| `skipped`, saying `The account token lacks` and a name            | nothing is wrong: an optional permission is not on the token. An alert's row adds `or wait a day for the install to create it` where the install holds a working key | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
+| `blocked`, saying `The account token lacks` and a name            | the token lacks the permission of that name             | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `blocked`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows, then [finish with the repair](#the-second-run) |
 | `failed`, saying `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
 | `failed`, with other words                                         | the row says why, such as a Worker of the name that is not poplin's | do what the row asks                                  |
 | `failed`, ending `Cloudflare asked to wait` or `no answer from Cloudflare` | Cloudflare was busy, or gave no answer          | run the command again in a minute                                 |
-| `skipped`, saying `an earlier row stopped the run`                 | an earlier row stopped the run before this piece        | fix that row first                                                |
+| `skipped`, saying `not attempted`                                 | the run did not reach this piece                        | fix each `blocked` and `failed` row, then run the command again   |
 | the address and `has not responded yet`, then `is installed, but its URL does not respond yet` | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-machine-in-and-check). If it still does not answer, run the repair the run printed: `npx poplin doctor --repair` with your `--domain` or `--no-domain`. Where the last line names a repair with `--add-user`, run that line |
 
 ## The second run
@@ -58,7 +58,7 @@ The last line of a run that left something undone names the command that goes on
 
 | The last line says                               | The install is                                        | Run, after the fix                                         |
 | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
-| `Next: rerun this command`                      | started, and not set yet                              | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `This account has an incomplete install. A run resumes it.`, and goes on. The other place is refused |
+| `Next: rerun this command`, after `add the permission, then` where the token lacks one | started, and not set yet | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `This account has an incomplete install. A run resumes it.`, and goes on. The other place is refused |
 | `Next: run npx poplin doctor --repair` and    your `--domain` or `--no-domain` | set: its address is written, and pieces are missing   | that line as it is written, with the same token. Where the line has `--add-user` and an email, keep both: [the install kept its users](../upkeep/remove.md#keep-the-data) |
 | `Nothing changed. Fix the above, then rerun this command.` | as it was before the run: the run printed no row, and changed nothing | the same line, once the line above it no longer holds: [Before any change](#before-any-change) has each |
 
@@ -76,7 +76,7 @@ created    Access application    poplin: poplin.example.com, *-p-poplin.example.
 created    Access policy         poplin logins
 The repair is complete
 Dashboard: https://poplin.example.com
-The account token was not stored. Delete it at Cloudflare.
+The account token was not stored
 ```
 
 The sample shows a few of the rows. The repair asks for the domain, or Enter for none, and for the token, as the install did. The line the install printed has `--domain` or `--no-domain` on it, and that repair asks for the token alone. [I cannot log in](cannot-log-in.md) has every line it can stop at.

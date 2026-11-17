@@ -274,7 +274,7 @@ A run that stopped is looked up in the [install guide](https://github.com/Vivswa
 ```text
 poplin 0.1.0 is installed
 Dashboard: https://poplin.example.com
-The account token was not stored. Delete it at Cloudflare.
+The account token was not stored
 Log this machine in now?
 ```
 
@@ -293,7 +293,7 @@ The user first does what `blocked` and `steps` name, such as switching Zero Trus
 | `install`                                   | started, and not set yet                | the line of part e again                    |
 | `repair`                                    | set, with pieces missing: often the login, made with Zero Trust off | the repair below    |
 
-A run without `--json`, as the user's is, names the same in its last line: it ends `Next: rerun this command`, or names the repair.
+A run without `--json`, as the user's is, names the same in a line led by `Next:`: `rerun this command`, after `add the permission, then` where the token lacks one, or the repair.
 
 `poplin install` only makes a new install: a second run on one that is set answers `already_installed` and changes nothing. The repair mends it, with the same token and the option of the install's kind. `next.command` is that line, and `--yes` and `--json` are yours to add:
 

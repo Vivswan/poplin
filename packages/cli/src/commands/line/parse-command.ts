@@ -103,15 +103,12 @@ function providerCommand(word: string): (typeof PROVIDER_COMMANDS)[number]["name
 
 function unknownCommand(word: string, publishHint: boolean): UsageError {
   const meant = nearest(word, [...SPECS.keys(), ...PROVIDER_COMMANDS.map((command) => command.name)]);
-  const hints: string[] = [];
+  const unknown = `Unknown command ${JSON.stringify(word)}`;
+  if (meant !== undefined) return usageError(unknown, `Did you mean poplin ${meant}?`);
 
-  if (meant !== undefined) hints.push(`Did you mean poplin ${meant}?`);
+  if (publishHint && PLAIN_WORD.test(word)) return usageError(unknown, `To publish a ${word.endsWith(".html") ? "file" : "folder"} of that name: poplin ./${word}`);
 
-  if (publishHint && PLAIN_WORD.test(word)) hints.push(`To publish a ${word.endsWith(".html") ? "file" : "folder"} of that name: poplin ./${word}`);
-
-  if (hints.length === 0) hints.push("See: poplin --help");
-
-  return usageError(`Unknown command ${JSON.stringify(word)}`, hints.join(" "));
+  return usageError(unknown, "See: poplin --help");
 }
 
 /** Whether a flag stands as a word of its own before `--`, even where the flag before it would take it as a value. */

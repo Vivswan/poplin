@@ -15,7 +15,7 @@ import { carefulOf, carried, followed, heldStop, NEXT, placeOf, REFUSED_AS, runn
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { RemovalMode, UninstallPlan, UninstallRequest } from "./records";
-import { afterRemoval, listedLines, removalLine, removalValue, removedLines, unlookedWords, warningLines } from "./report";
+import { afterRemoval, listedLines, removalLine, removalValue, removedLines, unlookedFix, unlookedWords, warningLines } from "./report";
 
 /** The command as it is typed after `poplin`, what runs it again, and the careful choices it takes. */
 const COMMAND = { name: "uninstall", again: NEXT.uninstall, careful: ["--keep-data", "--dry-run"] } as const;
@@ -124,8 +124,10 @@ async function removal(ground: Ground, request: UninstallRequest, how: Removal, 
   // A kind the token could not look for may still be there, so the stop names it beside what is left, and a run's next step is this command with the permission added.
   const there = removed.rows.some((row) => row.state === "keep") ? NOTHING.data : NOTHING.none;
   const careful = choicesOf(request.mode);
-  const [unlooked, ...fix] = unlookedWords(removed, how.run, careful);
-  const words = [unlooked === undefined ? `${there} ${UNTOUCHED}` : followed(`${there} ${unlooked}`, UNTOUCHED), ...fix].join(" ");
+  const unlooked = unlookedWords(removed, how.run);
+  const fix = unlookedFix(removed, how.run, careful, request.provider, "them");
+  const said = unlooked === undefined ? `${there} ${UNTOUCHED}` : followed(`${there} ${unlooked}`, UNTOUCHED);
+  const words = fix === undefined ? said : `${said} ${fix}`;
 
   return { problem: "no_install", exit: 1, words, next: afterRemoval(removed, how.run, NEXT.uninstall(request.provider, careful, placeOf(request.provider, ground.where))) };
 }
@@ -141,7 +143,7 @@ async function typedProof(listed: Listed, ends: InstallEnds, show: Show): Promis
 
 function ended(removed: Listed, run: Run, ground: Ground, request: UninstallRequest, show: Show): number {
   const careful = choicesOf(request.mode);
-  const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, careful);
+  const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, careful, request.provider);
   for (const line of lines) show.line(line.tone, line.text, line.hang);
 
   show.value(removalValue(removed, run, ground.found.state, NEXT.uninstall(request.provider, carried(careful, removed.ready), placeOf(request.provider, ground.where))));

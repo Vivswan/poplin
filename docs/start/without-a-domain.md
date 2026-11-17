@@ -78,7 +78,7 @@ See: npx poplin install cloudflare --help for 1 optional permission
 Create the account token here:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
 On the form, limit it to this account
-Select manually: Workers R2 Storage: Edit
+Add on the form: Workers R2 Storage: Edit
 Account token (hidden):
 ```
 
@@ -124,7 +124,7 @@ created    Key                   poplin kept key
 Waiting for https://poplin.your-name.workers.dev to respond
 poplin 0.1.0 is installed
 Dashboard: https://poplin.your-name.workers.dev
-The account token was not stored. Delete it at Cloudflare.
+The account token was not stored
 Log this machine in now?
 ```
 

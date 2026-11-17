@@ -91,10 +91,10 @@ async function rehearseLogout({ client, server, source }: Session): Promise<Outc
   const failure = answered.ok ? undefined : answered.failure;
   if (failure !== undefined && !isRevoked(failure)) return failed(failure);
 
-  const local = source === "file" ? "The stored login would be deleted" : "POPLIN_SERVER and POPLIN_TOKEN would stay set in this shell";
-  const lines = [{ tone: "done", text: `Would log out of ${server}` } as const, failure === undefined ? "The token would be revoked" : "The token is already invalid", local, "Dry run: one read-only request checked the token"];
+  const token = failure === undefined ? "the token would be revoked" : "the token is already invalid";
+  const lines = [{ tone: "done", text: `Would log out of ${server}: ${token}` } as const, "Dry run: one read-only request checked the token"];
 
-  return { ok: true, value: { dry_run: true, server, revoked: failure === undefined }, lines };
+  return { ok: true, value: { dry_run: true, server, revoked: failure === undefined }, lines, notes: source === "file" ? [] : ["POPLIN_SERVER and POPLIN_TOKEN would stay set in this shell"] };
 }
 
 /**
@@ -115,7 +115,7 @@ async function logout({ client, io, server, source }: Session): Promise<Outcome>
     return { ok: false, problem: { ...said, hint: `${local}. ${STILL_LIVE}` } };
   }
 
-  const lines = [{ tone: "done", text: `Logged out of ${server}` } as const, failure === undefined ? "The token is revoked" : "The token was already invalid"];
+  const lines = [{ tone: "done", text: `Logged out of ${server}: ${failure === undefined ? "the token is revoked" : "the token was already invalid"}` } as const];
 
   return { ok: true, value: { server, revoked: failure === undefined }, lines, notes: source === "file" ? [] : [local] };
 }

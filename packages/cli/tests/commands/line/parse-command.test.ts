@@ -120,13 +120,13 @@ describe("parseCommand", () => {
 
   // Drift: a typo that became a publish would upload a folder nobody meant to share, and one that became another command would change a site.
   const bareForm: readonly Row[] = [
-    [`poplin ${SWAPPED}`, refusal(`Unknown command "${SWAPPED}"`, `Did you mean poplin list? To publish a folder of that name: poplin ./${SWAPPED}`)],
+    [`poplin ${SWAPPED}`, refusal(`Unknown command "${SWAPPED}"`, "Did you mean poplin list?")],
     ["poplin report", refusal('Unknown command "report"', "To publish a folder of that name: poplin ./report")],
     ["poplin report.html", refusal('Unknown command "report.html"', "To publish a file of that name: poplin ./report.html")],
-    ["poplin publissh ./report", refusal('Unknown command "publissh"', "Did you mean poplin publish? To publish a folder of that name: poplin ./publissh")],
+    ["poplin publissh ./report", refusal('Unknown command "publissh"', "Did you mean poplin publish?")],
     ["poplin rotate report", refusal('Unknown command "rotate"', "To publish a folder of that name: poplin ./rotate")],
     [`poplin site delete ${LABEL}`, refusal('Unknown command "site"', "To publish a folder of that name: poplin ./site")],
-    ["poplin instal doctor", refusal('Unknown command "instal"', "Did you mean poplin install? To publish a folder of that name: poplin ./instal")],
+    ["poplin instal doctor", refusal('Unknown command "instal"', "Did you mean poplin install?")],
     ["poplin install", { kind: "provider", command: "install", words: [] }],
     ["poplin install somewhere --no-such-flag --user you@example.com", { kind: "provider", command: "install", words: ["somewhere", "--no-such-flag", "--user", "you@example.com"] }],
     ["poplin --json install somewhere", { kind: "provider", command: "install", words: ["--json", "somewhere"] }],
@@ -333,7 +333,7 @@ describe("parseCommand", () => {
       { kind: "version" },
       { kind: "help", topic: "set", asked: true },
       { kind: "version" },
-      refusal(`Unknown command "${SWAPPED}"`, `Did you mean poplin list? To publish a folder of that name: poplin ./${SWAPPED}`),
+      refusal(`Unknown command "${SWAPPED}"`, "Did you mean poplin list?"),
     ]);
   });
 

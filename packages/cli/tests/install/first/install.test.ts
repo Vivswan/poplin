@@ -56,7 +56,7 @@ describe("a fresh install", () => {
       `Waiting for ${ADDRESS} to respond`,
       "poplin 0.1.0 is installed",
       `Dashboard: ${ADDRESS}`,
-      "The account token was not stored. Delete it at Stand-In Host.",
+      "The account token was not stored",
       `Next: npx poplin login --server ${ADDRESS}`,
     ]);
     expect<unknown>(account.runs).toEqual([{ found: { state: "none", place: PLACE, notes: [] }, where: { kind: "none" }, login: "you@example.com", run: "apply" }]);
@@ -379,7 +379,7 @@ describe("what a run comes to", () => {
       `Dashboard: ${ADDRESS}`,
       `When it responds, log in: npx poplin login --server ${ADDRESS}`,
       `If it does not respond: ${REPAIR.command}`,
-      "The account token was not stored. Delete it at Stand-In Host.",
+      "The account token was not stored",
     ]);
   });
 
@@ -447,7 +447,7 @@ describe.each([
     expect([plain.code, plain.asked, plain.out.slice(-4)]).toEqual([
       0,
       [],
-      ["poplin 0.1.0 is installed", `Dashboard: ${ADDRESS}`, "The account token was not stored. Delete it at Stand-In Host.", `Add new@example.com as a user: ${letIn}`],
+      ["poplin 0.1.0 is installed", `Dashboard: ${ADDRESS}`, "The account token was not stored", `Add new@example.com as a user: ${letIn}`],
     ]);
     expect([told.code, told.fetched, told.out.at(-1)]).toEqual([0, [], plain.out.at(-1)]);
     expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, next: { step: "repair", command: letIn } }]);
@@ -657,7 +657,7 @@ describe("on a terminal", () => {
       "Create the account token here:",
       "  https://host.example.com/tokens/new?rights=chosen",
       "On the form, limit it to this account and this place",
-      "Select manually: Places: Read",
+      "Add on the form: Places: Read",
     ]);
     expect(account.runs[0]).toMatchObject({ where: { kind: "place", name: "example.com" }, login: "you@example.com" });
     expect(ran.out.at(-1)).toBe(`Next: npx poplin login --server ${ADDRESS}`);

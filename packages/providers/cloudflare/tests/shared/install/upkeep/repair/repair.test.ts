@@ -338,8 +338,8 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
 
   // Drift: Cloudflare keeps no observability across an upload, and a repair sends its upload before it reads the setting. One that stated the release's would switch the logs back on, on an install whose setting keeps none.
   test.each([
-    { name: "that Cloudflare already keeps none of", carried: true, uploaded: false, row: "Worker logs | leave | not kept", written: 0 },
-    { name: "whose change never reached Cloudflare", carried: false, uploaded: true, row: "Worker logs | change | not kept", written: 1 },
+    { name: "that Cloudflare already keeps none of", carried: true, uploaded: false, row: "Worker logs | leave | disabled", written: 0 },
+    { name: "whose change never reached Cloudflare", carried: false, uploaded: true, row: "Worker logs | change | disabled", written: 1 },
   ])("with the setting of the logs off, on a Worker $name, the upload states the logs as the Worker has them and the run ends with none kept", async ({ carried, uploaded, row, written }) => {
     const account = await behindInstall(kind);
     await account.store.database.changeSettings({ provider_logs: false }, { as: "person", by: OWNER, at: 0 });
