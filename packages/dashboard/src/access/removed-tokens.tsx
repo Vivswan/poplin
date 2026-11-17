@@ -26,7 +26,7 @@ const COLUMNS: readonly ColumnSpec<Row>[] = [
   { id: "name", header: "Name", fixed: true, cell: ({ token }) => <Name token={token} /> },
   { id: "state", header: "How", cell: (row) => <How {...row} /> },
   { id: "scope", header: "Could change", cell: ({ token }) => SCOPE_WORDS[token.scope] },
-  { id: "allowed", header: "Allowed", cell: ({ token }) => <Moment at={token.created} /> },
+  { id: "allowed", header: "Approved", cell: ({ token }) => <Moment at={token.created} /> },
   { id: "expires", header: "Ended", cell: ({ token }) => <Moment at={token.ended} /> },
 ];
 
@@ -57,9 +57,9 @@ interface RemovedTokensProps {
   readonly endWidth?: number;
 }
 
-/** Say how a token ended: that it ran out, that its user was removed, that it gave itself back, or who removed it, written as on every screen. The remover's name gives where the row is narrow. */
+/** Say how a token ended: that it expired, that its user was removed, that it gave itself back, or who revoked it, written as on every screen. The remover's name gives where the row is narrow. */
 function How({ token, names }: Row): ReactNode {
-  if (token.how === "ran_out") return "Ran out";
+  if (token.how === "ran_out") return "Expired";
 
   if (token.how === "user_removed") return "Its user was removed";
 
@@ -67,7 +67,7 @@ function How({ token, names }: Row): ReactNode {
 
   return (
     <span className="flex min-w-0 items-baseline">
-      <span className="shrink-0 whitespace-pre">Removed by </span>
+      <span className="shrink-0 whitespace-pre">Revoked by </span>
       <span data-gives className="truncate" style={{ minWidth: LEAST_REMOVER }}>
         <Who by={token.by} logins={names} unnamed="a token" />
       </span>
@@ -115,7 +115,7 @@ export function RemovedTokens({ ended, names, alongside, endWidth }: RemovedToke
       <div className="px-4 py-1.5 max-md:px-2">
         <CollapsibleTrigger render={<Button variant="ghost" size="sm" className="group/removed gap-1.5 text-muted-foreground max-md:min-h-10" />}>
           <ChevronRightIcon className="transition-transform group-data-[panel-open]/removed:rotate-90" />
-          Removed tokens
+          Revoked tokens
           <span className="font-normal text-faint tabular-nums">
             {rows.length}
             {ended.more ? "+" : ""}
@@ -125,7 +125,7 @@ export function RemovedTokens({ ended, names, alongside, endWidth }: RemovedToke
       <CollapsibleContent>
         <div className="max-md:hidden">
           <DataTable
-            label="Removed tokens"
+            label="Revoked tokens"
             columns={COLUMNS}
             rows={rows}
             rowId={({ token }) => token.id}
@@ -135,7 +135,7 @@ export function RemovedTokens({ ended, names, alongside, endWidth }: RemovedToke
             actionsWidth={endWidth}
           />
         </div>
-        <ul aria-label="Removed tokens" className="border-t md:hidden">
+        <ul aria-label="Revoked tokens" className="border-t md:hidden">
           {rows.map((row) => (
             <li key={row.token.id} className="flex min-h-16 flex-col justify-center gap-0.5 border-b px-4 py-2">
               <span className="truncate">

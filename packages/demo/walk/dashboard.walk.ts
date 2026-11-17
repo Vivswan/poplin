@@ -303,47 +303,47 @@ const STOPS: readonly Stop[] = [
     close: pressEscape,
   },
   {
-    name: "the question before a token is removed",
-    open: (page) => fromRowMenu(page, SAMPLE.token, "Remove"),
-    shows: (page) => [question(page, `Remove ${SAMPLE.token}?`)],
+    name: "the question before a token is revoked",
+    open: (page) => fromRowMenu(page, SAMPLE.token, "Revoke"),
+    shows: (page) => [question(page, `Revoke ${SAMPLE.token}?`)],
     close: leaveBy("Cancel"),
   },
   {
-    name: "a removed token, which then stands under Removed tokens",
+    name: "a revoked token, which then stands under Revoked tokens",
     open: async (page, wide) => {
-      await fromRowMenu(page, SAMPLE.token, "Remove");
-      await leaveBy("Remove")(page);
+      await fromRowMenu(page, SAMPLE.token, "Revoke");
+      await leaveBy("Revoke")(page);
       // The token's row leaves the list a moment later and moves everything under it up by more than a button's height: a press sent before that lands beside the button.
       await expect(rows(page, wide, "Tokens").getByText(SAMPLE.token, { exact: true })).toHaveCount(0);
-      await page.getByRole("button", { name: /^Removed tokens/ }).click();
+      await page.getByRole("button", { name: /^Revoked tokens/ }).click();
     },
-    shows: (page, wide) => [rows(page, wide, "Removed tokens").getByText(SAMPLE.token, { exact: true })],
+    shows: (page, wide) => [rows(page, wide, "Revoked tokens").getByText(SAMPLE.token, { exact: true })],
   },
   {
     name: "the review of a waiting login, which names it in quotes and starts at the least it may change",
     open: (page, wide) => reviewOf(page, wide, SAMPLE.login).click(),
     shows: (page) => [
-      review(page).getByText("Allow it only if you started this login yourself.", { exact: true }),
+      review(page).getByText("Approve it only if you started this login yourself.", { exact: true }),
       review(page).getByText(`"${SAMPLE.login}"`, { exact: true }),
-      review(page).getByRole("button", { name: "Own sites only", exact: true, pressed: true }),
-      review(page).getByRole("button", { name: "Allow", exact: true, disabled: true }),
+      review(page).getByRole("button", { name: "Publisher", exact: true, pressed: true }),
+      review(page).getByRole("button", { name: "Approve", exact: true, disabled: true }),
     ],
     close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
   },
   {
-    name: "the review the printed link opens, which holds no letter to type and allows the login once the terminal's are typed",
+    name: "the review the printed link opens, which holds no letter to type and approves the login once the terminal's are typed",
     open: async (page) => {
       // The demo's own page stands where the terminal would be: it prints the link and the code.
       await page.goto("state/allow/waiting");
       const printed = page.locator("section").filter({ hasText: SAMPLE.login });
       const letters = ((await printed.locator("code").textContent()) ?? "").slice(-4);
       await printed.getByRole("link").click();
-      await expect(review(page).getByRole("button", { name: "Allow", exact: true, disabled: true })).toBeVisible();
+      await expect(review(page).getByRole("button", { name: "Approve", exact: true, disabled: true })).toBeVisible();
       expect([letters.length, page.url().includes(letters), (await review(page).innerHTML()).includes(letters)]).toEqual([4, false, false]);
       await review(page).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(letters);
     },
-    shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Allow", exact: true, disabled: false })],
-    close: (page) => review(page).getByRole("button", { name: "Allow", exact: true }).click(),
+    shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Approve", exact: true, disabled: false })],
+    close: (page) => review(page).getByRole("button", { name: "Approve", exact: true }).click(),
   },
   {
     name: "a reset of the sample data, which keeps the screen it was pressed on",
@@ -436,7 +436,7 @@ async function narrowSites(page: Page, filter: string): Promise<void> {
 
 /** The review of a waiting login, under the title every review has. */
 function review(page: Page): Locator {
-  return page.getByRole("dialog", { name: "Allow this login?", exact: true });
+  return page.getByRole("dialog", { name: "Approve this login?", exact: true });
 }
 
 /** The button that opens the review of the waiting login that gave itself a name: its row says the name, the button does not. */
@@ -623,10 +623,10 @@ test.describe("on a screen 1024 px wide", () => {
   });
 
   // Drift: the tokens and the removed ones under them stand in the same columns, so the name of who removed a token would make both tables wider than their room again, and both would scroll sideways.
-  test("the tokens and the removed tokens under them are as wide as their room", async ({ page }) => {
+  test("the tokens and the revoked tokens under them are as wide as their room", async ({ page }) => {
     await page.goto("tokens/list");
-    await page.getByRole("button", { name: /^Removed tokens/ }).click();
-    for (const name of ["Tokens", "Removed tokens"]) {
+    await page.getByRole("button", { name: /^Revoked tokens/ }).click();
+    for (const name of ["Tokens", "Revoked tokens"]) {
       const table = page.getByRole("table", { name, exact: true });
       // A table is measured again once the page's fonts are in, so its width is read until it has come to rest.
       await expect(async () => expect(await table.evaluate((drawn) => drawn.scrollWidth - (drawn.closest('[data-slot="scroll-area"]')?.clientWidth ?? 0))).toBe(0)).toPass();

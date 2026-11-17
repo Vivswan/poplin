@@ -42,8 +42,8 @@ const SCREENS: readonly (readonly [string, (page: Page) => Promise<void>, boolea
     async (page) => {
       await toSection(page, "Access");
       await onPage(page, "tab", { name: "Tokens", exact: true }).click();
-      await onPage(page, "button", { name: /^Removed tokens/ }).click();
-      await expect(rowsOf(page, "Removed tokens").last()).toBeVisible();
+      await onPage(page, "button", { name: /^Revoked tokens/ }).click();
+      await expect(rowsOf(page, "Revoked tokens").last()).toBeVisible();
     },
     true,
   ],

@@ -287,7 +287,7 @@ describe("logIn", () => {
       await desk.decide({ login: idIn(address), allow: true, scope: "publisher", letters: lettersOf(soFar) });
     });
 
-    expect([ran.code, ran.err, ran.out.includes("role     publisher")]).toEqual([0, ["The dashboard approved \"Own sites only\". Fix: for \"Everything\", log in again and select it there"], true]);
+    expect([ran.code, ran.err, ran.out.includes("role     publisher")]).toEqual([0, ["The dashboard approved \"Publisher\". Fix: for \"Admin\", log in again and select it there"], true]);
   });
 
   // Drift: an agent relays the address to its user from the first line while the command still waits; a line that came late, or that was not JSON, would leave the user with nothing to open.

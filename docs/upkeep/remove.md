@@ -27,7 +27,7 @@ The block shows an install without a domain. Under a domain, `--domain example.c
 | Thing                              | For                                                                                                   |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | a terminal, and Node.js 24         | every line here: the start of [step 2 of Install](../start/install.md#2-run-the-command), up to `node --version` |
-| this machine logged in to poplin  | step 1 alone, with a login allowed with Can change: Everything. `npx poplin whoami` says whether it is; [step 5 of Install](../start/install.md#5-log-this-machine-in-and-check) logs it in |
+| this machine logged in to poplin  | step 1 alone, with a login approved with Can change: Admin. `npx poplin whoami` says whether it is; [step 5 of Install](../start/install.md#5-log-this-machine-in-and-check) logs it in |
 | the Cloudflare account             | the one the install is in. You must be able to log in at `https://dash.cloudflare.com`                |
 | an account token                   | steps 3 and 4, which each ask for it: a removal takes the token an install takes. If yours is gone, the command prints the link that makes a new one |
 

@@ -13,7 +13,7 @@ import { localAddress } from "../addresses/mount";
 import type { World } from "../world/world";
 
 /** The groups of the index, in the order shown. */
-export const GROUPS = ["Dashboard", "Dashboard of an install that holds nothing", "One site in the dashboard", "Access: allow this computer", "The login", "Served sites", "API"] as const;
+export const GROUPS = ["Dashboard", "Dashboard of an install that holds nothing", "One site in the dashboard", "Access: approve this machine", "The login", "Served sites", "API"] as const;
 
 /** The panel of a site that is not there, in the dashboard. */
 const NO_PANEL = "/sites/nothing--000000000000";
@@ -148,8 +148,8 @@ function dashboardEntries(): Entry[] {
     { group: "Dashboard", name: "Usage: the problems of the last 30 days", path: "/usage?days=30" },
     { group: "Dashboard", name: "Usage: the panel of a problem that is not in the list", path: "/usage?problem=2026-01-01.request_failed" },
     { group: "Dashboard", name: "No such screen", path: "/nothing" },
-    { group: "Access: allow this computer", name: "The logins that wait: what each terminal prints", path: "/state/allow/waiting" },
-    { group: "Access: allow this computer", name: "Login not found, decided, or run out", path: `${REVIEW_PAGE}/${NO_LOGIN}` },
+    { group: "Access: approve this machine", name: "The logins that wait: what each terminal prints", path: "/state/allow/waiting" },
+    { group: "Access: approve this machine", name: "Login not found, decided, or expired", path: `${REVIEW_PAGE}/${NO_LOGIN}` },
     { group: "The login", name: "No login behind the request", path: "/settings?as=visitor", status: 403 },
     { group: "The login", name: "An email that is no user", path: "/settings?as=removed", status: 403 },
     { group: "The login", name: "A login that cannot be checked", path: "/settings?as=unchecked", status: 503 },

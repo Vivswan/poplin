@@ -95,7 +95,7 @@ bun packages/cli/src/bin.ts list          # any command
 bun packages/cli/src/bin.ts mcp           # the MCP server, over stdio
 curl -H "Authorization: Bearer $POPLIN_TOKEN" $POPLIN_SERVER/api/sites
 
-# or log a computer in, and allow it under Access
+# or log a machine in, and approve it under Access
 bun packages/cli/src/bin.ts login --server ${gallery.origin}</pre></section>
 <div class="groups">${groups}</div>`,
   );
@@ -117,7 +117,7 @@ export function plainPage({ text, status }: { readonly text: string; readonly st
 /** The lines `poplin login` prints on one computer: the address that opens the review, as a link, and the code. */
 function printedLines(printed: Printed): Markup {
   return html`<section><h2>${printed.computer}</h2>
-<pre>open this address, and allow this login there:
+<pre>open this address, and approve this login there:
   <a href="${printed.address}">${printed.address}</a>
 the page asks for the last 4 letters of this code:
   <code>${printed.code}</code></pre></section>`;
@@ -133,8 +133,8 @@ export function terminalPage(printed: readonly Printed[]): Promise<string> {
 
   return shell(
     "Logins that wait",
-    html`<h1>What the waiting computers print</h1>
-<p class="banner">Demo. No computer is behind a sample login, so this page stands where each terminal would be.</p>
+    html`<h1>What the waiting machines print</h1>
+<p class="banner">Demo. No machine is behind a sample login, so this page stands where each terminal would be.</p>
 <div class="groups">${printed.length === 0 ? none : printed.map(printedLines)}</div>`,
   );
 }

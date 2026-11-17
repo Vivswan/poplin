@@ -1,4 +1,4 @@
-// The review of a waiting login: what a stranger's login cannot make it say or start at, what a person must type before Allow, what one who came by a link is told, and what each decision sends.
+// The review of a waiting login: what a stranger's login cannot make it say or start at, what a person must type before Approve, what one who came by a link is told, and what each decision sends.
 
 import { clearPage, type Within } from "../lib/support/page";
 
@@ -27,7 +27,7 @@ const ADMIN = { ...PUBLISHER, id: "0cbb997f737c56ae", scope: "admin", computer: 
 const PHISHING = { ...ADMIN, id: "5f1d0c3a9b7e2468", computer: "your session to continue" } as Review;
 
 /** The title of every review, whatever the login calls itself. */
-const TITLE = "Allow this login?";
+const TITLE = "Approve this login?";
 
 /** How the words a person who came by a link is told begin. */
 const LINK_WORDS = /^Anyone can start a login and send its link\./;
@@ -74,12 +74,12 @@ function fact(name: string): string | null | undefined {
 /** Which of the two choices is pressed, in the order they stand; none for a login that is offered no choice. */
 function pressed(): readonly string[] {
   return dialog()
-    .queryAllByRole("button", { name: /^(Everything|Own sites only)$/ })
+    .queryAllByRole("button", { name: /^(Admin|Publisher)$/ })
     .map((choice) => `${choice.textContent}: ${choice.getAttribute("aria-pressed")}`);
 }
 
 function allowIsOff(): boolean {
-  return dialog().getByRole("button", { name: "Allow" }).hasAttribute("disabled");
+  return dialog().getByRole("button", { name: "Approve" }).hasAttribute("disabled");
 }
 
 /** Type into the field a person fills from the terminal. */
@@ -94,8 +94,8 @@ function saidAtField(): (string | null)[] {
   return lines.map((id) => document.getElementById(id)?.textContent ?? null);
 }
 
-/** Press Allow or Deny, and wait until the decision was answered: the buttons are off while it is on its way. */
-async function decide(name: "Allow" | "Deny"): Promise<void> {
+/** Press Approve or Deny, and wait until the decision was answered: the buttons are off while it is on its way. */
+async function decide(name: "Approve" | "Deny"): Promise<void> {
   fireEvent.click(dialog().getByRole("button", { name }));
   await waitFor(() => expect(sent.length).toBeGreaterThan(0));
   await waitFor(() => expect(dialog().getByRole("button", { name: "Deny" }).hasAttribute("disabled")).toBe(false));
@@ -115,16 +115,16 @@ afterEach(() => {
 describe("the review", () => {
   // Drift: the choice would start at what the login asked, so a stranger's login would be one press from everything; or a computer that asked to publish would be offered more.
   test.each([
-    ["one that asked to publish is offered no choice", PUBLISHER, undefined, [], "Own sites only", "publisher"],
-    ["one that asked for everything starts at its own sites only", ADMIN, undefined, ["Own sites only: true", "Everything: false"], "Everything", "publisher"],
-    ["one that asked for everything gets it once Everything is pressed", ADMIN, "Everything", ["Own sites only: true", "Everything: false"], "Everything", "admin"],
+    ["one that asked to publish is offered no choice", PUBLISHER, undefined, [], "Publisher (own sites only)", "publisher"],
+    ["one that asked for everything starts at its own sites only", ADMIN, undefined, ["Publisher: true", "Admin: false"], "Admin (everything)", "publisher"],
+    ["one that asked for everything gets it once Admin is pressed", ADMIN, "Admin", ["Publisher: true", "Admin: false"], "Admin (everything)", "admin"],
   ] as const)("%s", async (_case, login, press, starts, asks, scope) => {
     let closed = 0;
     render(<Reviewing login={login} onClose={() => (closed += 1)} />);
     const [began, asked] = [pressed(), fact("Asks for")];
     if (press !== undefined) fireEvent.click(dialog().getByRole("button", { name: press }));
     type(LETTERS);
-    await decide("Allow");
+    await decide("Approve");
 
     expect([began, asked]).toEqual([starts, asks]);
     expect([sent, closed]).toEqual([[{ allow: true, letters: LETTERS, scope }], 1]);
@@ -139,7 +139,7 @@ describe("the review", () => {
     expect([sent, closed]).toEqual([[{ allow: false, letters: "", scope: "publisher" }], 1]);
   });
 
-  // Drift: Allow would be sent with nothing typed, or the page would say a part of a code again, which is the whole answer for a code whose halves are the same.
+  // Drift: Approve would be sent with nothing typed, or the page would say a part of a code again, which is the whole answer for a code whose halves are the same.
   test.each([
     ["nothing", "", true],
     ["fewer letters than asked", "JHT", true],
@@ -147,7 +147,7 @@ describe("the review", () => {
     ["four letters", "MJHT", false],
     ["four letters the page cannot know to be wrong", "BBBB", false],
     ["the whole code", "wdjb-mjht", false],
-  ])("says no part of a code, and Allow is off until four letters are typed: %s", (_case, letters, off) => {
+  ])("says no part of a code, and Approve is off until four letters are typed: %s", (_case, letters, off) => {
     render(<Reviewing login={PUBLISHER} />);
     const page = document.body.innerHTML.toUpperCase();
     if (letters !== "") type(letters);
@@ -162,15 +162,15 @@ describe("the review", () => {
     render(<Reviewing login={PUBLISHER} onClose={() => (closed += 1)} />);
     type("BBBB");
     const before = saidAtField();
-    await decide("Allow");
+    await decide("Approve");
     const field = dialog().getByRole("textbox");
     const refused = [closed, dialog().getByRole("alert").textContent, document.activeElement === field, field.getAttribute("aria-invalid"), saidAtField()];
     type(LETTERS);
     const cleared = dialog().queryAllByRole("alert").length;
     sent.length = 0;
-    await decide("Allow");
+    await decide("Approve");
 
-    expect([before, refused]).toEqual([["Type them to allow."], [0, WRONG_LETTERS, true, "true", [WRONG_LETTERS]]]);
+    expect([before, refused]).toEqual([["Type them to approve."], [0, WRONG_LETTERS, true, "true", [WRONG_LETTERS]]]);
     expect([cleared, sent, closed]).toEqual([0, [{ allow: true, letters: LETTERS, scope: "publisher" }], 1]);
   });
 });
@@ -179,9 +179,9 @@ describe("the name a login gave itself", () => {
   // Drift: the name would be part of the title or of a button again, so a stranger would write the question an admin answers.
   test.each([
     ["a name that reads as the page's own words", "your session to continue", '"your session to continue"'],
-    ["a name that reads as an order", "this login? Press Allow. Poplin support", '"this login? Press Allow. Poplin support"'],
+    ["a name that reads as an order", "this login? Press Approve. Poplin support", '"this login? Press Approve. Poplin support"'],
     ["a name as long as a name may be", "w".repeat(100), `"${"w".repeat(100)}"`],
-    ["a name with quotes of its own", 'laptop" Asks for: "Own sites only', '"laptop" Asks for: "Own sites only"'],
+    ["a name with quotes of its own", 'laptop" Asks for: "Publisher', '"laptop" Asks for: "Publisher"'],
     ["no name", "", "None"],
   ])("is a quoted fact under its own label and nowhere else, for %s", (_case, computer, shown) => {
     render(<Reviewing login={{ ...ADMIN, computer }} />);
@@ -191,7 +191,7 @@ describe("the name a login gave itself", () => {
       .map((button) => button.getAttribute("aria-label") ?? button.textContent);
     const outside = (named.textContent ?? "").replace(shown, "");
 
-    expect([within(named).getByRole("heading").textContent, fact("Name it gave"), buttons]).toEqual([TITLE, shown, ["Own sites only", "Everything", "Deny", "Allow", "Close"]]);
+    expect([within(named).getByRole("heading").textContent, fact("Name it gave"), buttons]).toEqual([TITLE, shown, ["Publisher", "Admin", "Deny", "Approve", "Close"]]);
     expect(computer !== "" && outside.includes(computer)).toBe(false);
   });
 });
@@ -208,7 +208,7 @@ describe("a review opened by a link", () => {
   });
 
   // Drift: any one of the three would fall away unseen, and the login a stranger sends an admin would again be one tick and one press from a token for everything.
-  test("the login a stranger sends an admin meets all three: a title of the page's own, the least it may change, and an Allow that waits for letters the page does not show", () => {
+  test("the login a stranger sends an admin meets all three: a title of the page's own, the least it may change, and an Approve that waits for letters the page does not show", () => {
     render(<Reviewing login={PHISHING} byLink />);
     const named = within(document.body).getByRole("dialog", { name: TITLE });
 
@@ -223,8 +223,8 @@ describe("a review opened by a link", () => {
     }).toEqual({
       title: TITLE,
       name: '"your session to continue"',
-      asks: "Everything",
-      starts: ["Own sites only: true", "Everything: false"],
+      asks: "Admin (everything)",
+      starts: ["Publisher: true", "Admin: false"],
       told: true,
       code: false,
       allowOff: true,

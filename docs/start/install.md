@@ -235,22 +235,22 @@ Here the last 4 letters are `RDMP`. Yours differ. If no browser opens, copy the 
 | The browser shows            | Do                                                                    |
 | ---------------------------- | --------------------------------------------------------------------- |
 | Cloudflare's login, first    | type your email, the one of step 2, then the code Cloudflare sends it |
-| `Allow this login?`, then    | the table below, with the short code of your terminal                 |
+| `Approve this login?`, then  | the table below, with the short code of your terminal                 |
 
 | On the page                                 | Do                                                    |
 | ------------------------------------------- | ----------------------------------------------------- |
-| Can change                                  | choose Everything, on a machine of your own          |
+| Can change                                  | choose Admin, on a machine of your own               |
 | Last 4 letters of the code in your terminal | type them                                             |
-| Allow                                       | press it                                              |
+| Approve                                     | press it                                              |
 
-Can change has two choices, and the page opens on the second:
+Can change has two roles to choose from, and the page opens on the second:
 
 | Can change     | Choose it for                             | This machine reaches                                                              | The login lasts       |
 | -------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- | --------------------- |
-| Everything     | a machine of your own                    | every site, and the settings: `npx poplin config`, `export`, `import`, and `update` need it | 30 days       |
-| Own sites only | a machine that should only publish, such as a shared one | the sites that one login published, and no other                   | until you remove it   |
+| Admin          | a machine of your own                    | every site, and the settings: `npx poplin config`, `export`, `import`, and `update` need it | 30 days       |
+| Publisher      | a machine that should only publish, such as a shared one | the sites that one login published, and no other                   | until you revoke it   |
 
-An agent on this machine uses the same login. With Everything it reaches a site that an earlier login published. With Own sites only it does not: after a new login it no longer reaches the sites of the login before.
+An agent on this machine uses the same login. As an admin it reaches a site that an earlier login published. As a publisher it does not: after a new login it no longer reaches the sites of the login before.
 
 The page takes only the letters of the code your terminal printed. If it refuses them, or you did not start a login, press Deny.
 

@@ -91,15 +91,15 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 
 | Scope | Given to | May |
 | --- | --- | --- |
-| publisher | a machine or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login` and leaves Can change at Own sites only on the page that allows it. `poplin login --publisher` saves no other kind, whatever that page chose | publish, and manage its own sites |
+| publisher | a machine or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login` and leaves Can change at Publisher on the page that approves it. `poplin login --publisher` saves no other kind, whatever that page chose | publish, and manage its own sites |
 | admin | a user, whose email is on the list of allowed users; a user's login at the dashboard carries the same rights  | everything: every site, the settings, the tokens |
 
 The page that allows a machine's login treats what the login says of itself as a stranger's words, since anyone can begin one:
 
 | The page | So |
 | --- | --- |
-| has the fixed title `Allow this login?`, and shows the machine's name in quotes beside `Name it gave` | a login cannot write the question a user answers |
-| starts at Own sites only, whatever the login asked for | a token for everything is given only by a user who chose Everything |
+| has the fixed title `Approve this login?`, and shows the machine's name in quotes beside `Name it gave` | a login cannot write the question a user answers |
+| starts at Publisher, whatever the login asked for | a token for everything is given only by a user who chose Admin |
 | is reached by an address that names the login and holds no part of its code | a link someone sent gives nothing to type |
 | is given no part of the code; the Worker checks the 4 letters the user types | the letters are in the terminal alone, so only its reader can allow the login |
 | opened by an address and not by a press on Review, says that anyone can start a login and send its link | a user who was sent a link is told so |
@@ -240,7 +240,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | a removed user  | the Worker checks the email against the allowed users on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds  |
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
 | tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed |
-| a token that ended | a removed token never logs in again, and its row is removed once it ended more than 90 days ago, a few rows at a time; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |
+| a token that ended | a revoked token never logs in again, and its row is removed once it ended more than 90 days ago, a few rows at a time; [Revoked tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |
 | every login at once | Sign everyone out, under Access, asks Cloudflare with the kept key to end every login of the dashboard and of private sites: each browser meets the login again at its next request, a few seconds on. A machine's token is untouched, and is revoked on its own |
 | the stored key | kept in the database; the limits per visitor are made from it |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |

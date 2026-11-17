@@ -60,7 +60,7 @@ Linux:    open a new window of the program named Terminal
 | is still on Cloudflare's page | leave that page open until the install is made, and copy the token from it again for step 3e           |
 | is gone                       | at Cloudflare, open My Profile, then API Tokens, and choose Roll in the token's menu: it shows a new text |
 
-**The login of step 4** is the last question of step 3e. On the page `Allow this login?`, choose Everything under Can change, on a machine of your own: [step 5 of Install](install.md#5-log-this-machine-in-and-check) says what each choice gives. The agent uses that login.
+**The login of step 4** is the last question of step 3e. On the page `Approve this login?`, choose Admin under Can change, on a machine of your own: [step 5 of Install](install.md#5-log-this-machine-in-and-check) says what each choice gives. The agent uses that login.
 
 A script or a CI job has nobody to ask, so the agent runs both lines itself there:
 

@@ -31,7 +31,7 @@ const BEGIN_RESTS = 5;
 const LOGIN_VARIABLES = ["POPLIN_SERVER", "POPLIN_TOKEN"];
 
 /** What a login is told that asked for every right and was allowed its own sites only, in the words the dashboard has for the two choices. */
-const ALLOWED_LESS = 'The dashboard approved "Own sites only". Fix: for "Everything", log in again and select it there';
+const ALLOWED_LESS = 'The dashboard approved "Publisher". Fix: for "Admin", log in again and select it there';
 
 /** What an install answers a begun login with. */
 type Begun = v.InferOutput<typeof BEGUN_LOGIN_ANSWER>;

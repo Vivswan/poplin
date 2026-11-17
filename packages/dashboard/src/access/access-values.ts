@@ -1,4 +1,4 @@
-// What the Access screen reads from its address and how it writes its values for a person: which tab is shown, what a token may change, a computer's name, and the order of the tokens.
+// What the Access screen reads from its address and how it writes its values for a person: which tab is shown, the role of a token, a machine's name, and the order of the tokens.
 
 import type { Sort } from "@/table/data-table";
 import { firstSort, type Orders, sortIn, sortKeys } from "@/table/sort";
@@ -9,8 +9,11 @@ export const PEOPLE_PATH = "/tokens";
 /** The path of the tokens. A review is drawn over them. */
 export const TOKENS_PATH = "/tokens/list";
 
-/** What a token of each scope may change, as the screen says it. */
-export const SCOPE_WORDS = { admin: "Everything", publisher: "Own sites only" } as const;
+/** The role of a token of each scope, as a command names it, with what the role may change. */
+export const SCOPE_WORDS = { admin: "Admin (everything)", publisher: "Publisher (own sites only)" } as const;
+
+/** The role alone, where its meaning is said beside it. */
+export const ROLE_WORDS = { admin: "Admin", publisher: "Publisher" } as const;
 
 /** The most characters of a computer's name that are shown. */
 const LONGEST_NAME = 40;
@@ -19,9 +22,9 @@ const LONGEST_NAME = 40;
 const CUT = "...";
 
 /** What stands for the name of a computer that gave none. */
-const NO_NAME = "A computer with no name";
+const NO_NAME = "A machine with no name";
 
-/** The orders of the tokens: the token allowed last comes first in a table nobody sorted. */
+/** The orders of the tokens: the token approved last comes first in a table nobody sorted. */
 export const TOKEN_ORDERS: Orders = { first: { name: "asc", allowed: "desc" }, unsorted: { key: "allowed", descending: true } };
 
 /**
