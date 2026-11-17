@@ -117,25 +117,26 @@ On an account without the marking bucket the step makes, mends, and removes noth
 
 ## The upgrade
 
-An install the older build made and filled takes the run's build as an update, and is asked again for everything it held. It runs on each of the two test installs.
+An install the older build made and filled takes the run's build as an update, and is asked again for everything it held. The build it takes holds one schema step more than the product, so the install applies a step to its filled database. It runs on each of the two test installs.
 
 | Started by | The build the install is updated to | Then |
 | ---------- | ----------------------------------- | ---- |
 | hand: Actions, the workflow of the install, Run workflow on `main`, tick `upgrade` | the build of main | the job `checks`, whatever the upgrade came to |
-| the pull request of a release, once its checks are approved to run | the release as it would merge: the pull request's merge commit | nothing more: the next run of main's live checks, or the midnight reset, puts the install back |
+| the pull request of a release, once its checks are approved to run | the release as it would merge: the pull request's merge commit | nothing more: the next run of main's live checks, the midnight one among them, finds the later step, which its checkout does not have, and starts the install over |
 
 Both run the job `upgrade` of `.github/workflows/live-upgrade.yml`, in the lane of the kind's live checks, so an upgrade and a run of main never touch one install together.
 
 ```text
 job upgrade
   scripts/upgrade/older-build.ts   the older build in a folder of its own, its packages installed, its Worker built: no secret reaches this step
-                                   this checkout told one patch above the older build's version, then built
+                                   this checkout told one patch above the older build's version and given the later step, then built
   scripts/upgrade/upgrade.ts       a test account alone -> the older build's own poplin uninstall and poplin install
                                    -> the older build's command line: 3 sites, a second version, a setting, a user; a token of its making
                                    -> the older build's own start of an update, fed the build of main as a release
-                                   -> the install says the new version 12 times in a row -> one line a check
+                                   -> the Worker of the new build starts, and applies the later step to the filled database
+                                   -> the install says the new version 12 times in a row -> one more site published -> one line a check
                                    -> the settings put back, the sites and the token's row removed
-job checks                         by hand alone: the install put back to the commit's own build, every live check on the updated install, the samples
+job checks                         by hand alone: its checkout holds no later step, so the install is started over, then every live check, the samples
 ```
 
 | The older build                              | Is                                                                                       |
@@ -154,20 +155,24 @@ A pre-release on npm is the command alone: no built Worker and no line of the we
 | `Token`      | the token made before the update read every site, the settings, and the log                                  |
 | `Settings`   | every setting is as before, the changed one and the added user among them                                    |
 | `Activity`   | every entry from before is there, and one `update_started` entry names both versions                         |
-| `Database`   | it holds every schema step of main, as main applies them                                                     |
+| `Database`   | core's own reading says every step of the build is marked with the build's fingerprint, the later step among them |
+| `Later step` | its table, column, and index are there; each site from before holds its label and its row; the site published after holds the default and no row |
+| `Publish`    | a site published after the update is shown to its holder, answered to a stranger as the unlisted one from before, and held by a backup with the page it was published with |
 | `Doctor`     | `poplin doctor --repair --dry-run` would change nothing, once the two settings were put back                 |
-| `Going back` | the version before is offered; or none is, where the update changed the database                             |
+| `Going back` | no version is offered: the update changed the database, which the version before cannot read                 |
 | `Cleanup`    | the two settings were put back, and the sites and the token's row removed                                    |
 
 ```text
 Older install: made by the older build's own poplin install, which says the version 0.0.0
 Older install: filled with 3 sites, a second version, a setting, and a user
 Update: the older build took 0.0.1 over 0.0.0, by its own start of an update
-Bucket writes and lists the upgrade asked for: 19 of at most 40
-Rows written this run: 153 of at most 300
+Bucket writes and lists the upgrade asked for: 23 of at most 40
+Rows written this run: 212 of at most 300, 22 of them for the later step
 Version: runs 0.0.1, and ran 0.0.0
 Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte
-Going back: offered, to 0.0.0
+Database: the 2 schema steps of this commit's build are marked as it applies them, step 0002 among them
+Later step: the table, the column, and the index of step 0002 are there, and the 3 sites hold what it filled from them
+Going back: not offered: the update changed the database, which the version before cannot read
 Cleanup: the two settings put back, the sites and the token's row removed
 ```
 
@@ -184,10 +189,13 @@ A check that fails says `FAILED` and what differs, by a site's place and access 
 A deployed Worker reads releases from the project's website alone, which names no build of a commit. So no run shows a deployed Worker that fetches a release and uploads itself with its kept key: the `self-update` row of the checklist does, once two releases are out.
 
 ```text
-the upgrade, as the harness counts it   153 rows and 19 bucket writes and lists on the local fake, of at most 300 and 40
+the upgrade, as the harness counts it   212 rows and 23 bucket writes and lists on the local fake, of at most 300 and 40
+of those, the later step                22 rows: 14 as it runs (5 for its mark, table, column, and index, and 3 for each of the 3 sites, as the Workers pool's database counts them)
+                                        and 8 after it: 2 as each of the 3 sites is removed, and 2 for the site published after it
 beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
-a run with upgrade ticked               about 153 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,620 rows, on each account it runs on
-the pull request of a release           about 153 + 20 = about 173 rows, on each account, each time its checks run
+a run with upgrade ticked               about 212 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,680 rows, on each account it runs on
+                                        and the first schema of the install the checks start over, which no meter counts
+the pull request of a release           about 212 + 20 = about 232 rows, on each account, each time its checks run
 ```
 
 The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgrade.yml` once for each kind of install on the pull request of a release, and stands down on its nightly call and on a dispatch. The pull request cannot merge until both ended green.
@@ -199,6 +207,26 @@ The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgra
 | its ref is `main` or `refs/pull/<number>/merge` | the environment's own rule, in `.github/settings.local.yml` |
 
 GitHub judges a pull request's run by the ref `refs/pull/<number>/merge`, which names no branch. So the environments admit the run of every pull request from a branch of this repository, and the `if:` and the step are what keep the other pull requests out. A pull request from a fork reads no secret.
+
+### The later step
+
+`scripts/upgrade/later-step.ts` writes one step into the checkout of the run: a file beside the product's steps, numbered one above the last, and its line in `registry.ts`. No commit holds it, and no other build or run has it.
+
+| It runs                                                                   | As a step of a release would                    |
+| ------------------------------------------------------------------------- | ----------------------------------------------- |
+| `CREATE TABLE upgrade_proof`, by a site's folder, removed with the site    | a new table                                     |
+| `ALTER TABLE sites ADD COLUMN upgrade_label TEXT NOT NULL DEFAULT ''`      | a new column with a default, on a table of rows |
+| `UPDATE sites SET upgrade_label = access \|\| '/' \|\| live_version`        | rows changed from what they held                |
+| `CREATE INDEX sites_by_upgrade_label`                                      | a new index                                     |
+| `INSERT INTO upgrade_proof`: each site's label and the count of its versions | rows filled from two tables                     |
+
+| The run shows                                                                                       | It cannot show                                              |
+| --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| the runner applies a step after the first, whole, to a database that holds rows, on the real provider | that a step written for a release is right: its own tests do |
+| the Worker does so as it starts, after an update the install took by its own start                   | a step that fails half-way on the real provider              |
+| every site, setting, token, and entry is as before, and a publish works on the changed tables        | a step over more rows than a test install holds              |
+
+`upgrade.ts` stops before anything is installed where its checkout's last step is not this one. A step that fails half-way is held by the unit tests of the runner, on SQLite and on the Workers pool's database: nothing of it is kept, and the Worker does not start.
 
 ## The test install
 
