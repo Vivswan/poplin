@@ -19,7 +19,7 @@ export interface Bindings {
   /** Where the install answers, unchecked: its domain and the public word it chose, or the account's name in its free address on an install without a domain. An install writes it; a Worker without it says it is not finished. */
   readonly ZONE: unknown;
 
-  /** The first settings in their text form, unchecked: the logins, and any other setting that does not start at its default. The Worker stores them while it has no settings, and never reads them once it has. */
+  /** The first settings in their text form, unchecked: the users, and any other setting that does not start at its default. The Worker stores them while it has no settings, and never reads them once it has. */
   readonly FIRST_SETTINGS: unknown;
 
   /** The Access application in front of the dashboard and of every private site, unchecked: the team's domain and the application's audience tag. An install or a repair writes it; a Worker without it admits nobody. */

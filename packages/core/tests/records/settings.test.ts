@@ -12,7 +12,7 @@ const PUBLISHED_DEFAULTS = {
   default_search_engines: "off",
   versions_kept: "3",
   trash_days: "7",
-  logins: "ada@example.com",
+  users: "ada@example.com",
   outside_pages: "blocked",
   search_engines_allowed: "off",
   block_bots: "auto",
@@ -35,7 +35,7 @@ const CHANGED = {
   default_search_engines: "on",
   versions_kept: "10",
   trash_days: "30",
-  logins: "ada@example.com,bo@example.com",
+  users: "ada@example.com,bo@example.com",
   outside_pages: "allowed",
   search_engines_allowed: "on",
   block_bots: "off",
@@ -58,7 +58,7 @@ const CHANGED_VALUES = {
   default_search_engines: true,
   versions_kept: 10,
   trash_days: 30,
-  logins: ["ada@example.com", "bo@example.com"],
+  users: ["ada@example.com", "bo@example.com"],
   outside_pages: "allowed",
   search_engines_allowed: true,
   block_bots: "off",
@@ -123,9 +123,9 @@ describe("settingsFromText and settingsToText", () => {
   });
 
   test("drift: a login is compared in its normal form, so the list is stored and shown that way however it was typed", () => {
-    const read = settingsFromText({ ...PUBLISHED_DEFAULTS, logins: " Ada@Example.com ,bo@example.com" });
+    const read = settingsFromText({ ...PUBLISHED_DEFAULTS, users: " Ada@Example.com ,bo@example.com" });
 
-    expect(read.ok && settingsToText(read.values).logins).toBe("ada@example.com,bo@example.com");
+    expect(read.ok && settingsToText(read.values).users).toBe("ada@example.com,bo@example.com");
   });
 
   // Drift: a setting is typed by a person; each row is text that must be refused by its key, never stored as some nearby value.
@@ -166,9 +166,9 @@ describe("settingsFromText and settingsToText", () => {
     ["search_engines_allowed", "allowed", "bad-form"],
     ["block_bots", "blocked", "bad-form"],
     ["block_bots", "Auto", "bad-form"],
-    ["logins", "", "bad-form"],
-    ["logins", "ada@example.com,", "bad-form"],
-    ["logins", "ada@example.com,ADA@example.com", "out-of-range"],
+    ["users", "", "bad-form"],
+    ["users", "ada@example.com,", "bad-form"],
+    ["users", "ada@example.com,ADA@example.com", "out-of-range"],
     ["default_access", "public", "unknown-key"],
   ])("refuses %s %j as %s", (key, text, refusal) => {
     expect<unknown>(settingsFromText({ ...PUBLISHED_DEFAULTS, [key]: text })).toEqual({ ok: false, key, refusal, every: [{ key, refusal }] });
@@ -220,8 +220,8 @@ describe("settingsFromText and settingsToText", () => {
 describe("SETTING_VALUES", () => {
   // Drift: the settings are read on every request; each row is a stored value that would switch a limit off or lock every admin out.
   test.each([
-    ["the last login cannot be removed", { logins: [] }, "logins"],
-    ["a login is an email in its normal form", { logins: ["Ada@Example.com"] }, "logins.0"],
+    ["the last login cannot be removed", { users: [] }, "users"],
+    ["a login is an email in its normal form", { users: ["Ada@Example.com"] }, "users.0"],
     ["a duration is stored as a count and its unit, not as the text typed", { default_expires: "60s" }, "default_expires"],
     ["a duration's unit is one of the four", { default_expires: { count: 1, unit: "w" } }, "default_expires"],
     ["a size is a whole count", { max_site_size: { count: 1.5, unit: "MB" } }, "max_site_size.count"],

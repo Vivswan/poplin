@@ -26,7 +26,7 @@ describe("changeConfig", () => {
     ["no object", "versions_kept=10", "settings"],
     ["a key that is no setting", { colour: "red" }, "colour"],
     ["a count below one", { versions_kept: 0 }, "versions_kept"],
-    ["an empty list of logins", { logins: [] }, "logins"],
+    ["an empty list of users", { users: [] }, "users"],
     ["a size in no known unit", { max_site_size: { count: 1, unit: "TB" } }, "max_site_size"],
     ["a word that is no choice", { outside_pages: "open" }, "outside_pages"],
   ] as const)("a change with %s is refused and leaves the settings as they were", async (_why, changes, about) => {
@@ -37,7 +37,7 @@ describe("changeConfig", () => {
     expect([await readConfig(world.install, ADMIN), await world.audit()]).toEqual([before, []]);
   });
 
-  // Drift: the settings hold the logins and the limits; a publisher token that could read or change them would be an admin in all but name.
+  // Drift: the settings hold the users and the limits; a publisher token that could read or change them would be an admin in all but name.
   test("a publisher neither reads nor changes the settings, nor reads the audit log", async () => {
     const world = await makeWorld();
 

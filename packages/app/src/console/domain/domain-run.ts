@@ -104,11 +104,11 @@ function carriedUsers(run: DomainRun, rows: readonly DomainRow[], pieces: readon
 /**
  * Say what a run did to the users at the domain, as the install settles a change of them by it.
  *
- * @param logins - the logins the run read and worked with
- * @returns the logins of a repair that carried them; `null` after a repair that wrote an object that holds the users and carried them to no end, so what the domain holds is unknown; `undefined` for a run that wrote none
+ * @param users - the users the run read and worked with
+ * @returns the users of a repair that carried them; `null` after a repair that wrote an object that holds the users and carried them to no end, so what the domain holds is unknown; `undefined` for a run that wrote none
  */
-function usersAfter(run: DomainRun, rows: readonly DomainRow[], pieces: readonly CheckedPiece[], logins: readonly Login[] | undefined): CarriedUsers["logins"] | undefined {
-  if (logins !== undefined && carriedUsers(run, rows, pieces)) return logins;
+function usersAfter(run: DomainRun, rows: readonly DomainRow[], pieces: readonly CheckedPiece[], users: readonly Login[] | undefined): CarriedUsers["users"] | undefined {
+  if (users !== undefined && carriedUsers(run, rows, pieces)) return users;
 
   return run === "repair" && rows.some((row) => row.users === true && WRITTEN.includes(row.state)) ? null : undefined;
 }
@@ -137,7 +137,7 @@ function askPlug(plug: DomainPlug, asked: Asked, token: string, settings: ReadSe
  * Run the plug once and keep the run: its pieces as the last check of the domain, in place of the run kept before, and its audit entry. A problem the run shows as mended ends with it.
  *
  * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, keeps nothing, so the run kept before stays the last one.
- *   Nothing kept ever holds the token. A repair that left the login standing settles a change of the users while the logins it carried are the stored ones
+ *   Nothing kept ever holds the token. A repair that left the login standing settles a change of the users while the users it carried are the stored ones
  * @throws {Error} the plug or the database failed; nothing was kept
  */
 export async function runDomain(plug: DomainPlug, install: Pick<Install, "database" | "now">, asked: Asked): Promise<DomainReading> {
@@ -156,8 +156,8 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
 
   const pieces = reading.rows.map(remembered);
   const detail = asked.unasked === true ? null : { run: asked.run, from: FROM, ...byState(reading) };
-  const carried = usersAfter(asked.run, reading.rows, pieces, read?.logins);
-  await keepDomainRun(install, { ran_at: install.now(), by: asked.by, run: asked.run, pieces }, detail, carried === undefined ? undefined : { logins: carried, since: began });
+  const carried = usersAfter(asked.run, reading.rows, pieces, read?.users);
+  await keepDomainRun(install, { ran_at: install.now(), by: asked.by, run: asked.run, pieces }, detail, carried === undefined ? undefined : { users: carried, since: began });
 
   return reading;
 }

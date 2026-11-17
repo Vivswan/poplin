@@ -268,8 +268,8 @@ function freeAddressPlace(install: ApiInstall, jobs: Jobs | undefined): Place {
     follow: {
       where: "Example Cloud",
       holdsKey: () => install.users.takes,
-      push: async (logins) => {
-        install.users.pushed.push(logins);
+      push: async (users) => {
+        install.users.pushed.push(users);
 
         return install.users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
       },
@@ -321,7 +321,7 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
   // The fake's provider takes every change of the users, unless a fault says the install holds no key: its list is then the one of the first settings for good.
   install.users.takes = switches.noKey !== true;
-  const loginList = async (): Promise<readonly string[]> => (install.users.takes ? (install.users.pushed.at(-1) ?? settings.logins) : settings.logins);
+  const loginList = async (): Promise<readonly string[]> => (install.users.takes ? (install.users.pushed.at(-1) ?? settings.users) : settings.users);
   // The fake's provider keeps the logs as the last change of their setting says, and on an install that holds no key as the first settings say, for good.
   const logsKept = async (): Promise<boolean> => (install.users.takes ? (install.logs.pushed.at(-1) ?? settings.provider_logs) : settings.provider_logs);
 

@@ -94,7 +94,7 @@ interface BenchParts {
   /** Reads how the job of one upload went, at the provider itself; absent on a run with no key of the provider. */
   readonly jobRun?: ((upload: string) => Promise<JobRun>) | undefined;
 
-  /** A login the install is told to let in, beside the settings the suite counts on; absent, the logins stay as they are. */
+  /** A login the install is told to let in, beside the settings the suite counts on; absent, the users stay as they are. */
   readonly login?: string | undefined;
 
   /** Reads the emails the login in front of the install lets in, at the provider itself; absent on a run with no key of the provider. */
@@ -342,10 +342,10 @@ export function openBench(parts: BenchParts): OpenBench {
   const settle = async (): Promise<void> => {
     if (parts.token === undefined) return;
 
-    const logins = parts.login === undefined ? undefined : parseLogins([parts.login]);
-    if (logins?.ok === false) throw new Error("the login the suite was given is no email address");
+    const users = parts.login === undefined ? undefined : parseLogins([parts.login]);
+    if (users?.ok === false) throw new Error("the login the suite was given is no email address");
 
-    const settings = logins === undefined ? SETTINGS : { ...SETTINGS, logins: [...logins.value] };
+    const settings = users === undefined ? SETTINGS : { ...SETTINGS, users: [...users.value] };
     const changed = await client.call(SETTINGS_ANSWER, (api) => api.config.$patch({ query: {}, json: settings }));
     if (!changed.ok) throw new Error(`the install refused the suite's settings: ${changed.failure.kind}`);
   };

@@ -50,48 +50,48 @@ describe("a change of the update settings", () => {
   });
 });
 
-describe("a change of the logins", () => {
+describe("a change of the users", () => {
   const cases: readonly { readonly name: string; readonly by: Actor; readonly stored: readonly Login[]; readonly next: readonly Login[]; readonly kept: boolean }[] = [
     { name: "an admin at the dashboard adds an email beside their own", by: ADMIN, stored: [ADA], next: [ADA, BO], kept: true },
     { name: "an admin at the dashboard takes another email out", by: ADMIN, stored: [ADA, BO], next: [ADA], kept: true },
     { name: "an admin at the dashboard takes their own email out and leaves a new one", by: ADMIN, stored: [ADA], next: [BO], kept: false },
     { name: "an admin at the dashboard takes their own email out and leaves one that was a login", by: ADMIN, stored: [ADA, BO], next: [BO], kept: false },
     { name: "a token adds an email", by: TOKEN, stored: [ADA], next: [ADA, BO], kept: true },
-    { name: "a token leaves one of two logins", by: TOKEN, stored: [ADA, BO], next: [BO], kept: true },
+    { name: "a token leaves one of two users", by: TOKEN, stored: [ADA, BO], next: [BO], kept: true },
     { name: "a token leaves new emails alone", by: TOKEN, stored: [ADA], next: [BO, CY], kept: false },
   ];
 
-  // Drift: the login page keeps a list of its own, which a repair from the dashboard brings up to the stored one; stored logins that page lets nobody in with shut the dashboard, and the repair with it.
+  // Drift: the login page keeps a list of its own, which a repair from the dashboard brings up to the stored one; stored users that page lets nobody in with shut the dashboard, and the repair with it.
   test.each(cases)("$name: stored is $kept", async ({ by, stored, next, kept }) => {
-    const world = await makeWorld({ logins: [...stored] });
-    const changed = await changeConfig(world.install, by, { logins: next, trash_days: 9 });
+    const world = await makeWorld({ users: [...stored] });
+    const changed = await changeConfig(world.install, by, { users: next, trash_days: 9 });
     const after = await readConfig(world.install, ADMIN);
 
-    expect(changed).toMatchObject(kept ? { ok: true, values: { logins: next, trash_days: 9 } } : { ok: false, code: "no_working_login", about: "logins" });
-    expect<unknown>([after.ok && after.values.logins, after.ok && after.values.trash_days, await world.audit()]).toEqual(kept ? [next, 9, ["settings_changed"]] : [stored, 7, []]);
+    expect(changed).toMatchObject(kept ? { ok: true, values: { users: next, trash_days: 9 } } : { ok: false, code: "no_working_user", about: "users" });
+    expect<unknown>([after.ok && after.values.users, after.ok && after.values.trash_days, await world.audit()]).toEqual(kept ? [next, 9, ["settings_changed"]] : [stored, 7, []]);
   });
 
-  // Drift: an import with its logins is the other way a list reaches the store; a rule held by `changeConfig` alone would leave a backup of another install to shut this one.
-  test("a backup whose logins share none with this install's is refused whole when its logins are asked for, and taken without them", async () => {
-    const other = await makeWorld({ logins: [BO], trash_days: 30 });
+  // Drift: an import with its users is the other way a list reaches the store; a rule held by `changeConfig` alone would leave a backup of another install to shut this one.
+  test("a backup whose users share none with this install's is refused whole when its users are asked for, and taken without them", async () => {
+    const other = await makeWorld({ users: [BO], trash_days: 30 });
     const exported = await exportSettings(other.install, { scope: "admin", holder: BO });
     if (!exported.ok) throw new Error("the export was refused");
 
     const world = await makeWorld();
     const sent = { format: exported.format, settings: { ...exported.settings } };
-    const refused = await importSettings(world.install, TOKEN, { ...sent, logins: true });
+    const refused = await importSettings(world.install, TOKEN, { ...sent, users: true });
     const untouched = await readConfig(world.install, ADMIN);
     const taken = await importSettings(world.install, TOKEN, sent);
 
-    expect([refused, untouched.ok && [untouched.values.logins, untouched.values.trash_days]]).toEqual([{ ok: false, code: "no_working_login", about: "logins" }, [[ADA], 7]]);
-    expect(taken).toMatchObject({ ok: true, values: { logins: [ADA], trash_days: 30 } });
+    expect([refused, untouched.ok && [untouched.values.users, untouched.values.trash_days]]).toEqual([{ ok: false, code: "no_working_user", about: "users" }, [[ADA], 7]]);
+    expect(taken).toMatchObject({ ok: true, values: { users: [ADA], trash_days: 30 } });
   });
 });
 
 describe("a change of the settings with dry_run", () => {
-  // Drift: the settings are patched by the database, and a dry run lays the change over them itself; one that laid it otherwise, or let through a pair or logins the run refuses, would show settings no run stores.
+  // Drift: the settings are patched by the database, and a dry run lays the change over them itself; one that laid it otherwise, or let through a pair or users the run refuses, would show settings no run stores.
   test("a dry run answers the settings or the refusal the run after it answers, and writes no row", async () => {
-    const world = await makeWorld({ logins: [ADA, BO] });
+    const world = await makeWorld({ users: [ADA, BO] });
     const asked: readonly unknown[] = [
       { trash_days: 9, versions_kept: 5 },
       { default_expires: { count: 12, unit: "h" } },
@@ -99,8 +99,8 @@ describe("a change of the settings with dry_run", () => {
       { update_check: false },
       { auto_update: false, update_check: false },
       { auto_update: true },
-      { logins: [BO, CY] },
-      { logins: [CY] },
+      { users: [BO, CY] },
+      { users: [CY] },
       { trash_days: 9 },
       { trash_days: undefined, versions_kept: 4 },
       { trash_days: 0 },
@@ -112,7 +112,7 @@ describe("a change of the settings with dry_run", () => {
 
     expect([...steps, asToken].map((step) => [step.written, step.rehearsal])).toEqual([...steps, asToken].map((step) => [0, step.run]));
     expect([...steps, asToken].map((step) => (step.run.ok ? "stored" : step.run.code))).toEqual(
-      ["stored", "stored", "stored", "stored", "stored", "needs_update_check", "no_working_login", "no_working_login", "stored", "stored", "bad_argument", "bad_argument", "not_allowed"],
+      ["stored", "stored", "stored", "stored", "stored", "needs_update_check", "no_working_user", "no_working_user", "stored", "stored", "bad_argument", "bad_argument", "not_allowed"],
     );
   });
 });

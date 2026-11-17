@@ -132,11 +132,11 @@ export async function openInstall(addresses: SiteAddresses = ADDRESSES): Promise
   const opened = await openDatabase(new BunSqliteDriver(), NOW);
   if (opened.kind !== "open") throw new Error(`the test's database did not open: ${opened.kind}`);
 
-  const logins = parseLogins([OWNER_EMAIL]);
-  if (!logins.ok) throw new Error(`the test's login was refused: ${logins.refusal}`);
+  const users = parseLogins([OWNER_EMAIL]);
+  if (!users.ok) throw new Error(`the test's login was refused: ${users.refusal}`);
 
-  const [owner] = logins.value;
-  if (owner === undefined) throw new Error("the test's logins are empty");
+  const [owner] = users.value;
+  if (owner === undefined) throw new Error("the test's users are empty");
 
   const { database } = opened;
   const memory = new MemoryStore();

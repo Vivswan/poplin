@@ -76,7 +76,7 @@ const HISTORY: readonly PlainMoment[] = [
   { ago: 44.5, does: "token", by: "mira", note: "first setup", scope: "admin" },
   { ago: 30.9, does: "token", by: "mira", note: "report agent" },
   { ago: 30.8, does: "token", by: "mira", note: "travel agent" },
-  { ago: 29.6, does: "settings", by: "mira", changes: { logins: ["mira@example.com", SECOND_ADMIN] } },
+  { ago: 29.6, does: "settings", by: "mira", changes: { users: ["mira@example.com", SECOND_ADMIN] } },
   { ago: 29.5, does: "login", by: "jonas" },
   { ago: 28.9, does: "domain", by: "mira", run: "check" },
   { ago: 28.8, does: "domain", by: "mira", run: "repair" },

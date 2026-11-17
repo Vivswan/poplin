@@ -91,8 +91,8 @@ function forwarderRow(row: Progress["rows"][number], answers: Readonly<Record<st
 async function readPieces(parts: PathParts, mode: Mode, found: { readonly connection: Connection; readonly placed: Placed }, progress: Progress, readSettings: ReadSettings): Promise<DomainReading> {
   const { connection, placed } = found;
   const settings = await readSettings();
-  const parsed = parseLogins(settings.logins);
-  const logins = parsed.ok ? parsed.value : undefined;
+  const parsed = parseLogins(settings.users);
+  const users = parsed.ok ? parsed.value : undefined;
   const { layout } = parts;
   const answers = { [layout.sitesWorker]: `https://${layout.sitesHost} (unlisted and public sites)`, [layout.privateWorker]: `https://${layout.privateHost} (private sites)` };
 
@@ -103,10 +103,10 @@ async function readPieces(parts: PathParts, mode: Mode, found: { readonly connec
     () => syncForwarders(connection, placed.accountId, layout, mode),
   );
   progress.rows.splice(0, Number.POSITIVE_INFINITY, ...progress.rows.map((row) => forwarderRow(row, answers)));
-  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, logins));
+  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, users));
   await logsPiece(progress, mode, placed, connection, settings.provider_logs);
   await databasePiece(progress, mode, placed, connection);
-  await alertPiece(progress, mode, placed, connection, logins);
+  await alertPiece(progress, mode, placed, connection, users);
   // The Workflow comes last, as on an install with a domain: nothing else of the install waits for it.
   await piece(
     progress,

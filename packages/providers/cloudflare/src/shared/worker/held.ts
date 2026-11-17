@@ -6,7 +6,7 @@ import { type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, SettingsAndKey } from "@poplin/core/src/database/database";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 
-/** How long a site request trusts the settings and the logins an instance read. */
+/** How long a site request trusts the settings and the users an instance read. */
 export const SETTINGS_LIFETIME_MS = 60_000;
 
 /** What marks the key made for the visitor limit. A new label would start every visitor's minute anew and break nothing. */
@@ -24,7 +24,7 @@ export interface Held {
   readonly settings: SettingValues;
 
   /** The emails allowed in. */
-  readonly logins: Logins;
+  readonly users: Logins;
 
   /** Hashes a visitor's network for the per-visitor limit. It is derived from the visitor key, so nothing more is stored. */
   readonly visitorSecret: CryptoKey;
@@ -71,15 +71,15 @@ async function derivedSecret(key: Uint8Array<ArrayBuffer>): Promise<Pick<Held, "
 /**
  * Make what an instance holds from the settings and the visitor key one read gave.
  *
- * @throws {Error} the install holds no settings or no visitor key, or its logins are refused
+ * @throws {Error} the install holds no settings or no visitor key, or its users are refused
  */
 async function heldFrom({ settings, key }: SettingsAndKey): Promise<Held> {
   if (settings === undefined || key === undefined) throw new Error("the install holds no settings or no visitor key");
 
-  const logins = parseLogins(settings.logins);
-  if (!logins.ok) throw new Error(`the stored logins are refused: ${logins.refusal}`);
+  const users = parseLogins(settings.users);
+  if (!users.ok) throw new Error(`the stored users are refused: ${users.refusal}`);
 
-  return { settings, logins: logins.value, ...(await derivedSecret(key)) };
+  return { settings, users: users.value, ...(await derivedSecret(key)) };
 }
 
 /**

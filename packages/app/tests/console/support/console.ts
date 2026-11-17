@@ -107,10 +107,10 @@ async function openWith({ base, domain, usage, follow, rules, jobs, logs, kind }
 
   // As a host would: the users are read on every request.
   const admitOf: Parameters<typeof createConsole>[0]["admit"] = async (headers) => {
-    const logins = parseLogins((await database.readSettings())?.logins ?? []);
-    if (!logins.ok) return { ok: false, refusal: "no-proof" };
+    const users = parseLogins((await database.readSettings())?.users ?? []);
+    if (!users.ok) return { ok: false, refusal: "no-proof" };
 
-    const who = await admit(headers, { identify, logins: logins.value, now: opened.clock.now });
+    const who = await admit(headers, { identify, users: users.value, now: opened.clock.now });
     if (who.ok) return who;
 
     return { ok: false, refusal: who.refusal === "not-a-user" ? who.refusal : PROVIDER_REFUSALS[who.refusal as keyof typeof PROVIDER_REFUSALS] };

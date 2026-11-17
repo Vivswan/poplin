@@ -183,7 +183,7 @@ describe("the hosts of each kind of install, kept apart", () => {
     ["no token", async () => ({})],
     ["a token that is no token", async () => ({ "Cf-Access-Jwt-Assertion": "garbage" })],
     ["a token another key signed under the team's key id", async (from) => accessHeaders(from, {}, await signer("stranger-key"))],
-    ["a token for an email that is not in the logins", (from) => accessHeaders(from, { email: "guest@example.com" })],
+    ["a token for an email that is not in the users", (from) => accessHeaders(from, { email: "guest@example.com" })],
     ["a claim to be the owner in a header Access never sets", async () => ({ "Cf-Access-Authenticated-User-Email": OWNER })],
   ];
 

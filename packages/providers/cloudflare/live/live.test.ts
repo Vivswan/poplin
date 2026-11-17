@@ -3,7 +3,7 @@
 //   POPLIN_LIVE_DOMAIN    the install's domain
 //   POPLIN_LIVE_ACCOUNT_ADDRESS   in its place for an install without a domain: the account's name in its free address, the `<account>` of `poplin.<account>.workers.dev`
 //   POPLIN_LIVE_TOKEN     an admin's token of the install; absent, the checks that need one are skipped
-//   POPLIN_LIVE_LOGIN     a login the install is told to let in; absent, its logins stay as they are
+//   POPLIN_LIVE_LOGIN     a login the install is told to let in; absent, its users stay as they are
 //   POPLIN_LIVE_MANY_FILES  1 to publish two thousand small files; any other value skips that check
 //   POPLIN_LIVE_LOAD      1 to add the load after the checks: a few publishes, a hundred visits in a row and at once, and a copy; any other value leaves it out
 //   POPLIN_LIVE_JOB_COPY  1 to copy a site too large for one request, which the install's job finishes; any other value skips that check

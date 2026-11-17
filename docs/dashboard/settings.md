@@ -14,7 +14,7 @@ npx poplin config
 npx poplin config trash_days 30
 ```
 
-The dashboard's Settings screen changes the same settings, all but `logins`: change them, then press Save in the bar at the foot. Each setting is a row.
+The dashboard's Settings screen changes the same settings, all but `users`: change them, then press Save in the bar at the foot. Each setting is a row.
 
 | In a row                        | Means                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------ |
@@ -46,7 +46,7 @@ The line after Save says when the change takes effect:
 | Logs       | `provider_logs`                                                                                    |
 | Updates    | `update_check`, `auto_update`                                                                      |
 
-`logins` is the list under Access, Users: [Add a user](access.md#add-a-user).
+`users` is the list under Access, Users: [Add a user](access.md#add-a-user).
 
 A saved `search_engines_allowed` or `outside_pages` also changes its rule at Cloudflare by itself, with [the key poplin keeps](../about/security.md#the-kept-key); `block_bots` changes there at the next Repair on [Domain](domain.md), and so do all three on an install that holds no key.
 
@@ -84,7 +84,7 @@ The settings `poplin config` takes:
 | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | `default_expires`, `default_search_engines`                                             | what a new site starts with                              |
 | `versions_kept`, `trash_days`                                                           | how much is kept, and for how long                       |
-| `logins`                                                                                | the emails that may log in                               |
+| `users`                                                                                 | the emails that may log in                               |
 | `outside_pages`, `search_engines_allowed`, `block_bots`                                 | what the install lets in                                 |
 | `max_total_size`, `max_site_size`, `max_sites`                                          | size limits                                              |
 | `max_files_per_publish`, `max_files_per_day`                                            | how many files one publish holds, and all publishes begun in one UTC day |

@@ -26,29 +26,29 @@ describe("one login, added or removed", () => {
   }[] = [
     { name: "an admin adds an email typed with capitals and spaces", by: ADMIN, stored: [ADA], change: addLogin, request: { login: " Bo@Example.COM " }, answer: { ok: true, login: BO }, after: [ADA, BO] },
     { name: "a token adds an email", by: TOKEN, stored: [ADA], change: addLogin, request: { login: BO }, answer: { ok: true, login: BO }, after: [ADA, BO] },
-    { name: "an email that is a login, typed another way, is added", by: ADMIN, stored: [ADA, BO], change: addLogin, request: { login: "BO@example.com" }, answer: { ok: false, code: "already_a_login", about: "login" }, after: [ADA, BO] },
+    { name: "an email that is a login, typed another way, is added", by: ADMIN, stored: [ADA, BO], change: addLogin, request: { login: "BO@example.com" }, answer: { ok: false, code: "already_a_user", about: "login" }, after: [ADA, BO] },
     { name: "text that is no email is added", by: ADMIN, stored: [ADA], change: addLogin, request: { login: "bo" }, answer: { ok: false, code: "bad_argument", about: "login" }, after: [ADA] },
     { name: "a request names no email", by: ADMIN, stored: [ADA], change: addLogin, request: {}, answer: { ok: false, code: "bad_argument", about: "login" }, after: [ADA] },
     { name: "a request holds a key that is none", by: ADMIN, stored: [ADA], change: addLogin, request: { login: BO, scope: "admin" }, answer: { ok: false, code: "bad_argument", about: "scope" }, after: [ADA] },
     { name: "a publisher adds an email", by: OWNER, stored: [ADA], change: addLogin, request: { login: BO }, answer: { ok: false, code: "not_allowed" }, after: [ADA] },
     { name: "an admin removes another email", by: ADMIN, stored: [ADA, BO, CY], change: removeLogin, request: { login: "Bo@example.com" }, answer: { ok: true, login: BO }, after: [ADA, CY] },
-    { name: "an admin removes their own email", by: ADMIN, stored: [ADA, BO], change: removeLogin, request: { login: ADA }, answer: { ok: false, code: "no_working_login", about: "login" }, after: [ADA, BO] },
-    { name: "a token removes one of two logins", by: TOKEN, stored: [ADA, BO], change: removeLogin, request: { login: ADA }, answer: { ok: true, login: ADA }, after: [BO] },
-    { name: "a token removes the last login", by: TOKEN, stored: [ADA], change: removeLogin, request: { login: ADA }, answer: { ok: false, code: "no_working_login", about: "login" }, after: [ADA] },
-    { name: "an email that is no login is removed", by: ADMIN, stored: [ADA, BO], change: removeLogin, request: { login: CY }, answer: { ok: false, code: "not_a_login", about: "login" }, after: [ADA, BO] },
+    { name: "an admin removes their own email", by: ADMIN, stored: [ADA, BO], change: removeLogin, request: { login: ADA }, answer: { ok: false, code: "no_working_user", about: "login" }, after: [ADA, BO] },
+    { name: "a token removes one of two users", by: TOKEN, stored: [ADA, BO], change: removeLogin, request: { login: ADA }, answer: { ok: true, login: ADA }, after: [BO] },
+    { name: "a token removes the last login", by: TOKEN, stored: [ADA], change: removeLogin, request: { login: ADA }, answer: { ok: false, code: "no_working_user", about: "login" }, after: [ADA] },
+    { name: "an email that is no login is removed", by: ADMIN, stored: [ADA, BO], change: removeLogin, request: { login: CY }, answer: { ok: false, code: "not_a_user", about: "login" }, after: [ADA, BO] },
     { name: "text that is no email is removed", by: ADMIN, stored: [ADA], change: removeLogin, request: { login: "@" }, answer: { ok: false, code: "bad_argument", about: "login" }, after: [ADA] },
     { name: "a publisher removes an email", by: OWNER, stored: [ADA, BO], change: removeLogin, request: { login: BO }, answer: { ok: false, code: "not_allowed" }, after: [ADA, BO] },
   ];
 
   // Drift: the dashboard's people list is changed by these two alone; a refusal that still wrote, a typed form stored as typed, or a removal that left no login the login page lets in would lose a person or shut the dashboard.
-  test.each(cases)("$name: the logins end as $after", async ({ by, stored, change, request, answer, after }) => {
-    const world = await makeWorld({ logins: [...stored] });
+  test.each(cases)("$name: the users end as $after", async ({ by, stored, change, request, answer, after }) => {
+    const world = await makeWorld({ users: [...stored] });
     const changed = await change(world.install, by, request);
     const read = await readConfig(world.install, ADMIN);
     const done = after.length !== stored.length;
 
-    expect(changed).toMatchObject(done ? { ...(answer as object), values: { logins: after } } : (answer as object));
-    expect<unknown>([read.ok && read.values.logins, await world.audit()]).toEqual([after, done ? ["settings_changed"] : []]);
+    expect(changed).toMatchObject(done ? { ...(answer as object), values: { users: after } } : (answer as object));
+    expect<unknown>([read.ok && read.values.users, await world.audit()]).toEqual([after, done ? ["settings_changed"] : []]);
   });
 
   // Drift: a token or a person is let in before the user is removed and asks after. Answered as done, it would put the removed user back or leave them a token; the answer must be the one a signer with no right gets.
@@ -59,11 +59,11 @@ describe("one login, added or removed", () => {
     test.each([
       { name: "adds the removed user", change: addLogin, request: { login: BO } },
       { name: "removes another user", change: removeLogin, request: { login: CY } },
-      { name: "stores a list with the removed user", change: changeConfig, request: { logins: [ADA, BO] } },
+      { name: "stores a list with the removed user", change: changeConfig, request: { users: [ADA, BO] } },
       { name: "stores another setting", change: changeConfig, request: { trash_days: 30 } },
       { name: "makes a token", change: issueToken, request: { scope: "publisher", note: "late" } },
-    ])("$name: not allowed, and the logins, the tokens, and the log stay", async ({ change, request }) => {
-      const world = await makeWorld({ logins: [ADA, BO, CY] });
+    ])("$name: not allowed, and the users, the tokens, and the log stay", async ({ change, request }) => {
+      const world = await makeWorld({ users: [ADA, BO, CY] });
       const issued = await issueToken(world.install, { scope: "admin", holder: BO }, { scope: "admin", note: "laptop" });
       if (!issued.ok) throw new Error("no token was issued");
 
@@ -72,7 +72,7 @@ describe("one login, added or removed", () => {
       const answer = await (change as (install: Install, actor: Actor, request: unknown) => Promise<unknown>)(world.install, late(issued.record.id), request);
 
       expect<unknown>([answer, await readConfig(world.install, ADMIN), await listTokens(world.install, ADMIN), await world.audit()]).toEqual([{ ok: false, code: "not_allowed" }, ...before]);
-      expect(before[0]).toMatchObject({ values: { logins: [ADA, CY] } });
+      expect(before[0]).toMatchObject({ values: { users: [ADA, CY] } });
     });
   });
 });

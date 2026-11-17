@@ -282,13 +282,13 @@ describe("an instance's first request", () => {
   });
 
   // Drift: the person who installs sets this variable by hand; one that had to carry every setting would be eighteen chances to mistype the install into not starting.
-  test("FIRST_SETTINGS that names the logins alone starts the install with every other setting at its default", async () => {
-    const answer = await ask(instance(w), `${ADMIN}/api/whoami`, {}, withBindings({ FIRST_SETTINGS: { logins: " owner@example.com , second@example.com " } }));
+  test("FIRST_SETTINGS that names the users alone starts the install with every other setting at its default", async () => {
+    const answer = await ask(instance(w), `${ADMIN}/api/whoami`, {}, withBindings({ FIRST_SETTINGS: { users: " owner@example.com , second@example.com " } }));
     const stored = await (await installOf(w)).database.readSettings();
     const usual = settingsFromText(FIRST);
 
     expect(answer.status).toBe(401);
-    expect(stored).toEqual(usual.ok ? { ...usual.values, logins: ["owner@example.com", "second@example.com"] as typeof usual.values.logins } : undefined);
+    expect(stored).toEqual(usual.ok ? { ...usual.values, users: ["owner@example.com", "second@example.com"] as typeof usual.values.users } : undefined);
   });
 
   const stopped: readonly { readonly name: string; readonly broken: () => Bindings; readonly status: number; readonly says: string; readonly hides: string }[] = [
@@ -317,8 +317,8 @@ describe("an instance's first request", () => {
       says: "  FIRST_SETTINGS: unknown-key",
       hides: "poplin_0123456789abcdef",
     },
-    { name: "first settings with no logins", broken: () => withBindings({ FIRST_SETTINGS: { trash_days: "9" } }), status: 503, says: "  FIRST_SETTINGS: missing at logins", hides: "9" },
-    { name: "first settings whose login is no email", broken: () => withBindings({ FIRST_SETTINGS: { logins: "the-owner" } }), status: 503, says: "  FIRST_SETTINGS: bad-form at logins", hides: "the-owner" },
+    { name: "first settings with no users", broken: () => withBindings({ FIRST_SETTINGS: { trash_days: "9" } }), status: 503, says: "  FIRST_SETTINGS: missing at users", hides: "9" },
+    { name: "first settings whose login is no email", broken: () => withBindings({ FIRST_SETTINGS: { users: "the-owner" } }), status: 503, says: "  FIRST_SETTINGS: bad-form at users", hides: "the-owner" },
     // The third batch of a start on an empty database is the step: the first two find that no ledger is there.
     { name: "a schema step that fails", broken: () => withBindings({ DB: failingDatabase((batch) => batch === 3) }), status: 503, says: "could not be brought up to date. Try again.", hides: "away" },
     { name: "a database that is away", broken: () => withBindings({ DB: failingDatabase(() => true) }), status: 503, says: "Something went wrong. Try again.", hides: "away" },
@@ -514,7 +514,7 @@ describe("the product, from a token to an opened site", () => {
     ["a token past its expiry", (from) => accessHeaders(from, { exp: Math.floor(from.clock.now / 1000) - 3600 })],
     ["a token not yet valid", (from) => accessHeaders(from, { nbf: Math.floor(from.clock.now / 1000) + 3600 })],
     ["a token that names no email", (from) => accessHeaders(from, { email: undefined })],
-    ["a token for an email that is not in the logins", (from) => accessHeaders(from, { email: "guest@example.com" })],
+    ["a token for an email that is not in the users", (from) => accessHeaders(from, { email: "guest@example.com" })],
     ["a claim to be the owner in a header Access never sets", async () => ({ "Cf-Access-Authenticated-User-Email": OWNER })],
   ];
 
@@ -536,7 +536,7 @@ describe("the product, from a token to an opened site", () => {
     expect({ whole, calls: tally.calls }).toEqual({ whole: answers.map(() => ({ status: 404, to: null, cache: "no-store", text: "Not found\n" })), calls: 0 });
   });
 
-  // Drift: a token check that fetched the team's keys, or read the logins, on every request would make a private page cost a network call or a second query.
+  // Drift: a token check that fetched the team's keys, or read the users, on every request would make a private page cost a network call or a second query.
   test("a private page view on a warm instance costs one site query, one request count, one file read, and no fetch of the team's keys", async () => {
     const tally = { calls: 0 };
     const worker = instance(w);
@@ -569,14 +569,14 @@ describe("the product, from a token to an opened site", () => {
 
   // Drift: Access keeps a person's session for 30 days, so a login removed on the dashboard would keep every private site until that session ends.
   test("a person whose login is removed keeps a private site for the rest of the instance's minute and is then refused, token and all", async () => {
-    const two = withBindings({ FIRST_SETTINGS: { ...FIRST, logins: `${OWNER},second@example.com` } });
+    const two = withBindings({ FIRST_SETTINGS: { ...FIRST, users: `${OWNER},second@example.com` } });
     const worker = instance(w);
     await ask(worker, `${ADMIN}/api/whoami`, {}, two);
     const site = await publish(worker, await tokenOf(w, "publisher"), { name: "report" }, [page("<h1>report</h1>")]);
     const second = await accessHeaders(w, { email: "second@example.com" });
 
     const before = await ask(worker, `${under(site, "p")}/`, { headers: second });
-    await done(await api(worker, await tokenOf(w, "admin")).config.$patch({ query: {}, json: { logins: [OWNER] } }));
+    await done(await api(worker, await tokenOf(w, "admin")).config.$patch({ query: {}, json: { users: [OWNER] } }));
     const withinTheMinute = await ask(worker, `${under(site, "p")}/`, { headers: second });
     wait(w, 1 / 60);
     const afterTheMinute = await ask(worker, `${under(site, "p")}/`, { headers: second });
@@ -1057,7 +1057,7 @@ describe("the admin hostname", () => {
   test("a setting changed through the dashboard is what the very next read shows, on the same instance and on another", async () => {
     const [worker, other] = [instance(w), instance(w)];
     const session = await logIn(worker, w);
-    const people = async (from: ReturnType<typeof instance>): Promise<unknown> => (await (await ask(from, `${ADMIN}/data/people`, { headers: session })).json<{ logins: string[] }>()).logins;
+    const people = async (from: ReturnType<typeof instance>): Promise<unknown> => (await (await ask(from, `${ADMIN}/data/people`, { headers: session })).json<{ users: string[] }>()).users;
     const before = [await people(worker), await people(other)];
     const added = await send(worker, `${ADMIN}/data/people/add`, { login: "bo@example.com" }, session);
 
@@ -1384,7 +1384,7 @@ describe("the rows the live checks count", () => {
         "put back from a backup, with three versions": [26, 26],
         // An upload that is given up was counted with the finish it never had.
         "an upload begun, asked what it lacks, and given up": [9, 27],
-        // Four rows more are written where the logins change after a check of the domain and Cloudflare refuses them: the mark that they changed, the mark of the try, the mark set anew, and the problem noted.
+        // Four rows more are written where the users change after a check of the domain and Cloudflare refuses them: the mark that they changed, the mark of the try, the mark set anew, and the problem noted.
         "a setting changed": [2, 6],
         "a fourth version, which drops two once the install keeps two": [19, 19],
         "a new site that runs out": [23, 23],

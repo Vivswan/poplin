@@ -291,20 +291,20 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       });
       expect((await auditDetails(database, "settings_changed")).at(-1)).toEqual({ default_expires: "never", max_sites: "none" });
       await expect(database.changeSettings({ trash_days: 0 }, BY_ADA)).rejects.toThrow();
-      await expect(database.changeSettings({ logins: [] }, BY_ADA)).rejects.toThrow();
+      await expect(database.changeSettings({ users: [] }, BY_ADA)).rejects.toThrow();
     });
 
     // Drift: the two update settings are written by requests that each name one, so only the store sees both. A refused change that still ended a token, or marked the users or the rules as changed, would be half a change.
     test("auto_update is stored on only beside update_check, whichever of the two a change names, and a change that would part them writes nothing of any key", async () => {
       const database = await opened(makeDatabase);
       const bo = "bo@example.com" as Login;
-      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo] }, BY_ADA);
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo] }, BY_ADA);
       await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [] }, null);
       await database.addToken((await mintToken({ scope: "publisher", note: "of bo", now: NOW })).record, { as: "person", by: bo, at: NOW });
       const state = async (): Promise<unknown> => {
         const [stored, tokens, check, entries] = [await database.readSettings(), await database.listTokenStates(NOW + 9, 50), await database.readDomainCheck(), await database.listAudit({ limit: 100 })];
 
-        return { pair: [stored?.update_check, stored?.auto_update], logins: stored?.logins, outside: stored?.outside_pages, trash: stored?.trash_days, live: tokens.live.length, entries: entries.length, check };
+        return { pair: [stored?.update_check, stored?.auto_update], users: stored?.users, outside: stored?.outside_pages, trash: stored?.trash_days, live: tokens.live.length, entries: entries.length, check };
       };
       const kinds = async (...changes: readonly Partial<typeof SETTINGS>[]): Promise<string[]> => {
         const answers: string[] = [];
@@ -315,10 +315,10 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
 
       const off = await kinds({ update_check: false });
       const before = await state();
-      const alone = await kinds({ auto_update: true, trash_days: 9, logins: [ADMIN], outside_pages: "allowed" }, { auto_update: true, update_check: false }, { auto_update: true });
+      const alone = await kinds({ auto_update: true, trash_days: 9, users: [ADMIN], outside_pages: "allowed" }, { auto_update: true, update_check: false }, { auto_update: true });
       const untouched = await state();
       const both = await kinds({ update_check: true, auto_update: true });
-      const parted = await kinds({ update_check: false, logins: [ADMIN], outside_pages: "allowed" }, { update_check: false });
+      const parted = await kinds({ update_check: false, users: [ADMIN], outside_pages: "allowed" }, { update_check: false });
       const kept = await state();
       const together = await kinds({ update_check: false, auto_update: false }, { update_check: true }, { auto_update: true }, { auto_update: true });
       // Asked at the same moment from the pair on and off, each of the two changes alone is fine: one of them lands, never both.
@@ -326,23 +326,23 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const raced = await Promise.all([database.changeSettings({ auto_update: true }, BY_ADA), database.changeSettings({ update_check: false }, BY_ADA)]);
 
       expect([off, alone, untouched, both, parted]).toEqual([["done"], ["needs_update_check", "needs_update_check", "needs_update_check"], before, ["done"], ["needs_update_check", "needs_update_check"]]);
-      expect(kept).toMatchObject({ pair: [true, true], logins: [ADMIN, bo], outside: "blocked", live: 1 });
+      expect(kept).toMatchObject({ pair: [true, true], users: [ADMIN, bo], outside: "blocked", live: 1 });
       expect(together).toEqual(["done", "done", "done", "unchanged"]);
       expect(raced.map(({ kind }) => kind).sort()).toEqual(["done", "needs_update_check"]);
     });
 
-    // Drift: the log is the record of who was given access. A list that replaces the logins is compared with the one it replaces in the same step, so its entry cannot name a user another change added a moment before.
-    test("the entry of new logins holds the list, who it adds and who it leaves out, each in the order of its list, beside every other value set; the same users in another order add and leave out nobody", async () => {
+    // Drift: the log is the record of who was given access. A list that replaces the users is compared with the one it replaces in the same step, so its entry cannot name a user another change added a moment before.
+    test("the entry of new users holds the list, who it adds and who it leaves out, each in the order of its list, beside every other value set; the same users in another order add and leave out nobody", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy, di, ed] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login, "ed@example.com" as Login];
-      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy] }, BY_ADA);
-      await database.changeSettings({ logins: [ed, ADMIN, di], trash_days: 9 }, BY_ADA);
-      await database.changeSettings({ logins: [ADMIN, di, ed] }, BY_ADA);
-      await database.changeSettings({ logins: [ADMIN, di, ed] }, BY_ADA);
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo, cy] }, BY_ADA);
+      await database.changeSettings({ users: [ed, ADMIN, di], trash_days: 9 }, BY_ADA);
+      await database.changeSettings({ users: [ADMIN, di, ed] }, BY_ADA);
+      await database.changeSettings({ users: [ADMIN, di, ed] }, BY_ADA);
 
       expect(await auditDetails(database, "settings_changed")).toEqual([
-        { logins: [ed, ADMIN, di], trash_days: 9, added: [ed, di], removed: [bo, cy] },
-        { logins: [ADMIN, di, ed], added: [], removed: [] },
+        { users: [ed, ADMIN, di], trash_days: 9, added: [ed, di], removed: [bo, cy] },
+        { users: [ADMIN, di, ed], added: [], removed: [] },
       ]);
     });
 
@@ -352,7 +352,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const [bo, cy, di] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login];
       const byAdmin: Signed = { as: "person", by: ADMIN, at: NOW + 1 };
       const kinds = (answers: readonly { readonly kind: string }[]): string[] => answers.map((answer) => answer.kind);
-      const stored = async (): Promise<unknown> => [...((await database.readSettings())?.logins ?? [])].sort();
+      const stored = async (): Promise<unknown> => [...((await database.readSettings())?.users ?? [])].sort();
 
       expect(kinds(await Promise.all([database.addLogin(bo, BY_ADA), database.removeLogin(ADMIN, BY_ADA)]))).toEqual(["not_set_up", "not_set_up"]);
       await database.initSettings(SETTINGS, BY_ADA);
@@ -369,12 +369,12 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
         await database.removeLogin(di, BY_ADA),
         await database.removeLogin(ADMIN, BY_ADA),
       ]).toEqual([
-        { kind: "unchanged", values: { ...values, logins: [ADMIN, cy, di] } },
-        { kind: "unchanged", values: { ...values, logins: [ADMIN, cy, di] } },
-        { kind: "no_working_login" },
-        { kind: "done", values: { ...values, logins: [ADMIN, di] } },
-        { kind: "done", values: { ...values, logins: [ADMIN] } },
-        { kind: "no_working_login" },
+        { kind: "unchanged", values: { ...values, users: [ADMIN, cy, di] } },
+        { kind: "unchanged", values: { ...values, users: [ADMIN, cy, di] } },
+        { kind: "no_working_user" },
+        { kind: "done", values: { ...values, users: [ADMIN, di] } },
+        { kind: "done", values: { ...values, users: [ADMIN] } },
+        { kind: "no_working_user" },
       ]);
 
       const details = await auditDetails(database, "settings_changed");
@@ -399,7 +399,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
     test("removing a user ends each token that user is behind, in the same step and each with its entry; a refused removal, a token that ran out, and the tokens of a user who stays are left as they were", async () => {
       const database = await opened(makeDatabase);
       const bo = "bo@example.com" as Login;
-      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo] }, BY_ADA);
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo] }, BY_ADA);
       const token = async (scope: "admin" | "publisher", note: string, now = NOW): Promise<TokenRecord> => (await mintToken({ scope, note, now })).record;
       const [stays, laptop, ci, old] = [await token("publisher", "stays"), await token("admin", "laptop", NOW + 1), await token("publisher", "ci", NOW + 2), await token("admin", "old", NOW - 31 * 86_400_000)];
       await database.addToken(stays, { as: "person", by: ADMIN, at: NOW });
@@ -437,7 +437,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
           [ADMIN, 1],
           [bo, 3],
         ],
-        "no_working_login",
+        "no_working_user",
         ["agent", "ci", "laptop", "stays"],
         "done",
         "unchanged",
@@ -456,11 +456,11 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       ]);
     });
 
-    // Drift: a request is let in before its user is removed and may write after. A settings write that still landed would put the removed user back among the logins, or end the tokens of a user who stays.
+    // Drift: a request is let in before its user is removed and may write after. A settings write that still landed would put the removed user back among the users, or end the tokens of a user who stays.
     test("a change of the settings signed by a token whose user was removed since writes nothing, and one signed by a token that leaves its own user out lands whole, once", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy, di, ed] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login, "ed@example.com" as Login];
-      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy, di, ed] }, BY_ADA);
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo, cy, di, ed] }, BY_ADA);
       await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [] }, null);
       const token = async (note: string, now = NOW): Promise<TokenRecord> => (await mintToken({ scope: "admin", note, now })).record;
       // The token of cy runs out five milliseconds on: a removal after that leaves it as it ended.
@@ -470,7 +470,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
         const [stored, tokens, check] = [await database.readSettings(), await database.listTokenStates(NOW + 9, 50), await database.readDomainCheck()];
         const ended = Object.fromEntries(tokens.ended.map(({ note, how }) => [note, how]));
 
-        return { logins: stored?.logins, outside: stored?.outside_pages, live: tokens.live.map(({ note }) => note).sort(), ended, changes: (await auditDetails(database, "settings_changed")).length, rulesWait: (check?.rules_changed_at ?? 0) > 0 };
+        return { users: stored?.users, outside: stored?.outside_pages, live: tokens.live.map(({ note }) => note).sort(), ended, changes: (await auditDetails(database, "settings_changed")).length, rulesWait: (check?.rules_changed_at ?? 0) > 0 };
       };
       await database.removeLogin(bo, { as: "person", by: ADMIN, at: NOW + 1 });
       await database.removeLogin(cy, { as: "person", by: ADMIN, at: NOW + 6 });
@@ -479,23 +479,23 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       // The token that ran out signs from before its end, as a request let in then would: its user is gone, so it is too.
       const ranOut: Signed = { as: "token", by: brief.id, at: NOW + 2 };
       const refused = [
-        await database.changeSettings({ logins: [ADMIN, bo], outside_pages: "allowed" }, late),
+        await database.changeSettings({ users: [ADMIN, bo], outside_pages: "allowed" }, late),
         await database.addLogin(bo, late),
         await database.removeLogin(cy, late),
         await database.removeLogin(di, late),
-        await database.changeSettings({ logins: [ADMIN] }, ranOut),
+        await database.changeSettings({ users: [ADMIN] }, ranOut),
         await database.removeLogin(cy, ranOut),
       ];
       const after = await state();
-      const own = [await database.removeLogin(ed, { as: "token", by: ci.id, at: NOW + 7 }), await database.changeSettings({ logins: [ADMIN], outside_pages: "allowed" }, { as: "token", by: pad.id, at: NOW + 8 })];
-      const again = await database.changeSettings({ logins: [ADMIN, di], outside_pages: "blocked" }, { as: "token", by: pad.id, at: NOW + 8 });
+      const own = [await database.removeLogin(ed, { as: "token", by: ci.id, at: NOW + 7 }), await database.changeSettings({ users: [ADMIN], outside_pages: "allowed" }, { as: "token", by: pad.id, at: NOW + 8 })];
+      const again = await database.changeSettings({ users: [ADMIN, di], outside_pages: "blocked" }, { as: "token", by: pad.id, at: NOW + 8 });
 
       expect<unknown>([refused, after]).toEqual([Array.from({ length: 6 }, () => ({ kind: "signer_gone" })), before]);
-      expect(before).toEqual({ logins: [ADMIN, di, ed], outside: "blocked", live: ["ci", "pad"], ended: { laptop: "user_removed", brief: "ran_out" }, changes: 2, rulesWait: false });
+      expect(before).toEqual({ users: [ADMIN, di, ed], outside: "blocked", live: ["ci", "pad"], ended: { laptop: "user_removed", brief: "ran_out" }, changes: 2, rulesWait: false });
       expect<unknown>([own.map(({ kind }) => kind), again, await state()]).toEqual([
         ["done", "done"],
         { kind: "signer_gone" },
-        { logins: [ADMIN], outside: "allowed", live: [], ended: { laptop: "user_removed", brief: "ran_out", pad: "user_removed", ci: "user_removed" }, changes: 4, rulesWait: true },
+        { users: [ADMIN], outside: "allowed", live: [], ended: { laptop: "user_removed", brief: "ran_out", pad: "user_removed", ci: "user_removed" }, changes: 4, rulesWait: true },
       ]);
     });
 
@@ -503,21 +503,21 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
     test("a write signed by a person who was removed since changes nothing, a person who is a login still writes, and the first login and the sweeper always sign", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy, di, ed] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login, "ed@example.com" as Login];
-      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy] }, BY_ADA);
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo, cy] }, BY_ADA);
       await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [] }, null);
       const token = async (note: string): Promise<TokenRecord> => (await mintToken({ scope: "publisher", note, now: NOW })).record;
       const state = async (): Promise<unknown> => {
         const [stored, tokens, check] = [await database.readSettings(), await database.listTokenStates(NOW + 9, 50), await database.readDomainCheck()];
         const entries = [(await auditDetails(database, "settings_changed")).length, (await auditDetails(database, "token_added")).length];
 
-        return { logins: stored?.logins, outside: stored?.outside_pages, live: tokens.live.map(({ note }) => note).sort(), ended: tokens.ended.length, entries, check };
+        return { users: stored?.users, outside: stored?.outside_pages, live: tokens.live.map(({ note }) => note).sort(), ended: tokens.ended.length, entries, check };
       };
       await database.removeLogin(bo, { as: "person", by: ADMIN, at: NOW + 1 });
       const before = await state();
       const late: Signed = { as: "person", by: bo, at: NOW + 2 };
       const refused = [
         await database.addLogin(bo, late),
-        await database.changeSettings({ logins: [ADMIN, bo], outside_pages: "allowed" }, late),
+        await database.changeSettings({ users: [ADMIN, bo], outside_pages: "allowed" }, late),
         await database.changeSettings({ outside_pages: "allowed" }, late),
         await database.removeLogin(cy, late),
         await database.addToken(await token("late"), late),
@@ -525,22 +525,22 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const after = await state();
       const standing: Signed = { as: "person", by: cy, at: NOW + 3 };
       const written = [await database.addLogin(di, standing), await database.removeLogin(di, standing), await database.changeSettings({ outside_pages: "allowed" }, standing), await database.addToken(await token("of cy"), standing)];
-      const always = [await database.changeSettings({ logins: [ed] }, { as: "first_login", by: ed, at: NOW + 4 }), await database.addToken(await token("swept"), { as: "sweeper", by: "sweep@poplin.invalid" as Login, at: NOW + 5 })];
+      const always = [await database.changeSettings({ users: [ed] }, { as: "first_login", by: ed, at: NOW + 4 }), await database.addToken(await token("swept"), { as: "sweeper", by: "sweep@poplin.invalid" as Login, at: NOW + 5 })];
 
       expect<unknown>([refused, after]).toEqual([Array.from({ length: 5 }, () => ({ kind: "signer_gone" })), before]);
-      expect(before).toMatchObject({ logins: [ADMIN, cy], outside: "blocked", live: [], ended: 0, entries: [1, 0] });
+      expect(before).toMatchObject({ users: [ADMIN, cy], outside: "blocked", live: [], ended: 0, entries: [1, 0] });
       expect<unknown>([written.map(({ kind }) => kind), always.map(({ kind }) => kind), await state()]).toMatchObject([
         ["done", "done", "done", "done"],
         ["done", "done"],
-        { logins: [ed], outside: "allowed", live: ["swept"], ended: 1, entries: [5, 2] },
+        { users: [ed], outside: "allowed", live: ["swept"], ended: 1, entries: [5, 2] },
       ]);
     });
 
-    // Drift: `poplin config logins` and an import replace the whole list. A list that dropped a user and kept that user's tokens would be the way round the removal.
-    test("a list of logins that leaves users out ends their tokens with it, and a list that keeps everyone ends none", async () => {
+    // Drift: `poplin config users` and an import replace the whole list. A list that dropped a user and kept that user's tokens would be the way round the removal.
+    test("a list of users that leaves users out ends their tokens with it, and a list that keeps everyone ends none", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
-      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy] }, BY_ADA);
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo, cy] }, BY_ADA);
       const minted = await Promise.all(["ada", "bo", "cy"].map((note) => mintToken({ scope: "publisher", note, now: NOW })));
       const [ofAda, ofBo, ofCy] = minted.map((mint) => mint.record);
       if (ofAda === undefined || ofBo === undefined || ofCy === undefined) throw new Error("the tokens were not minted");
@@ -550,9 +550,9 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       await database.addToken(ofCy, { as: "person", by: cy, at: NOW });
       const live = async (): Promise<string[]> => (await database.listTokens()).map(({ note }) => note).sort();
 
-      await database.changeSettings({ logins: [cy, bo, ADMIN], trash_days: 9 }, { as: "person", by: ADMIN, at: NOW + 1 });
+      await database.changeSettings({ users: [cy, bo, ADMIN], trash_days: 9 }, { as: "person", by: ADMIN, at: NOW + 1 });
       const kept = await live();
-      await database.changeSettings({ logins: [ADMIN, "di@example.com" as Login] }, { as: "person", by: ADMIN, at: NOW + 2 });
+      await database.changeSettings({ users: [ADMIN, "di@example.com" as Login] }, { as: "person", by: ADMIN, at: NOW + 2 });
 
       expect([kept, await live()]).toEqual([["ada", "bo", "cy"], ["ada"]]);
       expect((await database.listTokenStates(NOW + 3, 50)).ended.map(({ note, how, endedAt }) => [note, how, endedAt]).sort()).toEqual([

@@ -333,8 +333,8 @@ describe("createApi", () => {
     expect(part(await done((api) => api.config.$get({ query: {} })), "values").trash_days).toBe(7);
     expect(part(await done((api) => api.config.$patch({ json: { trash_days: 9 }, query: {} })), "values").trash_days).toBe(9);
     // Drift: a token names no email, so the API is the way a list of new emails alone would reach the store and shut the dashboard on everyone.
-    const shut = await answered(install.routes.config.$patch({ json: { logins: ["new@example.com" as Login] }, query: {} }));
-    expect([shut.status, shut.body.error]).toEqual([409, { code: "no_working_login", message: "the change would leave no login that works", about: "logins" }]);
+    const shut = await answered(install.routes.config.$patch({ json: { users: ["new@example.com" as Login] }, query: {} }));
+    expect([shut.status, shut.body.error]).toEqual([409, { code: "no_working_user", message: "the change would leave no user who can log in", about: "users" }]);
     // Drift: the dashboard locks the switch of automatic updates, and a token's PATCH never meets that lock.
     const alone = await answered(install.routes.config.$patch({ json: { update_check: false, auto_update: true }, query: {} }));
     expect([alone.status, alone.body.error]).toEqual([409, { code: "needs_update_check", message: "auto_update is on only while update_check is on", about: "auto_update" }]);
@@ -363,18 +363,18 @@ describe("createApi", () => {
       today: dayOf(NOW),
       problems: [{ day: dayOf(NOW), kind: "request_failed", count: 2, more: true, first_at: NOW, last_at: NOW, name: "TypeError", message: "the store did not answer" }],
     });
-    // Drift: `poplin config logins` replaces the users through this route. A change that left no mark would have the domain say nobody waits while the added user cannot log in.
+    // Drift: `poplin config users` replaces the users through this route. A change that left no mark would have the domain say nobody waits while the added user cannot log in.
     const users = [ada, "bo@example.com" as Login];
-    expect(part(await done((api) => api.config.$patch({ json: { logins: users }, query: {} })), "values").logins).toEqual(users);
+    expect(part(await done((api) => api.config.$patch({ json: { users: users }, query: {} })), "values").users).toEqual(users);
     expect([(await done((api) => api.domain.$get({ query: {} }))).body.waits, (await install.database.readDomainCheck())?.users_changed_at]).toEqual([true, NOW]);
     // Drift: the same change is carried to the provider by itself, and so is an import that brings its users.
     // A route that carried the list of before its own change would leave the provider with the old users, and one that carried on any setting would call it for nothing.
     install.users.takes = true;
     const three = [...users, "cy@example.com" as Login];
-    await done((api) => api.config.$patch({ json: { logins: three }, query: {} }));
+    await done((api) => api.config.$patch({ json: { users: three }, query: {} }));
     await done((api) => api.config.$patch({ json: { trash_days: 8 }, query: {} }));
     const settled = (await install.database.readDomainCheck())?.users_changed_at;
-    await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, logins: users.join(",") }, logins: true }, query: {} }));
+    await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, users: users.join(",") }, users: true }, query: {} }));
     await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, trash_days: "8" } }, query: {} }));
     expect([install.users.pushed, settled, (await install.database.readDomainCheck())?.users_changed_at]).toEqual([[three, users], null, null]);
     // Drift: `poplin config outside_pages` goes through this route too. A change that reached no rule of the domain would wait for a repair the command never mentions, and one carried on any setting would call the provider for nothing.
@@ -595,19 +595,19 @@ describe("createApi", () => {
 
   // Drift: a token is its user's. A removed user whose tokens lived on would read every private site with them, and with an admin one put their own email back among the users.
   test.each([
-    ["a shorter list of users", (install: ApiInstall, stays: Login[]) => answered(install.routes.config.$patch({ json: { logins: stays }, query: {} }))],
+    ["a shorter list of users", (install: ApiInstall, stays: Login[]) => answered(install.routes.config.$patch({ json: { users: stays }, query: {} }))],
     [
       "an import that brings a shorter list",
       async (install: ApiInstall, stays: Login[]) => {
         const settings = (await answered(install.routes.export.settings.$get({ query: {} }))).body.settings as Record<string, string>;
 
-        return answered(install.routes.import.settings.$post({ json: { format: 1, settings: { ...settings, logins: stays.join(",") }, logins: true }, query: {} }));
+        return answered(install.routes.import.settings.$post({ json: { format: 1, settings: { ...settings, users: stays.join(",") }, users: true }, query: {} }));
       },
     ],
   ])("%s ends the admin and the publisher token the removed user allowed, at once and for good, and no token of a user who stays", async (_how, shorten) => {
     const install = await openApi();
     const [ada, bo] = ["ada@example.com" as Login, "bo@example.com" as Login];
-    await answered(install.routes.config.$patch({ json: { logins: [ada, bo] }, query: {} }));
+    await answered(install.routes.config.$patch({ json: { users: [ada, bo] }, query: {} }));
     const [laptop, agent] = await Promise.all([mintToken({ scope: "admin", note: "laptop", now: NOW }), mintToken({ scope: "publisher", note: "agent", now: NOW })]);
     await install.database.addToken(laptop.record, { as: "person", by: bo, at: NOW });
     // A token made by a token is its maker's user's: the publisher token here is made by bo's admin token.
@@ -618,8 +618,8 @@ describe("createApi", () => {
 
     const removed = await shorten(install, [ada]);
     const after = await answers();
-    const back = await answered(install.as(laptop.token).config.$patch({ json: { logins: [ada, bo] }, query: {} }));
-    await answered(install.routes.config.$patch({ json: { logins: [ada, bo] }, query: {} }));
+    const back = await answered(install.as(laptop.token).config.$patch({ json: { users: [ada, bo] }, query: {} }));
+    await answered(install.routes.config.$patch({ json: { users: [ada, bo] }, query: {} }));
     const ended = (await install.database.listTokenStates(NOW, 50)).ended.map(({ id, how }) => [id, how]);
 
     expect([before, removed.status, after, back.status, await answers()]).toEqual([[200, 200, 200, 200, 200], 200, [401, 401, 200, 200, 200], 401, [401, 401, 200, 200, 200]]);
@@ -631,7 +631,7 @@ describe("createApi", () => {
     const install = await openApi();
     install.users.takes = true;
 
-    const refused = await answered(install.as(install.tokens.owner).config.$patch({ json: { logins: ["ada@example.com" as Login, "bo@example.com" as Login] }, query: {} }));
+    const refused = await answered(install.as(install.tokens.owner).config.$patch({ json: { users: ["ada@example.com" as Login, "bo@example.com" as Login] }, query: {} }));
 
     expect([refused.status, part(refused, "error").code, install.users.pushed]).toEqual([403, "not_allowed", []]);
   });
@@ -644,7 +644,7 @@ describe("createApi", () => {
     await published(install, { site }, { "index.html": "<h1>second</h1>" });
     const [owner, admin] = [install.as(install.tokens.owner), install.as(install.tokens.admin)];
     const query = { dry_run: "true" };
-    const settings = { logins: ["ada@example.com" as Login, "bo@example.com" as Login], outside_pages: "allowed" as const, provider_logs: false };
+    const settings = { users: ["ada@example.com" as Login, "bo@example.com" as Login], outside_pages: "allowed" as const, provider_logs: false };
     const before = [await stateOf(install), (await answered(admin.config.$get({ query: {} }))).body];
 
     const rehearsed = [
@@ -998,7 +998,7 @@ describe("what the API refuses before any action runs", () => {
     ["a JSON route sent a form", (install: ApiInstall) => answered(install.routes.config.$patch({ json: undefined as never, query: {} }, bytes("{}", FORM))), 415, {}, null],
     ["a file sent as JSON", (install: ApiInstall) => answered(install.routes.uploads[":upload"].file.$put({ param: { upload: NO_UPLOAD }, query: { path: "index.html" } }, bytes("x", { "Content-Type": "application/json" }))), 415, {}, null],
     ["a body that is no JSON", (install: ApiInstall) => install.ask(raw(install, "/api/config", { method: "PATCH", body: "{", headers: { "Content-Type": "application/json" } })), 400, { about: "body" }, null],
-    ["a JSON body past its cap", (install: ApiInstall) => answered(install.routes.config.$patch({ json: { logins: ["x".repeat(65_536) as Login] }, query: {} })), 413, { code: "too_large", about: "body" }, null],
+    ["a JSON body past its cap", (install: ApiInstall) => answered(install.routes.config.$patch({ json: { users: ["x".repeat(65_536) as Login] }, query: {} })), 413, { code: "too_large", about: "body" }, null],
     ["a manifest past its own cap", (install: ApiInstall) => answered(install.routes.uploads.$post({ json: { name: "x".repeat(LIMITS.manifestBytes), files: [] }, query: {} })), 413, { about: "body" }, null],
     ["a field no schema names", (install: ApiInstall) => answered(install.routes.sites[":site"].$patch({ param: { site: NO_SITE }, json: { colour: "red" } as never, query: {} })), 400, { about: "colour" }, null],
     ["a field of the wrong type", (install: ApiInstall) => answered(install.routes.sites[":site"].rollback.$post({ param: { site: NO_SITE }, json: { version: "1" } as never, query: {} })), 400, { about: "version" }, null],

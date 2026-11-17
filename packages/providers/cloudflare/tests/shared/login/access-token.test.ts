@@ -59,12 +59,12 @@ describe("the dashboard's admission over the real check", () => {
     if ("refusal" in outcome && outcome.refusal === "missing") headers.set("X-Forwarded-Email", "owner@example.com");
     setSystemTime(new Date(NOW));
 
-    expect<unknown>(await admit(headers, { identify, logins: users.value, now: NOW })).toEqual(outcome);
+    expect<unknown>(await admit(headers, { identify, users: users.value, now: NOW })).toEqual(outcome);
   });
 });
 
 describe("an Access token", () => {
-  // Drift: the email would be trusted in the case Access sent it, and no longer match the logins' normal form; or the login would be dated by the request, and every request would look like a new login.
+  // Drift: the email would be trusted in the case Access sent it, and no longer match the users' normal form; or the login would be dated by the request, and every request would look like a new login.
   test("a live token of this team and application gives its email in lowercase, and the moment Access issued it", async () => {
     const verdict = await check(certs(team), await sign(team, { email: "Owner@Example.COM", iat: NOW_SECONDS - 4000, nbf: NOW_SECONDS - 4000 }), NOW);
     const later = await check(certs(team), await sign(team, { iat: NOW_SECONDS - 4000, nbf: NOW_SECONDS - 4000 }), NOW + 1000 * 1000);

@@ -14,7 +14,7 @@ import { openOwned } from "../support/install";
 const [BO, CY] = ["bo@example.com" as Login, "cy@example.com" as Login];
 
 /** The one row of a domain whose login stands. */
-const LOGIN_STANDS: readonly DomainRow[] = [{ object: "Login policy", state: "present", detail: "the logins", part: "login" }];
+const LOGIN_STANDS: readonly DomainRow[] = [{ object: "Login policy", state: "present", detail: "the users", part: "login" }];
 
 /** A test install. */
 type Owned = Awaited<ReturnType<typeof openOwned>>;
@@ -39,12 +39,12 @@ function fakeFollow(answer: (earlier: number) => Promise<FollowRefusal | undefin
     pushed: [],
     held: undefined,
     holdsKey: () => holdsKey,
-    async push(logins) {
-      follow.pushed.push(logins);
+    async push(users) {
+      follow.pushed.push(users);
       const refusal = await answer(follow.pushed.length - 1);
       if (refusal !== undefined) return { ok: false, refusal };
 
-      follow.held = logins;
+      follow.held = users;
 
       return { ok: true };
     },
@@ -53,7 +53,7 @@ function fakeFollow(answer: (earlier: number) => Promise<FollowRefusal | undefin
   return follow;
 }
 
-/** Keep a first run of the domain, so the install remembers a change of the users, then add a user a moment later and answer the logins after it. */
+/** Keep a first run of the domain, so the install remembers a change of the users, then add a user a moment later and answer the users after it. */
 async function added(opened: Owned, login: Login): Promise<readonly Login[]> {
   if ((await opened.install.database.readDomainCheck()) === undefined) {
     await opened.install.database.keepDomainCheck({ ran_at: opened.install.now(), by: opened.owner, run: "repair", pieces: [] }, {});
@@ -63,7 +63,7 @@ async function added(opened: Owned, login: Login): Promise<readonly Login[]> {
   const change = await opened.install.database.addLogin(login, { as: "person", by: opened.owner, at: opened.install.now() });
   if (change.kind !== "done") throw new Error("the user was not added");
 
-  return change.values.logins;
+  return change.values.users;
 }
 
 /** Whether a change of the users waits. An install that keeps no run of its domain remembers none, which is no waiting. */
@@ -102,7 +102,7 @@ describe("followUsers", () => {
     const followed = await followUsers(opened.install, fakeFollow(() => refusal));
 
     expect(followed).toEqual({ carried: false, why: refusal, sentence });
-    expect([await waits(opened), (await opened.install.database.readSettings())?.logins, await problems(opened)]).toEqual([true, [opened.owner, BO], noted ? ["users_not_carried"] : []]);
+    expect([await waits(opened), (await opened.install.database.readSettings())?.users, await problems(opened)]).toEqual([true, [opened.owner, BO], noted ? ["users_not_carried"] : []]);
   });
 
   const halves: readonly { readonly refusal: FollowRefusal; readonly why: "half_retried" | "half_refused"; readonly sentence: string; readonly noted: boolean }[] = [
@@ -130,19 +130,19 @@ describe("followUsers", () => {
     const newer: UsersFollow = {
       where: "Example Cloud",
       holdsKey: () => true,
-      push: async (logins) => {
-        provider.held = logins;
+      push: async (users) => {
+        provider.held = users;
 
         return { ok: true };
       },
     };
     const retry: UsersFollow = {
       ...newer,
-      push: async (logins) => {
+      push: async (users) => {
         await added(opened, CY);
         const settled = await followUsers(opened.install, newer);
         const between = [settled, provider.held, await waits(opened)];
-        provider.held = logins;
+        provider.held = users;
         expect(between).toEqual([{ carried: true }, [opened.owner, BO, CY], false]);
 
         return { ok: false, refusal: "unreachable", written: true };
@@ -199,12 +199,12 @@ describe("followUsers", () => {
   });
 
   // Drift: two tries at once. While one carries the newest users, an older list of another admin lands at the provider after it, and that admin's try settles nothing.
-  // Settled on the stored logins alone, the first try would end the waiting over a provider that holds the older list, and nothing would ever carry the newest.
+  // Settled on the stored users alone, the first try would end the waiting over a provider that holds the older list, and nothing would ever carry the newest.
   test("a try that another try overtook at the provider does not settle the change, and carries the users once more", async () => {
     const opened = await openOwned();
     await added(opened, BO);
     const follow = fakeFollow(async (earlier) => {
-      if (earlier === 0) await opened.install.database.settleUsers({ logins: [opened.owner], since: 0 }, opened.install.now());
+      if (earlier === 0) await opened.install.database.settleUsers({ users: [opened.owner], since: 0 }, opened.install.now());
 
       return undefined;
     });
@@ -241,12 +241,12 @@ describe("followUsers", () => {
     const follow: UsersFollow = {
       where: "Example Cloud",
       holdsKey: () => true,
-      push: async (logins) => {
+      push: async (users) => {
         await opened.install.database.addLogin(CY, { as: "person", by: opened.owner, at: opened.install.now() });
         const repaired = [opened.owner, BO, CY];
-        await opened.install.database.keepDomainCheck({ ran_at: opened.install.now(), by: opened.owner, run: "repair", pieces: [] }, {}, { logins: repaired, since: opened.install.now() });
+        await opened.install.database.keepDomainCheck({ ran_at: opened.install.now(), by: opened.owner, run: "repair", pieces: [] }, {}, { users: repaired, since: opened.install.now() });
         expect(await waits(opened)).toBe(false);
-        provider.held = logins;
+        provider.held = users;
 
         return { ok: false, refusal: "unreachable", written: true };
       },
@@ -279,7 +279,7 @@ describe("the console", () => {
     const answer = await opened.change("/data/people/add", { login: BO });
 
     expect([answer.status, await answer.json()]).toEqual([200, { ok: true, login: BO, note: "The login list at Example Cloud was not reached; it is tried again by itself." }]);
-    expect((await opened.base.install.database.readSettings())?.logins).toEqual([opened.base.owner, BO]);
+    expect((await opened.base.install.database.readSettings())?.users).toEqual([opened.base.owner, BO]);
   });
 
   // Drift: a console with no door to the provider carries nothing, so its Domain screen is where a change is carried: the answer must go on pointing there, and say nothing where there is no such screen.

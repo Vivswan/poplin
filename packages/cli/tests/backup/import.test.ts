@@ -360,18 +360,18 @@ describe("import", () => {
     expect(into.sent.filter((sent) => !sent.includes("/uploads/"))).toEqual(["GET /api/whoami", "POST /api/import/sites"]);
   });
 
-  test("the settings come back only with --settings and the logins only with --users, and a one-site backup has none to give: without this an import could lock the admin of the new install out", async () => {
+  test("the settings come back only with --settings and the users only with --users, and a one-site backup has none to give: without this an import could lock the admin of the new install out", async () => {
     const from = await openBench();
     const label = await published(from, "notes", { "index.html": "<title>Notes</title>" });
     await from.run("config trash_days 9");
-    await from.run("config logins ada@example.com,grace@example.com");
+    await from.run("config users ada@example.com,grace@example.com");
     const zip = await exportedZip(from);
     const one = await exportedZip(from, label);
     const into = await openBench();
     const settings = async (): Promise<unknown[]> => {
-      const { values } = jsonOf(await into.run("config --json")) as { values: { trash_days: number; logins: unknown } };
+      const { values } = jsonOf(await into.run("config --json")) as { values: { trash_days: number; users: unknown } };
 
-      return [values.trash_days, values.logins];
+      return [values.trash_days, values.users];
     };
 
     const [before] = [await settings(), await into.run(`import ${zip}`)];

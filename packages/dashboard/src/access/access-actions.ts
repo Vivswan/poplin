@@ -93,7 +93,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
     } catch (error) {
       if (!(error instanceof Refused)) throw error;
 
-      if (error.code !== "not_a_login") return sayRefused(error.message);
+      if (error.code !== "not_a_user") return sayRefused(error.message);
 
       onChanged();
       unsay(addedLine(email));

@@ -9,7 +9,7 @@ The users who can log in, and the login this computer keeps.
 
 ## Add a user
 
-A user is an email in `logins`, which can log in to the dashboard. Cloudflare's login page keeps its own list, and poplin writes every change into it by itself, with [the key it keeps](../about/security.md#the-kept-key).
+A user is an email in `users`, which can log in to the dashboard. Cloudflare's login page keeps its own list, and poplin writes every change into it by itself, with [the key it keeps](../about/security.md#the-kept-key).
 
 | Where                        | Do                                                           |
 | ---------------------------- | ------------------------------------------------------------ |
@@ -24,7 +24,7 @@ The line that follows says how the change went:
 | `... is brought up to date by itself.`                  | is one change behind: the users changed again meanwhile | nothing                                             |
 | `... Open Domain and press Repair.`                     | is as it was or only partly changed: the install holds no key, Cloudflare refused the key, or the list is missing | on Domain, press Repair, paste an account token as in [step 3](../start/install.md#3-make-the-account-token), and press Repair again |
 
-The change is saved in every case. `poplin config logins` shows the same list.
+The change is saved in every case. `poplin config users` shows the same list.
 
 [Activity](activity.md) names each user by email, on the screen and in its files: `Added a user: new@example.com`, `Removed a user: new@example.com`.
 
@@ -34,7 +34,7 @@ To remove another user, choose Remove in the menu at the end of that user's row,
 
 Every token that user allowed stops working in the same step: the logins of their computers, their agents, and their build servers. The question before the removal says how many. Adding the user again brings none of them back.
 
-A list changed with `poplin config logins`, or by `poplin import` with `--settings --users`, is written to Cloudflare's list the same way, and a user it leaves out loses their tokens the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
+A list changed with `poplin config users`, or by `poplin import` with `--settings --users`, is written to Cloudflare's list the same way, and a user it leaves out loses their tokens the same way. `poplin config users` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
 Sign out, in the menu your email opens at the foot of the side menu, ends the login of this browser alone: Cloudflare shows its own page, and the next visit asks for a code again.
 
@@ -91,4 +91,4 @@ A removed token never logs in again, and nothing brings it back: `poplin login` 
 | A publisher's login | What                                                                                                                            |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | can                 | publish, and for the sites it published: list, show, update, change who can open, roll back, re-link, copy, delete, and restore |
-| cannot              | reach a site another login published, or the install's settings, logins, backups, and updates                                   |
+| cannot              | reach a site another login published, or the install's settings, users, backups, and updates                                    |

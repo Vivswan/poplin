@@ -47,7 +47,7 @@ export interface SiteNow extends SiteNamed {
  *
  * `as` says what signs: a `token`, a `person` who came in by email, the `first_login` that is the email of an install nobody has logged in to and is no stored login yet, the `sweeper` that is the install's own scheduled work,
  * or a `repair` made from outside the install with a key of its provider, by nobody who is a login.
- * A token and a person change the settings, the logins, and the tokens only while they stand: see `changeSettings` and `addToken`.
+ * A token and a person change the settings, the users, and the tokens only while they stand: see `changeSettings` and `addToken`.
  */
 export type Signed = { readonly at: number } & ({ readonly as: "token"; readonly by: TokenId } | { readonly as: "person" | "first_login" | "sweeper" | "repair"; readonly by: Login });
 
@@ -949,19 +949,19 @@ export interface Database {
   keepDomainCheck(check: DomainCheck, detail: Readonly<Record<string, unknown>> | null, carried?: CarriedUsers, mends?: readonly Mend[]): Promise<void>;
 
   /**
-   * Begin a try to carry the users to the domain: mark them as waiting, with a mark later than every one before it, and read the logins to carry, in one step.
+   * Begin a try to carry the users to the domain: mark them as waiting, with a mark later than every one before it, and read the users to carry, in one step.
    *
-   * @returns the logins stored now, `undefined` before setup stored any; and the mark, `undefined` on an install that keeps no run of its domain, where nothing remembers that a change waits
+   * @returns the users stored now, `undefined` before setup stored any; and the mark, `undefined` on an install that keeps no run of its domain, where nothing remembers that a change waits
    */
-  claimUsers(at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly mark: number | undefined }>;
+  claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined }>;
 
   /**
    * Settle a change of the users after a try to carry them to the domain, in one step with the comparison.
-   * The change waits no more only while the stored logins are exactly the list the domain took and no mark was set since the try began. Otherwise it waits under a later mark.
+   * The change waits no more only while the stored users are exactly the list the domain took and no mark was set since the try began. Otherwise it waits under a later mark.
    *
-   * @returns the logins stored now, `undefined` before setup stored any; and whether a change of the users waits after it
+   * @returns the users stored now, `undefined` before setup stored any; and whether a change of the users waits after it
    */
-  settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly waits: boolean }>;
+  settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly waits: boolean }>;
 
   /**
    * Begin a try to carry the settings of the domain's rules to the domain: give a change of them that waits a mark later than every one before it, and read the settings, in one step.
@@ -1007,7 +1007,7 @@ export interface Database {
   /**
    * Change some settings. Each given key is replaced; every other key stays as it is, even when another change lands at the same moment. A change that leaves every value as it is writes nothing.
    *
-   * The `settings_changed` audit entry holds the values the change sets, and beside new logins the emails they add and the ones they leave out, as `added` and `removed`.
+   * The `settings_changed` audit entry holds the values the change sets, and beside new users the emails they add and the ones they leave out, as `added` and `removed`.
    * Logins that add or drop a user, or that put another user first, are remembered, in the same step, as changed users by an install that keeps a check of its domain. The same users in another order behind the same first one are not.
    *
    * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited; it writes nothing.
@@ -1020,7 +1020,7 @@ export interface Database {
   ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check">>;
 
   /**
-   * Let one more email log in. It is one step that reads no list first: of logins added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which names the email as `added`.
+   * Let one more email log in. It is one step that reads no list first: of users added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which names the email as `added`.
    * An install that keeps a check of its domain remembers, in the same step, that the users changed: one more row written.
    *
    * @returns `unchanged` for an email that already is a login, and `signer_gone` as `changeSettings` answers it; neither writes anything
@@ -1033,10 +1033,10 @@ export interface Database {
    *
    * It writes one `settings_changed` audit entry, which names the email as `removed`, and an install that keeps a check of its domain remembers that the users changed.
    *
-   * @returns `unchanged` for an email that is no login, `no_working_login` for the signer's own email or the last login there is, and `signer_gone` as `changeSettings` answers it; none writes anything
+   * @returns `unchanged` for an email that is no user, `no_working_user` for the signer's own email or the last user there is, and `signer_gone` as `changeSettings` answers it; none writes anything
    * @throws {Error} the login is no email in its normal form
    */
-  removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login" | "signer_gone">>;
+  removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_user" | "signer_gone">>;
 
   /** The bytes of the key the visitor limits are made from, `undefined` before one was stored. Only this and `readSettingsAndKey` return them. */
   readVisitorKey(): Promise<Uint8Array<ArrayBuffer> | undefined>;

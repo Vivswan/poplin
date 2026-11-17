@@ -419,7 +419,7 @@ Tell the user what changes before step 1, and wait for their yes. Under another 
 | The line                   | Carries                                                            | Without it                                        |
 | -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
 | `--all-versions`, step 1   | every kept version of each site                                    | the live version alone: the others are lost       |
-| `--settings`, step 5       | every setting but the logins                                       | the new install keeps its own settings            |
+| `--settings`, step 5       | every setting but the users                                        | the new install keeps its own settings            |
 | `--settings --users`       | the list of users too                                              | the users are the new install's first login       |
 
 No line carries a token, a key of the install, or the activity log: each machine logs in again, and the log starts anew.

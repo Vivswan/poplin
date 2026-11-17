@@ -73,7 +73,7 @@ describe("the tokens that work and the ones that ended", () => {
   // Drift: an agent's token is the person who allowed it. A publisher token made by an admin token would outlive its person were it counted as nobody's, and the list of ended tokens would call a token that went with its user removed by hand.
   test("a user's tokens are counted with the ones their tokens made, all of them end when the user is removed, and each is told as gone with its user", async () => {
     const bo = "bo@example.com" as Login;
-    const world = await makeWorld({ logins: [ADMIN.holder as Login, bo] });
+    const world = await makeWorld({ users: [ADMIN.holder as Login, bo] });
     const issue = async (holder: Login | TokenId, scope: "admin" | "publisher", note: string): Promise<TokenId> => {
       const issued = await issueToken(world.install, { scope: "admin", holder }, { scope, note });
       if (!issued.ok) throw new Error("the token was not issued");

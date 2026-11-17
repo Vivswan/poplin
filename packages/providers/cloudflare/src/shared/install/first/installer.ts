@@ -320,7 +320,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
  */
 async function finish(work: Work, target: Target, login: Login, kept: SettingValues | undefined, reach: Reach): Promise<boolean> {
   const settings = kept ?? defaultSettings({ installer: login });
-  const parts = { script: SCRIPT, first: { login: settings.logins[0] ?? login, accountId: work.place.accountId }, fetch: reach.fetch, now: reach.now, sleep: reach.sleep };
+  const parts = { script: SCRIPT, first: { login: settings.users[0] ?? login, accountId: work.place.accountId }, fetch: reach.fetch, now: reach.now, sleep: reach.sleep };
   const plug = target.kind === "domain" ? createDomainPlug({ ...parts, layout: target.layout }) : createPathPlug({ ...parts, layout: target.layout });
   const reading = await (work.mode === "plan" ? plug.check(work.place.connection.key, async () => settings) : plug.repair(work.place.connection.key, async () => settings));
   if (!reading.ok && reading.refusal === "unreachable") return false;
@@ -400,15 +400,15 @@ async function stoodDatabase(work: Work, adopted: boolean, target: Target): Prom
 }
 
 /** The users a database holds, named for a row: the first five, and how many more there are. */
-function namedUsers(logins: readonly Login[]): string {
-  const more = logins.length - NAMED_USERS;
+function namedUsers(users: readonly Login[]): string {
+  const more = users.length - NAMED_USERS;
 
-  return USERS.format(more > 0 ? [...logins.slice(0, NAMED_USERS), `${more} more`] : logins);
+  return USERS.format(more > 0 ? [...users.slice(0, NAMED_USERS), `${more} more`] : users);
 }
 
 /** The first login a person gave, where the database holds users already and it is none of them; `undefined` where the login is used, or is a user already. */
 function unusedLogin(login: Login, kept: SettingValues | undefined): Login | undefined {
-  return kept === undefined || kept.logins.includes(login) ? undefined : login;
+  return kept === undefined || kept.users.includes(login) ? undefined : login;
 }
 
 /**
@@ -420,8 +420,8 @@ function unusedLogin(login: Login, kept: SettingValues | undefined): Login | und
 function keptUsersRow(login: Login, kept: SettingValues | undefined): Row | undefined {
   if (kept === undefined) return undefined;
 
-  const users = kept.logins.length === 1 ? "its user" : `its ${kept.logins.length} users`;
-  const held = `The database already has ${users}, and only they can log in: ${namedUsers(kept.logins)}.`;
+  const users = kept.users.length === 1 ? "its user" : `its ${kept.users.length} users`;
+  const held = `The database already has ${users}, and only they can log in: ${namedUsers(kept.users)}.`;
   if (unusedLogin(login, kept) === undefined) return { object: "First user", state: "leave", detail: `${login}: already a user. ${held}` };
 
   return { object: "First user", state: "leave-out", detail: `${login}: not used. ${held}` };

@@ -102,7 +102,7 @@ describe("what the problems of the Domain screen ask for", () => {
   // Drift: the Domain screen draws a problem of the last day under its line, with what to do. A line that says "Nothing to repair" over "press Repair" tells a person two things at once.
   // A count that took in a problem that says "press Check", one a day old, or one that is drawn on Usage where there is no Domain screen, would ask for a repair over no such box.
   test("names the kinds of the last day that say to press Repair where they are drawn at Domain, through a check, until the repair that ends them", async () => {
-    const [opened, bare] = [await openConsole("", fakePlug(() => ({ ok: true, rows: [{ object: "Login policy", state: "present", detail: "the logins", part: "login" }], steps: [] }))), await openConsole()];
+    const [opened, bare] = [await openConsole("", fakePlug(() => ({ ok: true, rows: [{ object: "Login policy", state: "present", detail: "the users", part: "login" }], steps: [] }))), await openConsole()];
     const asks = async (console = opened): Promise<unknown> => ((await (await console.get("/data/frame")).json()) as { readonly domainAsks: unknown }).domainAsks;
     const ran = async (run: "check" | "repair"): Promise<unknown> => (await opened.change(`/data/domain/${run}`, { token: TOKEN })).status;
 

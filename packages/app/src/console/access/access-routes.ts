@@ -121,7 +121,7 @@ export const accessRoutes = new Hono<Shared>()
     const counted = await countUserTokens(install, actor);
     if (!counted.ok) return refused(context, counted);
 
-    return context.json({ ok: true as const, logins: config.values.logins, you: context.get("email"), tokens: counted.counts });
+    return context.json({ ok: true as const, users: config.values.users, you: context.get("email"), tokens: counted.counts });
   })
   .post("/people/add", vValidator("json", PERSON, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");

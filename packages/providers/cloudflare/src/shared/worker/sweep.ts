@@ -156,16 +156,16 @@ async function keptAlerts(running: Pick<Running, "keepAlerts">, tally: Tally, fi
  * A repair of the login that stopped is noted as a problem, but for one Cloudflare gave no answer to: the next day's run tries again.
  * An alert that was not kept is noted nowhere: the Domain screen's check reads the alert with the same key, and its row says what to press.
  *
- * @param logins - the users the login is made to let through, as the run read them; the alerts go to the first
+ * @param emails - the users the login is made to let through, as the run read them; the alerts go to the first
  * @returns whether a repair of the login came through, which leaves the login standing, whatever became of the alerts
  */
-async function repairLogin(install: Install, running: Pick<Running, "login" | "follow" | "keepAlerts">, tally: Tally, logins: SettingValues["logins"]): Promise<boolean> {
+async function repairLogin(install: Install, running: Pick<Running, "login" | "follow" | "keepAlerts">, tally: Tally, emails: SettingValues["users"]): Promise<boolean> {
   if (!running.login.holdsKey()) return false;
 
-  const { wrote, users, calls, refusal } = await running.login.repair(logins);
+  const { wrote, users, calls, refusal } = await running.login.repair(emails);
   tally.web += calls;
   // A key Cloudflare refuses, and a Cloudflare that does not answer, would say the same of the alerts.
-  const alert = refusal === "key_refused" || refusal === "unreachable" ? [] : await keptAlerts(running, tally, logins[0]);
+  const alert = refusal === "key_refused" || refusal === "unreachable" ? [] : await keptAlerts(running, tally, emails[0]);
   // The users may have changed since the run read them: where their policy was written, they are carried anew, as stored now, and the alerts go to the first of them in that carry.
   if (users) {
     tally.web += FOLLOW_CALLS;
@@ -224,7 +224,7 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   const taking = running.updating.self;
   const self = { ...taking, ready: counted({ ready: taking.ready }, tally, "web", SELF_UPDATE_REQUESTS).ready };
   if (learned !== undefined) await startDueUpdate(watched, { ...learned, version: running.version }, { ...running.updating, self });
-  if (beginsDay(install.now()) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings.logins))) {
+  if (beginsDay(install.now()) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings.users))) {
     // What a broken login was noted as ends with a repair that came through. It is ended under the install's own database, which is what a request of this instance noted it under, so the call is counted here.
     tally.database += 1;
     await endProblems(install, ["login_stands"]);

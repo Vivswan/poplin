@@ -102,7 +102,7 @@ describe("what the screen opens with", () => {
     ["added", "/data/people/add"],
     ["removed", "/data/people/remove"],
   ] as const)("says that a repair waits once a user was %s, through a check, until a repair that leaves the login standing", async (_what, path) => {
-    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: [{ object: "Login policy", state: "present", detail: "the logins", part: "login" }], steps: [] })));
+    const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: [{ object: "Login policy", state: "present", detail: "the users", part: "login" }], steps: [] })));
     const login = "bo@example.com";
     const shown = async (): Promise<unknown> => {
       const { last } = (await (await opened.get("/data/domain")).json()) as { readonly last: { readonly waits: boolean; readonly summary: Ran["summary"] } };
@@ -166,7 +166,7 @@ describe("a run", () => {
       { piece: "Rate rule", state: "left out", tone: "idle", detail: "rate rule: the domain has other hostnames" },
     ]);
     expect(ran.summary).toEqual({ line: "1 to repair", tone: "bad" });
-    expect(plug.calls).toMatchObject([{ run: "check", token: TOKEN, settings: { outside_pages: "blocked", logins: [opened.base.owner] } }]);
+    expect(plug.calls).toMatchObject([{ run: "check", token: TOKEN, settings: { outside_pages: "blocked", users: [opened.base.owner] } }]);
     expect((await opened.base.audit())[0]).toMatchObject({ action: "domain_synced", by: opened.base.owner, detail: { run: "check", from: "dashboard" } });
   });
 
@@ -300,7 +300,7 @@ describe("the run the install remembers", () => {
         run: "repair",
         pieces: [
           { piece: "DNS record", detail: "every site", part: "reach", state: "ok" },
-          { piece: "Login policy", detail: "the logins", part: "login", state: "needs_repair" },
+          { piece: "Login policy", detail: "the users", part: "login", state: "needs_repair" },
           { piece: "Rate rule", detail: "left out", part: "rest", state: "not_set_up" },
           { piece: "Route", detail: "never reached", part: "reach", state: "unread", reason: "not_run" },
         ],
@@ -315,7 +315,7 @@ describe("the run the install remembers", () => {
       waits: true,
       rows: [
         { piece: "DNS record", state: "present", tone: "good", detail: "every site" },
-        { piece: "Login policy", state: "needs repair", tone: "bad", detail: "the logins: missing or changed" },
+        { piece: "Login policy", state: "needs repair", tone: "bad", detail: "the users: missing or changed" },
         { piece: "Rate rule", state: "optional", tone: "idle", detail: "left out" },
         { piece: "Route", state: "not run", tone: "idle", detail: "never reached" },
       ],

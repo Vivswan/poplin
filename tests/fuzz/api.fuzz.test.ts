@@ -185,8 +185,8 @@ const backupBodies = fc
       format: fc.oneof(fc.constantFrom(1, 2, 0), fc.string()),
       site: fc.oneof(backupSites, fc.json()),
       files: declaredFiles,
-      settings: fc.dictionary(hostile(fc.constantFrom("trash_days", "logins", "max_sites")), hostile(fc.constantFrom("7", "none", "ada@example.com")), { maxKeys: 4 }),
-      logins: fc.boolean(),
+      settings: fc.dictionary(hostile(fc.constantFrom("trash_days", "users", "max_sites")), hostile(fc.constantFrom("7", "none", "ada@example.com")), { maxKeys: 4 }),
+      users: fc.boolean(),
     },
     { requiredKeys: ["format"] },
   )

@@ -112,7 +112,7 @@ interface Serving {
   /** The install's address layout. */
   readonly addresses: SiteAddresses;
 
-  /** Decides who a request is from; `ok` is `true` only when the install's login vouches for an email that is in the logins now. */
+  /** Decides who a request is from; `ok` is `true` only when the install's login vouches for an email that is in the users now. */
   readonly identify: (headers: Headers) => Promise<{ readonly ok: boolean }>;
 
   /** The time, in milliseconds since the epoch. */

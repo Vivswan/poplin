@@ -12,7 +12,7 @@ import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 
 /** The settings the provider's side is made to match. */
-export type DomainSettings = Pick<SettingValues, "logins" | "outside_pages" | "search_engines_allowed" | "block_bots" | "provider_logs">;
+export type DomainSettings = Pick<SettingValues, "users" | "outside_pages" | "search_engines_allowed" | "block_bots" | "provider_logs">;
 
 /** Reads the settings the provider's side is made to match: an install has them before it answers any request. A plug calls it only after the token has proven itself, so a refused token learns nothing of the install. */
 export type ReadSettings = () => Promise<DomainSettings>;
@@ -54,7 +54,7 @@ export interface DomainPlug extends TokenFacts {
   /** How the screens speak of the install's side at the provider: `thing` is what a sentence calls it, such as `the domain`, and `line` is one sentence said first on its screen, or `null`. */
   readonly words: { readonly thing: string; readonly line: string | null };
 
-  /** The settings, beyond the logins, that a repair carries to the provider. */
+  /** The settings, beyond the users, that a repair carries to the provider. */
   readonly carriedSettings: readonly (keyof DomainSettings)[];
 
   /** The settings that do nothing on this install, since the provider's side has no place for them: each with the one short line its control says in place of taking a change. */

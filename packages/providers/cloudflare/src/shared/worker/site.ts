@@ -1,6 +1,6 @@
 // A request to any hostname but the admin one: its login checked, looked up, counted against the limits, then served.
 //
-//   the address  ->  the visitor's minute  ->  under `p`: the Access token and the logins  ->  one database query  ->  the site's limits  ->  serving, handed the site already found  ->  the day's count
+//   the address  ->  the visitor's minute  ->  under `p`: the Access token and the users  ->  one database query  ->  the site's limits  ->  serving, handed the site already found  ->  the day's count
 //
 // The visitor's minute is taken first, by the settings the instance read within the minute, so a visitor past it is refused with nothing read: neither a site nor a setting.
 // Once that minute ran out, one request takes it after its query, which brings the settings anew: a limit that was raised is in force within the minute, however many requests are refused.
@@ -117,11 +117,11 @@ function sameAddress(one: Address, other: Address | undefined): boolean {
   return other !== undefined && JSON.stringify(one) === JSON.stringify(other);
 }
 
-/** Check the Access token of a request under `p`, and its email against the logins. Every refusal is logged by its kind, never with a value of the request. */
+/** Check the Access token of a request under `p`, and its email against the users. Every refusal is logged by its kind, never with a value of the request. */
 async function proofOf(request: Request, addressed: Addressed, context: { readonly instance: Instance; readonly held: Held; readonly now: number }): Promise<Proof> {
   if (addressed.kind !== "site" || addressed.letter !== "p") return NOT_ASKED;
 
-  const who = await admit(request.headers, { identify: context.instance.identify, logins: context.held.logins, now: context.now });
+  const who = await admit(request.headers, { identify: context.instance.identify, users: context.held.users, now: context.now });
   if (who.ok) return { kind: "vouched" };
 
   console.warn(`poplin: a request for a private site was refused: ${who.refusal}`);

@@ -1,6 +1,6 @@
 // The install's two Access applications, each with the one policy it holds. Access keeps no mark on any of the four, so poplin's are the ones with its fixed names.
 //
-//   poplin              the whole dashboard hostname and every private site's address   poplin logins: allow, the install's logins
+//   poplin              the whole dashboard hostname and every private site's address   poplin logins: allow, the install's users
 //   poplin open paths   the paths of the dashboard hostname a program reaches            poplin open paths policy: bypass, everyone
 //
 // Access takes the longer path first, so an open path passes to the Worker with no login, where the API checks its own token.
@@ -14,7 +14,7 @@ import { type CloudflareFailure, type CloudflareResult, type Connection, callClo
 import { INSTALL_OBJECTS } from "../../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../../sync";
 
-/** The name that marks the logins' policy as poplin's. */
+/** The name that marks the users' policy as poplin's. */
 const POLICY_NAME = INSTALL_OBJECTS.accessPolicy;
 
 /** The name that marks the guarded application as poplin's. */
@@ -71,7 +71,7 @@ interface DesiredAccess {
   readonly hostname: Hostname;
 
   /** The emails let through. */
-  readonly logins: Logins;
+  readonly users: Logins;
 
   /** What every private site answers at: the hostname pattern from `privateSitesPattern`, or on an install without a domain the private host whole. */
   readonly privateSites: string;
@@ -165,9 +165,9 @@ function planApplication(application: AccountApplication | undefined, wanted: Wa
   return { kind: "change", id: application.id, policyId, ...wanted };
 }
 
-/** The policy that lets the install's logins through, as poplin writes it: one rule for each email, in the order of the alphabet. */
-function loginsPolicy(logins: Iterable<string>): WantedPolicy {
-  return { subject: POLICY_NAME, decision: "allow", include: [...logins].sort().map((email) => ({ email: { email } })) };
+/** The policy that lets the install's users through, as poplin writes it: one rule for each email, in the order of the alphabet. */
+function loginsPolicy(users: Iterable<string>): WantedPolicy {
+  return { subject: POLICY_NAME, decision: "allow", include: [...users].sort().map((email) => ({ email: { email } })) };
 }
 
 /** A policy as Cloudflare is sent it. */
@@ -196,7 +196,7 @@ export function planAccess(desired: DesiredAccess, current: AccountAccess): Acce
   return [
     ...planPair({ subject: OPEN_POLICY_NAME, decision: "bypass", include: [{ everyone: {} }] }, { subject: OPEN_APPLICATION_NAME, uris: open, policy: OPEN_POLICY_NAME }, current),
     ...planPair(
-      loginsPolicy(desired.logins),
+      loginsPolicy(desired.users),
       { subject: APPLICATION_NAME, uris: [desired.hostname, desired.privateSites], policy: POLICY_NAME },
       current,
     ),
@@ -233,14 +233,14 @@ export async function readLoginFacts(connection: Connection, accountId: string):
 }
 
 /**
- * Write the install's logins into the policy that lets them through, and nothing else of Access: no application is read or changed.
+ * Write the install's users into the policy that lets them through, and nothing else of Access: no application is read or changed.
  *
  * The policy is written even where the list answers that it lets through exactly these emails already: that answer may trail a write made a moment before, and Cloudflare taking the write proves that the key may change who logs in.
  *
- * @param logins - every email let through, in any order
+ * @param users - every email let through, in any order
  * @returns `true` once Cloudflare took the policy with exactly these emails, and `false` on an account with no such policy, where nothing is written
  */
-export async function writeLogins(connection: Connection, accountId: string, logins: readonly string[]): Promise<CloudflareResult<boolean>> {
+export async function writeLogins(connection: Connection, accountId: string, users: readonly string[]): Promise<CloudflareResult<boolean>> {
   const policies = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
   if (!policies.ok) return policies;
 
@@ -248,7 +248,7 @@ export async function writeLogins(connection: Connection, accountId: string, log
   const id = held?.id;
   if (held === undefined || id === undefined) return { ok: true, value: false };
 
-  const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(id, policyBody(accountId, loginsPolicy(logins))));
+  const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(id, policyBody(accountId, loginsPolicy(users))));
 
   return written.ok ? { ok: true, value: true } : written;
 }

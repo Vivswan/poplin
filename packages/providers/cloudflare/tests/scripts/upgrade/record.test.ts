@@ -21,7 +21,7 @@ const BEFORE: Reading = {
     { access: "public", shown: { id: "two", label: "b--two", access: "public", url: "https://b.example.com", live_version: 1, state: "live" }, visit: SERVED, stored: ONE_VERSION },
   ],
   listed: 2,
-  settings: { versions_kept: 5, trash_days: 7, logins: ["owner@example.com", "upgrade-check@example.com"] },
+  settings: { versions_kept: 5, trash_days: 7, users: ["owner@example.com", "upgrade-check@example.com"] },
   log: [
     { seq: 2, action: "settings_changed", detail: { keys: ["versions_kept"] }, by: "owner@example.com" },
     { seq: 1, action: "create", detail: {}, by: "owner@example.com" },
@@ -65,8 +65,8 @@ describe("what an update changed of an install", () => {
   // Drift: a setting's value may be a login, so only its key is told.
   test.each([
     ["a setting that went back to its default", { ...BEFORE.settings, versions_kept: 3 }, ["versions_kept changed", "versions_kept is not the value it was given"]],
-    ["a user that is gone", { ...BEFORE.settings, logins: ["owner@example.com"] }, ["logins changed", "the user that was added is not among the logins"]],
-    ["a setting the newer build does not answer", { versions_kept: 5, logins: BEFORE.settings.logins }, ["trash_days changed"]],
+    ["a user that is gone", { ...BEFORE.settings, users: ["owner@example.com"] }, ["users changed", "the user that was added is not among the users"]],
+    ["a setting the newer build does not answer", { versions_kept: 5, users: BEFORE.settings.users }, ["trash_days changed"]],
     ["a setting the newer build added", { ...BEFORE.settings, added: true }, []],
   ] as const)("%s is told by its key alone", (_what, settings, faults) => {
     expect(settingFaults(BEFORE, { ...AFTER, settings })).toEqual([...faults]);

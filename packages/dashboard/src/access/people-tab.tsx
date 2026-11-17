@@ -71,7 +71,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
   const adder = useRef<HTMLButtonElement>(null);
   const [leaving, setLeaving] = useState<Person>();
   const [signingOut, setSigningOut] = useState(false);
-  const rows = useMemo<readonly Person[]>(() => (people?.logins ?? []).map((email) => ({ email, you: email === people?.you, tokens: people?.tokens[email] ?? 0 })), [people]);
+  const rows = useMemo<readonly Person[]>(() => (people?.users ?? []).map((email) => ({ email, you: email === people?.you, tokens: people?.tokens[email] ?? 0 })), [people]);
 
   const removeOf = (person: Person): ReactNode => {
     if (person.you) return <span className="inline-flex h-7 min-w-7 items-center justify-center text-[13px] text-muted-foreground">you</span>;

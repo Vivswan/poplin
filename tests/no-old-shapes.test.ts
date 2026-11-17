@@ -58,6 +58,7 @@ const RETIRED_NAMES: readonly RegExp[] = [
   GALLERY_ADDRESS,
   /\bcache_(?:html|files)\b/,
   /\bPOPLIN_(?:VERSION|COPY_CONFIG)\b/,
+  /\b(?:no_working|already_a|not_a)_login\b|\bconfig logins\b|\$\.logins\b/,
 ];
 
 /** The places a retired name is rightly written, each with the one name it may hold: this guard holds them all. */
@@ -164,6 +165,8 @@ describe("no old shapes outside migrations/", () => {
     ["the zone values under their old binding", "const zone = env.ZONE_SETTINGS;", "retired name"],
     ["the old audit action of a sign-out", 'log("signed-everyone-out");', "retired name"],
     ["the setting of an install with no domain", 'const kind = settings.private_sites === "folders";', "retired name"],
+    ["the users read under their old key", "const first = sql`json_extract(value, '$.logins[0]')`;", "retired name"],
+    ["a refusal of a user under its old code", 'return refuse("no_working_login", "users");', "retired name"],
     ["the gallery's switch as a setting", "const VALUES = { gallery: v.boolean() };", "retired name"],
     ["the gallery as what an address resolves to", 'if (label === own) return { kind: "gallery" };', "retired name"],
     ["the gallery as a handler of serving", "const serving = { gallery: async (request) => page(request) };", "retired name"],

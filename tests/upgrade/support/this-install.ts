@@ -59,8 +59,8 @@ function addresses(): ReturnType<typeof hostnameAddresses> {
 }
 
 function admin(): Login {
-  const logins = parseLogins([ADMIN_EMAIL]);
-  const [holder] = logins.ok ? logins.value : [];
+  const users = parseLogins([ADMIN_EMAIL]);
+  const [holder] = users.ok ? users.value : [];
   if (holder === undefined) throw new Error("the check's login was refused");
 
   return holder;

@@ -54,10 +54,10 @@ const VALUES = {
   default_search_engines: v.boolean(),
   versions_kept: COUNT_SET,
   trash_days: DAYS_SET,
-  logins: v.pipe(
+  users: v.pipe(
     v.array(LOGIN),
     v.minLength(1),
-    v.check((logins) => new Set(logins).size === logins.length, "each login is listed once"),
+    v.check((users) => new Set(users).size === users.length, "each user is listed once"),
   ),
   outside_pages: v.picklist(OUTSIDE_PAGES),
   search_engines_allowed: v.boolean(),
@@ -98,7 +98,7 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   default_search_engines: onOff(),
   versions_kept: whole(),
   trash_days: whole(),
-  logins: loginList(),
+  users: userList(),
   outside_pages: oneOf(OUTSIDE_PAGES),
   search_engines_allowed: onOff(),
   block_bots: oneOf(BLOCK_BOTS),
@@ -142,7 +142,7 @@ type SettingKey = keyof SettingValues;
 
 /** What a new install knows that the defaults are built from. */
 interface Install {
-  /** The email of whoever sets the install up; the first login. */
+  /** The email of whoever sets the install up; the first user. */
   readonly installer: Login;
 }
 
@@ -221,21 +221,21 @@ function orWord<Word extends string, Value>(word: Word, form: TextForm<Value>): 
   };
 }
 
-function loginList(): TextForm<Login[]> {
+function userList(): TextForm<Login[]> {
   return {
     read: (text) => {
-      const logins: Login[] = [];
+      const users: Login[] = [];
 
       for (const entry of text.split(",")) {
         const login = parseLogin(entry);
         if (!login.ok) return undefined;
 
-        logins.push(login.value);
+        users.push(login.value);
       }
 
-      return logins;
+      return users;
     },
-    print: (logins) => logins.join(","),
+    print: (users) => users.join(","),
   };
 }
 
@@ -285,7 +285,7 @@ export function defaultSettings(install: Install): SettingValues {
     default_search_engines: false,
     versions_kept: 3,
     trash_days: 7,
-    logins: [install.installer],
+    users: [install.installer],
     outside_pages: "blocked",
     search_engines_allowed: false,
     block_bots: "auto",

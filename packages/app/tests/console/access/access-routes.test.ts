@@ -173,7 +173,7 @@ describe("the people", () => {
     const people = await read(await opened.get("/data/people"));
 
     expect(added).toMatchObject(answer);
-    expect(people.logins).toHaveLength(count);
+    expect(people.users).toHaveLength(count);
     expect(people.you).toBe(opened.base.owner);
   });
 
@@ -185,18 +185,18 @@ describe("the people", () => {
     const own = await read(await opened.change("/data/people/remove", { login: opened.base.owner }));
 
     expect([again, absent, own]).toMatchObject([
-      { ok: false, code: "already_a_login", about: "login", sentence: "That email can log in already." },
-      { ok: false, code: "not_a_login", about: "login", sentence: "That email is not in the list. It may have been removed already." },
-      { ok: false, code: "no_working_login", sentence: "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out." },
+      { ok: false, code: "already_a_user", about: "login", sentence: "That email can log in already." },
+      { ok: false, code: "not_a_user", about: "login", sentence: "That email is not in the list. It may have been removed already." },
+      { ok: false, code: "no_working_user", sentence: "Your own email has to stay among the users, so nothing was changed. Another admin can take it out." },
     ]);
-    expect((await read(await opened.get("/data/people"))).logins).toEqual([opened.base.owner]);
+    expect((await read(await opened.get("/data/people"))).users).toEqual([opened.base.owner]);
   });
 
   // Drift: the console would answer a refusal under another status than the API answers the same code with, so one refusal would read as a bad request here and as a conflict there.
   test.each([
-    ["add", "owner", 409, "already_a_login"],
-    ["remove", "nobody@example.com", 404, "not_a_login"],
-    ["remove", "owner", 409, "no_working_login"],
+    ["add", "owner", 409, "already_a_user"],
+    ["remove", "nobody@example.com", 404, "not_a_user"],
+    ["remove", "owner", 409, "no_working_user"],
   ])("a refused %s of %s goes out with the status the API gives its code", async (change, who, status, code) => {
     const opened = await openConsole();
     const response = await opened.change(`/data/people/${change}`, { login: who === "owner" ? opened.base.owner : who });

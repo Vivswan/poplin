@@ -21,9 +21,9 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `wrong_server`                                 | the login is for another install                   | log in to this one with `--server`                            |
 | `not_allowed`                                  | this login may not do that                         | `poplin whoami` shows the login; use an admin's               |
 | `not_set_up`                                   | the install has stored no settings                 | try again; if it stays, run `npx poplin doctor --repair`       |
-| `no_working_login`                             | the new logins would let nobody log in             | keep one email that is a login now in the list                |
+| `no_working_user`                              | the new users would let nobody log in              | keep one email that is a user now in the list                 |
 | `needs_update_check`                           | `auto_update` would be on with `update_check` off  | `poplin config update_check on` first, or `auto_update off` first |
-| `already_a_login`, `not_a_login`               | the email is a login already, or is none           | `poplin config logins` shows the logins                       |
+| `already_a_user`, `not_a_user`                 | the email is a user already, or is none            | `poplin config users` shows the users                         |
 | `unreachable`, `timeout`                       | no answer came                                     | check the URL and the network; `poplin list` before a retry     |
 | `not_json`, `unexpected_answer`                | the answer is not a poplin install's               | `poplin whoami` shows the URL in use                          |
 | `method_not_allowed`, `unsupported_media_type` | the install and this poplin are of two versions    | update the older one                                          |

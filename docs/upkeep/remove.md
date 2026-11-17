@@ -15,7 +15,7 @@ Run `npx poplin uninstall cloudflare --domain example.com` (or `--no-domain`). I
 ```
 
 ```text
-lost for good:   every site's files and every kept version, the settings, the logins, the activity log
+lost for good:   every site's files and every kept version, the settings, the users, the activity log
 stops working:   every address of the install, each link you shared included
 stays:           your Cloudflare account, your domain, every record and rule poplin did not make, and every route to another Worker
 ```

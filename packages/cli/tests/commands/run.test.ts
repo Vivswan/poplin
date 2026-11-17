@@ -38,10 +38,10 @@ const CODES: Readonly<Record<Code, true>> = {
   upload_finished: true,
   too_many_sites: true,
   not_set_up: true,
-  no_working_login: true,
+  no_working_user: true,
   needs_update_check: true,
-  already_a_login: true,
-  not_a_login: true,
+  already_a_user: true,
+  not_a_user: true,
   no_update: true,
   update_unreachable: true,
   no_key: true,
@@ -458,22 +458,22 @@ describe("run", () => {
     ]);
     expect(Object.keys(jsonOf(await bench.run("config --json")).values as object)).toContain("versions_kept");
 
-    // Drift: the stored logins and the login page's own list are two lists; a change that printed the first alone would leave a new person stopped at the login with nothing saying why.
+    // Drift: the stored users and the login page's own list are two lists; a change that printed the first alone would leave a new person stopped at the login with nothing saying why.
     // An install that carried the change to the login page by itself has no step left, and naming one would send a person to paste a token for nothing.
     await bench.install.database.keepDomainCheck({ ran_at: bench.install.clock.now, by: "ada@example.com" as Email, run: "repair", pieces: [] }, {});
     bench.install.users.takes = true;
-    const carried = await bench.run("config logins ada@example.com,cy@example.com");
+    const carried = await bench.run("config users ada@example.com,cy@example.com");
     bench.install.users.takes = false;
-    const added = await bench.run("config logins ada@example.com,second@example.com");
+    const added = await bench.run("config users ada@example.com,second@example.com");
 
     const step = ["New users cannot log in yet", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"];
 
-    expect([added.out, added.err, carried.out, carried.err]).toEqual([["logins  ada@example.com,second@example.com"], step, ["logins  ada@example.com,cy@example.com"], []]);
+    expect([added.out, added.err, carried.out, carried.err]).toEqual([["users  ada@example.com,second@example.com"], step, ["users  ada@example.com,cy@example.com"], []]);
 
     // Drift: a token names no email, so the one login known to pass the login page is one that was a login already; a list of new emails alone would shut the dashboard on everyone.
-    const replaced = await bench.run("config logins third@example.com");
+    const replaced = await bench.run("config users third@example.com");
 
-    expect([replaced.code, replaced.err[0], (await bench.run("config logins")).out]).toEqual([1, "The change would leave no user who can log in: logins", ["ada@example.com,second@example.com"]]);
+    expect([replaced.code, replaced.err[0], (await bench.run("config users")).out]).toEqual([1, "The change would leave no user who can log in: users", ["ada@example.com,second@example.com"]]);
   });
 
   // Drift: `poplin update` is the one command that replaces the install's own code. A check that started an update, or a start that did not say why it was refused, would leave a person guessing.
@@ -655,7 +655,7 @@ describe("run", () => {
       ["new-link zzzzzzzzzzzz"],
       [`duplicate ${label}`, asStranger],
       [`delete ${label} --no-trash`, asStranger],
-      ["config logins nobody@example.com"],
+      ["config users nobody@example.com"],
       ["config trash_days 9", asStranger],
     ];
     const before = await stateOf(bench);
@@ -675,7 +675,7 @@ describe("run", () => {
     expect(jsonOf(await bench.run("logout --json --dry-run", { env: {} }))).toEqual({ dry_run: true, revoked: false });
     expect((await bench.run("logout --dry-run", { env: {} })).out).toEqual(["Not logged in", "Dry run: no request was sent"]);
     expect((await bench.run(`set ${label} --search-engines on --dry-run`)).err).toEqual(["The setting would be saved, but search engines index only a public site"]);
-    expect((await bench.run("config logins ada@example.com,new@example.com --dry-run")).err).toEqual(["Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair"]);
+    expect((await bench.run("config users ada@example.com,new@example.com --dry-run")).err).toEqual(["Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair"]);
   });
 
   // Drift: a copy's calls are made again after the rest an install asks for; a dry run that gave up at the first such answer failed where the copy after it goes through.

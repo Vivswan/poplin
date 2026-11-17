@@ -9,7 +9,7 @@
 //   the same, on an install that keeps no run of its domain: nothing remembers that the change waits, so it is noted as a problem too
 //
 // The change of the users is stored before any of this, and stands whatever the provider answers.
-// The list carried is read after the change was stored, under a mark set in the same step. The change is settled only if the stored logins are still that list and no mark was set since: by a later change, or by another try at the provider.
+// The list carried is read after the change was stored, under a mark set in the same step. The change is settled only if the stored users are still that list and no mark was set since: by a later change, or by another try at the provider.
 // A list that is stale by then is carried once more, and where that is too the change is left waiting.
 // A try the provider refused sets a mark anew before it answers: its write of the list may have landed after a newer one that was settled meanwhile.
 
@@ -59,7 +59,7 @@ export interface UsersFollow {
   holdsKey(): boolean;
 
   /** Write the users into the provider's list, and nothing else of the login. It throws for nothing the provider answers, and no answer holds the key. */
-  push(logins: readonly Login[]): Promise<Pushed>;
+  push(users: readonly Login[]): Promise<Pushed>;
 }
 
 /** Whether the users reached the provider, and for a change that waits the sentence a screen shows after the word that it is saved. */
@@ -90,7 +90,7 @@ function waitingOf(pushed: Refusal, remembers: boolean): Waiting {
  * @param since - the mark the try began under, `undefined` on an install that kept no run then
  */
 async function refused(install: Pick<Install, "database" | "now">, follow: UsersFollow, pushed: Refusal, since: number | undefined): Promise<Followed> {
-  const { waits: remembers } = await install.database.settleUsers({ logins: null, since: since ?? 0 }, install.now());
+  const { waits: remembers } = await install.database.settleUsers({ users: null, since: since ?? 0 }, install.now());
   if (!remembers || NOTED.includes(pushed.refusal)) await noteProblem(install, "users_not_carried");
 
   return waits(follow, waitingOf(pushed, remembers));
@@ -112,16 +112,16 @@ export async function followUsers(install: Pick<Install, "database" | "now">, fo
 
   for (let tries = 0; tries < MOST_TRIES; tries += 1) {
     const claimed = await install.database.claimUsers(install.now());
-    const { logins } = claimed;
+    const { users } = claimed;
     // An install with no settings has no users to carry.
-    if (logins === undefined) return { carried: true };
+    if (users === undefined) return { carried: true };
 
     remembers = claimed.mark !== undefined;
-    const pushed = await follow.push(logins);
+    const pushed = await follow.push(users);
     if (!pushed.ok) return refused(install, follow, pushed, claimed.mark);
 
-    const settled = await install.database.settleUsers({ logins, since: claimed.mark ?? 0 }, install.now());
-    if (!settled.waits && settled.logins !== undefined && same(settled.logins, logins)) return { carried: true };
+    const settled = await install.database.settleUsers({ users, since: claimed.mark ?? 0 }, install.now());
+    if (!settled.waits && settled.users !== undefined && same(settled.users, users)) return { carried: true };
   }
 
   if (remembers) return waits(follow, "changed_again");

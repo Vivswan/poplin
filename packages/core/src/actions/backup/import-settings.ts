@@ -9,25 +9,25 @@ import { BACKUP_FORMAT } from "./export";
 import { type Install, type Refused, refuse } from "../records";
 import { type Stored, storeSettings } from "../install/store-settings";
 
-/** What an import of settings sends: the backup's format number, every setting in its text form, and whether the backup's logins replace this install's. */
+/** What an import of settings sends: the backup's format number, every setting in its text form, and whether the backup's users replace this install's. */
 export const SETTINGS_IMPORT = v.strictObject({
   format: POSITIVE,
   settings: v.record(v.string(), v.string()),
-  logins: v.optional(v.boolean(), false),
+  users: v.optional(v.boolean(), false),
 });
 
 /**
- * Replace this install's settings with a backup's. The logins stay as they are unless `logins` asks for the backup's: another install's logins could shut every admin of this one out.
+ * Replace this install's settings with a backup's. The users stay as they are unless `users` asks for the backup's: another install's users could shut every admin of this one out.
  *
  * @param request - what `exportSettings` answered, as `format` and `settings`; anything is taken and checked
  * @returns every setting after the change. `backup_too_new` for a format above the one this code reads, `bad_argument` naming the first key that is no setting, is missing, or whose text is refused.
- *   `no_working_login` for logins that let nobody in, and `needs_update_check` for a backup that holds `auto_update` on with `update_check` off
+ *   `no_working_user` for users that let nobody in, and `needs_update_check` for a backup that holds `auto_update` on with `update_check` off
  */
 export async function importSettings(
   install: Install,
   actor: Actor,
   request: v.InferInput<typeof SETTINGS_IMPORT>,
-): Promise<Stored | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "backup_too_new" | "no_working_login" | "needs_update_check">> {
+): Promise<Stored | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "backup_too_new" | "no_working_user" | "needs_update_check">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const asked = v.safeParse(SETTINGS_IMPORT, request);
@@ -38,8 +38,8 @@ export async function importSettings(
   const read = settingsFromText(asked.output.settings);
   if (!read.ok) return refuse(read.refusal === "needs-update-check" ? "needs_update_check" : "bad_argument", read.key);
 
-  const { logins, ...rest } = read.values;
-  const changes = asked.output.logins ? read.values : rest;
+  const { users, ...rest } = read.values;
+  const changes = asked.output.users ? read.values : rest;
 
   return storeSettings(install, actor, changes);
 }

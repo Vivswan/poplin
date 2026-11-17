@@ -114,7 +114,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepDomainCheck, 200 pieces over the run before": [1, 2],
   "readDomainCheck": [1, 0],
   "claimUsers": [3, 1],
-  "settleUsers, the stored logins carried": [4, 1],
+  "settleUsers, the stored users carried": [4, 1],
   "settleUsers, a try whose outcome is unknown": [3, 1],
   "claimRules": [3, 1],
   "settleRules, the stored settings carried": [4, 1],
@@ -921,10 +921,10 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     const pieces = Array.from({ length: 200 }, (_piece, at) => ({ piece: "Record", detail: `record ${at}`, part: "reach", state: "needs_repair" }) as const);
     await cost("keepDomainCheck, 200 pieces over the run before", () => database.keepDomainCheck({ ran_at: NOW + 1, by: BY_ADA.by, run: "repair", pieces }, { run: "repair" }));
     await cost("readDomainCheck", () => database.readDomainCheck());
-    const carried = (await database.readSettings())?.logins ?? [];
+    const carried = (await database.readSettings())?.users ?? [];
     await cost("claimUsers", () => database.claimUsers(NOW + 2));
-    await cost("settleUsers, the stored logins carried", () => database.settleUsers({ logins: carried, since: NOW + 2 }, NOW + 2));
-    await cost("settleUsers, a try whose outcome is unknown", () => database.settleUsers({ logins: null, since: NOW + 2 }, NOW + 2));
+    await cost("settleUsers, the stored users carried", () => database.settleUsers({ users: carried, since: NOW + 2 }, NOW + 2));
+    await cost("settleUsers, a try whose outcome is unknown", () => database.settleUsers({ users: null, since: NOW + 2 }, NOW + 2));
     await database.changeSettings({ outside_pages: "allowed" }, { ...BY_ADA, at: NOW + 3 });
     await cost("claimRules", () => database.claimRules(NOW + 4));
     await cost("settleRules, the stored settings carried", () => database.settleRules({ rules: { outside_pages: "allowed", search_engines_allowed: false }, since: NOW + 4 }, NOW + 4));
@@ -953,22 +953,22 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     const copy = await begunSite(database, site(900));
     await cost("publishUploadAsSite, a copy", () => database.publishUploadAsSite(copy.id, { ...copy.site, bytes: 1000, files: 2 }, BY_ADA, { copiedFrom: first.id }));
 
-    // The logins change after every read of the log, so that the entries they write are read by no page of it above.
+    // The users change after every read of the log, so that the entries they write are read by no page of it above.
     const person = "bo@example.com" as Login;
     await cost("addLogin", () => database.addLogin(person, BY_ADA));
     await cost("addLogin, already one", () => database.addLogin(person, BY_ADA));
     await cost("removeLogin", () => database.removeLogin(person, BY_ADA));
     await cost("removeLogin, not one", () => database.removeLogin(person, BY_ADA));
     await cost("removeLogin, the last", () => database.removeLogin(ADMIN, BY_ADA));
-    await cost("changeSettings, a login more", () => database.changeSettings({ logins: [ADMIN, person] }, BY_ADA));
-    await cost("changeSettings, another first login", () => database.changeSettings({ logins: [person, ADMIN] }, BY_ADA));
+    await cost("changeSettings, a login more", () => database.changeSettings({ users: [ADMIN, person] }, BY_ADA));
+    await cost("changeSettings, another first login", () => database.changeSettings({ users: [person, ADMIN] }, BY_ADA));
     // A user's tokens end with the user: each costs its entry of the log and its own row, with the indexes that hold it.
     const allowed = await Promise.all(["one", "two", "three", "four"].map((note) => mintToken({ scope: "publisher", note, now: NOW })));
     for (const { record } of allowed.slice(0, 2)) await database.addToken(record, { as: "person", by: person, at: NOW });
     await cost("removeLogin, a user behind 2 tokens", () => database.removeLogin(person, BY_ADA));
     await database.addLogin(person, BY_ADA);
     for (const { record } of allowed.slice(2)) await database.addToken(record, { as: "person", by: person, at: NOW });
-    await cost("changeSettings, a login less behind 2 tokens", () => database.changeSettings({ logins: [ADMIN] }, BY_ADA));
+    await cost("changeSettings, a login less behind 2 tokens", () => database.changeSettings({ users: [ADMIN] }, BY_ADA));
 
     await cost("readStorageWrites", () => database.readStorageWrites(DAY));
     await cost("takeStorageWrite", () => database.takeStorageWrite(DAY, 0));

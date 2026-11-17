@@ -86,7 +86,7 @@ describe("one more user, stored with the token", () => {
 
     expect([kept, sent.length, sent[0]?.sql.split("; ").length]).toEqual(["added", 1, 4]);
     expect<unknown>(numbers).toEqual(sent[0]?.params.map((_, at) => at + 1));
-    expect([(await store.database.readSettings())?.logins, entry]).toMatchObject([[OWNER, LOST], { at: 1_700_000_000_000, by: "doctor-repair@poplin.invalid", action: "settings_changed" }]);
+    expect([(await store.database.readSettings())?.users, entry]).toMatchObject([[OWNER, LOST], { at: 1_700_000_000_000, by: "doctor-repair@poplin.invalid", action: "settings_changed" }]);
   });
 
   // Drift: an email that is a user already must change nothing: a second entry, or a second mark, would say that the users changed when they did not.

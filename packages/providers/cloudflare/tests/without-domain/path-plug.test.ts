@@ -12,7 +12,7 @@ import { ADDRESSES } from "../shared/install/support/layouts";
 import type { Asked } from "../shared/install/support/replies";
 
 /** The settings the install holds. */
-const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
+const STORED: DomainSettings = { users: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
 
 /** Reads them, as a plug asks once a token is proven. */
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
@@ -269,7 +269,7 @@ test("the alert a repair makes is the account's own, at 1 dollar, mailed to the 
   await withAccount(account, async (plug) => {
     await plug.repair(TOKEN, SETTINGS);
     const first = structuredClone(account.alerts);
-    const moved = async (): Promise<DomainSettings> => ({ ...STORED, logins: ["second@example.com" as Login, "owner@example.com" as Login] });
+    const moved = async (): Promise<DomainSettings> => ({ ...STORED, users: ["second@example.com" as Login, "owner@example.com" as Login] });
     const rows = shown(await plug.repair(TOKEN, moved));
 
     expect(first).toMatchObject([{ name: "poplin: usage charges reached 1 dollar", alert_type: "billing_budget_alert", enabled: true, filters: { total_spend_dollars: ["1"] }, mechanisms: { email: [{ id: "owner@example.com" }] } }]);

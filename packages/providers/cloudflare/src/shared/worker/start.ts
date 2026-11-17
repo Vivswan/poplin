@@ -132,7 +132,7 @@ export interface Instance {
   /** The key poplin keeps for Cloudflare: whether the install holds one, whether Cloudflare still takes it, and the way to a new one. Nothing answers the key itself. */
   readonly key: InstallKey;
 
-  /** The users' side at Cloudflare: a change of the logins is carried there with the kept key. */
+  /** The users' side at Cloudflare: a change of the users is carried there with the kept key. */
   readonly follow: UsersFollow;
 
   /** Ends every login of the dashboard at Cloudflare, with the kept key. */
@@ -210,14 +210,14 @@ function badBinding(binding: RefusedBinding["binding"], refusal: string): Starte
 /**
  * Store the first settings of an install that has none. Two instances that start together store one row: the second is answered `already_set`.
  *
- * The binding must name the logins; every setting it leaves out starts at its default.
+ * The binding must name the users; every setting it leaves out starts at its default.
  */
 async function ensureSettings(database: Database, binding: unknown, now: number): Promise<Started | undefined> {
   const first = readFirstSettings(binding);
   if (!first.ok) return badBinding("FIRST_SETTINGS", first.refusal);
 
-  const [installer] = first.values.logins;
-  if (installer === undefined) return badBinding("FIRST_SETTINGS", "missing at logins");
+  const [installer] = first.values.users;
+  if (installer === undefined) return badBinding("FIRST_SETTINGS", "missing at users");
 
   await database.initSettings(first.values, { as: "first_login", by: installer, at: now });
 

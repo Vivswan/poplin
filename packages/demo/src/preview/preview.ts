@@ -46,7 +46,7 @@ const FREE_LIMITS = {
   storageWritesPerDay: { most: 30_281, warning: "Past 1,000,000 writes a month, the provider bills the rest." },
   storageReadsPerMonth: { most: 10_000_000, warning: "Requests read the storage. Past 10,000,000 reads a month, the provider bills the rest." },
   requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need a paid plan." },
-  logins: { most: 50, warning: "Past 50 users, the provider bills each login." },
+  users: { most: 50, warning: "Past 50 users, the provider bills each login." },
 } as const;
 
 /** The figures the invented host answers as its own: made up, the same at every reading, with the account's requests a little over the install's own count of the day, and a processing time above its limit so the sign of one shows. */

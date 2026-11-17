@@ -329,7 +329,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     expect([usersAt(account), run.done.ok && run.done.ready]).toEqual([{ login: [first, second], alerts }, true]);
     // The command ends with the repair that lets the person in, and offers no login, by this: the dry run says it as the run does.
     expect([dry.done, run.done].map((done) => done.ok && done.unused)).toEqual([LOGIN, LOGIN]);
-    expect(account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json).toEqual({ logins: first });
+    expect(account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json).toEqual({ users: first });
     // The stored settings say to leave the bot switches alone and to let outside pages in: the defaults would set the one and write a rule for the other.
     const followed = kind === "domain" ? ["Bot settings | leave-out | zone bot switches: the zone-wide bot switches are set to off"] : [];
 
@@ -411,7 +411,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     const said = shown(done).filter((row) => row.startsWith("D1 database") || row.startsWith("First user"));
 
     expect([await account.store.database.readSettings(), said]).toEqual([undefined, ["D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"]]);
-    expect([usersAt(account).login, account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json]).toEqual([[LOGIN], { logins: LOGIN }]);
+    expect([usersAt(account).login, account.bindings.find((binding) => binding.name === "FIRST_SETTINGS")?.json]).toEqual([[LOGIN], { users: LOGIN }]);
   });
 });
 

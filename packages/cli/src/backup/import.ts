@@ -280,7 +280,7 @@ function reported(request: ImportRequest, results: readonly Result[]): Outcome {
   const counts = { imported: count("imported"), skipped: count("skipped"), failed: count("failed") };
   const stopped = results.some(stopsRun);
   const lines: (string | Line)[] = results.map(lineOf);
-  if (request.settings) lines.unshift({ tone: RESULT_TONES.imported, text: ["restored", SETTINGS_ROW[request.logins ? "users" : "alone"]].join(GAP) });
+  if (request.settings) lines.unshift({ tone: RESULT_TONES.imported, text: ["restored", SETTINGS_ROW[request.users ? "users" : "alone"]].join(GAP) });
 
   lines.push(`${counts.imported} imported, ${counts.skipped} skipped, ${counts.failed} failed`);
   const sites = results.map(shown);
@@ -302,7 +302,7 @@ async function send(backup: Backup, request: ImportRequest, chosen: Chosen, sess
   const { format } = backup.manifest;
 
   if (request.settings) {
-    const sent = { format, settings: { ...backup.settings }, logins: request.logins };
+    const sent = { format, settings: { ...backup.settings }, users: request.users };
     const restored = await client.call(SETTINGS_ANSWER, (api) => api.import.settings.$post({ json: sent }));
     if (!restored.ok) return { ok: false, problem: problemOf(restored.failure, "changes") };
   }
@@ -330,7 +330,7 @@ async function preview(backup: Backup, request: ImportRequest, chosen: Chosen, a
   }
 
   const lines = sites.map((site) => ["would import", site.label, countText(site.versions, "version"), countText(site.files, "file"), showBytes(site.bytes)].join(GAP));
-  if (request.settings) lines.unshift(["would restore", SETTINGS_ROW[request.logins ? "users" : "alone"]].join(GAP));
+  if (request.settings) lines.unshift(["would restore", SETTINGS_ROW[request.users ? "users" : "alone"]].join(GAP));
 
   return {
     ok: true,

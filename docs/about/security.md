@@ -76,8 +76,8 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 
 | Who | Credential | Where it comes from |
 | --- | --- | --- |
-| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by a code Cloudflare sends to the email; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time. poplin sets no cookie of its own |
-| a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed logins each time |
+| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by a code Cloudflare sends to the email; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed users each time. poplin sets no cookie of its own  |
+| a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed users each time  |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that machine in a browser; an agent on that machine acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints a URL and a short code to open on another device, where a user allows that machine      |
 | the Worker, to the bucket and the database | its bindings inside Cloudflare | no database key exists outside Cloudflare; the one bucket key is the upload key below |
@@ -92,7 +92,7 @@ A token the Worker issues is never a Cloudflare API key. It has one of two scope
 | Scope | Given to | May |
 | --- | --- | --- |
 | publisher | a machine or a script that should only publish, such as a build server or a shared machine: a user logs it in with `poplin login` and leaves Can change at Own sites only on the page that allows it. `poplin login --publisher` saves no other kind, whatever that page chose | publish, and manage its own sites |
-| admin | a user, whose email is on the list of allowed logins; a user's login at the dashboard carries the same rights | everything: every site, the settings, the tokens |
+| admin | a user, whose email is on the list of allowed users; a user's login at the dashboard carries the same rights  | everything: every site, the settings, the tokens |
 
 The page that allows a machine's login treats what the login says of itself as a stranger's words, since anyone can begin one:
 
@@ -237,7 +237,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | --- | --- |
 | the login of the dashboard | Cloudflare Access's cookie, HttpOnly and SameSite Lax, for the dashboard's hostname alone, 30 days: no script can read it, and no site receives it. A browser counts every site of the install as the same site as the dashboard, so SameSite Lax holds back only what a page of another domain sends, a followed link aside; the row on writes covers a site's page |
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
-| a removed login | the Worker checks the email against the allowed logins on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds |
+| a removed user  | the Worker checks the email against the allowed users on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds  |
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
 | tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed |
 | a token that ended | a removed token never logs in again, and its row is removed once it ended more than 90 days ago, a few rows at a time; [Removed tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |

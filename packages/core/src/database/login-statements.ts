@@ -52,9 +52,9 @@ export function userBehind(by: SQL | string): SQL {
   return fragment`coalesce((SELECT ${SIGNER.allowed_by} FROM ${tokens} AS ${SIGNER} WHERE ${SIGNER.id} = ${by}), ${by})`;
 }
 
-/** Whether a column holds one of the stored logins: a user who is one still. */
+/** Whether a column holds one of the stored users: a user who is one still. */
 export function isUser(column: SQL): SQL {
-  return fragment`EXISTS (SELECT 1 FROM ${settings}, json_each(${settings.value}, '$.logins') AS j WHERE ${settings.id} = 1 AND j.value = ${column})`;
+  return fragment`EXISTS (SELECT 1 FROM ${settings}, json_each(${settings.value}, '$.users') AS j WHERE ${settings.id} = 1 AND j.value = ${column})`;
 }
 
 /** Whether a token that signs may still write: it was not removed, and the user behind it is a user still, whether or not the token has run out since it was let in. */
@@ -81,9 +81,9 @@ export function signerStands(signed: Signed): SQL {
   }
 }
 
-/** Whether an email is one of the stored logins, for a statement on the settings row. */
+/** Whether an email is one of the stored users, for a statement on the settings row. */
 export function isStoredLogin(email: string): SQL {
-  return fragment`EXISTS (SELECT 1 FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${email})`;
+  return fragment`EXISTS (SELECT 1 FROM json_each(${settings.value}, '$.users') AS j WHERE j.value = ${email})`;
 }
 
 /** The settings, and whether who signs a change of them still stands. */
@@ -103,19 +103,19 @@ export function signerGone(read: StatementResult | undefined): boolean {
   return read?.rows[0]?.stands !== 1;
 }
 
-/** The logins of one list that another does not hold, as a JSON array. Each list is a `json_each` of an array, which the engine walks in the array's order. */
-function loginsApart(held: SQL, missing: SQL): SQL {
+/** The users of one list that another does not hold, as a JSON array. Each list is a `json_each` of an array, which the engine walks in the array's order. */
+function usersApart(held: SQL, missing: SQL): SQL {
   return fragment`(SELECT json_group_array(one.value) FROM ${held} AS one WHERE one.value NOT IN (SELECT value FROM ${missing}))`;
 }
 
 /**
- * The audit entry of a change of the settings, with the values it sets. New logins are held with who they add and who they leave out, as `added` and `removed`.
- * It goes before the change in a batch, under the change's own condition: it reads the logins still stored.
+ * The audit entry of a change of the settings, with the values it sets. New users are held with who they add and who they leave out, as `added` and `removed`.
+ * It goes before the change in a batch, under the change's own condition: it reads the users still stored.
  */
 export function auditOfSettings(signed: Signed, changes: Partial<SettingValues>, lands: SQL | undefined): Statement {
-  const [stored, given] = [fragment`json_each(${settings.value}, '$.logins')`, fragment`json_each(${JSON.stringify(changes.logins ?? [])})`];
-  const users = fragment`json_set(${JSON.stringify(changes)}, '$.added', json(${loginsApart(given, stored)}), '$.removed', json(${loginsApart(stored, given)}))`;
-  const detail = changes.logins === undefined ? fragment`${JSON.stringify(changes)}` : users;
+  const [stored, given] = [fragment`json_each(${settings.value}, '$.users')`, fragment`json_each(${JSON.stringify(changes.users ?? [])})`];
+  const users = fragment`json_set(${JSON.stringify(changes)}, '$.added', json(${usersApart(given, stored)}), '$.removed', json(${usersApart(stored, given)}))`;
+  const detail = changes.users === undefined ? fragment`${JSON.stringify(changes)}` : users;
 
   return insertFrom(audit, [audit.at, audit.actor, audit.action, audit.detail], fragment`SELECT ${signed.at}, ${signed.by}, 'settings_changed', ${detail} FROM ${settings} WHERE ${lands}`);
 }
@@ -151,18 +151,18 @@ export function endTokensOfRemoved(login: string, signed: Signed): readonly [Sta
 }
 
 /**
- * End the tokens of every user a new list of logins leaves out, for a signer who stands: it goes before the list replaces the stored logins in a batch, since it reads who was a login.
+ * End the tokens of every user a new list of users leaves out, for a signer who stands: it goes before the list replaces the stored users in a batch, since it reads who was a user.
  * The token that signs is left to `endSignerLeftOut`, so it stands for every statement up to the replacement.
  *
  * @param when - what else must hold for the list to be written; left out, nothing else
  */
 export function endTokensOfDropped(next: readonly string[], signed: Signed, when: SQL = fragment`1`): readonly [Statement, Statement] {
-  const dropped = fragment`(SELECT was.value FROM ${settings}, json_each(${settings.value}, '$.logins') AS was WHERE ${settings.id} = 1 AND was.value NOT IN (SELECT value FROM json_each(${JSON.stringify(next)})))`;
+  const dropped = fragment`(SELECT was.value FROM ${settings}, json_each(${settings.value}, '$.users') AS was WHERE ${settings.id} = 1 AND was.value NOT IN (SELECT value FROM json_each(${JSON.stringify(next)})))`;
 
   return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped} AND ${tokens.id} <> ${signed.by} AND ${signerStands(signed)} AND ${when}`, signed);
 }
 
-/** End the token that signs a list of logins which leaves its own user out: it goes right after the list's change in a batch, and does nothing where the list was refused. */
+/** End the token that signs a list of users which leaves its own user out: it goes right after the list's change in a batch, and does nothing where the list was refused. */
 export function endSignerLeftOut(signed: Signed): readonly [Statement, Statement] {
   return endTokensWhere(fragment`${tokens.id} = ${signed.by} AND NOT ${isUser(fragment`${tokens.allowed_by}`)}`, signed, "change");
 }

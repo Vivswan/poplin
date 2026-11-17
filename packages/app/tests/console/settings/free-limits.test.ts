@@ -7,7 +7,7 @@ import { freeLimitMarks } from "../../../src/console/settings/free-limits";
 import { MOST_STORE_CALLS } from "../../../src/sites/serve";
 import { FREE_LIMITS } from "../support/install";
 
-const DEFAULTS = defaultSettings({ installer: "owner@example.com" as SettingValues["logins"][number] });
+const DEFAULTS = defaultSettings({ installer: "owner@example.com" as SettingValues["users"][number] });
 
 /** The reads of the storage a month of 31 days costs at a day's requests and writes. */
 function readsAMonth(requests: number, writes: number): number {
@@ -25,7 +25,7 @@ test.each([30_000, 0, 31, 200_001])("the mark of the month's reads is the last c
 
 test("the defaults are within every mark, so a new install shows no warning", () => {
   const marks = freeLimitMarks(DEFAULTS, FREE_LIMITS);
-  const values: Readonly<Record<string, unknown>> = { ...DEFAULTS, max_total_size: sizeBytes(DEFAULTS.max_total_size), max_site_size: sizeBytes(DEFAULTS.max_site_size), logins: DEFAULTS.logins.length };
+  const values: Readonly<Record<string, unknown>> = { ...DEFAULTS, max_total_size: sizeBytes(DEFAULTS.max_total_size), max_site_size: sizeBytes(DEFAULTS.max_site_size), users: DEFAULTS.users.length };
 
   expect(Object.entries(marks).filter(([key, bounds]) => bounds.some((bound) => !(Number(values[key]) <= bound.over)))).toEqual([]);
 });

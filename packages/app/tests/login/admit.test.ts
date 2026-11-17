@@ -47,14 +47,14 @@ test.each([
   ["a verified email that is no user", "mallory@example.com", ["ada@example.com"], { ok: false, refusal: "not-a-user" }],
   ["a verified email the provider wrote in capitals", "Ada@Example.com", ["ada@example.com"], { ok: true, actor: { scope: "admin", holder: "ada@example.com" }, since: SINCE }],
 ] as const)("a request with %s is answered whole", async (_case, verdict, users, outcome) => {
-  expect<unknown>(await admit(asking(verdict), { identify, logins: usersOf(...users), now: NOW })).toEqual(outcome);
+  expect<unknown>(await admit(asking(verdict), { identify, users: usersOf(...users), now: NOW })).toEqual(outcome);
 });
 
 // Drift: something kept from an earlier request would let a removed user go on, or keep a new user out.
 test("the same proof is admitted or refused by the users of each request alone", async () => {
   const proof = asking("bo@example.com");
   const answers = [];
-  for (const users of [["ada@example.com"], ["ada@example.com", "bo@example.com"], ["ada@example.com"]]) answers.push((await admit(proof, { identify, logins: usersOf(...users), now: NOW })).ok);
+  for (const users of [["ada@example.com"], ["ada@example.com", "bo@example.com"], ["ada@example.com"]]) answers.push((await admit(proof, { identify, users: usersOf(...users), now: NOW })).ok);
 
   expect(answers).toEqual([false, true, false]);
 });

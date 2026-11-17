@@ -432,14 +432,14 @@ export const API_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
-    name: "restore a backup's settings, the logins too",
+    name: "restore a backup's settings, the users too",
     route: "POST /api/import/settings",
-    // Worst: every setting is sent and the logins are taken too, so every one is written.
+    // Worst: every setting is sent and the users are taken too, so every one is written.
     arrange: async (stage) => {
       const token = await adminToken(stage);
       const kept = await done<{ format: number; settings: Record<string, string> }>(await apiOf(unmeasured(stage), token).export.settings.$get({ query: {} }));
 
-      return (measured) => apiOf(measured, token).import.settings.$post({ query: {}, json: { format: kept.format, settings: { ...kept.settings, trash_days: "9" }, logins: true } });
+      return (measured) => apiOf(measured, token).import.settings.$post({ query: {}, json: { format: kept.format, settings: { ...kept.settings, trash_days: "9" }, users: true } });
     },
     status: 200,
     budget: { queries: 3, reads: 0, writes: 0 },

@@ -10,7 +10,7 @@
 //   max_storage_writes_per_day   storageWritesPerDay    the times a day the storage is written to or listed
 //   requests_per_day             storageReadsPerMonth   the reads of the storage a month of such days can cost: three for every request, and one for every file copied
 //   requests_per_day             requestsPerDay         the day's requests
-//   logins                       logins                 how many emails may log in
+//   users                       users                 how many emails may log in
 //
 // The numbers and the sentences are the host's: this file names no plan and no price.
 
@@ -49,7 +49,7 @@ export interface FreeLimits {
   readonly storageWritesPerDay: FreeLimit;
   readonly storageReadsPerMonth: FreeLimit;
   readonly requestsPerDay: FreeLimit;
-  readonly logins: FreeLimit;
+  readonly users: FreeLimit;
 }
 
 /**
@@ -65,7 +65,7 @@ function requestsWithin(readsAMonth: number, values: SettingValues): number {
  * Write the free plan's limits as marks on the settings they bound.
  *
  * @param values - the stored settings: the mark of the month's reads on the day's requests depends on the day's writes
- * @returns the marks of each bounded setting, by its key, one for each limit: a size's in bytes, the logins' as how many there are, any other as the setting's count
+ * @returns the marks of each bounded setting, by its key, one for each limit: a size's in bytes, the users' as how many there are, any other as the setting's count
  */
 export function freeLimitMarks(values: SettingValues, limits: FreeLimits): Readonly<Partial<Record<keyof SettingValues, readonly FreeMark[]>>> {
   const mark = (limit: FreeLimit, over = limit.most): FreeMark => ({ over, warning: limit.warning });
@@ -77,6 +77,6 @@ export function freeLimitMarks(values: SettingValues, limits: FreeLimits): Reado
     max_files_per_day: [mark(limits.filesPerDay)],
     max_storage_writes_per_day: [mark(limits.storageWritesPerDay)],
     requests_per_day: [mark(limits.storageReadsPerMonth, requestsWithin(limits.storageReadsPerMonth.most, values)), mark(limits.requestsPerDay)],
-    logins: [mark(limits.logins)],
+    users: [mark(limits.users)],
   };
 }

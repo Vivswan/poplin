@@ -55,8 +55,8 @@ export type RememberedCheck = DomainCheck & { readonly users_changed_at: number 
 
 /** What a try to carry the users to the domain came to, as a change of them is settled by it. */
 export interface CarriedUsers {
-  /** The logins the domain took, in their stored order, or `null` where it is unknown what the domain holds after the try. */
-  readonly logins: readonly string[] | null;
+  /** The users the domain took, in their stored order, or `null` where it is unknown what the domain holds after the try. */
+  readonly users: readonly string[] | null;
 
   /** The mark the try began under, or the moment it began: a mark later than it says the users changed, or another try wrote the domain, while this one was under way. */
   readonly since: number;
