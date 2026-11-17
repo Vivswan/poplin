@@ -1,8 +1,8 @@
 # Runs the nightly fuzzing, as the starter written once by Vivswan/repo-platform and never overwritten
 # by a later sync.
 #
-# The fuzz step runs the property tests under tests/fuzz for ten minutes. Each failing property writes its
-# report, with the seed and the replay command, where the failure-report contract in docs/modules/fuzzer.md wants it.
+# The fuzz job runs every target under tests/fuzz side by side, three minutes each (fuzz.yml). Each failing property
+# writes its report, with the seed and the replay command, where the failure-report contract in docs/modules/fuzzer.md wants it.
 name: Nightly Fuzz
 
 on:
@@ -28,53 +28,13 @@ permissions:
   contents: read
 
 jobs:
+  # The run itself is fuzz.yml, the one the checks of a pull request and the release gate call too. A blank seed
+  # (the nightly) draws a new one; a blank `iterations` (the nightly) leaves the time as the only limit.
   fuzz:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    outputs:
-      attempt: ${{ github.run_attempt }}
-    # Sharding multiplies coverage: uncomment the matrix, suffix the artifact name below with the shard, and
-    # end the report job's download pattern and artifact-name with `-*` (docs/modules/fuzzer.md).
-    # strategy:
-    #   fail-fast: false
-    #   matrix:
-    #     shard: [1, 2, 3]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: .bun-version
-
-      - name: Install
-        run: bun install --frozen-lockfile
-
-      # FUZZ_SECONDS is the budget of the whole directory: tests/fuzz/config.ts shares it between the fuzz
-      # files and their properties. A blank FUZZ_RUNS (the nightly) leaves the time budget as the only limit.
-      # `timeout` turns a hang into a failure well before the job's own limit cancels it.
-      - name: Fuzz
-        env:
-          SEED: ${{ inputs.seed }}
-          FUZZ_RUNS: ${{ inputs.iterations }}
-          FUZZ_SECONDS: "600"
-          FUZZ_REPORTS: .fuzz-failures
-        run: |
-          export FUZZ_SEED="${SEED:-$RANDOM$RANDOM}"
-          echo "fuzzing with seed $FUZZ_SEED for $FUZZ_SECONDS seconds"
-          timeout 15m bun test tests/fuzz
-
-      # A job that hits timeout-minutes is cancelled, not failed, and its
-      # later steps still run under this condition.
-      - name: Upload failure artifacts
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: fuzz-failures-${{ github.run_attempt }}
-          # Point this at your failure-report directory.
-          path: .fuzz-failures/
-          # Hidden paths are skipped by default since upload-artifact v4.4.
-          include-hidden-files: true
-          if-no-files-found: ignore
+    uses: ./.github/workflows/fuzz.yml
+    with:
+      seed: ${{ inputs.seed }}
+      iterations: ${{ inputs.iterations }}
 
   # A CANCELLED fuzz job counts as red: hitting the timeout cancels rather
   # than fails, and a hang is exactly what a fuzzer exists to find.
@@ -94,7 +54,7 @@ jobs:
         if: needs.fuzz.result == 'failure' || needs.fuzz.result == 'cancelled'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: fuzz-failures-${{ needs.fuzz.outputs.attempt || github.run_attempt }}
+          pattern: fuzz-failures-*
           path: .fuzz-failures
           merge-multiple: true
 
@@ -108,7 +68,7 @@ jobs:
           label: "fuzz-nightly"
           title: Nightly fuzz failures
           artifacts-dir: .fuzz-failures
-          artifact-name: fuzz-failures-${{ needs.fuzz.outputs.attempt || github.run_attempt }}
+          artifact-name: fuzz-failures-*
           label-color: "B60205"
           label-description: "Automated nightly fuzz failure"
           stream: fuzz

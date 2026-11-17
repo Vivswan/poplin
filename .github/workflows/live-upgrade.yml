@@ -1,0 +1,82 @@
+# The live upgrade of the one test install a caller names: an install the older build made and filled takes this run's
+# build as an update, and must answer as before (packages/providers/cloudflare/live/README.md, "The upgrade").
+#
+#   live-checks.yml, live-checks-account-address.yml    a run by hand of main with `upgrade` ticked: the build of main
+#   release-gate.yml                                    the pull request of a release: the release as it would merge
+#
+# It removes the test install and writes rows and files of its own, so no push and no midnight run makes it.
+# The job names the environment, so the environment's secrets are the ones its steps read, under the names declared below.
+# It asks for no permission above `contents: read`, so the release gate may call it.
+
+name: Live Upgrade
+
+on:
+  workflow_call:
+    inputs:
+      kind:
+        description: "The kind of install the account holds: `domain` or `account address`"
+        type: string
+        required: true
+      environment:
+        description: The environment that holds the test account's secrets
+        type: string
+        required: true
+    # The names the steps read. A caller must hand each name over, and the value may be empty: the one a step reads is the secret of the job's environment.
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        description: The token of the test account
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        description: The test account
+        required: true
+      POPLIN_LIVE_LOGIN:
+        description: The email the test install lets in
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Only a run of main, or the pull request of a release, reaches the test account: the release's own branch, of this
+  # repository, opened by the release bot. Any other run stands down here, whatever its caller asked.
+  # live-install.yml asks the same of its jobs, and packages/providers/cloudflare/tests/live/workflow.test.ts holds the three to one text.
+  upgrade:
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'pull_request' &&
+      github.head_ref == 'release-please--branches--main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'github-actions[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    env:
+      POPLIN_LIVE_INSTALL: ${{ inputs.kind }}
+    # The lane of every job that touches the test install of one kind, the checks of main among them: each waits its turn, and none takes another's place.
+    concurrency:
+      group: live-checks-${{ inputs.kind }}
+      cancel-in-progress: false
+      queue: max
+    steps:
+      # The older build is a commit or a tag of the history, so the whole history is fetched.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      # The same asking as the job's `if:`, read from the file of the event: it stops the job before any step is handed a secret.
+      - name: Refuse a run that may not reach a test account
+        run: bun packages/providers/cloudflare/scripts/upgrade/admit.ts
+      # No secret reaches this step: it installs the packages of a tree of the history and builds it.
+      - name: Put the older build in a folder, build it, and give this checkout a version above it
+        timeout-minutes: 10
+        run: bun run --silent --cwd packages/providers/cloudflare live:upgrade-builds "$RUNNER_TEMP/poplin-older"
+      - name: Build the Worker bundle
+        run: bun run --cwd packages/providers/cloudflare build
+      - name: Upgrade an install of the older build to this run's
+        timeout-minutes: 40
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+        run: bun run --silent --cwd packages/providers/cloudflare live:upgrade "$RUNNER_TEMP/poplin-older"

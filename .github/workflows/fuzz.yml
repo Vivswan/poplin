@@ -1,0 +1,93 @@
+# The fuzz run: every target under tests/fuzz in a job of its own, side by side, each for three minutes, all under one seed.
+#
+#   checks.yml          every pull request and push    a new random seed
+#   nightly-fuzz.yml    every night, and by hand       a new random seed, or the one typed in
+#   release-gate.yml    the pull request of a release  a new random seed
+#
+# The seed is this file's one input: each caller passes it, blank for a new one.
+#
+#   job plan    lists the targets from the folder and says the seed (tests/fuzz/plan.ts)
+#   job target  one for each target: `bun test` of that file, with the budget and the seed
+#
+# A failing property prints its replay line, with FUZZ_SEED and FUZZ_PATH, and its report is kept as an artifact named
+# `<reports>-<attempt>-<target>`, where `reports` is `fuzz-failures` unless the caller names another start.
+# It runs on GitHub's runners alone: no secret and no account.
+
+name: Fuzz
+
+on:
+  workflow_call:
+    inputs:
+      seed:
+        description: The seed of every target (blank for a new random one)
+        type: string
+        default: ""
+      iterations:
+        description: The most runs of each property (blank for as many as the time allows)
+        type: string
+        default: ""
+      reports:
+        description: How the name of each artifact of failure reports starts; two calls in one run each name their own
+        type: string
+        default: fuzz-failures
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+      seed: ${{ steps.plan.outputs.seed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      # The script imports nothing a package holds, so nothing is installed.
+      - name: List the targets and say the seed
+        id: plan
+        env:
+          FUZZ_SEED: ${{ inputs.seed }}
+        run: bun tests/fuzz/plan.ts
+
+  target:
+    name: ${{ matrix.target }}
+    needs: [plan]
+    runs-on: ubuntu-latest
+    # Above the `timeout` of the step, so a hang ends as a failure with its lines, never as a cancelled job.
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # FUZZ_TARGET_SECONDS is the budget of this one file, which tests/fuzz/config.ts shares between its properties.
+      # A blank FUZZ_RUNS leaves the time as the only limit.
+      - name: Fuzz
+        env:
+          TARGET: ${{ matrix.target }}
+          FUZZ_SEED: ${{ needs.plan.outputs.seed }}
+          FUZZ_RUNS: ${{ inputs.iterations }}
+          FUZZ_TARGET_SECONDS: "180"
+          FUZZ_REPORTS: .fuzz-failures
+        run: timeout 6m bun test "tests/fuzz/$TARGET.fuzz.test.ts"
+      # A job that hits timeout-minutes is cancelled, not failed, and its later steps still run under this condition.
+      - name: Upload failure artifacts
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.reports }}-${{ github.run_attempt }}-${{ matrix.target }}
+          path: .fuzz-failures/
+          # Hidden paths are skipped by default since upload-artifact v4.4.
+          include-hidden-files: true
+          if-no-files-found: ignore

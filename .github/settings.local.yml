@@ -38,7 +38,10 @@ repository:
 #     target: branch
 #     enforcement: active
 
-# The environments for the tests that run against a real Cloudflare account: only a job in a main run that names one can read its secrets.
+# The environments for the tests that run against a real Cloudflare account: only a job that names one can read its secrets, in a run of main or
+# of a pull request from a branch of this repository. GitHub judges a run by its ref, which is `refs/pull/<number>/merge` for every pull request,
+# so no rule can name the release's branch alone; the job that upgrades a test install stands down outside the pull request of a release (live-upgrade.yml).
+# A pull request from a fork reads no secret.
 # Each of the two test accounts has its own, and the secrets carry the same names in both.
 # The secrets are set on GitHub, never declared here: an absent `secrets` key leaves live secrets untouched.
 environments:
@@ -48,6 +51,7 @@ environments:
       custom_branch_policies: true
     deployment_branch_policies:
       - name: main
+      - name: refs/pull/*/merge
     # Declared off, not omitted: a reviewer rule or a wait timer added by hand would park every run, and only a declared value heals it.
     reviewers: []
     wait_timer: 0
@@ -58,6 +62,7 @@ environments:
       custom_branch_policies: true
     deployment_branch_policies:
       - name: main
+      - name: refs/pull/*/merge
     # Declared off, not omitted: a reviewer rule or a wait timer added by hand would park every run, and only a declared value heals it.
     reviewers: []
     wait_timer: 0
