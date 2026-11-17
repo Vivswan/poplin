@@ -3,6 +3,7 @@
 //   fill      three sites, one of each access, the private one with a second version; one setting changed; one more user
 //   read      each site as its holder is shown it, as a stranger is answered at its address, and by the files of its every version; every setting; the log
 //   compare   what differs, in words that hold no name, no address, and no value of a setting
+//   publish   one more site once this commit's build runs: shown to its holder, answered to a stranger as the site of its access from before, and stored with its files
 //
 // The older build's command line fills and reads first, and this commit's reads after: a field the older answer held must be in the newer one, unchanged.
 
@@ -24,6 +25,9 @@ const CHANGED = { key: "versions_kept", value: 5 } as const;
 
 /** The user an upgrade adds: an address nobody can log in with. */
 const USER = "upgrade-check@example.com";
+
+/** The site an upgrade publishes after the update: open to whoever has its link, as one of the sites from before is. */
+const AFTER = { access: "unlisted", text: "<p>a page from after the update</p>" } as const;
 
 /** The entry of the log a start of an update writes. */
 const UPDATE_ENTRY = "update_started";
@@ -155,6 +159,30 @@ export async function readInstall(desk: Desk, token: string, sites: readonly Liv
   if (answered.status !== 200 || !log.success) throw new Error(`the log was answered with status ${answered.status}, to the token made before the update`);
 
   return { sites: read, listed, settings, log: log.output.entries };
+}
+
+/**
+ * Publish one more site, and ask for it as its holder, as a stranger, and by a backup of it.
+ *
+ * @param before - the install as it was read before the update: a stranger is answered at the new site as at the site of the same access from then
+ * @returns the site, and what is wrong with it: none for one that is shown as itself, answered, and stored with the page it was published with
+ * @throws {Error} the publish or the backup failed
+ */
+export async function publishAfter(desk: Desk, before: Reading): Promise<{ readonly site: LiveSite; readonly faults: readonly string[] }> {
+  const site = await desk.publish(AFTER);
+  const shown = await desk.cli("show", site.id);
+  const visit = await visitOf(desk, site.url);
+  const like = before.sites.find((read) => read.access === AFTER.access)?.visit;
+  const page = digestOf(new TextEncoder().encode(AFTER.text));
+  const told = v.safeParse(SHOWN, shown.value);
+  const faults = [
+    ...(shown.code === 0 && told.success && told.output.site.id === site.id ? [] : [`poplin show exited ${shown.code}, or showed another site`]),
+    ...(visit.status === like?.status && visit.type === like.type ? [] : [`a stranger is answered ${visit.status} at it, and ${like?.status ?? "nothing"} at the ${AFTER.access} site from before the update, or another media type`]),
+    ...(visit.digest === undefined || visit.digest === page ? [] : ["a stranger is answered another page than the one published"]),
+    ...(Object.values(await storedOf(desk, site)).includes(page) ? [] : ["a backup of it does not hold the page published"]),
+  ];
+
+  return { site, faults };
 }
 
 /** What differs between the sites of two readings: one line a site, by its place and its access. */

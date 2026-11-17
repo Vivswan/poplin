@@ -68,7 +68,7 @@ jobs:
       - name: Refuse a run that may not reach a test account
         run: bun packages/providers/cloudflare/scripts/upgrade/admit.ts
       # No secret reaches this step: it installs the packages of a tree of the history and builds it.
-      - name: Put the older build in a folder, build it, and give this checkout a version above it
+      - name: Put the older build in a folder, build it, and give this checkout a version above it and the later step
         timeout-minutes: 10
         run: bun run --silent --cwd packages/providers/cloudflare live:upgrade-builds "$RUNNER_TEMP/poplin-older"
       - name: Build the Worker bundle

@@ -12,6 +12,7 @@ import { generateSQLiteDrizzleJson, generateSQLiteMigration } from "drizzle-kit/
 
 import * as declared from "../src/database/schema";
 import { STEPS } from "../src/migrations/registry";
+import { stepFile, stepFileName } from "./step-file";
 
 /** The folder of the steps, where a draft is written. */
 const STEPS_FOLDER = join(import.meta.dir, "../src/migrations");
@@ -25,6 +26,9 @@ const SCHEMA_IN_GIT = "packages/core/src/database/schema.ts";
 /** How a rebuilt table shows in a draft: its copy under a new name. */
 const REBUILT = "__new_";
 
+/** What a draft that rebuilds a table says under its first line. */
+const REBUILT_NOTE = "// This draft rebuilds a table. A rebuilt table loses its triggers, STRICT, and WITHOUT ROWID, and dropping it removes the rows that refer to it: write this step by hand.";
+
 /** The schema the last commit declares, which the steps of that commit build. */
 async function declaredAtLastCommit(): Promise<Record<string, unknown>> {
   const copy = join(SCHEMA_FOLDER, `schema.last-commit.${process.pid}.ts`);
@@ -37,38 +41,14 @@ async function declaredAtLastCommit(): Promise<Record<string, unknown>> {
   }
 }
 
-/** The file of a step, as text. */
-function stepFile(number: number, description: string, statements: readonly string[]): string {
-  const lines = statements.map((statement) => `    ${JSON.stringify(statement.replace(/;\s*$/, ""))},`);
-  const warning = statements.some((statement) => statement.includes(REBUILT))
-    ? ["// This draft rebuilds a table. A rebuilt table loses its triggers, STRICT, and WITHOUT ROWID, and dropping it removes the rows that refer to it: write this step by hand."]
-    : [];
-
-  return [
-    `// Step ${number}: ${description}.`,
-    ...warning,
-    "",
-    'import type { Step } from "./migrate";',
-    "",
-    `/** ${description[0]?.toUpperCase()}${description.slice(1)}. */`,
-    `export const STEP_${number}: Step = {`,
-    `  number: ${number},`,
-    `  description: ${JSON.stringify(description)},`,
-    "  statements: [",
-    ...lines,
-    "  ],",
-    "};",
-    "",
-  ].join("\n");
-}
-
 const description = process.argv[2];
 if (description === undefined) throw new Error("say what the step changes, in a few words");
 
-const statements = await generateSQLiteMigration(await generateSQLiteDrizzleJson(await declaredAtLastCommit()), await generateSQLiteDrizzleJson(declared));
-if (statements.length === 0) throw new Error("the schema is declared as the last commit declares it: there is nothing to draft");
+const drafted = await generateSQLiteMigration(await generateSQLiteDrizzleJson(await declaredAtLastCommit()), await generateSQLiteDrizzleJson(declared));
+if (drafted.length === 0) throw new Error("the schema is declared as the last commit declares it: there is nothing to draft");
 
-const number = STEPS.length + 1;
-const name = `${String(number).padStart(4, "0")}-${description.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ts`;
-writeFileSync(join(STEPS_FOLDER, name), stepFile(number, description, statements), { flag: "wx" });
+const statements = drafted.map((statement) => statement.replace(/;\s*$/, ""));
+const step = { number: STEPS.length + 1, description, statements };
+const name = stepFileName(step);
+writeFileSync(join(STEPS_FOLDER, name), stepFile(step, statements.some((statement) => statement.includes(REBUILT)) ? [REBUILT_NOTE] : []), { flag: "wx" });
 console.log(`drafted ${name}: ${statements.length} statement(s). Read it, then list it in registry.ts`);

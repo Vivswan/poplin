@@ -62,7 +62,7 @@ async function readDatabase(reader: SqlDriver): Promise<Standing> {
 }
 
 /** Read something of the database through Cloudflare's API, by the driver the product's own commands read it with. A call Cloudflare did not take, or a statement it did not run, is answered as the stop it is. */
-async function asked<Read>(run: Run, databaseId: string, reading: (reader: SqlDriver) => Promise<Read>): Promise<Read | Stop> {
+export async function askDatabase<Read>(run: Run, databaseId: string, reading: (reader: SqlDriver) => Promise<Read>): Promise<Read | Stop> {
   try {
     return await reading(apiDriver(run.connection, { accountId: run.accountId, databaseId }));
   } catch (error) {
@@ -78,7 +78,7 @@ async function asked<Read>(run: Run, databaseId: string, reading: (reader: SqlDr
  * @returns `false` for a database that is behind, or that this commit's Worker would refuse; or why Cloudflare did not answer
  */
 export async function holdsOwnSchema(run: Run, databaseId: string): Promise<boolean | Stop> {
-  const found = await asked(run, databaseId, readDatabase);
+  const found = await askDatabase(run, databaseId, readDatabase);
 
   return isStop(found) ? found : found.drift === undefined && found.current;
 }
@@ -89,7 +89,7 @@ export async function holdsOwnSchema(run: Run, databaseId: string): Promise<bool
  * @returns the moment, in milliseconds since the epoch; `undefined` for a database no sweep has asked from; or why Cloudflare did not answer
  */
 export function lastAsked(run: Run, databaseId: string): Promise<number | undefined | Stop> {
-  return asked(run, databaseId, async (reader) => (await new SqlDatabase(reader).readUpdateCheck())?.checked_at);
+  return askDatabase(run, databaseId, async (reader) => (await new SqlDatabase(reader).readUpdateCheck())?.checked_at);
 }
 
 /**
@@ -128,7 +128,7 @@ export async function readStanding(run: Run): Promise<Standing | Stop> {
 
   if (typeof database !== "string") return database;
 
-  const found = await asked(run, database, readDatabase);
+  const found = await askDatabase(run, database, readDatabase);
   if (isStop(found)) return found;
 
   return found.drift === undefined ? found : { drift: `a database that held ${found.drift}`, current: false };

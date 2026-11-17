@@ -5,6 +5,7 @@
 //   -> the older build's own start of an update, fed this commit's build as a release -> the install says this commit's version, twelve answers in a row
 //   -> one line a check -> the settings put back, and the sites, the token's row, and the older build's folder removed
 //
+// This commit's build holds one schema step more than the product: the later step older-build.ts gave the checkout. The Worker applies it to the filled database as it starts, and the checks read what it left.
 // The start runs in this process, with the run's token where the kept key stands: a deployed Worker reads releases from the project's website alone, which names no build of a commit.
 // Every request to the install passes the meters of bucket writes and of rows. No line names an address, a site, a login, or the value of a setting.
 // Argument: the folder older-build.ts put the older build in.
@@ -20,12 +21,16 @@ import { CEILINGS, meterBucket } from "../live/budget";
 import { command, type Ends, type Published, placeWords, publish, reachOf, readBuilt } from "../live/commands";
 import { meterRows, ROW_CEILINGS } from "../live/rows";
 import { sendLive } from "../live/send";
-import { holdsOwnSchema, readStanding } from "../live/shape";
+import { readStanding } from "../live/shape";
 import { refuseOtherAccount } from "../live/test-account";
 import { findDatabase, removeTokens } from "../live/tokens";
 import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, type Stop } from "../live/util";
+import type { Step } from "../../../../core/src/migrations/migrate";
+import { STEPS } from "../../../../core/src/migrations/registry";
+import { readLeft } from "./later-left";
+import { isLaterStep, laterRows, stepLabel } from "./later-step";
 import { type Older, openOlder } from "./older";
-import { type Desk, fill, logFaults, putBack, type Reading, readInstall, settingFaults, settingsOf, siteFaults } from "./record";
+import { type Desk, fill, logFaults, publishAfter, putBack, type Reading, readInstall, settingFaults, settingsOf, siteFaults } from "./record";
 
 /** The login an install with no login of a person starts with: nobody can log in as it. */
 const NOBODY = "owner@example.com";
@@ -45,6 +50,9 @@ const UNTOUCHED: ReadonlySet<string> = new Set(["leave", "leave-out"]);
 /** How often a repair is asked what it would change, and the pause between two askings, in milliseconds: the login list follows the settings that were put back within seconds, by the install's own key. */
 const REPAIR_ASKS = { times: 4, everyMs: 10_000 } as const;
 
+/** Why an upgrade stops before it removes anything, where its build is the product alone: it would apply no step, and prove less than it says. */
+const NO_LATER_STEP = "this commit's build holds no later step: `live:upgrade-builds` gives the checkout one, before the Worker is built";
+
 /** What an upgrade is made with, beside the account. */
 export interface Upgrade {
   /** The variables the kind of install and the login are read from. */
@@ -55,6 +63,9 @@ export interface Upgrade {
 
   /** This commit's build as a release the project published. */
   readonly release: Published;
+
+  /** Every schema step of this commit's build, in order: the product's, then the later step. */
+  readonly steps: readonly Step[];
 
   /** What this commit's commands and the older build's update reach the world through, and rest by. */
   readonly ends: Ends;
@@ -83,9 +94,33 @@ interface Standing {
 
   /** The origin the install's API answers on. */
   readonly server: string;
+}
 
-  /** Whether the older build's database held every schema step of this commit, so the update changes no table. */
-  readonly sameSchema: boolean;
+/** What an upgrade notes as it goes, for the lines after its checks. */
+interface Noted {
+  /** What of the upgrade's own could not be taken off the install again. */
+  readonly left: string[];
+
+  /** The rows the later step costs the run, by the sites the install listed before the update: what the Worker wrote as it applied it, and what its index and table add to the requests after; none before the install took it. */
+  stepRows: number;
+}
+
+/** What the install was asked after the update, beside the reading of what it held before. */
+interface Asked {
+  /** The install as the older build's command line read it. */
+  readonly before: Reading;
+
+  /** The install as this commit's command line reads it. */
+  readonly after: Reading;
+
+  /** What sends a request to the install. */
+  readonly fetch: Fetch;
+
+  /** What the later step left on the database. */
+  readonly left: Exclude<Awaited<ReturnType<typeof readLeft>>, Stop>;
+
+  /** What is wrong with the site published after the update. */
+  readonly published: readonly string[];
 }
 
 /** Where an install answers, as the live checks name it. */
@@ -149,10 +184,10 @@ async function makeOlder(run: Run, given: Upgrade): Promise<Standing | Stop> {
 
   run.say(`Older install: made by the older build's own poplin install, which says the version ${given.older.version}`);
 
-  return { found, database, token, server: `https://${found.adminHost}`, sameSchema: made.current };
+  return { found, database, token, server: `https://${found.adminHost}` };
 }
 
-/** Start the update with the older build's own code, and wait until the install says this commit's version on a database at this commit's schema. */
+/** Start the update with the older build's own code, and wait until the install says this commit's version: a Worker answers only once its database took every step of its build. */
 async function takeUpdate(run: Run, given: Upgrade, standing: Standing, fetch: Fetch): Promise<Stop | undefined> {
   const holder = parseLogin(liveLogin(run, given.env) ?? NOBODY);
   if (!holder.ok) return { kind: "failed", what: "the login of the run is no email address" };
@@ -166,12 +201,8 @@ async function takeUpdate(run: Run, given: Upgrade, standing: Standing, fetch: F
 
   run.say(`Update: the older build took ${took.to} over ${took.from}, by its own start of an update`);
   const arrived = await awaitVersion(given.release.version, async () => (await stateOf(fetch, standing))?.version, given.ends);
-  if (arrived !== undefined) return arrived;
 
-  const holds = await holdsOwnSchema(run, standing.database);
-  if (holds === true) return undefined;
-
-  return holds === false ? { kind: "failed", what: "the install says this commit's version, and its database does not hold this commit's schema" } : holds;
+  return arrived;
 }
 
 /** Ask what a repair would change, and answer the pieces it would touch, each with what it would do. */
@@ -192,22 +223,19 @@ async function repairFaults(run: Run, given: Upgrade, found: Found): Promise<str
   }
 }
 
-/** What is wrong with the way back the install offers. */
-function backFaults(state: v.InferOutput<typeof STATE> | undefined, wanted: string | undefined): string[] {
+/** What is wrong with the way back the install offers: an update that changed the database is never gone back from, so a version it offers is the fault. */
+function backFaults(state: v.InferOutput<typeof STATE> | undefined): string[] {
   if (state === undefined) return ["the install did not say which version it can go back to"];
 
-  const to = state.back?.to;
-
-  return to === wanted ? [] : [`the install offers ${to ?? "no version"}, where ${wanted ?? "none"} is the way back`];
+  return state.back === null ? [] : [`the install offers ${state.back.to}, where the update changed the database and there is no way back`];
 }
 
 /** Every check of the install under this commit's build, against what was written down under the older one. */
-async function checksOf(run: Run, given: Upgrade, standing: Standing, read: { readonly before: Reading; readonly after: Reading; readonly fetch: Fetch }): Promise<Checked[]> {
+async function checksOf(run: Run, given: Upgrade, standing: Standing, read: Asked): Promise<Checked[]> {
   const { before, after } = read;
   const [from, to] = [given.older.version, given.release.version];
   const state = await stateOf(read.fetch, standing);
-  const wanted = standing.sameSchema ? from : undefined;
-  const offered = standing.sameSchema ? `offered, to ${from}` : "not offered: the update changed the database, which the version before cannot read";
+  const step = stepLabel(given.steps.length);
 
   return [
     { check: "Version", holds: `runs ${to}, and ran ${from}`, faults: [] },
@@ -215,9 +243,11 @@ async function checksOf(run: Run, given: Upgrade, standing: Standing, read: { re
     { check: "Token", holds: "the one made before the update read every site, the settings, and the log", faults: [] },
     { check: "Settings", holds: `${Object.keys(before.settings).length} as before the update, the changed one and the added user among them`, faults: settingFaults(before, after) },
     { check: "Activity", holds: `the ${before.log.length} entries from before the update, and the entry of the update`, faults: logFaults(before, after, { from, to }) },
-    { check: "Database", holds: "every schema step of this commit, as this commit applies them", faults: [] },
+    { check: "Database", holds: `the ${given.steps.length} schema steps of this commit's build are marked as it applies them, step ${step} among them`, faults: read.left.marks },
+    { check: "Later step", holds: `the table, the column, and the index of step ${step} are there, and the ${before.sites.length} sites hold what it filled from them`, faults: read.left.made },
+    { check: "Publish", holds: "a site published after the update is shown to its holder, answered to a stranger as the one from before, and stored with its files", faults: read.published },
     { check: "Doctor", holds: "a repair would change nothing, once the two settings were put back", faults: await repairFaults(run, given, standing.found) },
-    { check: "Going back", holds: offered, faults: backFaults(state, wanted) },
+    { check: "Going back", holds: "not offered: the update changed the database, which the version before cannot read", faults: backFaults(state) },
   ];
 }
 
@@ -229,9 +259,9 @@ function closing<Opened extends { readonly close: () => void }>(opened: Opened):
 /**
  * Fill the older install, update it, and check it; the benches are closed, the settings put back, and the sites removed whatever came of it.
  *
- * @param left - told what of the upgrade's own could not be taken off the install again
+ * @param noted - told the rows the later step wrote, and what of the upgrade's own could not be taken off the install again
  */
-async function fillAndCheck(run: Run, given: Upgrade, standing: Standing, fetch: Fetch, left: string[]): Promise<Checked[] | Stop> {
+async function fillAndCheck(run: Run, given: Upgrade, standing: Standing, fetch: Fetch, noted: Noted): Promise<Checked[] | Stop> {
   const parts = { token: standing.token, run: run.id, missing: {}, fetch, pause: given.ends.sleep, now: given.ends.reach.now, say: run.say, manyFiles: 0, largeCopy: 0 };
   using older = closing(given.older.openBench({ ...parts, addresses: given.older.liveAddresses(installOf(standing.found)) }));
   using own = closing(openBench({ ...parts, addresses: liveAddresses(installOf(standing.found)) }));
@@ -247,32 +277,41 @@ async function fillAndCheck(run: Run, given: Upgrade, standing: Standing, fetch:
     const stopped = await takeUpdate(run, given, standing, fetch);
     if (stopped !== undefined) return stopped;
 
+    noted.stepRows = laterRows(before.listed);
     const after = await readInstall(own.bench, standing.token, sites);
     await putBack(own.bench, changed);
     changed = undefined;
+    const published = await publishAfter(own.bench, before);
+    const left = await readLeft(run, standing.database, { steps: given.steps, before, after: published.site });
+    if (isStop(left)) return left;
 
-    return await checksOf(run, given, standing, { before, after, fetch });
+    return await checksOf(run, given, standing, { before, after, fetch, left, published: published.faults });
   } finally {
-    if (changed !== undefined) await putBack(own.bench, changed).catch(() => void left.push("the two settings were not put back"));
+    if (changed !== undefined) await putBack(own.bench, changed).catch(() => void noted.left.push("the two settings were not put back"));
 
-    await own.sweep().catch(() => void left.push("the sites were not removed"));
+    await own.sweep().catch(() => void noted.left.push("the sites were not removed"));
   }
 }
 
-/** Every step in order: the checks, or what stopped the run before them. What the upgrade could not take off the install again fails a check of its own. */
+/** Every step in order: the checks, or what stopped the run before them. What the upgrade could not take off the install again fails a check of its own. A build without the later step stops it first. */
 async function upgrade(run: Run, given: Upgrade): Promise<Checked[] | Stop> {
+  if (!isLaterStep(given.steps.at(-1))) return { kind: "failed", what: NO_LATER_STEP };
+
   const standing = await makeOlder(run, given);
   if (isStop(standing)) return standing;
 
   const bucket = meterBucket(given.fetch, CEILINGS.upgrade);
   const rows = meterRows(bucket.fetch, ROW_CEILINGS.upgrade);
-  const left: string[] = [];
-  const checked = await fillAndCheck(run, given, standing, rows.fetch, left).catch((error: unknown): Stop => ({ kind: "failed", what: error instanceof Error ? error.message : "a step threw" }));
+  const noted: Noted = { left: [], stepRows: 0 };
+  const { left } = noted;
+  const checked = await fillAndCheck(run, given, standing, rows.fetch, noted).catch((error: unknown): Stop => ({ kind: "failed", what: error instanceof Error ? error.message : "a step threw" }));
   if ((await removeTokens(run, standing.database, Date.now())) !== undefined) left.push("the row of the token was not removed");
 
+  // The Worker wrote the step's rows as it started, and its index and table add rows to the requests after it, past the price of every request: they are counted here, with the requests'.
+  const written = rows.written() + noted.stepRows;
   run.say(`Bucket writes and lists the upgrade asked for: ${bucket.spent()} of at most ${CEILINGS.upgrade}`);
-  run.say(`Rows written this run: ${rows.written()} of at most ${ROW_CEILINGS.upgrade}`);
-  const held = bucket.stopped() ?? rows.stopped();
+  run.say(`Rows written this run: ${written} of at most ${ROW_CEILINGS.upgrade}, ${noted.stepRows} of them for the later step`);
+  const held = bucket.stopped() ?? rows.stopped() ?? (written > ROW_CEILINGS.upgrade ? `passed its ceiling of ${ROW_CEILINGS.upgrade} rows written to the database` : undefined);
   if (held !== undefined) return { kind: "failed", what: `the upgrade ${held}` };
 
   if (!isStop(checked)) return [...checked, { check: "Cleanup", holds: "the two settings put back, the sites and the token's row removed", faults: left }];
@@ -310,7 +349,7 @@ if (import.meta.main) {
   try {
     const release = await publish(await readBuilt());
     const older = await openOlder(folder, process.env);
-    process.exitCode = await upgradeInstall(openRun(), { env: process.env, older, release, ends: { reach: reachOf(release, fetch), sleep: Bun.sleep }, fetch: sendLive });
+    process.exitCode = await upgradeInstall(openRun(), { env: process.env, older, release, steps: STEPS, ends: { reach: reachOf(release, fetch), sleep: Bun.sleep }, fetch: sendLive });
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

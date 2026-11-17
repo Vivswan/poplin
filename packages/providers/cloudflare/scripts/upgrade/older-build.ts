@@ -1,8 +1,9 @@
-// The older build a live upgrade starts from, put in a folder of its own and built there, and this checkout told a version above it.
+// The older build a live upgrade starts from, put in a folder of its own and built there, and this checkout told a version above it and given one schema step more.
 //
 //   the older build   the last release among the ancestors of the checkout; before the first release, the stand-in commit below
 //   its folder        `git archive` of it, with its own lockfile installed and its own Worker built
 //   this checkout     packages/cli/package.json told one patch above the older build's version, unless it is above it already
+//                     and the later step of later-step.ts written among the product's steps, so the update has a step to apply
 //
 // An install takes a release above its own version alone, and a commit of main says the version of the last release, as the older build does.
 // The stand-in is on npm as `0.1.0-main.767.20261117.gea52312`: a pre-release with main's first schema step and settings row, so main takes over the install it makes.
@@ -15,7 +16,9 @@ import { isPlainVersion } from "@poplin/core/src/records/update";
 import gt from "semver/functions/gt";
 import inc from "semver/functions/inc";
 
+import type { Step } from "../../../../core/src/migrations/migrate";
 import { lastRelease } from "../../../../../tests/upgrade/support/trees";
+import { addLaterStep, stepLabel } from "./later-step";
 
 /** The commit of main that stands in for a release while none is cut. It moves forward whenever the first schema step or a stored shape is edited in place; once a release has a tag, the newest tag is taken and this is read no more. */
 const STAND_IN = "ea52312a4e298d36aa84ca1a22275eb4d51124ff";
@@ -63,14 +66,14 @@ function tellVersion(tree: string, from: string, to: string): void {
 }
 
 /**
- * Put the older build in a folder, build its Worker there, and tell this checkout a version above it.
+ * Put the older build in a folder, build its Worker there, and tell this checkout a version above it and one schema step more.
  *
  * @param ref - the tag or the commit the older build is
  * @param folder - where it goes; removed again when a step fails
- * @returns the version the older build says, and the one this checkout says now
+ * @returns the version the older build says, the one this checkout says now, and the later step this checkout holds now
  * @throws {Error} a command failed, with what it said
  */
-export function prepareBuilds(root: string, ref: string, folder: string, run: RunCommand): { readonly older: string; readonly own: string } {
+export function prepareBuilds(root: string, ref: string, folder: string, run: RunCommand): { readonly older: string; readonly own: string; readonly step: Step } {
   if (existsSync(folder)) throw new Error(`${folder} is there already`);
 
   mkdirSync(folder, { recursive: true });
@@ -91,7 +94,7 @@ export function prepareBuilds(root: string, ref: string, folder: string, run: Ru
   const own = versionAbove(said, older);
   if (own !== said) tellVersion(root, said, own);
 
-  return { older, own };
+  return { older, own, step: addLaterStep(root) };
 }
 
 /** Run one command, with what it prints on this process's own. */
@@ -105,7 +108,7 @@ if (import.meta.main) {
   if (folder === undefined) throw new Error("name the folder the older build goes in");
 
   const ref = lastRelease(ROOT) ?? STAND_IN;
-  const { older, own } = prepareBuilds(ROOT, ref, folder, runCommand);
+  const { older, own, step } = prepareBuilds(ROOT, ref, folder, runCommand);
   console.log(`Older build: ${ref}, which says the version ${older}`);
-  console.log(`This commit's build: published for the upgrade as ${own}`);
+  console.log(`This commit's build: published for the upgrade as ${own}, with step ${stepLabel(step.number)} (${step.description}) for the upgrade alone`);
 }
