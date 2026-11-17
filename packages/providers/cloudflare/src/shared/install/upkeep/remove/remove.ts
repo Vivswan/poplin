@@ -44,6 +44,7 @@ import { listBuckets, planBucket } from "../../pieces/bucket/bucket";
 import { type DatabaseHolder, holderWords, readHolder, syncDatabase } from "../../pieces/database/database";
 import { type ListedBinding, readWorker } from "../../pieces/variables/variables";
 import { applySteps, type Mode, type Synced } from "../../sync";
+import { OUTLASTED } from "../../first/waits";
 
 /** The name of the install's Worker. */
 const SCRIPT = INSTALL_OBJECTS.worker;
@@ -147,7 +148,7 @@ function note(work: Work, row: RemovalRow): boolean {
 }
 
 /**
- * The row of a kind whose list or removal failed: blocked where the token lacks its permission, which the row names.
+ * The row of a kind whose list or removal failed: blocked where the token lacks its permission, which the row names, and where Cloudflare still asked to wait once the call's waits were spent, which a rerun goes on from.
  *
  * @param before - what went before the failure, as the row says it
  * @param unlisted - whether it is the list of a kind an install makes only with an optional permission that failed: a token that may not read it is then no failure, and the kind stays
@@ -158,6 +159,8 @@ function failed(work: Work, object: Kind, failure: CloudflareFailure, before: re
   if (lacksRight(failure) && unlisted) return note(work, { object, state: "stay", detail: `${WORDS.optional} ${right}`, right });
 
   if (lacksRight(failure)) return note(work, { object, state: "block", detail: `${went}${WORDS.lacks} ${right}`, right });
+
+  if (failure.failure === "rate-limited") return note(work, { object, state: "block", detail: `${went}${OUTLASTED}` });
 
   return note(work, { object, state: "fail", detail: `${went}${failureWords(failure)}` });
 }

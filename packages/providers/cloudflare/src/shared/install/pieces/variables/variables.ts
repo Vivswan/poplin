@@ -212,6 +212,8 @@ export async function syncVariables(connection: Connection, worker: OwnWorker, d
   const text = JSON.stringify({ bindings: [...kept, ...sent], ...(release === undefined ? {} : { annotations: taggedAs(release, MADE) }) });
 
   // Cloudflare reads the settings from one form field of JSON text, so the text is handed over as the request's body: given as an object, the SDK spreads it over a field per key.
-  const changed = await callCloudflare(connection, (api) => new BaseScriptAndVersionSettings(api).edit(worker.script, { account_id: worker.accountId }, { body: { settings: text } }));
+  // The change names every binding as it was read, so a connection's rider does not make it again after a wait: a binding added meanwhile would go.
+  const unridden: Connection = { ...connection, ride: undefined };
+  const changed = await callCloudflare(unridden, (api) => new BaseScriptAndVersionSettings(api).edit(worker.script, { account_id: worker.accountId }, { body: { settings: text } }));
   return changed.ok ? { ok: true, report: reportOf(steps) } : { ...changed, ...unsent };
 }

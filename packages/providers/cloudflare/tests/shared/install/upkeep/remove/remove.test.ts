@@ -70,13 +70,15 @@ const NOTHING = { records: 0, routes: 0, rules: 0, rulesets: 0, applications: 0,
 /** A kind of install. */
 type Kind = keyof typeof KINDS;
 
-/** What one find and one removal left behind: what it came to and told on the way, what was found, and every call the removal sent, with the ones that are no read. */
+/** What one find and one removal left behind: what it came to and told on the way, what was found, every call the removal sent, with the ones that are no read, and each wait with its line. */
 interface Outcome {
   readonly done: Removed;
   readonly found: Found<Where, Place>["state"];
   readonly calls: number;
   readonly writes: string[];
   readonly said: string[];
+  readonly slept: number[];
+  readonly told: string[];
 }
 
 /** Read a place from one option a test wrote by hand. */
@@ -133,7 +135,7 @@ async function removed(account: Account, kind: Kind, removal: Removal, where: Wh
   const sent = world.asked.slice(sought);
   const writes = sent.filter((entry) => entry.method !== "GET" && !entry.path.endsWith("/query")).map((entry) => `${entry.method} ${entry.path}`);
 
-  return { done, found: found.state, calls: sent.length, writes, said };
+  return { done, found: found.state, calls: sent.length, writes, said, slept: world.slept, told: world.told };
 }
 
 /** What of poplin's an account still holds, by kind of object. */
@@ -281,6 +283,44 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     const again = await removed(account, kind, applyOf(`poplin@${ACCOUNT}`));
 
     expect([again.found, shown(again.done)[0], again.done.ok && again.done.ready, left(account)]).toEqual(["none", "Workflow | remove | poplin-jobs", true, NOTHING]);
+  });
+
+  // Drift: every file is one call, so a bucket of many files meets Cloudflare's limit of calls. A removal that stopped at the first busy answer left the bucket, and a person had to run it again by hand.
+  test("a removal Cloudflare asks to wait while it empties the bucket waits what each answer names, says so, and removes everything", async () => {
+    const account = await installedAccount(kind, { refuse: `DELETE /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects/*`, refuseAs: { status: 429, code: 971 }, refuseTimes: 3, refuseAfter: 20 });
+    const run = await removed(account, kind, applyOf(KINDS[kind].confirm));
+
+    expect([shown(run.done), run.done.ok && run.done.ready, left(account)]).toEqual([[...ROWS[kind]], true, NOTHING]);
+    expect([run.slept, run.told, run.writes.length]).toEqual([[20_000, 20_000, 20_000], Array.from({ length: 3 }, () => "Cloudflare asked to wait. Retrying in 20 s"), CALLS[kind].removals + 3]);
+  });
+
+  // Drift: a limit that does not lift must end the run, and as a row that says to run it again: a failed row reads as a fault of the install, and a rerun that did not go on from the files that are left would never finish a large bucket.
+  test("a removal Cloudflare asks to wait for longer than five minutes leaves the bucket's row blocked with what went before it, and the run after it removes the rest", async () => {
+    const account = await installedAccount(kind, { refuse: `DELETE /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects/b.css`, refuseAs: { status: 429, code: 971 }, refuseAfter: 90 });
+    const stopped = await removed(account, kind, applyOf(KINDS[kind].confirm));
+    const row = "R2 bucket | block | removed 1 of the 2 files; then: Cloudflare asked to wait for more than 5 minutes";
+
+    expect([shown(stopped.done).filter((line) => line.includes(" | block | ")), stopped.done.ok && [stopped.done.ready, stopped.done.blocked], stopped.slept]).toEqual([[row], [false, []], Array.from({ length: 5 }, () => 60_000)]);
+    expect(left(account)).toEqual({ ...NOTHING, buckets: 1, objects: 1 });
+
+    delete account.refuse;
+    const again = await removed(account, kind, applyOf("poplin-sites"));
+
+    expect([again.found, shown(again.done)[0], again.done.ok && again.done.ready, left(account)]).toEqual(["leftover", "R2 bucket | remove | poplin-sites (files: 1, 5 B; matched by its name alone) | 1 | 5", true, NOTHING]);
+  });
+
+  // Drift: the wait is on the command's clock so that Ctrl-C ends it. A removal that went on after the person stopped it would remove what they meant to keep.
+  test("a wait the person stopped ends the removal with that error, and no call is sent after it", async () => {
+    const account = await installedAccount(kind, { refuse: `DELETE /accounts/${ACCOUNT}/r2/buckets/poplin-sites/objects/*`, refuseAs: { status: 429, code: 971 }, refuseAfter: 20 });
+    const world = await worldOf(account);
+    const interrupted = new Error("the command was interrupted");
+    const reach = { ...world.reach, sleep: () => Promise.reject(interrupted) };
+    const found = removable(await installer.find(KEY, KINDS[kind].where, reach, "remove"));
+    const sought = world.asked.length;
+    const thrown = await installer.remove(found, KINDS[kind].where, applyOf(KINDS[kind].confirm), reach, () => undefined).catch((error: unknown) => error);
+    const sent = world.asked.slice(sought).filter((entry) => entry.path.includes("/objects/"));
+
+    expect([thrown, sent.length, world.asked.at(-1) === sent[0], left(account)]).toMatchObject([interrupted, 1, true, { buckets: 1, objects: 2 }]);
   });
 
   // Drift: a removal on the wrong account, or by a script gone wrong, is the worst a person can meet here. The typed name is the one proof, so it is compared where the removal is done.

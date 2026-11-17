@@ -258,6 +258,43 @@ describe("a run", () => {
     expect([ran.code, ran.out.slice(-2)]).toEqual([1, ["The run is incomplete: 1 resource type removed, 1 failed", "Next: rerun this command"]]);
     expect(jsonOf(json)).toMatchObject({ ok: false, run: "apply", ready: false, rows: [{ object: "Address", did: "remove" }, { object: "Program", did: "fail", detail: "refused with status 500" }] });
   });
+
+  // Drift: a provider that asks to wait is waited for on the command's clock. Told nowhere, the command looks hung; told on stdout, it breaks the one JSON value a program reads.
+  test("that the provider asks to wait says why on stderr in a pipe and with --json, on the progress line of a terminal, where the work shows again after it; the rows and the value are those of a run that never waited", async () => {
+    const line = `uninstall stand-in --no-place --confirm ${NAME}`;
+    const waits = (): Account => ({ ...installed(), rests: 20 });
+    const said = "Stand-In Host asked to wait. Retrying in 20 s";
+    const terminal = await runLine(line, waits(), { env: HELD, progress: true });
+    const [piped, json, plain] = [await runLine(line, waits(), { env: HELD }), await runLine(`${line} --json`, waits(), { env: HELD, progress: true }), await runLine(`${line} --json`, installed(), { env: HELD })];
+
+    expect([piped.code, piped.err, piped.slept, piped.out]).toEqual([0, [said], [20_000], [FOUND, ...REMOVED, ...DONE]]);
+    expect([terminal.code, terminal.err, terminal.worked.slice(1, 4)]).toEqual([0, [], ["Removing the install", `${said} (Ctrl-C cancels)`, "Removing the install"]]);
+    expect([json.code, json.err, json.worked, json.out]).toEqual([0, [said], [], plain.out]);
+  });
+
+  // Drift: a kind the provider asked to wait for longer than the run waits is no fault of the install and needs no permission: a row that read failed, or a next step that named a permission, would send a person the wrong way.
+  test("that a provider's wait outlasted shows the kind as blocked, counts it so, and names this command as the next step, with no permission to add", async () => {
+    const rows: RemovalRow[] = [
+      { object: "Program", state: "remove", detail: "poplin" },
+      { object: "Store", state: "block", detail: "removed 1 of the 2 files; then: Stand-In Host asked to wait for more than 5 minutes" },
+    ];
+    const ran = await runLine(`uninstall stand-in --no-place --confirm ${NAME}`, installed(() => removedOf(rows, { ready: false })), { env: HELD });
+    const json = jsonOf(await runLine(`uninstall stand-in --no-place --confirm ${NAME} --json`, installed(() => removedOf(rows, { ready: false })), { env: HELD }));
+
+    expect([ran.code, ran.out.slice(-3)]).toEqual([
+      1,
+      ["blocked    Store                 removed 1 of the 2 files; then: Stand-In Host asked to wait for more than 5 minutes", "The run is incomplete: 1 resource type removed, 1 blocked", "Next: rerun this command"],
+    ]);
+    expect([json.ok, json.blocked, json.next, (json.rows as unknown[])[1]]).toEqual([false, [], AGAIN, { object: "Store", did: "block", detail: rows[1]?.detail }]);
+  });
+
+  // Drift: the wait is the one place a removal stands still, so it is where a person presses Ctrl-C. A command that went on, or ended with a crash's words, would not say that a rerun goes on.
+  test("that the person stops during a wait ends as cancelled, says to rerun, and shows no row after the wait", async () => {
+    const account: Account = { ...installed(), rests: 20 };
+    const ran = await runLine(`uninstall stand-in --no-place --confirm ${NAME}`, account, { env: HELD, stops: true });
+
+    expect([ran.code, ran.err, ran.out, account.changes]).toEqual([1, ["Stand-In Host asked to wait. Retrying in 20 s", "Cancelled", "Rerun to resume"], [FOUND], 0]);
+  });
 });
 
 describe("what stops a removal before it starts", () => {

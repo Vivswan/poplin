@@ -30,6 +30,7 @@ import { workflowNameOf } from "../../jobs/workflow-name";
 import type { DomainLayout } from "../../../with-domain/layout";
 import { type ListedBinding, readSettled } from "../pieces/variables/variables";
 import { readStartedPlace } from "../kind/started-place";
+import { riderOf } from "./waits";
 import { type BoundInstall, readInstallBinding } from "../kind/zone-binding";
 
 /** The name of the install's Worker. */
@@ -356,7 +357,7 @@ async function standing(place: Place, started: boolean, rights: Rights): Promise
  * @returns what is there, as one value; a token that is refused or shows no such domain, an install that was started for another place, and an account whose storage is off or whose token lacks a needed permission, are states of their own
  */
 export async function findInstall(token: Token, where: Where, reach: Reach, rights: Rights): Promise<Found<Where, Place>> {
-  const connection: Connection = { key: token, fetch: reach.fetch, sleep: reach.sleep };
+  const connection: Connection = { key: token, fetch: reach.fetch, sleep: reach.sleep, ride: riderOf(reach.sleep) };
   const accountId = await accountOf(connection, where);
   if (typeof accountId !== "string") return accountId;
 

@@ -107,7 +107,7 @@ A rule set is Cloudflare's holder for rules of one kind. One that poplin made go
 | `unchanged`                  | not removed by the command: the row says why, or where it is. With `--keep-data`, the R2 bucket and the D1 database |
 | `not found`                  | it went between the list and the removal                               |
 | `would skip`, `skipped`      | a thing of poplin's name that is not this install's, a kind the token lacks the permission to look for, or a piece that waits for an earlier one: it stays |
-| `blocked`                    | the token lacks the permission the row names                           |
+| `blocked`                    | the token lacks the permission the row names, or Cloudflare asked to wait for more than 5 minutes |
 | `failed`                     | Cloudflare refused that removal                                        |
 
 `poplin-sites` names two things without a domain: a forwarder, which is a small Worker, and the bucket with the sites' files.
@@ -219,6 +219,8 @@ A dry run with `--keep-data` lists the same. The kept bucket and database stay i
 | `The confirmation does not match`, and the text          | the text you typed is not the install's own          | run it again, and type the text the line names                                |
 | `The run is incomplete:`, a count of rows, and `Next: rerun this command` | a row says `blocked`, `failed`, or `skipped` | fix what the row names, then run the same line again: it removes what is left |
 | a row `blocked`, saying `The account token lacks` and a name | the token lacks the permission of that name         | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |
+| `Cloudflare asked to wait. Retrying in`, and seconds     | Cloudflare limits how many calls an account sends, and a bucket of many files reaches the limit | nothing: the command waits and goes on. Ctrl-C cancels it |
+| a row `blocked`, saying `Cloudflare asked to wait for more than 5 minutes` | the limit did not lift while the command waited | run the same line again: it removes what is left |
 | `The account changed after it was checked.`              | something changed at Cloudflare during the run       | run it again                                                                  |
 | `--dry-run and --confirm are mutually exclusive`             | the two options were on one line                     | take one of them off                                                          |
 

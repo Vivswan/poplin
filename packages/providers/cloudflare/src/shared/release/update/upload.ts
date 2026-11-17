@@ -174,8 +174,10 @@ function sendFiles(connection: Connection, worker: OwnWorker, bundle: CheckedBun
   const inherit = sending.inherit ? ({ bindings_inherit: "strict" } as const) : {};
 
   // The SDK names a content type of its own for this call. Unset, the form's own type goes out, with the boundary its parts are read by.
-  // The upload is sent once: a second try would name the bindings read before the first, and drop one added since.
-  return callCloudflare(connection, (api) => new BaseScripts(api).update(worker.script, { account_id: worker.accountId, ...inherit, metadata: {} }, { body, headers: { "Content-Type": null }, maxRetries: 0 }));
+  // The upload is sent once, by the SDK and by a connection's rider alike: a second try would name the bindings read before the first, and drop one added since.
+  const once: Connection = { ...connection, ride: undefined };
+
+  return callCloudflare(once, (api) => new BaseScripts(api).update(worker.script, { account_id: worker.accountId, ...inherit, metadata: {} }, { body, headers: { "Content-Type": null }, maxRetries: 0 }));
 }
 
 /** Read Cloudflare's answer to an upload: a refusal that is about the code sent is a value, and every other failure stays one. */

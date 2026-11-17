@@ -30,6 +30,7 @@ import pRetry from "p-retry";
 
 import type { Fetch } from "../../../../cli/src/client/client";
 import { failureWords } from "../../src/shared/install/first/rows";
+import { OUTLASTED } from "../../src/shared/install/first/waits";
 import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 import { checkedBundle } from "../../src/shared/release/update/bundle-files";
 import { openUpload } from "../../src/shared/release/update/upload";
@@ -88,8 +89,8 @@ const VITAL: ReadonlySet<string> = new Set(["R2 bucket", "D1 database", "Worker"
 /** How a row words a refusal by Cloudflare, with its status. */
 const REFUSAL_STATUS = /refused with status \d+/;
 
-/** How a row words a call that failed, in whole: a refusal's status and the numbers of its codes, a wait asked for, or no answer. */
-const CALL_FAILED = new RegExp(`${REFUSAL_STATUS.source}(?: and codes \\d+(?:, \\d+)*)?|${PASSES.join("|")}`);
+/** How a row words a call that failed, in whole: a refusal's status and the numbers of its codes, a wait asked for that outlasted the command's own waits, a wait asked for, or no answer. */
+const CALL_FAILED = new RegExp(`${REFUSAL_STATUS.source}(?: and codes \\d+(?:, \\d+)*)?|${OUTLASTED}|${PASSES.join("|")}`);
 
 /** How a row words a refusal of a token that lacks a permission. */
 const NOT_PERMITTED = /status 40[13]/;
@@ -350,7 +351,7 @@ async function startOver(run: Run, found: Found, world: World, progress: Progres
 
   const kinds = removed.rows.filter((row) => row.state === "remove").length;
   note(run, progress, { piece: "Removal", result: `${kinds} kinds in ${Math.round((world.ends.reach.now() - began) / 1000)} seconds` });
-  const left = removed.rows.filter((row) => NOT_REMOVED.has(row.state)).map((row) => row.object);
+  const left = removed.rows.filter((row) => NOT_REMOVED.has(row.state)).map((row) => `${row.object}: ${resultOf(row)}`);
 
   return left.length === 0 ? undefined : { kind: "failed", what: `poplin uninstall left the ${left.join(", the ")}` };
 }

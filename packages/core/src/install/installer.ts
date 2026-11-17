@@ -67,11 +67,11 @@ export type Read<Where> =
   | { readonly ok: false; readonly why: "open"; readonly open: readonly Question<Where>[] }
   | { readonly ok: false; readonly why: "refused"; readonly refused: string };
 
-/** What a run reaches the world through: the platform's own, or stand-ins. `now` is the clock, in milliseconds since the epoch, and `sleep` waits for so many milliseconds. */
+/** What a run reaches the world through: the platform's own, or stand-ins. `now` is the clock, in milliseconds since the epoch, and `sleep` waits for so many milliseconds; its `why` is the line a person is shown meanwhile. */
 export interface Reach {
   readonly fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
   readonly now: () => number;
-  readonly sleep: (milliseconds: number) => Promise<void>;
+  readonly sleep: (milliseconds: number, why?: string) => Promise<void>;
 }
 
 /** Something that stops a piece until a person acts at the provider's own pages: what it is, the line that says so, and the address to open. `right_lacking` names the right the token lacks. */
@@ -170,7 +170,7 @@ export type Removal = { readonly run: "dry-run"; readonly data: "remove" | "keep
  *
  * `remove` it is there and is the product's; `gone` it was there when the run listed it, and gone before the run reached it; `keep` it is data the run was told to leave.
  * `stay` it is nothing a removal takes away, and the row says what to do by hand; one with a `right` is a kind the token could not look for, which may still be there. `skip` it carries a name of the product's and is not this install's.
- * `block` the token lacks the right to remove it; `fail` the provider refused; `not-run` an earlier object still stands that must go first.
+ * `block` the token lacks the right to remove it, or the provider asked to wait for longer than a run waits, which a rerun goes on from; `fail` the provider refused; `not-run` an earlier object still stands that must go first.
  */
 export type RemovalState = "remove" | "gone" | "keep" | "stay" | "skip" | "block" | "fail" | "not-run";
 
