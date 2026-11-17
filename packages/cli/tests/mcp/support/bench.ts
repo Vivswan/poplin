@@ -6,6 +6,7 @@ import { type JSONRPCMessage, parseJSONRPCMessage } from "@modelcontextprotocol/
 
 import { type ApiInstall, type LayoutInput, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
+import { plainScreen } from "../../../src/local/screen";
 import { sendUnlessAborted } from "../../commands/support/harness";
 import { openSession } from "./session";
 
@@ -77,10 +78,18 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
     out: () => {
       throw new Error("the server printed a line on stdout");
     },
-    err: (text) => logged.push(text),
-    status: () => {
-      throw new Error("the server wrote a progress line");
-    },
+    screen: plainScreen({
+      out: () => {
+        throw new Error("the server printed a line on stdout");
+      },
+      err: (text) => logged.push(text),
+      status: () => {
+        throw new Error("the server wrote a progress line");
+      },
+      ask: async () => {
+        throw new Error("the server asked a question");
+      },
+    }),
     fetch: (target, init) =>
       sendUnlessAborted(init.signal, async () => {
         const request = new Request(target, init);
@@ -91,9 +100,6 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
       }),
     machine: { env: { POPLIN_CONFIG_DIR: `${home}/config`, ...login }, platform: process.platform, home },
     terminal: { asks: true, progress: true },
-    ask: async () => {
-      throw new Error("the server asked a question");
-    },
     timeoutMs: 2000,
     computer: "laptop",
     open: () => undefined,

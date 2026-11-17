@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { type ApiInstall, type LayoutInput, answered, ORIGIN, openApi } from "../../../../app/tests/api/support/install";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
+import { plainScreen } from "../../../src/local/screen";
 import { words } from "./command-line";
 
 /** The scratch folders the tests made, removed by `cleanUp`. */
@@ -146,8 +147,16 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
 
       const io: Io = {
         out: (text) => ran.out.push(text),
-        err: (text) => ran.err.push(text),
-        status: (text) => ran.status.push(text),
+        screen: plainScreen({
+          out: (text) => ran.out.push(text),
+          err: (text) => ran.err.push(text),
+          status: (text) => ran.status.push(text),
+          ask: async (question) => {
+            ran.asked.push(question);
+
+            return typeof options.typed === "object" ? undefined : (options.typed ?? "");
+          },
+        }),
         fetch: (input, init) =>
           sendUnlessAborted(init.signal, async () => {
             const request = new Request(input, init);
@@ -158,11 +167,6 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
           }),
         machine: { env: { POPLIN_CONFIG_DIR: join(home, "config"), ...env }, platform: process.platform, home },
         terminal: options.terminal ?? { asks: false, progress: false },
-        ask: async (question) => {
-          ran.asked.push(question);
-
-          return typeof options.typed === "object" ? undefined : (options.typed ?? "");
-        },
         timeoutMs: 2000,
         computer: "test-computer",
         open: (address) => {
@@ -180,7 +184,10 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
       };
 
       const code = await run(words(`poplin ${line}`), io);
-      assertNoToken(ran, [...Object.values(install.tokens), env.POPLIN_TOKEN ?? ""].filter((token) => token !== ""));
+      assertNoToken(
+        ran,
+        [...Object.values(install.tokens), env.POPLIN_TOKEN ?? ""].filter((token) => token !== ""),
+      );
 
       return { ...ran, code };
     },

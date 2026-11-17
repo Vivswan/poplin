@@ -3,9 +3,10 @@
 
 import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/installer";
 import { columns } from "../../commands/text";
+import type { Line } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
+import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */

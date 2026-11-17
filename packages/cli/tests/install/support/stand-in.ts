@@ -354,11 +354,7 @@ export async function runLine(line: string, account: Account, options: Options =
       ran.out.push(text);
       ran.shown.push(`out: ${text}`);
     },
-    err: (text) => {
-      ran.err.push(text);
-      ran.shown.push(`err: ${text}`);
-    },
-    status: () => undefined,
+    screen: ends.screen,
     fetch: async (input) => {
       ran.fetched.push(input);
 
@@ -366,9 +362,6 @@ export async function runLine(line: string, account: Account, options: Options =
     },
     machine: { env: options.env ?? {}, platform: process.platform, home: "/nowhere" },
     terminal: { asks: options.asks ?? false, progress: false },
-    ask: async () => {
-      throw new Error("the command asked through the plain question, not the screen");
-    },
     timeoutMs: 2000,
     computer: "test-computer",
     open: () => undefined,

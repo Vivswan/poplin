@@ -92,7 +92,7 @@ async function begin(client: Client, asked: { readonly scope: "publisher" | "adm
     if (failure.kind !== "refused" || failure.code !== "too_many_requests" || rests === BEGIN_RESTS) return problemOf(failure);
 
     const seconds = clamped(failure.retryAfter ?? INTERVAL_BOUNDS.max);
-    if (io.terminal.progress) io.status(`the install asks for a pause: beginning the login in ${seconds} s (Ctrl-C stops)`);
+    if (io.terminal.progress) io.screen.working(`the install asks for a pause: beginning the login in ${seconds} s (Ctrl-C stops)`);
 
     if ((await io.pause(seconds * MS_PER_SECOND)) === "interrupted") return problem("interrupted");
   }
@@ -107,7 +107,7 @@ function announce(page: string, begun: Begun, json: boolean, io: Io): void {
   }
 
   const minutes = Math.round(begun.expires_in / SECONDS_PER_MINUTE);
-  for (const line of ["open this address, and allow this login there:", `  ${page}`, "the page asks for the last 4 letters of this code:", `  ${begun.code}`, `the code works for ${minutes} minutes`]) io.out(line);
+  for (const line of ["open this address, and allow this login there:", `  ${page}`, "the page asks for the last 4 letters of this code:", `  ${begun.code}`, `the code works for ${minutes} minutes`]) io.screen.line("plain", line);
 }
 
 /** Ask for the token once: the token, the reason to stop, or the seconds to wait before the next question. */
@@ -132,7 +132,7 @@ async function collect(client: Client, begun: Begun, io: Io): Promise<Collected 
   let left = begun.expires_in;
 
   while (left > 0) {
-    if (io.terminal.progress) io.status(`waiting to be allowed, ${Math.ceil(left / SECONDS_PER_MINUTE)} min left (Ctrl-C stops)`);
+    if (io.terminal.progress) io.screen.working(`waiting to be allowed, ${Math.ceil(left / SECONDS_PER_MINUTE)} min left (Ctrl-C stops)`);
 
     if ((await io.pause(wait * MS_PER_SECOND)) === "interrupted") return problem("interrupted");
 
@@ -175,10 +175,10 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   const server = await serverOf(request, io);
   if (typeof server !== "string") return refused(server);
 
-  const client = createClient({ server, fetch: io.fetch, timeoutMs: io.timeoutMs, stopped: io.stopped, told: io.err, pause: io.pause });
+  const client = createClient({ server, fetch: io.fetch, timeoutMs: io.timeoutMs, stopped: io.stopped, told: (line) => io.screen.aside("note", line), pause: io.pause });
   const computer = request.computer ?? plainComputerName(io.computer);
   const begun = await begin(client, { scope: request.publisher ? "publisher" : "admin", computer }, io);
-  if (io.terminal.progress) io.status("");
+  if (io.terminal.progress) io.screen.rest();
 
   if ("exit" in begun) return refused(begun);
 
@@ -189,7 +189,7 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   if (request.browser) io.open(page);
 
   const collected = await collect(client, begun, io);
-  if (io.terminal.progress) io.status("");
+  if (io.terminal.progress) io.screen.rest();
 
   if ("code" in collected) return refused(collected);
 

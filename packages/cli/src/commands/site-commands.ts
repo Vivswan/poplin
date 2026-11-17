@@ -210,7 +210,7 @@ function copyOn({ client, io }: Session, site: string, first: v.InferInput<typeo
  */
 async function beforeNextCall(io: Session["io"], copy: v.InferOutput<typeof DUPLICATED_SITE>["copy"], done: number): Promise<Failure | undefined> {
   if (copy.copied === null) {
-    if (io.terminal.progress) io.status(`copying ${countText(copy.files, "file")} in the background (Ctrl-C stops)`);
+    if (io.terminal.progress) io.screen.working(`copying ${countText(copy.files, "file")} in the background (Ctrl-C stops)`);
 
     return (await io.pause(WATCH_MS)) === "interrupted" ? { kind: "stopped" } : undefined;
   }
@@ -218,7 +218,7 @@ async function beforeNextCall(io: Session["io"], copy: v.InferOutput<typeof DUPL
   // A call that copied nothing more would be sent for ever.
   if (copy.copied <= done) return { kind: "unexpected", status: OK };
 
-  if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
+  if (io.terminal.progress) io.screen.working(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
 
   return undefined;
 }
@@ -253,7 +253,7 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
 
     throw error;
   } finally {
-    if (io.terminal.progress) io.status("");
+    if (io.terminal.progress) io.screen.rest();
   }
 }
 
@@ -288,7 +288,7 @@ async function deleteForever(request: Asked<"delete">, session: Session): Promis
   if (!found.ok) return failed(found, "reads");
 
   const { label } = found.value.site;
-  const typed = await io.ask(`This removes ${label} and every file of it for good. Type its label to go on: `);
+  const typed = await io.screen.ask(`This removes ${label} and every file of it for good.\nType ${label} to go on:`);
   if (typed === undefined) return { ok: false, problem: problem("stopped", "nothing was deleted") };
 
   if (typed.trim() !== label) return { ok: false, problem: problem("not_confirmed") };

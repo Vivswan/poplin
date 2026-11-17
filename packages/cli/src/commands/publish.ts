@@ -84,9 +84,9 @@ function progressOn(io: Io, plan: PublishPlan): Progress {
     arrived: (file) => {
       files = Math.min(files + 1, total);
       bytes = Math.min(bytes + file.size, plan.bytes);
-      io.status(`uploading ${files}/${countText(total, "file")}, ${showBytes(bytes)} of ${showBytes(plan.bytes)}`);
+      io.screen.working(`uploading ${files}/${countText(total, "file")}, ${showBytes(bytes)} of ${showBytes(plan.bytes)}`);
     },
-    clear: () => io.status(""),
+    clear: () => io.screen.rest(),
   };
 }
 

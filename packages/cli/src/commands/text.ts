@@ -2,13 +2,25 @@
 
 import stringWidth from "string-width";
 
+import type { Run } from "../../../core/src/install/installer";
 import type { SiteObject } from "../../../core/src/actions/site-object";
+import type { Line, Tone } from "../local/screen";
 
 /** How many characters of an ISO moment are its day. */
 const DAY_LENGTH = 10;
 
 /** What stands between two columns of a row. */
 const GAP = "  ";
+
+/** How wide the column of a row's object is at least, so that the rows of a run line up as they are printed one by one. */
+const OBJECT_WIDTH = 20;
+
+/** The word of one state of a row in a dry run and in a run, and what kind of line it is. */
+export interface StateWords {
+  readonly "dry-run": string;
+  readonly apply: string;
+  readonly tone: Tone;
+}
 
 /**
  * Word a moment as its day in UTC, such as `2026-12-01`.
@@ -56,6 +68,22 @@ export function columns(rows: readonly (readonly string[])[]): string[] {
       .join(GAP)
       .trimEnd(),
   );
+}
+
+/**
+ * Lay one row out in columns: its state's word, as wide as the widest word of the run, then its object and its detail.
+ *
+ * @param states - the words of every state a row of this command can have
+ * @param run - whether the row is of a dry run or of a run
+ * @returns the line, whose detail stands under itself where a terminal folds it
+ */
+export function wordedRow<State extends string>(states: Readonly<Record<State, StateWords>>, row: { readonly state: State; readonly object: string; readonly detail: string }, run: Run): Line {
+  const all: readonly StateWords[] = Object.values(states);
+  const width = Math.max(...all.map((words) => words[run].length));
+  const words = states[row.state];
+  const cells = [words[run].padEnd(width), row.object.padEnd(OBJECT_WIDTH)];
+
+  return { tone: words.tone, text: [...cells, row.detail].join(GAP).trimEnd(), hang: stringWidth(cells.join(GAP)) + GAP.length };
 }
 
 /**

@@ -6,8 +6,8 @@
 import type { Login } from "../../../core/src/auth/logins";
 import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
-import { columns, countText } from "../commands/text";
-import type { Tone } from "../local/screen";
+import { columns, countText, type StateWords, wordedRow } from "../commands/text";
+import type { Line } from "../local/screen";
 import type { Careful, Next, Provider, Stop } from "./records";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
@@ -39,12 +39,6 @@ const COUNTED: readonly (readonly [RowState, string])[] = [
   ["leave-out", "leave out"],
 ];
 
-/** How wide the column of an object's name is at least, so that the rows of a run line up as they are printed one by one. */
-const OBJECT_WIDTH = 20;
-
-/** What stands between two columns of a row. */
-const GAP = "  ";
-
 /** What a line that stands under another starts with. */
 const INDENT = "  ";
 
@@ -72,13 +66,6 @@ export const NEXT = {
   none: (): Next => ({ step: "none", command: null }),
 } satisfies Readonly<Record<Next["step"], (...given: never[]) => Next>>;
 
-/** The word of one state of a row in a dry run and in a run, and what kind of line it is. */
-export interface StateWords {
-  readonly "dry-run": string;
-  readonly apply: string;
-  readonly tone: Tone;
-}
-
 /** How the last lines of a run are worded: what a run that left nothing undone is called, what to run after it, which goes on from what stands, what runs the same command again, and the repair of an install whose address stays silent. */
 export interface Ending {
   readonly done: string;
@@ -92,13 +79,6 @@ export interface Unsettled {
   readonly stop: Stop;
   readonly place: readonly string[];
 }
-
-/** One line as it is shown: its text, and what kind of line it is. */
-export interface Line {
-  readonly tone: Tone;
-  readonly text: string;
-}
-
 
 function plain(text: string): Line {
   return { tone: "plain", text };
@@ -240,20 +220,6 @@ function ownerLines(provider: Provider, version: string | undefined, newest: str
   ];
 
   return columns(rows).map((line) => `${INDENT}${line}`);
-}
-
-/**
- * Lay one row out in columns: its state's word, as wide as the widest word of the run, then its object and its detail.
- *
- * @param states - the words of every state a row of this command can have
- * @param run - whether the row is of a dry run or of a run
- */
-export function wordedRow<State extends string>(states: Readonly<Record<State, StateWords>>, row: { readonly state: State; readonly object: string; readonly detail: string }, run: Run): Line {
-  const all: readonly StateWords[] = Object.values(states);
-  const width = Math.max(...all.map((words) => words[run].length));
-  const words = states[row.state];
-
-  return { tone: words.tone, text: [words[run].padEnd(width), row.object.padEnd(OBJECT_WIDTH), row.detail].join(GAP).trimEnd() };
 }
 
 /** The rows of some options in a help text: each as it is typed, what it means, and the variable that answers the same. */

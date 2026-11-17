@@ -10,13 +10,7 @@ import type { Io } from "./commands/records";
 import { AFTER_STOP_TIMEOUT_MS, run } from "./commands/run";
 import { openBrowser } from "./local/browser";
 import { thisMachine } from "./local/login-file";
-import { askLine } from "./local/question";
-
-/** Moves to the start of the line, writes, and clears what the line held beyond it: the one updating progress line. No color is ever written. */
-const REWRITE = { start: "\r", clearToEnd: "\u001b[K" } as const;
-
-/** The value of `TERM` on a terminal that takes no control sequence. */
-const PLAIN_TERMINAL = "dumb";
+import { processScreen, showsColour } from "./local/screen";
 
 /** What the first Ctrl-C aborts: the one way a command hears that the person stopped it. */
 const STOP = new AbortController();
@@ -35,33 +29,36 @@ async function pause(ms: number): Promise<"over" | "interrupted"> {
   }
 }
 
-/** Take the first Ctrl-C as a stop, and end a command here that has not ended by itself after its last words. The listener is gone once it ran, so a second Ctrl-C ends the process at once. */
-function listenForStop(): void {
-  process.once("SIGINT", () => {
-    STOP.abort();
+/** Stop the command, and end it here when it has not ended by itself after its last words. */
+function stop(): void {
+  if (STOP.signal.aborted) return;
 
-    setTimeout(() => {
-      for (const line of problemLines(problem("stopped"))) console.error(line);
+  STOP.abort();
 
-      process.exit(exitCode({ kind: "failed" }));
-    }, LAST_WORDS_MS).unref();
-  });
+  setTimeout(() => {
+    for (const line of problemLines(problem("stopped"))) console.error(line);
+
+    process.exit(exitCode({ kind: "failed" }));
+  }, LAST_WORDS_MS).unref();
 }
 
-/** This process as a command sees it. A person can be asked when stdin and stderr are both a terminal, and the progress line shows when stderr is one that takes control sequences. */
+/** Take the first Ctrl-C as a stop. The listener is gone once it ran, so a second Ctrl-C ends the process at once. */
+function listenForStop(): void {
+  process.once("SIGINT", stop);
+}
+
+/** This process as a command sees it. A person can be asked when stdin and stderr are both a terminal, and what is being worked on shows when stderr shows colour. */
 function thisProcess(): Io {
-  const watched = process.stderr.isTTY === true;
   const machine = thisMachine();
+  const colour = { out: showsColour(process.stdout.isTTY, machine.env), err: showsColour(process.stderr.isTTY, machine.env) };
 
   return {
     out: (line) => console.log(line),
-    err: (line) => console.error(line),
-    status: (text) => process.stderr.write(`${REWRITE.start}${text}${REWRITE.clearToEnd}`),
+    // Every question and the line of what is worked on go to stderr, so stdout holds the result alone.
+    screen: processScreen({ out: process.stdout, err: process.stderr, colour, input: process.stdin, stop }),
     fetch: (input, init) => fetch(input, init),
     machine,
-    terminal: { asks: watched && process.stdin.isTTY === true, progress: watched && process.env.TERM !== PLAIN_TERMINAL },
-    // The question goes to stderr, so stdout holds the result alone.
-    ask: (question) => askLine(question, { input: process.stdin, output: process.stderr, stopped: STOP.signal }),
+    terminal: { asks: process.stderr.isTTY === true && process.stdin.isTTY === true, progress: colour.err },
     computer: hostname(),
     open: (address) => void openBrowser(address, machine),
     pause,

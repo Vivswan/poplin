@@ -2,15 +2,14 @@
 // A command of the family runs in one frame: its words read, its help and its list answered, its stops worded, every token hidden, and its lines shown for a person or as one JSON value.
 
 import { text } from "node:stream/consumers";
-import { stripVTControlCharacters } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import type { Run } from "../../../core/src/install/installer";
 import { exitCode } from "../commands/exit-codes";
 import type { Io } from "../commands/records";
-import { hide, written } from "../commands/util";
+import { guardedScreen, written } from "../commands/util";
 import { loadProviders } from "../local/providers";
-import { processScreen, type Screen, type Tone } from "../local/screen";
+import type { Tone } from "../local/screen";
 import { VERSION } from "../poplin";
 import { STOPPED, TOKEN_VARIABLE } from "./ask";
 import type { Careful, InstallEnds, Next, Parsed, Provider, Stop } from "./records";
@@ -18,15 +17,6 @@ import { stopLines, stopValue } from "./report";
 
 /** The folder of the providers, beside the file this code is built into. */
 const PROVIDERS = fileURLToPath(new URL("./providers/", import.meta.url));
-
-/** The value of `TERM` on a terminal that takes no control sequence. */
-const PLAIN_TERMINAL = "dumb";
-
-/** A run of control characters, the line break among them. */
-const CONTROL_RUN = /\p{Cc}+/gu;
-
-/** One control character that is no line break. */
-const CONTROL_BUT_BREAK = /[^\P{Cc}\n]/gu;
 
 /** The stops that say the install is at another place than the line named: the command that goes on carries no place, and the sentence names the option. */
 const ELSEWHERE: ReadonlySet<Stop["problem"]> = new Set(["other_place"]);
@@ -36,11 +26,11 @@ const ENDINGS = { 1: "failed", 2: "usage-error", 5: "unreachable" } as const;
 
 /** How a command says what it does: lines for a person, or nothing but the one JSON value at its end. */
 export interface Show {
-  /** One line of the result. */
-  readonly line: (tone: Tone, text: string) => void;
+  /** One line of the result; `hang` is how far its later rows stand in once a terminal folds it. */
+  readonly line: (tone: Tone, text: string, hang?: number) => void;
 
   /** One line that is no result. */
-  readonly aside: (tone: Tone, text: string) => void;
+  readonly aside: (tone: Tone, text: string, hang?: number) => void;
 
   /** What is being worked on, until the next line. */
   readonly working: (text: string) => void;
@@ -89,40 +79,21 @@ interface StoppedAt {
 }
 
 /**
- * The same screen and the same machine's ends, with every token taken out of each line, each question, and each choice before it is shown.
+ * The same machine's ends and the same screen, which is the one the command's own ends hold, with every token and every control character taken out of what is shown.
  *
- * A provider's text may quote what somebody else wrote in the account, so no escape sequence and no other control character of it reaches the terminal:
- * a line stays one line, and a question keeps the line breaks its list is made of. The one JSON value holds each text as it came, since JSON escapes it.
- * Stdout is left to its writers: the screen, the one JSON value written without tokens, and the help, which holds nothing a person or a variable gave.
+ * The one JSON value holds each text as it came, since JSON escapes it. Stdout is left to its writers: the screen, the one JSON value written without tokens, and the help, which holds nothing a person or a variable gave.
  */
 function guarded(io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): { readonly io: Io; readonly ends: InstallEnds } {
-  // A token is hidden before anything is taken out, since an escape sequence right before it ends at the token's first letter; and once more after, for a token a control character stood in.
-  const shown = (text: string, controls: RegExp, as: string): string => hide(stripVTControlCharacters(hide(text, secrets)).replace(controls, as), secrets);
-  const line = (text: string): string => shown(text, CONTROL_RUN, " ");
-  const lines = (text: string): string => shown(text, CONTROL_BUT_BREAK, "");
-  const { screen } = ends;
-  const hiding: Screen = {
-    line: (tone, text) => screen.line(tone, line(text)),
-    aside: (tone, text) => screen.aside(tone, line(text)),
-    ask: (question, secret) => screen.ask(lines(question), secret),
-    confirm: (question, initial) => screen.confirm(lines(question), initial),
-    choose: (question, picks) =>
-      screen.choose(
-        lines(question),
-        picks.map((pick) => ({ value: pick.value, label: line(pick.label), hint: line(pick.hint) })),
-      ),
-    working: (text) => screen.working(line(text)),
-    rest: screen.rest,
-  };
+  const screen = guardedScreen(ends.screen, secrets);
 
-  return { io: { ...io, err: (text) => io.err(line(text)) }, ends: { ...ends, screen: hiding } };
+  return { io: { ...io, screen }, ends: { ...ends, screen } };
 }
 
 /** The ways to show for one command. With `--json` no line reaches stdout but the one value, and what is no result goes to stderr as it is. */
 function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<string>): Show {
   const value = (said: unknown): void => io.out(written(said, secrets));
 
-  if (json) return { line: () => undefined, aside: (_tone, text) => io.err(text), working: () => undefined, value };
+  if (json) return { line: () => undefined, aside: (_tone, text) => io.screen.aside("plain", text), working: () => undefined, value };
 
   return { line: ends.screen.line, aside: ends.screen.aside, working: ends.screen.working, value: () => undefined };
 }
@@ -130,20 +101,18 @@ function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<s
 /**
  * The ends of this process.
  *
- * Colour shows on a stream that is a terminal, unless `NO_COLOR` is set or the terminal takes no control sequence. A request and a wait end when the person stops the command.
+ * The screen is the machine's own. A request and a wait end when the person stops the command.
  *
  * @param io - the machine's ends, whose stop ends each request and each wait
  */
 export function processEnds(io: Io): InstallEnds {
-  const { env } = io.machine;
-  const plain = (env.NO_COLOR ?? "") !== "" || env.TERM === PLAIN_TERMINAL;
   const sleep = async (milliseconds: number): Promise<void> => {
     if ((await io.pause(milliseconds)) === "interrupted") throw new Error("the command was stopped");
   };
 
   return {
     providers: () => loadProviders(PROVIDERS),
-    screen: processScreen({ out: process.stdout, err: process.stderr, colour: { out: process.stdout.isTTY === true && !plain, err: process.stderr.isTTY === true && !plain } }),
+    screen: io.screen,
     input: () => text(process.stdin),
     reach: {
       fetch: (input, init) => fetch(input, { ...init, signal: init?.signal == null ? io.stopped : AbortSignal.any([init.signal, io.stopped]) }),
