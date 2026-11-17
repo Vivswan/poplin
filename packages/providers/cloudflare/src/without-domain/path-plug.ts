@@ -38,6 +38,9 @@ type PathParts = Known & {
   /** What sends a call; absent outside tests. */
   readonly fetch?: Connection["fetch"];
 
+  /** What waits between two reads of settings that trail an upload; the platform's own timer where absent. */
+  readonly sleep?: Connection["sleep"];
+
   /** The clock a new upload key's moment of making is read from, in milliseconds since the epoch; absent outside tests. */
   readonly now?: (() => number) | undefined;
 };
@@ -59,7 +62,7 @@ async function findAccount(parts: PathParts, connection: Connection): Promise<st
 async function prove(parts: PathParts, token: string): Promise<{ readonly connection: Connection; readonly placed: Placed } | DomainReading> {
   if (!TOKEN.test(token)) return REFUSED;
 
-  const connection: Connection = { key: token, baseUrl: parts.baseUrl, fetch: parts.fetch };
+  const connection: Connection = { key: token, baseUrl: parts.baseUrl, fetch: parts.fetch, sleep: parts.sleep };
   const accountId = await findAccount(parts, connection);
   if (typeof accountId !== "string") return accountId;
 

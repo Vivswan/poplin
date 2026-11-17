@@ -11,7 +11,7 @@
 //
 // The Worker is poplin's when `WORKER_NAME` is its own name and its bucket, database, and Workflow are bound. It is set once `ZONE` reads as an install and `ACCOUNT_ID` is there.
 // Until then it also carries `INSTALL_PLACE`, which its first upload states: without it nothing says which kind of install the run that made it was.
-// For about a second after an upload, Cloudflare's settings can list a Worker without the bindings its new version holds. So a Worker that reads as not poplin's is read again, three times over 4.5 seconds, before it is told as held.
+// For about a second after an upload, Cloudflare's settings can list a Worker without the bindings its new version holds. So a Worker that reads as not poplin's is read again, by the one settled read every piece uses, before it is told as held.
 // Its sentence names the wait first: where the settings trail longer, the Worker is poplin's own, and the same command goes on a minute later.
 // Nothing here changes anything. Of the texts the account holds, an answer tells three, each read first: the place as a domain, the version as a released one, and an account's name on one line.
 
@@ -19,7 +19,6 @@ import type { Blocked, Found, Question, Reach, Read, Token } from "@poplin/core/
 import { newestPinned } from "@poplin/core/src/records/release";
 import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
 import { BaseDatabase } from "cloudflare/resources/d1/database/database";
-import pRetry from "p-retry";
 import { projectReleases } from "../../release/publish/release-source";
 import { readRelease } from "../../release/update/release-mark";
 import { isAccessOff, readLoginFacts } from "../pieces/access/access";
@@ -29,7 +28,7 @@ import { planDatabase } from "../pieces/database/database";
 import { INSTALL_OBJECTS } from "../install-objects";
 import { workflowNameOf } from "../../jobs/workflow-name";
 import type { DomainLayout } from "../../../with-domain/layout";
-import { type ListedBinding, readWorker } from "../pieces/variables/variables";
+import { type ListedBinding, readSettled } from "../pieces/variables/variables";
 import { readStartedPlace } from "../kind/started-place";
 import { type BoundInstall, readInstallBinding } from "../kind/zone-binding";
 
@@ -41,9 +40,6 @@ const SERVER_FAILURE = 500;
 
 /** Cloudflare's dashboard, where a person does what no API does. */
 const DASHBOARD = "https://dash.cloudflare.com";
-
-/** How often a Worker that reads as not poplin's is read again, and the wait before each read, in milliseconds: the settings trail an upload by about a second. */
-const AGAIN = { times: 3, everyMs: 1_500 } as const;
 
 /** The buckets of an account as a look that reads none has them: no bucket of poplin's name is told. */
 const NO_BUCKETS: Awaited<ReturnType<typeof listBuckets>> = { ok: true, value: [] };
@@ -98,16 +94,6 @@ interface Rights {
 
   /** Whether the look reads the account's buckets: only where the token it is made with is asked for the storage permission. */
   readonly buckets: boolean;
-}
-
-/** What a read of the Worker answers: its bindings, `undefined` for no Worker, or why Cloudflare gave none. */
-type Bindings = Awaited<ReturnType<typeof readWorker>>;
-
-/** A read of a Worker that is there and reads as not poplin's: what the reads again go on from. */
-class NotOwn extends Error {
-  constructor(readonly read: Bindings) {
-    super("the Worker reads as not poplin's");
-  }
 }
 
 /** What `find` answers. */
@@ -363,37 +349,6 @@ async function standing(place: Place, started: boolean, rights: Rights): Promise
 }
 
 /**
- * Read the Worker, and one that reads as not poplin's again after a wait each time, until it reads as poplin's, as gone, or not at all.
- *
- * The waits are on the caller's clock, through `reach.sleep`: the library waits none. A sleep that throws, as one the person stopped does, ends the reads with that error.
- *
- * @returns the last read where every one read as not poplin's
- */
-async function readSettled(place: Place, reach: Reach): Promise<Bindings> {
-  const attempt = async (): Promise<Bindings> => {
-    const read = await readWorker(place.connection, { accountId: place.accountId, script: SCRIPT });
-    if (read.ok && read.value !== undefined && !isOwn(read.value)) throw new NotOwn(read);
-
-    return read;
-  };
-  const again = async ({ error }: { readonly error: Error }): Promise<boolean> => {
-    if (!(error instanceof NotOwn)) return false;
-
-    await reach.sleep(AGAIN.everyMs);
-
-    return true;
-  };
-
-  try {
-    return await pRetry(attempt, { retries: AGAIN.times, minTimeout: 0, maxTimeout: 0, shouldRetry: again });
-  } catch (error) {
-    if (error instanceof NotOwn) return error.read;
-
-    throw error;
-  }
-}
-
-/**
  * Look for an install with a token. It only reads.
  *
  * @param where - the place a person chose: its domain says which account, and its `account` picks one where the token shows several
@@ -401,12 +356,12 @@ async function readSettled(place: Place, reach: Reach): Promise<Bindings> {
  * @returns what is there, as one value; a token that is refused or shows no such domain, an install that was started for another place, and an account whose storage is off or whose token lacks a needed permission, are states of their own
  */
 export async function findInstall(token: Token, where: Where, reach: Reach, rights: Rights): Promise<Found<Where, Place>> {
-  const connection: Connection = { key: token, fetch: reach.fetch };
+  const connection: Connection = { key: token, fetch: reach.fetch, sleep: reach.sleep };
   const accountId = await accountOf(connection, where);
   if (typeof accountId !== "string") return accountId;
 
   const place: Place = { connection, accountId, toJSON: () => undefined };
-  const bindings = await readSettled(place, reach);
+  const bindings = await readSettled(connection, { accountId, script: SCRIPT }, isOwn);
   if (!bindings.ok) return rights.lacks(bindings) ? { state: "blocked", blocked: [rightLacking(rights, "Worker variable", accountId)] } : refusedBy(bindings);
 
   if (bindings.value === undefined) return standing(place, false, rights);
