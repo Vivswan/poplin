@@ -9,6 +9,9 @@ export const VERSION_FLAG = "--version";
 /** The flag that turns `poplin doctor` into a repair with an account token, whose words its own parser reads. */
 export const REPAIR_FLAG = "--repair";
 
+/** The flag that asks for the help of every command at once, which works with no command alone. */
+export const FULL_HELP = { name: "--full-help", about: "Show the help of every command" } as const satisfies FlagSpec;
+
 /** The two flags every command takes. */
 const EVERYWHERE: readonly FlagSpec[] = [
   { name: HELP_FLAG, about: "Show this help" },

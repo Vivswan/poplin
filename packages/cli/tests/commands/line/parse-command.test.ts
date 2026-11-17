@@ -109,6 +109,8 @@ describe("parseCommand", () => {
     ["poplin list --json", { kind: "list", trash: false, json: true }],
     ["poplin list --server poplin.example.com", { kind: "list", trash: false, json: false, server: "poplin.example.com" }],
     ["poplin --help", { kind: "help", asked: true }],
+    ["poplin --full-help", { kind: "help", asked: true, full: true }],
+    ["poplin --help --full-help", { kind: "help", asked: true, full: true }],
     ["poplin --version", { kind: "version" }],
   ];
 

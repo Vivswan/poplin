@@ -17,6 +17,7 @@ import { runRepair } from "../install/repair/repair";
 import type { InstallEnds } from "../install/records";
 import type { CommandName } from "./command-table";
 import { exitCode } from "./exit-codes";
+import { fullHelp } from "./line/full-help";
 import { runExport } from "../backup/export";
 import { helpText } from "./line/help";
 import { runImport } from "../backup/import";
@@ -292,12 +293,13 @@ function mcpHost(io: Io): Host {
   };
 }
 
-/** Show a help text as its stream shows it: the one that was asked for on stdout, and the one an empty command line gets on stderr. */
-function showHelp(parsed: { readonly topic?: CommandName; readonly asked: boolean }, io: Io): void {
+/** Show a help text as its stream shows it: the one that was asked for on stdout, and the one an empty command line gets on stderr. The help of every command reads the providers first. */
+async function showHelp(parsed: { readonly topic?: CommandName; readonly asked: boolean; readonly full?: true }, io: Io, ends: () => InstallEnds): Promise<void> {
   const looks = io.looks ?? { out: PLAIN_LOOK, err: PLAIN_LOOK };
   // The help nobody asked for goes through the screen, which shows no line wider than its widest.
   const look = parsed.asked ? looks.out : { ...looks.err, width: Math.min(looks.err.width, PLAIN_LOOK.width) };
-  const text = foldedText(pasted(helpText(parsed.topic, look), runnerOf(io.machine.env)), look.width);
+  const help = parsed.full === true ? fullHelp(await ends().providers(), look) : helpText(parsed.topic, look);
+  const text = foldedText(pasted(help, runnerOf(io.machine.env)), look.width);
 
   if (parsed.asked) io.out(text);
   else io.screen.aside("plain", text);
@@ -328,7 +330,7 @@ export async function run(
   }
 
   if (parsed.kind === "help") {
-    showHelp(parsed, io);
+    await showHelp(parsed, io, () => installEnds(io));
 
     return exitCode(parsed);
   }

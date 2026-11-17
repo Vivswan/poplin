@@ -72,6 +72,7 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 | `poplin uninstall cloudflare --domain example.com --dry-run`         | lists what a removal would remove; changes nothing |
 | `poplin uninstall cloudflare --no-domain`                            | removes the install, after you type its address; `--keep-data` leaves the sites' files and the database: [Remove](../upkeep/remove.md) |
 | `poplin help rollback`                                               | shows the help of one command                     |
+| `poplin --full-help`                                                 | shows the help of every command on one page       |
 
 `poplin update` works on an install that holds its key: [Update the install](../upkeep/update.md#with-the-kept-key) shows what it does. An install that holds none answers `no_key`, and updates as [Update the install](../upkeep/update.md#update-the-install) says.
 
