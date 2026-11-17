@@ -76,12 +76,12 @@ describe("keepsLines", () => {
 describe("syncLogs", () => {
   // Drift: a check must send no change, and a run none where Cloudflare already matches: each write of the settings is a call of the day's allowance.
   test.each([
-    { name: "kept, as the setting asks", has: ON, kept: true, mode: "apply", report: { left: ["kept"], changed: [] }, sent: [`GET ${PATH}`] },
-    { name: "kept, with a record of each request somebody switched on", has: { ...ON, logs: { enabled: true, invocation_logs: true } }, kept: true, mode: "apply", report: { left: [], changed: ["kept"] }, sent: [`GET ${PATH}`, `PATCH ${PATH}`] },
-    { name: "kept, where the setting keeps none: a check", has: ON, kept: false, mode: "plan", report: { left: [], changed: ["not kept"] }, sent: [`GET ${PATH}`] },
-    { name: "kept, where the setting keeps none: a run", has: ON, kept: false, mode: "apply", report: { left: [], changed: ["not kept"] }, sent: [`GET ${PATH}`, `PATCH ${PATH}`] },
-    { name: "none stated, where the setting keeps none", has: null, kept: false, mode: "apply", report: { left: ["not kept"], changed: [] }, sent: [`GET ${PATH}`] },
-    { name: "switched off by hand, where the setting keeps them", has: OFF, kept: true, mode: "apply", report: { left: [], changed: ["kept"] }, sent: [`GET ${PATH}`, `PATCH ${PATH}`] },
+    { name: "kept, as the setting asks", has: ON, kept: true, mode: "apply", report: { left: ["enabled"], changed: [] }, sent: [`GET ${PATH}`] },
+    { name: "kept, with a record of each request somebody switched on", has: { ...ON, logs: { enabled: true, invocation_logs: true } }, kept: true, mode: "apply", report: { left: [], changed: ["enabled"] }, sent: [`GET ${PATH}`, `PATCH ${PATH}`] },
+    { name: "kept, where the setting keeps none: a check", has: ON, kept: false, mode: "plan", report: { left: [], changed: ["disabled"] }, sent: [`GET ${PATH}`] },
+    { name: "kept, where the setting keeps none: a run", has: ON, kept: false, mode: "apply", report: { left: [], changed: ["disabled"] }, sent: [`GET ${PATH}`, `PATCH ${PATH}`] },
+    { name: "none stated, where the setting keeps none", has: null, kept: false, mode: "apply", report: { left: ["disabled"], changed: [] }, sent: [`GET ${PATH}`] },
+    { name: "switched off by hand, where the setting keeps them", has: OFF, kept: true, mode: "apply", report: { left: [], changed: ["enabled"] }, sent: [`GET ${PATH}`, `PATCH ${PATH}`] },
   ] as const)("$name", async ({ has, kept, mode, report, sent }) => {
     await withFake(worker(has), async (connection, asked) => {
       const synced = await syncLogs(connection, WORKER, kept, mode);
@@ -98,7 +98,7 @@ describe("syncLogs", () => {
       async (connection, asked) => {
         const synced = await syncLogs(connection, WORKER, true, "apply");
 
-        expect([synced.ok && synced.report.left, calls(asked)]).toEqual([["kept"], [`GET ${PATH}`]]);
+        expect([synced.ok && synced.report.left, calls(asked)]).toEqual([["enabled"], [`GET ${PATH}`]]);
       },
     );
     await withFake(
