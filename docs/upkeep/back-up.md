@@ -57,13 +57,15 @@ the old install  ->  backup.zip  ->  a new install, where you want it
 | ---- | --------------------------------------------------------------------- | ------------------------------------------------------- |
 | 1    | save every site, its kept versions, and the settings                  | `npx poplin export --all-versions --out backup.zip`     |
 | 2    | check the zip: it lists its sites, and sends nothing                  | `npx poplin import backup.zip --dry-run`                |
-| 3    | in the same account: remove the old install, whole                    | [Remove](remove.md), without `--keep-data`              |
+| 3    | in the same account: remove the old install, whole                    | [Remove](remove.md) from its step 2, without `--keep-data` |
 | 4    | install anew, where you want it                                       | `npx poplin install cloudflare`, as [Install](../start/install.md) has it |
 | 5    | log this computer in to the new install, with Can change: Everything  | `npx poplin login --server https://poplin.example.com`  |
 | 6    | bring the sites and the settings back                                 | `npx poplin import backup.zip --settings`               |
-| 7    | to another account: remove the old install                            | [Remove](remove.md)                                     |
+| 7    | to another account: remove the old install                            | [Remove](remove.md) from its step 3                     |
 
 One account holds one install. So a move inside an account, to a domain or off one, removes the old install in step 3, before the new one is made. A move to another account leaves the old install up until step 7: remove it once step 6 put every site back.
+
+**Leave Remove's step 1 out.** It is the export of step 1 here, and a second run is refused with `file_exists`, since `backup.zip` is there already. In step 7, leave its step 2 out on this computer too: step 5 logged it in to the new install, and a logout would end that login.
 
 **Keep the zip safe.** After step 3 it is the only copy of your sites until step 6 is done. The last line of step 2 starts `the backup passed every check` for a zip that can be read. It does not try the sites against the new install.
 

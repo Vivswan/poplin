@@ -18,7 +18,7 @@ Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a 
 ```text
 the agent   asks, checks, says what to choose, and gives you each line to run
 you         choose in your browser, run two lines in a terminal of your own, and paste back what they print
-the token   goes from Cloudflare's page into the command's question, and nowhere else
+the token   goes from Cloudflare's page into the command's question, and never into the chat
 ```
 
 | Step | What happens                                                        | Who does it                                                                  |
@@ -45,7 +45,7 @@ Step 3 makes the install, in parts a to e. With an install that is there already
 | open a second terminal, as the lines below say    | a new window, beside the agent's                     |
 | paste the agent's line there, and press Enter     | the command asks `Account token (not shown):`        |
 | paste the token at that question, and press Enter | a row of small marks shows, never the letters        |
-| copy all that the command printed into the chat   | it holds no token, so it is safe to paste            |
+| copy all that the command printed into the chat   | it holds no token, so it is safe to paste. The login's code in it is used up once the command says `logged in` |
 
 ```text
 Mac:      press Command and Space, type Terminal, press Enter; then press Command and N for a new window
@@ -70,6 +70,8 @@ A script or a CI job has nobody to ask, so the agent runs both lines itself ther
 | in a script or a CI job, with nobody to ask  | the agent                  | in `POPLIN_INSTALL_TOKEN`, which the job's secret store sets   |
 
 Do not type an `export` line with the token to hand it to the agent: the shell keeps that line in its history.
+
+After the install, three things ask for a token again, and one of them is a page: the Domain screen of your own dashboard. [Step 4 of Install](install.md#4-read-what-it-made) names all three. Nothing else takes it.
 
 ## What to expect
 

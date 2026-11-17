@@ -1,6 +1,6 @@
 # Add the MCP server to your own configuration
 
-Open this at step 5 of [`setup.md`](setup.md), after the user has said yes to it. The MCP server is a program on this computer, started by you, that speaks over stdio.
+Open this at step 5 of [`setup.md`](setup.md), after the user's yes of step 1, which covers this: do not ask again. The MCP server is a program on this computer, started by you, that speaks over stdio.
 
 | Field     | Value        |
 | --------- | ------------ |

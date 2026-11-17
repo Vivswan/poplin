@@ -10,7 +10,7 @@ Poplin publishes a static site (a folder, or one HTML file) to an install: the u
 | ---- | ----------------------------------------------------- | --------------------------------------------------- |
 | 1    | Say what is about to happen, and ask                  | you                                                 |
 | 2    | Check what exists: Node.js, a saved login, an install | you                                                 |
-| 3    | Make the install, when there is none                  | the user: in a browser, then one command in a terminal of their own. You run the command in a script alone |
+| 3    | Make the install, when there is none                  | the user: in a browser, then two lines of one command in a terminal of their own: the dry run, and the run. You run both in a script alone |
 | 4    | Log this computer in, when no login is saved          | you run it, or the user at the end of step 3; the user allows it in a browser |
 | 5    | Add the MCP server to your own configuration          | you                                                 |
 | 6    | Confirm that it works, and tell the user              | you                                                 |
@@ -117,7 +117,9 @@ The team name can be any word. Zero Trust and R2 each ask for the payment method
 
 ### c. The account token
 
-**Never take the account token in the chat.** It changes the user's Cloudflare account. The user gives it to the command alone, which sends it to Cloudflare and stores it nowhere.
+**Never take the account token in the chat.** It changes the user's Cloudflare account. The user gives it to the command, which sends it to Cloudflare and stores it nowhere.
+
+After the install, three things take a token again: the Domain screen of the user's own dashboard, for a Repair and for a Check on an install that holds no key, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. Nothing else does: send the user to no other page with it.
 
 If the user pastes it to you all the same, do not repeat it. Ask them to open My Profile, then API Tokens, at Cloudflare, to choose Roll in that token's menu, and to use the new text.
 
@@ -156,7 +158,11 @@ Run it with the user's two answers. It changes nothing.
 npx poplin install cloudflare --domain example.com --login you@example.com --dry-run --json
 ```
 
-Without a domain, `--no-domain` stands in place of `--domain example.com`. It prints one JSON value:
+Without a domain, `--no-domain` stands in place of `--domain example.com`.
+
+`--json` stops no question: the command asks where its input and its error output are both a terminal. If yours are, add `--yes`, which asks nothing. With no token in your environment the line then ends at once with `missing_answer`.
+
+It prints one JSON value:
 
 ```json
 { "ok": true, "run": "dry-run", "ready": true, "address": "https://poplin.example.com",
@@ -388,16 +394,19 @@ No command moves an install: not to a domain, not off one, and not to another ac
 | ---- | --------------------------------------------------- | ------------------------------------------------------- |
 | 1    | `npx poplin export --all-versions --out backup.zip` | you, on the user's yes, with a login of Everything      |
 | 2    | `npx poplin import backup.zip --dry-run`            | you: it checks the zip, and sends nothing               |
-| 3    | the new install. In one account, the removal of the old install comes first | the user, as step 3 and the table above have them |
-| 4    | `npx poplin import backup.zip --settings`           | you, once this computer is logged in to the new install |
-| 5    | to another account: the removal of the old install  | the user, once step 4 put every site back               |
+| 3    | the new install. In one account, the removal of the old install comes first | the user: the install as [3. Make the install](#3-make-the-install) has it, the removal as the last row of the table before this one has it |
+| 4    | the login of this computer to the new install       | the user: yes at `Log this computer in now?`, the last question of their install, with Can change: Everything. It replaces the saved login of the old install |
+| 5    | `npx poplin import backup.zip --settings`           | you, once `npx poplin whoami` names the new install     |
+| 6    | to another account: the removal of the old install  | the user, once step 5 put every site back               |
+
+You log this computer out of nothing and in to nothing for a move: step 4 is the user's own answer, in their own terminal.
 
 Tell the user what changes before step 1, and wait for their yes. Under another domain, or of the other kind, every site gets a new address and each link they shared stops. In one account the old install goes before the new one is made, so the zip is then the only copy.
 
 | The line                   | Carries                                                            | Without it                                        |
 | -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
 | `--all-versions`, step 1   | every kept version of each site                                    | the live version alone: the others are lost       |
-| `--settings`, step 4       | every setting but the logins                                       | the new install keeps its own settings            |
+| `--settings`, step 5       | every setting but the logins                                       | the new install keeps its own settings            |
 | `--settings --logins`      | the list of users too                                              | the users are the new install's first login       |
 
 No line carries a token, a key of the install, or the activity log: each computer logs in again, and the log starts anew.
