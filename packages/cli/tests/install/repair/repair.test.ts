@@ -61,7 +61,7 @@ describe("a repair with the account token", () => {
       "left      Program               poplin, to run 0.1.0",
       "left      Address               poplin.example.com",
       "left out  Guard rule            the token lacks Rules: Edit (optional)",
-      "the install is as it should be. nothing was changed",
+      "the install is as it should be. Nothing was changed.",
       ...ENDED,
     ]);
     expect<unknown>(account.repairs).toEqual([{ found: WHOLE, where: { kind: "none" }, mend: { run: "apply", addUser: undefined } }]);
@@ -115,7 +115,7 @@ describe("a repair with the account token", () => {
       "would leave      Store                 poplin-sites",
       "would make       Guard rule            bots",
       "the token's permissions: each read was allowed, and a write is proven by the run",
-      "ready: a run would make 1. nothing was changed",
+      "ready: a run would make 1. Nothing was changed.",
     ]);
     expect(jsonOf(json)).toEqual({
       ok: true,
@@ -218,7 +218,7 @@ describe("what a repair does not go on from", () => {
     const ran = await runLine(RUN, account, { env: HELD });
     const json = await runLine(`${RUN} --json`, account, { env: HELD });
 
-    expect([ran.code, ran.out, ran.err, account.repairs]).toEqual([code, [], [line], []]);
+    expect([ran.code, ran.out, ran.err, account.repairs]).toEqual([code, [], [line.replace(/\. nothing was changed$/, ". Nothing was changed.")], []]);
     expect(jsonOf(json)).toEqual({ ok: false, problem, next, words: line, run: "apply", ready: false });
   });
 

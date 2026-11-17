@@ -8,6 +8,7 @@ import * as v from "valibot";
 import { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { problem, problemLines } from "../commands/problems";
 import type { Outcome } from "../commands/records";
+import { textOf } from "../commands/text";
 import { VERSION } from "../poplin";
 import type { Host } from "./records";
 import { TOOLS, type ToolName } from "./tools";
@@ -87,7 +88,7 @@ function resultOf(outcome: Outcome): CallToolResult {
     };
   }
 
-  const lines = [...outcome.lines, ...[...(outcome.steps ?? []), ...(outcome.notes ?? [])].map(toolWords)];
+  const lines = [...outcome.lines.map(textOf), ...[...(outcome.steps ?? []), ...(outcome.notes ?? [])].map(toolWords)];
 
   return { content: [{ type: "text", text: lines.length === 0 ? DONE : lines.join("\n") }], structuredContent: record(outcome.value) };
 }

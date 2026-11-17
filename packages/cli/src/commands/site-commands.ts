@@ -11,7 +11,8 @@ import { showViews } from "../../../core/src/records/views";
 import type { Called, Failure } from "../client/client";
 import { problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
-import { addressChange, columns, countText, dayText, searchNotes, siteLines } from "./text";
+import type { Line } from "../local/screen";
+import { addressChange, columns, countText, type DoneRow, dayText, doneRows, GAP, searchNotes, siteLines } from "./text";
 import { abandonUpload, callUnhurried, givenUp, giveUpUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
@@ -26,6 +27,18 @@ const OK = 200;
 
 /** How long the command waits between two asks after a copy the install makes by itself, in milliseconds. */
 const WATCH_MS = 2000;
+
+/** How far a site's address stands in under its row of the listing. */
+const INDENT = "  ";
+
+/** How some settings are joined into one phrase: `title and expires`. */
+const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+/** The settings of a site a change can leave other than it found them, in the order a change names them. */
+const SETTINGS = ["name", "title", "title_typed", "access", "public_name", "expires", "search_engines", "embeddable"] as const;
+
+/** A setting of a site as a change names it, where the words differ from the key the install takes. */
+const SETTING_WORDS: Readonly<Record<string, string>> = { search_engines: "search engines", public_name: "public name", title_typed: "title" };
 
 /** What became of a copy that was not finished, in words. */
 const AFTERMATH = {
@@ -66,17 +79,32 @@ function viewsText(views: SiteObject["views"]): string {
   return `${showViews(views.today)} times today, ${showViews(views.week)} in the last 7 days`;
 }
 
-function accessFacts(site: SiteObject): string[] {
-  return site.public_name === null ? [] : [`public name ${JSON.stringify(site.public_name)}`];
+/**
+ * The settings a change left other than it found them, each in the words the site's own listing has for it.
+ *
+ * @param before - the site as the change found it; `null` where the install did not say
+ * @returns the settings as one phrase, or that the site was so already
+ */
+function changedWords(before: SiteObject | null, site: SiteObject): string {
+  if (before === null) return "";
+
+  // A title counts once, whether its words changed or only who gave them: the page, or the person.
+  const named = new Set(SETTINGS.filter((key) => JSON.stringify(before[key]) !== JSON.stringify(site[key])).map((key) => SETTING_WORDS[key] ?? key));
+
+  return named.size === 0 ? "nothing: it was so already" : LIST.format(named);
 }
 
-/** The answer of an action on one site, printed as what was done and the site's address, and its old address when the action changed it. */
-function answered(called: Called<v.InferOutput<typeof SITE_ANSWER>>, done: string, facts: (site: SiteObject) => readonly string[], notes: readonly string[] = []): Outcome {
+/**
+ * The answer of an action on one site, printed as what was done, who can open the site, and the site's address, with its old address when the action changed it.
+ *
+ * @param more - the rows the action adds under its first
+ */
+function answered(called: Called<v.InferOutput<typeof SITE_ANSWER>>, done: string, facts: (site: SiteObject) => readonly string[], notes: readonly string[] = [], more: readonly DoneRow[] = []): Outcome {
   if (!called.ok) return failed(called);
 
   const { before, site } = called.value;
 
-  return { ok: true, value: called.value, lines: [...siteLines(done, site, facts(site)), ...addressChange(before, site)], notes };
+  return { ok: true, value: called.value, lines: siteLines(done, site, facts(site), [...more, ...addressChange(before, site)]), notes };
 }
 
 async function set(request: Asked<"set">, { client }: Session): Promise<Outcome> {
@@ -85,9 +113,9 @@ async function set(request: Asked<"set">, { client }: Session): Promise<Outcome>
   if (!changed.ok) return failed(changed);
 
   const { site, before } = changed.value;
-  const renamed = before === null || before.name === site.name ? [] : [`renamed from ${before.name}`];
+  const renamed: DoneRow[] = before === null || before.name === site.name ? [] : [{ tone: "note", done: "renamed", what: `from ${before.name}` }];
 
-  return answered(changed, site.access, (shown) => [...accessFacts(shown), ...renamed], searchNotes(changes, site));
+  return answered(changed, "changed", () => [changedWords(before, site)], searchNotes(changes, site), renamed);
 }
 
 async function show(request: OneSite, { client }: Session): Promise<Outcome> {
@@ -114,16 +142,21 @@ async function show(request: OneSite, { client }: Session): Promise<Outcome> {
 
     return [`version ${version.number}`, dayText(version.published), `by ${version.published_by}`, live];
   });
+  const hang = Math.max(...facts.map(([key = ""]) => key.length)) + GAP.length;
+  const rows = columns(facts).map((text): Line => ({ tone: "plain", text, hang }));
 
-  return { ok: true, value: shown.value, lines: [site.label, site.url, ...columns(facts), ...columns(versions)] };
+  return { ok: true, value: shown.value, lines: [site.label, site.url, "", ...rows, "", ...columns(versions)] };
 }
 
+/** The listing: one row a site, and under each site that is live its address, alone on a line. */
 function listed(sites: readonly SiteObject[], trash: boolean): string[] {
   if (sites.length === 0) return [trash ? "the trash is empty" : "no sites"];
 
   if (trash) return columns(sites.map((site) => [site.label, site.gone_on === undefined ? "" : `gone for good on ${dayText(site.gone_on)}`, site.title ?? ""]));
 
-  return columns(sites.map((site) => [site.label, site.access, site.url, site.title ?? ""]));
+  const rows = columns(sites.map((site) => [site.label, site.access, site.title ?? ""]));
+
+  return sites.flatMap((site, at) => [rows[at] ?? "", `${INDENT}${site.url}`]);
 }
 
 /** A cursor as the address holds it: one key a part, and no key for a part it lacks. */
@@ -168,13 +201,13 @@ async function newLink(request: OneSite, { client }: Session): Promise<Outcome> 
   if (!linked.ok) return failed(linked);
 
   const { before, site } = linked.value;
-  const dead = before === null ? [] : [`the old label ${before.label} and its address ${before.addresses.site} stopped working`];
+  const dead: DoneRow[] = before === null ? [] : [{ tone: "warning", done: "stopped", object: before.label, what: before.addresses.site }];
 
-  return { ok: true, value: linked.value, lines: [...siteLines("new link", site, []), ...dead] };
+  return { ok: true, value: linked.value, lines: siteLines("new link", site, [], dead) };
 }
 
-function copied(site: SiteObject): string[] {
-  return siteLines("copied", site, [site.access, countText(site.files, "file")]);
+function copied(site: SiteObject): (string | Line)[] {
+  return siteLines("copied", site, [countText(site.files, "file")]);
 }
 
 /**
@@ -210,7 +243,7 @@ function copyOn({ client, io }: Session, site: string, first: v.InferInput<typeo
  */
 async function beforeNextCall(io: Session["io"], copy: v.InferOutput<typeof DUPLICATED_SITE>["copy"], done: number): Promise<Failure | undefined> {
   if (copy.copied === null) {
-    if (io.terminal.progress) io.status(`copying ${countText(copy.files, "file")} in the background (Ctrl-C stops)`);
+    if (io.terminal.progress) io.screen.working(`Copying ${countText(copy.files, "file")} in the background (Ctrl-C stops)`);
 
     return (await io.pause(WATCH_MS)) === "interrupted" ? { kind: "stopped" } : undefined;
   }
@@ -218,7 +251,7 @@ async function beforeNextCall(io: Session["io"], copy: v.InferOutput<typeof DUPL
   // A call that copied nothing more would be sent for ever.
   if (copy.copied <= done) return { kind: "unexpected", status: OK };
 
-  if (io.terminal.progress) io.status(`copying ${copy.copied} of ${countText(copy.files, "file")}`);
+  if (io.terminal.progress) io.screen.working(`Copying ${copy.copied} of ${countText(copy.files, "file")}`);
 
   return undefined;
 }
@@ -253,7 +286,7 @@ async function duplicate(request: Asked<"duplicate">, session: Session): Promise
 
     throw error;
   } finally {
-    if (io.terminal.progress) io.status("");
+    if (io.terminal.progress) io.screen.rest();
   }
 }
 
@@ -269,14 +302,14 @@ export async function removeForGood(site: string, { client }: Pick<Session, "cli
 
   const { before, left } = deleted.value;
   const notes = left.length === 0 ? [] : ["the site is gone, and some of its files are still being removed"];
-  if (before === null) return { ok: true, value: deleted.value, lines: ["deleted for good; nothing can restore it"], notes };
+  if (before === null) return { ok: true, value: deleted.value, lines: [{ tone: "done", text: "deleted for good; nothing can restore it" }], notes };
 
   const addresses = [before.addresses.site];
   if (before.addresses.public !== null) addresses.push(before.addresses.public);
 
   const lost = `${countText(before.files, "file")} in ${countText(before.versions.length, "kept version")}`;
 
-  return { ok: true, value: deleted.value, lines: [`deleted for good  ${before.label}`, `gone: ${lost}; nothing can restore them`, `stopped working: ${addresses.join(" and ")}`], notes };
+  return { ok: true, value: deleted.value, lines: [{ tone: "done", text: `deleted for good  ${before.label}` }, `gone: ${lost}; nothing can restore them`, `stopped working: ${addresses.join(" and ")}`], notes };
 }
 
 /** Remove a site for good, once its label is typed on a terminal. Without a terminal to ask on, and at a question the person stopped, nothing is removed. */
@@ -288,7 +321,8 @@ async function deleteForever(request: Asked<"delete">, session: Session): Promis
   if (!found.ok) return failed(found, "reads");
 
   const { label } = found.value.site;
-  const typed = await io.ask(`This removes ${label} and every file of it for good. Type its label to go on: `);
+  io.screen.aside("warning", `This removes ${label} and every file of it for good.`);
+  const typed = await io.screen.ask(`Type ${label} to go on:`);
   if (typed === undefined) return { ok: false, problem: problem("stopped", "nothing was deleted") };
 
   if (typed.trim() !== label) return { ok: false, problem: problem("not_confirmed") };
@@ -307,13 +341,13 @@ async function deleteSite(request: Asked<"delete">, session: Session): Promise<O
 
   const gone = site.gone_on === undefined ? [] : [`gone for good on ${dayText(site.gone_on)}`];
 
-  return { ok: true, value: trashed.value, lines: [["in the trash", site.label, ...gone].join("  ")], steps: [`to take it back: poplin restore ${site.label}`] };
+  return { ok: true, value: trashed.value, lines: doneRows([{ tone: "done", done: "in the trash", object: site.label, what: gone.join(GAP) }]), steps: [`to take it back: poplin restore ${site.label}`] };
 }
 
 async function restore(request: OneSite, { client }: Session): Promise<Outcome> {
   const restored = await client.call(SITE_ANSWER, (api) => api.sites[":site"].restore.$post({ param: { site: siteWord(request.site) } }));
 
-  return answered(restored, "restored", (site) => [site.access, ...accessFacts(site)]);
+  return answered(restored, "restored", () => []);
 }
 
 /**

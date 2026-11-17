@@ -278,6 +278,18 @@ describe("logIn", () => {
     expect((await answered(saved.tokens.$get())).status).toBe(403);
   });
 
+  // Drift: the dashboard's choice stands on another screen than the terminal's last lines; a login that asked for every right and got less would first say so at the next command, as a refusal.
+  test("a login that asked for every right and was allowed its own sites only says so, in the dashboard's words for the two choices", async () => {
+    const desk = await openDesk();
+
+    const ran = await desk.login(`login --server ${ORIGIN} --no-browser`, async (address, soFar) => {
+      await desk.get(address);
+      await desk.decide({ login: idIn(address), allow: true, scope: "publisher", letters: lettersOf(soFar) });
+    });
+
+    expect([ran.code, ran.err, ran.out.includes("role     publisher")]).toEqual([0, ["the dashboard allowed Own sites only; for Everything, log in again and choose it there"], true]);
+  });
+
   // Drift: an agent relays the address to its user from the first line while the command still waits; a line that came late, or that was not JSON, would leave the user with nothing to open.
   test("--json prints the address and the code as one line before it waits, and who was logged in as a second, with no token in either", async () => {
     const desk = await openDesk();

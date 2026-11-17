@@ -93,8 +93,8 @@ describe("the MCP server", () => {
 
   // Drift: a wait told in a tool's answer reads as an error to the agent, or breaks the answer's shape; one told nowhere leaves whoever runs the server no trace of why a call took seconds.
   test.each([
-    ["a file that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), "index.html", "the install did not take index.html: sending it again in 2 s, 2 of 4"],
-    ["a file named after the token that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), ".txt", "the install did not take [token].txt: sending it again in 2 s, 2 of 4"],
+    ["a file that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), "index.html", "sending index.html again in 2 s, try 2 of 4"],
+    ["a file named after the token that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), ".txt", "sending [token].txt again in 2 s, try 2 of 4"],
     ["a rest the install asks for", () => Response.json({ error: { code: "too_many_requests", message: "no" } }, { status: 429, headers: { "Retry-After": "3" } }), "index.html", "the install asks for a pause: going on in 3 s"],
   ])("%s during a publish is one line in the server's log, and the tool answers as a publish that met nothing", async (_name, fault, failing, line) => {
     const bench = await open();
@@ -152,8 +152,10 @@ describe("the MCP server", () => {
     expect({ created: second.created, label: second.label, version: second.live_version }).toEqual({ created: false, label: first.label, version: 2 });
     expect(made.text.split("\n")).toEqual([
       `read ${folder}`,
-      "uploaded 2 files, 22 B (2 skipped as hidden or node_modules)",
-      `made  ${first.label}  private`,
+      "sent      2 files, 22 B (2 skipped as hidden or node_modules)",
+      `made      ${first.label}`,
+      "private   only your users can open it",
+      "",
       first.url,
     ]);
     expect(made.data.path).toBe(folder);
@@ -210,11 +212,11 @@ describe("the MCP server", () => {
     expect(shown.text.split("\n").slice(0, 2)).toEqual([site.label, site.url]);
     expect({ access: siteOf(unlisted).access, lines: unlisted.text.split("\n") }).toEqual({
       access: "unlisted",
-      lines: [`unlisted  ${site.label}`, siteOf(unlisted).url, `address changed: ${site.url} is now ${siteOf(unlisted).url}`],
+      lines: [`changed   ${site.label}  title, access, and expires`, `moved     from ${site.url}`, "unlisted  anyone with the link can open it", "", siteOf(unlisted).url],
     });
     expect({ version: siteOf(rolled).live_version, lines: rolled.text.split("\n") }).toEqual({
       version: 1,
-      lines: [`rolled back  ${site.label}  version 1 is live`, siteOf(rolled).url],
+      lines: [`rolled back  ${site.label}  version 1 is live`, "unlisted     anyone with the link can open it", "", siteOf(rolled).url],
     });
     expect((listed.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
     expect({ state: siteOf(trashed).state, last: trashed.text.split("\n").at(-1) }).toEqual({
@@ -284,7 +286,7 @@ describe("the MCP server", () => {
     const copy = siteOf(copied);
     const original = siteOf(await bench.call("get_site", { site: site.label }));
 
-    expect(copied.text.split("\n")).toEqual([`copied  ${copy.label}  private  1 file`, copy.url]);
+    expect(copied.text.split("\n")).toEqual([`copied    ${copy.label}  1 file`, "private   only your users can open it", "", copy.url]);
     expect({ sameId: copy.id === site.id, label: copy.label.slice(0, -12), access: copy.access, created: copy.created }).toEqual({ sameId: false, label: "report-draft--", access: "private", created: true });
     expect({ id: original.id, access: original.access, live: original.live_version }).toEqual({ id: site.id, access: "unlisted", live: 1 });
     expect(codeOf(await bench.call("duplicate_site", { site: site.label, name: "Not A Name" }))).toBe("bad_name");
@@ -317,8 +319,10 @@ describe("the MCP server", () => {
 
     expect(linked.text.split("\n")).toEqual([
       `new link  ${moved.label}`,
+      `stopped   ${site.label}  ${site.addresses.site}`,
+      "private   only your users can open it",
+      "",
       moved.url,
-      `the old label ${site.label} and its address ${site.addresses.site} stopped working`,
     ]);
     expect(moved.id).not.toBe(site.id);
     expect(codeOf(old)).toBe("not_found");

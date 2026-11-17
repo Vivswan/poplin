@@ -1,6 +1,7 @@
 // The two help texts of `poplin uninstall`: the command's own, which lists the providers, and one provider's, made from what the provider declares.
 
 import { columns } from "../../commands/text";
+import { foldedText } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import type { Provider } from "../records";
 import { DRY_RUN_HELP, optionLines } from "../report";
@@ -13,18 +14,19 @@ function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
 }
 
+/** The sections as one text, a line apart, with each line folded to the width of a help text. */
 function joined(sections: readonly (readonly string[])[]): string {
-  return sections.map((lines) => lines.join("\n")).join("\n\n");
+  return foldedText(sections.map((lines) => lines.join("\n")).join("\n\n"));
 }
 
 /** The help of the command itself: what it does, the providers, and the options every provider takes. */
 function commandHelp(providers: readonly Provider[]): string {
   const listed = providers.length === 0 ? ["none: this build of poplin carries no provider"] : columns(providers.map((one) => [one.id, one.about]));
-  const own = providers.map((one) => [`poplin uninstall ${one.id} --help`, "its own options, and what the account token needs"]);
+  const own = providers.map((one) => [`poplin uninstall ${one.id} --help`, "its own options, and what the token needs"]);
 
   return joined([
     ["poplin uninstall <provider> [options]"],
-    ["Remove your install from a provider: every object that carries poplin's names and", "marks, and nothing else. The sites' files and the database go last."],
+    ["Remove your install from a provider: every object that carries poplin's names and marks, and nothing else. The sites' files and the database go last."],
     ["Providers:", ...indented(listed)],
     ["Options:", ...optionLines(UNINSTALL_OPTIONS)],
     ["A run lists what it would remove, then asks you to type the install's address.", "A run that asks nothing takes it with --confirm; --yes alone confirms nothing."],

@@ -1,6 +1,7 @@
 // The two help texts of `poplin install`: the command's own, which lists the providers, and one provider's, made from what the provider declares.
 
 import { columns } from "../../commands/text";
+import { foldedText } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import { SHARED_OPTIONS } from "./parse";
 import type { Provider } from "../records";
@@ -13,14 +14,15 @@ function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
 }
 
+/** The sections as one text, a line apart, with each line folded to the width of a help text. */
 function joined(sections: readonly (readonly string[])[]): string {
-  return sections.map((lines) => lines.join("\n")).join("\n\n");
+  return foldedText(sections.map((lines) => lines.join("\n")).join("\n\n"));
 }
 
 /** The help of the command itself: what it does, the providers, and the options every provider takes. */
 function commandHelp(providers: readonly Provider[]): string {
   const listed = providers.length === 0 ? ["none: this build of poplin carries no provider"] : columns(providers.map((one) => [one.id, one.about]));
-  const own = providers.map((one) => [`poplin install ${one.id} --help`, "its own options, and what the account token needs"]);
+  const own = providers.map((one) => [`poplin install ${one.id} --help`, "its own options, and what the token needs"]);
 
   return joined([
     ["poplin install <provider> [options]"],

@@ -77,7 +77,7 @@ interface Told {
 
 /** The line before a pause of so many seconds, after which the one file is sent for the `next` time, as a pipe is sent it. */
 function againPiped(seconds: number, next: number): string {
-  return `the install did not take index.html: sending it again in ${seconds} s, ${next} of 4`;
+  return `sending index.html again in ${seconds} s, try ${next} of 4`;
 }
 
 /** The same line as a terminal's progress line shows it. */
@@ -339,7 +339,7 @@ describe("upload", () => {
   test.each<[string, Told]>([
     [
       "sent a third time says so before each pause, and the progress writes over it",
-      { faults: [badGateway, badGateway], line: "", terminal: WATCHED, code: 0, waits: [1500, 3000], status: [again(2, 2), again(3, 3), "uploading 1/1 file, 14 B of 14 B", ""], err: [], out: 3 },
+      { faults: [badGateway, badGateway], line: "", terminal: WATCHED, code: 0, waits: [1500, 3000], status: ["Publishing notes", again(2, 2), again(3, 3), "Publishing notes: 1/1 file, 14 B of 14 B", ""], err: [], out: 5 },
     ],
     [
       "given up says so before each of its three pauses, and then what it always said",
@@ -349,12 +349,12 @@ describe("upload", () => {
         terminal: WATCHED,
         code: 5,
         waits: [1500, 3000, 6000],
-        status: [again(2, 2), again(3, 3), again(6, 4), ""],
+        status: ["Publishing notes", again(2, 2), again(3, 3), again(6, 4), ""],
         err: [`the answer is not the install's: status 502 from ${ORIGIN}`, "the upload was given up and no site changed; is that the address of your poplin install?"],
         out: 0,
       },
     ],
-    ["sent again with no terminal to watch says so in one plain line on stderr", { faults: [badGateway], line: "", terminal: PIPED, code: 0, waits: [1500], status: [], err: [againPiped(2, 2)], out: 3 }],
+    ["sent again with no terminal to watch says so in one plain line on stderr", { faults: [badGateway], line: "", terminal: PIPED, code: 0, waits: [1500], status: [], err: [againPiped(2, 2)], out: 5 }],
     ["sent again under --json says so on stderr, and stdout holds the one result", { faults: [badGateway], line: " --json", terminal: PIPED, code: 0, waits: [1500], status: [], err: [againPiped(2, 2)], out: 1 }],
   ])("a file that is %s", async (_name, row) => {
     const bench = await openBench();
@@ -405,7 +405,7 @@ describe("upload", () => {
 
     const ran = await bench.run(folderOf("notes", { ...ONE, [named]: "x" }));
 
-    expect([ran.code, ran.err]).toEqual([0, ["the install did not take [token].txt: sending it again in 2 s, 2 of 4"]]);
+    expect([ran.code, ran.err]).toEqual([0, ["sending [token].txt again in 2 s, try 2 of 4"]]);
   });
 
   // Drift: an agent that runs a publish in a pipe sees nothing for as long as the install asks it to rest, and takes the command for hung.
@@ -438,7 +438,7 @@ describe("upload", () => {
     const watched = await bench.run(`duplicate ${label}`, { terminal: { asks: false, progress: true } });
     const piped = await bench.run(`duplicate ${label}`);
 
-    expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["copying 112 of 130 files", ""], 0, []]);
+    expect([watched.code, watched.status, piped.code, piped.status]).toEqual([0, ["Copying 112 of 130 files", ""], 0, []]);
   });
 
   // Drift: a publisher builds no address of its own. A file sent to the route this code remembers, and not where its ticket says, would miss whatever place the install names for it.

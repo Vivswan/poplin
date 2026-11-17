@@ -22,6 +22,7 @@ import type * as v from "valibot";
 import { type Client, createClient, type Failure, type Fetch } from "../../../../cli/src/client/client";
 import type { Io } from "../../../../cli/src/commands/records";
 import { run as runCli } from "../../../../cli/src/commands/run";
+import { plainScreen } from "../../../../cli/src/local/screen";
 import { callUnhurried } from "../../../../cli/src/commands/upload";
 import { buildDemo } from "../../../../demo/scripts/build";
 import { REAL_SITES_FILE, type RealSites } from "../../../../demo/src/preview/real-sites";
@@ -152,12 +153,10 @@ function ioOf(ends: ResetEnds, scratch: string, said: string[]): Io {
     out: (line) => {
       said.push(line);
     },
-    err: () => undefined,
-    status: () => undefined,
+    screen: plainScreen({ out: (line) => void said.push(line), err: () => undefined }),
     fetch: ends.fetch,
     machine: { env: { POPLIN_CONFIG_DIR: join(scratch, "config"), POPLIN_SERVER: ends.server, POPLIN_TOKEN: ends.token }, platform: process.platform, home: scratch },
     terminal: { asks: false, progress: false },
-    ask: async () => "",
     computer: "live-reset",
     open: () => undefined,
     pause: async (ms) => {

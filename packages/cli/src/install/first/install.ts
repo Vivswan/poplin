@@ -11,6 +11,7 @@ import { problemLines } from "../../commands/problems";
 import type { Io } from "../../commands/records";
 import { installAnswers } from "./answers";
 import { lookFor, STOPPED, settle } from "../ask";
+import { showLine } from "../../commands/text";
 import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
@@ -149,7 +150,7 @@ async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: s
   }
 
   // The address and the code of the login are shown as lines of this command: with `--json` on stderr, so stdout holds the one value.
-  const outcome = await logIn({ kind: "login", publisher: false, browser: true, json: false, server: address }, { ...io, out: json ? io.err : (line) => show.line("plain", line) });
+  const outcome = await logIn({ kind: "login", publisher: false, browser: true, json: false, server: address }, { ...io, screen: json ? { ...io.screen, line: io.screen.aside } : io.screen });
   if (!outcome.ok) {
     for (const line of problemLines(outcome.problem)) show.aside("error", line);
 
@@ -158,7 +159,7 @@ async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: s
     return { login: { ok: false, problem: outcome.problem.code } };
   }
 
-  for (const line of outcome.lines) show.line("plain", line);
+  for (const line of outcome.lines) showLine(show, line);
 
   for (const note of outcome.notes ?? []) show.aside("note", note);
 
@@ -243,8 +244,8 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
   show.working(doing);
 
   const installed = await provider.install(ground.found, ground.where, request.login, mode.mode, ends.reach, (row) => {
-    const { tone, text } = rowLine(row, mode.mode);
-    show.line(tone, text);
+    const { tone, text, hang } = rowLine(row, mode.mode);
+    show.line(tone, text, hang);
     show.working(doing);
   });
 

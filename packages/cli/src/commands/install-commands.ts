@@ -15,7 +15,8 @@ import { VERSION } from "../poplin";
 import { readSetting } from "./install-settings";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Outcome, RequestOf, Session } from "./records";
-import { columns, countText, dayText } from "./text";
+import type { Line } from "../local/screen";
+import { columns, countText, dayText, GAP } from "./text";
 
 /** What the login is still good for after a logout that the install did not answer: an install that was removed answers none, and its tokens went with it. */
 const STILL_LIVE = "if the install still stands, the token may still be live: revoke it on the install's dashboard";
@@ -95,7 +96,7 @@ async function logout({ client, io, server, source }: Session): Promise<Outcome>
     return { ok: false, problem: { ...said, hint: `${local}; ${STILL_LIVE}` } };
   }
 
-  const lines = [`logged out of ${server}`, failure === undefined ? "the token is revoked" : "the token was dead already"];
+  const lines = [{ tone: "done", text: `logged out of ${server}` } as const, failure === undefined ? "the token is revoked" : "the token was dead already"];
 
   return { ok: true, value: { server, revoked: failure === undefined }, lines, notes: source === "file" ? [] : [local] };
 }
@@ -216,7 +217,10 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
     ...domain.checks,
     ...noted.checks,
   ];
-  const lines = columns(checks.map((check) => [check.ok ? "ok" : "failed", check.check, check.detail]));
+  const marks = checks.map((check) => (check.ok ? "ok" : "failed"));
+  // A detail a terminal folds goes on under itself, past the mark and the name of its check.
+  const hang = Math.max(...marks.map((mark) => mark.length)) + Math.max(...checks.map((check) => check.check.length)) + 2 * GAP.length;
+  const lines = columns(checks.map((check, at) => [marks[at] ?? "", check.check, check.detail])).map((text, at): Line => ({ tone: checks[at]?.ok === true ? "done" : "error", text, hang }));
 
   const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, problems: noted.problems, token, checks }, lines: [...lines, "nothing was changed"] };
 

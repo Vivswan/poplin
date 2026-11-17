@@ -138,7 +138,7 @@ function exported(target: string, manifest: Manifest, sites: readonly Exported[]
   return {
     ok: true,
     value: { file: target, ...facts, sites, zip_bytes: zipBytes },
-    lines: [...columns(rows), `wrote ${target}: ${countText(count, "site")}, ${countText(manifest.files, "file")}, ${showBytes(zipBytes)}`],
+    lines: [...columns(rows), { tone: "done", text: `wrote ${target}: ${countText(count, "site")}, ${countText(manifest.files, "file")}, ${showBytes(zipBytes)}` }],
   };
 }
 
@@ -159,7 +159,7 @@ export async function runExport(request: ExportRequest, { client, io }: Session)
   let files = 0;
   const arrived = (label: string): void => {
     files += 1;
-    if (io.terminal.progress) io.status(`exporting ${label}: ${countText(files, "file")} so far`);
+    if (io.terminal.progress) io.screen.working(`exporting ${label}: ${countText(files, "file")} so far`);
   };
 
   try {
@@ -189,6 +189,6 @@ export async function runExport(request: ExportRequest, { client, io }: Session)
 
     return { ok: false, problem: problem("unwritable", error instanceof Error ? error.message : String(error)) };
   } finally {
-    if (io.terminal.progress) io.status("");
+    if (io.terminal.progress) io.screen.rest();
   }
 }

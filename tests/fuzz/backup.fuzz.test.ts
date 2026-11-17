@@ -9,6 +9,7 @@ import fc from "fast-check";
 import { parseObjectKey } from "../../packages/core/src/storage/storage";
 import { openBackup } from "../../packages/cli/src/backup/read";
 import { run } from "../../packages/cli/src/commands/run";
+import { plainScreen } from "../../packages/cli/src/local/screen";
 import { backupEntries, writeZip } from "../../packages/cli/tests/backup/support/zips";
 import { fuzzTarget } from "./config";
 
@@ -115,8 +116,7 @@ property(
 
     const code = await run(["import", ZIP], {
       out: (text) => printed.push(text),
-      err: (text) => printed.push(text),
-      status: (text) => printed.push(text),
+      screen: plainScreen({ out: (text) => printed.push(text), err: (text) => printed.push(text), status: (text) => printed.push(text), ask: async () => "" }),
       fetch: async (input, init) => {
         sent.push(new URL(input));
         if (!loggedIn) return new Response(NOT_LOGGED_IN, { status: 401 });
@@ -128,7 +128,6 @@ property(
       },
       machine: { env: { POPLIN_SERVER: SERVER, POPLIN_TOKEN: TOKEN, POPLIN_CONFIG_DIR: join(SCRATCH, "config") }, platform: process.platform, home: SCRATCH },
       terminal: { asks: false, progress: true },
-      ask: async () => "",
       timeoutMs: 1000,
       computer: "laptop",
       open: () => undefined,

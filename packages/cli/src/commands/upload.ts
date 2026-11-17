@@ -61,7 +61,7 @@ export type Published = v.InferOutput<typeof PUBLISHED_SITE>;
 export type Begun = v.InferOutput<typeof BEGUN_UPLOAD>;
 
 /** What a wait needs of the machine's ends. */
-type Resting = Pick<Io, "pause" | "status" | "err" | "terminal">;
+type Resting = Pick<Io, "pause" | "screen" | "terminal">;
 
 /** What the lanes of one upload share: where every wait of it is waited out, the stop after which no file is sent again, and the tickets its files are sent by. */
 interface Lanes {
@@ -151,10 +151,10 @@ class Pace {
   /** Wait on the command's one clock, and say why first: on the progress line where there is one, else in one line on stderr, so whatever runs the command in a pipe sees why it waits. */
   async #pause(ms: number, reason: string): Promise<void> {
     if (this.#io.terminal.progress) {
-      this.#io.status(`${reason} (Ctrl-C stops)`);
+      this.#io.screen.working(`${reason} (Ctrl-C stops)`);
       this.#told = true;
     } else {
-      this.#io.err(reason);
+      this.#io.screen.aside("note", reason);
     }
 
     if ((await this.#io.pause(ms)) === "interrupted") this.#stopped = { kind: "stopped" };
@@ -202,14 +202,14 @@ class Pace {
     if (this.#stopped !== undefined) return false;
 
     const ms = againPauseMs(sendings);
-    await this.#pause(ms, `the install did not take ${path}: sending it again in ${Math.round(ms / MS_PER_SECOND)} s, ${sendings + 1} of ${UPLOAD_RETRIES + 1}`);
+    await this.#pause(ms, `sending ${path} again in ${Math.round(ms / MS_PER_SECOND)} s, try ${sendings + 1} of ${UPLOAD_RETRIES + 1}`);
 
     return this.#stopped === undefined;
   }
 
   /** Take the line of a wait off the terminal, where one was told. */
   clear(): void {
-    if (this.#told) this.#io.status("");
+    if (this.#told) this.#io.screen.rest();
   }
 }
 
@@ -397,7 +397,7 @@ export async function sendUpload<File extends UploadFile>(client: Client, begun:
 
     return asked.ok ? { ok: true, value: asked.value.tickets } : asked;
   };
-  const sending = { arrived: on.arrived, pace, stopped: on.io.stopped, tickets: new TicketBook(begun.tickets, askTickets, () => on.io.err(THROUGH_INSTALL)) };
+  const sending = { arrived: on.arrived, pace, stopped: on.io.stopped, tickets: new TicketBook(begun.tickets, askTickets, () => on.io.screen.aside("note", THROUGH_INSTALL)) };
   const finish = (): Promise<Called<Published>> => unhurried(pace, () => finishUpload(client, upload));
 
   const unsent = await sendFiles(client, files, sending);

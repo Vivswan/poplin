@@ -18,7 +18,7 @@ async function start({ client }: Session, asked: string | undefined): Promise<Ou
 
   const { from, to } = started.value;
 
-  return { ok: true, value: { started: true, from, to }, lines: [`the install now runs ${to}; it ran ${from}`] };
+  return { ok: true, value: { started: true, from, to }, lines: [{ tone: "done", text: `the install now runs ${to}; it ran ${from}` }] };
 }
 
 /** Say what a start would come to, with one call that only reads: the newer version when one is out, whether the install holds the key an update is sent with, and the version it can go back to. */

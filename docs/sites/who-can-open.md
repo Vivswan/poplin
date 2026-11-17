@@ -24,12 +24,16 @@ Every other example runs the same way, with `npx` before `poplin`. A change of a
 
 ```text
 $ npx poplin set report--k3f9x2ab71qz --unlisted
-unlisted  report--k3f9x2ab71qz
+changed   report--k3f9x2ab71qz  access
+moved     from https://report--k3f9x2ab71qz-p-poplin.example.com
+unlisted  anyone with the link can open it
+
 https://report--k3f9x2ab71qz-u-poplin.example.com
-address changed: https://report--k3f9x2ab71qz-p-poplin.example.com is now https://report--k3f9x2ab71qz-u-poplin.example.com
 
 $ npx poplin set report--k3f9x2ab71qz --public --public-name docs
-public  report--k3f9x2ab71qz  public name "docs"
+changed   report--k3f9x2ab71qz  access and public name
+public    anyone can open it, as "docs"
+
 https://docs-page.example.com
 ```
 

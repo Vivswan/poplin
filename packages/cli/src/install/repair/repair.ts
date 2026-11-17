@@ -77,8 +77,8 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
   show.working(doing);
 
   const repaired = await provider.repair(ground.found, ground.where, { run, addUser: plan.addUser }, ends.reach, (row) => {
-    const { tone, text } = rowLine(row, run);
-    show.line(tone, text);
+    const { tone, text, hang } = rowLine(row, run);
+    show.line(tone, text, hang);
     show.working(doing);
   });
   if (!repaired.ok) return stopped(unmended(repaired, at.careful, at.place), show, at);

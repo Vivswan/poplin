@@ -3,9 +3,10 @@
 
 import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/installer";
 import { columns } from "../../commands/text";
+import type { Line } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, type Line, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
+import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -18,7 +19,7 @@ const PROBLEMS = { elsewhere: "other_place", changed: "changed" } as const;
 const ADOPT = "--adopt";
 
 /** What each end of a repair that left nothing undone is called. */
-const DONE = { same: `the install is as it should be. ${UNCHANGED}`, mended: "the install is mended." } as const;
+const DONE = { same: "the install is as it should be. Nothing was changed.", mended: "the install is mended." } as const;
 
 /** A repair that worked through its rows. */
 type Mended = Extract<Repaired, { readonly ok: true }>;

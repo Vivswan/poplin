@@ -9,6 +9,7 @@ import fc from "fast-check";
 import { type Called, type Client, createClient } from "../../packages/cli/src/client/client";
 import type { Io } from "../../packages/cli/src/commands/records";
 import { run } from "../../packages/cli/src/commands/run";
+import { plainScreen } from "../../packages/cli/src/local/screen";
 import { ABANDONED_UPLOAD } from "../../packages/core/src/actions/abandon-publish";
 import { BEGUN_LOGIN_ANSWER, REDEEMED_LOGIN } from "../../packages/core/src/actions/computer-logins";
 import { DELETED_SITE } from "../../packages/core/src/actions/delete";
@@ -198,16 +199,19 @@ property(
     const printed: string[] = [];
     const io: Io = {
       out: (text) => printed.push(text),
-      err: (text) => printed.push(text),
-      status: (text) => printed.push(text),
+      screen: plainScreen({
+        out: (text) => printed.push(text),
+        err: (text) => printed.push(text),
+        status: (text) => printed.push(text),
+        ask: async (question) => {
+          printed.push(question);
+
+          return "report--k3f9x2ab71qz";
+        },
+      }),
       fetch: scripted(script),
       machine: { env: { POPLIN_SERVER: SERVER, POPLIN_TOKEN: TOKEN, POPLIN_CONFIG_DIR: join(SCRATCH, "config") }, platform: process.platform, home: SCRATCH },
       terminal: { asks: true, progress: true },
-      ask: async (question) => {
-        printed.push(question);
-
-        return "report--k3f9x2ab71qz";
-      },
       timeoutMs: 1000,
       computer: "laptop",
       open: () => undefined,

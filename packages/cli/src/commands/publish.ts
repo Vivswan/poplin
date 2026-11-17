@@ -13,7 +13,7 @@ import { firstRootLink } from "../files/root-links";
 import { readTitle } from "../files/title";
 import { type Problem, problem, problemOf } from "./problems";
 import type { Io, Outcome, RequestOf, Session } from "./records";
-import { addressChange, columns, countText, dryRunText, searchNotes, siteLines } from "./text";
+import { addressChange, columns, countText, doneRows, dryRunText, searchNotes, siteLines } from "./text";
 import { abandonUpload, callUnhurried, givenUp, giveUpUpload, type Published, sendUpload } from "./upload";
 import { siteChanges, siteWord } from "./wire";
 
@@ -61,10 +61,13 @@ export interface PublishPlan {
   readonly manifest: Manifest;
 }
 
-/** Counts the files that arrived, and shows the count on the progress line when there is a terminal to show it on. */
+/** Counts the files that arrived, and shows the count on the line of what is worked on when there is a terminal to show it on. */
 interface Progress {
+  /** Counts one file that arrived. */
   readonly arrived: (file: PublishFile) => void;
-  readonly clear: () => void;
+
+  /** Ends the line: once the publish is live it stays as its heading, and after anything else nothing stays. */
+  readonly end: (live: boolean) => void;
 }
 
 function summary(plan: PublishPlan): string {
@@ -75,18 +78,21 @@ function summary(plan: PublishPlan): string {
 
 function progressOn(io: Io, plan: PublishPlan): Progress {
   const total = plan.files.length;
+  const heading = `Publishing ${plan.manifest.name ?? plan.manifest.site}`;
   let files = 0;
   let bytes = 0;
 
-  if (!io.terminal.progress) return { arrived: () => undefined, clear: () => undefined };
+  if (!io.terminal.progress) return { arrived: () => undefined, end: () => undefined };
+
+  io.screen.working(heading);
 
   return {
     arrived: (file) => {
       files = Math.min(files + 1, total);
       bytes = Math.min(bytes + file.size, plan.bytes);
-      io.status(`uploading ${files}/${countText(total, "file")}, ${showBytes(bytes)} of ${showBytes(plan.bytes)}`);
+      io.screen.working(`${heading}: ${files}/${countText(total, "file")}, ${showBytes(bytes)} of ${showBytes(plan.bytes)}`);
     },
-    clear: () => io.status(""),
+    end: (live) => io.screen.rest(live ? heading : undefined),
   };
 }
 
@@ -118,9 +124,9 @@ async function declare(files: readonly PublishFile[], stopped: AbortSignal): Pro
 
 function published(plan: PublishPlan, answer: Published): Outcome {
   const { site } = answer;
-  const facts = site.created ? [site.access] : [`version ${site.live_version}`, site.access];
-
-  const lines = [`uploaded ${summary(plan)}`, ...siteLines(site.created ? "made" : "updated", site, facts), ...addressChange(answer.before, site)];
+  const facts = site.created ? [] : [`version ${site.live_version}`];
+  const sent = doneRows([{ tone: "done", done: "sent", what: summary(plan) }]);
+  const lines = [...sent, ...siteLines(site.created ? "made" : "updated", site, facts, addressChange(answer.before, site))];
 
   return { ok: true, value: answer, lines, notes: searchNotes(plan.manifest, site) };
 }
@@ -220,21 +226,27 @@ export async function sendPublish(plan: PublishPlan, session: Session): Promise<
 
   const upload = begun.value.upload.id;
   const progress = progressOn(io, plan);
+  const live = (answer: Published): Outcome => {
+    progress.end(true);
+
+    return published(plan, answer);
+  };
 
   try {
     const finished = await sendUpload(client, begun.value, plan.files, { arrived: progress.arrived, io });
-    if (finished.ok) return published(plan, finished.value);
+    if (finished.ok) return live(finished.value);
 
     // An upload the install finished though its answer was lost is reported as done.
     const became = await giveUpUpload(session, upload);
-    if (became.kind === "published") return published(plan, became.answer);
+    if (became.kind === "published") return live(became.answer);
+
+    progress.end(false);
 
     return givenUp(finished.failure, AFTERMATH[became.kind]);
   } catch (error) {
+    progress.end(false);
     await abandonUpload(client, upload);
 
     throw error;
-  } finally {
-    progress.clear();
   }
 }

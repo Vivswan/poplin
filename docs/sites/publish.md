@@ -33,8 +33,10 @@ Every other example runs the same way, with `npx` before `poplin`.
 
 ```text
 $ npx poplin ./report
-uploaded 3 files, 48 kB
-made  report--k3f9x2ab71qz  private
+sent      3 files, 48 kB
+made      report--k3f9x2ab71qz
+private   only your users can open it
+
 https://report--k3f9x2ab71qz-p-poplin.example.com
 ```
 

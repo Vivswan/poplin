@@ -8,6 +8,7 @@ import pRetry from "p-retry";
 
 import { createClient, type Fetch } from "../../../cli/src/client/client";
 import type { Io } from "../../../cli/src/commands/records";
+import { plainScreen } from "../../../cli/src/local/screen";
 import { DELETED_SITE } from "../../../core/src/actions/delete";
 import { LISTED_SITES } from "../../../core/src/actions/list";
 import { SETTINGS_ANSWER } from "../../../core/src/actions/store-settings";
@@ -168,8 +169,7 @@ export function openBench(parts: BenchParts): OpenBench {
 
   const io = (out: (line: string) => void, fetch: Fetch = counted): Io => ({
     out,
-    err: () => undefined,
-    status: () => undefined,
+    screen: plainScreen({ out, err: () => undefined, status: () => undefined, ask: async () => "" }),
     fetch,
     machine: {
       env: { POPLIN_CONFIG_DIR: join(scratch, "config"), POPLIN_SERVER: admin, POPLIN_TOKEN: parts.token },
@@ -177,7 +177,6 @@ export function openBench(parts: BenchParts): OpenBench {
       home: scratch,
     },
     terminal: { asks: false, progress: false },
-    ask: async () => "",
     computer: "live-checks",
     open: () => undefined,
     // A command that waits between two asks waits as long here: an install that copies by itself would else be asked without a rest.
