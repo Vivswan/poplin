@@ -26,4 +26,5 @@ The tools an agent calls, each with one example input and the command that does 
 - **`delete_site` with `"no_trash": true`** removes the site at once, with no trash.
 - **The copy's name** goes with `duplicate_site`: `{ "site": "report--k3f9x2ab71qz", "name": "report-draft" }`. Left out, the copy has the site's own name.
 - **`duplicate_site` titles the copy** as the site, with `(copy)` after it: `Q3 sales (copy)`. [Manage sites](manage.md) has the whole rule.
+- **No tool takes a dry run:** a tool call is a run. `--dry-run` goes with the commands, and [Manage sites](manage.md#try-a-change-first) lists them.
 - **The agent's rules** are in the skill: [`skills/poplin/SKILL.md`](../../skills/poplin/SKILL.md).

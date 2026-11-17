@@ -191,7 +191,7 @@ async function show(request: Asked<"show">, { client }: Session): Promise<Outcom
     ["embeddable", switchText(site.embeddable)],
     ["expires", expiryText(site.expires)],
     ["kept", `${showBytes(site.bytes)} in ${countText(site.files, "file")}, every kept version counted`],
-    ["pages opened", viewsText(site.views)],
+    ["visits", viewsText(site.views)],
   ];
   const versions = site.versions.map((version) => {
     const live = version.number === site.live_version ? "live" : "";

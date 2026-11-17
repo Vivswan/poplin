@@ -59,7 +59,7 @@ It prints `logged out of` and the install's address. On the computer of step 1, 
 | poplin's tools in your agent          | the MCP server named `poplin`                         | ask the agent: `Remove the poplin MCP server from your configuration.` Then restart it |
 | poplin installed with npm             | only if you ran `npm install -g poplin`               | `npm uninstall -g poplin`                                                   |
 
-While the two variables are set, `poplin logout` works on that login and leaves the saved one on the computer. So their lines go first.
+While the two variables are set, `poplin logout` works on that login and leaves the saved one on the computer. So their lines go first. `poplin logout --dry-run` says which login a logout would end, and ends none.
 
 `npx` keeps the copy it downloaded in npm's own cache. It runs only when you type the command, and there is nothing to do about it.
 

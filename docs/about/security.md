@@ -245,7 +245,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | the stored key | kept in the database; the limits per visitor are made from it |
 | the bucket and the database | R2 public access stays off; the database is reached only through the Worker's binding |
 | site headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and correct content types on every answer of a site but three: the 308 from plain http, the 429 of a limit, and the page of a paused site carry neither header. The files of a site whose Allow embedding is off carry one more, which [Between sites](between-sites.md) describes |
-| page views | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept a year; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
+| visits | a site shows about how often its pages were opened, from a sampled count per site and UTC day kept a year; it counts opens, not people: no address, cookie, or browser name of a visitor is stored |
 | the dashboard | a strict Content-Security-Policy; it may never be framed |
 | a published file | before a file's bytes, the CLI sends its path, its size, its type, and its fingerprint, a SHA-256 of its bytes. The storage checks the bytes against the fingerprint as they arrive. A file of other bytes is refused and stored nowhere, one of the same length included |
 | content | the Worker never reads, parses, or rewrites a site's files, and adds none to them. A site that holds no `favicon.ico` is answered poplin's own icon at `/favicon.ico`, from the Worker's code |
