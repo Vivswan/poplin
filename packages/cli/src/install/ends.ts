@@ -4,7 +4,7 @@
 import { text } from "node:stream/consumers";
 import { fileURLToPath } from "node:url";
 
-import type { Run } from "../../../core/src/install/installer";
+import type { Reach, Run } from "../../../core/src/install/installer";
 import { exitCode } from "../commands/exit-codes";
 import type { Io } from "../commands/records";
 import { guardedScreen, written } from "../commands/line/util";
@@ -24,6 +24,9 @@ const ELSEWHERE: ReadonlySet<Stop["problem"]> = new Set(["other_place"]);
 
 /** The exits of a stop, as the endings the command table knows. */
 const ENDINGS = { 1: "failed", 2: "usage-error", 5: "unreachable" } as const;
+
+/** What ends the progress line of a wait, as on every wait a person can end. */
+const CANCELS = "(Ctrl-C cancels)";
 
 /** How a command says what it does: lines for a person, or nothing but the one JSON value at its end. */
 export interface Show {
@@ -97,6 +100,36 @@ function showOf(json: boolean, io: Io, ends: InstallEnds, secrets: ReadonlySet<s
   if (json) return { line: () => undefined, aside: (_tone, text) => io.screen.aside("plain", text), working: () => undefined, value };
 
   return { line: ends.screen.line, aside: ends.screen.aside, working: ends.screen.working, value: () => undefined };
+}
+
+/**
+ * The ways to show and the ends of one run, whose wait for a provider says why first, as an upload's does.
+ *
+ * @param progress - whether the run has a progress line: the wait is told there, and the line shows the work again once no wait is left; else it is one line on stderr
+ */
+function toldWaits(shows: Show, ends: InstallEnds, progress: boolean): { readonly show: Show; readonly ends: InstallEnds } {
+  const work: { text?: string; waits: number } = { waits: 0 };
+  const working = (text: string): void => {
+    work.text = text;
+    shows.working(text);
+  };
+  const sleep: Reach["sleep"] = async (milliseconds, why) => {
+    if (why === undefined) return ends.reach.sleep(milliseconds);
+
+    if (progress) shows.working(`${why} ${CANCELS}`);
+    else shows.aside("note", why);
+
+    work.waits += 1;
+    try {
+      await ends.reach.sleep(milliseconds);
+    } finally {
+      work.waits -= 1;
+    }
+
+    if (progress && work.waits === 0 && work.text !== undefined) shows.working(work.text);
+  };
+
+  return { show: { ...shows, working }, ends: { ...ends, reach: { ...ends.reach, sleep } } };
 }
 
 /**
@@ -184,7 +217,11 @@ async function answered<Planned>(line: Line<Planned>, parsed: Parsed<Planned>, p
 
   if (parsed.kind === "stop") return stopped(parsed.stop, show, { ...line, provider: parsed.provider });
 
-  if (parsed.kind === "plan") return command.run(parsed.plan, io, ends, show, secrets);
+  if (parsed.kind === "plan") {
+    const told = toldWaits(show, ends, io.terminal.progress && !command.json(parsed.plan));
+
+    return command.run(parsed.plan, io, told.ends, told.show, secrets);
+  }
 
   const provider = await picked(providers, ends);
 

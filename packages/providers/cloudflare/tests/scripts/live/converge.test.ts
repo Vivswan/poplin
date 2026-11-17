@@ -511,6 +511,17 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     expect({ code: over.code, uploads: over.uploads, buckets: standing.account.buckets.map((bucket) => bucket.name) }).toEqual({ code: 0, uploads: [FIRST_UPLOAD], buckets: ["poplin-live-sites", "poplin-sites"] });
   });
 
+  // Drift: a removal that left a kind stops the run. Told without the reason of its row, the log says that a kind stayed and not whether the product is at fault or the run is to be started again.
+  test("a start-over whose removal Cloudflare still asks to wait for after every wait stops the run, and names the kind that stayed with the reason of its row", async () => {
+    const standing = await standingOn(freshAccount(), kind);
+    await standing.again();
+    Object.assign(standing.account, { refuse: `DELETE /accounts/${INSTALL_ACCOUNT}/r2/buckets/poplin-sites`, refuseAs: { status: 429, code: 971 } });
+    const over = await standing.again(true);
+    const reason = "stopped (Cloudflare asked to wait for more than 5 minutes)";
+
+    expect([over.code, over.lines.filter((line) => line.includes("R2 bucket"))]).toEqual([1, [`R2 bucket: ${reason}`, `::error::The test install could not be made ready: poplin uninstall left the R2 bucket: ${reason}.`]]);
+  });
+
   // Drift: the Worker of the next commit refused the database of the last one, and every address answered 503; and an install bound to a bucket of another name would be mended forever and never be the product's.
   test.each([
     [

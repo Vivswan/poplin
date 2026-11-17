@@ -2,6 +2,7 @@
 // Without these the setting could switch logs back on that it keeps off, switch on Cloudflare's own record of each request, which holds the request's address, or write where nothing differs.
 
 import { describe, expect, test } from "bun:test";
+import { riderOf } from "../../../../../src/shared/install/first/waits";
 import { keepsLines, observabilityOf, syncLogs } from "../../../../../src/shared/install/pieces/worker-logs/worker-logs";
 import { withFake } from "../../support/fake-cloudflare";
 import { type Asked, refusal, reply } from "../../support/replies";
@@ -107,6 +108,21 @@ describe("syncLogs", () => {
         const synced = await syncLogs(connection, WORKER, true, "apply");
 
         expect(synced.ok ? undefined : [synced.failure, synced.report.changedNothing]).toEqual(["refused", true]);
+      },
+    );
+  });
+
+  // Drift: the write carries the observability as it was read. Made again by the connection's rider after a wait, it would put back a setting somebody changed meanwhile.
+  test("a write Cloudflare asks to wait for is left to the SDK's own tries: the rider of an install command's connection waits for nothing and sends it no further time", async () => {
+    const slept: number[] = [];
+    const ride = riderOf(async (milliseconds) => void slept.push(milliseconds));
+
+    await withFake(
+      (asked) => (asked.method === "PATCH" ? refusal(429, 971, "Please wait and consider throttling your request speed", { "retry-after-ms": "1" }) : worker(OFF)(asked)),
+      async (connection, asked) => {
+        const synced = await syncLogs({ ...connection, ride }, WORKER, true, "apply");
+
+        expect([synced.ok ? "" : synced.failure, slept, calls(asked).filter((call) => call.startsWith("PATCH")).length]).toEqual(["rate-limited", [], 3]);
       },
     );
   });

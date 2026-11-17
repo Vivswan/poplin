@@ -325,6 +325,9 @@ type PlugParts = Known & {
   /** What waits between two reads of settings that trail an upload; the platform's own timer where absent. */
   readonly sleep?: Connection["sleep"];
 
+  /** What makes a call again while Cloudflare asks it to wait; absent outside an install command. */
+  readonly ride?: Connection["ride"];
+
   /** The clock a new upload key's moment of making is read from, in milliseconds since the epoch; absent outside tests. */
   readonly now?: (() => number) | undefined;
 };
@@ -908,7 +911,7 @@ function placedIn(parts: PlugParts, zone: Zone): Placed {
 async function prove(parts: PlugParts, token: string): Promise<{ readonly connection: Connection; readonly zone: Zone; readonly placed: Placed } | DomainReading> {
   if (!TOKEN.test(token)) return REFUSED;
 
-  const connection: Connection = { key: token, baseUrl: parts.baseUrl, fetch: parts.fetch, sleep: parts.sleep };
+  const connection: Connection = { key: token, baseUrl: parts.baseUrl, fetch: parts.fetch, sleep: parts.sleep, ride: parts.ride };
   const zone = await findZone(parts, connection);
   if ("ok" in zone) return zone;
 

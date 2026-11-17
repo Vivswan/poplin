@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
+import { riderOf } from "../../../../../src/shared/install/first/waits";
 import { planVariables, readBindings, readWorker, syncVariables } from "../../../../../src/shared/install/pieces/variables/variables";
 import { withFake } from "../../support/fake-cloudflare";
 import { answer, emptyAccount, TOKEN } from "../../support/fake-install";
+import { refusal } from "../../support/replies";
 
 const WANTED = { team_domain: "team.cloudflareaccess.com", audience: "a".repeat(64) };
 const DESIRED = [{ name: "ACCESS", value: WANTED }];
@@ -121,6 +123,22 @@ test("a Worker that does not exist is told apart from one with no binding, reads
       expect(await readWorker(token, worker)).toEqual({ ok: true, value: [] });
       expect(await readWorker({ ...connection, key: "token-nobody-knows-0123456789" }, worker)).toMatchObject({ ok: false, failure: "refused", status: 401 });
       expect(asked.filter((entry) => entry.method !== "GET")).toEqual([]);
+    },
+  );
+});
+
+// Drift: the change names every binding as it was read. Made again by the connection's rider after a wait, it would drop a binding somebody added meanwhile.
+test("a change Cloudflare asks to wait for is left to the SDK's own tries: the rider of an install command's connection waits for nothing and sends it no further time", async () => {
+  const account = emptyAccount();
+  const slept: number[] = [];
+  const ride = riderOf(async (milliseconds) => void slept.push(milliseconds));
+
+  await withFake(
+    (asked) => (asked.method === "PATCH" ? refusal(429, 971, "Please wait and consider throttling your request speed", { "retry-after-ms": "1" }) : answer(account, asked)),
+    async (connection, asked) => {
+      const synced = await syncVariables({ ...connection, key: TOKEN, ride }, { accountId: ACCOUNT, script: "poplin" }, [{ name: "ACCOUNT_ID", value: ACCOUNT }], "apply");
+
+      expect([synced.ok ? "" : synced.failure, slept, asked.filter((entry) => entry.method === "PATCH").length]).toEqual(["rate-limited", [], 3]);
     },
   );
 });

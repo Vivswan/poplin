@@ -11,18 +11,25 @@ const API = "https://api.cloudflare.com/client/v4";
 // The status of an answer that asks to wait.
 const RATE_LIMITED_STATUS = 429;
 
+// The milliseconds of a second, which an answer that asks to wait counts in.
+const MS_PER_SECOND = 1000;
+
 // The plans a zone can be on, as the first word of Cloudflare's name for one.
 const ZONE_PLANS: ReadonlySet<string> = new Set(["free", "pro", "business", "enterprise"]);
 
 // One entry of the `errors` list in a reply, as far as a refusal is read.
 const REFUSAL = v.object({ code: v.number(), message: v.string() });
 
-/** Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. `sleep` waits so many milliseconds between two reads of settings that trail an upload: the platform's own timer where absent. */
+/**
+ * Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. `sleep` waits so many milliseconds between two reads of settings that trail an upload: the platform's own timer where absent.
+ * `ride` makes a call again while its answer asks to wait, and only the connection of an install command has one: with it the SDK tries such an answer once, and every wait is the rider's.
+ */
 export interface Connection {
   readonly key: string;
   readonly baseUrl?: string | undefined;
   readonly fetch?: ((input: string | URL | Request, init?: RequestInit) => Promise<Response>) | undefined;
   readonly sleep?: ((milliseconds: number) => Promise<void>) | undefined;
+  readonly ride?: (<Value>(call: () => Promise<CloudflareResult<Value>>) => Promise<CloudflareResult<Value>>) | undefined;
 }
 
 /** One entry of the `errors` list in Cloudflare's reply. */
@@ -31,10 +38,10 @@ interface ApiRefusal {
   readonly message: string;
 }
 
-/** A call that did not succeed. `refused` is Cloudflare's own answer, `rate-limited` a last answer that asked to wait (429), and `network` means no answer arrived. */
+/** A call that did not succeed. `refused` is Cloudflare's own answer, `rate-limited` a last answer that asked to wait (429), with the wait it named where `Retry-After` named one in seconds, and `network` means no answer arrived. */
 export type CloudflareFailure =
   | { readonly ok: false; readonly failure: "refused"; readonly status: number; readonly errors: readonly ApiRefusal[] }
-  | { readonly ok: false; readonly failure: "rate-limited" }
+  | { readonly ok: false; readonly failure: "rate-limited"; readonly afterMs?: number }
   | { readonly ok: false; readonly failure: "network"; readonly message: string };
 
 /** The `result` of Cloudflare's reply, or why there is none. */
@@ -51,10 +58,30 @@ export interface Zone {
   readonly accountId: string;
 }
 
+function limitedBy(retryAfter: string | null | undefined): CloudflareFailure {
+  const seconds = retryAfter == null || retryAfter.trim() === "" ? Number.NaN : Number(retryAfter);
+  if (!Number.isFinite(seconds) || seconds < 0) return { ok: false, failure: "rate-limited" };
+
+  return { ok: false, failure: "rate-limited", afterMs: seconds * MS_PER_SECOND };
+}
+
+// The SDK waits as long as an answer that asks to wait names, unseen, on a timer no person can end. Its own header for "do not try again" hands such an answer to the connection's rider at once.
+function unretried(send: NonNullable<Connection["fetch"]>): NonNullable<Connection["fetch"]> {
+  return async (input, init) => {
+    const response = await send(input, init);
+    if (response.status !== RATE_LIMITED_STATUS) return response;
+
+    const headers = new Headers(response.headers);
+    headers.set("x-should-retry", "false");
+
+    return new Response(response.body, { status: response.status, headers });
+  };
+}
+
 function failureOf(error: APIError): CloudflareFailure {
   if (error instanceof APIConnectionError || error.status === undefined) return { ok: false, failure: "network", message: error.message };
 
-  if (error.status === RATE_LIMITED_STATUS) return { ok: false, failure: "rate-limited" };
+  if (error.status === RATE_LIMITED_STATUS) return limitedBy(error.headers?.get("retry-after"));
 
   const errors: unknown = error.errors;
   const refusals = Array.isArray(errors) ? errors.filter((entry) => v.is(REFUSAL, entry)) : [];
@@ -78,7 +105,7 @@ function clientOf(connection: Connection): BaseCloudflare {
     apiEmail: null,
     userServiceKey: null,
     baseURL: connection.baseUrl ?? API,
-    fetch: connection.fetch,
+    fetch: connection.ride === undefined ? connection.fetch : unretried(connection.fetch ?? fetch),
     logLevel: "off",
   });
   // biome-ignore lint/complexity/useLiteralKeys: the SDK's types keep these options private, and this form reaches them with the name still checked.
@@ -91,20 +118,24 @@ function clientOf(connection: Connection): BaseCloudflare {
  * Make one call to the Cloudflare API with the key the caller holds.
  *
  * A busy answer (429), a failure of Cloudflare's own (5xx), and a dropped connection are tried again by the SDK, twice at most, after the wait Cloudflare names, or else up to half a second and then up to one.
+ * A connection with a rider leaves the busy answer to it: the rider makes the whole call again after each wait.
  *
  * @param call - builds an SDK resource on the given client and awaits one request
  * @returns the reply's `result`, or the failure of the last try; a refusal by Cloudflare is a value, never an exception
  */
 export async function callCloudflare<Value>(connection: Connection, call: (api: BaseCloudflare) => Promise<Value>): Promise<CloudflareResult<Value>> {
   const api = clientOf(connection);
+  const once = async (): Promise<CloudflareResult<Value>> => {
+    try {
+      return { ok: true, value: await call(api) };
+    } catch (error) {
+      if (error instanceof APIError) return failureOf(error);
 
-  try {
-    return { ok: true, value: await call(api) };
-  } catch (error) {
-    if (error instanceof APIError) return failureOf(error);
+      throw error;
+    }
+  };
 
-    throw error;
-  }
+  return connection.ride === undefined ? once() : connection.ride(once);
 }
 
 /**

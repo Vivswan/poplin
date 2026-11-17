@@ -38,12 +38,13 @@ interface Meets {
   readonly older?: Readonly<Record<string, number>>;
 }
 
-/** A stand-in world: the reach to hand a run, every call it sent to Cloudflare, every other address it asked, and each wait it asked for, in milliseconds, none of which takes time. */
+/** A stand-in world: the reach to hand a run, every call it sent to Cloudflare, every other address it asked, each wait it asked for, in milliseconds, none of which takes time, and the line of each wait that had one. */
 interface World {
   readonly reach: Reach;
   readonly asked: Asked[];
   readonly fetched: string[];
   readonly slept: number[];
+  readonly told: string[];
 }
 
 /** The files of the release, by the last part of the address each is fetched at. */
@@ -93,5 +94,11 @@ export async function worldOf(account: Account, meets: Meets = {}): Promise<Worl
     return meets.website?.(address) ?? (file === undefined ? new Response("no such file", { status: 404 }) : new Response(file));
   };
 
-  return { asked, fetched, slept, reach: { fetch, now: () => 0, sleep: async (milliseconds) => void slept.push(milliseconds) } };
+  const told: string[] = [];
+  const sleep: Reach["sleep"] = async (milliseconds, why) => {
+    slept.push(milliseconds);
+    if (why !== undefined) told.push(why);
+  };
+
+  return { asked, fetched, slept, told, reach: { fetch, now: () => 0, sleep } };
 }

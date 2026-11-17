@@ -79,6 +79,9 @@ export interface Account {
 
   /** What each call of `repair` was handed. */
   readonly repairs: { readonly found: Whole<Place>; readonly where: Where; readonly mend: Mend }[];
+
+  /** The seconds the host asks a removal to wait before its rows, which the removal waits through its reach with the line that says so; no wait unless given. */
+  rests: number | undefined;
 }
 
 /** How one command line is run. */
@@ -106,6 +109,12 @@ interface Options {
 
   /** The providers the package carries, in place of the one made-up provider. */
   readonly providers?: readonly Installer<unknown, unknown>[];
+
+  /** Whether the terminal has a progress line; none unless said. */
+  readonly progress?: boolean;
+
+  /** Whether the person stops the command during its first wait; they do not unless said. */
+  readonly stops?: boolean;
 }
 
 /** What the stand-in's form for a new token asks for at a place. */
@@ -123,7 +132,7 @@ function factsAt(where: Where): WorkTokenFacts {
 /**
  * What one command printed and asked, and how it exited. `shown` holds every line and every question in the order shown, each line with where it went and its tone.
  *
- * `fetched` lists what the login offer asked for, `reached` what the wait asked for, and `slept` how long each rest of the wait was.
+ * `fetched` lists what the login offer asked for, `reached` what the wait asked for, `slept` how long each rest of the wait was, and `worked` what the progress line was told to show.
  */
 export interface Ran {
   readonly code: number;
@@ -134,6 +143,7 @@ export interface Ran {
   readonly fetched: string[];
   readonly reached: string[];
   readonly slept: number[];
+  readonly worked: string[];
 }
 
 function placeQuestion(account: string | undefined): Question<Where> {
@@ -209,6 +219,7 @@ export function emptyAccount(): Account {
     removals: [],
     repaired: undefined,
     repairs: [],
+    rests: undefined,
   };
 }
 
@@ -263,9 +274,11 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
 
       return installed;
     },
-    remove: async (found, where, removal, _reach, say) => {
+    remove: async (found, where, removal, reach, say) => {
       account.removals.push({ found, where, removal });
       if (account.crash !== undefined) throw account.crash;
+
+      if (account.rests !== undefined) await reach.sleep(account.rests * 1000, `Stand-In Host asked to wait. Retrying in ${account.rests} s`);
 
       const removed = account.removed?.(removal) ?? removedOf(WHOLE);
       if (!removed.ok) return removed;
@@ -315,7 +328,7 @@ function screenOf(ran: Ran, typed: (string | boolean | undefined)[]): Screen {
     ask: async (question, secret) => answer<string>(secret === undefined ? question : `${question} [secret]`, "string"),
     confirm: async (question, initial) => answer<boolean>(`${question} [${initial ? "Y/n" : "y/N"}]`, "boolean"),
     choose: async (question, picks: readonly Choice[]) => answer<string>(`${question} ${picks.map((pick) => pick.value).join("|")}`, "string"),
-    working: () => undefined,
+    working: (text) => void ran.worked.push(text),
     rest: () => undefined,
   };
 }
@@ -328,13 +341,19 @@ function screenOf(ran: Ran, typed: (string | boolean | undefined)[]): Screen {
  * @param line - the words after `poplin`, such as `install stand-in --no-place`
  */
 export async function runLine(line: string, account: Account, options: Options = {}): Promise<Ran> {
-  const ran: Ran = { code: -1, out: [], err: [], asked: [], shown: [], fetched: [], reached: [], slept: [] };
+  const ran: Ran = { code: -1, out: [], err: [], asked: [], shown: [], fetched: [], reached: [], slept: [], worked: [] };
   const typed = [...(options.typed ?? [])];
   const statuses = [...(options.statuses ?? [401])];
+  const stop = new AbortController();
   let clock = 0;
   const sleep = async (milliseconds: number): Promise<void> => {
     ran.slept.push(milliseconds);
     clock += milliseconds;
+    if (options.stops !== true) return;
+
+    stop.abort();
+
+    throw new Error("the command was interrupted");
   };
   const ends: InstallEnds = {
     providers: async () => options.providers ?? [standIn(account) as Installer<unknown, unknown>],
@@ -364,12 +383,12 @@ export async function runLine(line: string, account: Account, options: Options =
       throw new TypeError("no network in this test");
     },
     machine: { env: options.env ?? {}, platform: options.platform ?? process.platform, home: "/nowhere" },
-    terminal: { asks: options.asks ?? false, progress: false },
+    terminal: { asks: options.asks ?? false, progress: options.progress ?? false },
     timeoutMs: 2000,
     computer: "test-computer",
     open: () => undefined,
     pause: async () => "over",
-    stopped: new AbortController().signal,
+    stopped: stop.signal,
   };
 
   const code = await run(words(`poplin ${line}`), io, undefined, () => ends);

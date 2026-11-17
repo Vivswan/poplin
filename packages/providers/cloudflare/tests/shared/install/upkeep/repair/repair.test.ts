@@ -190,6 +190,16 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     expect(account.workflows).toEqual([{ name: "poplin-jobs", script_name: "poplin", class_name: "PoplinJobs" }]);
   });
 
+  // Drift: a repair mends through a connection of its own making. One made without the rider of the connection that found the install would stop at a busy answer, which an uninstall rides out.
+  test("a piece whose call Cloudflare asks to wait for is made once the waits it named are over", async () => {
+    const account = await wholeInstall(kind);
+    account.workflows = [];
+    Object.assign(account, { refuse: `PUT /accounts/${ACCOUNT}/workflows/poplin-jobs`, refuseAs: { status: 429, code: 971 }, refuseTimes: 2, refuseAfter: 3 });
+    const run = await repaired(account, kind);
+
+    expect([run.done.ok && run.done.ready, run.slept, account.workflows.length]).toEqual([true, [3000, 3000], 1]);
+  });
+
   // Drift: the Worker stores every setting its `FIRST_SETTINGS` names on its first start. A repair before that start that read the first login alone would mend the login to fewer users than the install is about to have.
   test("an install that never answered a request is mended to every setting its Worker starts with, each first login among them", async () => {
     const account = await wholeInstall(kind, {}, "nothing");
@@ -303,6 +313,15 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
     // The release is stated once, by its value: named as kept beside it, Cloudflare would be told one binding twice.
     expect(metadata.bindings.filter((binding) => binding.name === "RELEASE")).toEqual([{ name: "RELEASE", type: "plain_text", text: RELEASE }]);
     expect([again.changes, shown(again.done)[0], again.calls.length]).toEqual([[], `Worker | leave | poplin, runs ${RELEASE}`, CALLS[kind]]);
+  });
+
+  // Drift: a call Cloudflare asks to wait for is made again after the wait. An upload made again names the bindings read before the first try, and drops one a person added meanwhile.
+  test("an upload Cloudflare asks to wait for is sent once and waited for by nothing, so the release is not taken and the run is not ready", async () => {
+    const account = await behindInstall(kind);
+    Object.assign(account, { refuse: UPLOAD, refuseAs: { status: 429, code: 971 }, refuseTimes: 1, refuseAfter: 3 });
+    const run = await repaired(account, kind, UPDATE, KINDS[kind].where, { older: { [OLDER]: OWN_SCHEMA } });
+
+    expect([run.changes, run.slept, account.refuseTimes, run.done.ok && run.done.ready]).toEqual([[UPLOAD], [], 0, false]);
   });
 
   // Drift: for about a second after an upload, Cloudflare lists the Worker without the bindings its new version holds. A repair reads them right after its own upload: read once, it stopped at `Worker variable` on an install with nothing wrong.

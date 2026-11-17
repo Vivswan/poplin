@@ -79,11 +79,12 @@ async function readObservability(connection: Connection, worker: OwnWorker): Pro
   return settings.failure === "refused" && settings.status === NO_WORKER ? { ok: true, value: undefined } : settings;
 }
 
-/** Write a Worker's observability as the setting asks, from the one it was read with. */
+/** Write a Worker's observability as the setting asks, from the one it was read with. A connection's rider does not make the write again after a wait: it would put back what was read before it. */
 function writeObservability(connection: Connection, worker: OwnWorker, base: unknown, kept: boolean): Promise<CloudflareResult<unknown>> {
   const observability = observabilityOf(base, kept);
+  const unridden: Connection = { ...connection, ride: undefined };
 
-  return callCloudflare(connection, (api) => new BaseSettings(api).edit(worker.script, { account_id: worker.accountId, observability }));
+  return callCloudflare(unridden, (api) => new BaseSettings(api).edit(worker.script, { account_id: worker.accountId, observability }));
 }
 
 /**

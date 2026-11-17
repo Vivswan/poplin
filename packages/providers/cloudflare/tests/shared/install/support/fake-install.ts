@@ -171,6 +171,12 @@ export interface Account {
 
   /** The status and the error code of that refusal; left out, the ones of a token that lacks a permission. */
   refuseAs?: { readonly status: number; readonly code: number };
+
+  /** How many more calls get that refusal, counted down by each; left out, every one does. */
+  refuseTimes?: number;
+
+  /** The `Retry-After` of that refusal, in seconds; left out, it names none. */
+  refuseAfter?: number;
 }
 
 /** An account with nothing of poplin's in it and no hostnames of its own. */
@@ -567,7 +573,13 @@ function barred(account: Account, asked: Asked, path: string): Response | undefi
   const refused = [account.refuse ?? []].flat().some((entry) => (entry.endsWith("*") ? call.startsWith(entry.slice(0, -1)) : entry === call));
   const quoted = account.refuseQuotes === true ? ` in ${JSON.stringify(asked.body)}` : "";
 
-  return refused ? refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}${quoted}`) : undefined;
+  if (!refused || account.refuseTimes === 0) return undefined;
+
+  if (account.refuseTimes !== undefined) account.refuseTimes -= 1;
+
+  const headers: Record<string, string> = account.refuseAfter === undefined ? {} : { "retry-after": String(account.refuseAfter) };
+
+  return refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}${quoted}`, headers);
 }
 
 /** The answer of a read a test set to trail a write: the next one kept for its path. */
