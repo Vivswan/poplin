@@ -13,7 +13,7 @@ import { MiddleColumn } from "@/shared/middle-column";
 import { SaveBar } from "@/shared/save-bar";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
 import { controlId, SettingRow } from "@/settings/setting-row";
-import { isOn } from "@/settings/setting-values";
+import { boundedBy, isOn } from "@/settings/setting-values";
 import { useDraft } from "@/settings/settings-draft";
 import { type Row, type Settings, useSettings } from "@/settings/settings-queries";
 import { type Block, blocksOf, UPDATES, wordsOf } from "@/settings/settings-words";
@@ -77,7 +77,7 @@ function Groups({
           {block.rows.map((row) => (
             <SettingRow
               key={row.key}
-              row={waitingOn(row, settings.rows, draft)}
+              row={waitingOn(boundedBy(row, settings.rows, draft.shown), settings.rows, draft)}
               text={draft.shown(row)}
               refusal={draft.refusals[row.key]}
               onChange={(text) => draft.change(row, text)}

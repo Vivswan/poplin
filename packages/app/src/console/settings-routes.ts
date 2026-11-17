@@ -14,7 +14,7 @@ import * as v from "valibot";
 
 import { ACCESS_SETTINGS } from "./settings/constants";
 import { type FreeLimits, type FreeMark, freeLimitMarks } from "./settings/free-limits";
-import { pairMarks } from "./settings/pair-limits";
+import { type PairMark, pairMarks } from "./settings/pair-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 import type { DomainPlug } from "./domain/records";
 import { type Control, controlOf, screenText, unitOf } from "./setting-controls";
@@ -44,13 +44,31 @@ interface Row {
   readonly fallback: string;
 
   /** What the setting can be put above: the host's free limits, and the install's limit that bounds it. Each is the largest count with no warning, its unit, and the sentence above it; a size has each for its text's unit and its default's. */
-  readonly limits: readonly (FreeMark & { readonly unit: string })[];
+  readonly limits: readonly (FreeMark & { readonly unit: string; readonly bound?: Bound })[];
 
   /** `true` for a setting a repair carries to the provider, in a dashboard that has the Domain screen, where that half waits for the next repair. `false` for one the install carries there by itself, or that no repair carries. */
   readonly repair: boolean;
 
   /** What the setting needs before it does anything on this install, in one short line; `null` for a setting that works. Its control takes no change while it says so. */
   readonly needs: string | null;
+}
+
+/**
+ * The setting a mark is the value of, for a screen that holds a field of it: the mark of a count typed there is that count times `times` of its unit, divided by `per` and rounded down.
+ * `times` holds each unit a text of the bounding row can have.
+ */
+interface Bound {
+  readonly key: Key;
+  readonly per: number;
+  readonly times: Readonly<Record<string, number>>;
+}
+
+/** The units the texts of a row can have, its own and its default's, each with the base units one of it holds: bytes for a size, 1 for anything else. */
+function unitsOf(value: SettingValues[Key], texts: readonly string[]): Readonly<Record<string, number>> {
+  const size = typeof value === "object" && !Array.isArray(value);
+  const units = new Set(texts.map((text) => text.replace(/^\d+/, "")));
+
+  return Object.fromEntries([...units].map((unit) => [unit, size ? sizeBytes({ count: 1, unit } as SettingValues["max_total_size"]) : 1]));
 }
 
 /** Every setting's text as the screen types it. */
@@ -65,16 +83,18 @@ function screenTexts(values: SettingValues): Readonly<Record<Key, string>> {
  * The marks of a setting on the count it is typed with, for each unit a text of the row can have: its own, and its default's, which Reset puts into the field.
  *
  * A size's bytes become a count of the unit, rounded down, so a typed count is above the mark exactly when its bytes are.
+ *
+ * @param units - the units of the row, from `unitsOf`
+ * @param boundUnits - the units of the row of a setting that bounds this one, by that setting's key
  */
-function limitsOf(marks: readonly FreeMark[], value: SettingValues[Key], texts: readonly string[]): Row["limits"] {
-  const units = [...new Set(texts.map((text) => text.replace(/^\d+/, "")))];
-  const size = typeof value === "object" && !Array.isArray(value);
+function limitsOf(marks: readonly (FreeMark | PairMark)[], units: Readonly<Record<string, number>>, boundUnits: (key: Key) => Readonly<Record<string, number>>): Row["limits"] {
+  return Object.entries(units).flatMap(([unit, one]) =>
+    marks.map((mark) => {
+      const limit = { over: Math.floor(mark.over / one), unit, warning: mark.warning };
 
-  return units.flatMap((unit) => {
-    const one = size ? sizeBytes({ count: 1, unit } as SettingValues["max_total_size"]) : 1;
-
-    return marks.map((mark) => ({ over: Math.floor(mark.over / one), unit, warning: mark.warning }));
-  });
+      return "bound" in mark ? { ...limit, bound: { key: mark.bound, per: one, times: boundUnits(mark.bound) } } : limit;
+    }),
+  );
 }
 
 /** Whether the install carries a setting to the domain by itself: one the domain's rules are written from, on an install that holds a key. */
@@ -95,6 +115,7 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
   const shown = (Object.keys(texts) as Key[]).filter((key) => !ACCESS_SETTINGS.includes(key));
   const carried: readonly string[] = facts.domain?.carriedSettings ?? [];
   const idle: Readonly<Record<string, string | undefined>> = facts.domain?.idleSettings ?? {};
+  const units = (key: Key): Readonly<Record<string, number>> => unitsOf(values[key], [texts[key], defaults[key]]);
 
   return shown.map((key) => {
     const control = controlOf(SETTING_VALUES.entries[key]);
@@ -105,7 +126,7 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
       text: texts[key],
       unit: control.kind === "number" ? unitOf(SETTING_VALUES.entries[key], texts[key]) : "",
       fallback: defaults[key],
-      limits: limitsOf([...(free[key] ?? []), ...(pairs[key] ?? [])], values[key], [texts[key], defaults[key]]),
+      limits: limitsOf([...(free[key] ?? []), ...(pairs[key] ?? [])], units(key), units),
       repair: carried.includes(key) && !isCarried(key, facts.carries),
       needs: idle[key] ?? null,
     };
