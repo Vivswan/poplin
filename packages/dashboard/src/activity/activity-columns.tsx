@@ -9,6 +9,9 @@ import { type TimeZoneChoice, unnamedMomentIn } from "@/lib/timezone";
 import { type LoginNames, Who } from "@/shared/who";
 import type { ColumnSpec } from "@/table/data-table";
 
+/** The least room what was done is cut down to: its first words. */
+const LEAST_WHAT = "16ch";
+
 /**
  * When an entry was written, to the minute, in the time zone a person chose.
  *
@@ -50,6 +53,15 @@ export function SiteThen({ entry }: { readonly entry: Entry }): ReactNode {
   );
 }
 
+/** What an entry says was done. Its end gives where the table is narrow, so the table stays as wide as its room: a pointer resting on it reads it whole. */
+function WhatThen({ entry }: { readonly entry: Entry }): ReactNode {
+  return (
+    <span data-gives title={entry.what} className="block truncate" style={{ minWidth: LEAST_WHAT }}>
+      {entry.what}
+    </span>
+  );
+}
+
 /**
  * The columns of the Activity table.
  *
@@ -60,7 +72,7 @@ export function activityColumns(logins: LoginNames, timeZone: TimeZoneChoice): r
   return [
     { id: "when", header: timeZone === "utc" ? "When (UTC)" : "When", fixed: true, sortable: "desc", cell: (entry) => <When entry={entry} headed /> },
     { id: "who", header: "Who", cell: (entry) => <Who by={entry.by} logins={logins} unnamed="a token" /> },
-    { id: "what", header: "What", widest: 480, cell: (entry) => <span title={entry.what}>{entry.what}</span> },
+    { id: "what", header: "What", widest: 480, cell: (entry) => <WhatThen entry={entry} /> },
     { id: "site", header: "Site", grows: true, cell: (entry) => <SiteThen entry={entry} /> },
   ];
 }

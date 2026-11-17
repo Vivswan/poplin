@@ -1,5 +1,5 @@
 // The removed tokens of the Tokens tab: the tokens that work no more, folded away under the list until a person opens them. Each says when it ended and how; none can be used again, and none has an action.
-// Their table has the columns of the list above it, one for one, none narrower than the list's. One that needs more room is wider, and the columns after it start further right.
+// Their table has the columns of the list above it, one for one, none narrower than the list's. One that needs more room is wider, and the columns after it start further right, into the room the list's rows end with their actions in.
 // The list keeps its own widths, and does not move when they are opened.
 
 import { ChevronRightIcon } from "lucide-react";
@@ -33,9 +33,6 @@ const COLUMNS: readonly ColumnSpec<Row>[] = [
 /** The least room the name of who removed a token is cut down to: the first letters of it. */
 const LEAST_REMOVER = "6ch";
 
-/** What a removed token ends its row with under the list above: nothing, in the room the list's own rows end with their actions in. */
-const NO_ACTION = (): ReactNode => null;
-
 /** One row of the list: a token that ended, and the names its remover is written with. */
 interface Row {
   readonly token: EndedToken;
@@ -52,9 +49,6 @@ interface RemovedTokensProps {
 
   /** What the list above measured of its columns; left out where no list is above. */
   readonly alongside?: Fitted;
-
-  /** The width the rows of the list above end with their actions in, in pixels: the same room is left empty here, so both tables have the same room for their columns. Left out where no list is above. */
-  readonly endWidth?: number;
 }
 
 /** Say how a token ended: that it expired, that its user was removed, that it gave itself back, or who revoked it, written as on every screen. The remover's name gives where the row is narrow. */
@@ -104,7 +98,7 @@ function End({ row }: { readonly row: Row }): ReactNode {
 }
 
 /** Draw the removed tokens under the list of the ones that work: closed until a person opens them, which the browser keeps. Nothing at all is drawn where no token ended. */
-export function RemovedTokens({ ended, names, alongside, endWidth }: RemovedTokensProps): ReactNode {
+export function RemovedTokens({ ended, names, alongside }: RemovedTokensProps): ReactNode {
   const [kept, keep] = useLocalStorageState<unknown>(OPEN_KEY);
   if (ended.tokens.length === 0) return null;
 
@@ -131,8 +125,6 @@ export function RemovedTokens({ ended, names, alongside, endWidth }: RemovedToke
             rowId={({ token }) => token.id}
             sort={ORDER}
             alongside={alongside}
-            actions={endWidth === undefined ? undefined : NO_ACTION}
-            actionsWidth={endWidth}
           />
         </div>
         <ul aria-label="Revoked tokens" className="border-t md:hidden">

@@ -238,7 +238,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
   const none = ended === undefined || ended.tokens.length === 0;
   const removed = none ? undefined : <RemovedTokens ended={ended} names={names} />;
   // Under the table the removed tokens are a second table that starts in the list's columns; under a phone's list, and where no list is, they stand alone.
-  const paired = none ? undefined : <RemovedTokens ended={ended} names={names} alongside={fitted} endWidth={ACTION_WIDTH} />;
+  const paired = none ? undefined : <RemovedTokens ended={ended} names={names} alongside={fitted} />;
   const afterAll = (under: ReactNode): ReactNode =>
     after === undefined && under === undefined ? undefined : (
       <>
