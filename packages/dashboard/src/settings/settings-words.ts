@@ -31,8 +31,8 @@ export const MOST_ABOUT = 60;
 const WORDS: Readonly<Record<string, Words>> = {
   default_expires: {
     block: "sites",
-    label: "Delete new sites",
-    about: "A new site is deleted this long after publishing.",
+    label: "New sites expire",
+    about: "A new site moves to the trash this long after publishing.",
     wordLabels: { word: "Never", number: "After" },
     start: "30",
   },

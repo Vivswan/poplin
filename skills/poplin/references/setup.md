@@ -278,7 +278,7 @@ The account token was not stored
 Log this machine in now?
 ```
 
-Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Allow this login?`. Tell them the two choices of Can change first, as step 4 has them. Then run the check of step 4.
+Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Approve this login?`. Tell them the two choices of Can change first, as step 4 has them. Then run the check of step 4.
 
 A run that kept a database's users and did not use the email of `--user` asks no such question. Its last line is `Add` the email `as a user:` and a repair with `--add-user`: the user runs that line.
 
@@ -321,23 +321,23 @@ Run the login with the dashboard's URL: the one the user gave you, or the one th
 npx poplin login --server https://poplin.example.com
 ```
 
-Give the user both, each on its own line. The URL opens the dashboard on the question `Allow this login?`. The page asks for the last 4 letters of the code. Neither the page nor the URL holds any of them, so the user needs the code you gave them.
+Give the user both, each on its own line. The URL opens the dashboard on the question `Approve this login?`. The page asks for the last 4 letters of the code. Neither the page nor the URL holds any of them, so the user needs the code you gave them.
 
 On a new install Cloudflare's login comes first: it asks for the user's email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser cannot find it.
 
 | The user                           | Does                                              |
 | ---------------------------------- | ------------------------------------------------- |
-| asked you for this login           | types the last 4 letters, then presses Allow      |
+| asked you for this login           | types the last 4 letters, then presses Approve    |
 | sees the page refuse those letters | presses Deny: that page is of some other login    |
 
-The page has one choice, Can change, and it starts at Own sites only. Tell the user both rows before they press Allow. The choice is theirs: you use the login they allow.
+The page has one choice, Can change, and it starts at Publisher. Tell the user both rows before they press Approve. The choice is theirs: you use the login they approve.
 
 | Can change     | The guide says it is for                  | You then reach                                                        | The login lasts        |
 | -------------- | ----------------------------------------- | --------------------------------------------------------------------- | ---------------------- |
-| Everything     | the user's own machine                   | every site of the install, and its settings                           | 30 days                |
-| Own sites only | a machine that should only publish       | the sites that one login published, and no other                      | until the user removes it |
+| Admin          | the user's own machine                   | every site of the install, and its settings                           | 30 days                |
+| Publisher      | a machine that should only publish       | the sites that one login published, and no other                      | until the user revokes it |
 
-With Own sites only, a site another login published is refused, with `not_found` or `not_allowed`. After a new login, that holds for every site you published before it. That is why the guide says Everything on the user's own machine.
+As a publisher, a site another login published is refused, with `not_found` or `not_allowed`. After a new login, that holds for every site you published before it. That is why the guide says Admin on the user's own machine.
 
 If you read output as JSON, add `--json`: the first line then carries the URL and the code.
 
@@ -357,7 +357,7 @@ npx poplin doctor
 | It prints                                                | Exit code | Next                                                 |
 | -------------------------------------------------------- | --------- | ---------------------------------------------------- |
 | lines that all start with ok, then `Nothing changed`     | 0         | step 5                                               |
-| the same, where the login line says publisher token, and the settings line says `skipped: requires an admin token` | 0 | the login is of Own sites only, and nothing is wrong: step 5 |
+| the same, where the login line says publisher token, and the settings line says `skipped: requires an admin token` | 0 | the login is a publisher's, and nothing is wrong: step 5 |
 | a line that starts with failed                           | 1         | tell the user that line, and stop until it is sorted |
 
 ## 5. Add the MCP server to your own configuration
@@ -405,10 +405,10 @@ No command moves an install: not to a domain, not off one, and not to another ac
 
 | Step | The line                                            | Who                                                     |
 | ---- | --------------------------------------------------- | ------------------------------------------------------- |
-| 1    | `npx poplin export --all-versions --out backup.zip` | you, on the user's yes, with a login of Everything      |
+| 1    | `npx poplin export --all-versions --out backup.zip` | you, on the user's yes, with an admin's login          |
 | 2    | `npx poplin import backup.zip --dry-run`            | you: it checks the zip, and sends nothing               |
 | 3    | the new install. In one account, the removal of the old install comes first | the user: the install as [3. Make the install](#3-make-the-install) has it, the removal as the last row of the table before this one has it |
-| 4    | the login of this machine to the new install       | the user: yes at `Log this machine in now?`, the last question of their install, with Can change: Everything. It replaces the stored login of the old install |
+| 4    | the login of this machine to the new install       | the user: yes at `Log this machine in now?`, the last question of their install, with Can change: Admin. It replaces the stored login of the old install |
 | 5    | `npx poplin import backup.zip --settings`           | you, once `npx poplin whoami` names the new install     |
 | 6    | to another account: the removal of the old install  | the user, once step 5 put every site back               |
 

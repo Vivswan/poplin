@@ -1,4 +1,4 @@
-// The row of one setting: its name, what it does, its default with the way back to it while the value differs, the control, under it the host's warnings for the value it holds, and a refusal or a plain line.
+// The row of one setting: its name, its key, what it does, its default with the way back to it while the value differs, the control, under it the host's warnings for the value it holds, and a refusal or a plain line.
 // A setting that does nothing on this install says in that line what it needs, and its control takes no change.
 
 import { type ReactNode, useEffect, useRef } from "react";
@@ -74,6 +74,7 @@ export function SettingRow({ row, text, refusal, onChange, marked, note }: Setti
   return (
     <SettingFrame
       name={words.label}
+      settingKey={row.key}
       controlId={id}
       anchor={settingAnchor(row.key)}
       marked={marked}

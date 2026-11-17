@@ -1,4 +1,4 @@
-// The Tokens tab of Access: the list of tokens keeps its columns when the removed tokens under it are opened, and Enter in a review's field does what Allow does.
+// The Tokens tab of Access: the list of tokens keeps its columns when the removed tokens under it are opened, and Enter in a review's field does what Approve does.
 
 import { expect, type Page } from "@playwright/test";
 
@@ -40,12 +40,12 @@ for (const size of SCREENS) {
     // Drift: the list would take the widths the removed tokens need, whose "How" says more than a state, and every column after it would jump to the right when they are opened.
     test("keeps every column where it is when the removed tokens under it are opened", async ({ page }) => {
       await page.goto("tokens/list");
-      const removed = page.getByRole("table", { name: "Removed tokens", exact: true });
+      const removed = page.getByRole("table", { name: "Revoked tokens", exact: true });
       // The rows drawn while the tokens are read have other widths: a token that works is waited for.
       await expect(page.getByRole("table", { name: "Tokens", exact: true }).getByText("Working", { exact: true }).first()).toBeVisible({ timeout: FIRST_LOAD_MS });
       const before = await restedStarts(page);
 
-      await page.getByRole("button", { name: /^Removed tokens/ }).click();
+      await page.getByRole("button", { name: /^Revoked tokens/ }).click();
       await expect(removed.getByRole("row").nth(1)).toBeVisible();
       // The removed tokens are measured after they are drawn, which is when the list above would move.
       await expect(async () => expect(await removed.evaluate((drawn) => drawn.scrollWidth - (drawn.closest('[data-slot="scroll-area"]')?.clientWidth ?? 0))).toBe(0)).toPass();
@@ -56,9 +56,9 @@ for (const size of SCREENS) {
 }
 
 // Drift: Enter in the field of the letters would do nothing, where it sends every other form of the dashboard, and a person who types the letters and presses Enter would wait for an answer that never comes.
-test("Enter in the field of a review's letters does what Allow does", async ({ page }) => {
+test("Enter in the field of a review's letters does what Approve does", async ({ page }) => {
   await page.goto("tokens/list");
-  const review = page.getByRole("dialog", { name: "Allow this login?", exact: true });
+  const review = page.getByRole("dialog", { name: "Approve this login?", exact: true });
   const field = review.getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true });
   await page.getByRole("button", { name: "Review", exact: true }).filter({ visible: true }).first().click({ timeout: FIRST_LOAD_MS });
   await field.fill(WRONG.letters);

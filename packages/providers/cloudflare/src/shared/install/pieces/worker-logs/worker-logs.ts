@@ -13,8 +13,8 @@ import { type CloudflareResult, type Connection, callCloudflare } from "../../cl
 import { INSTALL_OBJECTS } from "../../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../../sync";
 
-/** What the row of the logs names them by: kept, or not kept. */
-export const LOGS_SUBJECTS = { kept: "kept", dropped: "not kept" } as const;
+/** What the row of the logs names them by: the state of the setting, as the row of the workers.dev route words its own. */
+const LOGS_SUBJECTS = { kept: "enabled", dropped: "disabled" } as const;
 
 /** The status Cloudflare answers for a Worker that does not exist. */
 const NO_WORKER = 404;
@@ -91,7 +91,7 @@ function writeObservability(connection: Connection, worker: OwnWorker, base: unk
  *
  * @param kept - the setting: whether Cloudflare keeps the lines the Worker writes
  * @param mode - `plan` reads whether they are kept and sends no change
- * @returns one step, named `kept` or `not kept` as the setting asks: left where Cloudflare already matches and keeps no record of each request beside kept lines, and on an account with no such Worker, else changed. A refusal by Cloudflare is a value
+ * @returns one step, named `enabled` or `disabled` as the setting asks: left where Cloudflare already matches and keeps no record of each request beside kept lines, and on an account with no such Worker, else changed. A refusal by Cloudflare is a value
  */
 export async function syncLogs(connection: Connection, worker: OwnWorker, kept: boolean, mode: Mode): Promise<Synced> {
   const subject = kept ? LOGS_SUBJECTS.kept : LOGS_SUBJECTS.dropped;

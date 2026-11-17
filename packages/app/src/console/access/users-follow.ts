@@ -28,15 +28,15 @@ const MOST_TRIES = 2;
 
 /** What the screen says, after the word that the change is saved, of each way it did not reach the provider's list. `{where}` is the provider's name for itself. */
 const SENTENCES: Readonly<Record<Waiting, string>> = {
-  no_key: "poplin holds no key for {where}, so the login list there is as it was. Open Domain and press Repair.",
-  key_refused: "{where} refused poplin's key, so the login list there is as it was. Open Domain and press Repair.",
-  lacks_right: "poplin's key may not change the login list at {where}. Open Domain and press Repair.",
-  not_made: "The login list at {where} is missing. Open Domain and press Repair.",
-  unreachable: "The login list at {where} was not reached; it is tried again by itself.",
-  forgotten: "The login list at {where} is not up to date. Open Domain and press Repair.",
-  half_retried: "The login list at {where} was written, but the change is not complete; the rest is tried again by itself.",
-  half_refused: "The login list at {where} was written, but the change is not complete. Open Domain and press Repair.",
-  changed_again: "The users changed again meanwhile; the login list at {where} is brought up to date by itself.",
+  no_key: "The install holds no key for {where}, so the user list there is as it was. Open Domain and press Repair.",
+  key_refused: "{where} refused the install's key, so the user list there is as it was. Open Domain and press Repair.",
+  lacks_right: "The install's key may not change the user list at {where}. Open Domain and press Repair.",
+  not_made: "The user list at {where} is missing. Open Domain and press Repair.",
+  unreachable: "The user list at {where} was not reached; it is tried again by itself.",
+  forgotten: "The user list at {where} is not up to date. Open Domain and press Repair.",
+  half_retried: "The user list at {where} was written, but the change is not complete; the rest is tried again by itself.",
+  half_refused: "The user list at {where} was written, but the change is not complete. Open Domain and press Repair.",
+  changed_again: "The users changed again meanwhile; the user list at {where} is brought up to date by itself.",
 };
 
 /** The refusals no later try mends: a person must repair the domain. An install with no key says so on Domain already. */

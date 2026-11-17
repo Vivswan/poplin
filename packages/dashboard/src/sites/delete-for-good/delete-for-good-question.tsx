@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { answerOf, api } from "@/lib/api";
 import { thenHome } from "@/lib/focus";
 import { sayDone, unsay } from "@/lib/notify";
-import { LONGEST_NAME, type Site, shownName } from "@/lib/sites";
+import { type Site, shownName } from "@/lib/sites";
 import { useOnePress } from "@/dialog/one-press";
 import { trashLine } from "@/sites/site-actions";
 import { SITES_KEY, siteKey } from "@/sites/site-queries";
@@ -58,7 +58,7 @@ interface AnswerProps {
   readonly onRemove: () => Promise<unknown>;
 }
 
-/** What an open question shows: the field for the site's name, and the button that stays off until the name is typed. It is drawn anew with each asking, so each starts with an empty field. */
+/** What an open question shows: the field for the site's label, and the button that stays off until the label is typed. Two sites may share a name, and no two a label. It is drawn anew with each asking, so each starts with an empty field. */
 function Answer({ asked, asking, removal, onRemove }: AnswerProps): ReactNode {
   const { site } = asked;
   const cancel = useRef<HTMLButtonElement>(null);
@@ -68,7 +68,7 @@ function Answer({ asked, asking, removal, onRemove }: AnswerProps): ReactNode {
   const { press, busy } = useOnePress(onRemove);
   const remove = (event: FormEvent): void => {
     event.preventDefault();
-    if (typed === site.name) press();
+    if (typed === site.label) press();
   };
 
   return (
@@ -79,28 +79,27 @@ function Answer({ asked, asking, removal, onRemove }: AnswerProps): ReactNode {
           <AlertDialogDescription>This cannot be undone, and the site's files go too.</AlertDialogDescription>
         </AlertDialogHeader>
         <Field invalid={refusal !== undefined}>
-          <FieldLabel>Site's name</FieldLabel>
+          <FieldLabel>Site's label</FieldLabel>
           <Input
             value={typed}
             onChange={(event) => {
               setTyped(event.target.value);
-              // A refusal is about the delete that was sent: it leaves when the name is typed again. A delete on its way is left to end.
+              // A refusal is about the delete that was sent: it leaves when the label is typed again. A delete on its way is left to end.
               if (!removal.isPending) removal.reset();
             }}
             aria-required
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
-            maxLength={LONGEST_NAME}
           />
           <FieldDescription>
-            Type <span className="font-mono text-xs text-foreground">{site.name}</span> to delete it.
+            Type <span className="font-mono text-xs wrap-anywhere text-foreground select-all">{site.label}</span> to delete it.
           </FieldDescription>
           {refusal === undefined ? null : <FieldError>{refusal}</FieldError>}
         </Field>
         <AlertDialogFooter>
           <AlertDialogCancel ref={cancel}>Cancel</AlertDialogCancel>
-          <AlertDialogAction type="submit" variant="destructive" disabled={typed !== site.name || busy}>
+          <AlertDialogAction type="submit" variant="destructive" disabled={typed !== site.label || busy}>
             Delete for good
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -110,9 +109,9 @@ function Answer({ asked, asking, removal, onRemove }: AnswerProps): ReactNode {
 }
 
 /**
- * Draw the question that is asked, and delete the site once it is answered: the button that does it stays off until the site's name is typed.
+ * Draw the question that is asked, and delete the site once it is answered: the button that does it stays off until the site's label is typed.
  *
- * A refusal is said at the field with the typed name kept. A done delete is said in one line with no Undo, and the lists are read again.
+ * A refusal is said at the field with the typed label kept. A done delete is said in one line with no Undo, and the lists are read again.
  */
 export function DeleteForGoodQuestion(): ReactNode {
   const client = useQueryClient();

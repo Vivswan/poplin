@@ -32,12 +32,12 @@ const NAMES = { "00000000000000cc": "report agent" };
 
 /** The button that opens and closes the list. */
 function opener(): HTMLElement {
-  return within(document.body).getByRole("button", { name: /^Removed tokens/ });
+  return within(document.body).getByRole("button", { name: /^Revoked tokens/ });
 }
 
 /** What the open table says in each row: the name, then how the token ended. */
 function said(): string[][] {
-  const table = within(document.body).getByRole("table", { name: "Removed tokens" });
+  const table = within(document.body).getByRole("table", { name: "Revoked tokens" });
 
   return within(table)
     .getAllByRole("row")
@@ -55,16 +55,16 @@ afterAll(clearPage);
 
 describe("the removed tokens", () => {
   // Drift: the words of an end are joined here from the answer's `how` and `by` and the shared writer of who did a thing. A token that gave itself back would read as removed by its own name, or a remover with no name left would be written as an id.
-  test("open into the shared table, each saying how it ended: by whom it was removed, that it logged out, that it ran out, or that its user was removed", () => {
+  test("open into the shared table, each saying how it ended: by whom it was revoked, that it logged out, that it expired, or that its user was removed", () => {
     drawn({ tokens: TOKENS, more: false });
     fireEvent.click(opener());
 
     expect(said()).toEqual([
-      ["old laptop", "Removed by mira@example.com"],
-      ["intern laptop", "Removed by report agent"],
+      ["old laptop", "Revoked by mira@example.com"],
+      ["intern laptop", "Revoked by report agent"],
       ["nightly build", "Logged out"],
-      ["old server", "Removed by a token"],
-      ["first setup", "Ran out"],
+      ["old server", "Revoked by a token"],
+      ["first setup", "Expired"],
       ["jonas laptop", "Its user was removed"],
       ["jonas agent", "Its user was removed"],
     ]);

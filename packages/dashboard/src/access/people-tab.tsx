@@ -76,7 +76,7 @@ export function PeopleTab({ people, failure, actions, onRetry }: PeopleTabProps)
   const removeOf = (person: Person): ReactNode => {
     if (person.you) return <span className="inline-flex h-7 min-w-7 items-center justify-center text-[13px] text-muted-foreground">you</span>;
 
-    return <RowMenu name={person.email} onRemove={() => setLeaving(person)} />;
+    return <RowMenu name={person.email} word="Remove" onRemove={() => setLeaving(person)} />;
   };
   const openAdding = (): void => setAdding(({ opening }) => ({ opening: opening + 1, open: true }));
   const answerLeaving = (yes: boolean): void => {

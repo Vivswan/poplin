@@ -6,9 +6,9 @@ import { copy, sayDone, sayRefused, send, unsay } from "@/lib/notify";
 
 /** What each decision says once it is done. */
 const DECIDED = {
-  allowed: "Allowed. Its token shows here in a few seconds.",
-  lowered: "Allowed, for its own sites only. Its token shows here in a few seconds.",
-  denied: "Denied. The computer was not logged in.",
+  allowed: "Approved. Its token shows here in a few seconds.",
+  lowered: "Approved as a publisher, for its own sites only. Its token shows here in a few seconds.",
+  denied: "Denied. The machine was not logged in.",
 } as const;
 
 /** What a sign-out of everyone says once it is done: the login in front takes some seconds to ask again, and the page works until then. */
@@ -155,7 +155,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
       if (done === undefined) return;
 
       onChanged();
-      sayDone("Removed. Its token works nowhere now.");
+      sayDone("Revoked. Its token works nowhere now.");
     },
     copyCommand: (command) => copy(command, { done: "Copied.", failed: "Not copied. Select the command and copy it." }),
     signEveryoneOut: async () => {

@@ -303,47 +303,47 @@ const STOPS: readonly Stop[] = [
     close: pressEscape,
   },
   {
-    name: "the question before a token is removed",
-    open: (page) => fromRowMenu(page, SAMPLE.token, "Remove"),
-    shows: (page) => [question(page, `Remove ${SAMPLE.token}?`)],
+    name: "the question before a token is revoked",
+    open: (page) => fromRowMenu(page, SAMPLE.token, "Revoke"),
+    shows: (page) => [question(page, `Revoke ${SAMPLE.token}?`)],
     close: leaveBy("Cancel"),
   },
   {
-    name: "a removed token, which then stands under Removed tokens",
+    name: "a revoked token, which then stands under Revoked tokens",
     open: async (page, wide) => {
-      await fromRowMenu(page, SAMPLE.token, "Remove");
-      await leaveBy("Remove")(page);
+      await fromRowMenu(page, SAMPLE.token, "Revoke");
+      await leaveBy("Revoke")(page);
       // The token's row leaves the list a moment later and moves everything under it up by more than a button's height: a press sent before that lands beside the button.
       await expect(rows(page, wide, "Tokens").getByText(SAMPLE.token, { exact: true })).toHaveCount(0);
-      await page.getByRole("button", { name: /^Removed tokens/ }).click();
+      await page.getByRole("button", { name: /^Revoked tokens/ }).click();
     },
-    shows: (page, wide) => [rows(page, wide, "Removed tokens").getByText(SAMPLE.token, { exact: true })],
+    shows: (page, wide) => [rows(page, wide, "Revoked tokens").getByText(SAMPLE.token, { exact: true })],
   },
   {
     name: "the review of a waiting login, which names it in quotes and starts at the least it may change",
     open: (page, wide) => reviewOf(page, wide, SAMPLE.login).click(),
     shows: (page) => [
-      review(page).getByText("Allow it only if you started this login yourself.", { exact: true }),
+      review(page).getByText("Approve it only if you started this login yourself.", { exact: true }),
       review(page).getByText(`"${SAMPLE.login}"`, { exact: true }),
-      review(page).getByRole("button", { name: "Own sites only", exact: true, pressed: true }),
-      review(page).getByRole("button", { name: "Allow", exact: true, disabled: true }),
+      review(page).getByRole("button", { name: "Publisher", exact: true, pressed: true }),
+      review(page).getByRole("button", { name: "Approve", exact: true, disabled: true }),
     ],
     close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
   },
   {
-    name: "the review the printed link opens, which holds no letter to type and allows the login once the terminal's are typed",
+    name: "the review the printed link opens, which holds no letter to type and approves the login once the terminal's are typed",
     open: async (page) => {
       // The demo's own page stands where the terminal would be: it prints the link and the code.
       await page.goto("state/allow/waiting");
       const printed = page.locator("section").filter({ hasText: SAMPLE.login });
       const letters = ((await printed.locator("code").textContent()) ?? "").slice(-4);
       await printed.getByRole("link").click();
-      await expect(review(page).getByRole("button", { name: "Allow", exact: true, disabled: true })).toBeVisible();
+      await expect(review(page).getByRole("button", { name: "Approve", exact: true, disabled: true })).toBeVisible();
       expect([letters.length, page.url().includes(letters), (await review(page).innerHTML()).includes(letters)]).toEqual([4, false, false]);
       await review(page).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(letters);
     },
-    shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Allow", exact: true, disabled: false })],
-    close: (page) => review(page).getByRole("button", { name: "Allow", exact: true }).click(),
+    shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Approve", exact: true, disabled: false })],
+    close: (page) => review(page).getByRole("button", { name: "Approve", exact: true }).click(),
   },
   {
     name: "a reset of the sample data, which keeps the screen it was pressed on",
@@ -436,7 +436,7 @@ async function narrowSites(page: Page, filter: string): Promise<void> {
 
 /** The review of a waiting login, under the title every review has. */
 function review(page: Page): Locator {
-  return page.getByRole("dialog", { name: "Allow this login?", exact: true });
+  return page.getByRole("dialog", { name: "Approve this login?", exact: true });
 }
 
 /** The button that opens the review of the waiting login that gave itself a name: its row says the name, the button does not. */
@@ -623,10 +623,10 @@ test.describe("on a screen 1024 px wide", () => {
   });
 
   // Drift: the tokens and the removed ones under them stand in the same columns, so the name of who removed a token would make both tables wider than their room again, and both would scroll sideways.
-  test("the tokens and the removed tokens under them are as wide as their room", async ({ page }) => {
+  test("the tokens and the revoked tokens under them are as wide as their room", async ({ page }) => {
     await page.goto("tokens/list");
-    await page.getByRole("button", { name: /^Removed tokens/ }).click();
-    for (const name of ["Tokens", "Removed tokens"]) {
+    await page.getByRole("button", { name: /^Revoked tokens/ }).click();
+    for (const name of ["Tokens", "Revoked tokens"]) {
       const table = page.getByRole("table", { name, exact: true });
       // A table is measured again once the page's fonts are in, so its width is read until it has come to rest.
       await expect(async () => expect(await table.evaluate((drawn) => drawn.scrollWidth - (drawn.closest('[data-slot="scroll-area"]')?.clientWidth ?? 0))).toBe(0)).toPass();
@@ -1430,8 +1430,8 @@ test("two times of the same length take the same room in the face the dashboard 
 
 // Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for.
 test("in a site's panel, a span is shown as the moment it ends before it is saved and after, Undo takes it away again, and a day is picked in a dialog that one Escape leaves", async ({ page }) => {
-  const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it deletes itself", exact: true }) });
-  const change = panel(page).getByRole("button", { name: "Change when it deletes itself", exact: true });
+  const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it expires", exact: true }) });
+  const change = panel(page).getByRole("button", { name: "Change when it expires", exact: true });
   await arrive(page);
   await openPanel(page, SAMPLE.site);
   await expect(fact).toHaveText("NeverChange");
@@ -1453,15 +1453,15 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
   // The dialog is opened from inside the panel, and dims the page as every dialog does.
   await expect(page.locator('[data-slot="dialog-overlay"]')).toBeVisible();
   await day.getByRole("gridcell").getByRole("button", { disabled: false }).first().click();
-  await expect(day.getByText(/^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
+  await expect(day.getByText(/^Expires \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
   await pressEscape(page);
   await expect(day).toBeHidden();
   await expect(change).toBeFocused();
   await expect(fact).toHaveText("NeverChange");
 });
 
-// Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title where its name is asked for.
-test("a site in the trash is deleted for good only once its name is typed, with the focus on Cancel first and back on its button after Escape; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
+// Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title or its bare name where its label is asked for: two sites may share a name.
+test("a site in the trash is deleted for good only once its label is typed, with the focus on Cancel first and back on its button after Escape; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
   const asks = question(page, `Delete ${TRASHED.title} for good?`);
   const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
   await arrive(page);
@@ -1478,9 +1478,13 @@ test("a site in the trash is deleted for good only once its name is typed, with 
   await expect(asking).toBeFocused();
   await asking.click();
 
-  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.title);
-  await expect(remove).toBeDisabled();
-  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.name);
+  // The question writes the label to type: the site's name, two dashes, and its id.
+  const label = (await asks.getByText(new RegExp(`^${TRASHED.name}--[a-z0-9]+$`)).textContent()) ?? "";
+  for (const short of [TRASHED.title, TRASHED.name]) {
+    await asks.getByRole("textbox", { name: "Site's label", exact: true }).fill(short);
+    await expect(remove).toBeDisabled();
+  }
+  await asks.getByRole("textbox", { name: "Site's label", exact: true }).fill(label);
   await remove.click();
   await expect(said(page, `${TRASHED.title} deleted for good.`)).toBeVisible();
   await expect(siteName(page, TRASHED.title)).toHaveCount(0);

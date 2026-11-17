@@ -32,7 +32,7 @@ test("a double click on Delete for good deletes the site once, and closes the qu
   await page.getByRole("row").getByRole("button", { name: `Details of ${TRASHED.title}`, exact: true }).press("Enter");
   await page.getByRole("dialog", { name: TRASHED.title, exact: true }).getByRole("button", { name: "Delete for good", exact: true }).click();
   const question = page.getByRole("alertdialog", { name: `Delete ${TRASHED.title} for good?`, exact: true });
-  await question.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.name);
+  await question.getByRole("textbox", { name: "Site's label", exact: true }).fill((await question.getByText(new RegExp(`^${TRASHED.name}--[a-z0-9]+$`)).textContent()) ?? "");
   const sent = changesOf(page);
 
   await question.getByRole("button", { name: "Delete for good", exact: true }).dblclick();
@@ -60,20 +60,20 @@ test("a double click on Restore in a row of the trash restores the site once, an
   expect(sent.filter((path) => path.endsWith("/restore")).length).toBe(1);
 });
 
-// Drift: Allow took both presses: the login was allowed, and the line said that it "is no longer waiting".
-test("a double click on Allow allows the login once, and says so", async ({ page }) => {
+// Drift: Approve took both presses: the login was approved, and the line said that it "is no longer waiting".
+test("a double click on Approve approves the login once, and says so", async ({ page }) => {
   await page.goto(WAITING);
   const printed = page.locator("section").filter({ has: page.getByRole("link") }).first();
   await expect(printed.locator("code")).toBeVisible({ timeout: FIRST_LOAD_MS });
   const letters = ((await printed.locator("code").textContent()) ?? "").slice(-4);
   await printed.getByRole("link").click();
-  const review = page.getByRole("dialog", { name: "Allow this login?", exact: true });
+  const review = page.getByRole("dialog", { name: "Approve this login?", exact: true });
   await review.getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(letters);
   // A login that asked for more than it gets is told so in the same line.
-  const allowed = page.getByRole("region", { name: /^Notifications/ }).getByText(/^Allowed.* Its token shows here in a few seconds\.$/u);
+  const allowed = page.getByRole("region", { name: /^Notifications/ }).getByText(/^Approved.* Its token shows here in a few seconds\.$/u);
   const sent = changesOf(page);
 
-  await review.getByRole("button", { name: "Allow", exact: true }).dblclick();
+  await review.getByRole("button", { name: "Approve", exact: true }).dblclick();
   await expect(allowed).toBeVisible();
   await rested(page);
 

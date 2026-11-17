@@ -1,17 +1,17 @@
-// How one object of an install stands at its provider, in the words a person reads: the Domain screen says them.
+// How one object of an install stands at its provider, in the words a person reads: the Domain screen says them, as a command says them of its own run.
 
-/** The words of each state a check or a repair answers for one object. `optional` is an object the token has no right for and the install works without. */
+/** The words of each state a check or a repair answers for one object. `optional` is an object the token has no right for and the install works without. A run left a `skipped` object as it was: an optional one, one left out, or one never reached. */
 const DOMAIN_STATE_WORDS: Readonly<Record<string, string>> = {
-  present: "present",
+  present: "unchanged",
   missing: "missing",
   differs: "differs",
-  "left-out": "left out",
-  optional: "optional",
+  "left-out": "skipped",
+  optional: "skipped",
   created: "created",
-  changed: "changed",
+  changed: "updated",
   removed: "removed",
   failed: "failed",
-  "not-run": "not run",
+  "not-run": "skipped",
 };
 
 /**

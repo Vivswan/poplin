@@ -5,7 +5,7 @@ order: 40
 
 # Access
 
-The users who can log in, and the login this computer keeps.
+The users who can log in, and the login this machine keeps.
 
 ## Add a user
 
@@ -32,7 +32,7 @@ The change is saved in every case. `poplin config users` shows the same list.
 
 To remove another user, choose Remove in the menu at the end of that user's row, and press Remove when asked. That user is out of the dashboard at once, and out of private sites within a minute. Your own email cannot be the one you remove.
 
-Every token that user allowed stops working in the same step: the logins of their computers, their agents, and their build servers. The question before the removal says how many. Adding the user again brings none of them back.
+Every token that user approved stops working in the same step: the logins of their machines, their agents, and their build servers. The question before the removal says how many. Adding the user again brings none of them back.
 
 A list changed with `poplin config users`, or by `poplin import` with `--settings --users`, is written to Cloudflare's list the same way, and a user it leaves out loses their tokens the same way. `poplin config users` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
@@ -48,45 +48,45 @@ Sign everyone out, on the tab Users, ends every login of the dashboard and of pr
 
 Without a kept key, Cloudflare ends the logins itself: in Zero Trust, open the Access application named poplin and revoke its existing tokens.
 
-## This computer
+## This machine
 
 | Example                                              | Does                                                          |
 | ---------------------------------------------------- | ------------------------------------------------------------- |
-| `poplin login --server https://poplin.example.com`   | logs this computer in: you allow it in your browser           |
-| `poplin login --publisher --machine ci-runner`       | saves a publisher's login, for a computer that should only publish            |
+| `poplin login --server https://poplin.example.com`   | logs this machine in: you approve it in your browser           |
+| `poplin login --publisher --machine ci-runner`       | saves a publisher's login, for a machine that should only publish            |
 | `poplin login --no-browser`                          | prints the URL and opens no browser                           |
 | `poplin login --json`                                | prints two lines: the URL and the code, then the result       |
-| `poplin whoami`                                      | prints the install, the role, and when the login runs out     |
+| `poplin whoami`                                      | prints the install, the role, and when the login expires      |
 | `poplin logout`                                      | revokes the login and forgets it                              |
 
 ```text
 $ poplin login --server https://poplin.example.com
   ->  prints a URL and a short code
-  ->  you open the URL, type the last 4 letters of the code, and allow it
+  ->  you open the URL, type the last 4 letters of the code, and approve it
   ->  the token is stored on this machine
 ```
 
 An install begins two logins a minute from one address, and eight a minute for all addresses together. In a minute that is full, `poplin login` is told how long to wait, waits, and asks again.
 
-The page that allows a login starts at Own sites only, whatever the computer asked for. Choose Everything there for a computer that changes settings or sees every site.
+The page that approves a login starts at the role Publisher, whatever the machine asked for. A publisher changes its own sites only. Choose Admin there for a machine that changes settings or sees every site.
 
-A computer keeps one saved login: a new `poplin login` replaces it. An agent on the computer uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
+A machine keeps one saved login: a new `poplin login` replaces it. An agent on the machine uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
 
 `POPLIN_CONFIG_DIR` in the environment names another folder for the saved login, read when the two names above are not set. Set for an agent's tools alone, it gives the agent a login of its own, which shows under its own name: [the skill's page](../../skills/poplin/references/mcp-server.md#optional-a-login-of-your-own) has the step.
 
 ## Tokens
 
-A computer's login is a token. The dashboard lists them under Access, Tokens.
+A machine's login is a token. The dashboard lists them under Access, Tokens.
 
 | In the list                    | Shows                                                                      |
 | ------------------------------ | -------------------------------------------------------------------------- |
-| a token that works             | its name, what it can change, when it was allowed, when it runs out        |
-| Remove, in the menu of its row | ends it at once                                                            |
-| Removed tokens, folded         | the 50 that ended last in the past 90 days, each with `Removed by` and who did it, `Logged out`, `Ran out`, or `Its user was removed` |
+| a token that works             | its name, its role as `Admin (everything)` or `Publisher (own sites only)`, when it was approved, when it expires |
+| Revoke, in the menu of its row | ends it at once                                                            |
+| Revoked tokens, folded         | the 50 that ended last in the past 90 days, each with `Revoked by` and who did it, `Logged out`, `Expired`, or `Its user was removed` |
 
-A removed token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. `Its user was removed` is a token that ended with the user who allowed it. [Security](../about/security.md#hardening) says what the install stores of a token.
+A revoked token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. `Its user was removed` is a token that ended with the user who approved it. [Security](../about/security.md#hardening) says what the install stores of a token.
 
-`--publisher` is for a computer or a script that should only publish, such as a build server or a shared machine.
+`--publisher` is for a machine or a script that should only publish, such as a build server or a shared machine.
 
 | A publisher's login | What                                                                                                                            |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |

@@ -1,4 +1,4 @@
-// One setting of the Settings screen as a row. A wide column has the name at the left, with one short sentence and the default under it, and the control at the right, with what the host warns of at its value in plain words under it.
+// One setting of the Settings screen as a row. A wide column has the name at the left, with the setting's key, one short sentence and the default under it, and the control at the right, with what the host warns of at its value in plain words under it.
 // A narrow column keeps the sentence and the default behind a "?" beside the name. The narrowest one, a phone's, has a field under its name and a switch beside it.
 
 import { Field } from "@base-ui/react/field";
@@ -19,6 +19,9 @@ const NARROW_ONLY = "@[600px]:hidden";
 interface SettingFrameProps {
   /** The name of what is set. */
   readonly name: string;
+
+  /** The key a command names the setting by, such as `trash_days`: it stands under the name, as text a person can select. */
+  readonly settingKey?: string;
 
   /** The id of the control: the name has this id with `-label` after it, for a control it names. */
   readonly controlId: string;
@@ -117,6 +120,7 @@ function Warnings({ warnings }: { readonly warnings: readonly string[] }): React
 /** Draw one row. */
 export function SettingFrame({
   name,
+  settingKey,
   controlId,
   anchor,
   marked = false,
@@ -152,6 +156,7 @@ export function SettingFrame({
           </Field.Label>
           {sentences.length === 0 && fallback === undefined ? null : <About name={name} says={sentences} fallback={fallback} onReset={onReset} />}
         </div>
+        {settingKey === undefined ? null : <code className="block w-fit max-w-full font-mono text-xs leading-5 wrap-anywhere text-muted-foreground select-all">{settingKey}</code>}
         <p className={cn("text-muted-foreground", WIDE_ONLY)}>
           {about === "" ? null : <Field.Description render={<span />}>{about}</Field.Description>}
           {onReset === undefined ? null : (

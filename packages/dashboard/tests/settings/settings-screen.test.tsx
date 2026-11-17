@@ -173,19 +173,21 @@ afterAll(async () => {
 });
 
 describe("the one page", () => {
-  // Drift: a setting that arrives with no words would be shown under its raw key, or under a heading nobody looks for it under; or the settings would be split over tabs again.
-  test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name", async () => {
+  // Drift: a setting that arrives with no words would be named by its raw key, or stand under a heading nobody looks for it under; or the settings would be split over tabs again. A row without its key could not be found in `poplin config`.
+  test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name and its key under it", async () => {
     await drawn();
     const blocks = [...document.querySelectorAll("form section")].map((block) => [block.querySelector("h2")?.textContent, ...[...block.querySelectorAll("h3")].map((name) => name.textContent)]);
 
-    expect([blocks, document.body.textContent?.includes("update_channel")]).toEqual([
+    const keys = [...document.querySelectorAll("form section code")].map((key) => key.textContent);
+
+    expect([blocks, keys]).toEqual([
       [
         ["New sites", "Show in search engines", "Keep deleted sites"],
         ["Storage", "All sites together"],
         ["Logs", "Keep logs"],
         ["Updates", "Check for new versions", "Update automatically", "Update channel"],
       ],
-      false,
+      ["default_search_engines", "trash_days", "max_total_size", "provider_logs", "update_check", "auto_update", "update_channel"],
     ]);
   });
 
