@@ -55,14 +55,15 @@ Without a kept key, Cloudflare ends the logins itself: in Zero Trust, open the A
 | `poplin login --server https://poplin.example.com`   | logs this computer in: you allow it in your browser           |
 | `poplin login --publisher --name ci-runner`          | saves a publisher's login, for a computer that should only publish            |
 | `poplin login --no-browser`                          | prints the address and opens no browser                       |
+| `poplin login --json`                                | prints two lines: the address and the code, then the result   |
 | `poplin whoami`                                      | prints the install, the role, and when the login runs out     |
 | `poplin logout`                                      | revokes the login and forgets it                              |
 
 ```text
 $ poplin login --server https://poplin.example.com
-  ->  prints an address and a short code
-  ->  you open the address, type the last 4 letters of the code, and allow it
-  ->  the login is saved on this computer
+  ->  prints a URL and a short code
+  ->  you open the URL, type the last 4 letters of the code, and allow it
+  ->  the token is stored on this machine
 ```
 
 An install begins two logins a minute from one address, and eight a minute for all addresses together. In a minute that is full, `poplin login` is told how long to wait, waits, and asks again.

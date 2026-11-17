@@ -58,17 +58,17 @@ One command makes your install. A domain is your choice: take it if you have one
 
 ```text
 $ npx poplin install cloudflare
-Your own domain (example.com), or Enter for none: example.com
-Your email, the first login: you@example.com
+Custom domain (Enter for workers.dev): example.com
+First user's email: you@example.com
 ...
-Account token (not shown):
-looking for an install ... none
-made      R2 bucket             poplin-sites
-made      D1 database           poplin
-made      Worker                poplin, runs 0.1.0
+Account token (hidden):
+This account has no install
+created    R2 bucket             poplin-sites
+created    D1 database           poplin
+created    Worker                poplin, runs 0.1.0
 ...
-poplin 0.1.0 is installed.
-Your dashboard: https://poplin.example.com
+poplin 0.1.0 is installed
+Dashboard: https://poplin.example.com
 ...
 ```
 

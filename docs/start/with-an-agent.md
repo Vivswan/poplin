@@ -29,7 +29,7 @@ the token   goes from Cloudflare's page into the command's question, and never i
 | 3b   | what no command can switch on                                       | you, in your browser; the agent says what to open                            |
 | 3c   | the account token                                                   | you, in your browser; the agent gives you the link, and says what to choose  |
 | 3d   | a dry run: what the install would make, and what blocks it          | you run the agent's line, and paste back what it prints: [the table below](#you-run-steps-3d-and-3e) |
-| 3e   | the install: `npx poplin install cloudflare`, with your two answers | you, the same way; then you press Enter at `Log this computer in now?`       |
+| 3e   | the install: `npx poplin install cloudflare`, with your two answers | you, the same way; then you press Enter at `Log this machine in now?`        |
 | 4    | the login of this computer                                          | you, at the end of step 3e. With an install that was there: the agent runs `npx poplin login`, and you allow it in your browser |
 | 5    | poplin's tools are added to the agent's configuration               | the agent; it may ask you to restart it, so that the tools show              |
 | 6    | a last check                                                        | the agent names your install                                                 |
@@ -43,7 +43,7 @@ Step 3 makes the install, in parts a to e. With an install that is there already
 | You                                               | What happens                                         |
 | ------------------------------------------------- | ---------------------------------------------------- |
 | open a second terminal, as the lines below say    | a new window, beside the agent's                     |
-| paste the agent's line there, and press Enter     | the command asks `Account token (not shown):`        |
+| paste the agent's line there, and press Enter     | the command asks `Account token (hidden):`           |
 | paste the token at that question, and press Enter | a row of small marks shows, never the letters        |
 | copy all that the command printed into the chat   | it holds no token, so it is safe to paste. The login's code in it is used up once the command says `logged in` |
 
@@ -66,7 +66,7 @@ A script or a CI job has nobody to ask, so the agent runs both lines itself ther
 
 | The agent runs                               | Steps 3d and 3e are run by | The token is given                                             |
 | -------------------------------------------- | -------------------------- | -------------------------------------------------------------- |
-| on your computer, with you                   | you                        | at the command's question `Account token (not shown):`         |
+| on your computer, with you                   | you                        | at the command's question `Account token (hidden):`            |
 | in a script or a CI job, with nobody to ask  | the agent                  | in `POPLIN_INSTALL_TOKEN`, which the job's secret store sets   |
 
 Do not type an `export` line with the token to hand it to the agent: the shell keeps that line in its history.

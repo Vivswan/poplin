@@ -48,12 +48,12 @@ No build runs, at Cloudflare or anywhere. The install takes the built Worker the
 
 ```text
 $ npx poplin update --dry-run
-0.3.1 is out; the install runs 0.3.0
-the install holds its key
-nothing was started
+0.3.1 is available. The install runs 0.3.0.
+The install has its provider key
+Dry run: no update was started
 
 $ npx poplin update
-the install now runs 0.3.1; it ran 0.3.0
+Updated the install from 0.3.0 to 0.3.1
 ```
 
 **It worked when** the foot of the dashboard's side, and the `version` row of `npx poplin doctor`, name the new version. Activity says `Started an update to 0.3.1`.
@@ -102,33 +102,33 @@ With `--update`, the repair brings an install that is behind to the newest relea
 
 ```text
 $ npx poplin doctor --repair --update --dry-run
-looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
-would change     Worker                poplin: 0.2.0 to 0.3.0
-would leave      DNS record            *.example.com
+poplin 0.2.0 is installed at https://poplin.example.com
+would update  Worker                poplin: 0.2.0 to 0.3.0
+unchanged     Public word           page (public sites answer at <name>-page.example.com)
 ...
-ready: a run would change 1. Nothing was changed.
+A run would update 1 resource
 
 $ npx poplin doctor --repair --update
-looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
-changed   Worker                poplin: 0.2.0 to 0.3.0
-left      DNS record            *.example.com
+poplin 0.2.0 is installed at https://poplin.example.com
+updated    Worker                poplin: 0.2.0 to 0.3.0
+unchanged  Public word           page (public sites answer at <name>-page.example.com)
 ...
-the install is mended.
-Your dashboard: https://poplin.example.com
-The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
+The repair is complete
+Dashboard: https://poplin.example.com
+The account token was not stored. You can delete it at Cloudflare.
 ```
 
 Without `--update`, the repair mends and uploads no release, whatever `auto_update` says. Where a newer one is out, its row `Worker` says so, and the run ends as it would without that row:
 
 ```text
 $ npx poplin doctor --repair
-looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
-left      Worker                poplin, runs 0.2.0; 0.3.0 is out: add --update to take it
-left      DNS record            *.example.com
+poplin 0.2.0 is installed at https://poplin.example.com
+unchanged  Worker                poplin, runs 0.2.0; 0.3.0 is available: pass --update to deploy it
+unchanged  Public word           page (public sites answer at <name>-page.example.com)
 ...
-the install is as it should be. Nothing was changed.
-Your dashboard: https://poplin.example.com
-The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
+The install needs no repair
+Dashboard: https://poplin.example.com
+The account token was not stored. You can delete it at Cloudflare.
 ```
 
 The samples are cut short where the dots are. Without a domain the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`.
@@ -141,11 +141,11 @@ The samples are cut short where the dots are. Without a domain the address ends 
 
 | The row `Worker` says                                    | Means                                                                      |
 | -------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `left`, and `poplin, runs 0.3.0`                         | the install runs the newest release: nothing is uploaded                   |
-| `left`, and `poplin, runs 0.2.0; 0.3.0 is out: add --update to take it` | the line had no `--update`: nothing is uploaded, and the same line with `--update` takes the release |
-| `changed`, and `poplin: 0.2.0 to 0.3.0`                  | the release is in place                                                    |
-| `left`, and `its version is not read`                    | the Worker's `RELEASE` variable is gone or names no release, as after code another tool uploaded: nothing says it is behind, so nothing is uploaded |
-| `stopped` or `failed`, and why                           | the release is not known to be in place: an upload with no answer may be in. The rest is mended, unless a row says why it was not. Do what the row says, then run the line again |
+| `unchanged`, and `poplin, runs 0.3.0`                    | the install runs the newest release: nothing is uploaded                   |
+| `unchanged`, and `poplin, runs 0.2.0; 0.3.0 is available: pass --update to deploy it` | the line had no `--update`: nothing is uploaded, and the same line with `--update` takes the release |
+| `updated`, and `poplin: 0.2.0 to 0.3.0`                  | the release is in place                                                    |
+| `unchanged`, and `its version is unknown`                | the Worker's `RELEASE` variable is gone or names no release, as after code another tool uploaded: nothing says it is behind, so nothing is uploaded |
+| `blocked` or `failed`, and why                           | the release is not known to be in place: an upload with no answer may be in. The rest is mended, unless a row says why it was not. Do what the row says, then run the line again |
 
 | After the upload                                         | The repair                                                                 |
 | -------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -189,13 +189,13 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 
 ```text
 $ npx poplin update --dry-run
-no newer version is known; the install runs 0.3.1
-the install holds its key
-the install can go back to 0.3.0: npx poplin update --to 0.3.0
-nothing was started
+No newer version is known. The install runs 0.3.1.
+The install has its provider key
+To go back to 0.3.0: npx poplin update --to 0.3.0
+Dry run: no update was started
 
 $ npx poplin update --to 0.3.0
-the install now runs 0.3.0; it ran 0.3.1
+Updated the install from 0.3.1 to 0.3.0
 ```
 
 The upload of an update writes one variable onto the Worker, `LAST_UPDATE`: the version it came from, the version it took, the schema of the database, and when.
@@ -263,7 +263,7 @@ An install and an update upload the Worker's source map with the Worker, so an e
 `poplin doctor` names both versions. When they differ, the row says so:
 
 ```text
-ok  version   install 0.2.0, this poplin 0.1.0: the install and this poplin are of two versions; update the older one
+ok  version   install 0.2.0, CLI 0.1.0: versions differ, update the older one
 ```
 
 `npx poplin@latest doctor` runs the newest command.
@@ -304,15 +304,15 @@ While the setting `update_check` is on, the install says when a newer version is
 
 ```text
 $ poplin doctor
-ok  install   https://poplin.example.com answers
-ok  version   install 0.1.0, this poplin 0.1.0
-ok  update    0.2.0 is out (this install runs 0.1.0): https://github.com/Vivswan/poplin/releases/tag/v0.2.0
-ok  login     admin token 3f9a1c07b2d84e65, saved on this machine, expires 2026-12-15
-ok  settings  21 settings read
+ok  install   https://poplin.example.com responds
+ok  version   install 0.1.0, CLI 0.1.0
+ok  update    0.2.0 is available (the install runs 0.1.0): https://github.com/Vivswan/poplin/releases/tag/v0.2.0
+ok  login     admin token 3f9a1c07b2d84e65, stored on this machine, expires 2026-12-15
+ok  settings  21 settings
 ok  sites     4 sites
 ok  trash     0 sites
 ok  problems  none in 7 days
-nothing was changed
+Nothing changed
 ```
 
 | Question             | Answer                                                                                             |

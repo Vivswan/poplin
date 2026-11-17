@@ -67,7 +67,7 @@ One account holds one install. So a move inside an account, to a domain or off o
 
 **Leave Remove's step 1 out.** It is the export of step 1 here, and a second run is refused with `file_exists`, since `backup.zip` is there already. In step 7, leave its step 2 out on this computer too: step 5 logged it in to the new install, and a logout would end that login.
 
-**Keep the zip safe.** After step 3 it is the only copy of your sites until step 6 is done. The last line of step 2 starts `the backup passed every check` for a zip that can be read. It does not try the sites against the new install.
+**Keep the zip safe.** After step 3 it is the only copy of your sites until step 6 is done. The last line of step 2 starts `The zip passed every check` for a zip that can be read. It does not try the sites against the new install.
 
 **Before step 1, where the move is off a domain**, mend what an install without a domain does not take, and publish those sites again:
 

@@ -15,7 +15,7 @@ description: Use when the user asks to publish, share, host, or put online an HT
 
 - The user asks to publish, share, host, or put online a page, a report, a chart, a dashboard, or a folder of static files
 - The user asks to update, roll back, re-link, delete, or restore something published this way
-- The user asks to set poplin up, or you have neither the tools below nor a login (`npx poplin whoami` prints `not logged in`)
+- The user asks to set poplin up, or you have neither the tools below nor a login (`npx poplin whoami` prints `Not logged in`)
 
 ## The tools
 
