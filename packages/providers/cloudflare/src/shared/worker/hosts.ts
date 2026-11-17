@@ -32,7 +32,7 @@ import { createPathPlug, givePathKey } from "../../without-domain/path-plug";
 import { createDomainPlug, giveKey } from "../../with-domain/zone-plug";
 
 /** The guard rules of an install with no zone: there is none to write, so a change of their settings is carried the moment it is stored. None is left waiting, and none is noted as a problem. */
-const NO_RULES: RulesFollow = { holdsKey: () => true, push: async () => ({ ok: true }) };
+const NO_RULES: RulesFollow = { holdsKey: () => true, push: async () => ({ ok: true, rules: "none" }) };
 
 /** What is wrong with a `ZONE` binding, in a sentence that quotes no value of it. */
 const REFUSALS = {

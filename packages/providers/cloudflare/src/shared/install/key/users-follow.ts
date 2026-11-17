@@ -3,6 +3,7 @@
 //   the policy    every login, under "Access: Apps and Policies Write"   an account with no such policy answers `not_made`, and nothing is written
 //                 written every time: a list read just after a write may still answer the users as they were
 //   the alerts    the first login, under "Notifications Write"           an account that lacks one gets it
+//                 compared with one list, which may trail a write: a try that wrote none says so, and the install trusts that only of a try made long after the last write
 //
 // No application is read or changed, and no answer carries the key or a text Cloudflare sent.
 
@@ -35,11 +36,11 @@ export function createUsersFollow(key: KeptKey | undefined, accountId: string, a
 
       if (!written.value) return { ok: false, refusal: "not_made" };
 
-      if (first === undefined) return { ok: true };
+      if (first === undefined) return { ok: true, stood: true };
 
       const sent = await keepAlerts(key, accountId, alerts, first);
 
-      return sent.refusal === undefined ? { ok: true } : { ok: false, refusal: sent.refusal, written: true };
+      return sent.refusal === undefined ? { ok: true, stood: sent.wrote.length === 0 } : { ok: false, refusal: sent.refusal, written: true };
     },
   };
 }

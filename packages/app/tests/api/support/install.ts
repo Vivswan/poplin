@@ -210,7 +210,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
       push: async (emails) => {
         users.pushed.push(emails);
 
-        return users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
+        return users.takes ? { ok: true, stood: false } : { ok: false, refusal: "no_key" };
       },
     },
     endLogins: async () => {
@@ -223,7 +223,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
       push: async (values) => {
         rules.pushed.push(values);
 
-        return { ok: true };
+        return { ok: true, rules: "written" };
       },
     },
     logs: {

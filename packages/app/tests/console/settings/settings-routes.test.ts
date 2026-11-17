@@ -11,7 +11,7 @@ import { openConsole } from "../support/console";
 import { usualPlug } from "../support/fake-plug";
 
 /** The provider's side of a setting on an install that holds its key: every change is taken. */
-const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const }) };
+const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const, rules: "written" as const }) };
 
 /** One setting as the route answers it. */
 interface Row {

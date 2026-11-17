@@ -50,6 +50,8 @@ The line after Save says when the change takes effect:
 
 A saved `search_engines_allowed` or `outside_pages` also changes its rule at Cloudflare by itself, with [the key poplin keeps](../about/security.md#the-kept-key); `block_bots` changes there at the next Repair on [Domain](domain.md), and so do all three on an install that holds no key.
 
+After a save, each clean-up run that comes a minute or more after poplin last tried the rules reads them again and writes one that differs from its setting, until a run finds both as their settings ask. The runs are 15 minutes apart.
+
 A saved `provider_logs` changes the Worker's logs at Cloudflare by itself, with the same key, on an install of either kind: [Switch the logs off](activity.md#switch-the-logs-off).
 
 On an install [without a domain](../start/without-a-domain.md), the control of `block_bots` is disabled and says `Needs a domain.`: what it asks for is a switch of a domain at Cloudflare. `search_engines_allowed` and `outside_pages` work there through the Worker alone, and nothing is sent to Cloudflare for them.

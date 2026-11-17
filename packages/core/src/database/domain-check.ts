@@ -5,6 +5,11 @@
 //                      below zero   none waits; its size is the last mark there was
 //                      NULL         none ever waited
 //
+// A change of the rules' settings waits until a try that read the domain long enough after the last write found nothing to write: a read just after a write may still answer the domain as it was.
+// The users' list is written whole by every try, so a try the domain took settles it. The alerts that go to the first user are compared, so they wait until such a read:
+//
+//   alerts_changed_at  above zero   a try of the users may have changed the alerts, at this moment
+//                      NULL         a later read confirmed them, or no try ever was
 // A mark is always later than every mark before it, the settled ones too, so a try that began under an earlier mark can never take a later one for its own.
 
 import { and, eq, sql as fragment, gt, type SQL } from "drizzle-orm";
@@ -52,8 +57,8 @@ function storedRules(rules: Partial<RuleSettings>): ReturnType<typeof fragment> 
  * @returns one `SELECT` of the one row, its pieces as JSON text
  */
 export function domainCheckAsked(): Statement {
-  const { ran_at, ran_by, run, pieces, users_changed_at, rules_changed_at } = domainCheck;
-  const columns = { ran_at, ran_by, run, pieces, users_changed_at, rules_changed_at };
+  const { ran_at, ran_by, run, pieces, users_changed_at, rules_changed_at, alerts_changed_at } = domainCheck;
+  const columns = { ran_at, ran_by, run, pieces, users_changed_at, rules_changed_at, alerts_changed_at };
 
   return built(BUILD.select(columns).from(domainCheck).where(eq(domainCheck.id, 1)));
 }
@@ -102,29 +107,34 @@ export function usersReplaced(users: readonly string[], signed: Signed, when?: S
 
 /**
  * Build the statement that marks the users as waiting before a try to carry them to the domain, with a mark later than every one before it. It writes only on an install that keeps a run.
+ * The alerts that go to the first user may change with the try, and are marked so from this moment on.
  *
  * @param at - the moment of the try
  */
 export function usersClaimed(at: number): Statement {
-  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(eq(domainCheck.id, 1)));
+  return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at), alerts_changed_at: v.parse(MOMENT, at) }).where(eq(domainCheck.id, 1)));
 }
 
 /**
  * Build the statement that settles a change of the users after a try to carry them to the domain. The mark goes only while the stored users are exactly the list that was carried, in that order, and no mark was set since the try began.
  * Otherwise a later mark is set: a list carried while the users changed again, or while another try wrote the domain, never leaves the change forgotten.
+ * The alerts' mark goes in the same step, for a try that confirmed them and only where the users' mark goes.
  *
  * @param carried - what the try came to
  * @param at - the moment a mark is set anew with
  */
 export function usersCarried(carried: CarriedUsers, at: number): Statement {
-  if (carried.users === null) return usersClaimed(at);
+  if (carried.users === null) return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(at) }).where(eq(domainCheck.id, 1)));
 
   const same = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND json_extract(${settings.value}, '$.users') = json(${JSON.stringify(carried.users)}))`;
   const untouched = fragment`${LAST_MARK} <= ${v.parse(MOMENT, carried.since)}`;
   // A settled mark keeps its size, below zero: the next one is later than it.
   const settled = fragment`-abs(${domainCheck.users_changed_at})`;
 
-  return built(BUILD.update(domainCheck).set({ users_changed_at: fragment`CASE WHEN ${same} AND ${untouched} THEN ${settled} ELSE ${laterMark(at)} END` }).where(eq(domainCheck.id, 1)));
+  const mark = fragment`CASE WHEN ${same} AND ${untouched} THEN ${settled} ELSE ${laterMark(at)} END`;
+  const alerts = carried.confirmed === true ? { alerts_changed_at: fragment`CASE WHEN ${same} AND ${untouched} THEN NULL ELSE ${domainCheck.alerts_changed_at} END` } : {};
+
+  return built(BUILD.update(domainCheck).set({ users_changed_at: mark, ...alerts }).where(eq(domainCheck.id, 1)));
 }
 
 /**
@@ -154,15 +164,15 @@ export function rulesClaimed(at: number): Statement {
 
 /**
  * Build the statement that settles a change of the settings of the domain's rules after a try to carry them to the domain, as `usersCarried` settles the users.
- * The mark is settled only while the stored values are the ones carried and no mark was set since the try began.
+ * The mark is settled only by a try that confirmed the rules, while the stored values are the ones carried and no mark was set since the try began.
  * Otherwise a later mark is set, also where another try has settled meanwhile: values written after that try's leave the rules behind the settings.
  *
  * @param carried - what the try came to
  * @param at - the moment a mark is set anew with
  */
 export function rulesCarried(carried: CarriedRules, at: number): Statement {
-  // A try whose outcome is unknown leaves the change waiting, also where none waited when it began.
-  if (carried.rules === null) return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(at) }).where(eq(domainCheck.id, 1)));
+  // A try whose outcome is unknown leaves the change waiting, also where none waited when it began, and so does one that wrote the rules or read them too soon after a write.
+  if (carried.rules === null || carried.confirmed !== true) return built(BUILD.update(domainCheck).set({ rules_changed_at: laterRulesMark(at) }).where(eq(domainCheck.id, 1)));
 
   const untouched = fragment`${LAST_RULES_MARK} <= ${v.parse(MOMENT, carried.since)}`;
   const settled = fragment`-abs(${domainCheck.rules_changed_at})`;
@@ -181,9 +191,20 @@ export function waitingMark(stored: unknown): number | undefined {
 }
 
 /**
+ * Read the moment of the last change or try out of stored columns: a mark keeps its size once it is settled.
+ *
+ * @returns the latest of the marks, waiting or settled, or `undefined` where none was ever set
+ */
+export function lastMark(stored: readonly unknown[]): number | undefined {
+  const marks = stored.filter((mark) => typeof mark === "number").map(Math.abs);
+
+  return marks.length === 0 ? undefined : Math.max(...marks);
+}
+
+/**
  * Read the kept run out of what `domainCheckAsked` answered.
  *
- * @returns the run, the mark a change of the users waits under, and the same of the settings of the domain's rules, or `undefined` for no row and for a row that is no run
+ * @returns the run, the mark a change of the users waits under, the same of the settings of the domain's rules, and the moment the alerts may last have changed with no read to confirm them, or `undefined` for no row and for a row that is no run
  */
 export function domainCheckIn(result: StatementResult | undefined): RememberedCheck | undefined {
   const row = result?.rows[0];
@@ -192,5 +213,5 @@ export function domainCheckIn(result: StatementResult | undefined): RememberedCh
   const check = v.safeParse(DOMAIN_CHECK, { ran_at: row.ran_at, by: row.ran_by, run: row.run, pieces: JSON.parse(row.pieces) });
   if (!check.success) return undefined;
 
-  return { ...check.output, users_changed_at: waitingMark(row.users_changed_at) ?? null, rules_changed_at: waitingMark(row.rules_changed_at) ?? null };
+  return { ...check.output, users_changed_at: waitingMark(row.users_changed_at) ?? null, rules_changed_at: waitingMark(row.rules_changed_at) ?? null, alerts_changed_at: waitingMark(row.alerts_changed_at) ?? null };
 }

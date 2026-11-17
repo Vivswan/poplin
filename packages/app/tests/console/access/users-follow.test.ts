@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import type { Login } from "@poplin/core/src/auth/logins";
 
 import type { DomainRow } from "../../../src/console/domain/records";
-import { type FollowRefusal, followUsers, type UsersFollow } from "../../../src/console/access/users-follow";
+import { type FollowRefusal, type FollowTry, followUsers, type UsersFollow } from "../../../src/console/access/users-follow";
 import { openConsole } from "../support/console";
 import { fakePlug } from "../support/fake-plug";
 import { openOwned } from "../support/install";
@@ -26,6 +26,12 @@ interface FakeFollow extends UsersFollow {
 
   /** The list the provider holds, `undefined` before it took any. */
   held: readonly Login[] | undefined;
+
+  /** Whom the provider mails for the install, which follows the first user: read, and written only where it differs. */
+  mailed: Login | undefined;
+
+  /** Whom the next try reads as mailed, in place of who is: a read that trails a write. */
+  trails: Login | undefined;
 }
 
 /**
@@ -38,6 +44,8 @@ function fakeFollow(answer: (earlier: number) => Promise<FollowRefusal | undefin
     where: "Example Cloud",
     pushed: [],
     held: undefined,
+    mailed: undefined,
+    trails: undefined,
     holdsKey: () => holdsKey,
     async push(users) {
       follow.pushed.push(users);
@@ -45,8 +53,11 @@ function fakeFollow(answer: (earlier: number) => Promise<FollowRefusal | undefin
       if (refusal !== undefined) return { ok: false, refusal };
 
       follow.held = users;
+      const stood = (follow.trails ?? follow.mailed) === users[0];
+      follow.trails = undefined;
+      if (!stood) follow.mailed = users[0];
 
-      return { ok: true };
+      return { ok: true, stood };
     },
   };
 
@@ -64,6 +75,24 @@ async function added(opened: Owned, login: Login): Promise<readonly Login[]> {
   if (change.kind !== "done") throw new Error("the user was not added");
 
   return change.values.users;
+}
+
+/** Put another user first, a moment later, as a change of the setting does. */
+async function firstIs(opened: Owned, users: readonly Login[]): Promise<void> {
+  opened.clock.now += 1;
+  await opened.install.database.changeSettings({ users: [...users] }, { as: "person", by: opened.owner, at: opened.install.now() });
+}
+
+/** Move the clock a minute on, and answer a try that trusts its reads where nothing changed or tried in that minute, as the scheduled run makes one. */
+function aMinuteOn(opened: Owned): FollowTry {
+  opened.clock.now += 60_000;
+
+  return { quietSince: opened.install.now() - 30_000 };
+}
+
+/** Whether the alerts are marked as changed, with no later read to confirm them. */
+async function unconfirmed(opened: Owned): Promise<boolean> {
+  return ((await opened.install.database.readDomainCheck())?.alerts_changed_at ?? null) !== null;
 }
 
 /** Whether a change of the users waits. An install that keeps no run of its domain remembers none, which is no waiting. */
@@ -133,7 +162,7 @@ describe("followUsers", () => {
       push: async (users) => {
         provider.held = users;
 
-        return { ok: true };
+        return { ok: true, stood: false };
       },
     };
     const retry: UsersFollow = {
@@ -184,6 +213,39 @@ describe("followUsers", () => {
 
     expect(followed).toEqual({ carried: false, why: "changed_again", sentence: "The users changed again meanwhile; the login list at Example Cloud is brought up to date by itself." });
     expect([follow.pushed.length, await waits(opened)]).toEqual([2, true]);
+  });
+
+  // Drift: the first user changed to another person and back at once. The second try reads who is mailed as it was before the first one's write, finds it standing, and writes nothing: the other person is mailed on.
+  // The list itself is written every time, so the change of the users is settled; what the try compared must stay to be confirmed, or no later run reads the provider again.
+  test("a first user put back at once, whose try reads who is mailed as before the first write, settles the users and leaves the rest to confirm; the try that confirms writes it, and the one after it ends the waiting", async () => {
+    const opened = await openOwned();
+    const follow = fakeFollow();
+    follow.mailed = opened.owner;
+    await added(opened, BO);
+    await firstIs(opened, [BO, opened.owner]);
+    await followUsers(opened.install, follow);
+    follow.trails = opened.owner;
+    await firstIs(opened, [opened.owner, BO]);
+
+    expect([await followUsers(opened.install, follow), follow.mailed, await waits(opened), await unconfirmed(opened)]).toEqual([{ carried: true }, BO, false, true]);
+    expect([await followUsers(opened.install, follow, aMinuteOn(opened)), follow.mailed, await unconfirmed(opened)]).toEqual([{ carried: true }, opened.owner, true]);
+    // A try that comes at once finds the alerts standing, and is trusted with nothing: its read may be of before the write.
+    expect([await followUsers(opened.install, follow, { quietSince: opened.install.now() - 30_000 }), await unconfirmed(opened)]).toEqual([{ carried: true }, true]);
+    expect([await followUsers(opened.install, follow, aMinuteOn(opened)), follow.mailed, await waits(opened), await unconfirmed(opened)]).toEqual([{ carried: true }, opened.owner, false, false]);
+  });
+
+  // Drift: a try that confirms is trusted for its read alone. One that found the rest standing over users that changed while it read would end the waiting for a first user it never compared.
+  test("a try that confirms while the users change leaves the rest to confirm", async () => {
+    const opened = await openOwned();
+    await added(opened, BO);
+    const follow = fakeFollow(async (earlier) => {
+      if (earlier === 1) await firstIs(opened, [BO, opened.owner]);
+
+      return undefined;
+    });
+    await followUsers(opened.install, follow);
+
+    expect([await followUsers(opened.install, follow, aMinuteOn(opened)), follow.mailed, await unconfirmed(opened)]).toEqual([{ carried: true }, BO, true]);
   });
 
   // Drift: an install with no key can carry nothing, so it is asked nothing and writes nothing: the change waits under the mark its own storing set, and Domain says to press Repair.

@@ -271,7 +271,7 @@ function freeAddressPlace(install: ApiInstall, jobs: Jobs | undefined): Place {
       push: async (users) => {
         install.users.pushed.push(users);
 
-        return install.users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
+        return install.users.takes ? { ok: true, stood: false } : { ok: false, refusal: "no_key" };
       },
     },
     logs: {

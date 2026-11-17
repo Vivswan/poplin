@@ -181,6 +181,7 @@ Cloudflare emails your first user when the account's usage charges for the billi
 | When                                   | The install                                                         |
 | -------------------------------------- | ------------------------------------------------------------------- |
 | a user is added or removed             | makes the alert where the account has none, and sends it to the first user |
+| the first clean-up run a minute or more after poplin last wrote the list, the runs being 15 minutes apart | reads the alert again, and sends it to the first user where it goes to someone else |
 | the first clean-up run of each UTC day | the same                                                            |
 | it holds no key, or one Cloudflare no longer takes | makes none: press Repair, which makes a key             |
 
