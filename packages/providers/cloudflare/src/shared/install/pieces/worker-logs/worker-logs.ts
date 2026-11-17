@@ -1,7 +1,7 @@
 // The Worker's logs at Cloudflare, kept or not as the install's setting `provider_logs` says: the observability of the Worker, which Cloudflare holds for the script and not for a version of it.
 //
 //   GET    .../workers/scripts/{name}/script-settings      whether the lines the Worker writes are kept now
-//   PATCH  .../workers/scripts/{name}/script-settings      only where that differs from the setting
+//   PATCH  .../workers/scripts/{name}/script-settings      after a change of the setting; by a repair and the run that begins a day only where that differs from the setting; a check sends none
 //
 // Cloudflare keeps a line when the observability and its logs are both on and the logs are stored. The setting switches both, stores the logs it keeps, and changes nothing else of the observability.
 // Cloudflare's own record of each request stays off whatever the setting says: it holds the request's address.
@@ -9,7 +9,7 @@
 
 import { BaseSettings } from "cloudflare/resources/workers/scripts/settings";
 import * as v from "valibot";
-import { type Connection, callCloudflare } from "../../client";
+import { type CloudflareResult, type Connection, callCloudflare } from "../../client";
 import { INSTALL_OBJECTS } from "../../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../../sync";
 
@@ -71,6 +71,21 @@ export function observabilityOf(base: unknown, kept: boolean): { readonly enable
   };
 }
 
+/** Read the Worker's observability as Cloudflare answers it now; `undefined` on an account with no such Worker. */
+async function readObservability(connection: Connection, worker: OwnWorker): Promise<CloudflareResult<{ readonly observability: unknown } | undefined>> {
+  const settings = await callCloudflare(connection, (api) => new BaseSettings(api).get(worker.script, { account_id: worker.accountId }));
+  if (settings.ok) return { ok: true, value: { observability: settings.value.observability } };
+
+  return settings.failure === "refused" && settings.status === NO_WORKER ? { ok: true, value: undefined } : settings;
+}
+
+/** Write a Worker's observability as the setting asks, from the one it was read with. */
+function writeObservability(connection: Connection, worker: OwnWorker, base: unknown, kept: boolean): Promise<CloudflareResult<unknown>> {
+  const observability = observabilityOf(base, kept);
+
+  return callCloudflare(connection, (api) => new BaseSettings(api).edit(worker.script, { account_id: worker.accountId, observability }));
+}
+
 /**
  * Make the Worker's logs match the setting.
  *
@@ -80,14 +95,33 @@ export function observabilityOf(base: unknown, kept: boolean): { readonly enable
  */
 export async function syncLogs(connection: Connection, worker: OwnWorker, kept: boolean, mode: Mode): Promise<Synced> {
   const subject = kept ? LOGS_SUBJECTS.kept : LOGS_SUBJECTS.dropped;
-  const settings = await callCloudflare(connection, (api) => new BaseSettings(api).get(worker.script, { account_id: worker.accountId }));
+  const read = await readObservability(connection, worker);
+  if (!read.ok) return { ...read, report: reportOf([]) };
+
   // A Worker that does not exist has no logs to change: the upload that makes it states them as the setting says.
-  if (!settings.ok && settings.failure === "refused" && settings.status === NO_WORKER) return { ok: true, report: reportOf([{ kind: "leave", subject }]) };
+  if (read.value === undefined) return { ok: true, report: reportOf([{ kind: "leave", subject }]) };
 
-  if (!settings.ok) return { ...settings, report: reportOf([]) };
+  const { observability } = read.value;
+  const kind = matches(observability, kept) ? "leave" : "change";
 
-  const kind = matches(settings.value.observability, kept) ? "leave" : "change";
-  const observability = observabilityOf(settings.value.observability, kept);
+  return applySteps([{ kind, subject } as const], () => writeObservability(connection, worker, observability, kept), mode);
+}
 
-  return applySteps([{ kind, subject } as const], () => callCloudflare(connection, (api) => new BaseSettings(api).edit(worker.script, { account_id: worker.accountId, observability })), mode);
+/**
+ * Write the setting to the Worker's logs whatever Cloudflare answers they are now, for a setting that just changed.
+ *
+ * Cloudflare's reads of a Worker's settings trail its writes: a setting put back just after it was switched over reads as already there, and a write left out for that would leave Cloudflare with the other state.
+ *
+ * @param kept - the setting: whether Cloudflare keeps the lines the Worker writes
+ * @returns nothing, once Cloudflare took the write or the account has no such Worker. The read gives only the parts of the observability the setting does not name. A refusal by Cloudflare is a value
+ */
+export async function stateLogs(connection: Connection, worker: OwnWorker, kept: boolean): Promise<CloudflareResult<undefined>> {
+  const read = await readObservability(connection, worker);
+  if (!read.ok) return read;
+
+  if (read.value === undefined) return { ok: true, value: undefined };
+
+  const written = await writeObservability(connection, worker, read.value.observability, kept);
+
+  return written.ok ? { ok: true, value: undefined } : written;
 }

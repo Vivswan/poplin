@@ -235,11 +235,12 @@ export async function readLoginFacts(connection: Connection, accountId: string):
 /**
  * Write the install's logins into the policy that lets them through, and nothing else of Access: no application is read or changed.
  *
+ * The policy is written even where the list answers that it lets through exactly these emails already: that answer may trail a write made a moment before, and Cloudflare taking the write proves that the key may change who logs in.
+ *
  * @param logins - every email let through, in any order
- * @param send - `always` writes the policy even where it lets through exactly these emails already: Cloudflare taking that write proves that the key may change who logs in, which reading the policy does not
- * @returns `true` once the policy lets through exactly these emails, which it may have done already, and `false` on an account with no such policy, where nothing is written
+ * @returns `true` once Cloudflare took the policy with exactly these emails, and `false` on an account with no such policy, where nothing is written
  */
-export async function writeLogins(connection: Connection, accountId: string, logins: readonly string[], send: "changes" | "always" = "changes"): Promise<CloudflareResult<boolean>> {
+export async function writeLogins(connection: Connection, accountId: string, logins: readonly string[]): Promise<CloudflareResult<boolean>> {
   const policies = await callCloudflare(connection, (api) => Array.fromAsync(new BasePolicies(api).list({ account_id: accountId })));
   if (!policies.ok) return policies;
 
@@ -247,10 +248,7 @@ export async function writeLogins(connection: Connection, accountId: string, log
   const id = held?.id;
   if (held === undefined || id === undefined) return { ok: true, value: false };
 
-  const wanted = loginsPolicy(logins);
-  if (send === "changes" && decidesExactly({ ...held, id }, wanted)) return { ok: true, value: true };
-
-  const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(id, policyBody(accountId, wanted)));
+  const written = await callCloudflare(connection, (api) => new BasePolicies(api).update(id, policyBody(accountId, loginsPolicy(logins))));
 
   return written.ok ? { ok: true, value: true } : written;
 }

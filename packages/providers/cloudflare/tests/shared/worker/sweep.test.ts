@@ -96,8 +96,8 @@ describe("the scheduled run", () => {
       users: [[{ email: { email: OWNER } }]],
       variable: { name: "ACCESS", type: "json", json: { team_domain: TEAM, audience: account.applications.find((application) => application.name === INSTALL_OBJECTS.accessApplication)?.aud } },
     });
-    // The sixth and the seventh write are the two alerts, made for the first user before the users are carried.
-    expect([first.calls <= MOST_REPAIR_CALLS, first.writes, sameDay, nextDay.calls > 0, nextDay.writes]).toEqual([true, 7, 0, true, 0]);
+    // The sixth and the seventh write are the two alerts, made for the first user before the users are carried; the eighth is the carry's own writing of the policy, which no list read just after the repair's is trusted to leave out.
+    expect([first.calls <= MOST_REPAIR_CALLS, first.writes, sameDay, nextDay.calls > 0, nextDay.writes]).toEqual([true, 8, 0, true, 0]);
     expect(account.alerts.map((alert) => [alert.name, alert.mechanisms])).toEqual(ALERTS.map((name) => [name, { email: [{ id: OWNER }] }]));
     expect(said).toEqual([
       {
@@ -161,7 +161,7 @@ describe("the scheduled run", () => {
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
     const login = { holdsKey: () => true, repair: async () => ({ wrote: [], users: false, calls: 0, refusal: undefined }) };
     const keepAlerts = async (): Promise<{ readonly wrote: readonly string[] }> => ({ wrote: [] });
-    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, logs: keyless };
+    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, dailyLogs: keyless };
     const kinds = async (): Promise<string[]> => (await install.database.listProblems(dayOf(w.clock.now))).map((problem) => problem.kind);
     await noteProblem(install, "login_unchecked");
     const noted = await kinds();

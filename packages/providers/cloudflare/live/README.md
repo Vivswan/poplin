@@ -585,7 +585,7 @@ The list is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The em
 | ----------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | read        | `poplin config provider_logs`, after the run's changes of the settings | the Worker's observability is as the setting says within 20 s     |
 | switch over | `poplin config provider_logs` with the other text                      | the Worker's observability is as the new setting says within 20 s |
-| put back    | `poplin config provider_logs` with the first text                      | the Worker's observability is as it was at the start              |
+| put back    | `poplin config provider_logs` with the first text                      | the Worker's observability is as it was at the start within 20 s  |
 
 The observability is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The setting is put back whatever the check met.
 

@@ -265,7 +265,7 @@ describe.each(Object.keys(PLACES) as (keyof typeof PLACES)[])("an install as `po
   test("with the setting of the logs off, Cloudflare keeps no line after the change, after the install's own update, and after it went back", async () => {
     const { account, fetch } = await installed(kind);
     const made = keepsLines(account.observability);
-    const pushed = await createLogsFollow(readKeptKey(TOKEN, { fetch }), WORKER).push(false);
+    const pushed = await createLogsFollow(readKeptKey(TOKEN, { fetch }), WORKER, "every time").push(false);
     const changed = keepsLines(account.observability);
     const outcome = await updatedThenFailed(account, fetch, false);
     const sent = account.uploads.map((upload) => keepsLines((upload.metadata as { readonly observability?: unknown }).observability));

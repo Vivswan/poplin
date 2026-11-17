@@ -1565,6 +1565,27 @@ describe("a computer's login", () => {
     expect(release.uploads).toEqual([release.upload]);
   });
 
+  // Drift: the Worker joins a change of the setting to the side that writes every time. Joined to the one a day's run compares with, a setting put back just after it was switched over would stay switched over at Cloudflare.
+  test("an admin who switches provider_logs off and on again at once has both written to Cloudflare, whose read still answers the logs as they were", async () => {
+    const written: unknown[] = [];
+    const cloudflare = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init);
+      if (request.method === "PATCH") written.push(await request.json());
+
+      return Response.json({ success: true, errors: [], messages: [], result: { observability: { enabled: true, head_sampling_rate: 1, logs: { enabled: true, invocation_logs: false } } } });
+    };
+    const worker = instance(w, cloudflare);
+    const calls = api(worker, await tokenOf(w, "admin"), (input, init) => ask(worker, input, init, { ...BINDINGS, KEPT_KEY: OWN_KEY }));
+
+    await done(await calls.config.$patch({ query: {}, json: { provider_logs: false } }));
+    await done(await calls.config.$patch({ query: {}, json: { provider_logs: true } }));
+
+    expect(written).toEqual([
+      { observability: { enabled: false, head_sampling_rate: 1, logs: { enabled: false, invocation_logs: false } } },
+      { observability: { enabled: true, head_sampling_rate: 1, logs: { enabled: true, invocation_logs: false } } },
+    ]);
+  });
+
   // Drift: one key for everyone would let one computer silence every terminal, a share as large as the whole would let one address refuse every login, and no count of the install would let a few addresses spend a day's writes.
   test("one address's third login of a minute is refused while others begin theirs, the ninth of all is refused, and one address's twenty-sixth question is refused while another's is answered", async () => {
     const worker = instance(w);

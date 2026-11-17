@@ -150,6 +150,9 @@ export interface Instance {
   /** The logs' side at Cloudflare: a change of the setting that keeps them is carried to the Worker's observability with the kept key. */
   readonly logs: LogsFollow;
 
+  /** The same side for the run that begins a day, which states the setting and writes only where Cloudflare differs. */
+  readonly dailyLogs: LogsFollow;
+
   /** Cloudflare's side of the Usage screen. */
   readonly usage: UsageHost;
 
@@ -353,7 +356,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   const logsKept = async (): Promise<boolean> => (await database.readSettings())?.provider_logs !== false;
   const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, last: env.LAST_UPDATE, now: outside.now, fetch: outside.latest.fetch, logsKept });
   const { key, domain, rules, alerts } = hosts.sideOf({ ...own.value, kept, uploadKey, fetch: outside.cloudflare, now: outside.now });
-  const carried = { follow: createUsersFollow(kept, own.value.accountId, alerts), endLogins: createEndLogins(kept, own.value.accountId), rules, logs: createLogsFollow(kept, own.value) };
+  const carried = { follow: createUsersFollow(kept, own.value.accountId, alerts), endLogins: createEndLogins(kept, own.value.accountId), rules, logs: createLogsFollow(kept, own.value, "every time") };
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),
@@ -381,6 +384,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     domain,
     key,
     ...carried,
+    dailyLogs: createLogsFollow(kept, own.value, "where it differs"),
     login: createLoginRepair(kept, { ...own.value, adminHost: hosts.adminHost, privateSites: hosts.privateSites }),
     keepAlerts: (email) => keepAlerts(kept, own.value.accountId, alerts, email),
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), databaseBytes: () => driver.heldBytes(), workflow: workflowNameOf(own.value.script), key: kept }),
