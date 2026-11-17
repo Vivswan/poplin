@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { Login } from "../../../../core/src/auth/logins";
 import type { Blocked, Found, Installer, Row, Token } from "../../../../core/src/install/installer";
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { jsonOf } from "../../commands/support/harness";
@@ -163,7 +164,7 @@ describe("--json", () => {
     const ran = await runLine("install stand-in --yes --json", account);
 
     expect(ran.code).toBe(2);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", next: { step: "install", command: "npx poplin install" }, missing: ["where", "login", "token"] });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", next: { step: "install", command: "npx poplin install stand-in" }, missing: ["where", "login", "token"] });
     expect(ran.err).toEqual([
       "poplin install: an answer is missing: where it answers. Give --place <name> or --no-place (or POPLIN_PLACE).",
       "poplin install: an answer is missing: the first login. Give --login <email> (or POPLIN_LOGIN).",
@@ -176,7 +177,7 @@ describe("--json", () => {
     const ran = await runLine("install stand-in --place example.com --no-place --json", emptyAccount());
 
     expect(ran.code).toBe(2);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "usage", next: { step: "install", command: "npx poplin install" }, words: ["poplin install: give one of --place <name> and --no-place"] });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "usage", next: { step: "install", command: "npx poplin install stand-in" }, words: ["poplin install: give one of --place <name> and --no-place"] });
   });
 
   test("the list of providers is one value: without this an agent cannot learn what it may install at", async () => {
@@ -293,7 +294,7 @@ describe("what a look finds", () => {
     ["a block", { state: "blocked", blocked: [{ what: "storage_off", words: "Storage is not switched on for this account", address: "https://host.example.com/storage" }] }, 1, "blocked"],
     ["a refused token", { state: "refused", why: "token", words: "the account token was refused" }, 1, "token_refused"],
     ["a place the token does not show", { state: "refused", why: "no_domain", words: "the account token shows no such place" }, 1, "no_domain"],
-    ["an install that was started for another place", { state: "refused", why: "other_place", words: "an install was started here for another place" }, 1, "other_place"],
+    ["an install that was started for another place", { state: "refused", why: "other_place", words: "an install was started here for another place", give: "--place example.com" }, 1, "other_place"],
     ["a provider that gives no answer", { state: "refused", why: "unreachable", words: "the host gave no answer" }, 5, "unreachable"],
   ] as const)("%s stops the command before any change, with its own exit and problem: without this the exit code tells a script the wrong thing", async (_name, scene, code, problem) => {
     const account = accountWith(scene);
@@ -422,6 +423,58 @@ describe("what a run comes to", () => {
   });
 });
 
+describe("a first login the run did not use", () => {
+  const login = "new@example.com" as Login;
+  const line = "install stand-in --no-place --login new@example.com --adopt";
+  const unusedAt = (): Account => ({ ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: login } });
+
+  // Drift: the install kept the users its records hold, and the email of the line is none of them. An ending that offers the login asks a person in who gets no code, and a `next` of `login` sends a program the same way.
+  test("ends with the repair that lets that person in, as its last line and as the next step, and offers no login: without this a person is asked to log in who gets no code", async () => {
+    const letIn = "npx poplin doctor --repair --add-user new@example.com";
+    const plain = await runLine(`${line} --no-wait`, unusedAt(), { env: HELD, asks: true });
+    const told = await runLine(`${line} --yes --log-in --no-wait`, unusedAt(), { env: HELD });
+    const json = await runLine(`${line} --yes --no-wait --json`, unusedAt(), { env: HELD });
+    const silent = await runLine(`${line} --yes`, unusedAt(), { env: HELD, statuses: [503] });
+
+    expect([plain.code, plain.asked, plain.out.slice(-4)]).toEqual([
+      0,
+      [],
+      ["poplin 0.1.0 is installed.", `Your dashboard: ${ADDRESS}`, "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.", `To let new@example.com log in too: ${letIn}`],
+    ]);
+    expect([told.code, told.fetched, told.out.at(-1)]).toEqual([0, [], plain.out.at(-1)]);
+    expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, next: { step: "repair", command: letIn } }]);
+    expect("login" in jsonOf(json)).toBe(false);
+    // An install whose address gives no answer yet names the same line, and no login the person could not finish.
+    expect<unknown>([silent.code, silent.out.filter((text) => text.includes("log in"))]).toEqual([1, [plain.out.at(-1)]]);
+  });
+
+  // Drift: the repair that finishes such an install mends the login to the users it kept. Named without the email, it leaves the person of the line out for good, and no later line says how to let them in.
+  test("that left a piece undone names the repair that also lets that person in, once the install is found whole", async () => {
+    const whole: Found<Where, Place> = { state: "whole", place: PLACE, version: "0.1.0", address: ADDRESS, newest: "0.1.0" };
+    const undone: Row[] = [{ object: "Login", state: "block", detail: "the login product is not switched on" }];
+    const account: Account = { ...accountWith(LEFTOVER, whole), installed: { ...installedOf([...FRESH, ...undone], { ready: false }), unused: login } };
+    const ran = await runLine(`${line} --yes --no-wait`, account, { env: HELD });
+    const json = await runLine(`${line} --yes --no-wait --json`, { ...account, scenes: [LEFTOVER, whole] }, { env: HELD });
+
+    expect([ran.code, ran.out.at(-2)]).toEqual([1, "1 not done. Run npx poplin doctor --repair --add-user new@example.com: it goes on from what stands."]);
+    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, next: { step: "repair", command: "npx poplin doctor --repair --add-user new@example.com" } });
+  });
+
+  // Drift: the line is one a person pastes into a shell. An email with an apostrophe or a dollar sign, pasted bare, opens a quote that never closes or names a variable, and the repair adds nobody or somebody else.
+  test.each([
+    ["o'brien@example.com", "'o'\\''brien@example.com'"],
+    ["pay$roll&co@example.com", "'pay$roll&co@example.com'"],
+    ["first.last+tag@example.com", "first.last+tag@example.com"],
+    // zsh reads a bare word that starts with an equals sign as a command to look up, and the paste does nothing.
+    ["=ls@example.com", "'=ls@example.com'"],
+  ])("the line that lets %s in too writes the email as one word of a POSIX shell: %s", async (email, word) => {
+    const account: Account = { ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: email as Login } };
+    const json = await runLine(`${line} --yes --no-wait --json`, account, { env: HELD });
+
+    expect((jsonOf(json).next as { readonly command: string }).command).toBe(`npx poplin doctor --repair --add-user ${word}`);
+  });
+});
+
 describe("a run that is blocked", () => {
   test("a release whose files are not the ones published is said in its own sentence, nothing names an address, and no login is offered: without this a run with no address prints the word undefined", async () => {
     const account = emptyAccount();
@@ -441,6 +494,27 @@ describe("a run that is blocked", () => {
     ]);
     expect(plain.fetched).toEqual([]);
     expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, address: null, release: null, blocked: [{ what: "bad_release" }] });
+  });
+
+  // Drift: a run that is blocked before its first row has started nothing, so `0 not done` beside exit 1 and `it goes on from what stands` say what is not so, of a project with no release yet as of an account with no address.
+  test("before its first row says that nothing was changed and when to run again, and counts nothing: without this a run that started nothing ends `0 not done`", async () => {
+    const account = emptyAccount();
+    const none: Blocked = { what: "no_release", words: "No release of poplin is published yet.", address: "https://example.com" };
+    account.installed = { ...installedOf([], { ready: false, blocked: [none] }), address: undefined, release: undefined };
+
+    const plain = await runLine(RUN, account, { env: HELD });
+    const json = await runLine(`${RUN} --json`, account, { env: HELD });
+
+    expect([plain.code, plain.out.slice(1)]).toEqual([
+      1,
+      [
+        "No release of poplin is published yet.",
+        "  https://example.com",
+        "nothing was changed. Run this command again once what the lines above say is no longer so.",
+        "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",
+      ],
+    ]);
+    expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, rows: [], blocked: [{ what: "no_release" }], next: { step: "install", command: "npx poplin install stand-in" } });
   });
 });
 

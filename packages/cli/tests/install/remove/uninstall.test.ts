@@ -220,7 +220,8 @@ describe("a run", () => {
         "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",
       ],
     ]);
-    expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, unlooked: ["Guard rule", "Alert"], next: { step: "none" } }]);
+    // The sentence says to run the command again with the permission added, so the next step is that command: a program that goes by `next` alone would stop at `none`.
+    expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, unlooked: ["Guard rule", "Alert"], next: { step: "uninstall", command: "npx poplin uninstall stand-in" } }]);
     expect([dry.code, dry.out.slice(-2)]).toEqual([0, [`2 kinds would not be looked for, ${unlooked}`, "ready: a run would remove 4 kinds. nothing was removed"]]);
   });
 
@@ -245,6 +246,15 @@ describe("a run", () => {
     expect([none.code, none.err.at(-1)]).toEqual([
       1,
       `No install is in this account. 1 kind was not looked for, ${unlooked} If the install made one, it is still there: delete it by hand, or add the permission and run this command again. Nothing was removed.`,
+    ]);
+
+    const keeping = `uninstall stand-in --no-place --confirm ${NAME} --keep-data --json`;
+    const nexts = await Promise.all([keeping, "uninstall stand-in --no-place --dry-run --keep-data --json"].map(async (line) => jsonOf(await runLine(line, installed(() => removedOf(data)), { env: HELD }))));
+
+    // A run names this command again, with `--keep-data` in its sentence as on its line; a dry run's sentence names no next run, and neither does its value.
+    expect(nexts.map((stop) => [stop.next, String(stop.words).includes("run this command again with --keep-data")])).toEqual([
+      [{ step: "uninstall", command: "npx poplin uninstall stand-in --keep-data" }, true],
+      [{ step: "none", command: null }, false],
     ]);
   });
 
@@ -276,7 +286,7 @@ describe("what stops a removal before it starts", () => {
 
   // Drift: a program reads the problem, not the sentence. Told as a token that shows no such domain, it would send a person to the token's form in place of the option to give.
   test("an install that was started for another place than the one named stops the removal as other_place, with the provider's sentence, and nothing is removed", async () => {
-    const account: Account = { ...emptyAccount(), scenes: [{ state: "refused", why: "other_place", words: "An install was started here for another place." }], removed: () => removedOf(WHOLE) };
+    const account: Account = { ...emptyAccount(), scenes: [{ state: "refused", why: "other_place", words: "An install was started here for another place.", give: "--place example.com" }], removed: () => removedOf(WHOLE) };
     const ran = await runLine("uninstall stand-in --no-place --dry-run --json", account, { env: HELD });
 
     expect([ran.code, jsonOf(ran), account.changes]).toMatchObject([1, { ok: false, problem: "other_place", words: "An install was started here for another place. Nothing was removed." }, 0]);

@@ -12,6 +12,7 @@
 // The Worker is poplin's when `WORKER_NAME` is its own name and its bucket, database, and Workflow are bound. It is set once `ZONE` reads as an install and `ACCOUNT_ID` is there.
 // Until then it also carries `INSTALL_PLACE`, which its first upload states: without it nothing says which kind of install the run that made it was.
 // For about a second after an upload, Cloudflare's settings can list a Worker without the bindings its new version holds. So a Worker that reads as not poplin's is read again, three times over 4.5 seconds, before it is told as held.
+// Its sentence names the wait first: where the settings trail longer, the Worker is poplin's own, and the same command goes on a minute later.
 // Nothing here changes anything. Of the texts the account holds, an answer tells three, each read first: the place as a domain, the version as a released one, and an account's name on one line.
 
 import type { Blocked, Found, Question, Reach, Read, Token } from "@poplin/core/src/install/installer";
@@ -79,7 +80,7 @@ const WORDS = {
   token: "Cloudflare refused the token, or the token shows no account.",
   otherAccount: "The token does not show that account.",
   unreachable: "Cloudflare gave no usable answer.",
-  held: `A Worker named ${SCRIPT} is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again.`,
+  held: `A Worker named ${SCRIPT} is in this account and does not carry poplin's name, so nothing here touches it. If you just installed or updated poplin, wait a minute and run this again. Else give it another name in your browser, then run this again.`,
   storage: "R2 is not switched on for this account, or the token may not use it. Switch R2 on in your browser, and check that the token has Workers R2 Storage: Edit.",
   loginOff: "Access is not switched on for this account. Open Zero Trust and pick a plan (Free works): until then nobody can log in.",
   lacks: "The token lacks a permission. Add this one",
@@ -294,16 +295,21 @@ async function versionOf(place: Place): Promise<string | undefined> {
   return typeof tag === "string" && isPlainVersion(tag) ? tag : undefined;
 }
 
-/** Say that an install that was started and not finished was started for another place than the one a person named; `undefined` where the two are one. */
-function startedElsewhere(bindings: readonly ListedBinding[], where: Where): string | undefined {
+/** Say that an install that was started and not finished was started for another place than the one a person named, with the option that names its own; `undefined` where the two are one. */
+function startedElsewhere(bindings: readonly ListedBinding[], where: Where): Pick<Extract<FoundHere, { readonly why: "other_place" }>, "words" | "give"> | undefined {
   const started = readStartedPlace(bindings);
   if (started === undefined) return undefined;
 
-  if (started.kind === "no-domain") return where.kind === "domain" ? "An install was started in this account without a domain, and not finished: give --no-domain." : undefined;
+  if (started.kind === "no-domain") {
+    const give = "--no-domain";
+
+    return where.kind === "domain" ? { words: `An install was started in this account without a domain, and not finished: give ${give}.`, give } : undefined;
+  }
 
   const named = where.kind === "domain" && where.layout.domain === started.domain;
+  const give = `--domain ${started.domain}`;
 
-  return named ? undefined : `An install was started in this account under the domain ${started.domain}, and not finished: give --domain ${started.domain}.`;
+  return named ? undefined : { words: `An install was started in this account under the domain ${started.domain}, and not finished: give ${give}.`, give };
 }
 
 /** A whole install: its version, and the newest release the project's website names. */
@@ -415,5 +421,5 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
 
   const other = startedElsewhere(bindings.value, where);
 
-  return other === undefined ? standing(place, true, rights) : { state: "refused", why: "other_place", words: other };
+  return other === undefined ? standing(place, true, rights) : { state: "refused", why: "other_place", ...other };
 }

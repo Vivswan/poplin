@@ -127,9 +127,10 @@ export const COMMANDS = [
     about: "make a private copy of a site, with a new address",
     arguments: [{ ...SITE, required: true }],
     flags: [{ name: "--name", value: "<name>", about: "the copy's name; the site's own without it" }, ...installFlags("the copy")],
-    examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report --name report-draft"],
+    examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report--k3f9x2ab71qz --name report-draft"],
     notes: [
-      "The copy holds the live version's files and the site's settings.",
+      "The copy holds the live version's files and the site's settings, but for",
+      "when it expires: that is set as for a new site.",
       "Its title is the one the site shows, with (copy) after it.",
       "A title that ends that way already is kept as it is.",
       "It is always private, whatever the site is, and the site is not changed.",
@@ -202,7 +203,7 @@ export const COMMANDS = [
       { name: "key", about: "the setting to show; without it, every setting", required: false },
       { name: "value", about: "the value to give it: 7d, 9GB, 25%, on", required: false },
     ],
-    flags: installFlags("the settings"),
+    flags: installFlags("the settings, or the one named as key and value"),
     examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed"],
     notes: [
       "outside_pages, search_engines_allowed, and block_bots also change your",

@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
-import { answered, type LayoutInput } from "../../../app/tests/api/support/install";
+import { answered, type LayoutInput, ORIGIN } from "../../../app/tests/api/support/install";
 import { planPublish } from "../../src/commands/publish";
 import { type Bench, cleanUp, folderOf, jsonOf, openBench, stateOf } from "./support/harness";
 
@@ -92,6 +92,18 @@ describe("publish", () => {
     expect((site as { url: string }).url).toBe("https://sales-page.example.com");
   });
 
+  // Drift: a publish refused for a taken public name hinted `poplin set <site> ...`, though the refused publish made no site to set.
+  test("a new site whose public name another site holds is hinted with the publish's own flag, and no site is made", async () => {
+    const bench = await openBench();
+    await bench.run(`${folderOf("docs", { "index.html": "<title>Docs</title>" })} --public`);
+    const before = await stateOf(bench);
+
+    const refused = await bench.run(`${folderOf("guide", { "index.html": "<title>Guide</title>" })} --public --public-name docs`);
+
+    expect([refused.code, refused.err]).toEqual([1, ["another site holds that public name: public_name", "to pick another: publish again with --public-name <public name>"]]);
+    expect(await stateOf(bench)).toEqual(before);
+  });
+
   test("--dry-run says what would be sent and calls no install, so it runs with no login and changes nothing", async () => {
     const bench = await openBench();
     const folder = folderOf("notes", PAGES);
@@ -165,7 +177,7 @@ describe("publish", () => {
   test.each([
     ["a file that is never stored", (request: Request) => (request.method === "PUT" ? answer(500, { error: { code: "internal", message: "no" } }) : undefined), "the install failed to do that", 1],
     ["a file the install refuses", (request: Request) => (request.method === "PUT" ? answer(400, { error: { code: "size_mismatch", message: "no", about: "index.html" } }) : undefined), "a file changed while it was sent: index.html", 1],
-    ["a finish that is never answered", (request: Request) => (request.url.endsWith("/finish") ? new Response("<html>bad gateway</html>", { status: 502 }) : undefined), "the answer is not the install's: status 502", 5],
+    ["a finish that is never answered", (request: Request) => (request.url.endsWith("/finish") ? new Response("<html>bad gateway</html>", { status: 502 }) : undefined), `the answer is not the install's: status 502 from ${ORIGIN}`, 5],
   ])("%s gives the upload up, changes no site, and says so: without this a failed publish leaves files and a pending upload behind", async (_name, hook, sentence, code) => {
     const bench = await openBench();
     const folder = folderOf("notes", PAGES);
@@ -274,7 +286,7 @@ describe("publish", () => {
     const lost = await bench.run(folder);
 
     expect(lost.code).toBe(5);
-    expect(lost.err[0]).toBe("the answer is not the install's: status 502");
+    expect(lost.err[0]).toBe(`the answer is not the install's: status 502 from ${ORIGIN}`);
     expect(lost.err[1]).toStartWith("no site changed; an upload the install began all the same runs out by itself within a day");
     expect(bench.sent).toEqual(["GET /api/whoami", "POST /api/uploads"]);
     expect(await stateOf(bench)).toEqual(before);
@@ -443,7 +455,7 @@ describe("publish", () => {
 
   // Drift: a zone that never lets up, or a person who stops the command, must end the upload; a rest with no bound would hang a script for good.
   test.each<[string, "over" | "interrupted", number[], number, number, string]>([
-    ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7, 5, "the answer is not the install's: status 429"],
+    ["never lets up", "over", [2000, 4000, 8000, 16_000, 32_000, 60_000], 7, 5, `the answer is not the install's: status 429 from ${ORIGIN}`],
     ["is stopped by the person during the first rest", "interrupted", [2000], 1, 1, "the command was stopped: the upload was given up and no site changed"],
   ])("an upload whose zone %s is given up after its rests and says why", async (_name, paused, waits, puts, code, line) => {
     const bench = await openBench();

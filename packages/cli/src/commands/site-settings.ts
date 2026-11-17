@@ -1,6 +1,8 @@
 // The settings of one site, as `publish` and `set` both read them from the same flags.
 
-import { dayStart, readExpires } from "../../../core/src/actions/changes";
+import * as v from "valibot";
+
+import { dayStart, MAX_TITLE_LENGTH, readExpires, TITLE_TEXT } from "../../../core/src/actions/changes";
 import type { PublicName, SiteName } from "../../../core/src/names/names";
 import type { SettingValues } from "../../../core/src/records/settings";
 import { readSetting } from "./install-settings";
@@ -15,6 +17,9 @@ const ACCESS_FLAGS = [
 
 /** What `--expires` takes, for the hint of a refused one. */
 const EXPIRY_FORMS = "a span is a count of s, m, h, or d: 7d. A date is 2026-12-01";
+
+/** What `--title` takes, for the hint of a refused one. */
+const TITLE_FORM = `a title is one line of at most ${MAX_TITLE_LENGTH} characters; "" is the page's own`;
 
 /** A time span as core counts one: a count of seconds, minutes, hours, or days. */
 type Span = Exclude<SettingValues["default_expires"], "never">;
@@ -64,6 +69,20 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
   return { kind: "span", span };
 }
 
+/** Read `--title` by core's own rule of a typed title, so a title the install would refuse is refused here, with the rule it breaks. */
+function readTitle(flags: Flags): string | null | undefined | UsageError {
+  const title = flagValue(flags, "--title");
+  if (title === undefined) return undefined;
+
+  if (title === "") return null;
+
+  if (title.length > MAX_TITLE_LENGTH) return usageError(`--title is ${title.length} characters long: a title has at most ${MAX_TITLE_LENGTH}`, TITLE_FORM);
+
+  if (!v.is(TITLE_TEXT, title)) return usageError("--title holds a line break or a control character: a title is one line", TITLE_FORM);
+
+  return title;
+}
+
 function readAccess(flags: Flags): SiteSettings["access"] | UsageError {
   const given = ACCESS_FLAGS.filter(([flag]) => flags.has(flag));
   const [first, second] = given;
@@ -92,12 +111,14 @@ export function readSiteSettings(flags: Flags, now: number): SiteSettings | Usag
   const expires = readExpiry(flags, now);
   if (isUsageError(expires)) return expires;
 
-  const title = flagValue(flags, "--title");
+  const title = readTitle(flags);
+  if (isUsageError(title)) return title;
+
   const settings: { -readonly [Setting in keyof SiteSettings]: SiteSettings[Setting] } = {};
 
   if (access !== undefined) settings.access = access;
 
-  if (title !== undefined) settings.title = title === "" ? null : title;
+  if (title !== undefined) settings.title = title;
 
   if (searchEngines !== undefined) settings.searchEngines = searchEngines;
 

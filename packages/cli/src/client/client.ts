@@ -65,18 +65,18 @@ export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
  * Why a call got no answer to use.
  *
  * `refused` is the API's own refusal, with its code. `unreachable` is a request that never got an answer, `timeout` one that took too long.
+ * `address` is the origin a request was sent to, for the two failures that put the address in doubt. `left` is false for a request that never left this computer: nothing of it was sent, so it changed nothing.
  * `stopped` is a call the person stopped the command before or during: the install may have had the request all the same.
  * `not-json` is an answer that is no JSON, such as a proxy's error page, and `unexpected` one that is JSON of a form the API never sends, or a redirect.
  * `said` is the first line of a `not-json` answer in plain text: an install that cannot start says why in one.
- *
  * `retryAfter` is how many seconds an answer asked its caller to wait, when its `Retry-After` header names whole seconds.
  */
 export type Failure =
   | { readonly kind: "refused"; readonly status: number; readonly code: string; readonly message: string; readonly about?: string; readonly retryAfter?: number }
-  | { readonly kind: "unreachable" }
+  | { readonly kind: "unreachable"; readonly address: string; readonly left: boolean }
   | { readonly kind: "stopped" }
   | { readonly kind: "timeout"; readonly seconds: number }
-  | { readonly kind: "not-json"; readonly status: number; readonly said?: string; readonly retryAfter?: number }
+  | { readonly kind: "not-json"; readonly address: string; readonly status: number; readonly said?: string; readonly retryAfter?: number }
   | { readonly kind: "unexpected"; readonly status: number; readonly retryAfter?: number };
 
 /** What a call answers: the route's answer, or why there is none. */
@@ -180,13 +180,17 @@ function saidOf(response: Raw, text: string | undefined): { readonly said?: stri
   return said === "" ? {} : { said };
 }
 
-/** Read an answer that is JSON into the value a done answer holds, or into the failure any other answer is. */
-async function readJson(response: Raw): Promise<Called<unknown>> {
+/**
+ * Read an answer that is JSON into the value a done answer holds, or into the failure any other answer is.
+ *
+ * @param address - the origin the request was sent to, which an answer that is no JSON puts in doubt
+ */
+async function readJson(response: Raw, address: string): Promise<Called<unknown>> {
   const { status } = response;
   const wait = waitOf(response);
   const text = await readText(response);
   const parsed = text === undefined ? undefined : parseJson(text);
-  if (parsed === undefined) return failed({ kind: "not-json", status, ...saidOf(response, text), ...wait });
+  if (parsed === undefined) return failed({ kind: "not-json", address, status, ...saidOf(response, text), ...wait });
 
   if (status === OK) return { ok: true, value: parsed.value };
 
@@ -200,8 +204,8 @@ async function readJson(response: Raw): Promise<Called<unknown>> {
 }
 
 /** Read an answer into the value of its form, or a failure. An answer of another form is a failure, so no command reads a key that is not there. */
-async function readAnswer<Form extends v.GenericSchema>(form: Form, response: Raw): Promise<Called<v.InferOutput<Form>>> {
-  const read = await readJson(response);
+async function readAnswer<Form extends v.GenericSchema>(form: Form, response: Raw, address: string): Promise<Called<v.InferOutput<Form>>> {
+  const read = await readJson(response, address);
   if (!read.ok) return read;
 
   if (!v.is(form, read.value)) return failed({ kind: "unexpected", status: response.status });
@@ -210,7 +214,7 @@ async function readAnswer<Form extends v.GenericSchema>(form: Form, response: Ra
 }
 
 /** Read the answer to a file sent by its ticket: taken on any status in the 200s, whatever the body, else the failure the answer is. */
-async function readSent(response: Raw): Promise<Called<undefined>> {
+async function readSent(response: Raw, address: string): Promise<Called<undefined>> {
   const { status } = response;
 
   if (status >= OK && status < REDIRECT) {
@@ -219,7 +223,7 @@ async function readSent(response: Raw): Promise<Called<undefined>> {
     return { ok: true, value: undefined };
   }
 
-  const read = await readJson(response);
+  const read = await readJson(response, address);
 
   return read.ok ? failed({ kind: "unexpected", status }) : read;
 }
@@ -257,11 +261,11 @@ function storedType(header: string | null): string | undefined {
 }
 
 /** Read the answer to a download: the stream with what the headers say of it, or the refusal a JSON body holds. A done answer without its type, or with a length that is no count, is none. */
-async function readDownload(response: Raw): Promise<Called<Download>> {
+async function readDownload(response: Raw, address: string): Promise<Called<Download>> {
   const { status } = response;
 
   if (status !== 200) {
-    const read = await readJson(response);
+    const read = await readJson(response, address);
 
     return read.ok ? failed({ kind: "unexpected", status }) : read;
   }
@@ -324,6 +328,7 @@ export function createClient(options: ClientOptions): Client {
     send: (api: ApiCalls, signal: AbortSignal) => Promise<Raw>,
     read: (response: Raw) => Promise<Called<Done>>,
     again?: "repeatable",
+    address: string = options.server,
   ): Promise<Called<Done>> => {
     const timeoutMs = options.timeoutMs ?? patienceMs;
     const tooLong = AbortSignal.timeout(timeoutMs);
@@ -334,17 +339,17 @@ export function createClient(options: ClientOptions): Client {
 
     try {
       return await read(await send(routes.api, signal));
-    } catch {
+    } catch (error) {
       if (options.stopped?.aborted === true) return failed({ kind: "stopped" });
 
       if (tooLong.aborted) return failed({ kind: "timeout", seconds: Math.round(timeoutMs / 1000) });
 
       // What a `fetch` throws is dropped unread: it may quote the request, and the request holds the token.
-      return failed({ kind: "unreachable" });
+      return failed({ kind: "unreachable", address, left: !(error instanceof NeverLeft) && !NEVER_LEFT_CODES.has(codeOf(error)) });
     }
   };
 
-  const call: Client["call"] = (form, send, how) => ask(how === "long" ? FILE_TIMEOUT_MS : CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response), how === "repeatable" ? how : undefined);
+  const call: Client["call"] = (form, send, how) => ask(how === "long" ? FILE_TIMEOUT_MS : CALL_TIMEOUT_MS, send, (response) => readAnswer(form, response, options.server), how === "repeatable" ? how : undefined);
 
   const send: Client["send"] = (ticket, body) => {
     // A ticket names a whole address, or a path of the install, which is read against the address the install is reached at.
@@ -357,13 +362,13 @@ export function createClient(options: ClientOptions): Client {
     // A stream is sent as it is read, which the request must say.
     const put = (signal: AbortSignal): Promise<Raw> => options.fetch(place.href, { method: ticket.method, headers: sent, body, duplex: "half", redirect: "manual", signal } as RequestInit);
 
-    return ask(FILE_TIMEOUT_MS, (_api, signal) => put(signal), own ? readSent : readElsewhere);
+    return ask(FILE_TIMEOUT_MS, (_api, signal) => put(signal), own ? (response) => readSent(response, place.origin) : readElsewhere, undefined, place.origin);
   };
 
   const download: Client["download"] = ({ site, version, path }) => {
     const send = (api: ApiCalls): Promise<Raw> => api.export.sites[":site"].file.$get({ param: { site }, query: { version: String(version), path } });
 
-    return ask(FILE_TIMEOUT_MS, send, readDownload);
+    return ask(FILE_TIMEOUT_MS, send, (response) => readDownload(response, options.server));
   };
 
   return { call, send, download };

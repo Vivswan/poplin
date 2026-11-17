@@ -67,13 +67,13 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 | Problem           | From               | Means                                                                    | What to do                                                        |
 | ----------------- | ------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
 | `no_install`      | both               | the account holds no install; or a removal with `--keep-data` found kept data alone | make the token in the account the install is in; for kept data, run the removal without `--keep-data` |
-| `other_place`     | both, and `install` | the install, or one that was started and not finished, is of another place than the line named | give `--domain` and its domain, or `--no-domain`, as `words` says |
+| `other_place`     | both, and `install` | the install is of another place than the line named; for `install` and the removal, also one that was started and not finished | give `--domain` and its domain, or `--no-domain`, as `words` says |
 | `changed`         | both               | the account changed between the look and the work; nothing was done      | run it again                                                      |
-| `unfinished`      | the repair         | an install was started and never set, so there is nothing to mend        | finish it: `npx poplin install cloudflare`                        |
+| `unfinished`      | the repair         | an install was started and never set, so there is nothing to mend        | finish it: `npx poplin install cloudflare`. Where it was started for another place than the line named, `next.command` has that place's option |
 | `another_version` | the repair         | the install's records are of another version than this command           | `npx poplin@latest doctor --repair`                               |
 | `not_confirmed`   | the removal        | the address typed, or given with `--confirm`, is not the install's own; nothing was removed | give the address a run with `--dry-run` prints |
 
-A repair or a removal that worked through its rows prints them, with `ready` false where a row is left undone. A removal lists in `unlooked` each kind its token could not look for.
+A repair or a removal that worked through its rows prints them, with `ready` false where a row is left undone. A removal lists in `unlooked` each kind its token could not look for. After a run that lists one, `next` names the removal again: with the permission added to the token, the same line looks for that kind.
 
 Each entry of `blocked` names what blocks in `what`:
 

@@ -31,8 +31,8 @@ const STARTED_FOR = {
 
 /** What a look answers for an install that was started for another place than the one named. */
 const ELSEWHERE = {
-  domain: { state: "refused", why: "other_place", words: "An install was started in this account under the domain example.com, and not finished: give --domain example.com." },
-  none: { state: "refused", why: "other_place", words: "An install was started in this account without a domain, and not finished: give --no-domain." },
+  domain: { state: "refused", why: "other_place", words: "An install was started in this account under the domain example.com, and not finished: give --domain example.com.", give: "--domain example.com" },
+  none: { state: "refused", why: "other_place", words: "An install was started in this account without a domain, and not finished: give --no-domain.", give: "--no-domain" },
 } as const;
 
 /** The account an install that is set runs in, as its Worker holds it. */
@@ -127,7 +127,13 @@ describe("the states of an account", () => {
         "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare.",
       "install",
     ],
-    ["a Worker with none of poplin's name", MARKS.slice(0, 3), "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. Give it another name in your browser, then run this again.", "again"],
+    [
+      "a Worker with none of poplin's name",
+      MARKS.slice(0, 3),
+      "A Worker named poplin is in this account and does not carry poplin's name, so nothing here touches it. " +
+        "If you just installed or updated poplin, wait a minute and run this again. Else give it another name in your browser, then run this again.",
+      "again",
+    ],
   ] as const)("tells %s in words that never say to delete it, and names the command its words name for a program", async (_, bindings, words, after) => {
     const address = `https://dash.cloudflare.com/${ACCOUNT}/workers/services/view/poplin`;
 

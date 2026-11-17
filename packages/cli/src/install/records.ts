@@ -60,6 +60,7 @@ export type InstallRequest = { readonly provider: Provider; readonly json: boole
  * What to run after a command ended: the step as one word for a program, and its command line.
  *
  * The line holds none of the answers the line before it gave: no token, no place, no proof, no consent. It keeps each careful choice of that line where the same command goes on.
+ * It holds the place too where the stop's own sentence names one, as after a repair on an install that was started for another place. A consent, as `--adopt` is, is never on the line: a person adds it.
  * `install`, `repair`, and `uninstall` are the three commands; `login` logs a computer in to an install that is whole; `none` is an end with nothing left to run.
  */
 export type Next = { readonly step: "install" | "repair" | "uninstall" | "login"; readonly command: string } | { readonly step: "none"; readonly command: null };
@@ -94,13 +95,14 @@ export type Stop =
  * What the words after an install command ask for: the help, the version, the list of providers, a refusal, or the command's plan to run.
  *
  * `pick` is a line on a terminal that names no provider: `named` reads the same line for the provider the person chose.
+ * A `stop` holds the provider the line that goes on from it names: the one it names as its subcommand, or the only one the package carries; `undefined` where neither says which.
  */
 export type Parsed<Planned> =
   | { readonly kind: "help"; readonly provider: Provider | undefined }
   | { readonly kind: "version" }
   | { readonly kind: "list"; readonly json: boolean }
   | { readonly kind: "pick"; readonly json: false; readonly named: (provider: Provider) => Parsed<Planned> }
-  | { readonly kind: "stop"; readonly stop: Stop; readonly json: boolean }
+  | { readonly kind: "stop"; readonly stop: Stop; readonly json: boolean; readonly provider: Provider | undefined }
   | { readonly kind: "plan"; readonly plan: Planned };
 
 /** What the words after `poplin install` ask for. */

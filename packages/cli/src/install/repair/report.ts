@@ -14,6 +14,9 @@ const INDENT = "  ";
 /** The problem each of the provider's own refusals of a repair is, as the command's JSON names it, where the same command goes on from it. */
 const PROBLEMS = { elsewhere: "other_place", changed: "changed" } as const;
 
+/** The option of an install that takes up what an earlier install left behind: a consent, which the sentence names and no next step carries. */
+const ADOPT = "--adopt";
+
 /** What each end of a repair that left nothing undone is called. */
 const DONE = { same: `the install is as it should be. ${UNCHANGED}`, mended: "the install is mended." } as const;
 
@@ -44,7 +47,9 @@ export function foundWords(found: Whole<unknown>): string {
  *
  * @param provider - the provider, which the line that names `poplin install` names
  * @param careful - the careful choices of the repair's line, kept where the repair itself goes on
- * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one
+ * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one.
+ *   Where the install was started for another place, the sentence and the next step name one line: the install at that place.
+ *   Where data was left behind, the sentence names `--adopt` and the next step is the install without it: the consent is a person's to add
  */
 export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[]): Stop {
   const next = NEXT.install(provider);
@@ -52,7 +57,7 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
 
   if (found.state === "none") return { problem: "no_install", exit: 1, words: `No install is in this account. To make one: ${install}`, next };
 
-  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${install} --adopt`), next };
+  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${install} ${ADOPT}`), next };
 
   if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
 
@@ -61,6 +66,13 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
   if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNCHANGED) };
+
+  if (found.why === "other_place") {
+    // A repair at the place it was started for would stop again: the install is not set, so the install goes on with it there.
+    const finish = NEXT.install(provider, [], [found.give]);
+
+    return { problem: "unfinished", exit: 1, words: followed(found.words, `To finish it: ${finish.command}`), next: finish };
+  }
 
   return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
 }

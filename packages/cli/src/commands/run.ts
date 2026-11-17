@@ -254,7 +254,7 @@ function print(outcome: Outcome, json: boolean, io: Io, tokens: ReadonlySet<stri
   if (json) {
     io.out(written(outcome.value, tokens));
   } else {
-    for (const line of outcome.lines) io.out(hide(line, tokens));
+    for (const line of [...outcome.lines, ...(outcome.steps ?? [])]) io.out(hide(line, tokens));
   }
 
   return exitCode({ kind: outcome.found ?? "done" });
