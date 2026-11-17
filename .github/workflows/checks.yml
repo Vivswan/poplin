@@ -39,6 +39,29 @@ jobs:
       - name: Build the Worker bundle and test the Worker (Workers runtime)
         run: bun run test:worker
 
+  # The tests of `check` again, with the package told one minor version above its own, as a release tells it. A test
+  # that states today's version passes on every other pull request and fails on the release's own.
+  next-version:
+    name: test / next version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The upgrade tests read the last release from the tags, and its code and one older commit from the history.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Tell the package the next version
+        working-directory: packages/cli
+        run: bun pm version minor --no-git-tag-version
+      - name: Test
+        run: bun run test --path-ignore-patterns 'tests/fuzz/**'
+      - name: Test the dashboard's client
+        run: bun run test:client
+      - name: Build the Worker bundle and test the Worker (Workers runtime)
+        run: bun run test:worker
+
   # Every fuzz target side by side, three minutes each (fuzz.yml). The seed is the one input of that file: blank here,
   # as in the nightly and the release gate, so each run draws a new one and its job `plan` prints it.
   fuzz:
@@ -48,8 +71,8 @@ jobs:
 
   # The product's tests and the three tree guards on every OS a user publishes from. The runtime is the bun that
   # .bun-version pins: the tests import bun:test, which no other runtime provides. The fuzz tests run in `fuzz` alone.
-  # The Worker's tests run in `check` alone too: they need the Workers runtime, and the root `test` script this job
-  # calls leaves the Workers-runtime tests of `packages/providers/cloudflare` out.
+  # The Worker's tests run in `check` and `next-version` alone: they need the Workers runtime, and the root `test` script
+  # this job calls leaves the Workers-runtime tests of `packages/providers/cloudflare` out.
   matrix:
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
