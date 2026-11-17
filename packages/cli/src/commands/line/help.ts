@@ -3,7 +3,7 @@
 import type { Command } from "commander";
 
 import { type Look, PLAIN_LOOK } from "../../local/screen";
-import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, PROVIDER_COMMANDS, SESSION } from "../command-table";
+import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, FULL_HELP, HELP_FLAG, PROVIDER_COMMANDS, SESSION } from "../command-table";
 import { SETTING_SAMPLES } from "../install/install-settings";
 import { type HelpPage, type HelpPart, helpPage } from "./help-page";
 import { argumentsOf, buildProgram } from "./program";
@@ -29,7 +29,7 @@ function overview(program: Command): HelpPage {
 
   return {
     usage: [[`${program.name()} <path> [flags]`, BARE_ABOUT], `${program.name()} <command> [flags]`],
-    parts: [...listing, { title: "Options:", rows: flagRows(everywhere) }, { title: "Examples:", lines: SESSION }],
+    parts: [...listing, { title: "Options:", rows: flagRows([...everywhere.filter((flag) => flag.name === HELP_FLAG), FULL_HELP, ...everywhere.filter((flag) => flag.name !== HELP_FLAG)]) }, { title: "Examples:", lines: SESSION }],
   };
 }
 

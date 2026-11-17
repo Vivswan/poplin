@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { type Command, CommanderError } from "commander";
 
-import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, PROVIDER_COMMANDS, REPAIR_FLAG, VERSION_FLAG } from "../command-table";
+import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, FULL_HELP, HELP_FLAG, PROVIDER_COMMANDS, REPAIR_FLAG, VERSION_FLAG } from "../command-table";
 import { argumentsOf, buildProgram } from "./program";
 import { buildRequest, type TypedRequest } from "./requests";
 import { type Flags, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
@@ -52,14 +52,14 @@ interface TypedWords {
 }
 
 /**
- * What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets.
+ * What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets, and `full` is set for the help of every command at once.
  *
  * `install`, `uninstall`, and `doctor` with `--repair` are the commands whose words are not read here: their options are their providers', which only the built package knows. `words` are the ones after the command's own.
  */
 export type Parsed =
   | TypedRequest
   | { readonly kind: "provider"; readonly command: ProviderCommand; readonly words: readonly string[] }
-  | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean }
+  | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean; readonly full?: true }
   | { readonly kind: "version" }
   | UsageError;
 
@@ -123,6 +123,8 @@ function asks(argv: readonly string[], flag: string): boolean {
 
 /** Answer for a line with no argument on it: the help or the version when asked, and else what its first flag lacks. */
 function withoutWord(argv: readonly string[], flags: readonly TypedFlag[]): Parsed {
+  if (asks(argv, FULL_HELP.name)) return { kind: "help", asked: true, full: true };
+
   if (asks(argv, HELP_FLAG)) return { kind: "help", asked: true };
 
   if (asks(argv, VERSION_FLAG)) return { kind: "version" };
