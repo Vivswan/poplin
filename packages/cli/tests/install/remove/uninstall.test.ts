@@ -80,7 +80,7 @@ describe("a dry run", () => {
       `A run asks you to type this, or takes it with --confirm: ${NAME}`,
       "The sites' files and the database go last: --keep-data leaves them.",
       "A removal logs no computer out: run npx poplin logout on each one first.",
-      "ready: a run would remove 4 kinds. nothing was removed",
+      "ready: a run would remove 4 kinds. Nothing was removed.",
     ]);
     expect([handed(account), account.changes]).toEqual([[{ run: "dry-run", data: "remove" }], 0]);
   });
@@ -118,7 +118,7 @@ describe("a dry run", () => {
     const ran = await runLine("uninstall stand-in --no-place --dry-run", installed(() => removedOf(rows, { ready: false, blocked })), { env: HELD });
 
     expect(ran.code).toBe(1);
-    expect(ran.out.slice(-3)).toEqual(["the token lacks a permission. Add this one: Programs: Edit", "  https://host.example.com/tokens", "not ready: 1 blocked, 1 not run. A run would remove the other 1 kind. nothing was removed"]);
+    expect(ran.out.slice(-3)).toEqual(["the token lacks a permission. Add this one: Programs: Edit", "  https://host.example.com/tokens", "not ready: 1 blocked, 1 not run. A run would remove the other 1 kind. Nothing was removed."]);
   });
 });
 
@@ -198,7 +198,7 @@ describe("a run", () => {
     expect([dry.code, dry.out.slice(3, 5), dry.out.slice(-3)]).toEqual([
       0,
       kept,
-      ["The sites' files and the database stay: --keep-data was given.", "A removal logs no computer out: run npx poplin logout on each one first.", "ready: a run would remove 2 kinds. nothing was removed"],
+      ["The sites' files and the database stay: --keep-data was given.", "A removal logs no computer out: run npx poplin logout on each one first.", "ready: a run would remove 2 kinds. Nothing was removed."],
     ]);
   });
 
@@ -222,7 +222,7 @@ describe("a run", () => {
     ]);
     // The sentence says to run the command again with the permission added, so the next step is that command: a program that goes by `next` alone would stop at `none`.
     expect([json.code, jsonOf(json)]).toMatchObject([0, { ok: true, ready: true, unlooked: ["Guard rule", "Alert"], next: AGAIN }]);
-    expect([dry.code, dry.out.slice(-2)]).toEqual([0, [`2 kinds would not be looked for, ${unlooked}`, "ready: a run would remove 4 kinds. nothing was removed"]]);
+    expect([dry.code, dry.out.slice(-2)]).toEqual([0, [`2 kinds would not be looked for, ${unlooked}`, "ready: a run would remove 4 kinds. Nothing was removed."]]);
   });
 
   test("told to keep the data where the data is all that is left says so and exits 1, as does a run that met only what is not the install's: without this a removal of nothing reads as done", async () => {
@@ -296,6 +296,6 @@ describe("what stops a removal before it starts", () => {
     const account: Account = { ...emptyAccount(), scenes: [{ state: "held", words: "A program named poplin is in this account and is not poplin's.", address: "https://host.example.com/programs/poplin", after: "again" }] };
     const ran = await runLine(`uninstall stand-in --no-place --confirm ${NAME}`, account, { env: HELD });
 
-    expect([ran.code, ran.err, account.removals]).toEqual([1, ["A program named poplin is in this account and is not poplin's.", "  https://host.example.com/programs/poplin", "nothing was changed"], []]);
+    expect([ran.code, ran.err, account.removals]).toEqual([1, ["A program named poplin is in this account and is not poplin's.", "  https://host.example.com/programs/poplin", "Nothing was changed."], []]);
   });
 });

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { Login } from "../../../../core/src/auth/logins";
 import type { Blocked, Found, Installer, Row, Token } from "../../../../core/src/install/installer";
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
+import { pasted } from "../../../src/local/invoked";
 import { jsonOf } from "../../commands/support/harness";
 import { ADDRESS, type Account, accountQuestion, emptyAccount, FRESH, installedOf, type Place, type Ran, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
 
@@ -109,7 +110,7 @@ describe("a fresh install", () => {
       "would leave      Address               poplin.example.com",
       "would leave out  Guard rule            the token lacks Rules: Edit (optional)",
       "the token's permissions: each read was allowed, and a write is proven by the run",
-      "ready: a run would make 3 and leave out 1. nothing was changed",
+      "ready: a run would make 3 and leave out 1. Nothing was changed.",
     ]);
   });
 });
@@ -155,7 +156,7 @@ describe("--json", () => {
       "blocked          Program               the token lacks Programs: Edit",
       "The token lacks a permission. Add this one: Programs: Edit",
       "  https://host.example.com/tokens",
-      "not ready: 1 blocked. nothing was changed",
+      "not ready: 1 blocked. Nothing was changed.",
     ]);
   });
 
@@ -196,7 +197,7 @@ describe("what a look finds", () => {
     expect(ran.code).toBe(1);
     expect(ran.out).toEqual(["looking for an install ... found"]);
     expect(ran.err).toEqual([
-      `This account already holds poplin 0.1.0, at ${ADDRESS}, and it is as it should be. nothing was changed.`,
+      `This account already holds poplin 0.1.0, at ${ADDRESS}, and it is as it should be. Nothing was changed.`,
       `The way on: npx poplin login --server ${ADDRESS}`,
       "  to check it   npx poplin doctor",
       "  to mend it    npx poplin doctor --repair",
@@ -236,7 +237,7 @@ describe("what a look finds", () => {
     expect([run.code, dry.code]).toEqual([1, 1]);
     expect(jsonOf(run)).toEqual({ ok: false, problem: "already_installed", next, found: { version: null, address: ADDRESS, newest: null, ...mend }, run: "apply", ready: false });
     expect(jsonOf(dry)).toMatchObject({ problem: "already_installed", next, run: "dry-run", ready: false });
-    expect(run.err.slice(0, 1 + way.length)).toEqual([`This account already holds poplin (version not read), at ${ADDRESS}${state}. nothing was changed.`, ...way]);
+    expect(run.err.slice(0, 1 + way.length)).toEqual([`This account already holds poplin (version not read), at ${ADDRESS}${state}. Nothing was changed.`, ...way]);
   });
 
   test("something left behind stops a run that asks nothing, and names --adopt: without this a run would take another install's records silently", async () => {
@@ -249,7 +250,7 @@ describe("what a look finds", () => {
       "Records named poplin are in this account, and no poplin runs.",
       "To use it, with what it holds: run this again with --adopt. To start without it, delete it here first, with what it holds:",
       "  https://host.example.com/records",
-      "nothing was changed",
+      "Nothing was changed.",
     ]);
     expect(dry.code).toBe(1);
     expect(jsonOf(dry)).toEqual({ ok: false, problem: "leftover", next: { ...AGAIN, command: `${AGAIN.command} --dry-run` }, words: LEFTOVER.words, address: LEFTOVER.address, run: "dry-run", ready: false });
@@ -303,7 +304,7 @@ describe("what a look finds", () => {
 
     expect(ran.code).toBe(code);
     expect(jsonOf(ran)).toMatchObject({ ok: false, problem, run: "apply", ready: false });
-    expect(ran.err.join("\n")).toContain("nothing was changed");
+    expect(ran.err.join("\n")).toContain("Nothing was changed.");
     expect(account.runs).toEqual([]);
   });
 
@@ -407,11 +408,11 @@ describe("what a run comes to", () => {
 
   test("a provider that could not start its work is exit 5: without this a script retries a failure that is no failure of the install", async () => {
     const account = emptyAccount();
-    account.installed = { ok: false, why: "unreachable", words: "the project's website gave no answer. nothing was changed" };
+    account.installed = { ok: false, why: "unreachable", words: "the project's website gave no answer. Nothing was changed." };
     const ran = await runLine(`${RUN} --json`, account, { env: HELD });
 
     expect(ran.code).toBe(5);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "unreachable", next: AGAIN, words: "the project's website gave no answer. nothing was changed", run: "apply", ready: false });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "unreachable", next: AGAIN, words: "the project's website gave no answer. Nothing was changed.", run: "apply", ready: false });
   });
 
   test("--log-in logs this computer in at the dashboard's address, and a login that fails leaves the install done: without this the offer is words alone", async () => {
@@ -463,6 +464,17 @@ describe.each([
 
     expect([ran.code, ran.out.at(-2)]).toEqual([1, `1 not done. Run npx poplin doctor --repair ${place} --add-user new@example.com: it goes on from what stands.`]);
     expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, next: { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` } });
+  });
+
+  // Drift: the place and the user are written into a line the terminal starts as poplin was started; a rule that stops at the first option would cut them off, and one that reached the JSON value would hand a program two values.
+  test("is shown started as poplin was started with its place and its user whole, and the JSON value keeps the line as it is written", async () => {
+    const options = `doctor --repair ${place} --add-user new@example.com`;
+    const ran = await runLine(`${line} --yes --no-wait`, unusedAt(), { env: HELD });
+    const json = await runLine(`${line} --yes --no-wait --json`, unusedAt(), { env: HELD });
+    const last = ran.out.at(-1) ?? "";
+
+    expect([pasted(last, "poplin"), pasted(last, "npx poplin")]).toEqual([`To let new@example.com log in too: poplin ${options}`, `To let new@example.com log in too: npx poplin ${options}`]);
+    expect(jsonOf(json).next).toEqual({ step: "repair", command: `npx poplin ${options}` });
   });
 
   // Drift: a dry run of such an install is followed by the run, and a next step with no place stops that run for the answer of where, with nobody there to give it.
@@ -533,7 +545,7 @@ describe("a run that is blocked", () => {
       [
         "No release of poplin is published yet.",
         "  https://example.com",
-        "nothing was changed. Run this command again once what the lines above say is no longer so.",
+        "Nothing was changed. Run this command again once what the lines above say is no longer so.",
         "The token was used for this run and is stored nowhere. You can delete it at Stand-In Host.",
       ],
     ]);
@@ -590,13 +602,11 @@ describe("on a terminal", () => {
     expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "Your email, the first login:", "Account token (not shown): [secret]", "Log this computer in now? [Y/n]"]);
     expect(account.tokensFor).toEqual(["install"]);
     expect(ran.err).toEqual([
-      "The account token needs 2 permissions, for this account and this place:",
-      "  Places: Read, Programs: Edit",
-      "Optional:",
-      "  Rules: Edit: a guard rule",
-      "This link opens the form with each one chosen that a link can choose:",
+      "The account token does the work of this run: 2 permissions, for this account and this place; 1 more is optional.",
+      "This link opens the form with them chosen:",
       "  https://host.example.com/tokens/new?rights=chosen",
       "The form asks which account the token is for.",
+      "Every permission by name: npx poplin install stand-in --help",
     ]);
     expect(account.runs[0]).toMatchObject({ where: { kind: "place", name: "example.com" }, login: "you@example.com" });
     expect(ran.out.at(-1)).toBe(`To log this computer in: npx poplin login --server ${ADDRESS}`);
@@ -631,7 +641,7 @@ describe("on a terminal", () => {
     const account = emptyAccount();
     const ran = await runLine("install stand-in --no-place", account, { asks: true, env: HELD, typed: [undefined] });
 
-    expect(ran).toMatchObject({ code: 1, err: ["stopped: nothing was changed"] });
+    expect(ran).toMatchObject({ code: 1, err: ["stopped. Nothing was changed."] });
     expect(account.finds).toEqual([]);
   });
 
@@ -657,7 +667,7 @@ describe("on a terminal", () => {
     const went = await runLine(`${RUN} --no-wait`, quiet, { env: HELD });
 
     expect(asked.asked).toEqual(["Go on all the same? No stops here, so that you can switch it on first. [y/N]"]);
-    expect(asked.err).toEqual(["The login product is not switched on for this account", "  https://host.example.com/login", "stopped: nothing was changed"]);
+    expect(asked.err).toEqual(["The login product is not switched on for this account", "  https://host.example.com/login", "stopped. Nothing was changed."]);
     expect(asked.code).toBe(1);
     expect(stopped.runs).toEqual([]);
     expect(dry.asked).toEqual([]);

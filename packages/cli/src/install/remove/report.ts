@@ -104,11 +104,11 @@ export function listedLines(removed: Listed, data: "remove" | "keep"): Line[] {
   const proof = plain(`A run asks you to type this, or takes it with --confirm: ${removed.confirm}`);
   const kept = plain(data === "keep" ? "The sites' files and the database stay: --keep-data was given." : "The sites' files and the database go last: --keep-data leaves them.");
   const first = plain(`A removal logs no computer out: run ${LOGOUT} on each one first.`);
-  if (removed.ready) return [proof, kept, first, ...unlookedLines(removed, "dry-run"), { tone: "done", text: `ready: a run would remove ${kinds}. nothing was removed` }];
+  if (removed.ready) return [proof, kept, first, ...unlookedLines(removed, "dry-run"), { tone: "done", text: `ready: a run would remove ${kinds}. Nothing was removed.` }];
 
   const undone = UNDONE.filter((state) => count(removed, [state]) > 0).map((state) => `${count(removed, [state])} ${STATES[state]["dry-run"]}`);
 
-  return [proof, ...blockedLines(removed.blocked), { tone: "error", text: `not ready: ${undone.join(", ")}. A run would remove the other ${kinds}. nothing was removed` }];
+  return [proof, ...blockedLines(removed.blocked), { tone: "error", text: `not ready: ${undone.join(", ")}. A run would remove the other ${kinds}. Nothing was removed.` }];
 }
 
 /**

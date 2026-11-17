@@ -10,6 +10,7 @@ import type { Io } from "./commands/records";
 import { AFTER_STOP_TIMEOUT_MS, run } from "./commands/run";
 import { openBrowser } from "./local/browser";
 import { thisMachine } from "./local/login-file";
+import { pastedScreen, runnerOf } from "./local/invoked";
 import { processScreen, showsColour } from "./local/screen";
 
 /** What the first Ctrl-C aborts: the one way a command hears that the person stopped it. */
@@ -55,7 +56,7 @@ function thisProcess(): Io {
   return {
     out: (line) => console.log(line),
     // Every question and the line of what is worked on go to stderr, so stdout holds the result alone.
-    screen: processScreen({ out: process.stdout, err: process.stderr, colour, input: process.stdin, stop }),
+    screen: pastedScreen(processScreen({ out: process.stdout, err: process.stderr, colour, input: process.stdin, stop }), runnerOf(machine.env)),
     fetch: (input, init) => fetch(input, init),
     machine,
     terminal: { asks: process.stderr.isTTY === true && process.stdin.isTTY === true, progress: colour.err },

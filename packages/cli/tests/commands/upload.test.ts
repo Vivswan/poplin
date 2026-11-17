@@ -77,7 +77,7 @@ interface Told {
 
 /** The line before a pause of so many seconds, after which the one file is sent for the `next` time, as a pipe is sent it. */
 function againPiped(seconds: number, next: number): string {
-  return `the install did not take index.html: sending it again in ${seconds} s, ${next} of 4`;
+  return `sending index.html again in ${seconds} s, try ${next} of 4`;
 }
 
 /** The same line as a terminal's progress line shows it. */
@@ -405,7 +405,7 @@ describe("upload", () => {
 
     const ran = await bench.run(folderOf("notes", { ...ONE, [named]: "x" }));
 
-    expect([ran.code, ran.err]).toEqual([0, ["the install did not take [token].txt: sending it again in 2 s, 2 of 4"]]);
+    expect([ran.code, ran.err]).toEqual([0, ["sending [token].txt again in 2 s, try 2 of 4"]]);
   });
 
   // Drift: an agent that runs a publish in a pipe sees nothing for as long as the install asks it to rest, and takes the command for hung.

@@ -16,9 +16,9 @@ const REMOVAL = "uninstall stand-in --no-place --confirm poplin.example.com --ye
 
 /** The three commands, each with what it says after a provider's sentence of a stop before any change. */
 const COMMANDS = [
-  ["install", INSTALL, "nothing was changed"],
+  ["install", INSTALL, "Nothing was changed."],
   ["uninstall", UNINSTALL, "Nothing was removed."],
-  ["doctor --repair", REPAIR, "nothing was changed"],
+  ["doctor --repair", REPAIR, "Nothing was changed."],
 ] as const;
 
 /** What a provider says of a token it refuses, as one that ends its sentence with a full stop writes it and as one that does not. */

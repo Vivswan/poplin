@@ -93,8 +93,8 @@ describe("the MCP server", () => {
 
   // Drift: a wait told in a tool's answer reads as an error to the agent, or breaks the answer's shape; one told nowhere leaves whoever runs the server no trace of why a call took seconds.
   test.each([
-    ["a file that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), "index.html", "the install did not take index.html: sending it again in 2 s, 2 of 4"],
-    ["a file named after the token that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), ".txt", "the install did not take [token].txt: sending it again in 2 s, 2 of 4"],
+    ["a file that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), "index.html", "sending index.html again in 2 s, try 2 of 4"],
+    ["a file named after the token that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), ".txt", "sending [token].txt again in 2 s, try 2 of 4"],
     ["a rest the install asks for", () => Response.json({ error: { code: "too_many_requests", message: "no" } }, { status: 429, headers: { "Retry-After": "3" } }), "index.html", "the install asks for a pause: going on in 3 s"],
   ])("%s during a publish is one line in the server's log, and the tool answers as a publish that met nothing", async (_name, fault, failing, line) => {
     const bench = await open();
