@@ -117,9 +117,9 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
   const run = async (kind: DomainRun, sent: Sent): Promise<Refused | undefined> => {
     try {
       const done = await answerOf(api.domain[kind].$post({ json: { token: sent.token } }));
-      pieces.take(done);
+      const shown = await pieces.take(done);
       asks.close();
-      sayRan(done.summary);
+      sayRan(shown.summary);
 
       return undefined;
     } catch (refused) {

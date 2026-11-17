@@ -2,10 +2,10 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { PROBLEM_KINDS, PROBLEM_WORDS } from "@poplin/core/src/records/problem";
+import { PROBLEM_KINDS, PROBLEM_WORDS, type ProblemKind } from "@poplin/core/src/records/problem";
 import { dayOf } from "@poplin/core/src/records/views";
 
-import { TOKEN, usualPlug } from "./support/fake-plug";
+import { fakePlug, TOKEN, usualPlug } from "./support/fake-plug";
 import { openConsole } from "./support/console";
 
 /** The milliseconds of one hour and of one day. */
@@ -17,7 +17,7 @@ const UNDER_A_DOMAIN: readonly string[] = ["rules_not_carried"];
 type Opened = Awaited<ReturnType<typeof openConsole>>;
 
 /** Note a kind as the install would, `ago` milliseconds before the console's clock. */
-async function note(opened: Opened, kind: "request_failed" | "login_unchecked" | "update_failed" | "requests_limit_reached", ago: number, message: string | null = null): Promise<void> {
+async function note(opened: Opened, kind: ProblemKind, ago: number, message: string | null = null): Promise<void> {
   await opened.base.install.database.noteProblem({ kind, at: opened.base.clock.now - ago, count: 1, more: false, name: message === null ? null : "Error", message });
 }
 
@@ -95,6 +95,27 @@ describe("a console with no Domain screen", () => {
 
     expect([listed.problems.map((problem) => problem.home), frame.recent.map((problem) => problem.home)]).toEqual([["usage"], ["usage"]]);
     expect(frame.marks).toEqual({ usage: { count: 1, says: "The login could not be checked" }, domain: null, settings: null });
+  });
+});
+
+describe("what the problems of the Domain screen ask for", () => {
+  // Drift: the Domain screen draws a problem of the last day under its line, with what to do. A line that says "Nothing to repair" over "press Repair" tells a person two things at once.
+  // A count that took in a problem that says "press Check", one a day old, or one that is drawn on Usage where there is no Domain screen, would ask for a repair over no such box.
+  test("counts the kinds of the last day that say to press Repair where they are drawn at Domain, through a check, until the repair that ends them", async () => {
+    const [opened, bare] = [await openConsole("", fakePlug(() => ({ ok: true, rows: [{ object: "Login policy", state: "present", detail: "the logins", part: "login" }], steps: [] }))), await openConsole()];
+    const asks = async (console = opened): Promise<unknown> => ((await (await console.get("/data/frame")).json()) as { readonly domainAsks: unknown }).domainAsks;
+    const ran = async (run: "check" | "repair"): Promise<unknown> => (await opened.change(`/data/domain/${run}`, { token: TOKEN })).status;
+
+    await note(opened, "login_unchecked", HOUR_MS);
+    await note(opened, "sweep_failed", HOUR_MS);
+    await note(opened, "users_not_carried", 25 * HOUR_MS);
+    const quiet = await asks();
+    await note(opened, "users_not_carried", 2 * HOUR_MS);
+    await note(opened, "rules_not_carried", HOUR_MS);
+    await note(bare, "users_not_carried", HOUR_MS);
+    const [raised, checked, checkedAsks, repaired] = [await asks(), await ran("check"), await asks(), await ran("repair")];
+
+    expect([quiet, raised, checked, checkedAsks, repaired, await asks(), await asks(bare)]).toEqual([null, { line: "2 to repair", tone: "bad" }, 200, { line: "2 to repair", tone: "bad" }, 200, null, null]);
   });
 });
 

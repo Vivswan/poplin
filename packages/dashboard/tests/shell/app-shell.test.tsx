@@ -4,7 +4,7 @@ import { clearPage } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -58,11 +58,17 @@ afterAll(clearPage);
 
 describe("the way out of the login", () => {
   // Drift: the console sends a browser on from one path of its own to where the provider ends a login. A link to any other place, or one the router answers with a screen, would leave the browser logged in.
-  test("is named Sign out, beside the email at the foot of the side, and leads to the console's own way out", async () => {
+  test("is named Sign out, the one item of the menu the email at the foot of the side opens, and leads to the console's own way out", async () => {
     await drawWith(null);
-    const out = screen.getByRole("button", { name: "Sign out" });
+    const account = screen.getByTitle(BOOT.email);
+    const before = screen.queryAllByText("Sign out").length;
+    await act(async () => {
+      fireEvent.click(account);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const items = screen.getAllByRole("menuitem");
 
-    expect([out.getAttribute("href"), out.parentElement?.textContent]).toEqual([`${BOOT.base}/out`, `${BOOT.email}Sign out`]);
+    expect([before, items.map((item) => [item.textContent, item.getAttribute("href")]), account.getAttribute("aria-expanded")]).toEqual([0, [["Sign out", `${BOOT.base}/out`]], "true"]);
   });
 });
 

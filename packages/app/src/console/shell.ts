@@ -74,6 +74,9 @@ export interface Boot {
 
   /** What the side marks at each screen that holds a problem. */
   readonly marks: Marked["marks"];
+
+  /** What the problems of the Domain screen ask for, as its line says it, or `null`. */
+  readonly domainAsks: Marked["domainAsks"];
 }
 
 /**

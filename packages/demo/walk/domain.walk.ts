@@ -21,7 +21,7 @@ test("Domain opens on its pieces with no press and no token; opened again once t
   await arrive(page);
   const asked = page.getByRole("dialog");
   await toSection(page, "Domain");
-  await expect(domainLine(page, "Nothing to repair")).toBeVisible();
+  await expect(domainLine(page, "1 to repair")).toBeVisible();
   await expect(page.getByRole("table", { name: "Pieces", exact: true }).getByRole("row").nth(1)).toBeVisible();
   await expect(asked).toHaveCount(0);
 

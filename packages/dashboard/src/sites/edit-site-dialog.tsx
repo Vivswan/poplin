@@ -15,6 +15,9 @@ const HINTS = {
   name: "The link uses this name. Old links keep working.",
 } as const;
 
+/** What stands under an empty name, in the hint's place. */
+const NAME_NEEDED = "A site needs a name.";
+
 /** A field of the dialog. */
 type FieldKey = keyof typeof HINTS;
 
@@ -155,7 +158,7 @@ export function EditSiteDialog({ site, onClose, onSave, returnTo }: EditSiteDial
             first
             field={fields.title}
           />
-          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={refusalAt("name")} hint={HINTS.name} required field={fields.name} />
+          <NamingField label="Name" value={name} onChange={type("name", setName)} refusal={name.trim() === "" ? NAME_NEEDED : refusalAt("name")} hint={HINTS.name} required field={fields.name} />
           {refusal?.about === null ? (
             <Field invalid>
               <FieldError>{refusal.sentence}</FieldError>

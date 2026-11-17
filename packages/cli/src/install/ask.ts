@@ -102,12 +102,12 @@ async function chosen(question: Question<unknown>, asking: "terminal" | "never",
 /**
  * Look for an install with the token. A token that shows more than one place is asked which, and looked with again at the place chosen.
  *
- * @param request - the provider, the token, the place the person named, and whether a person can be asked
+ * @param request - the provider, the token, the place the person named, whether a person can be asked, and the work the token is made for
  * @param tell - `looking` before each look, and `found` with what it found
  * @returns what was found, with the place the provider was last asked about; or the stop of a choice nobody could make
  */
 export async function lookFor(
-  request: Pick<InstallRequest, "provider" | "token" | "where" | "asking">,
+  request: Pick<InstallRequest, "provider" | "token" | "where" | "asking"> & { readonly work: "install" | "repair" | "remove" },
   ends: Pick<InstallEnds, "reach" | "screen">,
   tell: { readonly looking: () => void; readonly found: (found: Found<unknown, unknown>) => void },
 ): Promise<{ readonly found: Exclude<Found<unknown, unknown>, { readonly state: "choice" }>; readonly where: unknown } | Stop> {
@@ -115,7 +115,7 @@ export async function lookFor(
 
   for (;;) {
     tell.looking();
-    const found = await request.provider.find(request.token, where, ends.reach);
+    const found = await request.provider.find(request.token, where, ends.reach, request.work);
     tell.found(found);
 
     if (found.state !== "choice") return { found, where };

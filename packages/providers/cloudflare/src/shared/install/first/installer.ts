@@ -84,6 +84,9 @@ const OWN_ROWS: ReadonlySet<string> = new Set(["D1 database"]);
 /** How many users of a database a row names before it counts the rest. */
 const NAMED_USERS = 5;
 
+/** A word a POSIX shell reads as it is written, with no quote around it. */
+const PLAIN_WORD = /^[A-Za-z0-9@%+=:,./_-]+$/;
+
 /** How the users a row names are joined: `a and b`, `a, b, and 2 more`. */
 const USERS = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
@@ -423,6 +426,11 @@ function namedUsers(logins: readonly Login[]): string {
   return USERS.format(more > 0 ? [...logins.slice(0, NAMED_USERS), `${more} more`] : logins);
 }
 
+/** Write a word so a POSIX shell reads it as that one word: as it is, or in single quotes with each one inside written `'\''`. */
+function shellWord(word: string): string {
+  return PLAIN_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+}
+
 /**
  * The row of the first login a person gave, where the database holds users already; `undefined` where it holds none, and the login is used.
  *
@@ -435,7 +443,7 @@ function keptUsersRow(login: Login, kept: SettingValues | undefined): Row | unde
   const held = `The database holds ${users} already, and they are who logs in: ${namedUsers(kept.logins)}.`;
   if (kept.logins.includes(login)) return { object: "First login", state: "leave", detail: `${login}: a user already. ${held}` };
 
-  return { object: "First login", state: "leave-out", detail: `${login}: not used. ${held} To let this person in too: npx poplin doctor --repair --add-user ${login}` };
+  return { object: "First login", state: "leave-out", detail: `${login}: not used. ${held} To let this person in too: npx poplin doctor --repair --add-user ${shellWord(login)}` };
 }
 
 /**
@@ -492,7 +500,7 @@ export const installer: Installer<Where, Place> = {
   token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
   read,
   facts: (where, work) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST),
-  find: (token, where, reach) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor }),
+  find: (token, where, reach, work) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor, buckets: work !== "repair" }),
   install,
   remove: (found, where, removal, _reach, say) => removeInstall(found, where, removal, tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST).tokenLink, say),
   repair,
