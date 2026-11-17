@@ -1,15 +1,17 @@
-// The control a setting is changed with, by the kind the server read from the setting's type: a switch, a choice, a number with its unit beside it, or text. Every control holds the setting's text, the one form the server shows and takes.
+// The control a setting is changed with, by the kind the server gives it: a switch, a choice, a number with its unit beside it, some of the install's users, or text. Every control holds the setting's text, the one form the server shows and takes.
 
 import { Field } from "@base-ui/react/field";
 import { NumberField } from "@base-ui/react/number-field";
 import type { ReactNode } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList, ComboboxTrigger } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { choiceLabel, isOn, isSwitch, partsOf, switchText, textOf } from "@/settings/setting-values";
+import { chosenOf, chosenText, choiceLabel, FIRST_USER, isOn, isSwitch, partsOf, switchText, textOf } from "@/settings/setting-values";
 import type { Row } from "@/settings/settings-queries";
 import { unitWord, wordsOf } from "@/settings/settings-words";
 
@@ -32,6 +34,7 @@ const CONTROLS: { readonly [Kind in Row["control"]["kind"]]: (props: ControlProp
   number: NumberControl,
   lines: LinesControl,
   text: TextControl,
+  users: UsersControl,
 };
 
 /** What a control is drawn from. */
@@ -175,6 +178,45 @@ function LinesControl({ id, text, onChange }: ControlProps): ReactNode {
       autoComplete="off"
       spellCheck={false}
     />
+  );
+}
+
+/** What the button of a choice among the install's users says: the default with the email it stands for, the one chosen user, or how many are chosen. */
+function chosenWords(users: readonly string[], chosen: readonly string[]): string {
+  const [first] = users;
+  if (chosen.length === 0) return first === undefined ? FIRST_USER : `${FIRST_USER} (${first})`;
+
+  return chosen.length === 1 ? (chosen[0] ?? "") : `${chosen.length} users`;
+}
+
+/** A choice among the install's users: a button that says who is chosen and opens a list to search and tick. No tick is the setting's default, the first user. */
+function UsersControl({ row, id, text, onChange }: ControlProps): ReactNode {
+  const users = row.control.kind === "users" ? row.control.options : [];
+  const chosen = chosenOf(row, text);
+  // The chosen users are kept in the order of the install's users, whatever order they were ticked in.
+  const choose = (ticked: readonly string[]): void => onChange(chosenText(row, users.filter((user) => ticked.includes(user))));
+
+  return (
+    <Combobox multiple items={users} autoHighlight value={chosen} onValueChange={choose}>
+      <ComboboxTrigger
+        id={id}
+        aria-labelledby={`${id}-label ${id}`}
+        render={<Button type="button" variant="outline" className="w-full min-w-0 justify-between gap-1.5 font-normal max-md:min-h-10" />}
+      >
+        <span className="min-w-0 truncate">{chosenWords(users, chosen)}</span>
+      </ComboboxTrigger>
+      <ComboboxContent align="start" aria-label="Users" className="w-72">
+        <ComboboxInput placeholder="Find a user" aria-label="Find a user" showTrigger={false} />
+        <ComboboxEmpty>No user found.</ComboboxEmpty>
+        <ComboboxList aria-label="Users">
+          {(user: string) => (
+            <ComboboxItem key={user} value={user}>
+              <span className="min-w-0 truncate">{user}</span>
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 

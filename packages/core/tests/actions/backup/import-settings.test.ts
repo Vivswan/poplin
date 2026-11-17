@@ -6,9 +6,9 @@ import { importSettings } from "../../../src/actions/backup/import-settings";
 import type { Login } from "../../../src/auth/logins";
 import { ADMIN, makeWorld, OWNER } from "../support/actions-fixture";
 
-/** The settings of another install as its export gives them: its own users, and three values this install does not have. */
+/** The settings of another install as its export gives them: its own users, one of them chosen for the alerts, and three values this install does not have. */
 async function backup(): Promise<{ format: number; settings: Record<string, string> }> {
-  const other = await makeWorld({ users: ["bo@example.com" as Login, "ada@example.com" as Login], trash_days: 30, max_sites: 12, block_bots: "off" });
+  const other = await makeWorld({ users: ["bo@example.com" as Login, "ada@example.com" as Login], alert_users: ["bo@example.com" as Login], trash_days: 30, max_sites: 12, block_bots: "off" });
   const exported = await exportSettings(other.install, ADMIN);
   if (!exported.ok) throw new Error(`the fixture export was refused: ${exported.code}`);
 
@@ -17,7 +17,8 @@ async function backup(): Promise<{ format: number; settings: Record<string, stri
 
 describe("importSettings", () => {
   // Drift: the users say who may sign in; a backup's users laid over this install's would shut out the admin who ran the import, with no way back but the database.
-  test("a backup's settings replace this install's, and its users only when they are asked for by name", async () => {
+  // The users the alerts go to are chosen among the users: a backup's, laid over users they are none of, would be refused, so they come and stay with the users.
+  test("a backup's settings replace this install's, and its users, with who its alerts go to, only when they are asked for by name", async () => {
     const world = await makeWorld();
     const sent = await backup();
 
@@ -25,8 +26,8 @@ describe("importSettings", () => {
     const audit = await world.audit();
     const taken = await importSettings(world.install, ADMIN, { ...sent, users: true });
 
-    expect(kept).toMatchObject({ ok: true, values: { users: ["ada@example.com"], trash_days: 30, max_sites: 12, block_bots: "off" } });
-    expect<unknown>([audit, taken.ok && taken.values.users, await readConfig(world.install, ADMIN)]).toEqual([["settings_changed"], ["bo@example.com", "ada@example.com"], taken]);
+    expect(kept).toMatchObject({ ok: true, values: { users: ["ada@example.com"], alert_users: [], trash_days: 30, max_sites: 12, block_bots: "off" } });
+    expect<unknown>([audit, taken.ok && [taken.values.users, taken.values.alert_users], await readConfig(world.install, ADMIN)]).toEqual([["settings_changed"], [["bo@example.com", "ada@example.com"], ["bo@example.com"]], taken]);
   });
 
   // Drift: each row is a backup this install cannot read whole; one that was applied in part would leave settings no admin chose.

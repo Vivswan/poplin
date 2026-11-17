@@ -1,5 +1,5 @@
 // The Settings screen under the wheel: its rows scroll, and the page around them never does. A count too large to keep, which is refused at its field. The switch of the logs, which stays as it was saved.
-// And the moment Save rests after a save the install carries by itself.
+// And the moment Save rests after a save the install carries by itself. The choice of who gets the alerts, which holds a user ticked in its list.
 
 import { expect, type Page } from "@playwright/test";
 
@@ -25,6 +25,9 @@ const TOO_LARGE = { typed: "99999999999999999999", refusal: "Use a whole number 
 
 /** The group of the logs: its heading, its one switch, what the row says of it, and the line an install without a key adds under it. */
 const LOGS = { group: "Logs", label: "Keep logs", about: "Logs help find a fault; while off, the provider keeps none.", waits: "Takes effect at the next update or Repair." } as const;
+
+/** The choice of who gets the alerts: its group, its name, what its button says while none is chosen, and what Save says where a repair carries the choice. */
+const ALERTS = { group: "Alerts", label: /^Send alerts to/u, first: /^First user \(.+@.+\)$/u, saved: "Saved. Takes effect at the next Repair." } as const;
 
 /** Turn the wheel down to the end with the pointer at a place of the window. */
 async function wheelDown(page: Page, x: number, y: number): Promise<void> {
@@ -109,6 +112,26 @@ test("Keep logs stands under Logs with its sentence, stays off once it is switch
   await page.reload();
   await expect(page.getByRole("switch", { name: LOGS.label, exact: true })).not.toBeChecked();
   await expect(page.getByText(LOGS.waits, { exact: false })).toHaveCount(0);
+});
+
+// Drift: the choice would be free text again, read as nobody while none is chosen, or be dropped by Save, so the alerts would go on to a user who was to get none.
+test("Send alerts to stands under Alerts as the first user by email, takes a user ticked in its list, and holds the choice after Save and a reload", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  const choice = page.getByRole("region", { name: ALERTS.group, exact: true }).getByRole("combobox", { name: ALERTS.label });
+  await expect(choice).toHaveText(ALERTS.first);
+
+  await choice.click();
+  const user = page.getByRole("listbox", { name: "Users", exact: true }).getByRole("option").first();
+  const email = (await user.textContent()) ?? "";
+  await user.click();
+  await page.keyboard.press("Escape");
+  await expect(choice).toHaveText(email);
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("region", { name: /^Notifications/ }).getByTitle(ALERTS.saved, { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: ALERTS.group, exact: true }).getByRole("combobox", { name: ALERTS.label })).toHaveText(email);
 });
 
 // Drift: a rule or the logs saved on an install that holds its key is written to the provider by itself, once for each save. A Save that took the next press at once would let a switch be flipped three times in two seconds;

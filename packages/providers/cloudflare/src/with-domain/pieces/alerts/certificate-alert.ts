@@ -1,4 +1,4 @@
-// The certificate alert of an install with a domain: Cloudflare emails the install's first user when a certificate it issues for a domain fails to validate, is issued, is renewed, or runs out.
+// The certificate alert of an install with a domain: Cloudflare emails the users the install's settings choose when a certificate it issues for a domain fails to validate, is issued, is renewed, or runs out.
 // Cloudflare takes no filter for this type, so the alert is the account's: it covers every domain of the account, not the install's alone.
 // An install without a domain has none: its address is Cloudflare's own, and so is that address's certificate.
 

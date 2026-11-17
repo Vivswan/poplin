@@ -1,10 +1,11 @@
 // The requests: what each command asks for once its words are read, with every argument checked.
 
 import { type Checked, parsePublicName, parseSiteName, type SiteName } from "../../../../core/src/names/names";
+import { settingFromText } from "../../../../core/src/records/settings";
 import { isPlainVersion } from "../../../../core/src/records/update";
 import { readSiteReference, type SettledSite, type TypedSite } from "../../../../core/src/sites/references";
 import type { CommandName } from "../command-table";
-import { isSettingKey, readSetting, SETTING_SAMPLES, type SettingKey } from "../install/install-settings";
+import { isSettingKey, SETTING_SAMPLES, type SettingKey } from "../install/install-settings";
 import { readSiteSettings, type SiteSettings } from "../sites/site-settings";
 import { type Flags, flagValue, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
 
@@ -282,7 +283,7 @@ function readConfigAction(words: Words): ConfigAction | UsageError {
 
   if (value === undefined) return { kind: "show", key };
 
-  if (readSetting(key, value) === undefined)
+  if (settingFromText(key, value) === undefined)
     return usageError(`Invalid value ${JSON.stringify(value)} for ${key}`, `Usage: poplin config ${key} ${SETTING_SAMPLES[key]}`);
 
   return { kind: "change", key, value, dryRun };

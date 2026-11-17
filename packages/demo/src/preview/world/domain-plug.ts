@@ -11,7 +11,7 @@ import type { TokenFacts } from "../../../../core/src/install/token-facts";
 const FLOOD_RULE: OptionalRight = { right: "Rules: Edit", adds: "The provider stops floods before they reach a site." };
 
 /** The optional right of an install without a domain, and what it adds. */
-const SPEND_ALERT: OptionalRight = { right: "Alerts: Edit", adds: "The provider emails your first user when the account's charges reach an amount." };
+const SPEND_ALERT: OptionalRight = { right: "Alerts: Edit", adds: "The provider emails the users you choose in Settings when the account's charges reach an amount." };
 
 /** The provider's side of an install under a domain. */
 export const WITH_DOMAIN: Provider = {
@@ -31,7 +31,7 @@ export const WITH_DOMAIN: Provider = {
     tokenNote: "On the form, choose the account and the domain the account token is for.",
     tokenFor: "this account and this domain",
   },
-  says: { words: { thing: "the domain", line: null }, carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"], idleSettings: {} },
+  says: { words: { thing: "the domain", line: null }, carriedSettings: ["alert_users", "outside_pages", "search_engines_allowed", "block_bots"], idleSettings: {} },
 };
 
 /** The provider's side of an install without a domain, as the preview alone invents it: the two addresses its sites answer at, the login, and the optional alert of the account, with no record, route, or rule, since such an install has none. */
@@ -50,7 +50,7 @@ export const WITHOUT_DOMAIN: Provider = {
     tokenNote: "On the form, choose the account the account token is for.",
     tokenFor: "this account",
   },
-  says: { words: { thing: "the install", line: "No domain: your sites answer at the provider's free address." }, carriedSettings: [], idleSettings: { block_bots: "Needs a domain." } },
+  says: { words: { thing: "the install", line: "No domain: your sites answer at the provider's free address." }, carriedSettings: ["alert_users"], idleSettings: { block_bots: "Needs a domain." } },
 };
 
 /** The tokens the changing plug answers with a refusal, so that each refusal can be seen: it takes any other. */

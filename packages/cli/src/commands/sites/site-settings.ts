@@ -4,8 +4,7 @@ import * as v from "valibot";
 
 import { dayStart, isSpan, MAX_TITLE_LENGTH, readExpires, TITLE_TEXT } from "../../../../core/src/actions/sites/changes";
 import type { PublicName, SiteName } from "../../../../core/src/names/names";
-import type { SettingValues } from "../../../../core/src/records/settings";
-import { readSetting } from "../install/install-settings";
+import { type SettingValues, settingFromText } from "../../../../core/src/records/settings";
 import { type Flags, flagValue, isUsageError, type UsageError, usageError } from "../line/util";
 
 /** The three access flags, each with the access it sets. */
@@ -43,7 +42,7 @@ function readSwitch(flags: Flags, name: string): boolean | undefined | UsageErro
   if (word === undefined) return undefined;
 
   // Core reads `on` and `off` for the switch a new site gets, and a site's own switches are typed the same way.
-  return readSetting("default_search_engines", word) ?? usageError(`${name} requires on or off, got ${JSON.stringify(word)}`);
+  return settingFromText("default_search_engines", word) ?? usageError(`${name} requires on or off, got ${JSON.stringify(word)}`);
 }
 
 function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError {
@@ -59,7 +58,7 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
     return { kind: "date", date: when };
   }
 
-  const span = readSetting("default_expires", when);
+  const span = settingFromText("default_expires", when);
   if (span === "never") return { kind: "never" };
 
   if (span !== undefined && taken) return { kind: "span", span };

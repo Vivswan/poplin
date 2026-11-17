@@ -7,12 +7,11 @@ import { PROBLEMS_LISTED } from "../../../../core/src/actions/install/problems";
 import { LISTED_SITES } from "../../../../core/src/actions/sites/list";
 import { REVOKED_TOKEN, WHOAMI_ANSWER } from "../../../../core/src/actions/access/manage-tokens";
 import { SETTINGS_ANSWER } from "../../../../core/src/actions/install/store-settings";
-import { settingsToText } from "../../../../core/src/records/settings";
+import { settingFromText, settingsToText } from "../../../../core/src/records/settings";
 import type { AddressLayout } from "../../../../core/src/sites/address-layout";
 import type { Called, Failure } from "../../client/client";
 import { clearLogin } from "../../local/login-file";
 import { VERSION } from "../../poplin";
-import { readSetting } from "./install-settings";
 import { type Problem, problem, problemOf } from "../problems";
 import type { Outcome, RequestOf, Session } from "../records";
 import type { Line } from "../../local/screen";
@@ -26,6 +25,15 @@ const USERS_STEP = ["New users cannot log in yet", "Fix: on the dashboard's Doma
 
 /** What a dry run of a change of the users says of that step: whether it is needed shows only once the change is stored. */
 const USERS_MAY_STEP = "Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair";
+
+/** What a change of who the alerts go to still needs on an install that did not carry it to the provider by itself, or that does not say whether it did. */
+const ALERTS_STEP = ["The alerts may still go to the previous users", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"] as const;
+
+/** What an install that did not carry a change says it still needs, for each setting that is carried with the users. A dry run of new users says its own. */
+const CARRIED_STEPS: Readonly<Record<string, { readonly step: readonly string[]; readonly may: readonly string[] }>> = {
+  users: { step: USERS_STEP, may: [USERS_MAY_STEP] },
+  alert_users: { step: ALERTS_STEP, may: [] },
+};
 
 /** What follows the two versions of an install and a command that differ. */
 const TWO_VERSIONS = "versions differ";
@@ -127,7 +135,7 @@ function oneSetting(key: SettingKey, values: v.InferOutput<typeof SETTINGS_ANSWE
 
 /** Give one setting a value, or with a dry run ask the install what the setting would be. */
 async function changeSetting(action: Extract<ConfigAction, { readonly kind: "change" }>, { client }: Session): Promise<Outcome> {
-  const value = readSetting(action.key, action.value);
+  const value = settingFromText(action.key, action.value);
   if (value === undefined) return { ok: false, problem: problem("bad_argument", action.key) };
 
   const query = action.dryRun ? { dry_run: "true" } : {};
@@ -137,15 +145,16 @@ async function changeSetting(action: Extract<ConfigAction, { readonly kind: "cha
   const shown = [action.key, settingsToText(changed.value.values)[action.key]];
   const lines = action.dryRun ? [...columns([["would set", ...shown]]), REHEARSED] : columns([shown]);
   const answer = action.dryRun ? { dry_run: true, ...oneSetting(action.key, changed.value.values) } : oneSetting(action.key, changed.value.values);
-  if (action.key !== "users") return { ok: true, value: answer, lines, notes: [] };
+  const carried = CARRIED_STEPS[action.key];
+  if (carried === undefined) return { ok: true, value: answer, lines, notes: [] };
 
-  if (action.dryRun) return { ok: true, value: answer, lines, notes: [USERS_MAY_STEP] };
+  if (action.dryRun) return { ok: true, value: answer, lines, notes: [...carried.may] };
 
   // The install says whether the change still waits for a repair. One that does not say, or that remembers no run of its domain to say it by, is taken to wait.
   const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
   const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
 
-  return { ok: true, value: answer, lines, notes: settled ? [] : [...USERS_STEP] };
+  return { ok: true, value: answer, lines, notes: settled ? [] : [...carried.step] };
 }
 
 async function config(action: ConfigAction, session: Session): Promise<Outcome> {

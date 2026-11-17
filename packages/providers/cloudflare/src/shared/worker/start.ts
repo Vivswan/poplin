@@ -141,8 +141,8 @@ export interface Instance {
   /** The login's own pieces at Cloudflare: a scheduled run puts back with the kept key what is missing or differs. */
   readonly login: LoginRepair;
 
-  /** Keeps the alerts of the install's kind with the kept key, sent to the given first user: a scheduled run makes one the account lacks. */
-  readonly keepAlerts: (email: string) => Promise<KeptAlerts>;
+  /** Keeps the alerts of the install's kind with the kept key, sent to the given emails: a scheduled run makes one the account lacks. */
+  readonly keepAlerts: (emails: readonly string[]) => Promise<KeptAlerts>;
 
   /** The guard rules' side at Cloudflare: a change of a setting they are written from is carried there with the kept key. */
   readonly rules: RulesFollow;
@@ -386,7 +386,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     ...carried,
     dailyLogs: createLogsFollow(kept, own.value, "where it differs"),
     login: createLoginRepair(kept, { ...own.value, adminHost: hosts.adminHost, privateSites: hosts.privateSites }),
-    keepAlerts: (email) => keepAlerts(kept, own.value.accountId, alerts, email),
+    keepAlerts: (emails) => keepAlerts(kept, own.value.accountId, alerts, emails),
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), databaseBytes: () => driver.heldBytes(), workflow: workflowNameOf(own.value.script), key: kept }),
     version: VERSION,
     jobs: workflowJobs(env.JOBS),

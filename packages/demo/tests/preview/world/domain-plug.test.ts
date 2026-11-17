@@ -4,7 +4,7 @@ import type { DomainReading, DomainSettings } from "../../../../app/src/console/
 import { changingPlug, WITH_DOMAIN, WITHOUT_DOMAIN } from "../../../src/preview/world/domain-plug";
 
 /** The settings a run reads, which the preview's plug asks for and does not use. */
-const SETTINGS: DomainSettings = { users: [], outside_pages: "blocked", search_engines_allowed: false, block_bots: "off", provider_logs: true };
+const SETTINGS: DomainSettings = { users: [], alert_users: [], outside_pages: "blocked", search_engines_allowed: false, block_bots: "off", provider_logs: true };
 
 /** The optional rows of a run that read its table, each as its state and its detail. */
 function optionalRows(reading: DomainReading): string[] {
@@ -19,7 +19,7 @@ test.each([
   [
     "without a domain",
     WITHOUT_DOMAIN,
-    "Spend alert | sample-spend-alert: The provider emails your first user when the account's charges reach an amount. To switch this on, add this permission to the account token and press Repair: Alerts: Edit",
+    "Spend alert | sample-spend-alert: The provider emails the users you choose in Settings when the account's charges reach an amount. To switch this on, add this permission to the account token and press Repair: Alerts: Edit",
   ],
 ])("an install %s has one optional piece, whose row says what the token form says of its right, on a check and after a repair", async (_kind, provider, row) => {
   const plug = changingPlug(provider);

@@ -30,10 +30,12 @@ Cloudflare's changelog of 2026-11-13 describes spend limits for Workers and Dura
 
 ```text
 when     the account's usage charges for the billing period reach 1 US dollar
-who      Cloudflare emails your first user
-made by  the install, with the key it keeps: when the users change, and once a day
+who      Cloudflare emails the users alert_users chooses: your first user by default
+made by  the install, with the key it keeps: when the users or alert_users change, and once a day
 sooner   Repair, with an account token that also holds Notifications: Edit
 ```
+
+[`alert_users`](../../dashboard/settings.md#who-gets-the-alerts) picks other users. One who is not a member of your Cloudflare account confirms one mail from Cloudflare first.
 
 An install of either kind, under a domain or without one, holds [its key](../../about/security.md#the-kept-key) from the run that made it, and makes the alert with it. No permission is added for that.
 

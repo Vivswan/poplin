@@ -42,6 +42,9 @@ const sentTo: string[] = [];
 /** The saves the server holds back until a test lets them through. */
 const held: (() => void)[] = [];
 
+/** The row of who gets the alerts, with none chosen, on an install that does not carry the choice by itself. */
+const ALERT_USERS: Row = { key: "alert_users", control: { kind: "users", options: [BOOT.email, "noor@example.com"] }, text: "first", unit: "", fallback: "first", limits: [], repair: true, needs: null };
+
 /** How the server of these tests answers. */
 interface Served {
   readonly refusedKey?: string;
@@ -50,6 +53,7 @@ interface Served {
   readonly keyed?: boolean;
   readonly waits?: { readonly repair?: readonly string[]; readonly update?: readonly string[] };
   readonly carried?: readonly string[];
+  readonly alerts?: boolean;
 }
 
 function rowOf(key: string, control: Row["control"], unit = ""): Row {
@@ -63,8 +67,9 @@ function rowOf(key: string, control: Row["control"], unit = ""): Row {
  * @param keyed - whether the install holds its key
  * @param waits - the settings whose half at the provider waits after a save that holds them, by what they wait for
  * @param carried - the settings the install carries to the provider by itself after a save that holds them
+ * @param alerts - whether the rows hold who gets the alerts, on an install that does not carry that choice by itself
  */
-function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false, waits = {}, carried = [] }: Served = {}): void {
+function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false, waits = {}, carried = [], alerts = false }: Served = {}): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
     if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: keyed, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
@@ -78,6 +83,7 @@ function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false, wai
         rowOf("auto_update", { kind: "switch" }),
         rowOf("update_channel", { kind: "switch" }),
         rowOf("provider_logs", { kind: "switch" }),
+        ...(alerts ? [ALERT_USERS] : []),
       ];
 
       return Response.json({ ok: true, rows });
@@ -203,6 +209,14 @@ describe("the one page", () => {
 
 describe("the address of one setting", () => {
   // Drift: a link of another screen would land on the top of the page, and the person would have to find the setting it meant among twenty.
+  // Drift: the choice of who gets the alerts would sit under a heading of another kind, or its line would speak of rules on a domain, which an install without a domain has none of.
+  test("holds who gets the alerts under Alerts, as the first user by email while none is chosen, and says that the alerts change after a repair where the install does not carry the choice", async () => {
+    serve({ alerts: true });
+    const block = within((await drawn()).getByRole("region", { name: "Alerts" }));
+
+    expect([block.getByRole("combobox", { name: /^Send alerts to/ }).textContent, block.getByText(/after Repair in/).textContent]).toEqual([`First user (${BOOT.email})`, "The alerts change after Repair in Domain."]);
+  });
+
   test("points its block out: the block is shaded and its control has the focus", async () => {
     const { to, hash } = settingAddress("trash_days");
     const page = await drawn(`${to}#${hash}`);

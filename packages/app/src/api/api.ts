@@ -40,7 +40,7 @@ import { HTTPException } from "hono/http-exception";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import * as v from "valibot";
 
-import { followUsers, type UsersFollow } from "../console/access/users-follow";
+import { followUsers, namesUsers, type UsersFollow } from "../console/access/users-follow";
 import { holding, type Later } from "../console/later";
 import { carryLogs, type LogsFollow, namesLogs } from "../console/settings/logs-follow";
 import { carryRules, namesRule, type RulesFollow } from "../console/settings/rules-follow";
@@ -113,7 +113,7 @@ export interface ApiDeps extends Install, Gate {
 /**
  * Carry a stored change of the settings to the provider: the users before the answer, and the settings of the domain's rules and of the logs with no answer held for them where the host holds the request open.
  *
- * @param named - whether the change named the users, whether it named a setting the domain's rules are written from, and whether it named the setting of the logs
+ * @param named - whether the change named the users or who the alerts go to, whether it named a setting the domain's rules are written from, and whether it named the setting of the logs
  * @returns the action's own answer, whatever the provider said: a change that did not reach it waits, and the dashboard says so
  */
 async function carried<Answer extends { readonly ok: boolean; readonly values?: Pick<SettingValues, "provider_logs"> }>(
@@ -229,7 +229,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
       const [changes, how] = [context.req.valid("json"), context.req.valid("query")];
       // A change that is not stored is carried nowhere.
       const stored = how.dry_run !== true;
-      const named = { users: stored && typeof changes === "object" && changes !== null && "users" in changes, rules: stored && namesRule(changes), logs: stored && namesLogs(changes) };
+      const named = { users: stored && namesUsers(changes), rules: stored && namesRule(changes), logs: stored && namesLogs(changes) };
 
       return respond(await carried(deps, context, await changeConfig(context.var.install, context.var.actor, changes, how), named));
     })

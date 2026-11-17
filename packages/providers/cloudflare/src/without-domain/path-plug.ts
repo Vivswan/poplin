@@ -9,6 +9,7 @@
 
 import type { DomainPlug, DomainReading, ReadSettings } from "@poplin/app/src/console/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
+import { alertAddresses } from "@poplin/core/src/records/settings";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import type { KeptKey } from "../shared/install/key/kept-key";
 import type { AccountAddresses } from "./address-layout";
@@ -106,7 +107,7 @@ async function readPieces(parts: PathParts, mode: Mode, found: { readonly connec
   await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, users));
   await logsPiece(progress, mode, placed, connection, settings.provider_logs);
   await databasePiece(progress, mode, placed, connection);
-  await alertPiece(progress, mode, placed, connection, users);
+  await alertPiece(progress, mode, placed, connection, users === undefined ? [] : alertAddresses(settings));
   // The Workflow comes last, as on an install with a domain: nothing else of the install waits for it.
   await piece(
     progress,
@@ -156,7 +157,7 @@ export function createPathPlug(parts: PathParts): DomainPlug {
   return {
     ...tokenFacts("noDomain"),
     words: { thing: "the install", line: NO_DOMAIN },
-    carriedSettings: [],
+    carriedSettings: ["alert_users"],
     idleSettings: { block_bots: NEEDS_DOMAIN },
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),

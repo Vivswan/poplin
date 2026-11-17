@@ -10,12 +10,16 @@ const BLOCKS = [
   { id: "publishing", heading: "Publishing" },
   { id: "traffic", heading: "Traffic" },
   { id: "limits", heading: "Other limits" },
+  { id: "alerts", heading: "Alerts" },
   { id: "logs", heading: "Logs" },
   { id: "updates", heading: "Updates" },
 ] as const;
 
 /** The block that says what went wrong with an update. */
 export const UPDATES = "updates";
+
+/** The block of who the provider's alerts go to. */
+export const ALERTS = "alerts";
 
 /** What the units of a number's text are called beside its field. A unit missing here is shown as it is, such as `MB` or `%`. */
 const UNIT_WORDS: Readonly<Record<string, string>> = { d: "days", h: "hours", m: "minutes", s: "seconds", B: "bytes" };
@@ -62,6 +66,7 @@ const WORDS: Readonly<Record<string, Words>> = {
   site_share_of_day: { block: "traffic", label: "One site's share", about: "The part of the requests per day one site may use." },
   site_requests_per_minute: { block: "traffic", label: "One site per minute", about: "The most requests one site answers in a minute.", unit: "requests" },
   visitor_requests_per_minute: { block: "traffic", label: "One visitor per minute", about: "The most requests one visitor gets in a minute.", unit: "requests" },
+  alert_users: { block: "alerts", label: "Send alerts to", about: "A user outside the provider account confirms one mail first." },
   provider_logs: { block: "logs", label: "Keep logs", about: "Logs help find a fault; while off, the provider keeps none." },
   update_check: { block: "updates", label: "Check for new versions", about: "Asks the project's website once a day." },
   auto_update: { block: "updates", label: "Update automatically", about: "Needs the check above.", needs: "update_check", needsLine: "Switch on the check above first." },
@@ -118,6 +123,8 @@ function blockFromKey(key: string): BlockId {
   if (key.includes("update")) return "updates";
 
   if (key.includes("logs")) return "logs";
+
+  if (key.includes("alert")) return "alerts";
 
   if (key.startsWith("max_") || key.includes("requests") || key.includes("_per_")) return "limits";
 

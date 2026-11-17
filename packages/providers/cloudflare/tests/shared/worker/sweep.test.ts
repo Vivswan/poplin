@@ -394,6 +394,35 @@ describe("the scheduled run", () => {
     expect([written, confirmed, asked.length - before, await problemsOf(w)]).toEqual([[to(OWNER), [null, true]], [null, false], 0, []]);
   });
 
+  // Drift: who gets the alerts is a setting of its own. A change of it that was carried nowhere would leave Cloudflare mailing the users chosen before, and one no later run compared again would be trusted on a read that may trail its write.
+  // The run that begins a day keeps the alerts too: one that read the first user alone would undo the choice once a day, on an install of either kind.
+  test.each(KEYED)("with $kind, users chosen for the alerts get every alert of the install at once, the next runs confirm them with reads alone, and the run that begins a day leaves them chosen", async ({ bindings, admin, alerts }) => {
+    const account = emptyAccount();
+    account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
+    const asked: Asked[] = [];
+    const worker = instance(w, cloudflareOf(account, asked));
+    const calls = api(worker, await tokenOf(w, "admin"), (input, init) => ask(worker, input, init, bindings), admin);
+    const { database } = await installOf(w);
+    await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+    const mailed = (): unknown => account.alerts.map((alert) => [alert.name, alert.mechanisms]);
+    const to = (emails: readonly string[]): unknown => alerts.map((name) => [name, { email: emails.map((id) => ({ id })) }]);
+    const marks = async (): Promise<unknown> => database.readDomainCheck().then((kept) => [kept?.users_changed_at ?? null, (kept?.alerts_changed_at ?? null) !== null]);
+    const chosen = ["bo@example.com", OWNER];
+
+    await done(await calls.config.$patch({ query: {}, json: { users: [OWNER, "bo@example.com"] as Login[] } }));
+    const first = mailed();
+    await done(await calls.config.$patch({ query: {}, json: { alert_users: chosen as Login[] } }));
+    const carried = [mailed(), await marks()];
+    wait(w, 0.25);
+    await sweep(worker, w, bindings);
+    const confirmed = await marks();
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    await sweep(worker, w, bindings);
+
+    expect([first, carried, confirmed]).toEqual([to([OWNER]), [to(chosen), [null, true]], [null, false]]);
+    expect([mailed(), await problemsOf(w)]).toEqual([to(chosen), []]);
+  });
+
   // Drift: without the handler, or with one that never reaches the later parts of the walk, expired sites stay live in the listing and the bucket fills with files nothing serves.
   test("an expired site reaches the trash, then leaves it with its files after trash_days, and an upload nobody finished is removed with its files", async () => {
     const worker = instance(w);

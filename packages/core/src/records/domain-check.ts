@@ -52,7 +52,7 @@ export const DOMAIN_CHECK = v.strictObject({
 
 /**
  * The last run as the install reads it back, with the moment the users last changed and nothing carried it to the domain, and the same of the settings the domain's rules are written from: `null` when none waits.
- * A change of those settings waits until a later read of the domain confirms it. `alerts_changed_at` is the moment of the last try to carry the users, which may change the alerts that go to the first of them: `null` once such a read confirmed the alerts.
+ * A change of those settings waits until a later read of the domain confirms it. `alerts_changed_at` is the moment of the last try to carry the users, which may change the install's alerts: `null` once such a read confirmed the alerts.
  */
 export type RememberedCheck = DomainCheck & { readonly users_changed_at: number | null; readonly rules_changed_at: number | null; readonly alerts_changed_at: number | null };
 
@@ -64,7 +64,7 @@ export interface CarriedUsers {
   /** The mark the try began under, or the moment it began: a mark later than it says the users changed, or another try wrote the domain, while this one was under way. */
   readonly since: number;
 
-  /** Set by a try that read the domain long enough after the last write to it, and found the alerts going to the first user. Left out, the alerts stay to be confirmed. */
+  /** Set by a try that read the domain long enough after the last write to it, and found the alerts going to the users the settings choose. Left out, the alerts stay to be confirmed. */
   readonly confirmed?: true;
 }
 

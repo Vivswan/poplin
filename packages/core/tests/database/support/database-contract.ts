@@ -415,7 +415,11 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
 
       // Before any run is kept nothing holds a mark, which the answer says, so whoever carries the users can say that nothing remembers them.
       // Each try is also told the moment of the last change or try before it, which says whether its reads of the domain can show every write.
-      expect([beforeAnyRun, claimed, clockBehind]).toEqual([{ users: SETTINGS.users, mark: undefined, last: undefined }, { users: stored, mark: NOW + 3, last: NOW + 2 }, { users: stored, mark: NOW + 9, last: NOW + 8 }]);
+      expect([beforeAnyRun, claimed, clockBehind]).toEqual([
+        { users: SETTINGS.users, alerts: [ADMIN], mark: undefined, last: undefined },
+        { users: stored, alerts: [ADMIN], mark: NOW + 3, last: NOW + 2 },
+        { users: stored, alerts: [ADMIN], mark: NOW + 9, last: NOW + 8 },
+      ]);
       expect([stale, otherOrder, overtaken]).toEqual([[true, NOW + 4], [true, NOW + 5], [true, NOW + 6]]);
       expect([exact, again, unknown]).toEqual([[false, null], [false, null], [true, NOW + 8]]);
     });

@@ -1,4 +1,5 @@
-// A notification policy of the account that poplin keeps: Cloudflare emails the install's first user when what the policy's type watches happens.
+// A notification policy of the account that poplin keeps: Cloudflare emails the users the install's settings choose, the first user by default, when what the policy's type watches happens.
+// An address that is no member of the Cloudflare account gets one mail from Cloudflare to confirm, and no alert before it is confirmed; Cloudflare says of no address whether it is.
 // An alert tells and stops nothing. Cloudflare keeps no mark on a notification policy, so poplin's is the one with its fixed name.
 // The SDK sends an alert type and a filter as given: its types lack the budget alert's type and its filter.
 // One list of the account's policies serves every alert of a run.
@@ -52,8 +53,8 @@ interface AccountPolicy {
 /** One step of an alert's plan; a `change` carries the id of the policy it rewrites. */
 type AlertStep = { readonly kind: "create"; readonly subject: string } | { readonly kind: "leave"; readonly subject: string } | { readonly kind: "change"; readonly subject: string; readonly id: string };
 
-/** Whether a policy is the alert as poplin writes it: switched on, with its filters and no other, and sent by email to that address alone. Cloudflare reads a policy back with empty lists for what it does not use. */
-function matches(alert: AccountAlert, policy: AccountPolicy, email: string): boolean {
+/** Whether a policy is the alert as poplin writes it: switched on, with its filters and no other, and sent by email to exactly those addresses, in any order. Cloudflare reads a policy back with empty lists for what it does not use. */
+function matches(alert: AccountAlert, policy: AccountPolicy, emails: readonly string[]): boolean {
   const unused = v.optional(v.strictTuple([]));
   const wanted = Object.fromEntries(Object.entries(alert.filters ?? {}).map(([name, [value]]) => [name, v.strictTuple([v.literal(value)])]));
   const filters = v.objectWithRest(wanted, unused);
@@ -61,7 +62,7 @@ function matches(alert: AccountAlert, policy: AccountPolicy, email: string): boo
     alert_type: v.literal(alert.type),
     enabled: v.literal(true),
     filters: alert.filters === undefined ? v.optional(filters) : filters,
-    mechanisms: v.objectWithRest({ email: v.strictTuple([v.object({ id: v.literal(email) })]) }, unused),
+    mechanisms: v.objectWithRest({ email: v.pipe(v.array(v.object({ id: v.string() })), v.check((sent) => sent.length === emails.length && emails.every((email) => sent.some(({ id }) => id === email)))) }, unused),
   });
 
   return v.is(written, policy);
@@ -71,21 +72,21 @@ function matches(alert: AccountAlert, policy: AccountPolicy, email: string): boo
  * Compute the change that gives the account one of poplin's alerts.
  *
  * @param policies - the account's notification policies as they are now
- * @param email - the address the alert goes to
+ * @param emails - the addresses the alert goes to, each once
  * @returns one step: a `leave` for a policy with the alert's name that is the alert as written, a `change` for one that is not, or a `create`; no step names another policy
  */
-export function planAlert(alert: AccountAlert, policies: readonly AccountPolicy[], email: string): AlertStep[] {
+export function planAlert(alert: AccountAlert, policies: readonly AccountPolicy[], emails: readonly string[]): AlertStep[] {
   const own = policies.find((policy) => policy.name === alert.name && policy.id !== undefined);
   if (own?.id === undefined) return [{ kind: "create", subject: alert.name }];
 
-  return [matches(alert, own, email) ? { kind: "leave", subject: alert.name } : { kind: "change", subject: alert.name, id: own.id }];
+  return [matches(alert, own, emails) ? { kind: "leave", subject: alert.name } : { kind: "change", subject: alert.name, id: own.id }];
 }
 
-/** The alert as Cloudflare is sent it, for one address: a type that takes no filter is sent none. */
-function alertBody(alert: AccountAlert, accountId: string, email: string): PolicyCreateParams {
+/** The alert as Cloudflare is sent it, for its addresses: a type that takes no filter is sent none. */
+function alertBody(alert: AccountAlert, accountId: string, emails: readonly string[]): PolicyCreateParams {
   const filters = alert.filters === undefined ? {} : { filters: alert.filters };
   // @ts-expect-error An alert's type is any text here, and the SDK's types lack the budget alert's type and its filter.
-  const policy: PolicyCreateParams = { account_id: accountId, name: alert.name, description: alert.description, alert_type: alert.type, enabled: true, ...filters, mechanisms: { email: [{ id: email }] } };
+  const policy: PolicyCreateParams = { account_id: accountId, name: alert.name, description: alert.description, alert_type: alert.type, enabled: true, ...filters, mechanisms: { email: emails.map((id) => ({ id })) } };
 
   return policy;
 }
@@ -100,21 +101,21 @@ export function listAlerts(connection: Connection, accountId: string): Promise<C
 }
 
 /**
- * Keep poplin's alerts with the key the install keeps: one the account lacks is made, and one that differs, or goes to another address, is written as poplin writes it.
+ * Keep poplin's alerts with the key the install keeps: one the account lacks is made, and one that differs, or goes to other addresses, is written as poplin writes it.
  *
  * @param key - the kept key, or `undefined` on an install that holds none, which answers `no_key` and calls nothing
  * @param alerts - the alerts of the install's kind, kept in this order from one list of the account's policies
- * @param email - the install's first user, whom every alert goes to
+ * @param emails - whom every alert goes to: what `alertAddresses` reads from the install's settings, one address at least
  * @returns the name of each alert that was made or changed, none for one that stood, and the key's refusal where the keeping stopped. It throws for nothing Cloudflare answers, and no answer holds the key
  */
-export async function keepAlerts(key: KeptKey | undefined, accountId: string, alerts: readonly AccountAlert[], email: string): Promise<KeptAlerts> {
+export async function keepAlerts(key: KeptKey | undefined, accountId: string, alerts: readonly AccountAlert[], emails: readonly string[]): Promise<KeptAlerts> {
   const wrote: string[] = [];
   const listed = await keyed(key, KEY_RIGHT, (connection) => listAlerts(connection, accountId));
   if (!listed.ok) return { wrote, refusal: listed.refusal };
 
   for (const alert of alerts) {
     const kept = await keyed(key, KEY_RIGHT, async (connection): Promise<CloudflareResult<readonly string[]>> => {
-      const synced = await syncAlert(connection, accountId, alert, email, "apply", { ok: true, value: listed.value });
+      const synced = await syncAlert(connection, accountId, alert, emails, "apply", { ok: true, value: listed.value });
 
       return synced.ok ? { ok: true, value: [...synced.report.created, ...synced.report.changed] } : synced;
     });
@@ -127,20 +128,20 @@ export async function keepAlerts(key: KeptKey | undefined, accountId: string, al
 }
 
 /**
- * Make sure the account has one of poplin's alerts, sent to one address.
+ * Make sure the account has one of poplin's alerts, sent to the given addresses, one at least.
  *
  * @param mode - `plan` sends no change
  * @param read - the account's notification policies as `listAlerts` answered them, where the run has read them for another alert; left out, they are read here
  * @returns what was created, changed, or left; a refusal by Cloudflare is a value, with the report of what was done before it
  */
-export async function syncAlert(connection: Connection, accountId: string, alert: AccountAlert, email: string, mode: Mode, read?: CloudflareResult<readonly AccountPolicy[]>): Promise<Synced> {
+export async function syncAlert(connection: Connection, accountId: string, alert: AccountAlert, emails: readonly string[], mode: Mode, read?: CloudflareResult<readonly AccountPolicy[]>): Promise<Synced> {
   const listed = read ?? (await listAlerts(connection, accountId));
   if (!listed.ok) return { ...listed, report: reportOf([]) };
 
-  const policy = alertBody(alert, accountId, email);
+  const policy = alertBody(alert, accountId, emails);
 
   return applySteps(
-    planAlert(alert, listed.value, email),
+    planAlert(alert, listed.value, emails),
     (step) => callCloudflare(connection, (api) => (step.kind === "create" ? new BasePolicies(api).create(policy) : new BasePolicies(api).update(step.id, policy))),
     mode,
   );

@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { MOST_DAYS, MOST_FILES_PER_PUBLISH, MOST_OF_A_COUNT, SETTING_VALUES } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
 
+import type { UsersFollow } from "../../../src/console/access/users-follow";
 import type { DomainPlug } from "../../../src/console/domain/records";
 import { CONTROL_KINDS, controlOf } from "../../../src/console/settings/setting-controls";
 import { openConsole } from "../support/console";
@@ -134,6 +135,66 @@ describe("the rows", () => {
 
     expect(rows.filter((row) => row.repair)).toEqual([]);
     expect(rows.filter((row) => row.needs !== null).map((row) => [row.key, row.needs])).toEqual([["block_bots", "Needs a domain."]]);
+  });
+});
+
+describe("the setting of who the alerts go to", () => {
+  /** A domain whose repair carries who the alerts go to, as each kind of install's does. */
+  const PLUG: DomainPlug = { ...usualPlug(), carriedSettings: ["alert_users"] };
+
+  /** What a choice that names an email that is no user is told. */
+  const GONE = "A chosen user is no user any more, so nothing was changed. Choose again.";
+
+  /** The provider's side of the users, which records the emails each try is handed for the alerts. */
+  function following(holdsKey: boolean): UsersFollow & { readonly sent: (readonly string[])[] } {
+    const sent: (readonly string[])[] = [];
+
+    const push: UsersFollow["push"] = async (_users, alerts) => {
+      sent.push(alerts);
+
+      return { ok: true, stood: false };
+    };
+
+    return { where: "Example Cloud", sent, holdsKey: () => holdsKey, push };
+  }
+
+  // Drift: the row would be free text again, where a typed address that is no user is refused; or it would offer users the install does not have.
+  test("is a choice among the install's users, with the word of the default as its text while none is chosen", async () => {
+    const opened = await openConsole();
+    const row = (await settingsOf(opened)).rows.find((entry) => entry.key === "alert_users");
+
+    expect<unknown>(row).toEqual({ key: "alert_users", control: { kind: "users", options: [opened.base.owner] }, text: "first", unit: "", fallback: "first", limits: [], repair: false, needs: null });
+  });
+
+  // Drift: a saved choice would stay in the database alone, and the provider would go on mailing the users chosen before, with the screen saying the change is in effect.
+  test.each([
+    ["that holds a key", true, { repair: [], update: [] }, true, 1],
+    ["that holds none", false, { repair: ["alert_users"], update: [] }, false, 0],
+  ] as const)("is carried with the users on an install %s, and else waits for a repair", async (_name, keyed, waits, carried, tries) => {
+    const follow = following(keyed);
+    const opened = await openConsole("", PLUG, { follow });
+    const marked = (await settingsOf(opened)).rows.filter((row) => row.repair).map((row) => row.key);
+    const saved = await opened.change("/data/settings", { texts: { alert_users: opened.base.owner, trash_days: "30" } });
+
+    expect([marked, await saved.json(), follow.sent]).toEqual([keyed ? [] : ["alert_users"], { ok: true, waits, carried }, Array.from({ length: tries }, () => [opened.base.owner])]);
+  });
+
+  // Drift: an address that is no user would be stored, or refused in words about a login list this screen does not show.
+  test("refuses an email that is no user at its field, and one more than the most, each in its own sentence, and stores neither", async () => {
+    const opened = await openConsole();
+    const many = Array.from({ length: 21 }, (_one, at) => `user${at}@example.com`).join(",");
+    const refusals = [];
+    for (const text of ["stranger@example.com", many]) refusals.push(await (await opened.change("/data/settings", { texts: { alert_users: text } })).json());
+
+    const { alert_users: kept } = await textsOf(opened);
+
+    expect([refusals, kept]).toEqual([
+      [
+        { ok: false, code: "not_a_user", about: "alert_users", sentence: GONE, each: [{ about: "alert_users", sentence: GONE }] },
+        { ok: false, code: "bad_argument", about: "alert_users", sentence: "Choose 20 users at most.", each: [{ about: "alert_users", sentence: "Choose 20 users at most." }] },
+      ],
+      "first",
+    ]);
   });
 });
 

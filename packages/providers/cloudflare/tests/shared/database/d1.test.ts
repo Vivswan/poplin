@@ -95,10 +95,12 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "initSettings, already set": [3, 0],
   "addLogin": [4, 3],
   "addLogin, already one": [4, 0],
-  "removeLogin": [13, 3],
+  "removeLogin": [14, 3],
   "removeLogin, not one": [8, 0],
   "removeLogin, the last": [10, 0],
   "changeSettings, a login more": [38, 3],
+  "changeSettings, who the alerts go to": [20, 3],
+  "changeSettings, a stranger for the alerts": [17, 0],
   "changeSettings, another first login": [37, 3],
   "removeLogin, a user behind 2 tokens": [16, 9],
   "changeSettings, a login less behind 2 tokens": [40, 9],
@@ -962,6 +964,10 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("removeLogin, the last", () => database.removeLogin(ADMIN, BY_ADA));
     await cost("changeSettings, a login more", () => database.changeSettings({ users: [ADMIN, person] }, BY_ADA));
     await cost("changeSettings, another first login", () => database.changeSettings({ users: [person, ADMIN] }, BY_ADA));
+    // Who the alerts go to is chosen among the users, and put back to none, so every call after reads the settings as an install with no choice holds them.
+    await cost("changeSettings, who the alerts go to", () => database.changeSettings({ alert_users: [person] }, BY_ADA));
+    await cost("changeSettings, a stranger for the alerts", () => database.changeSettings({ alert_users: ["stranger@example.com" as Login] }, BY_ADA));
+    await database.changeSettings({ alert_users: [] }, BY_ADA);
     // A user's tokens end with the user: each costs its entry of the log and its own row, with the indexes that hold it.
     const allowed = await Promise.all(["one", "two", "three", "four"].map((note) => mintToken({ scope: "publisher", note, now: NOW })));
     for (const { record } of allowed.slice(0, 2)) await database.addToken(record, { as: "person", by: person, at: NOW });

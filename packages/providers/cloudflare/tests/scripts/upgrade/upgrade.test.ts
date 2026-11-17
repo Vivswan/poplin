@@ -50,7 +50,7 @@ const HELD = [
   "Version: runs 0.4.0, and ran 0.3.0",
   "Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte",
   "Token: the one made before the update read every site, the settings, and the log",
-  "Settings: 21 as before the update, the changed one and the added user among them",
+  "Settings: 22 as before the update, the changed one and the added user among them",
   "Activity: the 8 entries from before the update, and the entry of the update",
   `Database: the ${BUILD.length} schema steps of this commit's build are marked as it applies them, step ${LATER} among them`,
   `Later step: the table, the column, and the index of step ${LATER} are there, and the 3 sites hold what it filled from them`,

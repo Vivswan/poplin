@@ -470,6 +470,23 @@ describe("run", () => {
 
     expect([added.out, added.err, carried.out, carried.err]).toEqual([["users  ada@example.com,second@example.com"], step, ["users  ada@example.com,cy@example.com"], []]);
 
+    // Drift: who gets the alerts is typed as the users are, and read by its own rule alone: read among sample users, every real email would be refused before it was sent. The word `first` puts the default back.
+    // A choice the install did not carry to the provider says so, as a change of the users does, and one that names no user is refused by the install.
+    const chosen = await bench.run("config alert_users second@example.com");
+    bench.install.users.takes = true;
+    const back = await bench.run("config alert_users first");
+    bench.install.users.takes = false;
+    const stranger = await bench.run("config alert_users nobody@example.com");
+    const waiting = ["The alerts may still go to the previous users", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"];
+
+    expect([chosen.out, chosen.err, back.out, back.err]).toEqual([["alert_users  second@example.com"], waiting, ["alert_users  first"], []]);
+    expect([stranger.code, stranger.err, (await bench.run("config alert_users")).out, (await bench.run("config alert_users first,second@example.com")).err[0]]).toEqual([
+      1,
+      ["The email is not a user: alert_users", "See: poplin config users"],
+      ["first"],
+      'Invalid value "first,second@example.com" for alert_users',
+    ]);
+
     // Drift: a token names no email, so the one login known to pass the login page is one that was a login already; a list of new emails alone would shut the dashboard on everyone.
     const replaced = await bench.run("config users third@example.com");
 

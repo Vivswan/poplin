@@ -27,11 +27,11 @@ interface FakeFollow extends UsersFollow {
   /** The list the provider holds, `undefined` before it took any. */
   held: readonly Login[] | undefined;
 
-  /** Whom the provider mails for the install, which follows the first user: read, and written only where it differs. */
-  mailed: Login | undefined;
+  /** Whom the provider mails for the install, their emails with commas between them: read, and written only where it differs from the emails a try is handed. */
+  mailed: string | undefined;
 
   /** Whom the next try reads as mailed, in place of who is: a read that trails a write. */
-  trails: Login | undefined;
+  trails: string | undefined;
 }
 
 /**
@@ -47,15 +47,16 @@ function fakeFollow(answer: (earlier: number) => Promise<FollowRefusal | undefin
     mailed: undefined,
     trails: undefined,
     holdsKey: () => holdsKey,
-    async push(users) {
+    async push(users, alerts) {
       follow.pushed.push(users);
       const refusal = await answer(follow.pushed.length - 1);
       if (refusal !== undefined) return { ok: false, refusal };
 
       follow.held = users;
-      const stood = (follow.trails ?? follow.mailed) === users[0];
+      const to = alerts.join(",");
+      const stood = (follow.trails ?? follow.mailed) === to;
       follow.trails = undefined;
-      if (!stood) follow.mailed = users[0];
+      if (!stood) follow.mailed = to;
 
       return { ok: true, stood };
     },
@@ -232,6 +233,35 @@ describe("followUsers", () => {
     // A try that comes at once finds the alerts standing, and is trusted with nothing: its read may be of before the write.
     expect([await followUsers(opened.install, follow, { quietSince: opened.install.now() - 30_000 }), await unconfirmed(opened)]).toEqual([{ carried: true }, true]);
     expect([await followUsers(opened.install, follow, aMinuteOn(opened)), follow.mailed, await waits(opened), await unconfirmed(opened)]).toEqual([{ carried: true }, opened.owner, false, false]);
+  });
+
+  // Drift: who gets the alerts is a setting of its own, carried with the users. A change of it that set no mark would be compared by no later run, and a try whose read trailed the last write would leave the alerts going to the users chosen before.
+  test("a change of who the alerts go to is carried with the users and marks the alerts by itself; one put back at once, whose try reads the alerts as before the first write, is written by the try that confirms", async () => {
+    const opened = await openOwned();
+    const follow = fakeFollow();
+    const choose = async (chosen: Login[]): Promise<void> => {
+      opened.clock.now += 1;
+      await opened.install.database.changeSettings({ alert_users: chosen }, { as: "person", by: opened.owner, at: opened.install.now() });
+    };
+    await added(opened, BO);
+    await followUsers(opened.install, follow);
+    await followUsers(opened.install, follow, aMinuteOn(opened));
+    const before = [follow.mailed, await waits(opened), await unconfirmed(opened)];
+    await choose([BO, opened.owner]);
+    const marked = [await waits(opened), await unconfirmed(opened)];
+
+    expect([before, marked]).toEqual([
+      [opened.owner, false, false],
+      [true, true],
+    ]);
+    expect([await followUsers(opened.install, follow), follow.mailed, await waits(opened)]).toEqual([{ carried: true }, `${BO},${opened.owner}`, false]);
+
+    follow.trails = opened.owner;
+    await choose([]);
+
+    expect([await followUsers(opened.install, follow), follow.mailed, await waits(opened), await unconfirmed(opened)]).toEqual([{ carried: true }, `${BO},${opened.owner}`, false, true]);
+    expect([await followUsers(opened.install, follow, aMinuteOn(opened)), follow.mailed, await unconfirmed(opened)]).toEqual([{ carried: true }, opened.owner, true]);
+    expect([await followUsers(opened.install, follow, aMinuteOn(opened)), follow.mailed, await unconfirmed(opened)]).toEqual([{ carried: true }, opened.owner, false]);
   });
 
   // Drift: a try that confirms is trusted for its read alone. One that found the rest standing over users that changed while it read would end the waiting for a first user it never compared.

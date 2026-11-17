@@ -36,6 +36,12 @@ export const MOST_OF_A_COUNT = 1_000_000_000;
 /** The most days a span of time may be set to, 100 years: a moment that many days after any day in reach is still a date. */
 export const MOST_DAYS = 36_500;
 
+/** The most users the install's alerts go to: a provider's alert takes about that many addresses. */
+export const MOST_ALERT_USERS = 20;
+
+/** The word that stands, in text, for alerts that go to the first user: no user is chosen. */
+const FIRST_USER = "first";
+
 /** A count from 1 to the top. */
 const COUNT_SET = v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(MOST_OF_A_COUNT));
 
@@ -59,6 +65,11 @@ const VALUES = {
     v.minLength(1),
     v.check((users) => new Set(users).size === users.length, "each user is listed once"),
   ),
+  alert_users: v.pipe(
+    v.array(LOGIN),
+    v.maxLength(MOST_ALERT_USERS),
+    v.check((chosen) => new Set(chosen).size === chosen.length, "each user is listed once"),
+  ),
   outside_pages: v.picklist(OUTSIDE_PAGES),
   search_engines_allowed: v.boolean(),
   block_bots: v.picklist(BLOCK_BOTS),
@@ -77,9 +88,13 @@ const VALUES = {
   provider_logs: v.boolean(),
 };
 
-/** Every setting, as the settings are stored and read. An install that never asks for the newest release starts no update by itself, so `auto_update` is on only beside `update_check`: checked once those two are typed, whatever another key holds. */
+/** Every setting, as the settings are stored and read. Two pairs are checked once both of a pair are typed, whatever another key holds: `auto_update` is on only beside `update_check`, and each of `alert_users` is one of `users`. */
 export const SETTING_VALUES = v.pipe(
   v.strictObject(VALUES),
+  v.forward(
+    v.partialCheck([["users"], ["alert_users"]], (values) => values.alert_users.every((chosen) => values.users.includes(chosen)), "each of alert_users is one of users"),
+    ["alert_users"],
+  ),
   v.forward(
     v.partialCheck([["update_check"], ["auto_update"]], (values) => values.update_check || !values.auto_update, "auto_update is on only while update_check is on"),
     ["auto_update"],
@@ -99,6 +114,7 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   versions_kept: whole(),
   trash_days: whole(),
   users: userList(),
+  alert_users: chosenUsers(),
   outside_pages: oneOf(OUTSIDE_PAGES),
   search_engines_allowed: onOff(),
   block_bots: oneOf(BLOCK_BOTS),
@@ -135,6 +151,9 @@ interface TextForm<Value> {
 /** The values of every setting. */
 export type SettingValues = v.InferOutput<typeof SETTING_VALUES>;
 
+/** The users of stored settings as one read gave them, and the emails the install's alerts go to among them. Both are `undefined` before setup stored any settings. */
+export type StoredUsers = { readonly users: readonly Login[]; readonly alerts: readonly Login[] } | { readonly users: undefined; readonly alerts: undefined };
+
 /** The values the rules of the domain are written from. */
 export type RuleSettings = Pick<SettingValues, (typeof RULE_SETTINGS)[number]>;
 
@@ -146,8 +165,8 @@ interface Install {
   readonly installer: Login;
 }
 
-/** Why settings text was refused: a key that is no setting, a setting left out, text not in the key's form, a value outside its range, or `auto_update` on beside `update_check` off. */
-type SettingRefusal = "unknown-key" | "missing" | "bad-form" | "out-of-range" | "needs-update-check";
+/** Why settings text was refused: a key that is no setting, a setting left out, text not in the key's form, a value outside its range, `auto_update` on beside `update_check` off, or one of `alert_users` that is none of `users`. */
+type SettingRefusal = "unknown-key" | "missing" | "bad-form" | "out-of-range" | "needs-update-check" | "not-a-user";
 
 /** One key that was refused, and why. */
 interface RefusedSetting {
@@ -239,6 +258,16 @@ function userList(): TextForm<Login[]> {
   };
 }
 
+/** The users the alerts go to: the word for the first user where none is chosen, else the list as the users are typed. */
+function chosenUsers(): TextForm<Login[]> {
+  const list = userList();
+
+  return {
+    read: (text) => (text === FIRST_USER ? [] : list.read(text)),
+    print: (chosen) => (chosen.length === 0 ? FIRST_USER : list.print(chosen)),
+  };
+}
+
 function printOne<Key extends SettingKey>(key: Key, values: SettingValues): string {
   return FORMS[key].print(values[key]);
 }
@@ -275,6 +304,28 @@ export function spanSeconds(span: Exclude<SettingValues["default_expires"], "nev
 }
 
 /**
+ * The emails the install's alerts go to, as every reader of them asks.
+ *
+ * @returns the users chosen in `alert_users`, in their order; the first user alone while none is chosen
+ */
+export function alertAddresses(settings: Pick<SettingValues, "users" | "alert_users">): readonly Login[] {
+  if (settings.alert_users.length > 0) return settings.alert_users;
+
+  const [first] = settings.users;
+
+  return first === undefined ? [] : [first];
+}
+
+/**
+ * Read the users out of the settings one read of the store gave, with who the alerts go to among them.
+ *
+ * @param stored - the settings, `undefined` before setup stored any
+ */
+export function storedUsers(stored: SettingValues | undefined): StoredUsers {
+  return stored === undefined ? { users: undefined, alerts: undefined } : { users: stored.users, alerts: alertAddresses(stored) };
+}
+
+/**
  * Build the settings a new install starts with.
  *
  * @returns the values of the published defaults table; the one that depends on the install comes from `install`
@@ -286,6 +337,7 @@ export function defaultSettings(install: Install): SettingValues {
     versions_kept: 3,
     trash_days: 7,
     users: [install.installer],
+    alert_users: [],
     outside_pages: "blocked",
     search_engines_allowed: false,
     block_bots: "auto",
@@ -318,13 +370,41 @@ export function settingsToText(values: SettingValues): Record<SettingKey, string
   return texts;
 }
 
+/**
+ * Read one setting from its text form, by its own rule alone. What two settings must hold together is the store's to say, which holds the other one.
+ *
+ * @returns the typed value, or `undefined` for text that is not in the key's form and for a value the key's rule refuses
+ */
+export function settingFromText<Key extends SettingKey>(key: Key, text: string): SettingValues[Key] | undefined {
+  const value = FORMS[key].read(text);
+  if (value === undefined) return undefined;
+
+  const checked = v.safeParse(VALUES[key] as v.GenericSchema<unknown, SettingValues[Key]>, value);
+
+  return checked.success ? checked.output : undefined;
+}
+
 function refusedAlone(refused: RefusedSetting): CheckedSettings {
   return { ok: false, ...refused, every: [refused] };
 }
 
-/** Why the schema refused a key whose text was read. A switch has no range, so `auto_update` is refused there for one reason. */
-function refusedValue(key: string): RefusedSetting {
-  return { key, refusal: key === "auto_update" ? "needs-update-check" : "out-of-range" };
+/** Why the schema refused a key whose text was read. A check of two keys is a pair that does not go together, told as its own refusal; any other is a value outside its range. */
+function refusedValue(key: string, pair: boolean): RefusedSetting {
+  if (!pair) return { key, refusal: "out-of-range" };
+
+  return { key, refusal: key === "auto_update" ? "needs-update-check" : "not-a-user" };
+}
+
+/** The keys the schema refused, each with whether it was refused as half of a pair. A key's own rule is told before the pair's: the first issue of a key names it. */
+function refusedKeys(issues: readonly v.BaseIssue<unknown>[]): ReadonlyMap<string, boolean> {
+  const named = new Map<string, boolean>();
+
+  for (const issue of issues) {
+    const key = v.getDotPath(issue)?.split(".")[0] ?? "";
+    if (!named.has(key)) named.set(key, issue.type === "partial_check");
+  }
+
+  return named;
 }
 
 /**
@@ -332,7 +412,7 @@ function refusedValue(key: string): RefusedSetting {
  *
  * @param texts - one text for every key; to change one setting, print the current ones and replace that key
  * @returns the typed values, or the first refused key: a key that is no setting; else, in the order of the settings, the first that is left out or whose text is not in its form; else the first value its rule refuses.
- *   `auto_update` on beside `update_check` off is such a value of `auto_update`, refused as `needs-update-check`.
+ *   `auto_update` on beside `update_check` off is such a value of `auto_update`, refused as `needs-update-check`, and one of `alert_users` that is none of `users` such a value of `alert_users`, refused as `not-a-user`.
  *   `every` holds each text not in its form and each value the schema refuses, in the order of the settings; for a key that is no setting or is left out, that key alone
  */
 export function settingsFromText(texts: Readonly<Record<string, string>>): CheckedSettings {
@@ -356,8 +436,7 @@ export function settingsFromText(texts: Readonly<Record<string, string>>): Check
   if (checked.success) return { ok: true, values: checked.output };
 
   // A text that was not read leaves its key out of the values, which the schema names too: such a key is told once, by its form.
-  const named = checked.issues.map((issue) => v.getDotPath(issue)?.split(".")[0] ?? "");
-  const outside = [...new Set(named)].filter((key) => !unread.some((refused) => refused.key === key)).map(refusedValue);
+  const outside = [...refusedKeys(checked.issues)].filter(([key]) => !unread.some((refused) => refused.key === key)).map(([key, pair]) => refusedValue(key, pair));
   const order = (refused: RefusedSetting): number => SETTING_KEYS.indexOf(refused.key as SettingKey);
   const every = [...unread.filter((refused) => refused.refusal === "bad-form"), ...outside].sort((left, right) => order(left) - order(right));
 

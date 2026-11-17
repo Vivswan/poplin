@@ -99,10 +99,16 @@ describe("a change of the settings with dry_run", () => {
       { update_check: false },
       { auto_update: false, update_check: false },
       { auto_update: true },
+      { alert_users: [BO] },
+      { alert_users: [CY] },
+      { users: [ADA, CY] },
+      { users: [ADA, BO], alert_users: [CY] },
       { users: [BO, CY] },
       { users: [CY] },
       { trash_days: 9 },
       { trash_days: undefined, versions_kept: 4 },
+      { alert_users: undefined },
+      { users: undefined, alert_users: [BO] },
       { trash_days: 0 },
       {},
     ];
@@ -112,7 +118,9 @@ describe("a change of the settings with dry_run", () => {
 
     expect([...steps, asToken].map((step) => [step.written, step.rehearsal])).toEqual([...steps, asToken].map((step) => [0, step.run]));
     expect([...steps, asToken].map((step) => (step.run.ok ? "stored" : step.run.code))).toEqual(
-      ["stored", "stored", "stored", "stored", "stored", "needs_update_check", "no_working_user", "no_working_user", "stored", "stored", "bad_argument", "bad_argument", "not_allowed"],
+      ["stored", "stored", "stored", "stored", "stored", "needs_update_check", "stored", "not_a_user", "stored", "not_a_user", "no_working_user", "no_working_user", "stored", "stored", "stored", "not_a_user", "bad_argument", "bad_argument", "not_allowed"],
     );
+    // New users that leave a chosen user out take that user out of `alert_users`, in the dry run as in the run.
+    expect(steps.slice(6, 10).map((step) => (step.run.ok ? step.run.values.alert_users : [step.run.code, step.run.about]))).toEqual([[BO], ["not_a_user", "alert_users"], [], ["not_a_user", "alert_users"]]);
   });
 });

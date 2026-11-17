@@ -14,6 +14,7 @@ export const EXAMPLE_BINDINGS = {
     versions_kept: "3",
     trash_days: "7",
     users: "owner@example.com",
+    alert_users: "first",
     outside_pages: "blocked",
     search_engines_allowed: "off",
     block_bots: "auto",

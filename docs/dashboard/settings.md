@@ -32,7 +32,7 @@ The line after Save says when the change takes effect:
 | The line says | Means |
 | ------------- | ----- |
 | `Saved.` | in effect |
-| `Saved. Takes effect at the next Repair.` | a setting under Visitors whose rule only a Repair writes: `block_bots` on every install under a domain, and the other two on one that holds no key. On Domain, press Repair |
+| `Saved. Takes effect at the next Repair.` | a setting under Visitors whose rule only a Repair writes: `block_bots` on every install under a domain, and the other two on one that holds no key. Also Send alerts to, on an install that holds no key. On Domain, press Repair |
 | `Saved. Takes effect at the next update or Repair.` | Keep logs, on an install that holds no key |
 | `Saved. 1 setting takes effect at the next Repair.` | one such setting, saved together with others that are in effect |
 
@@ -43,6 +43,7 @@ The line after Save says when the change takes effect:
 | Storage    | `max_total_size`, `max_site_size`, `max_sites`                                                     |
 | Publishing | `max_files_per_publish`, `max_files_per_day`, `max_storage_writes_per_day`                         |
 | Traffic    | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` |
+| Alerts     | `alert_users`                                                                                      |
 | Logs       | `provider_logs`                                                                                    |
 | Updates    | `update_check`, `auto_update`                                                                      |
 
@@ -53,6 +54,29 @@ A saved `search_engines_allowed` or `outside_pages` also changes its rule at Clo
 After a save, each clean-up run that comes a minute or more after poplin last tried the rules reads them again and writes one that differs from its setting, until a run finds both as their settings ask. The runs are 15 minutes apart.
 
 A saved `provider_logs` changes the Worker's logs at Cloudflare by itself, with the same key, on an install of either kind: [Switch the logs off](activity.md#switch-the-logs-off).
+
+## Who gets the alerts
+
+`alert_users` chooses who Cloudflare emails the install's alerts to: the [budget alert](domain.md#optional-an-email-when-charges-reach-1-dollar) on every install, and the [certificate alert](domain.md#an-email-about-certificates) under a domain.
+
+| `alert_users`                 | The alerts go to                                                    |
+| ----------------------------- | ------------------------------------------------------------------- |
+| `first`, the default          | the first user, also after the users are put in another order       |
+| `ada@example.com,bo@example.com` | those users: 20 at most, each one of `users`                     |
+
+```sh
+npx poplin config alert_users ada@example.com,bo@example.com
+npx poplin config alert_users first
+```
+
+| What happens                               | Then                                                                 |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| you tick users under Send alerts to, and Save | the same setting is stored                                        |
+| an email that is no user is named          | refused with `not_a_user`; nothing changes                           |
+| a chosen user is removed                   | leaves `alert_users` with the removal; with none left, the first user gets the alerts |
+| the choice is saved                        | Cloudflare's alerts change by itself, with [the key poplin keeps](../about/security.md#the-kept-key); on an install that holds no key, at the next Repair |
+
+A chosen user who is not a member of your Cloudflare account gets one mail from Cloudflare to confirm, and no alert before confirming it. poplin cannot see whether an address is confirmed.
 
 On an install [without a domain](../start/without-a-domain.md), the control of `block_bots` is disabled and says `Needs a domain.`: what it asks for is a switch of a domain at Cloudflare. `search_engines_allowed` and `outside_pages` work there through the Worker alone, and nothing is sent to Cloudflare for them.
 
@@ -87,6 +111,7 @@ The settings `poplin config` takes:
 | `default_expires`, `default_search_engines`                                             | what a new site starts with                              |
 | `versions_kept`, `trash_days`                                                           | how much is kept, and for how long                       |
 | `users`                                                                                 | the emails that may log in                               |
+| `alert_users`                                                                           | which users get the install's alerts: `first` in a new install, the first user, [Who gets the alerts](#who-gets-the-alerts) |
 | `outside_pages`, `search_engines_allowed`, `block_bots`                                 | what the install lets in                                 |
 | `max_total_size`, `max_site_size`, `max_sites`                                          | size limits                                              |
 | `max_files_per_publish`, `max_files_per_day`                                            | how many files one publish holds, and all publishes begun in one UTC day |

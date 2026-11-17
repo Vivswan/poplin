@@ -26,7 +26,7 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | the dashboard and private sites | Repair: Access application and Access policy | Cloudflare's login, for the `users` alone  |
 | the bucket's public address | the bucket [the install](../../start/install.md#4-read-what-it-made) makes has none | files are read through the Worker alone |
 | uploads in parts that nobody finished | Cloudflare's own rule on the bucket, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
-| the account's usage charges of a billing period: 1 US dollar | the install's key, within a day of the install; or Repair: Budget alert, with the optional permission Notifications: Edit. Under a domain or without one | Cloudflare emails the first user. Nothing is stopped |
+| the account's usage charges of a billing period: 1 US dollar | the install's key, within a day of the install; or Repair: Budget alert, with the optional permission Notifications: Edit. Under a domain or without one | Cloudflare emails the users `alert_users` chooses, the first user by default. Nothing is stopped |
 
 Repair is the button on the Domain screen, and the command `npx poplin doctor --repair`. The budget alert exists where the install's key or a Repair made it.
 

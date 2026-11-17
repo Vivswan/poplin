@@ -317,14 +317,14 @@ describe("the upload key, by the kind of install", () => {
 
 describe("the screens of an install without a domain", () => {
   // Drift: the kind's words and its settings reach the screens through the one plug. Built from the other kind's, the dialog would say "the domain", a repair would be asked for settings it carries nowhere, and block_bots would look like it works.
-  test("the Domain screen says there is no domain and names its runs by the install; Settings marks block_bots alone as needing a domain, and no setting for a repair", async () => {
+  test("the Domain screen says there is no domain and names its runs by the install; Settings marks block_bots alone as needing a domain, and for a repair only who gets the alerts, which an install that holds no key does not carry by itself", async () => {
     const worker = instance(w);
     const owner = await accessHeaders(w);
     const domain = await (await askFree(worker, `${FREE_ADMIN}/data/domain`, { headers: owner })).json<{ words: unknown; form: { tokenRights: string[] } }>();
     const { rows } = await (await askFree(worker, `${FREE_ADMIN}/data/settings`, { headers: owner })).json<{ rows: { key: string; repair: boolean; needs: string | null }[] }>();
 
     expect([domain.words, domain.form.tokenRights.length]).toEqual([{ thing: "the install", line: "No domain: your sites answer at Cloudflare's free address." }, 5]);
-    expect([rows.filter((row) => row.repair), rows.filter((row) => row.needs !== null).map((row) => [row.key, row.needs])]).toEqual([[], [["block_bots", "Needs a domain."]]]);
+    expect([rows.filter((row) => row.repair).map((row) => row.key), rows.filter((row) => row.needs !== null).map((row) => [row.key, row.needs])]).toEqual([["alert_users"], [["block_bots", "Needs a domain."]]]);
   });
 });
 

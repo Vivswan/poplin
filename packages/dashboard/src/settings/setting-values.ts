@@ -12,6 +12,9 @@ const COUNT_TEXT = new Intl.NumberFormat("en-US", { useGrouping: false, maximumF
 /** The two parts of a number's text: its count, which may be none, and the unit after it. A fraction stays in the count as it was typed, and so does a minus, which the server refuses. */
 const PARTS = /^(-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)|)(.*)$/;
 
+/** What a choice among the install's users is called while none is chosen: the alerts then go to the first user. */
+export const FIRST_USER = "First user";
+
 /** A number's text taken apart. */
 interface Parts {
   /** The count; `null` for the word of no number and for a text with no count. */
@@ -76,6 +79,25 @@ export function textOf(row: Row, { count, unit }: Parts): string {
 }
 
 /**
+ * The users a choice among the install's users holds.
+ *
+ * @param text - the setting's text: the chosen emails with commas between them, or the text of the row's default, which stands for none
+ * @returns the chosen emails, in the text's order; none for the default
+ */
+export function chosenOf(row: Row, text: string): readonly string[] {
+  return text === row.fallback || text === "" ? [] : text.split(",");
+}
+
+/**
+ * The text of a choice among the install's users: `chosenOf` read back.
+ *
+ * @returns the emails with commas between them; for none, the text of the row's default
+ */
+export function chosenText(row: Row, chosen: readonly string[]): string {
+  return chosen.length === 0 ? row.fallback : chosen.join(",");
+}
+
+/**
  * Whether a switch is on.
  *
  * @param text - the setting's text: `on` or `off`, or for a choice of two drawn as a switch one of its options
@@ -113,10 +135,12 @@ export function isSwitch(row: Row): boolean {
 /**
  * Write a value of a setting where it is only read: its default.
  *
- * @returns `On` or `Off` for a switch, the option's name for a choice, a number with separators and its unit, the name of the word of no number, any other text unchanged
+ * @returns `On` or `Off` for a switch, the option's name for a choice, a number with separators and its unit, the name of the word of no number, the chosen users or the name of none, any other text unchanged
  */
 export function readOf(row: Row, text: string): string {
   if (isSwitch(row)) return isOn(row, text) ? "On" : "Off";
+
+  if (row.control.kind === "users") return chosenOf(row, text).join(", ") || FIRST_USER;
 
   if (row.control.kind === "choice") return choiceLabel(row, text);
 

@@ -16,7 +16,7 @@ import type { CarriedRules, CarriedUsers, DomainCheck, RememberedCheck } from ".
 import { computerLoginFromRow } from "../records/computer-login";
 import type { Mend, Problem } from "../records/problem";
 import { LOGIN, SITE_ID } from "../records/fields";
-import { SETTING_CHANGES, SETTING_VALUES, type SettingValues } from "../records/settings";
+import { SETTING_CHANGES, SETTING_VALUES, type SettingValues, type StoredUsers, storedUsers } from "../records/settings";
 import { visitorKeyFromRow, visitorKeyToText } from "../records/secret";
 import { NEW_SITE, SITE_DETAILS, SITE_FOLDER, type Site, type SiteAccess, type SiteFolder, siteFromRow, siteToRow } from "../records/site";
 import { SWEEP_PLACE, type SweepPlace } from "../records/sweep-place";
@@ -82,7 +82,7 @@ import type {
   UploadSize,
   UploadsPage,
 } from "./database";
-import { domainCheckAsked, domainCheckIn, domainCheckKept, lastMark, rulesCarried, rulesClaimed, rulesReplaced, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
+import { alertUsersReplaced, domainCheckAsked, domainCheckIn, domainCheckKept, lastMark, rulesCarried, rulesClaimed, rulesReplaced, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { type ProblemNote, problemNoted, problemsAsked, problemsEnded, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
@@ -118,6 +118,7 @@ import {
   tokenById,
   tokenNames,
   USER_TOKENS,
+  alertUsersKept,
   auditOfSettings,
   endSignerLeftOut,
   endTokensOfDropped,
@@ -127,7 +128,7 @@ import {
   settingsAndSigner,
   signerGone,
   signerStands,
-  updatePairKept,
+  settingsPatched,
   userBehind,
   userTokenCounts,
   worksAt,
@@ -1196,17 +1197,17 @@ export class SqlDatabase implements Database {
     await this.#driver.batch([domainCheckKept(check), ...entry, ...settling, ...(ended === undefined ? [] : [ended])]);
   }
 
-  async claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined; readonly last: number | undefined }> {
+  async claimUsers(at: number): Promise<StoredUsers & { readonly mark: number | undefined; readonly last: number | undefined }> {
     const [before, , read, kept] = await this.#driver.batch([domainCheckAsked(), usersClaimed(at), READ_SETTINGS, domainCheckAsked()]);
     const was = before?.rows[0];
 
-    return { users: settingsIn(read)?.users, mark: waitingMark(kept?.rows[0]?.users_changed_at), last: lastMark([was?.users_changed_at, was?.alerts_changed_at]) };
+    return { ...storedUsers(settingsIn(read)), mark: waitingMark(kept?.rows[0]?.users_changed_at), last: lastMark([was?.users_changed_at, was?.alerts_changed_at]) };
   }
 
-  async settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly waits: boolean }> {
+  async settleUsers(carried: CarriedUsers, at: number): Promise<StoredUsers & { readonly waits: boolean }> {
     const [, read, kept] = await this.#driver.batch([usersCarried(carried, at), READ_SETTINGS, domainCheckAsked()]);
 
-    return { users: settingsIn(read)?.users, waits: waitingMark(kept?.rows[0]?.users_changed_at) !== undefined };
+    return { ...storedUsers(settingsIn(read)), waits: waitingMark(kept?.rows[0]?.users_changed_at) !== undefined };
   }
 
   async claimRules(at: number): Promise<{ readonly settings: SettingValues | undefined; readonly mark: number | null | undefined; readonly last: number | undefined }> {
@@ -1285,19 +1286,18 @@ export class SqlDatabase implements Database {
   async changeSettings(
     changes: Partial<SettingValues>,
     signed: Signed,
-  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check">> {
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check" | "not_a_user">> {
     const checked = v.parse(SETTING_CHANGES, changes);
-    // A merge patch: each key it names is replaced and every other key stays, only when a value differs.
-    const patched = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(checked)})`;
-    // Only a change of an update setting can part the two, and such a change writes nothing at all then: every statement of it waits on the pair.
-    const fits = checked.update_check === undefined && checked.auto_update === undefined ? undefined : updatePairKept(patched);
+    // A change that would part a pair of settings writes nothing at all: every statement of it waits on `fits`. The rest is written only when a value differs.
+    const { patched, fits } = settingsPatched(checked);
     const lands = and(eq(settings.id, 1), signerStands(signed), fits, fragment`json(${patched}) <> json(${settings.value})`);
     const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(lands));
     // The marks of changed users and of changed rules read the settings as they still are, so they run before the change.
     const rules = rulesReplaced(checked, signed, fits);
     // So do the tokens of the users the new list leaves out, which end in the same step.
     const replaced = checked.users === undefined ? [] : [usersReplaced(checked.users, signed, fits), ...endTokensOfDropped(checked.users, signed, fits)];
-    const marks = [...replaced, ...(rules === undefined ? [] : [rules])];
+    const chosen = checked.alert_users === undefined ? [] : [alertUsersReplaced(checked.alert_users, signed, fits)];
+    const marks = [...replaced, ...chosen, ...(rules === undefined ? [] : [rules])];
     // The token that signs ends after the change, where the new list leaves its own user out: it stands for every statement before.
     const own = checked.users === undefined ? [] : endSignerLeftOut(signed);
     const answers = await this.#driver.batch([...marks, auditOfSettings(signed, checked, lands), update, ...own, settingsAndSigner(signed)]);
@@ -1309,9 +1309,11 @@ export class SqlDatabase implements Database {
 
     if (signerGone(read)) return { kind: "signer_gone" };
 
-    const asked = { ...values, ...checked };
+    const asked = { ...values, ...Object.fromEntries(Object.entries(checked).filter(([, value]) => value !== undefined)) };
 
-    return asked.auto_update && !asked.update_check ? { kind: "needs_update_check" } : { kind: "unchanged", values };
+    if (asked.auto_update && !asked.update_check) return { kind: "needs_update_check" };
+
+    return asked.alert_users.every((login) => asked.users.includes(login)) ? { kind: "unchanged", values } : { kind: "not_a_user" };
   }
 
   async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">> {
@@ -1331,7 +1333,8 @@ export class SqlDatabase implements Database {
   async removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_user" | "signer_gone">> {
     const email = v.parse(LOGIN, login);
     const place = fragment`(SELECT j.key FROM json_each(${settings.value}, '$.users') AS j WHERE j.value = ${email})`;
-    const removed = fragment<string>`json_remove(${settings.value}, '$.users[' || ${place} || ']')`;
+    // Who is no user any more gets no alert: the removed user leaves that list in the same write.
+    const removed = alertUsersKept(fragment<string>`json_remove(${settings.value}, '$.users[' || ${place} || ']')`);
     // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
     const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.users') > 1 END`;
     const lands = and(eq(settings.id, 1), signerStands(signed), isStoredLogin(login), keepsWorkingLogin);
