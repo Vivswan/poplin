@@ -40,14 +40,14 @@ failed  problems  2 kinds today: request_failed, sweep_failed
 
 | Kind                     | It says                                         | What to do                                          |
 | ------------------------ | ----------------------------------------------- | --------------------------------------------------- |
-| `request_failed`         | A request failed                                | try again; if it comes back, report it              |
+| `request_failed`         | A request failed                                | try again; if it comes back, [report it](https://github.com/Vivswan/poplin/issues) |
 | `api_failed`             | A publish or a command failed                   | run it again; `poplin doctor` checks the install    |
 | `sweep_failed`           | The clean-up did not finish                     | nothing yet: it runs again by itself                |
 | `count_unwritten`        | The day's count of storage writes was not saved | nothing, unless it comes back                       |
 | `login_unwritten`        | A login was not written to Activity             | nothing: the login itself worked                    |
 | `login_unchecked`        | The login could not be checked                  | open Domain and press Check                         |
 | `update_failed`          | An update did not go as it should               | the sentence of what went wrong; for a key, open Domain and press Repair |
-| `update_went_back`       | An update could not change the database, so poplin went back | nothing is lost; report it, and update again once a later release is out |
+| `update_went_back`       | An update could not change the database, so poplin went back | nothing is lost; [report it](https://github.com/Vivswan/poplin/issues), and update again once a later release is out |
 | `users_not_carried`      | A change of the users did not reach the login page | open Domain and press Repair            |
 | `rules_not_carried`      | A changed setting did not reach every rule of the domain | open Domain and press Repair               |
 | `copy_failed`            | A copy of a site was not made                   | duplicate the site again                            |

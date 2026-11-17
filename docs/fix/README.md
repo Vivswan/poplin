@@ -12,3 +12,5 @@ What to do when nobody can log in, when the install command stops, when poplin r
 | [When the install stops](an-install-step-fails.md) | each line `poplin install` stops at, and its next step       |
 | [When poplin refuses](poplin-refuses.md)         | every refusal and what to do                                   |
 | [Problems](problems.md)                          | what went wrong in the install: where it shows, what is kept   |
+
+Where a row says to report it: [the project's issues](https://github.com/Vivswan/poplin/issues).

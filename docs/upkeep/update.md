@@ -187,7 +187,7 @@ the install asks Cloudflare, with its key, to run the version before again
 | What is lost        | nothing: a step is kept whole or not at all, so the database is as 0.3.0 left it                        |
 | Where it shows      | Activity: `Went back to 0.3.0: the update to 0.3.1 could not change the database`; the problem `update_went_back` |
 | When it stays put   | the install holds no key, the code was put in place another way, a variable or secret was set by hand between the last repair and the update, or an earlier step of the same release was kept |
-| What to do          | report it, and update again once a later release is out                                                 |
+| What to do          | [report it](https://github.com/Vivswan/poplin/issues), and update again once a later release is out                                              |
 
 Where the install stays put, it answers `This install's database could not be brought up to date. Try again.` until the step runs, or until you roll back at Cloudflare.
 
@@ -273,7 +273,7 @@ While the setting `update_check` is on, the install says when a newer version is
 $ poplin doctor
 ok  install   https://poplin.example.com answers
 ok  version   install 0.1.0, this poplin 0.1.0
-ok  update    0.2.0 is out (this install runs 0.1.0): https://example.com/changelog/#v0-2-0
+ok  update    0.2.0 is out (this install runs 0.1.0): https://github.com/Vivswan/poplin/releases/tag/v0.2.0
 ok  login     admin token 3f9a1c07b2d84e65, saved on this machine, expires 2026-12-15
 ok  settings  21 settings read
 ok  sites     4 sites

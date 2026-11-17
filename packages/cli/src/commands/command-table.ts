@@ -20,7 +20,7 @@ const SITE = { name: "site", about: "its label, id, public name, or address" };
 
 /** The settings of a site, the same when it is published and when it is changed. */
 const SITE_SETTINGS: readonly FlagSpec[] = [
-  { name: "--private", about: "only you can open it" },
+  { name: "--private", about: "only the users of your install can open it" },
   { name: "--unlisted", about: "anyone who has the address can open it" },
   { name: "--public", about: "everyone can open it, at its public name" },
   { name: "--public-name", value: "<name>", about: "with --public: its public name, when not its name" },
