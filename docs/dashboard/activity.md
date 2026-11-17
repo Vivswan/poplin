@@ -92,6 +92,8 @@ On Cloudflare's Workers Paid plan, lines past the plan's own allowance are charg
 | `poplin: step`                                                        | a step of the database was applied by another build, or failed            | the step, and a failure's kind     |
 | `poplin: the sweep did not run.`                                      | a scheduled run found the variables or the database not ready             | the names of the variables, if any |
 | `poplin: the sweep failed`                                            | a scheduled run met an error                                              | the error's kind, places in code   |
+| `poplin: a round of a job failed`                                     | a step of a background job met an error                                   | the error's kind, places in code   |
+| `poplin: a job that failed was not given up`                          | a failed background job could not be removed                              | the error's kind, places in code   |
 
 - **An error the Worker caught is written by its kind, never by its message.** `RangeError`, then the places in the code it passed through; for a scheduled run that failed, Cloudflare names them by the source's file and line. a message could repeat a site's id or a file's path.
 - **poplin writes into no line** a token, a login's token, a login code, an email, a visitor's address, a site's id, or a value of a setting or a variable.

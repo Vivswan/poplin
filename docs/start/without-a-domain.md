@@ -67,13 +67,11 @@ npx poplin install cloudflare --no-domain
 ## The account token
 
 ```text
-The account token needs 6 permissions, for this account:
-  Access: Apps and Policies: Edit, Workers Scripts: Edit, ...
-Optional:
-  Notifications: Edit: Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.
-This link opens the form with each one chosen that a link can choose:
+The account token does the work of this run: 6 permissions, for this account; 1 more is optional.
+This link opens the form with them chosen:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
 On the form, choose your account under Account Resources, then create the account token and copy it. The link does not choose this permission, so choose it on the form yourself: Workers R2 Storage: Edit.
+Every permission by name: npx poplin install cloudflare --help
 Account token (not shown):
 ```
 
@@ -102,7 +100,7 @@ The terminal shows a row of small marks for what you paste, never the letters. P
 
 **Leave Cloudflare's page with the token open** until the command says `is installed`: Cloudflare shows the token once, and a run that stops asks for it again. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
-One permission is optional here: Notifications: Edit, which the command lists with what it adds. **Skip it on a first install:** nothing is wrong without it. With it, the run makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once. Without it, the install makes that email by itself within a day, with the key it keeps. The other optional permissions are all of a domain.
+One permission is optional here: Notifications: Edit. **Skip it on a first install:** nothing is wrong without it. With it, the run makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once. Without it, the install makes that email by itself within a day, with the key it keeps. The other optional permissions are all of a domain.
 
 ## What it prints
 

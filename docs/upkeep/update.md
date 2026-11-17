@@ -63,12 +63,12 @@ the install now runs 0.3.1; it ran 0.3.0
 | a start in the same minute                                | `too_many_requests`   | nothing |
 | a key Cloudflare no longer takes, or none                 | `key_refused`, `no_key` | nothing |
 | a key made before poplin could update itself              | `lacks_right`, about `Workers Scripts Write` | nothing |
-| the website or the release's page does not answer         | `release_refused` | nothing |
+| the website or the release's page does not answer, or Cloudflare gives the Worker's bindings in part or not at all | `release_refused` | nothing |
 | a file whose digest or size is not the published one      | `release_refused` | nothing |
 | a manifest of another version or schema than the website names | `release_refused` | nothing |
 | a release the install cannot put in place: its manifest is one the running version cannot read, or it needs a binding the Worker does not have | `release_refused` | nothing: [the repair takes it](#a-release-the-install-cannot-take) |
 | Cloudflare refuses the new code, such as code that stops as it starts | `version_refused` | nothing: the install runs the version it ran |
-| Cloudflare does not answer the upload                     | `update_unreachable`  | the update may be in: reload in a minute |
+| Cloudflare does not answer the upload, or the first read with the key | `update_unreachable`  | the update may be in: reload in a minute |
 
 `release_refused` comes with a word for which row it is. For `key_refused`, `no_key`, and `lacks_right`, press Repair on the Domain screen with an account token: it makes a key with every permission the install uses. [When poplin refuses](../fix/poplin-refuses.md) has each code.
 
@@ -98,7 +98,7 @@ looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
 would change     Worker                poplin: 0.2.0 to 0.3.0
 would leave      DNS record            *.example.com
 ...
-ready: a run would change 1. nothing was changed
+ready: a run would change 1. Nothing was changed.
 
 $ npx poplin doctor --repair
 looking for an install ... found: poplin 0.2.0, at https://poplin.example.com
@@ -106,6 +106,8 @@ changed   Worker                poplin: 0.2.0 to 0.3.0
 left      DNS record            *.example.com
 ...
 the install is mended.
+Your dashboard: https://poplin.example.com
+The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
 ```
 
 The samples are cut short where the dots are. Without a domain the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`.
@@ -121,7 +123,7 @@ The samples are cut short where the dots are. Without a domain the address ends 
 | `left`, and `poplin, runs 0.3.0`                         | the install runs the newest release: nothing is uploaded                   |
 | `changed`, and `poplin: 0.2.0 to 0.3.0`                  | the release is in place                                                    |
 | `left`, and `its version is not read`                    | the Worker's `RELEASE` variable is gone or names no release, as after code another tool uploaded: nothing says it is behind, so nothing is uploaded |
-| `stopped` or `failed`, and why                           | nothing was uploaded; the rest of the install is still mended. Do what the row says, then run the line again |
+| `stopped` or `failed`, and why                           | the release is not known to be in place; the rest of the install is still mended. Do what the row says, then run the line again |
 
 | After the upload                                         | The repair                                                                 |
 | -------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -158,7 +160,7 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 $ npx poplin update --dry-run
 no newer version is known; the install runs 0.3.1
 the install holds its key
-the install can go back to 0.3.0: poplin update --to 0.3.0
+the install can go back to 0.3.0: npx poplin update --to 0.3.0
 nothing was started
 
 $ npx poplin update --to 0.3.0
@@ -278,6 +280,7 @@ ok  login     admin token 3f9a1c07b2d84e65, saved on this machine, expires 2026-
 ok  settings  21 settings read
 ok  sites     4 sites
 ok  trash     0 sites
+ok  problems  none in 7 days
 nothing was changed
 ```
 

@@ -57,17 +57,15 @@ An **account token** is a long password that lets a program change your Cloudfla
    | `Your own domain (example.com), or Enter for none:` | the install's domain alone, with no `https://` and no `www`; or press Enter, for an install at `workers.dev` |
    | `Account token (not shown):`                        | leave the terminal at this question, and make the token: the next step   |
 
-   Between the two it prints what the token needs, and the link to its form. Without a domain:
+   Between the two it prints how many permissions the token needs, and the link to its form. Without a domain:
 
    ```text
    Your own domain (example.com), or Enter for none:
-   The account token needs 5 permissions, for this account:
-     Access: Apps and Policies: Edit, Workers Scripts: Edit, ...
-   Optional:
-     Notifications: Edit: Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.
-   This link opens the form with each one chosen that a link can choose:
+   The account token does the work of this run: 5 permissions, for this account; 1 more is optional.
+   This link opens the form with them chosen:
      https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
    On the form, choose your account under Account Resources, then create the account token and copy it.
+   Every permission by name: npx poplin doctor --repair --help
    Account token (not shown):
    ```
 
@@ -122,7 +120,7 @@ Every piece of the install has a row. Four matter here:
 | The last lines say                                    | Means                                         | Do                                                           |
 | ----------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
 | `the install is mended.`                              | what was missing is made, the new user too    | log in                                                       |
-| `the install is as it should be. nothing was changed` | nothing was broken, and no user was added     | if no code arrives, run the line with `--add-user`           |
+| `the install is as it should be. Nothing was changed.` | nothing was broken, and no user was added     | if no code arrives, run the line with `--add-user`           |
 | a number, then `not done. Run this command again`     | a row says `stopped`, `failed`, or `not run`  | [When it stops](#when-it-stops), then the same line again    |
 
 The login is mended to the users the install has stored. No site and no setting of yours is changed.
@@ -158,7 +156,7 @@ The dashboard's Activity lists the new user as `Added a user:` and the email, by
 | without a domain       | 5 permissions, on the account: an install's 6 without Workers R2 Storage: Edit                     |
 | `--add-user`, on both  | the same token. Of its permissions, Access: Apps and Policies: Edit is the one that lets a person in |
 
-The link the command prints chooses every one of them. A token you kept from the install has one permission more, and works too. The optional permissions the command lists are not needed. `npx poplin doctor --repair --help` lists the permissions of an install's token and both of its links.
+The link the command prints chooses every one of them. A token you kept from the install has one permission more, and works too. The optional permissions are not needed. `npx poplin doctor --repair --help` lists the permissions of an install's token and both of its links.
 
 **Why `--add-user` wants that one.** Whoever may change the login page at Cloudflare could let a person in there by hand. So the command first writes the list of emails at Cloudflare, with your token. The email is stored in the install only after Cloudflare took that write. A token that may only read adds nobody.
 

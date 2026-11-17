@@ -52,7 +52,7 @@ a copy of 10,000 files     1 request and 92 steps
 Cloudflare's free plan     3,000 steps a day, 1,024 steps a job
 ```
 
-The page or the command that began the copy only asks whether it is a site yet: 3 queries an ask, and nothing of the storage. Closing the page leaves the copy running. Cancel ends the job. A step that fails is tried five more times; then the copy is given up, its files are removed, and [Problems](../../fix/problems.md) shows `copy_failed`.
+The page or the command that began the copy only asks whether it is a site yet: 3 queries an ask, and nothing of the storage. Closing the page leaves the copy running. Cancel ends the job. A step that fails is tried five more times; then the copy is given up, its files are removed, and [Problems](../../fix/problems.md) shows `A copy of a site was not made`.
 
 A job that stops without giving its copy up leaves an upload nobody finishes. The sweep removes it and its files once 25 hours have passed, and notes `copy_failed`: one query more in that run.
 

@@ -82,19 +82,16 @@ Then type the install's line. The first time, it asks whether it may download po
 npx poplin install cloudflare
 ```
 
-It asks three things, then works, and at the end asks once more: whether to log this computer in. The sample cuts the list of permissions and the link short, where the dots are:
+It asks three things, then works, and at the end asks once more: whether to log this computer in. The sample cuts the link short, where the dots are:
 
 ```text
 Your own domain (example.com), or Enter for none: example.com
 Your email, the first login: you@example.com
-The account token needs 10 permissions, for this account and this domain:
-  Zone: Read, DNS: Edit, Workers Routes: Edit, ...
-Optional:
-  Single Redirect: Edit: Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself.
-  ...
-This link opens the form with each one chosen that a link can choose:
+The account token does the work of this run: 10 permissions, for this account and this domain; 4 more are optional.
+This link opens the form with them chosen:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
 On the form, choose your account under Account Resources and your domain under Zone Resources, then create the account token and copy it. The link does not choose this permission, so choose it on the form yourself: Workers R2 Storage: Edit.
+Every permission by name: npx poplin install cloudflare --help
 Account token (not shown):
 ```
 
@@ -140,7 +137,7 @@ The terminal shows a row of small marks for what you paste, never the letters. P
 
 **Leave Cloudflare's page with the token open** until the command says `is installed`: Cloudflare shows the token once, and a run that stops asks for it again. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
-**Skip the optional permissions on a first install.** There are four, and the command lists what each adds. Nothing is wrong without them, and they can be added on any day: three for [rules against junk traffic](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers), and one for [an email about charges](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once.
+**Skip the optional permissions on a first install.** There are four, and `npx poplin install cloudflare --help` names them. A row that says `left out` says what its permission adds. Nothing is wrong without them, and they can be added on any day: three for [rules against junk traffic](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers), and one for [an email about charges](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once.
 
 **If the form opens empty**, [When the install stops](../fix/an-install-step-fails.md#the-token-form-opens-empty) has the ten rows to add by hand.
 
@@ -194,7 +191,7 @@ Under a domain, the command adds records, routes, and rules of its own. A websit
 
 ```text
 looking for an install ... found
-This account already holds poplin 0.1.0, at https://poplin.example.com, and it is as it should be. nothing was changed.
+This account already holds poplin 0.1.0, at https://poplin.example.com, and it is as it should be. Nothing was changed.
 The way on: npx poplin login --server https://poplin.example.com
   to check it   npx poplin doctor
   to mend it    npx poplin doctor --repair
@@ -320,8 +317,10 @@ would make       Worker                poplin, runs 0.1.0
 would make       DNS record            poplin.example.com
 would make       Access application    poplin: poplin.example.com, *-p-poplin.example.com
 the token's permissions: each read was allowed, and a write is proven by the run
-ready: a run would make 27 and change 1. nothing was changed
+ready: a run would make 27 and change 1. Nothing was changed.
 ```
+
+The sample is of a token that holds the four optional permissions. With a token that lacks one, the last line counts those rows too: `and leave out`, and their number.
 
 | The last line starts with | Means                                                                              | Exit code |
 | ------------------------- | ---------------------------------------------------------------------------------- | --------- |

@@ -8,7 +8,7 @@ order: 10
 Each line `npx poplin install cloudflare` can stop at, and what to do next; the steps themselves are in [Install](../start/install.md). An install [without a domain](../start/without-a-domain.md) stops the same way, but for the lines about a domain.
 
 ```text
-stopped before any change    the line ends in "nothing was changed": fix the cause, run the same command again
+stopped before any change    the line ends in "Nothing was changed.": fix the cause, run the same command again
 stopped part way             rows say stopped, failed, or not run: what is made stays, and every piece reads before it writes
 ```
 
@@ -43,7 +43,7 @@ A row says what happened to one piece. [Step 4 of Install](../start/install.md#4
 
 | A row                                                              | Means                                                   | Do                                                                |
 | ------------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------- |
-| `left out`, ending `add this permission to the account token and press Repair:` and a name | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
+| `left out`, ending `add this permission to the account token and run npx poplin doctor --repair:` and a name | nothing is wrong: an optional permission is not on the token | nothing, or [the optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) |
 | `stopped`, ending `Add this one:` or `Add this permission to the account token:` and a name | the token lacks the permission of that name | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `stopped`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows, then [finish with the repair](#the-second-run) |
 | `failed`, saying `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
@@ -60,7 +60,7 @@ The last line of a run that left something undone names the command that goes on
 | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
 | `Run this command again`                         | started, and not set yet                              | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `An install was started here and not finished`, and goes on. The other place is refused |
 | `Run npx poplin doctor --repair` and your `--domain` or `--no-domain` | set: its address is written, and pieces are missing   | that line as it is written, with the same token. Where the line has `--add-user` and an email, keep both: [the install kept its users](../upkeep/remove.md#keep-the-data) |
-| `nothing was changed. Run this command again once what the lines above say is no longer so.` | as it was before the run: the run printed no row, and changed nothing | the same line, once the line above it no longer holds: [Before any change](#before-any-change) has each |
+| `Nothing was changed. Run this command again once what the lines above say is no longer so.` | as it was before the run: the run printed no row, and changed nothing | the same line, once the line above it no longer holds: [Before any change](#before-any-change) has each |
 
 The first two go on from what stands: every piece reads before it writes. `poplin install` only makes a new install, so a second `install` on one that is set says `This account already holds poplin`, and changes nothing.
 
@@ -77,6 +77,8 @@ made      Access policy         poplin logins
 The login is ready. Open your dashboard and log in:
   https://poplin.example.com
 the install is mended.
+Your dashboard: https://poplin.example.com
+The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
 ```
 
 The sample shows a few of the rows. The repair asks for the domain, or Enter for none, and for the token, as the install did. The line the install printed has `--domain` or `--no-domain` on it, and that repair asks for the token alone. [I cannot log in](cannot-log-in.md) has every line it can stop at.

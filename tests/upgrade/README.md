@@ -34,13 +34,14 @@ A read is asked when the command of the code that made the install has its flags
 
 `upgrade.test.ts` lists what is not checked as skipped tests, each with what it needs.
 
-## The three tests
+## The tests
 
 | Test               | From                                                 | Expects                                                               |
 | ------------------ | ---------------------------------------------------- | --------------------------------------------------------------------- |
 | `upgrade.test.ts`  | the last release                                     | no finding; before the first release it says that nothing is released |
 | `detector.test.ts` | this code itself                                     | no finding                                                            |
-| `detector.test.ts` | a commit from before step 1 was last edited in place | findings for the database and the settings                            |
+| `detector.test.ts` | a commit from before step 1 was last edited in place | findings for the database, the settings, and the backup               |
+| `detector.test.ts` | answers written by hand                              | each comparison names what is gone or changed, and passes what is kept, moved, or added |
 
 ## Adding a schema step
 

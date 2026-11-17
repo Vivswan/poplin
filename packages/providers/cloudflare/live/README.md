@@ -418,7 +418,7 @@ The database's free plan takes 100,000 rows written a day, every database of the
 | a site put back from a backup             | 22            | 2 for each version more, and 1 where it runs out                           |
 | a site removed for good                   | 13            | with three versions and a day's count; 6 to the trash, 9 out of it         |
 | a change of who may open a site           | 4             | any other setting 2, a title 1 more and a name 2 more, and 1 where it is told an expiry |
-| a new link                                | 12            | a rollback 2, a setting of the install 3, a computer's login 3             |
+| a new link                                | 12            | a rollback 2, a setting of the install 6 and 3 more for a setting of the guard rules, a computer's login 3 |
 | a copy of a site                          | 24            | counted at the request that begins it; 19 for each request that goes on    |
 | a copy the install's job finishes         | 24            | none for an ask while the job copies; 19 and 1 for each round of the job, with the answer that names the site |
 | a listing of the bucket                   | 1             | the files of a version, and what an upload lacks                           |
@@ -458,12 +458,12 @@ A run started by hand with `load` ticked adds one check after all the others: so
 
 | Step | Requests | Rows written, at most | Bucket writes and lists |
 | --- | --- | --- | --- |
-| publish 5 sites of one page | one publish each | 20 each | 2 each |
-| publish one site of 20 files | one publish | 20 | 21 |
+| publish 5 sites of one page | one publish each | 23 each | 2 each |
+| publish one site of 20 files | one publish | 23 | 21 |
 | open its page | 30 one after another, then 50 at once | 2 each | none |
 | ask for a file it does not hold | 10 one after another, then 10 at once | 2 each | none |
 | list the sites | 5 one after another | none | none |
-| copy the site of 20 files | one command | 21 | 22 |
+| copy the site of 20 files | one command | 24 | 22 |
 | the run's sweep removes the 7 sites | one removal each | 13 each | 1 each |
 
 ```text
@@ -616,7 +616,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
 | a run started by hand with the load switched on                     | `load`: it is no row of any other run's table                            |
-| a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`, `download`: the checklist below        |
+| a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`: the checklist below, which also holds `download` |
 | a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` |
 
 ## The token's permissions
