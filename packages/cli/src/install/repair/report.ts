@@ -6,7 +6,7 @@ import { columns } from "../../commands/text";
 import type { Line } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED } from "../report";
+import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -47,13 +47,13 @@ export function foundWords(found: Whole<unknown>): string {
  * The stop of a look that found no whole install.
  *
  * @param provider - the provider, which the line that names `poplin install` names
- * @param careful - the careful choices of the repair's line, kept where the repair itself goes on
+ * @param careful - the careful choices of the repair's line, and `update` whether it asked for the newest release: both kept where the repair itself goes on
  * @param place - the place the repair looked at, which the install it names carries
  * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one.
  *   Where the install was started for another place, the sentence and the next step name one line: the install at that place.
  *   Where data was left behind, the sentence names `--adopt` and the next step is the install without it: the consent is a person's to add
  */
-export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[], place: readonly string[]): Stop {
+export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[], place: readonly string[], update: boolean): Stop {
   const next = NEXT.install(provider, [], place);
   const install = next.command;
 
@@ -63,7 +63,7 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
 
   if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
 
-  if (found.state === "held") return heldStop(found, NEXT.repair("this", careful, place), provider, place);
+  if (found.state === "held") return heldStop(found, NEXT.repair("this", careful, [...updateWords(update), ...place]), provider, place);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -79,14 +79,18 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
   return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
 }
 
-/** The stop of a repair that changed nothing, in the provider's own words. The repair that goes on from records of another version keeps the careful choices of the line and its place. */
-export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[]): Stop {
+/**
+ * The stop of a repair that changed nothing, in the provider's own words. The repair that goes on from records of another version keeps the careful choices of the line and its place.
+ *
+ * @param update - whether the line asked for the newest release, which the repair that goes on keeps
+ */
+export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean): Stop {
   const words = followed(repaired.words, UNCHANGED);
   if (repaired.why === "unreachable") return { problem: "unreachable", exit: 5, words };
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
 
-  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired, careful, place) };
+  if (repaired.why === "another" || repaired.why === "behind") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired, careful, place, update) };
 
   return { problem: PROBLEMS[repaired.why], exit: 1, words };
 }
@@ -111,7 +115,7 @@ export function repairedLines(repaired: Mended, run: Run, provider: Provider): L
  * The JSON value of a repair that worked through its rows.
  *
  * @param found - the install the repair went on from
- * @param named - the place of the install and the user the line was given to add, which the repair named next carries: without the user, the run after a dry run would add nobody
+ * @param named - the update the line asked for, the place of the install, and the user the line was given to add, which the repair named next carries: without them, the run after a dry run would take no release and add nobody
  * @returns `ok` and `ready` are whether the command exits with 0: nothing is left undone, or a run would leave nothing. `changes` is how many objects were changed or would be.
  *   Each row's state is under `will` in a dry run and under `did` in a run
  */
@@ -145,7 +149,7 @@ export function repairHelp(providers: readonly Provider[], provider?: Provider):
   return [
     [`poplin ${REPAIR_COMMAND} ${shown === undefined ? "<provider>" : `${others.length === 0 ? "" : `${shown.id} `}${shown.usage}`} [options]`],
     ["Mend your install at its provider, with an account token. It needs no login,", "so it is the way back in. It finds the install first, then makes each piece", "that is missing or differs, and leaves the rest."],
-    ["An install behind the newest release is brought to it: the way an install", "takes a release it cannot take by itself. One that runs the newest is left."],
+    ["A repair takes no newer release: where one is out, a row says so. With", "--update it first brings the install to the newest release, the way an", "install takes a release it cannot take by itself. Day to day: poplin update"],
     ...listed,
     ["Options:", ...optionLines(REPAIR_OPTIONS)],
     [...DRY_RUN_HELP],

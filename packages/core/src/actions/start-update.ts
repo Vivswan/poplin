@@ -33,7 +33,7 @@ const STARTS_PER_MINUTE = 1;
 const COUNT_KEY = "start_update";
 
 /** What a person is told of a release refused about `needs_hand`: the one command that takes it, with an account token. The dashboard and the command say it in these words. */
-export const TAKEN_BY_REPAIR = "The install cannot take this release by itself. To take it, run: npx poplin doctor --repair";
+export const TAKEN_BY_REPAIR = "The install cannot take this release by itself. To take it, run: npx poplin doctor --repair --update";
 
 /** What a start answers: the files of a release are in place, the version the install ran, and the version of the release. */
 export const STARTED_UPDATE = v.object({ started: v.literal(true), from: v.string(), to: v.string() });

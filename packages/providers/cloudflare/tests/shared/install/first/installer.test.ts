@@ -328,7 +328,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
 
     const world = await worldOf(account);
     const found = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
-    const mended = found.state === "whole" ? await installer.repair(found, KINDS[kind].where, { run: DRY, addUser: undefined }, world.reach, () => undefined) : undefined;
+    const mended = found.state === "whole" ? await installer.repair(found, KINDS[kind].where, { run: DRY, update: false, addUser: undefined }, world.reach, () => undefined) : undefined;
 
     expect(mended?.ok === true ? mended.rows.filter((row) => row.state !== "leave" && row.state !== "leave-out") : mended).toEqual([]);
   });

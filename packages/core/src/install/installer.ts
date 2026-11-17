@@ -192,9 +192,10 @@ export type Removed =
 /** An install that is set, as `find` answers it: the one state a repair goes on from. */
 export type Whole<Place> = Extract<Found<never, Place>, { readonly state: "whole" }>;
 
-/** What a repair is asked for: whether it changes anything, and the email of one more person to let log in, or `undefined` for none. */
+/** What a repair is asked for: whether it changes anything, whether it first brings an install that is behind to the newest release, and the email of one more person to let log in, or `undefined` for none. */
 export interface Mend {
   readonly run: Run;
+  readonly update: boolean;
   readonly addUser: Login | undefined;
 }
 
@@ -205,10 +206,11 @@ export interface Mend {
  * `address` is where the install's dashboard is.
  * The second shape is a repair that changed nothing: the provider gave no answer, or refused the token at the install; the install answers at `elsewhere` than the place named;
  * its records are of `another` poplin than this one, or it runs a newer release than the newest this one reads; or it `changed` since it was found, and is no whole install now.
+ * `behind` is an install behind the newest release whose records this code does not read as they are: only a repair that updates goes on from it.
  */
 export type Repaired =
   | { readonly ok: true; readonly rows: readonly Row[]; readonly steps: readonly Step[]; readonly blocked: readonly Blocked[]; readonly address: string; readonly ready: boolean }
-  | { readonly ok: false; readonly why: "unreachable" | "token" | "elsewhere" | "another" | "changed"; readonly words: string };
+  | { readonly ok: false; readonly why: "unreachable" | "token" | "elsewhere" | "another" | "behind" | "changed"; readonly words: string };
 
 /**
  * One provider, as the command works through it. `Where` is the provider's own answer of where the install goes, and `Place` what it found with a token: the command holds both and looks into neither.
@@ -255,7 +257,8 @@ export interface Installer<Where, Place> {
 
   /**
    * Mend an install that is set, with the token alone, or with a dry run say what a run would change. It needs no login of the install, and reads the install's own settings from its records.
-   * An install behind the newest release is brought to it first, and one that runs a newer release than this code reads is left whole.
+   * A repair mends and takes no newer release: an install behind the newest release is brought to it first only where `mend.update` asks, and else one row says that a newer release is out.
+   * An install that runs a newer release than this code reads is left whole.
    *
    * A user is added only once the provider took a change of who may log in from this token, in this run: a token that may only read adds nobody.
    *

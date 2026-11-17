@@ -59,6 +59,7 @@ const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "set --json": ["--private"],
   "set --server": ["--private"],
   "import --logins": ["--settings"],
+  "doctor --update": ["--repair"],
   "doctor --dry-run": ["--repair"],
   "doctor --add-user": ["--repair"],
   "doctor --yes": ["--repair"],

@@ -1,12 +1,13 @@
-// The release an install runs, brought to the newest one by a repair: the way an install takes a release it cannot take by itself.
+// The release an install runs, which a repair leaves, and brings to the newest one only where it is asked to update: the way an install takes a release it cannot take by itself.
 //
-//   the install runs      its Worker's row    sent
-//   the newest release    left                nothing
-//   an older one          changed             the release's checked files in one upload, then the database's steps
+//   the install runs      asked to update    its Worker's row              sent
+//   the newest release    yes or no          left                          nothing
+//   an older one          no                 left, and says what is out    nothing: no release is fetched
+//   an older one          yes                changed                       the release's checked files in one upload, then the database's steps
 //   an older one, and the newest release is one this poplin cannot place
-//                         none                the repair stops before it mends anything: the newest poplin places it, and mends the rest
-//   a newer one           none                the repair stops before it mends anything: this poplin would put older pieces back
-//   a version not read    left                nothing: no tag says it is behind
+//                         yes                none                          the repair stops before it mends anything: the newest poplin places it, and mends the rest
+//   a newer one           yes or no          none                          the repair stops before it mends anything: this poplin would put older pieces back
+//   a version not read    yes or no          left                          nothing: no tag says it is behind
 //
 // The upload is the install's own update, sent with the person's token in place of the kept key: the same checked files, the same four calls, every binding the Worker has kept by name.
 // It states the update it is where the website names the version the install ran, so the release's code knows the version it can go back to.
@@ -28,8 +29,11 @@ import { type Stepped, stepDatabase } from "./settings";
 /** The name of the install's Worker. */
 const SCRIPT = INSTALL_OBJECTS.worker;
 
-/** The command of the newest poplin that goes on where this one stops. */
-const NEWEST_POPLIN = "npx poplin@latest doctor --repair";
+/** The option of a repair that also updates, as a line gives it and a row names it. */
+const UPDATE = "--update";
+
+/** The command of the newest poplin that goes on where this one stops: the repair alone, and the repair that also updates. */
+export const NEWEST_POPLIN = { mend: "npx poplin@latest doctor --repair", update: `npx poplin@latest doctor --repair ${UPDATE}` } as const;
 
 /** What the row of the database's steps is called. */
 const STEPS = "Database steps";
@@ -37,11 +41,13 @@ const STEPS = "Database steps";
 /** What a row says, after the Worker's or the database's name. */
 const WORDS = {
   unread: "its version is not read, so no release is put in place",
+  unreadLeft: "its version is not read",
+  out: `is out: add ${UPDATE} to take it`,
   noNewest: "the project's website named no release, so nothing says whether a newer one is out. Run this again",
   unreachable: "the release's files could not be fetched. Run this again",
   no_release: "the project's website names no release now. Run this again",
   bad_release: "the release's files are not the ones the project published. Nothing was uploaded",
-  newer_release: `this release needs a newer poplin: ${NEWEST_POPLIN}`,
+  newer_release: `this release needs a newer poplin: ${NEWEST_POPLIN.update}`,
   token: "Cloudflare refused the token",
   silent: "no answer from Cloudflare. The release may be in: run this again",
   part: "the Worker's bindings were not read whole. Run this again",
@@ -55,10 +61,13 @@ const WORDS = {
 /** The row that says the install's records wait for a release that is not in place, where they are of another schema than this poplin's. */
 export const RECORDS_WAIT: Row = { object: STEPS, state: "not-run", detail: `${INSTALL_OBJECTS.database}: ${WORDS.waits}` };
 
-/** What a repair hands over to bring the install's code to the newest release. */
+/** What a repair hands over to settle the install's code. */
 interface Asked {
   /** The install as the look found it: the version it runs, and the newest release the website named. */
   readonly found: Whole<Place>;
+
+  /** Whether the person asked for the newest release: without it no release is fetched and none is sent. */
+  readonly update: boolean;
 
   /** The id of the database the Worker is bound to. */
   readonly databaseId: string;
@@ -76,10 +85,14 @@ interface Asked {
 /**
  * What became of the install's code.
  *
- * `left` is a Worker nothing is done to. `placed` is a release a run put in place, or a dry run read that a run would. `unplaced` is one that is not in place, which a row says why.
+ * `left` is a Worker nothing is done to: `out` is the newer release it was not asked to take, where one is out.
+ * `placed` is a release a run put in place, or a dry run read that a run would. `unplaced` is one that is not in place, which a row says why.
  * `stop` is an install the newest poplin alone goes on with: one of a newer release than the newest this poplin reads, or behind a release this poplin cannot place. Nothing is mended, and its words say what to run.
  */
-type Settled = { readonly state: "left" | "placed" | "unplaced"; readonly rows: readonly Row[] } | { readonly state: "stop"; readonly words: string };
+type Settled =
+  | { readonly state: "left"; readonly rows: readonly Row[]; readonly out: string | undefined }
+  | { readonly state: "placed" | "unplaced"; readonly rows: readonly Row[] }
+  | { readonly state: "stop"; readonly words: string };
 
 /** The Worker's row. */
 function workerRow(state: Row["state"], detail: string, right?: string): Row {
@@ -112,8 +125,13 @@ function stepsRow(stepped: Stepped, rights: Asked["rights"]): Row | undefined {
   return rights.lacks(failure) ? { object: STEPS, state: "block", detail: `${name}: ${LACKS}: ${right}`, right } : { object: STEPS, state: "fail", detail: `${name}: ${failureWords(failure)}` };
 }
 
+/** A Worker nothing is done to, with its one row. */
+function left(detail: string, out?: string): Extract<Settled, { readonly state: "left" }> {
+  return { state: "left", rows: [workerRow("leave", detail)], out };
+}
+
 /** Send the one upload of a release with the token, and say in rows what Cloudflare made of it. */
-async function uploaded(asked: Asked, release: Release, from: string): Promise<Extract<Settled, { readonly rows: readonly Row[] }>> {
+async function uploaded(asked: Asked, release: Release, from: string): Promise<Extract<Settled, { readonly state: "placed" | "unplaced" }>> {
   const { place } = asked.found;
   const worker = { accountId: place.accountId, script: SCRIPT };
   const first = (lacking: readonly string[]): ReturnType<Release["first"]> => release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: asked.databaseId }).filter((binding) => lacking.includes(binding.name));
@@ -142,7 +160,7 @@ async function uploaded(asked: Asked, release: Release, from: string): Promise<E
 async function taken(asked: Asked, from: string): Promise<Settled> {
   const release = await newestRelease(asked.reach);
   // A release this code cannot read as an upload, or of another schema than its own, is one whose steps it cannot run and whose pieces it cannot mend: the newest poplin does both.
-  if (release === "newer_release" || (typeof release !== "string" && release.schema !== OWN_SCHEMA)) return { state: "stop", words: `The newest release is one this poplin cannot put in place. Run the newest poplin: ${NEWEST_POPLIN}` };
+  if (release === "newer_release" || (typeof release !== "string" && release.schema !== OWN_SCHEMA)) return { state: "stop", words: `The newest release is one this poplin cannot put in place. Run the newest poplin: ${NEWEST_POPLIN.update}` };
 
   if (typeof release === "string") return { state: "unplaced", rows: [workerRow("fail", `, runs ${from}: ${WORDS[release]}`)] };
 
@@ -156,21 +174,27 @@ async function taken(asked: Asked, from: string): Promise<Settled> {
 }
 
 /**
- * Bring the code of an install to the newest release, or with a dry run say what a run would do.
+ * Settle the code of an install: leave it, or where the person asked to update, bring it to the newest release; a dry run says what a run would do.
  *
- * An install that runs the newest release gets no upload, and one that runs a newer release than the newest this poplin reads is never put back.
+ * An install that runs the newest release gets no upload, and neither does one that was not asked to update. One that runs a newer release than the newest this poplin reads is never put back.
  *
- * @returns the Worker's row, and after an upload the row of the database's steps where it had any to run; or the words of an install that is newer than this poplin reads
+ * @returns the Worker's row, and after an upload the row of the database's steps where it had any to run; or the words of an install the newest poplin alone goes on with
  */
 export async function syncRelease(asked: Asked): Promise<Settled> {
   const { version, newest } = asked.found;
-  if (version === undefined) return { state: "left", rows: [workerRow("leave", `: ${WORDS.unread}`)] };
+  if (version === undefined) return left(`: ${asked.update ? WORDS.unread : WORDS.unreadLeft}`);
+
+  if (version === newest) return left(`, runs ${version}`);
+
+  if (newest !== undefined && isAbove(version, newest)) {
+    const command = asked.update ? NEWEST_POPLIN.update : NEWEST_POPLIN.mend;
+
+    return { state: "stop", words: `The install runs ${version}, and the newest release this poplin reads is ${newest}. Nothing is put back to an older release. Run the newest poplin: ${command}` };
+  }
+
+  if (!asked.update) return newest === undefined ? left(`, runs ${version}`) : left(`, runs ${version}; ${newest} ${WORDS.out}`, newest);
 
   if (newest === undefined) return { state: "unplaced", rows: [workerRow("fail", `, runs ${version}: ${WORDS.noNewest}`)] };
-
-  if (version === newest) return { state: "left", rows: [workerRow("leave", `, runs ${version}`)] };
-
-  if (isAbove(version, newest)) return { state: "stop", words: `The install runs ${version}, and the newest release this poplin reads is ${newest}. Nothing is put back to an older release. Run the newest poplin: ${NEWEST_POPLIN}` };
 
   return taken(asked, version);
 }

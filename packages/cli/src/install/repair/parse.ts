@@ -1,4 +1,4 @@
-// The words after `poplin doctor` that carry `--repair`, read once into a plan: where the install is, the token, and whether one more person is let in.
+// The words after `poplin doctor` that carry `--repair`, read once into a plan: where the install is, the token, whether a newer release is taken, and whether one more person is let in.
 // A line that contradicts itself is refused here with one line, and so is a run that asks nothing and lacks an answer. Nothing is read from disk or sent anywhere.
 
 import { type Login, parseLogin } from "../../../../core/src/auth/logins";
@@ -13,6 +13,7 @@ export const REPAIR_COMMAND = "doctor --repair";
 /** The options of a repair, which every provider takes. The parser reads these rows and the help prints them. */
 export const REPAIR_OPTIONS: readonly OptionRow[] = [
   { flag: "--repair", value: null, about: "mend the install at its provider, with an account token", variable: null },
+  { flag: "--update", value: null, about: "first bring an install that is behind to the newest release", variable: null },
   { flag: "--dry-run", value: null, about: "say what a repair would change, and change nothing", variable: null },
   { flag: "--add-user", value: "<email>", about: "let one more person log in", variable: null },
   { flag: "--yes", value: null, about: "ask nothing; a missing answer stops the run and is named", variable: null },
@@ -25,7 +26,6 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   "--server": "--repair works with the account token, not a login: leave out --server",
   "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
   "--login": "a repair keeps the users the install has. To let one more person in: --add-user <email>",
-  "--update": "To update an install: poplin update",
   "--remove": "To remove an install: poplin uninstall <provider>",
 };
 
@@ -37,7 +37,7 @@ const COMMAND: CommandWords = { name: REPAIR_COMMAND, options: REPAIR_OPTIONS, e
  *
  * `where` on a terminal is the provider's own answer, or the questions it still has. `token` there is the one the variable held.
  */
-export type RepairPlan = { readonly provider: Provider; readonly json: boolean; readonly run: Run; readonly addUser: Login | undefined } & (
+export type RepairPlan = { readonly provider: Provider; readonly json: boolean; readonly run: Run; readonly update: boolean; readonly addUser: Login | undefined } & (
   | { readonly asking: "never"; readonly where: unknown; readonly token: GivenToken }
   | { readonly asking: "terminal"; readonly where: { readonly known: true; readonly where: unknown } | { readonly known: false; readonly open: readonly Question<unknown>[] }; readonly token: Token | undefined }
 );
@@ -79,7 +79,7 @@ function planned(read: Named, env: Variables, asking: boolean, json: boolean): R
   if ("problem" in answers) return answers;
 
   const { where, addUser } = answers;
-  const said = { provider: read.provider, json, run: read.shared.has("dry-run") ? "dry-run" : "apply", addUser } as const;
+  const said = { provider: read.provider, json, run: read.shared.has("dry-run") ? "dry-run" : "apply", update: read.shared.has("update"), addUser } as const;
   if (asking) return { ...said, asking: "terminal", where: where.ok ? { known: true, where: where.where } : { known: false, open: where.open }, token: answers.token };
 
   const piped: GivenToken | undefined = read.shared.has("token-stdin") ? { from: "stdin" } : undefined;

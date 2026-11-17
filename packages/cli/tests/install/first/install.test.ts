@@ -204,7 +204,7 @@ describe("what a look finds", () => {
       "  to update it  npx poplin update              (0.2.0 is out)",
       "  to remove it  npx poplin uninstall stand-in",
     ]);
-    expect<unknown>([account.runs, account.changes, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([[], 0, [[{ kind: "none" }, { run: "dry-run", addUser: undefined }]]]);
+    expect<unknown>([account.runs, account.changes, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([[], 0, [[{ kind: "none" }, { run: "dry-run", update: false, addUser: undefined }]]]);
   });
 
   // Drift: the line once named the repair for every install that is there. A person whose install was whole was sent to mend it, when the way on was to log in.
@@ -492,7 +492,7 @@ describe.each([
     const repair = await runLine(command.replace("npx poplin ", ""), account, { env: HELD });
     const where = place === "--no-place" ? { kind: "none" } : { kind: "place", name: "example.com" };
 
-    expect<unknown>([repair.code, account.finds, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([0, [where], [[where, { run: "apply", addUser: login }]]]);
+    expect<unknown>([repair.code, account.finds, account.repairs.map((asked) => [asked.where, asked.mend])]).toEqual([0, [where], [[where, { run: "apply", update: false, addUser: login }]]]);
   });
 
   // Drift: the line is one a person pastes into a shell. An email with an apostrophe or a dollar sign, pasted bare, opens a quote that never closes or names a variable, and the repair adds nobody or somebody else.

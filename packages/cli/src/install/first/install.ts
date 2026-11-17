@@ -62,8 +62,8 @@ interface Ended {
 async function standing(found: Whole<unknown>, where: unknown, request: InstallRequest, ends: InstallEnds): Promise<Stop> {
   const there = { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest } as const;
   const place = placeOf(request.provider, where);
-  const read = await request.provider.repair(found, where, { run: "dry-run", addUser: undefined }, ends.reach, () => undefined);
-  if (!read.ok) return { ...there, mend: "unread", unread: read.words, next: repairAfter(read, [], place) };
+  const read = await request.provider.repair(found, where, { run: "dry-run", update: false, addUser: undefined }, ends.reach, () => undefined);
+  if (!read.ok) return { ...there, mend: "unread", unread: read.words, next: repairAfter(read, [], place, false) };
 
   if (!read.ready || changesIn(read.rows) > 0) return { ...there, mend: "something", next: NEXT.repair("this", [], place) };
 

@@ -65,7 +65,7 @@ const UNCHANGED_ENDING = /(^|\. |: )nothing was changed\.?$/;
 /** What every dry run of the three commands exits with, as each help says it. */
 export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
 
-/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (the place the run knows or the stop names, or a user, never a consent), then each careful choice. */
+/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (a place, a user, a repair's update, never a consent), then each careful choice. */
 export const NEXT = {
   install: (provider: Provider | undefined, careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id, ...named], careful) }),
   repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({
@@ -147,13 +147,26 @@ export function runningWords(version: string | undefined): string {
 export const REFUSED_AS = { token: "token_refused", no_domain: "no_domain", other_place: "other_place" } as const;
 
 /**
+ * The option of a repair that first brings the install to the newest release, as the command it is named in carries it.
+ *
+ * @param update - whether the line asked for it, or the stop it is named after says that only such a repair goes on
+ */
+export function updateWords(update: boolean): readonly string[] {
+  return update ? ["--update"] : [];
+}
+
+/**
  * What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again.
+ * An install that is behind, with records this poplin does not read as they are, is one only a repair that updates goes on from, so that repair is named.
  *
  * @param careful - the careful choices of the repair's own line; none where another command names the repair
  * @param place - the place the run knows, which is left out where the provider says the install answers elsewhere
+ * @param update - whether the repair's own line asked for the newest release; false where another command names the repair
  */
-export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[]): Next {
-  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, refused.why === "elsewhere" ? [] : place);
+export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean): Next {
+  const named = [...updateWords(update || refused.why === "behind"), ...(refused.why === "elsewhere" ? [] : place)];
+
+  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, named);
 }
 
 /** Write a word so a POSIX shell reads it as that one word: as it is, or in single quotes with each one inside written `'\''`. */
