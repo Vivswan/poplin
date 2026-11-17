@@ -75,6 +75,9 @@ const FIRST_RESET = 105;
 /** The rows the same reset counts: 3 removals at 13, 12 new sites at 22, the demo among them, 1 more for each of the 3 that run out, 2 more versions at 13, and 1 move to the trash at 6. */
 const FIRST_RESET_ROWS = 338;
 
+/** What a reset counts on an install that holds no site, as the one made anew after the upgrade of a release: the same without the 3 removals, each a bucket list and 13 rows. */
+const FRESH_RESET = { operations: FIRST_RESET - 3, rows: FIRST_RESET_ROWS - 3 * 13 };
+
 /** The rows of a site removed for good, as the harness counts one. */
 const REMOVAL_ROWS = 13;
 
@@ -426,6 +429,17 @@ describe("the reset of the test install, against a local fake", () => {
     expect(files.map((file) => JSON.parse(file))).toEqual([addresses]);
     expect(files.map((file) => readRealSites(JSON.parse(file)))).toEqual([addresses]);
     expect(Object.keys(addresses).sort()).toEqual(PUBLISHED);
+  });
+
+  // The figure the put-back after a release's upgrade is planned with: it runs on the pull request of a release alone, so a sample that grew past the reset's ceilings would first show there, as a demo that stays down.
+  test.each(["domain", "account address"] as const)("on an install of %s made anew, which holds no site, a reset publishes every sample and the demo for 299 rows and 102 bucket writes and lists", async (kind) => {
+    const install = await openSqlInstall(kind);
+    const ended = await reset(install, await install.addToken("the put-back"));
+
+    expect({ ended, left: await left(install) }).toEqual({
+      ended: { ...PUT, linked: kind === "domain" ? PUT.linked : 0, removed: 0, trashed: 0, demo: "published", ...FRESH_RESET },
+      left: resetState(1),
+    });
   });
 
   // Drift: every site of an install without a domain answers under a path, which is no address the demo takes for a link. A reset that wrote the host's root there would send every link of the demo to a 404, on the second test account alone.

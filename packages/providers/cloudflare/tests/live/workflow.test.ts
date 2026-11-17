@@ -2,6 +2,7 @@
 // There is one workflow for each kind of install, and both call the one file that holds the steps and the one that holds the upgrade.
 // A push that reaches an install and starts no run, a file of one kind that starts the other kind's run, a midnight reset that takes a waiting run's place, or a wait that no test drives would show on a real run alone.
 // So would a job that reaches a test account from a run that may not, a fuzz target no job runs, a second copy of the fuzz command with a budget of its own, or an upgrade of the test installs under a caller that hands it no secret.
+// So would a release's upgrade that leaves a test install without the samples and the demo: only the pull request of a release runs the jobs that put it back.
 
 import { describe, expect, test } from "bun:test";
 import { mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
@@ -73,11 +74,17 @@ const STEPS = parse("live-install.yml");
 /** The file both workflows and the release's own workflow call: the upgrade of one install, parsed. */
 const UPGRADE = parse("live-upgrade.yml");
 
-/** The workflow that upgrades both installs on the pull request of a release, parsed. */
+/** The workflow that upgrades both installs on the pull request of a release, and puts each back, parsed. */
 const RELEASE = parse("release-live-upgrade.yml");
 
 /** The job of that workflow that upgrades the install of each kind. */
 const RELEASE_JOBS = { domain: "domain", "account address": "account-address" } as const;
+
+/** The job of that workflow that puts the install of each kind back after its upgrade. */
+const PUT_BACK_JOBS = { domain: "put-back-domain", "account address": "put-back-account-address" } as const;
+
+/** The rights the job `checks` of the steps asks for. GitHub starts no run of a workflow whose caller grants a called job less than it asks. */
+const ASKED_RIGHTS = { contents: "read", actions: "read" };
 
 /** The environments of the two test accounts. */
 const ENVIRONMENTS: readonly string[] = Object.values(KINDS).map((kind) => kind.environment);
@@ -171,6 +178,8 @@ interface Step {
 /** One job of a workflow, as far as a test reads it. */
 interface Job {
   readonly if?: string;
+  readonly needs?: readonly string[];
+  readonly permissions?: Readonly<Record<string, string>>;
   readonly environment?: string;
   readonly strategy?: { readonly matrix?: Readonly<Record<string, unknown>> };
   readonly concurrency?: Readonly<Record<string, unknown>>;
@@ -296,10 +305,13 @@ describe("what each workflow hands the steps", () => {
     ["the steps", (kind: Kind) => CALLERS[kind].jobs.live],
     ["the upgrade", (kind: Kind) => CALLERS[kind].jobs.upgrade],
     ["the upgrade of a release", (kind: Kind) => RELEASE.jobs[RELEASE_JOBS[kind]]],
+    ["the put-back after the upgrade of a release", (kind: Kind) => RELEASE.jobs[PUT_BACK_JOBS[kind]]],
   ] as const)("each workflow names its own kind and the environment of that kind's account for %s, and the two hand over nothing else that differs", (_what, jobOf) => {
     const handed = BOTH.map(jobOf);
     const pairs = handed.map((job) => ({ kind: job?.with?.kind, environment: job?.with?.environment }));
-    const rest = handed.map((job) => ({ ...job, name: undefined, with: { ...job?.with, kind: undefined, environment: undefined } }));
+    // A put-back waits for the upgrade of its own kind, under that job's name: one that waited for the other kind's could run before its own upgrade, which then leaves the install as before.
+    const waits = (job: Job | undefined): readonly string[] => (job?.needs ?? []).map((name) => (BOTH.some((kind) => RELEASE_JOBS[kind] === name && job?.with?.kind === kind) ? "the upgrade of its own kind" : name));
+    const rest = handed.map((job) => ({ ...job, name: undefined, needs: waits(job), with: { ...job?.with, kind: undefined, environment: undefined } }));
 
     expect({ pairs, same: rest[0] }).toEqual({ pairs: BOTH.map((kind) => ({ kind, environment: KINDS[kind].environment })), same: rest[1] });
   });
@@ -308,7 +320,7 @@ describe("what each workflow hands the steps", () => {
 describe("the secrets of the live workflows", () => {
   // A called workflow reads only the secrets it declares. A step that reads one more would be handed nothing, and would stop on the real run alone.
   test.each([
-    ["the steps", STEPS, BOTH.map((kind) => CALLERS[kind].jobs.live)],
+    ["the steps", STEPS, BOTH.flatMap((kind) => [CALLERS[kind].jobs.live, RELEASE.jobs[PUT_BACK_JOBS[kind]]])],
     ["the upgrade", UPGRADE, BOTH.flatMap((kind) => [CALLERS[kind].jobs.upgrade, RELEASE.jobs[RELEASE_JOBS[kind]]])],
   ] as const)("every secret a step of %s reads is one its file declares, and each caller hands over those names and no other", (_what, called, callers) => {
     const read = Object.values(called.jobs).flatMap((job) => (job.steps ?? []).flatMap((step) => Object.values(step.env ?? {}).flatMap((value) => [...String(value).matchAll(/secrets\.(\w+)/g)].map((match) => match[1] ?? ""))));
@@ -451,8 +463,8 @@ describe("the release gate", () => {
 
 describe("the live upgrade of a release", () => {
   // GitHub hands a called workflow only the secrets its caller passes, and a job two calls deep under a caller that passes none reads empty values: the upgrade of a release stopped there, on the real run alone.
-  test("the event starts the workflow that calls the upgrade, so no workflow between them can hold the secrets back", () => {
-    const callers = workflows().filter((file) => Object.values(parse(file).jobs).some((job) => job.uses === `./${WORKFLOWS}/live-upgrade.yml`));
+  test.each(["live-upgrade.yml", "live-install.yml"])("the event starts each workflow that calls %s, so no workflow between them can hold the secrets back", (called) => {
+    const callers = workflows().filter((file) => Object.values(parse(file).jobs).some((job) => job.uses === `./${WORKFLOWS}/${called}`));
 
     expect(Object.fromEntries(callers.map((file) => [file, Object.keys(parse(file).on).includes("workflow_call")]))).toEqual({
       "live-checks-account-address.yml": false,
@@ -463,8 +475,17 @@ describe("the live upgrade of a release", () => {
 
   // Drift: the workflow starts for every pull request. A job without the branch of a release would wait in the lane of the live checks for each of them, to be refused there.
   test("each job takes the branch of a release alone, the one the guard of the called job admits", () => {
-    const asked = Object.values(RELEASE.jobs).map((job) => job.if);
+    const asked = BOTH.map((kind) => [RELEASE.jobs[RELEASE_JOBS[kind]]?.if, RELEASE.jobs[PUT_BACK_JOBS[kind]]?.if]);
 
-    expect(asked).toEqual(BOTH.map(() => `github.head_ref == '${RELEASE_BRANCH}'`));
+    expect({ asked, jobs: Object.keys(RELEASE.jobs).length }).toEqual({ asked: BOTH.map(() => [`github.head_ref == '${RELEASE_BRANCH}'`, `\${{ !cancelled() && github.head_ref == '${RELEASE_BRANCH}' }}`]), jobs: 2 * BOTH.length });
+  });
+});
+
+describe("the put-back after the live upgrade of a release", () => {
+  // GitHub refuses the whole workflow, upgrade and all, where a caller grants a called job less than it asks: no run starts, and the pull request shows no check to read.
+  test("every caller of the steps grants the rights their job asks for", () => {
+    const callers = workflows().flatMap((file) => Object.values(parse(file).jobs).filter((job) => job.uses === `./${WORKFLOWS}/live-install.yml`));
+
+    expect({ asks: STEPS.jobs.checks?.permissions, grants: callers.map((job) => job.permissions) }).toEqual({ asks: ASKED_RIGHTS, grants: [ASKED_RIGHTS, ASKED_RIGHTS, ASKED_RIGHTS, ASKED_RIGHTS] });
   });
 });

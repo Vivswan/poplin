@@ -8,6 +8,8 @@
 #     -> make the standing test install match the commit -> run packages/providers/cloudflare/live against it -> put the install back
 #   a run by hand with `start_over` ticked -> the same steps, and the one that makes the install match first removes it with `poplin uninstall`, then makes it from nothing
 #   a run by hand with `upgrade` ticked -> the caller first runs live-upgrade.yml: the older build installed with its own commands, filled, and updated to this commit's build; then these steps
+#   the pull request of a release -> release-live-upgrade.yml calls these steps after its upgrade, with `put_back_only`: main checked out and built
+#     -> the install made to match main, which starts it over where the upgrade left its later schema step -> put back, with no checks between
 #
 #   make the install match: `poplin install` where the account holds none, and where it holds one the commit's build by the upload of an update, then `poplin doctor --repair`
 #   midnight UTC -> the same steps for main as it is, with one check more: a copy too large for one request, which the install's job finishes
@@ -43,6 +45,10 @@ on:
         default: false
       load:
         description: Also run the small load after the checks
+        type: boolean
+        default: false
+      put_back_only:
+        description: Run no checks, and on a pull request make the install from the branch it would merge into
         type: boolean
         default: false
     # The names the steps read. A caller must hand each name over, and the value may be empty: the one a step reads is the secret of the job's environment.
@@ -86,10 +92,11 @@ jobs:
       cancel-in-progress: false
       queue: max
     steps:
-      # The commit of the push, the one whose gate the next step waits for.
+      # The commit of the push, the one whose gate the next step waits for. A put-back on a pull request takes the branch it would merge into, so the install is the one main's own run makes; any other run names no ref.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.put_back_only && github.base_ref || '' }}
       - uses: ./.github/actions/setup
       # The same asking as the job's `if:`, read from the file of the event: it stops the job before any step is handed a secret.
       - name: Refuse a run that may not reach a test account
@@ -115,6 +122,7 @@ jobs:
           POPLIN_LIVE_START_OVER: ${{ inputs.start_over }}
         run: bun run --silent --cwd packages/providers/cloudflare live:converge
       - name: Run the live checks
+        if: ${{ !inputs.put_back_only }}
         timeout-minutes: 25
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
