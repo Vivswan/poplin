@@ -69,4 +69,21 @@ describe("the dialog that edits a site", () => {
 
     expect([after, sent]).toEqual([[DRAFT.title, "trip-notes", true], [{ title: DRAFT.title }]]);
   });
+
+  // Drift: with the name emptied, Save is off and Enter does nothing, and a dialog that says nothing of it leaves a person pressing a dead button. A name of two letters is told its rule by the server; an empty one never gets that far.
+  test("an emptied Name says under the field that a site needs one, with Save off, and the hint is back once a letter is typed", () => {
+    render(<Editing site={SITE} />);
+    const name = screen.getByRole("textbox", { name: "Name" });
+    const says = (): readonly [needed: number, hint: number, save: boolean] => [screen.queryAllByText("A site needs a name.").length, screen.queryAllByText("The link uses this name. Old links keep working.").length, held()[2]];
+    const before = says();
+    fireEvent.change(name, { target: { value: "  " } });
+    const emptied = says();
+    fireEvent.change(name, { target: { value: "t" } });
+
+    expect([before, emptied, says()]).toEqual([
+      [0, 1, false],
+      [1, 0, false],
+      [0, 1, true],
+    ]);
+  });
 });

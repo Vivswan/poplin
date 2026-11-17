@@ -22,7 +22,7 @@ interface StatusLineProps {
 /** Draw the line. */
 export function StatusLine({ line, tone, beside, head }: StatusLineProps): ReactNode {
   return (
-    <div ref={head} tabIndex={-1} role="status" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 outline-none">
+    <div ref={head} tabIndex={-1} role="status" data-tone={tone} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 outline-none">
       <span className="flex items-center gap-2 font-medium">
         <ToneMark tone={tone} />
         {line}

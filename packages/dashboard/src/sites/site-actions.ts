@@ -68,7 +68,7 @@ export function siteActions(onChanged: (before: Site, after: Site | null) => voi
 
   // A site that is out of the trash again has nothing left to undo: the line that said it went there leaves.
   const restore: SiteActions["restore"] = async (site) => {
-    const restored = await run(site, send(routes.restore.$post({ param: at(site), json: {} })), "Restored from the trash.");
+    const restored = await run(site, send(routes.restore.$post({ param: at(site), json: {} })), `${shownName(site)} restored.`);
     if (restored !== undefined) unsay(trashLine(site));
 
     return restored;

@@ -13,7 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QUERIES } from "@/lib/api";
 import { noteFocus } from "@/lib/focus";
 import { IN_BROWSER, PHONE } from "@/lib/media";
-import { leaveAtPress, leaveNewest } from "@/lib/notify";
+import { leaveAtPress } from "@/lib/notify";
 import { Screens } from "@/screens";
 
 /** How long a pointer rests on a control before its hint shows, in milliseconds. */
@@ -28,9 +28,6 @@ const LINE_LOOK = { toast: "cn-toast py-2.5! has-data-description:py-1!", title:
 /** Draw the place where every result is said. */
 function Lines(): ReactNode {
   const phone = useMediaQuery(PHONE, IN_BROWSER);
-  useEffect(() => {
-    if (phone) leaveNewest();
-  }, [phone]);
   useEffect(() => {
     document.addEventListener("click", leaveAtPress);
     document.addEventListener("focusin", noteFocus);
