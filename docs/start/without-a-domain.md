@@ -139,7 +139,7 @@ The Access application is Cloudflare's login in front of the dashboard and of ev
 
 ## Log in
 
-The command's last question logs this machine in, as [step 5 of Install](install.md#5-log-this-machine-in-and-check) shows: the pages in your browser are the same. After a no, or on another machine, the address after `--server` is the dashboard's, as the command printed it:
+The command's last question logs this machine in, as [step 5 of Install](install.md#5-log-this-machine-in-and-check) shows: the pages in your browser are the same. After a no, or on another machine, the URL after `--server` is the dashboard's, as the command printed it:
 
 ```sh
 npx poplin login --server https://poplin.your-name.workers.dev

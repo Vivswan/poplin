@@ -208,7 +208,7 @@ Next: npx poplin login --server https://poplin.example.com
 
 | The first line says            | Run next                                                                      |
 | ------------------------------ | ----------------------------------------------------------------------------- |
-| `and needs no repair`          | log in: the line under it has the address                                     |
+| `and needs no repair`          | log in: the line under it has the URL                                         |
 | `and needs a repair`           | the repair, as the line under it writes it: with `--domain` or `--no-domain`  |
 | neither                        | the line under it says why that was not read, and names the repair's dry run  |
 
@@ -220,7 +220,7 @@ Three things ask for a token again: the dashboard's [Domain](../dashboard/domain
 
 ## 5. Log this machine in, and check
 
-At `Log this machine in now?`, Yes is chosen already: press Enter. It prints an address and a short code in your terminal, and opens the address in your browser:
+At `Log this machine in now?`, Yes is chosen already: press Enter. It prints a URL and a short code in your terminal, and opens the URL in your browser:
 
 ```text
 Open this URL and approve the login:
@@ -230,7 +230,7 @@ Enter the last 4 characters of this code on that page:
 The code expires in 10 minutes
 ```
 
-Here the last 4 letters are `RDMP`. Yours differ. If no browser opens, copy the address of the second line into your browser.
+Here the last 4 letters are `RDMP`. Yours differ. If no browser opens, copy the URL of the second line into your browser.
 
 | The browser shows            | Do                                                                    |
 | ---------------------------- | --------------------------------------------------------------------- |
@@ -254,7 +254,7 @@ An agent on this machine uses the same login. With Everything it reaches a site 
 
 The page takes only the letters of the code your terminal printed. If it refuses them, or you did not start a login, press Deny.
 
-After a no, or on another machine, the same login is one line, with the address of your own dashboard, as the command printed it:
+After a no, or on another machine, the same login is one line, with the URL of your own dashboard, as the command printed it:
 
 ```sh
 npx poplin login --server https://poplin.example.com
@@ -280,7 +280,7 @@ ok  problems  none in 7 days
 
 The login lasts 30 days: after that, `npx poplin login` makes a new one. **If a line does not start with `ok`**, [When the install stops](../fix/an-install-step-fails.md#the-machine-is-not-logged-in) has it.
 
-Your dashboard is at the address the command printed. It opens on Sites, which says `No sites yet`.
+Your dashboard is at the URL the command printed. It opens on Sites, which says `No sites yet`.
 
 ## Publish
 
@@ -396,7 +396,7 @@ A repair that found an install started for another place names the install with 
 | ----------- | --------------------------------------------------------------------------- |
 | `install`   | the install, as `command` writes it, with the login added                   |
 | `repair`    | the repair, as `command` writes it: the newest poplin's where it says `npx poplin@latest` |
-| `login`     | `npx poplin login`, with `--server` and the install's address               |
+| `login`     | `npx poplin login`, with `--server` and the install's URL                   |
 | `uninstall` | the removal, as `command` writes it, with its proof added: a removal's dry run, one that left a kind, or one whose token could not look for a kind |
 | `none`      | nothing                                                                     |
 

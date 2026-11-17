@@ -29,12 +29,12 @@ You publish with the MCP tools, or with the `poplin` command when the tools are 
 | `list_sites`    | lists the sites; with `trash`, the trash   | `npx poplin list`, `npx poplin list --trash`              |
 | `update_site`   | changes who can open a site, by `access`   | `npx poplin set report--k3f9x2ab71qz --unlisted`          |
 | `rollback_site` | goes back one version, or to `version`     | `npx poplin rollback report--k3f9x2ab71qz`                |
-| `new_link`      | gives the site a new address               | `npx poplin new-link report--k3f9x2ab71qz`                |
+| `new_link`      | gives the site a new URL                   | `npx poplin new-link report--k3f9x2ab71qz`                |
 | `delete_site`   | moves the site to the trash                | `npx poplin delete report--k3f9x2ab71qz`                  |
 | `restore_site`  | takes it back out of the trash             | `npx poplin restore report--k3f9x2ab71qz`                 |
-| `duplicate_site` | makes a private copy with a new address   | `npx poplin duplicate report--k3f9x2ab71qz`               |
+| `duplicate_site` | makes a private copy with a new URL       | `npx poplin duplicate report--k3f9x2ab71qz`               |
 
-`site` names one site: its label (`report--k3f9x2ab71qz`), its bare id, its address (`url`), or the public name of a public site. Add `--json` to a command to get the site as JSON.
+`site` names one site: its label (`report--k3f9x2ab71qz`), its bare id, its URL (`url`), or the public name of a public site. Add `--json` to a command to get the site as JSON.
 
 ## Publishing
 

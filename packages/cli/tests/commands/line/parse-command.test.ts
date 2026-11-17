@@ -85,7 +85,7 @@ describe("parseCommand", () => {
     ["poplin list --trash", { kind: "list", trash: true, ...PLAIN }],
     ["poplin login", { kind: "login", publisher: false, browser: true, ...PLAIN }],
     ["poplin login --publisher", { kind: "login", publisher: true, browser: true, ...PLAIN }],
-    ["poplin login --publisher --name ci-runner --no-browser", { kind: "login", publisher: true, browser: false, computer: "ci-runner", ...PLAIN }],
+    ["poplin login --publisher --machine ci-runner --no-browser", { kind: "login", publisher: true, browser: false, computer: "ci-runner", ...PLAIN }],
     ["poplin logout", { kind: "logout", dryRun: false, ...PLAIN }],
     ["poplin whoami", { kind: "whoami", ...PLAIN }],
     ["poplin doctor", { kind: "doctor", ...PLAIN }],

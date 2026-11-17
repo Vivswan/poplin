@@ -72,7 +72,7 @@ a  ask two things          a domain or none; the email of the first user
 b  the browser             the user switches on what no command can
 c  the account token       the user makes it; it never passes through the chat
 d  the dry run             reads everything, changes nothing, and says what blocks a run
-e  the run                 makes the install, and prints the dashboard's address
+e  the run                 makes the install, and prints the dashboard's URL
 ```
 
 Before part a, ask what the user has. Say which of these is missing, and stop until they have it.
@@ -191,7 +191,7 @@ A consent is never in `command`. Where a repair found kept data and no install, 
 | ----------- | --------------------------------------------------------------- |
 | `install`   | the line of part e                                              |
 | `repair`    | the repair of part f, as `command` writes it                    |
-| `login`     | step 4, with the address in `command`                           |
+| `login`     | step 4, with the URL in `command`                               |
 | `uninstall` | a removal's own line again: the user's to run                   |
 | `none`      | nothing                                                         |
 
@@ -315,13 +315,13 @@ With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts wh
 
 Do this when step 2 found no login. For a login that ran out, do it only on the user's yes. Never replace a login that works.
 
-Run the login with the dashboard's address: the one the user gave you, or the one the install printed. It prints a web address and a short code, and then waits for the user, so run it in a way that lets you read its output while it is still running:
+Run the login with the dashboard's URL: the one the user gave you, or the one the install printed. It prints a URL and a short code, and then waits for the user, so run it in a way that lets you read its output while it is still running:
 
 ```sh
 npx poplin login --server https://poplin.example.com
 ```
 
-Give the user both, each on its own line. The address opens the dashboard on the question `Allow this login?`. The page asks for the last 4 letters of the code. Neither the page nor the address holds any of them, so the user needs the code you gave them.
+Give the user both, each on its own line. The URL opens the dashboard on the question `Allow this login?`. The page asks for the last 4 letters of the code. Neither the page nor the URL holds any of them, so the user needs the code you gave them.
 
 On a new install Cloudflare's login comes first: it asks for the user's email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser cannot find it.
 
@@ -339,7 +339,7 @@ The page has one choice, Can change, and it starts at Own sites only. Tell the u
 
 With Own sites only, a site another login published is refused, with `not_found` or `not_allowed`. After a new login, that holds for every site you published before it. That is why the guide says Everything on the user's own machine.
 
-If you read output as JSON, add `--json`: the first line then carries the web address and the code.
+If you read output as JSON, add `--json`: the first line then carries the URL and the code.
 
 | The command ends with                           | Next                                           |
 | ----------------------------------------------- | ---------------------------------------------- |
@@ -380,7 +380,7 @@ Before a restart, tell the user four things, since the chat may not come back:
 | You have         | Check               | Good looks like                      |
 | ---------------- | ------------------- | ------------------------------------ |
 | the poplin tools | call `list_sites`   | a list of sites, which may be empty  |
-| no tools yet     | `npx poplin whoami` | the install's address and its `role` |
+| no tools yet     | `npx poplin whoami` | the install's URL and its `role`     |
 
 A check that answers a refusal goes to [`refusals.md`](refusals.md).
 
@@ -395,7 +395,7 @@ Both are commands the user's account token runs, so the rule of part c holds: th
 | nobody can log in to the dashboard          | `npx poplin doctor --repair`                     | give the user the line, and read what it printed with them: the table of part f       |
 | an update says the install cannot take the release by itself | `npx poplin doctor --repair --update`            | with `--update` the repair first brings the install to the newest release: its row says `updated  Worker`. Without it a repair only mends, and that row says which release is out |
 | their mailbox is gone, or the first email was mistyped | `npx poplin doctor --repair`, with `--add-user` and the email | add the option only with an email the user gave you for this                        |
-| remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | give the user the line, and read its list with them: it asks for the token. The removal itself is the user's too: they type the install's address at its question |
+| remove the install                          | `npx poplin uninstall cloudflare --dry-run`      | give the user the line, and read its list with them: it asks for the token. The removal itself is the user's too: they type the install's host at its question    |
 
 Never pass `--confirm` on your own: it is the proof that the user means this install, and a removal cannot be undone. The guide has both: [I cannot log in](https://github.com/Vivswan/poplin/blob/main/docs/fix/cannot-log-in.md) and [Remove](https://github.com/Vivswan/poplin/blob/main/docs/upkeep/remove.md).
 

@@ -208,7 +208,7 @@ describe("logIn", () => {
   test("neither the secret nor the token is in any page, audit entry, printed line, or reported failure, and the token is stored as its hash alone", async () => {
     const desk = await openDesk();
 
-    const ran = await desk.login(`login --server ${ORIGIN} --name laptop`, (address, ran) => allow(desk, address, ran));
+    const ran = await desk.login(`login --server ${ORIGIN} --machine laptop`, (address, ran) => allow(desk, address, ran));
     await desk.get("/data/tokens");
     await desk.get("/data/activity");
     const everything = [...desk.pages, JSON.stringify(await desk.bench.install.database.listAudit({ limit: 100 })), ...ran.out, ...ran.err, ...ran.status, JSON.stringify(desk.bench.install.reported)].join("\n");

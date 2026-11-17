@@ -5,7 +5,7 @@ order: 30
 
 # Remove an install
 
-Run `npx poplin uninstall cloudflare --domain example.com` (or `--no-domain`). It lists what it would remove, asks you to type the install's address, and removes it; `--dry-run` only lists, and `--keep-data` leaves the sites' files and the database. The steps [by hand](#by-hand-at-cloudflare) are the same removal.
+Run `npx poplin uninstall cloudflare --domain example.com` (or `--no-domain`). It lists what it would remove, asks you to type the install's host, and removes it; `--dry-run` only lists, and `--keep-data` leaves the sites' files and the database. The steps [by hand](#by-hand-at-cloudflare) are the same removal.
 
 ```text
 1  save a copy of your sites    npx poplin export --all-versions --out backup.zip
@@ -47,7 +47,7 @@ The command logs no machine out. Do this before the removal, while the install s
 npx poplin logout
 ```
 
-It prints `Logged out of` and the install's address. On the machine of step 1, run it after the export.
+It prints `Logged out of` and the install's URL. On the machine of step 1, run it after the export.
 
 **On a machine you reach only after the removal**, the same line says `Cannot reach the install`, and its hint says `The stored login is deleted`. The removal's own last lines say the same. That is enough where the database went too: the tokens were in it. A database kept with `--keep-data` still holds them, so log out before such a removal.
 
@@ -119,7 +119,7 @@ A rule set is Cloudflare's holder for rules of one kind. One that poplin made go
 | under your domain | `npx poplin uninstall cloudflare --domain example.com` | `poplin.example.com`           |
 | without a domain  | `npx poplin uninstall cloudflare --no-domain`          | `poplin.your-name.workers.dev` |
 
-What you type is your dashboard's address, without the `https://`. The command prints it in its question. With neither option on the line, it first asks `Custom domain (Enter for workers.dev):`.
+What you type is your dashboard's host, without the `https://`. The command prints it in its question. With neither option on the line, it first asks `Custom domain (Enter for workers.dev):`.
 
 It asks for the token again, as step 3 said, lists the same rows, and then asks. The sample is of an install under a domain that has every optional piece, removed with a token that holds the optional permissions. It is cut short where the dots are:
 
@@ -145,7 +145,7 @@ The install is removed: 18 resource types removed, 2 unchanged
 Next: npx poplin logout on each machine with a stored login, to delete it
 ```
 
-Nothing is removed before you type the address. Another text than the install's own removes nothing.
+Nothing is removed before you type the host. Another text than the install's own removes nothing.
 
 ## What stays, and what to do
 
@@ -214,9 +214,9 @@ A dry run with `--keep-data` lists the same. The kept bucket and database stay i
 | -------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `This account has no install. Nothing changed.`          | the token is of an account with no install           | make the token in the account the install is in                               |
 | `Only the data remains, and --keep-data keeps it.`       | the install is removed, and only its kept data is left | to remove the data too, run the line without `--keep-data`                  |
-| `The install in this account is at`, and an address      | the line named another place than the install's: `--no-domain` for an install under a domain, the other way round, or another domain | run it again with the install's own domain after `--domain`, or with `--no-domain` |
+| `The install in this account is at`, and a URL           | the line named another place than the install's: `--no-domain` for an install under a domain, the other way round, or another domain | run it again with the install's own domain after `--domain`, or with `--no-domain` |
 | `This account has an incomplete install`, and a place    | an install that was never finished was started for another place than the line named | run it again with the option the line names: `--domain` and that domain, or `--no-domain` |
-| `The confirmation does not match`, and the address       | the address you typed is not the install's own       | run it again, and type the address the line names                             |
+| `The confirmation does not match`, and the text          | the text you typed is not the install's own          | run it again, and type the text the line names                                |
 | `The run is incomplete:`, a count of rows, and `Next: rerun this command` | a row says `blocked`, `failed`, or `skipped` | fix what the row names, then run the same line again: it removes what is left |
 | a row `blocked`, saying `The account token lacks` and a name | the token lacks the permission of that name         | [add it to the token](../fix/an-install-step-fails.md#add-a-permission-to-the-token) |
 | `The account changed after it was checked.`              | something changed at Cloudflare during the run       | run it again                                                                  |
@@ -224,7 +224,7 @@ A dry run with `--keep-data` lists the same. The kept bucket and database stay i
 
 ## From a script
 
-A person gives the token at the question, where it is not shown. A script or a CI job cannot be asked: it gives the address with `--confirm`, and adds `--yes`. `--yes` alone removes nothing.
+A person gives the token at the question, where it is not shown. A script or a CI job cannot be asked: it gives the text with `--confirm`, and adds `--yes`. `--yes` alone removes nothing.
 
 | The token is given                      | Where it must come from                             |
 | --------------------------------------- | --------------------------------------------------- |

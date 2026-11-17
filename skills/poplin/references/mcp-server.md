@@ -42,7 +42,7 @@ Then log in once with the same variable set, and a name for yourself. The user a
 
 ```sh
 export POPLIN_CONFIG_DIR="/home/user/.config/poplin-agent"
-npx poplin login --name my-agent --server https://poplin.example.com
+npx poplin login --machine my-agent --server https://poplin.example.com
 ```
 
 In PowerShell the first line is `$env:POPLIN_CONFIG_DIR = "C:\Users\user\poplin-agent"`.

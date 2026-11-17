@@ -127,7 +127,7 @@ Cloudflare's login sends its code only to an email that is a login of the instal
 
 ## The machine is not logged in
 
-The login line is `npx poplin login`, with `--server` and your dashboard's address: [step 5](../start/install.md#5-log-this-machine-in-and-check) shows it. A machine with no stored login needs the address each time.
+The login line is `npx poplin login`, with `--server` and your dashboard's URL: [step 5](../start/install.md#5-log-this-machine-in-and-check) shows it. A machine with no stored login needs the URL each time.
 
 | You see                                                    | Means                                                | Do                                                        |
 | ---------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
@@ -141,7 +141,7 @@ The login line is `npx poplin login`, with `--server` and your dashboard's addre
 | `The login expired before approval`               | the code ran out before Allow; nothing was stored     | run the login line again                                  |
 | `Not logged in`                                            | the login did not finish                             | run the login line again                                  |
 | `The token is missing or expired`                                 | the login ran out: it lasts 30 days                  | `npx poplin login`, and allow it again                    |
-| `Cannot reach the install`                                 | the address is mistyped, or the network is down      | check the address after `--server`                        |
+| `Cannot reach the install`                                 | the URL is mistyped, or the network is down          | check the URL after `--server`                            |
 | a line of `poplin doctor` that starts with `failed`        | that one read failed; the rest of the line says why  | fix what it names, then run `npx poplin doctor` again     |
 | `failed  problems`, then kinds                             | something went wrong in the install today            | [Problems](problems.md#what-is-noted) has each kind |
 
