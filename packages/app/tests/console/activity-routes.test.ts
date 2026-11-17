@@ -80,6 +80,17 @@ describe("a page of the log", () => {
     expect([page.entries.map((entry) => entry.what), (JSON.parse(line ?? "null") as { readonly what: string }).what]).toEqual([["Checked the install", "Set the first settings"], "Checked the install"]);
   });
 
+  // Drift: the store writes who was added and removed under two keys, and the sentence is made from them here. With a key renamed on one side, the record of who was given access would say only that the settings changed.
+  test("says who was added and who was removed from the Access screen, the same in the list and in the file", async () => {
+    const opened = await openConsole();
+    await opened.change("/data/people/add", { login: "noor@example.com" });
+    await opened.change("/data/people/remove", { login: "noor@example.com" });
+    const said = (await pageOf(opened)).entries.slice(0, 2).map((entry) => entry.what);
+    const file = (await (await opened.get("/data/activity/download")).text()).split("\r\n").slice(1, 3);
+
+    expect([said, file.map((line) => line.split(",")[2])]).toEqual([["Removed a user: noor@example.com", "Added a user: noor@example.com"], said]);
+  });
+
   // Drift: a site that is gone would be linked to a page that answers 404, a renamed one to the label it no longer has, or an entry would show a title the site has since lost.
   test("names each site as it was then, with the label and the title it has now, and neither for a site that is gone", async () => {
     const { opened, keptLabel } = await openWithHistory();

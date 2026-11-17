@@ -392,7 +392,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
 
     expect([shown(done).at(-1), done.ok && done.ready, changes, last]).toEqual(["User | make | lost@example.com", true, ADD_CALLS.slice(1), ADD_CALLS]);
     expect([letThrough(account), (await account.store.database.readSettings())?.logins]).toEqual([[LOST, OWNER], [OWNER, LOST]]);
-    expect(entry).toMatchObject({ action: "settings_changed", by: "doctor-repair@poplin.invalid", detail: { logins: [OWNER, LOST] } });
+    expect(entry).toMatchObject({ action: "settings_changed", by: "doctor-repair@poplin.invalid", detail: { added: [LOST], removed: [] } });
   });
 
   // Drift: this is the rule the command stands on. A token that proves only that it can see the install must add nobody: a stored user is carried to the login later by the install's own, stronger key.
