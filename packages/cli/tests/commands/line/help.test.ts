@@ -11,8 +11,11 @@ import { cleanUp, jsonOf, openBench, scratch } from "../support/harness";
 /** A site label in the published form. */
 const LABEL = "report--k3f9x2ab71qz";
 
-/** The width of the narrowest terminal the help must fit. */
+/** The width of a help text where no terminal is. */
 const MAX_LINE = 80;
+
+/** Where the later rows of a folded description start: under the description of its row. */
+const UNDER_DESCRIPTION = /^ {28}\S/;
 
 /** A line of printable ASCII. */
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
@@ -47,7 +50,7 @@ const PRINTED: readonly (readonly [line: string, key: string, named: string])[] 
   ["doctor --json", "checks", "the checks"],
   ["config --json", "values", "the settings"],
   ["whoami --json", "token", "the token"],
-  ["update --dry-run --json", "key", "what a start would come to"],
+  ["update --dry-run --json", "key", "what a start would do"],
   ["list --json", "sites", "the sites"],
   ["logout --json", "revoked", "revoked"],
 ];
@@ -144,17 +147,43 @@ describe("helpText", () => {
     const takers = SPECS.filter((spec) => jsonLine(spec.name) !== "");
     const oneSite = takers.filter((spec) => spec.arguments.some((argument) => argument.required && ["site", "path"].includes(argument.name)));
 
-    expect(takers.filter((spec) => !/^print JSON: .*, or the error object$/.test(jsonLine(spec.name))).map((spec) => spec.name)).toEqual([]);
+    expect(takers.filter((spec) => !/^Print JSON: .*, or the error object$/.test(jsonLine(spec.name))).map((spec) => spec.name)).toEqual([]);
     expect(takers.filter((spec) => /the (site|copy)\b/.test(jsonLine(spec.name))).map((spec) => spec.name)).toEqual(oneSite.map((spec) => spec.name));
   });
 
-  test("every help text is plain ASCII in lines of at most 80 characters and names its command: a terminal 80 wide shows it unbroken", () => {
+  test("every help text is plain ASCII in lines of at most 80 characters and names its command where no look is given: a pipe, a file, and a log of CI hold no colour sequence", () => {
     const texts = [helpText(), ...SPECS.map((spec) => helpText(spec.name))];
     const lines = texts.flatMap((text) => text.split("\n"));
 
     expect(lines.filter((line) => line.length > MAX_LINE || !PRINTABLE_ASCII.test(line) || line !== line.trimEnd())).toEqual([]);
-    expect(texts.map((text) => text.startsWith("usage: poplin"))).toEqual(texts.map(() => true));
+    expect(texts.map((text) => text.startsWith("Usage: poplin"))).toEqual(texts.map(() => true));
     expect(SPECS.filter((spec) => !helpText().includes(`\n  ${spec.name}`)).map((spec) => spec.name)).toEqual([]);
+  });
+
+  test("a terminal 200 wide folds no description, and one 60 wide folds each under its own column: the help follows the terminal, not a fixed 80", () => {
+    const rows = (width: number): string[] => [undefined, ...SPECS.map((spec) => spec.name)].flatMap((topic) => helpText(topic, { width, colour: false }).split("\n"));
+
+    expect([rows(200).filter((row) => UNDER_DESCRIPTION.test(row)), rows(60).some((row) => UNDER_DESCRIPTION.test(row))]).toEqual([[], true]);
+  });
+
+  test("a painted help has its titles bold, its left column cyan, and its descriptions grey, and its notes and examples as they are written", () => {
+    const painted = helpText("doctor", { width: MAX_LINE, colour: true }).split("\n");
+
+    expect(painted.slice(0, 3)).toEqual(["\x1b[1mUsage:\x1b[22m \x1b[36mpoplin\x1b[39m \x1b[36mdoctor\x1b[39m [flags]", "", "\x1b[90mCheck the install; --repair fixes it\x1b[39m"]);
+    expect(painted).toContain("\x1b[1mOptions:\x1b[22m");
+    expect(painted).toContain(`  \x1b[36m--yes\x1b[39m${" ".repeat(21)}\x1b[90mNever prompt\x1b[39m`);
+    expect(painted.slice(-2)).toEqual(["\x1b[1mExamples:\x1b[22m", "  poplin doctor"]);
+  });
+
+  test("the flags of doctor that only act with --repair stand in a part of their own, and each is refused without it: a flag listed beside --json reads as one of a check", () => {
+    const [options = "", repair = ""] = helpText("doctor").split("\n\nWith --repair:\n");
+    const block = `\n${repair.split("\n\n")[0] ?? ""}`;
+    const under = LISTED.filter(({ spec, flag }) => spec.name === "doctor" && isPrinted(block, flag));
+    const refused = under.map(({ flag }) => parseCommand(["doctor", flag.name, ...(flag.value === undefined ? [] : [FLAG_VALUES[flag.name] ?? ""])]));
+
+    expect(under.map(({ flag }) => flag.name)).toEqual(["--update", "--dry-run", "--add-user", "--yes", "--token-stdin"]);
+    expect(under.filter(({ flag }) => isPrinted(options, flag))).toEqual([]);
+    expect(refused.map((parsed) => parsed.kind === "usage-error" && parsed.message.endsWith("goes with --repair"))).toEqual(under.map(() => true));
   });
 
   test("every example a help text prints runs the command it is printed under: a copied example must not be refused", () => {

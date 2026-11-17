@@ -31,6 +31,9 @@ const STOP_KEYS: ReadonlySet<string> = new Set(["\u0003", "\u001b", END_OF_INPUT
 /** The library's folding of a text at its spaces, measured in the cells of a terminal. It breaks no word: one wider than the line stands alone on a row. */
 const FOLDER = Object.assign(new Help(), { minWidthToWrap: MIN_FOLD, displayWidth: (shown: string): number => stringWidth(shown) });
 
+/** The look where nobody watches: plain lines of at most the widest width of the screen. */
+export const PLAIN_LOOK: Look = { width: MAX_WIDTH, colour: false };
+
 /** What a line is, which on a terminal chooses its mark and its colour. */
 export type Tone = "done" | "note" | "warning" | "error" | "plain";
 
@@ -39,6 +42,12 @@ export interface Line {
   readonly tone: Tone;
   readonly text: string;
   readonly hang?: number;
+}
+
+/** How a text laid out in columns is shown on a stream: how wide its lines may be, and whether it is painted. */
+export interface Look {
+  readonly width: number;
+  readonly colour: boolean;
 }
 
 /** One answer a person can choose: what choosing it gives, its name, and a line about it. */
@@ -122,14 +131,15 @@ function folded(line: string, width: number, hang: number | undefined): string[]
 }
 
 /**
- * Fold a text of many lines as a terminal of the widest width shows it: each line at its spaces, its later rows under its own indent.
+ * Fold a text of many lines as a terminal shows it: each line at its spaces, its later rows under its own indent. A colour sequence takes no room.
  *
+ * @param width - the widest a line may be; the widest width of the screen when left out
  * @returns the text, in which only a word wider than the line, such as an address, is wider than it
  */
-export function foldedText(text: string): string {
+export function foldedText(text: string, width: number = MAX_WIDTH): string {
   return text
     .split("\n")
-    .flatMap((line) => folded(line, MAX_WIDTH, undefined))
+    .flatMap((line) => folded(line, width, undefined))
     .join("\n");
 }
 
@@ -142,6 +152,17 @@ export function showsColour(terminal: boolean | undefined, env: Readonly<Record<
   const set = (name: string): boolean => (env[name] ?? "") !== "";
 
   return terminal === true && !set("NO_COLOR") && !set("CI") && env.TERM !== PLAIN_TERMINAL;
+}
+
+/**
+ * How a text laid out in columns is shown on a stream.
+ *
+ * @returns painted and as wide as the terminal where the stream shows colour, and plain at the widest width of the screen everywhere else
+ */
+export function lookOf(stream: { readonly isTTY?: boolean; readonly columns?: number }, env: Readonly<Record<string, string | undefined>>): Look {
+  const colour = showsColour(stream.isTTY, env);
+
+  return colour ? { width: stream.columns ?? PLAIN_LOOK.width, colour } : PLAIN_LOOK;
 }
 
 /**

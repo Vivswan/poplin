@@ -228,9 +228,9 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
     name: "Stand-In Host",
     about: "Stand-In Host: under your own place, or without one",
     options: [
-      { flag: "--place", value: "<name>", about: "under your own place: example.com", variable: "POPLIN_PLACE" },
-      { flag: "--no-place", value: null, about: "at the address the host gives the account", variable: "POPLIN_PLACE=none" },
-      { flag: "--account", value: "<id>", about: "the account, when the token shows more than one", variable: "POPLIN_ACCOUNT" },
+      { flag: "--place", value: "<name>", about: "Install under your own place: example.com", variable: "POPLIN_PLACE" },
+      { flag: "--no-place", value: null, about: "Install at the address the host gives the account", variable: "POPLIN_PLACE=none" },
+      { flag: "--account", value: "<id>", about: "Account id, when the token can access more than one", variable: "POPLIN_ACCOUNT" },
     ],
     usage: "(--place <name> | --no-place)",
     tokenHelp: ["The account token needs:", "  with a place   two permissions: Places: Read, Programs: Edit", "  without        one permission: Programs: Edit"],

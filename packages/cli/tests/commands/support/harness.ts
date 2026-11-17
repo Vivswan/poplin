@@ -25,6 +25,9 @@ interface Options {
   /** Whether a terminal is there to ask on and to show progress on; neither unless said. */
   readonly terminal?: Io["terminal"];
 
+  /** How each stream shows a help text; plain unless said. */
+  readonly looks?: Io["looks"];
+
   /** What the person types when asked; `stop` for a person who stops the question, as Ctrl-C at it does. */
   readonly typed?: string | { readonly stop: true };
 }
@@ -167,6 +170,7 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
           }),
         machine: { env: { POPLIN_CONFIG_DIR: join(home, "config"), ...env }, platform: process.platform, home },
         terminal: options.terminal ?? { asks: false, progress: false },
+        ...(options.looks === undefined ? {} : { looks: options.looks }),
         timeoutMs: 2000,
         computer: "test-computer",
         open: (address) => {

@@ -46,9 +46,9 @@ const ACCOUNT_ID = /^[0-9a-f]{32}$/;
 
 /** The provider's own options. */
 const OPTIONS: readonly OptionRow[] = [
-  { flag: "--domain", value: "<name>", about: "under your own domain, which is Active on the account: example.com", variable: "POPLIN_DOMAIN" },
-  { flag: "--no-domain", value: null, about: "at the free address Cloudflare gives the account", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
-  { flag: "--account", value: "<id>", about: "the account, when the token shows more than one", variable: "POPLIN_ACCOUNT" },
+  { flag: "--domain", value: "<name>", about: "Install under your own domain, Active on the account: example.com", variable: "POPLIN_DOMAIN" },
+  { flag: "--no-domain", value: null, about: "Install at the free address Cloudflare gives the account", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
+  { flag: "--account", value: "<id>", about: "Account id, when the token can access more than one", variable: "POPLIN_ACCOUNT" },
 ];
 
 /** What a line of the run says, where no row of a piece's own says it. */

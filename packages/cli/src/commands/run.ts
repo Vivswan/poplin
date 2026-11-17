@@ -5,7 +5,7 @@ import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import { type Client, createClient } from "../client/client";
 import { currentLogin, TOKEN_VARIABLES } from "../local/current-login";
 import { pasted, runnerOf } from "../local/invoked";
-import { foldedText } from "../local/screen";
+import { foldedText, PLAIN_LOOK } from "../local/screen";
 import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
@@ -15,6 +15,7 @@ import { runInstall } from "../install/first/install";
 import { runUninstall } from "../install/remove/uninstall";
 import { runRepair } from "../install/repair/repair";
 import type { InstallEnds } from "../install/records";
+import type { CommandName } from "./command-table";
 import { exitCode } from "./exit-codes";
 import { runExport } from "../backup/export";
 import { helpText } from "./line/help";
@@ -291,6 +292,17 @@ function mcpHost(io: Io): Host {
   };
 }
 
+/** Show a help text as its stream shows it: the one that was asked for on stdout, and the one an empty command line gets on stderr. */
+function showHelp(parsed: { readonly topic?: CommandName; readonly asked: boolean }, io: Io): void {
+  const looks = io.looks ?? { out: PLAIN_LOOK, err: PLAIN_LOOK };
+  // The help nobody asked for goes through the screen, which shows no line wider than its widest.
+  const look = parsed.asked ? looks.out : { ...looks.err, width: Math.min(looks.err.width, PLAIN_LOOK.width) };
+  const text = foldedText(pasted(helpText(parsed.topic, look), runnerOf(io.machine.env)), look.width);
+
+  if (parsed.asked) io.out(text);
+  else io.screen.aside("plain", text);
+}
+
 /**
  * Run the words after `poplin`.
  *
@@ -316,8 +328,7 @@ export async function run(
   }
 
   if (parsed.kind === "help") {
-    const put = parsed.asked ? io.out : (text: string): void => io.screen.aside("plain", text);
-    put(foldedText(pasted(helpText(parsed.topic), runnerOf(io.machine.env))));
+    showHelp(parsed, io);
 
     return exitCode(parsed);
   }

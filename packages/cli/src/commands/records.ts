@@ -3,7 +3,7 @@
 import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import type { Called, Client, Fetch } from "../client/client";
 import type { Machine } from "../local/login-file";
-import type { Line, Screen } from "../local/screen";
+import type { Line, Look, Screen } from "../local/screen";
 import type { Problem } from "./problems";
 import type { Request } from "./line/requests";
 
@@ -29,6 +29,9 @@ export interface Io {
 
   /** Whether a person can be asked a question, and whether the line that says what is being worked on would be seen. */
   readonly terminal: { readonly asks: boolean; readonly progress: boolean };
+
+  /** How a help text is shown on stdout and on stderr; plain lines of at most 80 characters on both when left out. */
+  readonly looks?: { readonly out: Look; readonly err: Look };
 
   /** How long one call may take, in milliseconds, in place of the client's defaults. */
   readonly timeoutMs?: number;

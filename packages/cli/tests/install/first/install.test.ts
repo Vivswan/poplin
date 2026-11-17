@@ -749,6 +749,6 @@ describe("no provider", () => {
 
     expect(ran).toMatchObject({ code: 1, err: ["this build of poplin carries no provider to install at", "install the published package: npx poplin install"] });
     expect(help.code).toBe(0);
-    expect(help.out.join("\n")).toContain("none: this build of poplin carries no provider");
+    expect(help.out.join("\n")).toContain("none: this build of poplin includes no provider");
   });
 });

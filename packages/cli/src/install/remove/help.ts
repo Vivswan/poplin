@@ -1,51 +1,49 @@
-// The two help texts of `poplin uninstall`: the command's own, which lists the providers, and one provider's, made from what the provider declares.
+// The two help texts of `poplin uninstall`: the command's own, which lists the providers, and one provider's, which lists the provider's options beside the shared ones.
 
-import { columns } from "../../commands/text";
-import { foldedText } from "../../local/screen";
+import { type HelpPage, helpPage } from "../../commands/line/help-page";
+import { type Look, PLAIN_LOOK } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import type { Provider } from "../records";
-import { DRY_RUN_HELP, optionLines } from "../report";
+import { DRY_RUN_HELP, NO_PROVIDER, optionRows, PROVIDER_HELP } from "../report";
 import { UNINSTALL_OPTIONS } from "./parse";
 
-/** How far a line of a list stands in. */
-const INDENT = "  ";
-
-function indented(lines: readonly string[]): string[] {
-  return lines.map((line) => `${INDENT}${line}`);
-}
-
-/** The sections as one text, a line apart, with each line folded to the width of a help text. */
-function joined(sections: readonly (readonly string[])[]): string {
-  return foldedText(sections.map((lines) => lines.join("\n")).join("\n\n"));
-}
+/** What every help of the command says after its options: how a removal is confirmed, what a dry run exits with, where the token comes from, and what a removal leaves. */
+const NOTES: readonly string[] = [
+  "A run lists what it would remove, then prompts for the install's address.",
+  "Without prompts, pass it with --confirm; --yes alone confirms nothing.",
+  "",
+  ...DRY_RUN_HELP,
+  "",
+  ...TOKEN_HELP,
+  "",
+  "No machine is logged out: run poplin logout on each one first.",
+];
 
 /** The help of the command itself: what it does, the providers, and the options every provider takes. */
-function commandHelp(providers: readonly Provider[]): string {
-  const listed = providers.length === 0 ? ["none: this build of poplin carries no provider"] : columns(providers.map((one) => [one.id, one.about]));
-  const own = providers.map((one) => [`poplin uninstall ${one.id} --help`, "its own options, and what the token needs"]);
-
-  return joined([
-    ["poplin uninstall <provider> [options]"],
-    ["Remove your install from a provider: every object that carries poplin's names and marks, and nothing else. The sites' files and the database go last."],
-    ["Providers:", ...indented(listed)],
-    ["Options:", ...optionLines(UNINSTALL_OPTIONS)],
-    ["A run lists what it would remove, then asks you to type the install's address.", "A run that asks nothing takes it with --confirm; --yes alone confirms nothing."],
-    [...DRY_RUN_HELP],
-    [...TOKEN_HELP],
-    ["It logs no computer out: run poplin logout on each one first."],
-    ...(own.length === 0 ? [] : [indented(columns(own))]),
-  ]);
+function commandHelp(providers: readonly Provider[]): HelpPage {
+  return {
+    usage: ["poplin uninstall <provider> [options]"],
+    about: "Remove the install from the provider: every object that carries poplin's names and marks, and nothing else. The site files and the database are removed last.",
+    parts: [
+      { title: "Providers:", rows: providers.map((one) => [one.id, one.about]), lines: providers.length === 0 ? [NO_PROVIDER] : [] },
+      { title: "Options:", rows: optionRows(UNINSTALL_OPTIONS) },
+      { title: "Notes:", lines: NOTES },
+      { title: "Related:", rows: providers.map((one) => [`poplin uninstall ${one.id} --help`, PROVIDER_HELP]) },
+    ],
+  };
 }
 
-/** The help of one provider: how its options say where the install is, the options, and what the token needs, all in the provider's own words. */
-function providerHelp(provider: Provider): string {
-  return joined([
-    [`poplin uninstall ${provider.id} ${provider.usage} [options]`],
-    [`Remove your install from ${provider.name}. Its own options say where the install is.`],
-    [`Options of ${provider.name}:`, ...optionLines(provider.options)],
-    [...provider.tokenHelp],
-    ["Every option of poplin uninstall works here too: poplin uninstall --help"],
-  ]);
+/** The help of one provider: how its options say where the install is, every option the line takes, and what the token needs in the provider's own words. */
+function providerHelp(provider: Provider): HelpPage {
+  return {
+    usage: [`poplin uninstall ${provider.id} ${provider.usage} [options]`],
+    about: `Remove the install from ${provider.name}. The provider's options locate the install.`,
+    parts: [
+      { title: "Options:", rows: optionRows([...provider.options, ...UNINSTALL_OPTIONS]) },
+      { title: "Token:", lines: provider.tokenHelp },
+      { title: "Notes:", lines: NOTES },
+    ],
+  };
 }
 
 /**
@@ -53,8 +51,9 @@ function providerHelp(provider: Provider): string {
  *
  * @param providers - the providers the built package carries, which the command's own help lists
  * @param provider - the provider to explain; the command itself when absent
- * @returns lines with no trailing newline; a provider's are as long as its own words make them
+ * @param look - how wide the stream shows it and whether in colour; plain lines of at most 80 characters when absent
+ * @returns lines with no trailing newline; a provider's own lines are as long as its words make them
  */
-export function uninstallHelp(providers: readonly Provider[], provider?: Provider): string {
-  return provider === undefined ? commandHelp(providers) : providerHelp(provider);
+export function uninstallHelp(providers: readonly Provider[], provider?: Provider, look: Look = PLAIN_LOOK): string {
+  return helpPage(provider === undefined ? commandHelp(providers) : providerHelp(provider), look);
 }
