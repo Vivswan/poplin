@@ -130,7 +130,7 @@ describe("run", () => {
 
     expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`updated    ${label}  access and search engines`, `redirects  from ${url}`, "unlisted   open to anyone with the URL", "", open]);
     expect((await bench.run(`set ${label} --public --public-name docs`)).out).toEqual([`updated   ${label}  access and public name`, 'public    open to everyone, as "docs"', "", "https://docs-page.example.com"]);
-    expect((await bench.run("set docs --private")).out).toEqual([`updated    ${label}  access and public name`, `redirects  from ${open}`, "private    login required", "", url]);
+    expect((await bench.run("set docs --private")).out).toEqual([`updated    ${label}  access and public name`, `redirects  from ${open}`, "revoked    https://docs-page.example.com", "private    login required", "", url]);
     expect((await bench.run(`set ${label} --private --embeddable off`)).out[0]).toBe(`updated   ${label}  embeddable`);
     expect((await bench.run(`set ${label} --private`)).out[0]).toBe(`unchanged  ${label}`);
     expect((await bench.run(`delete ${label}`)).out).toEqual([`trashed   ${label}  permanent deletion on 2023-11-21`, `Undo: poplin restore ${label}`]);
@@ -259,11 +259,13 @@ describe("run", () => {
     const { bench, label } = await withSite();
     const renamed = `notes--${label.slice(-12)}`;
 
-    const moved = `redirects  from https://${label}-p-poplin.example.com`;
+    const old = `still serves  https://${label}-p-poplin.example.com`;
 
-    expect((await bench.run(`set ${label} --name notes`)).out).toEqual([`updated    ${renamed}  name`, "renamed    from report", moved, "private    login required", "", `https://${renamed}-p-poplin.example.com`]);
+    expect((await bench.run(`set ${label} --name notes`)).out).toEqual([`updated       ${renamed}  name`, "renamed       from report", old, "private       login required", "", `https://${renamed}-p-poplin.example.com`]);
     expect((await bench.run(`set ${label} --unlisted`)).out[0]).toBe(`updated    ${renamed}  access`);
-    expect((await bench.run(`${folderOf("report", { "index.html": "<title>Second</title>" })} --site ${label} --name q3-report`)).out[1]).toBe(`updated    q3-report--${label.slice(-12)}  version 2`);
+    const again = await bench.run(`${folderOf("report", { "index.html": "<title>Second</title>" })} --site ${label} --name q3-report`);
+
+    expect(again.out.slice(1, 3)).toEqual([`updated       q3-report--${label.slice(-12)}  version 2`, `still serves  https://${renamed}-u-poplin.example.com`]);
   });
 
   test("rollback and new-link print the version now live and the new label: the old label is dead, so the new one must be on stdout", async () => {
