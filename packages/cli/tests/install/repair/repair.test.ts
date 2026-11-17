@@ -332,7 +332,7 @@ describe("the words of a repair", () => {
 
   test.each([
     ["--server https://poplin.example.com", ["poplin doctor --repair: no option --server", "--repair works with the account token, not a login: leave out --server"]],
-    ["--login you@example.com", ["poplin doctor --repair: no option --login", "a repair keeps the users the install has. To let one more person in: --add-user <email>"]],
+    ["--user you@example.com", ["poplin doctor --repair: no option --user", "a repair keeps the users the install has. To let one more person in: --add-user <email>"]],
     ["--place example.com --no-place", ["poplin doctor --repair: give one of --place <name> and --no-place"]],
   ])("a repair with %s is refused with a line that says what to type: without this a wrong option is ignored", async (options, err) => {
     const account = installed();

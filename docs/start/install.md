@@ -164,7 +164,7 @@ Log this computer in now?
 
 **It worked when** it says that the address `answers`, and then `poplin 0.1.0 is installed.`, with the version of the day. The sample shows a few of the rows. A new address can take a few minutes: the command waits up to five.
 
-**Where the address does not answer in that time**, the run says `poplin 0.1.0 is made, and its address does not answer yet.` and exits with 1. Under it are two lines: the login for once the address answers, and the repair, with your `--domain` or `--no-domain`, for one that still does not. A run that did not use `--login` has one line there: that repair with `--add-user`.
+**Where the address does not answer in that time**, the run says `poplin 0.1.0 is made, and its address does not answer yet.` and exits with 1. Under it are two lines: the login for once the address answers, and the repair, with your `--domain` or `--no-domain`, for one that still does not. A run that did not use `--user` has one line there: that repair with `--add-user`.
 
 | A row starts with | Means                                                                   |
 | ----------------- | ----------------------------------------------------------------------- |
@@ -306,7 +306,7 @@ Windows:  npx poplin "C:\Users\user\Desktop\my report" --name my-report
 The run after it asks for the token again. Leave Cloudflare's page with the token open until the install is made, and copy the token from it a second time.
 
 ```sh
-npx poplin install cloudflare --domain example.com --login you@example.com --dry-run
+npx poplin install cloudflare --domain example.com --user you@example.com --dry-run
 ```
 
 ```text
@@ -339,7 +339,7 @@ Each question has an option and a variable, so a run can ask nothing. An agent a
 | ------------------------ | -------------------------------------- | ------------------------------------ |
 | under a domain           | `--domain example.com`                 | `POPLIN_DOMAIN`                      |
 | without a domain         | `--no-domain`                          | `POPLIN_DOMAIN` set to the word none |
-| the first login          | `--login you@example.com`              | `POPLIN_LOGIN`                       |
+| the first login          | `--user you@example.com`               | `POPLIN_USER`                        |
 | the account token, for a script alone | `--token-stdin` reads it from standard input | `POPLIN_INSTALL_TOKEN` |
 | the account, when the token shows more than one | `--account` and the account's id | `POPLIN_ACCOUNT`    |
 
@@ -355,18 +355,18 @@ No option carries the token itself.
 A script's line names every answer but the token, and adds `--yes`:
 
 ```sh
-npx poplin install cloudflare --no-domain --login you@example.com --yes
+npx poplin install cloudflare --no-domain --user you@example.com --yes
 ```
 
 | Option        | Does                                                                                     |
 | ------------- | ---------------------------------------------------------------------------------------- |
 | `--yes`       | asks nothing. A missing answer stops the run before any change, and is named             |
 | `--json`      | prints one JSON value, and nothing else on standard output                               |
-| `--adopt`     | uses a bucket or a database named like poplin's that no install holds, with what it holds. Where the database holds users, they log in, and [`--login` is not used](../upkeep/remove.md#keep-the-data) |
-| `--log-in`    | logs this computer in when the install is made; `--no-log-in` does not, and does not ask. It is not `--login`, which names the email |
+| `--adopt`     | uses a bucket or a database named like poplin's that no install holds, with what it holds. Where the database holds users, they log in, and [`--user` is not used](../upkeep/remove.md#keep-the-data) |
+| `--log-in`    | logs this computer in when the install is made; `--no-log-in` does not, and does not ask |
 | `--no-wait`   | does not wait for the new install to answer                                              |
 
-A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--login` logs no computer in. It ends with the line that lets that email in, also where its address does not answer yet.
+A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--user` logs no computer in. It ends with the line that lets that email in, also where its address does not answer yet.
 
 With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command`. A run without `--json` names the same command in its last lines. After an install that could not be read, that line adds `--dry-run`.
 
@@ -374,7 +374,7 @@ With `--json`, the value of a run, and of a run that stopped, names what to run 
 | ------------------------------------------------------ | --------------------------------------------------------------------- |
 | the place: `--domain example.com`, or `--no-domain`    | the run knew it: from your line, the variable, or your answer         |
 | `--dry-run`, and a removal's `--keep-data`             | `next` names the same command again, after a stop or a run not ready  |
-| `--add-user` and an email                              | an install kept its users and did not use `--login`; or a repair given it has something to mend yet |
+| `--add-user` and an email                              | an install kept its users and did not use `--user`; or a repair given it has something to mend yet |
 | a repair's `--update`                                  | the repair's own line had it; or a repair stopped at an install that is behind, with records only an update brings to this poplin |
 | no token, no login, no account, no proof, no `--adopt` | always: these are yours to add                                        |
 

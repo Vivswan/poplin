@@ -65,8 +65,8 @@ On an install [without a domain](../start/without-a-domain.md), the control of `
 | `poplin doctor`                                                      | checks that the install answers, and prints its version beside this poplin's, as `install 0.1.0, this poplin 0.1.0`; changes nothing |
 | `poplin update`                                                      | starts an update of the install to the newest version; `--dry-run` says what it would do |
 | `poplin update --to 0.2.0`                                           | takes that version in place of the newest: a lower one [goes back](../upkeep/update.md#go-back) |
-| `poplin install cloudflare --domain example.com --login you@example.com` | makes a new install under a domain; `--no-domain` makes one without. Where an install is, it says so and changes nothing: [Install](../start/install.md) |
-| `poplin install cloudflare --no-domain --login you@example.com --dry-run` | lists what that would make, with the same options; changes nothing |
+| `poplin install cloudflare --domain example.com --user you@example.com` | makes a new install under a domain; `--no-domain` makes one without. Where an install is, it says so and changes nothing: [Install](../start/install.md) |
+| `poplin install cloudflare --no-domain --user you@example.com --dry-run` | lists what that would make, with the same options; changes nothing |
 | `poplin doctor --repair`                                             | mends the install at Cloudflare, the way back in when nobody can log in; `--dry-run` lists what it would change: [I cannot log in](../fix/cannot-log-in.md) |
 | `poplin doctor --repair --add-user new@example.com`                  | the same, and lets one more email log in          |
 | `poplin uninstall cloudflare --domain example.com --dry-run`         | lists what a removal would remove; changes nothing |

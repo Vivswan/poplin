@@ -228,8 +228,8 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
     name: "Stand-In Host",
     about: "Stand-In Host: under your own place, or without one",
     options: [
-      { flag: "--place", value: "<name>", about: "Install under your own place: example.com", variable: "POPLIN_PLACE" },
-      { flag: "--no-place", value: null, about: "Install at the address the host gives the account", variable: "POPLIN_PLACE=none" },
+      { flag: "--place", value: "<name>", about: "Your own place: example.com", variable: "POPLIN_PLACE" },
+      { flag: "--no-place", value: null, about: "The address the host gives the account", variable: "POPLIN_PLACE=none" },
       { flag: "--account", value: "<id>", about: "Account id, when the token can access more than one", variable: "POPLIN_ACCOUNT" },
     ],
     usage: "(--place <name> | --no-place)",

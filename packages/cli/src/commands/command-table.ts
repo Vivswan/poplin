@@ -281,7 +281,7 @@ export const COMMANDS = [
   },
   {
     name: "export",
-    group: "Install:",
+    group: "Backup:",
     about: "Export all sites, or one, as a zip",
     arguments: [{ ...SITE, about: "Site to export (default: all)", required: false }],
     flags: [
@@ -295,13 +295,13 @@ export const COMMANDS = [
   },
   {
     name: "import",
-    group: "Install:",
+    group: "Backup:",
     about: "Import a backup zip",
     arguments: [{ name: "zip", about: "A zip made by export", required: true }],
     flags: [
       { name: "--site", value: "<site>", about: "Import only this site" },
-      { name: "--settings", about: "Replace the install's settings, except the logins" },
-      { name: "--logins", about: "With --settings: replace the logins too" },
+      { name: "--settings", about: "Replace the install's settings, except the users" },
+      { name: "--users", about: "With --settings: replace the users (logins) too" },
       { name: "--dry-run", about: "Validate the zip and list its sites; import nothing" },
       ...installFlags("the sites, and the counts unless --dry-run"),
     ],
@@ -314,7 +314,7 @@ export const COMMANDS = [
   },
   {
     name: "mcp",
-    group: "Install:",
+    group: "Agent:",
     about: "Run the MCP server over stdio",
     arguments: [],
     flags: EVERYWHERE,

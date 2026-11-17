@@ -11,7 +11,7 @@ import { ADDRESS, type Account, accountQuestion, emptyAccount, FRESH, installedO
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
 
 /** A run that gives every answer and asks nothing. */
-const RUN = "install stand-in --no-place --login you@example.com --yes";
+const RUN = "install stand-in --no-place --user you@example.com --yes";
 
 /** What runs the command again at the place of `RUN`, as the one JSON value names it. */
 const AGAIN = { step: "install", command: "npx poplin install stand-in --no-place" };
@@ -67,7 +67,7 @@ describe("a fresh install", () => {
 
   test("the token on standard input is its first line, and --no-wait asks the new install nothing: without this a piped token with a newline is refused", async () => {
     const account = emptyAccount();
-    const ran = await runLine("install stand-in --place example.com --login you@example.com --token-stdin --no-wait", account, { stdin: `${TOKEN}\n` });
+    const ran = await runLine("install stand-in --place example.com --user you@example.com --token-stdin --no-wait", account, { stdin: `${TOKEN}\n` });
 
     expect(ran.code).toBe(0);
     expect(account.runs[0]).toMatchObject({ where: { kind: "place", name: "example.com" }, run: "apply" });
@@ -77,7 +77,7 @@ describe("a fresh install", () => {
 
   test("standard input that holds no token is refused before any look: without this a wrong pipe reaches the provider", async () => {
     const account = emptyAccount();
-    const ran = await runLine("install stand-in --no-place --login you@example.com --token-stdin", account, { stdin: "oops\n" });
+    const ran = await runLine("install stand-in --no-place --user you@example.com --token-stdin", account, { stdin: "oops\n" });
 
     expect(ran).toMatchObject({ code: 2, out: [], err: ["poplin install: standard input does not hold an account token of Stand-In Host"] });
     expect(account.finds).toEqual([]);
@@ -165,10 +165,10 @@ describe("--json", () => {
     const ran = await runLine("install stand-in --yes --json", account);
 
     expect(ran.code).toBe(2);
-    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", next: { step: "install", command: "npx poplin install stand-in" }, missing: ["where", "login", "token"] });
+    expect(jsonOf(ran)).toEqual({ ok: false, problem: "missing_answer", next: { step: "install", command: "npx poplin install stand-in" }, missing: ["where", "user", "token"] });
     expect(ran.err).toEqual([
       "poplin install: an answer is missing: where it answers. Give --place <name> or --no-place (or POPLIN_PLACE).",
-      "poplin install: an answer is missing: the first login. Give --login <email> (or POPLIN_LOGIN).",
+      "poplin install: an answer is missing: the first login. Give --user <email> (or POPLIN_USER).",
       `poplin install: an answer is missing: the account token. Set ${TOKEN_VARIABLE}, or pipe it with --token-stdin.`,
     ]);
     expect(account.finds).toEqual([]);
@@ -431,7 +431,7 @@ describe.each([
   ["at a place", "--place example.com"],
 ])("a first login the run did not use, in an install %s", (_kind, place) => {
   const login = "new@example.com" as Login;
-  const line = `install stand-in ${place} --login new@example.com --adopt`;
+  const line = `install stand-in ${place} --user new@example.com --adopt`;
   const unusedAt = (): Account => ({ ...accountWith(LEFTOVER), installed: { ...installedOf(FRESH), unused: login } });
 
   // Drift: the install kept the users its records hold, and the email of the line is none of them. An ending that offers the login asks a person in who gets no code, and a `next` of `login` sends a program the same way.
@@ -601,7 +601,7 @@ describe("a run that is blocked", () => {
 describe("the token", () => {
   test("a question that quotes the token is asked without it: without this a provider's own words put the token into a prompt", async () => {
     const account = accountWith({ state: "choice", question: accountQuestion({ kind: "none" }, `Which account is ${TOKEN} for? 1) First  2) Second`) }, { state: "none", place: PLACE, notes: [] });
-    const ran = await runLine("install stand-in --no-place --login you@example.com --dry-run", account, { asks: true, env: HELD, typed: ["1"] });
+    const ran = await runLine("install stand-in --no-place --user you@example.com --dry-run", account, { asks: true, env: HELD, typed: ["1"] });
 
     expect(ran.asked).toEqual(["Which account is [token] for? 1) First  2) Second"]);
     expect(ran.code).toBe(0);
@@ -610,7 +610,7 @@ describe("the token", () => {
   test("a failure that quotes the token is printed without it, as lines and as JSON: without this a provider's error puts the token on the screen", async () => {
     const account = emptyAccount();
     account.crash = new Error(`the host refused ${TOKEN}`);
-    const plain = await runLine("install stand-in --no-place --login you@example.com --token-stdin", account, { stdin: TOKEN });
+    const plain = await runLine("install stand-in --no-place --user you@example.com --token-stdin", account, { stdin: TOKEN });
     const json = await runLine(`${RUN} --json`, account, { env: HELD });
 
     expect(plain.code).toBe(1);
@@ -659,7 +659,7 @@ describe("on a terminal", () => {
 
   test("an answer that is refused is said and asked again, and an answer that was given is not asked: without this one typing mistake ends the run", async () => {
     const account = emptyAccount();
-    const ran = await runLine("install stand-in --login you@example.com", account, { asks: true, typed: ["UPPER", "", "tok_short", TOKEN, false] });
+    const ran = await runLine("install stand-in --user you@example.com", account, { asks: true, typed: ["UPPER", "", "tok_short", TOKEN, false] });
 
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual([
@@ -692,9 +692,9 @@ describe("on a terminal", () => {
 
   test("something left behind is asked about, and a no stops the run: without this a person is never asked before another install's records are used", async () => {
     const no = accountWith(LEFTOVER);
-    const refused = await runLine("install stand-in --no-place --login you@example.com", no, { asks: true, env: HELD, typed: [false] });
+    const refused = await runLine("install stand-in --no-place --user you@example.com", no, { asks: true, env: HELD, typed: [false] });
     const yes = accountWith(LEFTOVER);
-    const taken = await runLine("install stand-in --no-place --login you@example.com --no-log-in --no-wait", yes, { asks: true, env: HELD, typed: [true] });
+    const taken = await runLine("install stand-in --no-place --user you@example.com --no-log-in --no-wait", yes, { asks: true, env: HELD, typed: [true] });
 
     expect(refused.asked).toEqual(["Use it, with what it holds? [y/N]"]);
     expect(refused.code).toBe(1);
@@ -706,8 +706,8 @@ describe("on a terminal", () => {
   test("what is switched off is said before the run, and a no stops it; a dry run and a run that asks nothing go on: without this a half-made install is the only way to learn of it", async () => {
     const scene: Found<Where, Place> = { state: "none", place: PLACE, notes: [LOGIN_OFF] };
     const stopped = accountWith(scene);
-    const asked = await runLine("install stand-in --no-place --login you@example.com", stopped, { asks: true, env: HELD, typed: [false] });
-    const dry = await runLine("install stand-in --no-place --login you@example.com --dry-run", accountWith(scene), { asks: true, env: HELD });
+    const asked = await runLine("install stand-in --no-place --user you@example.com", stopped, { asks: true, env: HELD, typed: [false] });
+    const dry = await runLine("install stand-in --no-place --user you@example.com --dry-run", accountWith(scene), { asks: true, env: HELD });
     const quiet = accountWith(scene);
     const went = await runLine(`${RUN} --no-wait`, quiet, { env: HELD });
 
@@ -723,7 +723,7 @@ describe("on a terminal", () => {
 
   test("a token that shows two accounts is asked which, and looked with again at the place chosen: without this an account is picked for the person", async () => {
     const account = accountWith({ state: "choice", question: accountQuestion({ kind: "none" }) }, { state: "none", place: PLACE, notes: [] });
-    const ran = await runLine("install stand-in --no-place --login you@example.com --no-log-in --no-wait", account, { asks: true, env: HELD, typed: ["3", "2"] });
+    const ran = await runLine("install stand-in --no-place --user you@example.com --no-log-in --no-wait", account, { asks: true, env: HELD, typed: ["3", "2"] });
 
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual(["Which account? 1) First  2) Second", "Which account? 1) First  2) Second"]);
@@ -734,7 +734,7 @@ describe("on a terminal", () => {
   test("with two providers and none named it asks which: without this the first provider would be taken for the person", async () => {
     const account = emptyAccount();
     const providers = [standIn(emptyAccount(), "other-host"), standIn(account)] as Installer<unknown, unknown>[];
-    const ran = await runLine("install --dry-run", account, { asks: true, env: { ...HELD, POPLIN_LOGIN: "you@example.com", POPLIN_PLACE: "none" }, typed: ["stand-in"], providers });
+    const ran = await runLine("install --dry-run", account, { asks: true, env: { ...HELD, POPLIN_USER: "you@example.com", POPLIN_PLACE: "none" }, typed: ["stand-in"], providers });
 
     expect(ran.asked).toEqual(["Where? other-host|stand-in"]);
     expect(ran.code).toBe(0);

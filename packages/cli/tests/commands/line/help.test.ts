@@ -63,7 +63,7 @@ const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "set --dry-run": ["--private"],
   "config --dry-run": ["versions_kept", "10"],
   "set --server": ["--private"],
-  "import --logins": ["--settings"],
+  "import --users": ["--settings"],
   "doctor --update": ["--repair"],
   "doctor --dry-run": ["--repair"],
   "doctor --add-user": ["--repair"],
@@ -214,5 +214,22 @@ describe("helpText", () => {
 
     expect(alone.length).toBeGreaterThan(0);
     expect(alone.filter((flag) => !isPrinted(helpText(), flag))).toEqual([]);
+  });
+
+  test("the overview lists the commands under their groups in one order, and uninstall ends the group of install: a command moved to another group would drag uninstall after it", () => {
+    const parts = helpText()
+      .split("\n\n")
+      .slice(1, 8)
+      .map((part) => part.split("\n").map((line) => line.trim().split(" ")[0]));
+
+    expect(parts).toEqual([
+      ["Publish:", "publish"],
+      ["Sites:", "set", "show", "rollback", "new-link", "duplicate", "delete", "restore", "list"],
+      ["Auth:", "login", "logout", "whoami"],
+      ["Install:", "install", "config", "doctor", "update", "uninstall"],
+      ["Backup:", "export", "import"],
+      ["Agent:", "mcp"],
+      ["Help:", "help"],
+    ]);
   });
 });

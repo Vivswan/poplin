@@ -537,7 +537,7 @@ async function checkRelease(run: Run, world: World, progress: Progress, words: r
  * @returns the install's database, and whether the build that ran before is left unable to answer; or what stopped the run
  */
 async function settle(run: Run, found: Found, login: string, current: boolean, world: World, progress: Progress): Promise<Made | Stop> {
-  const words = ["cloudflare", ...placeWords(run, found), `--login=${login}`, "--yes", "--adopt", "--no-log-in", "--json"];
+  const words = ["cloudflare", ...placeWords(run, found), `--user=${login}`, "--yes", "--adopt", "--no-log-in", "--json"];
   const made = await makeOrMend(run, found, { words, current }, world, progress);
   if (isStop(made.made)) return made.made;
 

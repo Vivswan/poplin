@@ -203,13 +203,13 @@ A run that left a kind undone ends `Run this command again with --keep-data`, an
 
 The new install takes its users and its settings from the kept database:
 
-| The kept database holds | Who the login lets in             | `--login`                                                                          |
+| The kept database holds | Who the login lets in             | `--user`                                                                           |
 | ----------------------- | --------------------------------- | ---------------------------------------------------------------------------------- |
 | users                   | those users, and nobody else      | not used. For an email that is none of them, the row `left out  First login` says so |
-| no users yet            | the email you give for `--login`  | used                                                                               |
-| records this poplin cannot read | the email you give for `--login` | used, and the row of the database says that its users were not read          |
+| no users yet            | the email you give for `--user`   | used                                                                               |
+| records this poplin cannot read | the email you give for `--user` | used, and the row of the database says that its users were not read          |
 
-To let one more person in afterwards: `npx poplin doctor --repair --no-domain --add-user you@example.com`, with their email. Under a domain the line holds `--domain` and your domain in place of `--no-domain`. Where the email of `--login` is none of the kept users, the run ends with that line, after `To let you@example.com log in too:`, and offers no login of this computer.
+To let one more person in afterwards: `npx poplin doctor --repair --no-domain --add-user you@example.com`, with their email. Under a domain the line holds `--domain` and your domain in place of `--no-domain`. Where the email of `--user` is none of the kept users, the run ends with that line, after `To let you@example.com log in too:`, and offers no login of this computer.
 
 A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 

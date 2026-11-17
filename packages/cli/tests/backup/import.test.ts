@@ -360,7 +360,7 @@ describe("import", () => {
     expect(into.sent.filter((sent) => !sent.includes("/uploads/"))).toEqual(["GET /api/whoami", "POST /api/import/sites"]);
   });
 
-  test("the settings come back only with --settings and the logins only with --logins, and a one-site backup has none to give: without this an import could lock the admin of the new install out", async () => {
+  test("the settings come back only with --settings and the logins only with --users, and a one-site backup has none to give: without this an import could lock the admin of the new install out", async () => {
     const from = await openBench();
     const label = await published(from, "notes", { "index.html": "<title>Notes</title>" });
     await from.run("config trash_days 9");
@@ -378,7 +378,7 @@ describe("import", () => {
     const bare = await settings();
     const restored = await into.run(`import ${zip} --settings`);
     const kept = await settings();
-    await into.run(`import ${zip} --settings --logins`);
+    await into.run(`import ${zip} --settings --users`);
     const refused = await into.run(`import ${one} --settings`);
 
     expect([bare, kept[0], kept[1]]).toEqual([before, 9, before[1]]);

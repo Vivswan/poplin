@@ -12,7 +12,7 @@ const FORGED = "The host refused the token.\u001b[2K\r\nThe way on: npx poplin u
 const REFUSED: Found<Where, Place> = { state: "refused", why: "token", words: FORGED };
 
 /** A dry run of an install that gives every answer, with the token in its variable. */
-const LINE = "install stand-in --no-place --login you@example.com --yes --dry-run";
+const LINE = "install stand-in --no-place --user you@example.com --yes --dry-run";
 
 // Drift: a provider's sentence may quote a name somebody else wrote in the account. Printed as it is, an escape sequence in it rewrites the terminal, and a person reads the forged line as the command's own.
 test("a provider's sentence reaches the screen on one line with no control character, and the JSON value holds it as it came", async () => {
@@ -35,8 +35,8 @@ test("a token a provider's sentence quotes right after an escape sequence is hid
 // Drift: a stop that comes while the line is read knows the command and not the provider, so its next step names no provider, and that line with the answers added is refused: a provider's option needs its provider named first.
 test("a stop that comes while the line is read names the provider in its next step: the one the words name, or the only one the package carries", async () => {
   const lines = [
-    "install stand-in --place example.com --login you@example.com --yes --json",
-    "install --dry-run --place example.com --login you@example.com --json",
+    "install stand-in --place example.com --user you@example.com --yes --json",
+    "install --dry-run --place example.com --user you@example.com --json",
     "uninstall --keep-data --json",
     "doctor --repair --dry-run --add-user nobody --json",
   ];

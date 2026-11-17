@@ -308,7 +308,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
   const alerts = kind === "domain" ? [first, first] : [first];
 
   // Drift: the Worker stores its first settings only in a database that holds none. Mended to the first login a person typed, Cloudflare would let in an email the install turns away, and send no code to the users it knows.
-  test("the login, the alerts, and the rules are mended to the users and the settings the database holds, a row and the answer say that --login was not used, and a repair then finds nothing to change", async () => {
+  test("the login, the alerts, and the rules are mended to the users and the settings the database holds, a row and the answer say that --user was not used, and a repair then finds nothing to change", async () => {
     const account = await keptData();
     const dry = await installed(account, kind, DRY);
     const run = await installed(account, kind, APPLY);
@@ -374,7 +374,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
     await other.store.call("UPDATE schema_steps SET fingerprint = ?1", ["of another build"]);
     const { done } = await installed(other, kind, APPLY);
     const unread =
-      "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps; its records are not at the schema of this poplin, so the users it holds were not read, and --login is used. " +
+      "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps; its records are not at the schema of this poplin, so the users it holds were not read, and --user is used. " +
       `Once the install answers, npx poplin doctor --repair ${kind === "domain" ? "--domain example.com" : "--no-domain"} mends the login to the users it holds)`;
 
     expect([shown(done)[1], shown(done).filter((row) => row.startsWith("First login")), usersAt(other).login]).toEqual([unread, [], [LOGIN]]);

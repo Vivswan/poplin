@@ -46,8 +46,8 @@ const ACCOUNT_ID = /^[0-9a-f]{32}$/;
 
 /** The provider's own options. */
 const OPTIONS: readonly OptionRow[] = [
-  { flag: "--domain", value: "<name>", about: "Install under your own domain, Active on the account: example.com", variable: "POPLIN_DOMAIN" },
-  { flag: "--no-domain", value: null, about: "Install at the free address Cloudflare gives the account", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
+  { flag: "--domain", value: "<name>", about: "Your own domain, Active on the account: example.com", variable: "POPLIN_DOMAIN" },
+  { flag: "--no-domain", value: null, about: "The free address Cloudflare gives the account", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
   { flag: "--account", value: "<id>", about: "Account id, when the token can access more than one", variable: "POPLIN_ACCOUNT" },
 ];
 
@@ -66,7 +66,7 @@ const WORDS = {
   notUsed: "it is not used, and an install needs a database of this name",
   unchecked: "its code was there before this run, and this run did not check it",
   allowance: "the database's free allowance for the day is used up",
-  unreadUsers: "its records are not at the schema of this poplin, so the users it holds were not read, and --login is used",
+  unreadUsers: "its records are not at the schema of this poplin, so the users it holds were not read, and --user is used",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
@@ -317,7 +317,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
  * Finish the install with the repair of its kind and its first login: the code the dashboard's Domain screen runs, on a Worker with nothing set.
  *
  * The repair is given the account the token was found in, so it looks for no other.
- * A database that stood before the run and holds an earlier install's settings is what the Worker goes on with: its login is mended to those users, its rules to those settings, and `--login` is not used.
+ * A database that stood before the run and holds an earlier install's settings is what the Worker goes on with: its login is mended to those users, its rules to those settings, and `--user` is not used.
  *
  * @param kept - the settings such a database holds; `undefined` for a database the Worker stores its first settings in
  * @returns whether Cloudflare answered; its rows are added to the run, but the database's, which stands by now

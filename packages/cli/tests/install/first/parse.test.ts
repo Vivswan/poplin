@@ -17,7 +17,7 @@ const PROVIDERS: readonly Installer<unknown, unknown>[] = [
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
 
 /** Every answer a run needs, as options. */
-const ANSWERS = "--no-place --login you@example.com";
+const ANSWERS = "--no-place --user you@example.com";
 
 function parsed(line: string, env: Readonly<Record<string, string | undefined>> = {}, canAsk = false): ParsedInstall {
   return parseInstall(words(`poplin ${line}`).slice(1), PROVIDERS, env, canAsk);
@@ -51,9 +51,9 @@ describe("a line that gives every answer", () => {
 
   test.each([
     ["without a place", `install stand-in ${ANSWERS}`, { ...fixed, where: { kind: "none" }, mode: apply }],
-    ["under a place", "install stand-in --place example.com --login you@example.com", { ...fixed, where: { kind: "place", name: "example.com" }, mode: apply }],
-    ["an option joined to its value", "install stand-in --place=example.com --login=You@Example.com", { ...fixed, where: { kind: "place", name: "example.com" }, mode: apply }],
-    ["the shared options before the provider", "install --login you@example.com --json stand-in --no-place", { ...fixed, json: true, where: { kind: "none" }, mode: apply }],
+    ["under a place", "install stand-in --place example.com --user you@example.com", { ...fixed, where: { kind: "place", name: "example.com" }, mode: apply }],
+    ["an option joined to its value", "install stand-in --place=example.com --user=You@Example.com", { ...fixed, where: { kind: "place", name: "example.com" }, mode: apply }],
+    ["the shared options before the provider", "install --user you@example.com --json stand-in --no-place", { ...fixed, json: true, where: { kind: "none" }, mode: apply }],
     ["the provider's own second option", `install stand-in ${ANSWERS} --account second`, { ...fixed, where: { kind: "none", account: "second" }, mode: apply }],
     ["a dry run", `install stand-in ${ANSWERS} --dry-run`, { ...fixed, where: { kind: "none" }, mode: { mode: "dry-run", adopt: "no" } }],
     ["a dry run of a run that adopts", `install stand-in ${ANSWERS} --dry-run --adopt`, { ...fixed, where: { kind: "none" }, mode: { mode: "dry-run", adopt: "yes" } }],
@@ -64,11 +64,11 @@ describe("a line that gives every answer", () => {
   });
 
   test("the variables answer what the options leave open, and an option wins over its variable: without this an agent that sets variables is asked", () => {
-    const env = { ...HELD, POPLIN_LOGIN: "env@example.com", POPLIN_PLACE: "example.org" };
+    const env = { ...HELD, POPLIN_USER: "env@example.com", POPLIN_PLACE: "example.org" };
 
     expect(planOf("install stand-in", env)).toMatchObject({ asking: "never", where: { kind: "place", name: "example.org" }, login: "env@example.com" });
-    expect(planOf("install stand-in --no-place --login you@example.com", env)).toMatchObject({ where: { kind: "none" }, login: "you@example.com" });
-    expect(planOf("install stand-in", { ...env, POPLIN_LOGIN: "" })).toMatchObject({ kind: "stop" });
+    expect(planOf("install stand-in --no-place --user you@example.com", env)).toMatchObject({ where: { kind: "none" }, login: "you@example.com" });
+    expect(planOf("install stand-in", { ...env, POPLIN_USER: "" })).toMatchObject({ kind: "stop" });
   });
 
   test("a token that is piped is read later, and makes the run one that asks nothing even on a terminal: without this a pipe would be asked a question", () => {
@@ -103,7 +103,7 @@ describe("a line on a terminal", () => {
 
 describe("a line that is refused", () => {
   test.each([
-    ["both forms of one answer", "install stand-in --place example.com --no-place --login you@example.com", ["poplin install: give one of --place <name> and --no-place"]],
+    ["both forms of one answer", "install stand-in --place example.com --no-place --user you@example.com", ["poplin install: give one of --place <name> and --no-place"]],
     ["both forms of the login offer", `install stand-in ${ANSWERS} --log-in --no-log-in`, ["poplin install: give one of --log-in and --no-log-in"]],
     ["a dry run that logs in", `install stand-in ${ANSWERS} --dry-run --log-in`, ["poplin install: --dry-run changes nothing: leave out --log-in"]],
     ["a dry run that does not log in", `install stand-in ${ANSWERS} --dry-run --no-log-in`, ["poplin install: --dry-run changes nothing: leave out --no-log-in"]],
@@ -111,10 +111,10 @@ describe("a line that is refused", () => {
     ["the token given twice", `install stand-in ${ANSWERS} --token-stdin`, [`poplin install: the token is given twice: ${TOKEN_VARIABLE} is set, and --token-stdin was given`]],
     ["an option twice", "install stand-in --no-place --no-place", ["poplin install: --no-place was given twice"]],
     ["a shared option twice", `install stand-in ${ANSWERS} --yes --yes`, ["poplin install: --yes was given twice"]],
-    ["an email that is none", "install stand-in --no-place --login you", ["poplin install: --login takes an email address", "for example: --login you@example.com"]],
-    ["an email with nothing in it", 'install stand-in --no-place --login ""', ["poplin install: --login takes an email address", "for example: --login you@example.com"]],
-    ["a place the provider refuses", "install stand-in --place UPPER --login you@example.com", ['poplin install: --place takes a name alone, such as example.com: "UPPER"']],
-    ["an option with no value", "install stand-in --no-place --login", ["poplin install: --login needs a value: --login <email>"]],
+    ["an email that is none", "install stand-in --no-place --user you", ["poplin install: --user takes an email address", "for example: --user you@example.com"]],
+    ["an email with nothing in it", 'install stand-in --no-place --user ""', ["poplin install: --user takes an email address", "for example: --user you@example.com"]],
+    ["a place the provider refuses", "install stand-in --place UPPER --user you@example.com", ['poplin install: --place takes a name alone, such as example.com: "UPPER"']],
+    ["an option with no value", "install stand-in --no-place --user", ["poplin install: --user needs a value: --user <email>"]],
     ["a repair", `install stand-in ${ANSWERS} --repair`, ["poplin install: no option --repair", "To mend an install: poplin doctor --repair"]],
     ["an update", `install stand-in ${ANSWERS} --update`, ["poplin install: no option --update", "To update an install: poplin update"]],
     ["a force", `install stand-in ${ANSWERS} --force`, ["poplin install: no option --force", "install changes no install that is there. To remove one: poplin uninstall <provider>"]],
@@ -122,7 +122,7 @@ describe("a line that is refused", () => {
     ["an option of another provider", `install stand-in ${ANSWERS} --region west`, ["poplin install: --region is no option of stand-in", "it is an option of other-host"]],
     ["a provider's option given to the other", "install other-host --place example.com", ["poplin install: --place is no option of other-host", "it is an option of stand-in"]],
     ["a provider's option before any provider", "install --no-place", ["poplin install: --no-place is an option of stand-in", "name the provider first: poplin install stand-in --no-place"]],
-    ["a provider's option before its provider", "install --no-place stand-in --login you@example.com", ["poplin install: --no-place is an option of stand-in", "name the provider first: poplin install stand-in --no-place"]],
+    ["a provider's option before its provider", "install --no-place stand-in --user you@example.com", ["poplin install: --no-place is an option of stand-in", "name the provider first: poplin install stand-in --no-place"]],
     ["a value that starts with a dash, unjoined", `install stand-in ${ANSWERS} --account --yes`, ["poplin install: --account needs a value: --account <id>"]],
     ["an option nothing has", `install stand-in ${ANSWERS} --loud`, ["poplin install: no option --loud", "poplin install stand-in --help lists the options"]],
     ["an option one letter off", `install stand-in ${ANSWERS} --dry-rum`, ["poplin install: no option --dry-rum", "did you mean --dry-run?"]],
@@ -141,11 +141,11 @@ describe("a line that is refused", () => {
   });
 
   test.each([
-    ["nothing given", "install stand-in --yes", {}, ["where", "login", "token"]],
-    ["the place given", "install stand-in --no-place --yes", {}, ["login", "token"]],
+    ["nothing given", "install stand-in --yes", {}, ["where", "user", "token"]],
+    ["the place given", "install stand-in --no-place --yes", {}, ["user", "token"]],
     ["all but the token", `install stand-in ${ANSWERS} --yes`, {}, ["token"]],
-    ["all but the login", "install stand-in --no-place", HELD, ["login"]],
-    ["no terminal and no --yes", "install stand-in", {}, ["where", "login", "token"]],
+    ["all but the login", "install stand-in --no-place", HELD, ["user"]],
+    ["no terminal and no --yes", "install stand-in", {}, ["where", "user", "token"]],
   ])("a run that asks nothing names every missing answer, %s: without this an agent learns of one answer a run", (_name, line, env, missing) => {
     expect(refusal(line, env)).toEqual(missing);
     expect(parsed(line, env)).toMatchObject({ kind: "stop", stop: { exit: 2, problem: "missing_answer" } });

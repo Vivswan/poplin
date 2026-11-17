@@ -47,9 +47,8 @@ Remove the install from Stand-In Host. The provider's options locate the
 install.
 
 Options:
-  --place <name>            Install under your own place: example.com
-                            (POPLIN_PLACE)
-  --no-place                Install at the address the host gives the account
+  --place <name>            Your own place: example.com  (POPLIN_PLACE)
+  --no-place                The address the host gives the account
                             (POPLIN_PLACE=none)
   --account <id>            Account id, when the token can access more than one
                             (POPLIN_ACCOUNT)
