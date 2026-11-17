@@ -7,6 +7,7 @@ import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import type { Mend, Repaired, Run, Token, Whole } from "@poplin/core/src/install/installer";
 import type { Place, Where } from "../../../../../src/shared/install/first/find";
 import { installer } from "../../../../../src/shared/install/first/installer";
+import { keepsLines, observabilityOf } from "../../../../../src/shared/install/pieces/worker-logs/worker-logs";
 import { ACCOUNT, type Account, answer, emptyAccount, KEY_VALUE_START, TOKEN } from "../../support/fake-install";
 import { type Store, storeOf } from "../../support/fake-store";
 import { RELEASE, worldOf } from "../../support/fake-reach";
@@ -28,7 +29,7 @@ const KINDS = {
 const [DRY, APPLY]: readonly [Run, Run] = ["dry-run", "apply"];
 
 /** The calls a repair that changes nothing sends, pinned for each kind: all of them read. */
-const CALLS: Readonly<Record<keyof typeof KINDS, number>> = { domain: 30, "no-domain": 26 };
+const CALLS: Readonly<Record<keyof typeof KINDS, number>> = { domain: 31, "no-domain": 27 };
 
 /** A version below the release the website names, which an install that is behind runs. */
 const OLDER = "0.2.0";
@@ -257,7 +258,7 @@ describe.each(BOTH)("the release an install runs, where Cloudflare tags no versi
   test("an upload by another tool, which keeps poplin's marks and states no release, is read as no version: never as the tag of the version under it", async () => {
     const account = await wholeInstall(kind);
     const kept = account.bindings.filter((binding) => binding.name !== "RELEASE").map((binding) => ({ name: binding.name, type: "inherit" }));
-    answer(account, { method: "PUT", path: `/accounts/${ACCOUNT}/workers/scripts/poplin`, key: `Bearer ${TOKEN}`, body: { metadata: { bindings: kept }, "index.js": "" } });
+    answer(account, { method: "PUT", path: `/accounts/${ACCOUNT}/workers/scripts/poplin`, key: `Bearer ${TOKEN}`, body: { metadata: { bindings: kept, observability: account.observability }, "index.js": "" } });
     const { done, changes } = await repaired(account, kind);
 
     expect(account.versions.map((version) => (version.annotations as { readonly "workers/tag"?: string } | undefined)?.["workers/tag"])).toEqual([undefined, RELEASE, RELEASE]);
@@ -297,6 +298,23 @@ describe.each(BOTH)("a release the install is behind, %s", (kind) => {
     const { metadata } = account.uploads.at(-1) as { readonly metadata: { readonly bindings: readonly { readonly name: string }[] } };
 
     expect([account.uploads.length, metadata.bindings.some((binding) => binding.name === "LAST_UPDATE")]).toEqual([2, false]);
+  });
+
+  // Drift: Cloudflare keeps no observability across an upload, and a repair sends its upload before it reads the setting. One that stated the release's would switch the logs back on, on an install whose setting keeps none.
+  test.each([
+    { name: "that Cloudflare already keeps none of", carried: true, uploaded: false, row: "Worker logs | leave | not kept", written: 0 },
+    { name: "whose change never reached Cloudflare", carried: false, uploaded: true, row: "Worker logs | change | not kept", written: 1 },
+  ])("with the setting of the logs off, on a Worker $name, the upload states the logs as the Worker has them and the run ends with none kept", async ({ carried, uploaded, row, written }) => {
+    const account = await behindInstall(kind);
+    await account.store.database.changeSettings({ provider_logs: false }, { as: "person", by: OWNER, at: 0 });
+    if (carried) account.observability = observabilityOf(account.observability, false);
+
+    const { done, calls } = await repaired(account, kind);
+    const sent = account.uploads.map((upload) => keepsLines((upload.metadata as { readonly observability?: unknown }).observability));
+
+    const patched = calls.filter((entry) => entry.method === "PATCH" && entry.path.endsWith("/script-settings"));
+
+    expect([sent, shown(done).filter((entry) => entry.startsWith("Worker logs")), patched.length, keepsLines(account.observability)]).toEqual([[true, uploaded], [row], written, false]);
   });
 
   // Drift: a person runs the repair to get back in. One that stopped at an upload it could not send would leave the login unmended, and one that said nothing of the upload would leave the release untaken with no word.

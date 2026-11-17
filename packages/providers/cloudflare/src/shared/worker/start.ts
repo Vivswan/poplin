@@ -15,6 +15,7 @@ import { createApi } from "@poplin/app/src/api/api";
 import type { DomainPlug } from "@poplin/app/src/console/domain/records";
 import type { InstallKey } from "@poplin/app/src/console/key/records";
 import type { UsersFollow } from "@poplin/app/src/console/access/users-follow";
+import type { LogsFollow } from "@poplin/app/src/console/settings/logs-follow";
 import type { RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 import type { UsageHost } from "@poplin/app/src/console/usage/records";
 import type { Identify } from "@poplin/app/src/login/admit";
@@ -46,6 +47,7 @@ import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
 import { goBack } from "../release/update/go-back";
 import { createSelfUpdate } from "../release/update/self-update";
+import { createLogsFollow } from "../install/pieces/worker-logs/logs-follow";
 import { accessIdentity } from "../login/access-token";
 import { accessKeys } from "../login/keys";
 import { R2Store } from "../storage/r2";
@@ -144,6 +146,9 @@ export interface Instance {
 
   /** The guard rules' side at Cloudflare: a change of a setting they are written from is carried there with the kept key. */
   readonly rules: RulesFollow;
+
+  /** The logs' side at Cloudflare: a change of the setting that keeps them is carried to the Worker's observability with the kept key. */
+  readonly logs: LogsFollow;
 
   /** Cloudflare's side of the Usage screen. */
   readonly usage: UsageHost;
@@ -345,9 +350,10 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
   };
   const counters = new CloudflareCounters({ limiter: env.MINUTE_LIMITS, database, rows: driver });
   const { kept, uploadKey, direct } = readKeys(env, own.value.accountId, outside);
-  const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, last: env.LAST_UPDATE, now: outside.now, fetch: outside.latest.fetch });
+  const logsKept = async (): Promise<boolean> => (await database.readSettings())?.provider_logs !== false;
+  const update = createSelfUpdate({ key: kept, worker: own.value, version: VERSION, last: env.LAST_UPDATE, now: outside.now, fetch: outside.latest.fetch, logsKept });
   const { key, domain, rules, alerts } = hosts.sideOf({ ...own.value, kept, uploadKey, fetch: outside.cloudflare, now: outside.now });
-  const carried = { follow: createUsersFollow(kept, own.value.accountId, alerts), endLogins: createEndLogins(kept, own.value.accountId), rules };
+  const carried = { follow: createUsersFollow(kept, own.value.accountId, alerts), endLogins: createEndLogins(kept, own.value.accountId), rules, logs: createLogsFollow(kept, own.value) };
   const api = createApi({
     ...install,
     readToken: (id) => database.getToken(id),

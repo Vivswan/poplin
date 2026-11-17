@@ -97,6 +97,7 @@ export function takeWith(parts: UpdateParts, given: Taking): ReturnType<typeof s
     last: undefined,
     now: given.now,
     fetch: (url, init) => given.feed(url, init),
+    logsKept: async () => (await database.readSettings())?.provider_logs !== false,
   });
   const counters = { takeMinute: async () => ({ ok: true }) as const };
 

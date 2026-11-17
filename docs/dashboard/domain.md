@@ -95,6 +95,7 @@ On an install [without a domain](../start/without-a-domain.md) the screen is the
 | Worker variable    | what the Worker reads at its start                                     |
 | Key                | [the key poplin keeps](../about/security.md#the-kept-key)              |
 | Upload key         | [the key that sends files straight to the bucket](../about/security.md#the-upload-key) |
+| Worker logs        | whether Cloudflare keeps the Worker's lines, as [the setting](activity.md#switch-the-logs-off) says: `kept` or `not kept` |
 | D1 database        | the database of the install                                            |
 | Budget alert       | [the email when charges reach 1 dollar](#optional-an-email-when-charges-reach-1-dollar): `optional` until the key or a Repair made it |
 | Workflow           | what runs the install's background jobs: the copy of a large site      |

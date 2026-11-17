@@ -44,6 +44,7 @@ function shared(host: string, sites: string): string[] {
     "Worker variable | make | ZONE",
     "Key | make | poplin kept key",
     "Upload key | make | poplin upload key",
+    "Worker logs | leave | kept",
   ];
 }
 
@@ -81,8 +82,8 @@ const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
 
 /** The calls each kind sends, pinned: to find an install, for a dry run, and for a run, with how many of the run's change something. */
 const CALLS: Readonly<Record<keyof typeof KINDS, { readonly find: number; readonly dry: number; readonly run: number; readonly writes: number }>> = {
-  domain: { find: 6, dry: 19, run: 49, writes: 24 },
-  "no-domain": { find: 6, dry: 13, run: 37, writes: 18 },
+  domain: { find: 6, dry: 20, run: 50, writes: 24 },
+  "no-domain": { find: 6, dry: 14, run: 38, writes: 18 },
 };
 
 function loginOf(text: string): Login {

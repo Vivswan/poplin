@@ -3,9 +3,7 @@
 import { expect } from "bun:test";
 
 import type { Bench, Check } from "../records";
-
-/** How long the provider's list may take to show a change it took, in milliseconds, and how long one look waits for the next. */
-const SHOWN_WITHIN = { ms: 20_000, pause: 2000 } as const;
+import { shownInTime } from "../util";
 
 /** The logins of the install as its settings hold them, in order. */
 async function storedLogins(bench: Bench): Promise<string[]> {
@@ -16,16 +14,8 @@ async function storedLogins(bench: Bench): Promise<string[]> {
 }
 
 /** Look at the provider's list until an email is there, or is gone, and answer whether it came to that in time. */
-async function listed(bench: Bench, email: string, wanted: boolean): Promise<boolean> {
-  const until = bench.now() + SHOWN_WITHIN.ms;
-
-  for (;;) {
-    if ((await bench.loginList()).includes(email) === wanted) return true;
-
-    if (bench.now() >= until) return false;
-
-    await bench.pause(SHOWN_WITHIN.pause);
-  }
+function listed(bench: Bench, email: string, wanted: boolean): Promise<boolean> {
+  return shownInTime(bench, async () => (await bench.loginList()).includes(email) === wanted);
 }
 
 /** The check of the users. The email it adds is of a domain kept for documents: nobody holds it, and the check takes it out again whatever it met. */

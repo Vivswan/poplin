@@ -12,6 +12,9 @@ export const OWN_KEY = "kept-key-of-the-test";
 /** Every binding of a set-up install's Worker, as Cloudflare's API lists them. */
 const OWN_BINDINGS = ["SITES", "DB", "JOBS", "MINUTE_LIMITS", "WORKER_NAME", "ACCOUNT_ID", "ZONE", "ACCESS", "FIRST_SETTINGS", "KEPT_KEY"];
 
+/** The observability of a Worker whose logs are kept, as an install's first upload states it. */
+const KEPT = { enabled: true, head_sampling_rate: 1, logs: { enabled: true, invocation_logs: false } };
+
 /** The built module of the release, as any text. */
 const MODULE = "export default {};\n";
 
@@ -53,6 +56,9 @@ interface OwnRelease {
 
   /** What one upload of the release reads as. */
   readonly upload: Uploaded;
+
+  /** The observability the Worker has now: the one of an install that keeps its logs, until an upload or a change of the script settings states another. */
+  readonly observability: () => unknown;
 }
 
 function result(value: unknown): Response {
@@ -92,10 +98,12 @@ export async function ownRelease(version: string): Promise<OwnRelease> {
     [bundleAsset(version, MAP_FILE)]: built[MAP_FILE],
   };
   const uploads: Uploaded[] = [];
+  const worker: { observability: unknown } = { observability: KEPT };
 
   return {
     uploads,
-    upload: { kept: OWN_BINDINGS.filter((name) => name !== "MINUTE_LIMITS"), observability: { enabled: true }, module: MODULE, map: true },
+    upload: { kept: OWN_BINDINGS.filter((name) => name !== "MINUTE_LIMITS"), observability: KEPT, module: MODULE, map: true },
+    observability: () => worker.observability,
     latest: {
       fetch: async (address) => {
         const file = published[address.slice(address.lastIndexOf("/") + 1)];
@@ -110,13 +118,22 @@ export async function ownRelease(version: string): Promise<OwnRelease> {
       const request = new Request(input, init);
       if (request.headers.get("authorization") !== `Bearer ${OWN_KEY}`) return new Response("no such key", { status: 401 });
 
+      const { pathname } = new URL(request.url);
+      if (pathname.endsWith("/script-settings")) {
+        if (request.method === "PATCH") worker.observability = ((await request.json()) as { readonly observability: unknown }).observability;
+
+        return result({ logpush: false, observability: worker.observability });
+      }
+
       if (request.method !== "GET") {
-        uploads.push(await uploadOf(request));
+        const upload = await uploadOf(request);
+        uploads.push(upload);
+        worker.observability = upload.observability;
 
         return result({ id: "poplin" });
       }
 
-      return result(new URL(request.url).pathname.endsWith("/schedules") ? { schedules: [{ cron: "*/15 * * * *" }] } : { bindings: OWN_BINDINGS.map((name) => ({ name, type: "plain_text" })) });
+      return result(pathname.endsWith("/schedules") ? { schedules: [{ cron: "*/15 * * * *" }] } : { bindings: OWN_BINDINGS.map((name) => ({ name, type: "plain_text" })), observability: worker.observability });
     },
   };
 }

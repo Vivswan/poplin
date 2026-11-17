@@ -4,10 +4,11 @@
 //   the run's start       1: the last asking, the settings, and the walk's place, read together  0                      1
 //   the day's first run   2: that, and the answer written                                        1: the website asked   3
 //   the login repaired    8: the users carried anew where their policy was written, an audit entry, a problem noted, on the run that begins a UTC day   29: 14, the 3 of the two alerts, and that carry's 12, and one for each further page of a list   37
+//   the logs stated       2: the setting read again after each of two writings, on the run that begins a UTC day   4: 2 x (the observability read, and written where it differs)   6
 //   users or rules wait   1: the kept run of the domain read, on an install that holds a key           0                      1
 //   either carried        6 for the users, 5 for the rules: that read once, then 2 x (the mark set with what is stored read, the settling), a problem noted   12 and 10: 2 x 6 and 2 x 5 to Cloudflare   18, 15
-//   an update             5: the try, the audit entry, and the try taken back or a problem      11: the release read,   16
-//                            noted                                                               fetched, and put in place
+//   an update             6: the try, the setting of the logs read, the audit entry, and the    11: the release read,   17
+//                            try taken back or a problem noted                                   fetched, and put in place
 //   one step over sites   4: a listing of what is due, its 5 sites changed in one call, their folders forgotten in one, the count of bucket writes   150: 5 x 30 to the bucket   154
 //   one step, at most    12: over the uploads: a listing, 5 x (an upload given up, its record removed), and the count of bucket writes            150: 5 x 30 to the bucket   162
 //   a step over uploads   1 more: a copy nobody finished, noted as a problem                     0                      1
@@ -17,11 +18,10 @@
 //   one invocation       50: an instance that starts in it makes up to 10 before the run                                300
 //
 // D1 answers one invocation 50 queries on Cloudflare's Free plan, a batch being one. A run with nothing due makes 6, and 7 on an install that holds a key, however many sites the install holds.
-// The settings are read once, at the start, and hold for the run. The walk's place is not written by a run whose walk began and ended in it.
-// A run with nothing due writes no row, but the first run of a UTC day, which writes the one row of the answer.
+// The settings are read once, at the start, and hold for the run. The walk's place is not written by a run whose walk began and ended in it. A run with nothing due writes no row, but the first run of a UTC day, which writes the one row of the answer.
 // The call that ends a walk also removes the audit entries and the ended tokens of over 90 days ago: at most 125 rows a run, and none where nothing is that old.
 // An update is started on the day's first run alone, and only where core's rules let it: every other run, and every install with the switch off, makes no call for it.
-// A change of the users that did not reach Cloudflare is carried once a run, until it is settled, and so is a changed setting that did not reach the zone's guard rules.
+// A change of the users that did not reach Cloudflare is carried once a run, until it is settled, and so is a changed setting that did not reach the zone's guard rules. The setting of the logs keeps no mark: the run that begins a UTC day states it whole.
 // A run that listed the bucket adds its listings to the day's count in one row. It may list a thousand times a day beyond `max_storage_writes_per_day`, so no other work of a day keeps it from removing files.
 
 import { startDueUpdate } from "@poplin/core/src/actions/auto-update";
@@ -34,8 +34,10 @@ import { SWEEP_SPARE_WRITES, sweepExpired } from "@poplin/core/src/actions/sweep
 import { SWEEPER } from "@poplin/core/src/auth/scopes";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import { followUsers, type UsersFollow } from "@poplin/app/src/console/access/users-follow";
+import { followLogs, type LogsFollow } from "@poplin/app/src/console/settings/logs-follow";
 import { followRules, type RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 
+import { LOGS_PUSH_CALLS } from "../install/pieces/worker-logs/logs-follow";
 import type { LoginRepair } from "../install/pieces/access/login-repair";
 import type { KeptAlerts } from "../install/pieces/alerts/account-alert";
 import { RULES_PUSH_CALLS } from "../../with-domain/pieces/rules/rules-follow";
@@ -67,6 +69,9 @@ const ALERT_CALLS = 3;
 /** The calls to Cloudflare one carrying of the settings to the guard rules makes at most, before any the SDK sends again: the rules written, for the settings and for ones that changed meanwhile. */
 const RULES_CALLS = 2 * RULES_PUSH_CALLS;
 
+/** The calls to Cloudflare one stating of the logs makes at most, before any the SDK sends again: the observability written, for the setting and for one that changed meanwhile. */
+const LOGS_CALLS = 2 * LOGS_PUSH_CALLS;
+
 /** The most requests an update sends: seven to the website and the release's page, the redirect of each file among them, and four to Cloudflare's API. */
 const SELF_UPDATE_REQUESTS = 11;
 
@@ -82,7 +87,7 @@ const START: NonNullable<Place> = { trash: false };
 /** Where the walk stands, as the database keeps it between two runs; `undefined` once it reached its end. */
 type Place = Awaited<ReturnType<Install["database"]["readSweepPlace"]>>;
 
-/** The version the install runs, what updates it, and the login's, the users', the alerts', and the guard rules' side at Cloudflare. */
+/** The version the install runs, what updates it, and the login's, the users', the alerts', the guard rules', and the logs' side at Cloudflare. */
 interface Running {
   readonly version: string;
   readonly updating: Updating;
@@ -90,6 +95,7 @@ interface Running {
   readonly follow: UsersFollow;
   readonly keepAlerts: (email: string) => Promise<KeptAlerts>;
   readonly rules: RulesFollow;
+  readonly logs: LogsFollow;
 }
 
 /** The calls a run has made so far. A call to the database is one query to D1, and one to the web is the request for the newest version. */
@@ -189,14 +195,22 @@ async function carryWaiting(install: Install, running: Pick<Running, "follow" | 
   }
 }
 
+/** State the setting of the logs to Cloudflare, where the install holds a key to state it with: a change that did not reach Cloudflare is carried so, within a day. A refusal is left for the next day's run. */
+async function stateLogs(install: Install, running: Pick<Running, "logs">, tally: Tally, kept: boolean): Promise<void> {
+  if (!running.logs.holdsKey()) return;
+
+  tally.web += LOGS_CALLS;
+  await followLogs(install, running.logs, kept);
+}
+
 /**
  * Run the sweep for one scheduled invocation: go on where the run before stopped, and keep where this one stops.
  *
  * The place is kept in the database, since Cloudflare may start a new instance for every run. Only what is due is looked at: a run takes 15 due items, and 5 when each takes a whole removal of files.
- * The first run of a UTC day also writes which version of poplin is the newest and may start an update, and the run that begins the day repairs the login: each leaves the steps fewer calls.
+ * The first run of a UTC day also writes which version of poplin is the newest and may start an update, and the run that begins the day repairs the login and states the logs: each leaves the steps fewer calls.
  *
  * @param asking - what sends the day's one request for the newest version, and where to
- * @param running - the version the install runs and what updates it, for the update an install starts by itself, and the login's, the users', and the guard rules' side at Cloudflare
+ * @param running - the version the install runs and what updates it, for the update an install starts by itself, and the login's, the users', the guard rules', and the logs' side at Cloudflare
  * @throws {Error} the sweep was refused, or the database failed; what was moved or removed before stays so, and the next run begins where this one began
  */
 export async function runSweep(install: Install, asking: Asking, running: Running): Promise<void> {
@@ -215,6 +229,7 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
     tally.database += 1;
     await endProblems(install, ["login_stands"]);
   }
+  if (beginsDay(install.now()) && start.settings !== undefined) await stateLogs(watched, running, tally, start.settings.provider_logs);
   await carryWaiting(watched, running, tally);
 
   let place: Place = start.place ?? START;

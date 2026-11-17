@@ -37,6 +37,7 @@ import { assetOf, type ClientFiles, ICON, KEPT_A_DAY, KEPT_FOR_GOOD, shellPage }
 import { isSpent, spentAnswer } from "./spent";
 import type { UsersFollow } from "./access/users-follow";
 import { holding, type Later } from "./later";
+import type { LogsFollow } from "./settings/logs-follow";
 import type { RulesFollow } from "./settings/rules-follow";
 
 /** The title of every page of the dashboard, the same on every install. */
@@ -128,6 +129,9 @@ interface ConsoleParts extends CodeTries {
   /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair on the Domain screen. */
   readonly rules?: RulesFollow;
 
+  /** The provider's side of the install's logs: a change of the setting that keeps them is carried there by itself. Without it such a change waits for the next update or repair. */
+  readonly logs?: LogsFollow;
+
   /** The host's background work, which runs the rounds of a copy after its first request's. Without it the client's own requests run them, one each. */
   readonly jobs?: Jobs;
 }
@@ -149,6 +153,7 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("follow", parts.follow);
       context.set("endLogins", parts.endLogins);
       context.set("rules", parts.rules);
+      context.set("logs", parts.logs);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
       context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, version: parts.version, usage: parts.usage, jobs: parts.jobs ?? inlineJobs, layout: parts.layout });
 

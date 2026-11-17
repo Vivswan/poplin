@@ -10,7 +10,7 @@
 //   POPLIN_LIVE_RUN       what tells this run's sites from another's; `local` when absent
 //   POPLIN_LIVE_MISSING   a JSON object of what the install is known to lack, each with its reason
 //   POPLIN_LIVE_REPORT    a file that receives the table of outcomes
-//   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   the key and the account the login list and a job are read with at Cloudflare; absent, the checks of the users and of the job are skipped
+//   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   the key and the account the login list, the Worker's logs, and a job are read with at Cloudflare; absent, the checks of the users, of the logs, and of the job are skipped
 //
 // On an install with a token, the suite first sets the two settings it counts on: `trash_days` and `visitor_requests_per_minute`.
 // Every request passes two meters: the bucket writes and lists it asks for, and the rows it makes the database write. A request past either ceiling is held back, and the run ends red with one line that says which.
@@ -18,12 +18,16 @@
 
 import { afterAll, beforeAll, describe, test } from "bun:test";
 import { writeFileSync } from "node:fs";
+import { BaseSettings } from "cloudflare/resources/workers/scripts/settings";
 
 import { CEILINGS, meterBucket } from "../scripts/live/budget";
 import { readJobRun } from "../scripts/live/job-run";
 import { readLoginList } from "../scripts/live/login-list";
 import { meterRows, ROW_CEILINGS } from "../scripts/live/rows";
 import { sendLive } from "../scripts/live/send";
+import { callCloudflare } from "../src/shared/install/client";
+import { INSTALL_OBJECTS } from "../src/shared/install/install-objects";
+import { keepsLines } from "../src/shared/install/pieces/worker-logs/worker-logs";
 import { type LiveInstall, liveAddresses } from "./addresses";
 import { openBench } from "./bench";
 import { probeMissing } from "./capabilities";
@@ -62,6 +66,9 @@ const NOT_ASKED = "a run started by hand with the many-files check switched on (
 /** Why the check of the users is skipped on a run that cannot read Cloudflare's list. */
 const NO_PROVIDER_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read the login list at Cloudflare";
 
+/** Why the check of the logs is skipped on a run that cannot read the Worker's script settings. */
+const NO_LOGS_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read the Worker's logs at Cloudflare";
+
 /** What a run that was told nothing of the install counts on no knowledge of: its upload key. */
 const NO_WORD_OF_KEY = "a run that says whether the install holds an upload key the bucket takes";
 
@@ -79,6 +86,18 @@ function providerOf(): { readonly key: string; readonly accountId: string } | un
   const [key, accountId] = [setting("CLOUDFLARE_API_TOKEN"), setting("CLOUDFLARE_ACCOUNT_ID")];
 
   return key === undefined || accountId === undefined ? undefined : { key, accountId };
+}
+
+/**
+ * Read whether Cloudflare keeps the lines the install's Worker writes, with the key the run holds.
+ *
+ * @throws {Error} Cloudflare refused the reading; the message is one of this file's own, and holds nothing Cloudflare or the connection said
+ */
+async function readLogsKept(provider: { readonly key: string; readonly accountId: string }): Promise<boolean> {
+  const settings = await callCloudflare({ key: provider.key }, (api) => new BaseSettings(api).get(INSTALL_OBJECTS.worker, { account_id: provider.accountId }));
+  if (!settings.ok) throw new Error(`the Worker's logs at Cloudflare could not be read: ${settings.failure}`);
+
+  return keepsLines(settings.value.observability);
 }
 
 /** Where the run was told the install answers: under a domain, or under an account's free address; `undefined` for a run told neither, or both. */
@@ -100,6 +119,8 @@ function knownMissing(): Missing {
   if (setting("POPLIN_LIVE_JOB_COPY") !== "1") known["job-copy"] = NOT_SCHEDULED;
 
   if (providerOf() === undefined) known["login-list"] = NO_PROVIDER_KEY;
+
+  if (providerOf() === undefined) known["provider-logs"] = NO_LOGS_KEY;
 
   if (providerOf() === undefined) known.jobs ??= NO_JOBS_KEY;
 
@@ -143,6 +164,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
           manyFiles: MANY_FILES,
           largeCopy: LARGE_COPY,
           loginList: provider === undefined ? undefined : () => readLoginList({ key: provider.key }, provider.accountId),
+          logsKept: provider === undefined ? undefined : () => readLogsKept(provider),
           jobRun: provider === undefined ? undefined : (upload) => readJobRun({ key: provider.key }, provider.accountId, upload),
         })
       : undefined;

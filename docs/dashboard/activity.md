@@ -117,5 +117,27 @@ Cloudflare stores each line together with the request it was written in. poplin 
 
 - **Who can read it:** whoever can read the logs of your Cloudflare account, for the days the first table names.
 - **Cloudflare's own record of each request is off.** With it on, the address of every request would be stored, also of one that went well.
-- **To keep addresses out,** switch the Worker's logs off at Cloudflare, in the Worker's settings. No line is kept then: the reason of a 503, of a refused login, and of a step of the database that failed is in no log.
-- **An update switches the logs on again.** An update that poplin makes states the log settings of its release, and poplin's release states them on. So: off at Cloudflare, and again after each update. poplin has no setting for it.
+- **To keep addresses out,** switch the logs off with the setting below. No line is kept then.
+
+### Switch the logs off
+
+```sh
+npx poplin config provider_logs off
+```
+
+On the Settings screen it is Keep logs, under Logs. The default is on.
+
+| With the logs off        | Still works                                              | Is lost                                                                 |
+| ------------------------ | -------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Problems, on Activity    | yes: poplin keeps them in its own database               |                                                                         |
+| Activity                 | yes: the same                                            |                                                                         |
+| a fault read at Cloudflare |                                                        | the lines above: the reason of a 503, of a refused login, of a failed step of the database |
+
+| The install             | A change takes effect                                                        |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| holds [its key](../about/security.md#the-kept-key) | at once: poplin writes it to the Worker's settings at Cloudflare |
+| holds no key            | at the next update, or at the next Repair on [Domain](domain.md)             |
+
+- **The setting holds across updates.** Every upload of the Worker states the logs as the setting says: an install, an update, and a repair.
+- **A switch flipped at Cloudflare does not hold.** An install that holds its key writes the setting there again once a day, and the row `Worker logs` on Domain says `differs` until then.
+- **Cloudflare's own record of each request stays off** whatever the setting says.

@@ -118,6 +118,9 @@ export interface Account {
   /** The cron list of the install's Worker. */
   crons: string[];
 
+  /** The observability of the install's Worker, as its last upload or a change of its script settings stated it. */
+  observability: unknown;
+
   /** The two address switches of the install's Worker. */
   address: Row;
 
@@ -191,6 +194,7 @@ export function emptyAccount(): Account {
     versions: [],
     deployments: [],
     crons: [],
+    observability: { enabled: true, head_sampling_rate: 1, logs: { enabled: true, invocation_logs: false } },
     address: { enabled: false, previews_enabled: true },
     buckets: [],
     objects: [],
@@ -338,13 +342,15 @@ function versions(account: Account, asked: Asked, parts: readonly string[]): Res
 
 /** An upload of the install's Worker: it makes the Worker where there is none, with Cloudflare's first addresses, and a new latest version with the annotations sent. */
 function uploaded(account: Account, asked: Asked): Response {
-  const { metadata, ...files } = asked.body as { readonly metadata: { readonly bindings: Row[]; readonly annotations?: Row } };
+  const { metadata, ...files } = asked.body as { readonly metadata: { readonly bindings: Row[]; readonly annotations?: Row; readonly observability?: unknown } };
   if (account.noWorker === true) account.bindings = [];
 
   account.noWorker = false;
   if (account.trailing !== undefined) account.trailing.from = "now";
 
   account.bindings = boundAfter(account, metadata.bindings);
+  // Cloudflare keeps no observability across an upload: one that states none leaves the Worker with none.
+  account.observability = metadata.observability;
   account.uploads.push({ metadata, files: Object.keys(files) });
   versioned(account, metadata.annotations);
 
@@ -366,7 +372,14 @@ function written(account: Account, asked: Asked): Response {
 function settingsOf(account: Account): Row {
   const trailing = account.trailing?.from === "now" ? account.trailing.answers.shift() : undefined;
 
-  return trailing ?? { bindings: account.bindings };
+  return trailing ?? { bindings: account.bindings, observability: account.observability };
+}
+
+/** The script settings of the install's Worker: its observability, read, or replaced by a change that states one. */
+function scriptSettings(account: Account, asked: Asked): Response {
+  if (asked.method === "PATCH") account.observability = (asked.body as { readonly observability?: unknown }).observability;
+
+  return reply({ logpush: false, observability: account.observability ?? { enabled: false }, tags: [] });
 }
 
 /** The account's Workers: the list, the Worker named `poplin` with its settings, its versions, its cron list, and its address switches, and every other Worker. */
@@ -392,6 +405,8 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
 
     return reply(account.address);
   }
+
+  if (parts[5] === "script-settings") return scriptSettings(account, asked);
 
   if (parts[5] !== "settings") return refusal(404, 10007, "This Worker does not exist on your account.");
 

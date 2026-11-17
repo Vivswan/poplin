@@ -24,6 +24,7 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | a sentence under the field      | Save refused that value; every refused row gets one at the first Save    |
 | `Use a whole number from 1 to 1,000,000,000.` | such a sentence, for a number typed with a fraction, such as `1.5`, or above its top. A count goes up to 1,000,000,000, a size to 1,000,000,000 MB, days and a span of time to 36,500 days |
 | `Needs poplin's key to work. Open Domain and press Repair.` | under Update automatically, on an install that holds no key |
+| `Takes effect at the next update or Repair.` | under Keep logs, on an install that holds no key |
 | `Switch on the check above first.` | under Update automatically while Check for new versions is off. Switching the check off switches Update automatically off with it, and its switch takes no change until the check is on again |
 
 | Heading    | Settings                                                                                           |
@@ -33,11 +34,14 @@ The dashboard's Settings screen changes the same settings, all but `logins`: cha
 | Storage    | `max_total_size`, `max_site_size`, `max_sites`                                                     |
 | Publishing | `max_files_per_publish`, `max_files_per_day`, `max_storage_writes_per_day`                         |
 | Traffic    | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` |
+| Logs       | `provider_logs`                                                                                    |
 | Updates    | `update_check`, `auto_update`                                                                      |
 
 `logins` is the list under Access, Users: [Add a user](access.md#add-a-user).
 
 A saved `search_engines_allowed` or `outside_pages` also changes its rule at Cloudflare by itself, with [the key poplin keeps](../about/security.md#the-kept-key); `block_bots` changes there at the next Repair on [Domain](domain.md), and so do all three on an install that holds no key.
+
+A saved `provider_logs` changes the Worker's logs at Cloudflare by itself, with the same key, on an install of either kind: [Switch the logs off](activity.md#switch-the-logs-off).
 
 On an install [without a domain](../start/without-a-domain.md), the control of `block_bots` is disabled and says `Needs a domain.`: what it asks for is a switch of a domain at Cloudflare. `search_engines_allowed` and `outside_pages` work there through the Worker alone, and nothing is sent to Cloudflare for them.
 
@@ -77,5 +81,6 @@ The settings `poplin config` takes:
 | `requests_per_day`, `site_share_of_day`, `site_requests_per_minute`, `visitor_requests_per_minute` | request limits                                |
 | `update_check`                                                                          | whether the install asks which version is the newest     |
 | `auto_update`                                                                           | whether the install starts an update by itself: off in a new install, and on only while `update_check` is on, [Update](../upkeep/update.md#optional-update-by-itself) |
+| `provider_logs`                                                                         | whether Cloudflare keeps the lines the Worker writes: on in a new install, [Switch the logs off](activity.md#switch-the-logs-off) |
 
 Every command that talks to the install also takes `--json`, for the answer as JSON, and `--server`, to name the install. The three that work at Cloudflare take `--json` and no `--server`.

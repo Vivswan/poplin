@@ -12,7 +12,7 @@ import { ADDRESSES } from "../shared/install/support/layouts";
 import type { Asked } from "../shared/install/support/replies";
 
 /** The settings the install holds. */
-const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" };
+const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
 
 /** Reads them, as a plug asks once a token is proven. */
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
@@ -55,6 +55,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key")} | poplin kept key`,
     `Upload key | ${state("key")} | poplin upload key`,
+    `Worker logs | ${states.logs ?? "present"} | kept`,
     `D1 database | ${state("database")} | poplin`,
     `Budget alert | ${state("alert")} | poplin: usage charges reached 1 dollar`,
     `Workflow | ${state("jobs")} | poplin-jobs`,
@@ -93,12 +94,12 @@ test("a check of an account with nothing in it names the two forwarders, the log
 });
 
 // Drift: the count is what one request of a Worker spends on a repair: past 50 the Domain screen's one press could not finish on the free plan.
-test("a repair makes every object in 29 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
+test("a repair makes every object in 30 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
   const account = deployed();
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created" }));
-    expect(asked).toHaveLength(29);
+    expect(asked).toHaveLength(30);
     expect(account.workers).toEqual(
       ["poplin-sites", "poplin-private"].map((id) => ({ id, tags: ["poplin-forwarder"], bindings: [{ type: "service", name: "POPLIN", service: "poplin" }], enabled: true, previews_enabled: false })),
     );
@@ -253,7 +254,7 @@ test("a repair with a token without Notifications: Edit fails nothing: every oth
     const reading = await plug.repair(TOKEN, SETTINGS);
 
     expect(shown(reading)).toEqual(rest({ all: "created" }));
-    expect([asked.length, account.alerts, reading.ok ? runDone("repair", reading, false).summary : undefined]).toEqual([28, [], { line: "11 repaired", tone: "good" }]);
+    expect([asked.length, account.alerts, reading.ok ? runDone("repair", reading, false).summary : undefined]).toEqual([29, [], { line: "11 repaired", tone: "good" }]);
 
     const sent = asked.length;
 
@@ -291,7 +292,7 @@ async function withKey(account: Account, run: (plug: ReturnType<typeof createPat
 }
 
 // Drift: the count is what one request of a Worker spends each time the Domain screen opens on a check that is old. With no token to prove, a call for the account's free address, to the databases, or to the tokens is one the check has no use for.
-test("an install that holds its key checks with no token: every piece a repair made reads as present in 16 calls, each a read sent with the key, and the database's row says the install runs on it", async () => {
+test("an install that holds its key checks with no token: every piece a repair made reads as present in 17 calls, each a read sent with the key, and the database's row says the install runs on it", async () => {
   const account = deployed();
 
   await withKey(account, async (plug, own, asked) => {
@@ -301,7 +302,7 @@ test("an install that holds its key checks with no token: every piece a repair m
     const calls = asked.slice(sent);
 
     expect(rows).toEqual(table({}).map((row) => (row.startsWith("D1 database") ? "D1 database | present | poplin: the install is running on it" : row)));
-    expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens|workers\/subdomain)(\/|\?|$)/.test(call.path))]).toEqual([16, [`GET Bearer ${KEPT}`], []]);
+    expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens|workers\/subdomain)(\/|\?|$)/.test(call.path))]).toEqual([17, [`GET Bearer ${KEPT}`], []]);
   });
 });
 
@@ -352,6 +353,7 @@ test.each([
       "Worker variable | not-run | ",
       "Key | differs | poplin kept key: Cloudflare refused the key the install holds",
       "Upload key | not-run | ",
+      "Worker logs | not-run | ",
       "D1 database | not-run | ",
       "Budget alert | not-run | ",
       "Workflow | not-run | ",
