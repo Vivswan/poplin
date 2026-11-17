@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { MOST_FILES_PER_PUBLISH, SETTING_VALUES } from "@poplin/core/src/records/settings";
+import { MOST_DAYS, MOST_FILES_PER_PUBLISH, MOST_OF_A_COUNT, SETTING_VALUES } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
 
 import type { DomainPlug } from "../../src/console/domain/records";
@@ -182,12 +182,12 @@ describe("a save", () => {
     const response = await opened.change("/data/settings", { texts: { trash_days: "0", update_check: "off", auto_update: "on" } });
     const refusal = (await response.json()) as { readonly code: string; readonly each: readonly { readonly about: string; readonly sentence: string }[] };
 
-    expect([response.status, refusal.code, refusal.each.map((one) => [one.about, one.sentence.split(",")[0]])]).toEqual([
+    expect([response.status, refusal.code, refusal.each.map((one) => [one.about, one.sentence.split(" ").slice(0, 4).join(" ")])]).toEqual([
       400,
       "bad_argument",
       [
         ["trash_days", "Use a whole number"],
-        ["auto_update", "Updating by itself needs the check for new versions"],
+        ["auto_update", "Updating by itself needs"],
       ],
     ]);
   });
@@ -214,9 +214,10 @@ describe("a save", () => {
 
     expect(told.filter(([key, sentence]) => sentence.includes(key) || sentence.includes("is not one it takes"))).toEqual([]);
     expect(Object.fromEntries(told)).toMatchObject({
-      trash_days: "Use a whole number, 1 or more.",
-      max_total_size: "Use a whole number, 1 or more.",
-      max_sites: "Use a whole number, 1 or more, or leave it empty for no limit.",
+      trash_days: `Use a whole number from 1 to ${MOST_DAYS.toLocaleString("en-US")}.`,
+      max_total_size: `Use a whole number, 1 or more, up to ${MOST_OF_A_COUNT.toLocaleString("en-US")} MB.`,
+      default_expires: `Use a whole number, 1 or more, up to ${MOST_DAYS.toLocaleString("en-US")} days.`,
+      max_sites: `Use a whole number from 1 to ${MOST_OF_A_COUNT.toLocaleString("en-US")}, or leave it empty for no limit.`,
       max_files_per_publish: `Use a whole number from 1 to ${MOST_FILES_PER_PUBLISH.toLocaleString("en-US")}.`,
       site_share_of_day: "Use a whole number from 1 to 100.",
     });

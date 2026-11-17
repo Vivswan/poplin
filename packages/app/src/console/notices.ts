@@ -16,8 +16,21 @@ import type { updateSite } from "@poplin/core/src/actions/set";
 import type { getSite } from "@poplin/core/src/actions/show";
 import type { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
 import { type startUpdate, TAKEN_BY_REPAIR } from "@poplin/core/src/actions/start-update";
+import { MOST_DAYS, MOST_OF_A_COUNT } from "@poplin/core/src/records/settings";
 
 import type { DomainReading } from "./domain/records";
+
+/** What a refused count is told: the range core's rule for it has. */
+const COUNT_RANGE = `Use a whole number from 1 to ${MOST_OF_A_COUNT.toLocaleString("en-US")}.`;
+
+/** What a refused count of days is told. */
+const DAYS_RANGE = `Use a whole number from 1 to ${MOST_DAYS.toLocaleString("en-US")}.`;
+
+/** What a refused size is told. Its top is named with its unit: a size stored in another unit is typed in that one. */
+const SIZE_RANGE = `Use a whole number, 1 or more, up to ${MOST_OF_A_COUNT.toLocaleString("en-US")} MB.`;
+
+/** What a refused span of time is told, its top named with its unit for the same reason. */
+const SPAN_RANGE = `Use a whole number, 1 or more, up to ${MOST_DAYS.toLocaleString("en-US")} days.`;
 
 /** What each refusal code says. `{about}` is the field or setting the code is about. A code of an action missing here does not compile. */
 const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
@@ -78,22 +91,22 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   bad_argument: {
     expires: "Pick a day that is still ahead.",
     title: "Use one line of 200 characters at most.",
-    default_expires: "Use a whole number, 1 or more.",
+    default_expires: SPAN_RANGE,
     default_search_engines: "Use on or off.",
-    versions_kept: "Use a whole number, 1 or more.",
-    trash_days: "Use a whole number, 1 or more.",
+    versions_kept: COUNT_RANGE,
+    trash_days: DAYS_RANGE,
     logins: "Use whole email addresses, each one once.",
     login: "Type an email address, such as name@example.com.",
-    max_total_size: "Use a whole number, 1 or more.",
-    max_site_size: "Use a whole number, 1 or more.",
-    max_sites: "Use a whole number, 1 or more, or leave it empty for no limit.",
+    max_total_size: SIZE_RANGE,
+    max_site_size: SIZE_RANGE,
+    max_sites: `${COUNT_RANGE.slice(0, -1)}, or leave it empty for no limit.`,
     max_files_per_publish: "Use a whole number from 1 to 10,000.",
-    max_files_per_day: "Use a whole number, 1 or more.",
-    max_storage_writes_per_day: "Use a whole number, 1 or more.",
-    requests_per_day: "Use a whole number, 1 or more.",
+    max_files_per_day: COUNT_RANGE,
+    max_storage_writes_per_day: COUNT_RANGE,
+    requests_per_day: COUNT_RANGE,
     site_share_of_day: "Use a whole number from 1 to 100.",
-    site_requests_per_minute: "Use a whole number, 1 or more.",
-    visitor_requests_per_minute: "Use a whole number, 1 or more.",
+    site_requests_per_minute: COUNT_RANGE,
+    visitor_requests_per_minute: COUNT_RANGE,
     update_check: "Use on or off.",
     auto_update: "Use on or off.",
     outside_pages: "Use blocked or allowed.",

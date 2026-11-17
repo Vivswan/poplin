@@ -149,6 +149,7 @@ describe("updateSite", () => {
     ["a moment as a count", { expires: "1893486600250" }, { code: "bad_argument", about: "expires" }],
     ["a span of nothing", { expires: "0d" }, { code: "bad_argument", about: "expires" }],
     ["a span that ends past the last moment a date holds", { expires: "100000000d" }, { code: "bad_argument", about: "expires" }],
+    ["a span one day longer than the install's own default may be", { expires: "36501d" }, { code: "bad_argument", about: "expires" }],
     ["a title with a line break", { title: "two\nlines" }, { code: "bad_argument", about: "title" }],
     ["a title with a control character", { title: "a\u0000b" }, { code: "bad_argument", about: "title" }],
     ["a title with a line separator", { title: "two\u2028lines" }, { code: "bad_argument", about: "title" }],

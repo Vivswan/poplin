@@ -2,7 +2,7 @@
 
 import * as v from "valibot";
 
-import { dayStart, MAX_TITLE_LENGTH, readExpires, TITLE_TEXT } from "../../../core/src/actions/changes";
+import { dayStart, isSpan, MAX_TITLE_LENGTH, readExpires, TITLE_TEXT } from "../../../core/src/actions/changes";
 import type { PublicName, SiteName } from "../../../core/src/names/names";
 import type { SettingValues } from "../../../core/src/records/settings";
 import { readSetting } from "./install-settings";
@@ -60,13 +60,14 @@ function readExpiry(flags: Flags, now: number): Expiry | undefined | UsageError 
   }
 
   const span = readSetting("default_expires", when);
-  if (span === undefined) return usageError(`--expires takes a span, a date, or never, not ${JSON.stringify(when)}`, EXPIRY_FORMS);
-
   if (span === "never") return { kind: "never" };
 
-  if (!taken) return usageError(`--expires ${when} is too far ahead`, EXPIRY_FORMS);
+  if (span !== undefined && taken) return { kind: "span", span };
 
-  return { kind: "span", span };
+  // A span in its form that core does not take is longer than a span may be.
+  if (isSpan(when)) return usageError(`--expires ${when} is too far ahead`, EXPIRY_FORMS);
+
+  return usageError(`--expires takes a span, a date, or never, not ${JSON.stringify(when)}`, EXPIRY_FORMS);
 }
 
 /** Read `--title` by core's own rule of a typed title, so a title the install would refuse is refused here, with the rule it breaks. */

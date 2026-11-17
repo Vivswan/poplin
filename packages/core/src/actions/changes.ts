@@ -4,7 +4,7 @@ import * as v from "valibot";
 
 import type { Database, Signed, SiteDetails } from "../database/database";
 import { parsePublicName, parseSiteName, type ReservedNames, type SiteName } from "../names/names";
-import { type SettingValues, spanSeconds } from "../records/settings";
+import { MOST_DAYS, type SettingValues, spanSeconds } from "../records/settings";
 import type { Site, SiteAccess } from "../records/site";
 import type { SiteId } from "../sites/ids";
 import { type Refused, refuse } from "./records";
@@ -127,7 +127,17 @@ function momentOf(text: string, now: number): number | undefined {
   const [, count, unit] = SPAN_PATTERN.exec(text) ?? [];
   if (count === undefined) return dayStart(text) ?? writtenMoment(text);
 
-  return now + spanSeconds({ count: Number(count), unit: unit as Span["unit"] }) * 1000;
+  // A span typed for one site is as long as the install's own default may be, and no longer.
+  const seconds = spanSeconds({ count: Number(count), unit: unit as Span["unit"] });
+
+  return seconds > spanSeconds({ count: MOST_DAYS, unit: "d" }) ? undefined : now + seconds * 1000;
+}
+
+/**
+ * Decide whether a text is a time span as typed, whatever its length: a whole number from 1 and its unit, such as `7d`.
+ */
+export function isSpan(text: string): boolean {
+  return SPAN_PATTERN.test(text);
 }
 
 /**
@@ -135,7 +145,7 @@ function momentOf(text: string, now: number): number | undefined {
  *
  * @param text - `never`, a span from `now` such as `7d`, a day such as `2026-12-01`, or a moment such as `2026-12-01T08:30:00.000Z`
  * @param now - the moment a span is counted from, in milliseconds since the epoch
- * @returns `"never"`, the moment in whole milliseconds, or `undefined` for text in no such form, for a moment that is not after `now`, and for one past the last moment a date holds
+ * @returns `"never"`, the moment in whole milliseconds, or `undefined` for text in no such form, for a span of more days than a setting takes, for a moment that is not after `now`, and for one past the last moment a date holds
  */
 export function readExpires(text: string, now: number): "never" | number | undefined {
   if (text === "never") return "never";

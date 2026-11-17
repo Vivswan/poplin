@@ -4,7 +4,7 @@ import prettyBytes from "pretty-bytes";
 import * as v from "valibot";
 
 import { type Login, parseLogin } from "../auth/logins";
-import { LOGIN, POSITIVE } from "./fields";
+import { LOGIN } from "./fields";
 
 /** A whole number as text: no sign, no leading zero, no fraction. */
 const WHOLE_PATTERN = /^(?:0|[1-9]\d*)$/;
@@ -30,18 +30,30 @@ export const RULE_SETTINGS = ["outside_pages", "search_engines_allowed"] as cons
 /** The most files one publish may declare under any setting: finishing lists them a thousand a store call. */
 export const MOST_FILES_PER_PUBLISH = 10_000;
 
-/** A time span of at least one unit. */
-const TIME_SPAN = amountSchema(SECONDS_PER_UNIT, 1);
+/** The most a count may be set to, and the most megabytes a size: one top for every number that is no count of days, far above what a host gives. */
+export const MOST_OF_A_COUNT = 1_000_000_000;
 
-/** A size of at least one unit. */
-const SIZE = amountSchema(BYTES_PER_UNIT, 1);
+/** The most days a span of time may be set to, 100 years: a moment that many days after any day in reach is still a date. */
+export const MOST_DAYS = 36_500;
+
+/** A count from 1 to the top. */
+const COUNT_SET = v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(MOST_OF_A_COUNT));
+
+/** A count of days from 1 to the top. */
+const DAYS_SET = v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(MOST_DAYS));
+
+/** A time span from one unit to the most days, in whichever unit it is typed. */
+const TIME_SPAN = amountSchema(SECONDS_PER_UNIT, MOST_DAYS * SECONDS_PER_UNIT.d);
+
+/** A size from one unit to the most megabytes, in whichever unit it is typed. */
+const SIZE = amountSchema(BYTES_PER_UNIT, MOST_OF_A_COUNT * BYTES_PER_UNIT.MB);
 
 /** The typed value of every key, in the order `poplin config` shows them. */
 const VALUES = {
   default_expires: v.union([v.literal("never"), TIME_SPAN]),
   default_search_engines: v.boolean(),
-  versions_kept: POSITIVE,
-  trash_days: POSITIVE,
+  versions_kept: COUNT_SET,
+  trash_days: DAYS_SET,
   logins: v.pipe(
     v.array(LOGIN),
     v.minLength(1),
@@ -52,14 +64,14 @@ const VALUES = {
   block_bots: v.picklist(BLOCK_BOTS),
   max_total_size: SIZE,
   max_site_size: SIZE,
-  max_sites: v.union([v.literal("none"), POSITIVE]),
+  max_sites: v.union([v.literal("none"), COUNT_SET]),
   max_files_per_publish: v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(MOST_FILES_PER_PUBLISH)),
-  max_files_per_day: POSITIVE,
-  max_storage_writes_per_day: POSITIVE,
-  requests_per_day: POSITIVE,
+  max_files_per_day: COUNT_SET,
+  max_storage_writes_per_day: COUNT_SET,
+  requests_per_day: COUNT_SET,
   site_share_of_day: v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(100)),
-  site_requests_per_minute: POSITIVE,
-  visitor_requests_per_minute: POSITIVE,
+  site_requests_per_minute: COUNT_SET,
+  visitor_requests_per_minute: COUNT_SET,
   update_check: v.boolean(),
   auto_update: v.boolean(),
 };
@@ -144,12 +156,13 @@ interface RefusedSetting {
 /** The typed settings, or the first key that was refused and why, with every refused key beside it in `every`, in the order of the settings. */
 export type CheckedSettings = { readonly ok: true; readonly values: SettingValues } | ({ readonly ok: false; readonly every: readonly RefusedSetting[] } & RefusedSetting);
 
-function amountSchema<Table extends Units>(units: Table, least: number): v.GenericSchema<unknown, Amount<keyof Table>> {
+/** An amount of at least one of its unit, and of `most` base units at the most. */
+function amountSchema<Table extends Units>(units: Table, most: number): v.GenericSchema<unknown, Amount<keyof Table>> {
   const unitNames = Object.keys(units) as (keyof Table & string)[];
 
   return v.pipe(
-    v.strictObject({ count: v.pipe(v.number(), v.safeInteger(), v.minValue(least)), unit: v.picklist(unitNames) }),
-    v.check((amount) => Number.isSafeInteger(amount.count * (units[amount.unit] ?? 0)), "the amount is a whole number of base units"),
+    v.strictObject({ count: v.pipe(v.number(), v.safeInteger(), v.minValue(1)), unit: v.picklist(unitNames) }),
+    v.check((amount) => amount.count * (units[amount.unit] ?? 0) <= most, "the amount is no more than the most of its kind"),
   );
 }
 
