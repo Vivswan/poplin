@@ -57,7 +57,7 @@ const WORDS = {
   noName: "--domain takes a name, such as example.com",
   account: "--account takes an account's id: 32 characters of 0-9 and a-f",
   domain: { "bad-domain": "is no domain name", "domain-too-long": "is too long: an address of the login under it passes 63 characters", "bad-public-word": "is no domain name" },
-  noRelease: "No release of poplin is published yet.",
+  noRelease: "The project's website names no release now. Run this again in a few minutes.",
   badRelease: "The release's files are not the ones the project published. Nothing was uploaded.",
   newerRelease: "This release needs a newer poplin: run npx poplin@latest install",
   noAddress: "This account has no free address yet, or one whose name is too long for the login. Open Workers & Pages in your browser and set the account's subdomain.",

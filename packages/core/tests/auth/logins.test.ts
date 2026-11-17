@@ -25,7 +25,7 @@ describe("parseLogin", () => {
     ["owner@example.com", { ok: true, value: "owner@example.com" }],
     ["  Owner@Example.COM \n", { ok: true, value: "owner@example.com" }],
     ["first.last+tag@mail.example.com", { ok: true, value: "first.last+tag@mail.example.com" }],
-    ["o'neil_1@example-site.org", { ok: true, value: "o'neil_1@example-site.org" }],
+    ["o'neil_1@mail-host.example.org", { ok: true, value: "o'neil_1@mail-host.example.org" }],
     [`${LONGEST_LOCAL}@example.com`, { ok: true, value: `${LONGEST_LOCAL}@example.com` }],
     ["", { ok: false, refusal: "empty" }],
     [" \t\n", { ok: false, refusal: "empty" }],

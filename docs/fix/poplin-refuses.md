@@ -41,7 +41,7 @@ A refused command prints one sentence and often a hint. With `--json` it prints 
 | `no_key`, `key_refused` | the install holds no key, or Cloudflare no longer takes it | press Repair on the dashboard's Domain screen                  |
 | `lacks_right`        | the install's key lacks the permission shown                | press Repair on the dashboard's Domain screen: it makes a key with the permission |
 | `release_refused`    | the release cannot be taken, for the reason shown; nothing was changed | [With the kept key](../upkeep/update.md#with-the-kept-key) has each reason. Where its hint says the install cannot take this release by itself, run `npx poplin doctor --repair` |
-| `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, report it             |
+| `version_refused`    | Cloudflare refused the new version; the install runs the version it ran | try again; if it comes back, [report it](https://github.com/Vivswan/poplin/issues) |
 
 **Making, mending, and removing an install**
 
@@ -84,9 +84,9 @@ Each entry of `blocked` names what blocks in `what`:
 | `login_off`     | Zero Trust is not switched on: nobody could log in              | pick the Free plan at `address`, before the run                  |
 | `right_lacking` | the token lacks the permission in `right`                       | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token) |
 | `no_address`    | without a domain: the account has no `workers.dev` subdomain, or one of more than 36 characters | set one of 36 characters at most, under Workers & Pages |
-| `no_release`    | poplin's website names no version to install                    | nothing can be installed until it does                           |
+| `no_release`    | poplin's website names no version to install: none is out, or one came out minutes ago | run it again in a few minutes |
 | `newer_release` | the newest version needs a newer command                        | `npx poplin@latest install cloudflare`                           |
-| `bad_release`   | the release's files are not the ones poplin's website names; nothing was uploaded | run it again; if it comes back, report it      |
+| `bad_release`   | the release's files are not the ones poplin's website names; nothing was uploaded | run it again; if it comes back, [report it](https://github.com/Vivswan/poplin/issues) |
 
 **Naming a site**
 
