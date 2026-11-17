@@ -263,6 +263,8 @@ Where `next.step` is `repair` and its `command` holds `--add-user`, the install 
 
 Run that `command` as it is written, in place of step 4 and of the repair of part f: it holds the install's place, mends what is undone, and lets the email in. Without `--add-user` the email stays out.
 
+On Windows, `next.add` may be `--add-user <email>` instead: the email holds a character a Windows shell gives a meaning, so the `command` leaves it out. The user adds the option and the email to the line by hand.
+
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
 
 **When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again: the user copies it from Cloudflare's page a second time, or rolls it, as part d has it. It prints a row for each thing it makes, and ends:

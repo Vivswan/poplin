@@ -10,7 +10,7 @@ import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor, STOPPED } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { Careful, InstallEnds, Next, Provider, Stop } from "../records";
-import { carefulOf, NEXT, placeOf, rowLine, type Unsettled, updateWords, userWords } from "../report";
+import { carefulOf, NEXT, placeOf, rowLine, type Unsettled, updateWords, userOption } from "../report";
 import { parseRepair, REPAIR_COMMAND, type RepairPlan } from "./parse";
 import { foundWords, repairedLines, repairedValue, repairHelp, stopOf, unmended } from "./report";
 
@@ -71,7 +71,7 @@ async function look(request: Request, ends: InstallEnds, show: Show): Promise<{ 
 }
 
 /** Settle a plan's open answers, find the install, and mend it or say what a run would change. The token is hidden from the moment it is read. */
-async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
+async function planned(plan: RepairPlan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const { provider, run, update } = plan;
   const line = { command: commandOf(update), careful: carefulOf(run), provider, run };
   const request = await settled(plan, ends);
@@ -94,7 +94,8 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
 
   for (const line of repairedLines(repaired, run, provider)) show.line(line.tone, line.text);
 
-  show.value(repairedValue(repaired, run, ground.found, [...updateWords(update), ...at.place, ...userWords(plan.addUser)]));
+  const user = userOption(plan.addUser, io.machine.platform);
+  show.value(repairedValue(repaired, run, ground.found, { words: [...updateWords(update), ...at.place, ...user.words], add: user.add }));
 
   return exitCode({ kind: repaired.ready ? "done" : "failed" });
 }

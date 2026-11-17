@@ -53,6 +53,15 @@ const LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 /** A word a shell reads as it is written, with no quote around it. It holds no equals sign: zsh takes a word that starts with one as a command to look up. */
 const PLAIN_WORD = /^[A-Za-z0-9@%+:,./_-]+$/;
 
+/** A word cmd.exe and PowerShell both read as it is written, as does the command file `npx` runs through, which reads its arguments by cmd.exe's rules again whatever quotes stood around them. */
+const WINDOWS_WORD = /^[A-Za-z0-9][A-Za-z0-9@+./_-]*$/;
+
+/** The platform whose terminals read a pasted line by the rules of cmd.exe or of PowerShell: a run cannot tell which. */
+const WINDOWS = "win32";
+
+/** The option of a repair's user, as a line that leaves it out names it for a person to add. */
+const ADD_USER = "--add-user <email>";
+
 /** What every stop before the first change ends in, as the one JSON value holds it at the end of a stop's words. */
 export const UNCHANGED = "nothing was changed";
 
@@ -185,13 +194,31 @@ export function placeOf(provider: Provider, where: unknown): readonly string[] {
 }
 
 /**
- * The option of a repair that lets one more person log in, as the command it is named in carries it.
+ * The option of a repair that lets one more person log in, as the command it is named in carries it on this machine.
+ *
+ * No quoting makes a word safe on Windows: cmd.exe reads `%` inside quotes, PowerShell reads `$`, and the command file `npx` runs through reads the word once more with its quotes gone.
+ * So an email there is written bare where every character of it is plain to both shells, and is left out where one is not.
  *
  * @param login - the email of that person; `undefined` for a line that adds nobody
- * @returns the option and the email as one word of a POSIX shell, or no word
+ * @param platform - the machine's `process.platform`
+ * @returns `words` are the option and the email as one word of the machine's shell, or none; `add` names the option where the line leaves it out for a person to add
  */
-export function userWords(login: Login | undefined): readonly string[] {
-  return login === undefined ? [] : ["--add-user", shellWord(login)];
+export function userOption(login: Login | undefined, platform: string): { readonly words: readonly string[]; readonly add?: string } {
+  if (login === undefined) return { words: [] };
+
+  if (platform !== WINDOWS) return { words: ["--add-user", shellWord(login)] };
+
+  return WINDOWS_WORD.test(login) ? { words: ["--add-user", login] } : { words: [], add: ADD_USER };
+}
+
+/**
+ * Put on a step what its line leaves out for a person to add.
+ *
+ * @param add - the option left out; `undefined` for a line that holds every word
+ * @returns the same step, with `add` where it names a command and something was left out
+ */
+export function leaving(next: Next, add: string | undefined): Next {
+  return add === undefined || next.step === "none" ? next : { ...next, add };
 }
 
 /**
@@ -199,9 +226,12 @@ export function userWords(login: Login | undefined): readonly string[] {
  *
  * @param login - the first login the run did not use
  * @param place - the place of the install, which the line holds before the user
+ * @param platform - the machine's `process.platform`, which says how the email is written
  */
-export function letInNext(login: Login, place: readonly string[]): Next {
-  return NEXT.repair("this", [], [...place, ...userWords(login)]);
+export function letInNext(login: Login, place: readonly string[], platform: string): Next {
+  const user = userOption(login, platform);
+
+  return leaving(NEXT.repair("this", [], [...place, ...user.words]), user.add);
 }
 
 /**
@@ -211,6 +241,18 @@ export function letInNext(login: Login, place: readonly string[]): Next {
  */
 export function unusedLine(login: Login, next: Next): Line {
   return plain(`To let ${login} log in too: ${next.command}`);
+}
+
+/**
+ * Say what the command a run named next leaves out, for the person to add: without it, the line they paste lets nobody in.
+ *
+ * @param login - the email the line leaves out
+ * @returns the line, or none where the command holds every word
+ */
+export function leftOutLines(login: Login, next: Next): Line[] {
+  if (next.step === "none" || next.add === undefined) return [];
+
+  return [plain(`Add ${next.add} to that line yourself, with ${login}: no line a Windows terminal reads holds that email safely.`)];
 }
 
 /** How many objects a run changed, or with a dry run would. */

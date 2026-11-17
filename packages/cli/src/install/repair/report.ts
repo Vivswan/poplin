@@ -6,7 +6,7 @@ import { columns } from "../../commands/text";
 import type { Line } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
+import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, leaving, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -31,11 +31,17 @@ function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
 }
 
-/** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the same repair, by the words in `named`, where a run has something to mend yet. */
-function nextOf(repaired: Mended, run: Run, named: readonly string[]): Next {
+/** What the repair a run names next holds of the line it was run by: its words, and the option it leaves out for a person to add. */
+interface Named {
+  readonly words: readonly string[];
+  readonly add: string | undefined;
+}
+
+/** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the same repair, by what `named` holds, where a run has something to mend yet. */
+function nextOf(repaired: Mended, run: Run, named: Named): Next {
   const mended = repaired.ready && (run === "apply" || changesIn(repaired.rows) === 0);
 
-  return mended ? NEXT.login(repaired.address) : NEXT.repair("this", carried(carefulOf(run), repaired.ready), named);
+  return mended ? NEXT.login(repaired.address) : leaving(NEXT.repair("this", carried(carefulOf(run), repaired.ready), named.words), named.add);
 }
 
 /** Say which install a look found: its version where it could be read, and where its dashboard is. */
@@ -115,11 +121,12 @@ export function repairedLines(repaired: Mended, run: Run, provider: Provider): L
  * The JSON value of a repair that worked through its rows.
  *
  * @param found - the install the repair went on from
- * @param named - the update the line asked for, the place of the install, and the user the line was given to add, which the repair named next carries: without them, the run after a dry run would take no release and add nobody
+ * @param named - the update the line asked for, the place of the install, and the user the line was given to add, which the repair named next carries: without them, the run after a dry run would take no release and add nobody.
+ *   A user whose email this machine's shell cannot be given safely is left out of the words, and named as what to add
  * @returns `ok` and `ready` are whether the command exits with 0: nothing is left undone, or a run would leave nothing. `changes` is how many objects were changed or would be.
  *   Each row's state is under `will` in a dry run and under `did` in a run
  */
-export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>, named: readonly string[]): Readonly<Record<string, unknown>> {
+export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>, named: Named): Readonly<Record<string, unknown>> {
   return {
     ok: repaired.ready,
     run,

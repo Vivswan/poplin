@@ -152,12 +152,15 @@ describe("a repair with the account token", () => {
   test.each(["--no-place", "--place example.com"])("a dry run with %s that was given a user to add names the run with that user, as one word of a shell: without this an agent that follows `next` adds nobody", async (place) => {
     const line = `doctor --repair ${place} --yes --dry-run --json`;
     const dry = await runLine(`${line} --add-user new@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
-    const quoted = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
+    const quoted = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD, platform: "linux" });
+    // No quote holds in both of Windows' shells, so there the line leaves the email out and names the option to add.
+    const left = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD, platform: "win32" });
     const undone = await runLine(`${line.replace(" --dry-run", "")} --add-user new@example.com`, installed(repairedOf(ONE_GONE, { ready: false })), { env: HELD });
 
-    expect([dry, quoted, undone].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([
+    expect([dry, quoted, left, undone].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([
       [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
       [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user 'o'\\''brien@example.com'` }],
+      [0, { step: "repair", command: `npx poplin doctor --repair ${place}`, add: "--add-user <email>" }],
       [1, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
     ]);
   });
@@ -172,10 +175,10 @@ describe("a repair with the account token", () => {
     const lacking = await runLine(`${line} --update`, installed());
     await runLine(line, plain, { env: HELD });
     const next = { step: "repair", command: `npx poplin doctor --repair --update ${place}` };
+    const [login, unplaced] = [{ step: "login", command: `npx poplin login --server ${ADDRESS}` }, { step: "repair", command: "npx poplin doctor --repair --update" }];
 
     expect([plain.repairs.map((one) => one.mend.update), asked.repairs.map((one) => [one.mend.run, one.mend.update])]).toEqual([[false], [["dry-run", true], ["apply", true]]]);
     expect([dry, run, undone, lacking].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([[0, next], [0, login], [1, next], [2, unplaced]]);
-    const [login, unplaced] = [{ step: "login", command: `npx poplin login --server ${ADDRESS}` }, { step: "repair", command: "npx poplin doctor --repair --update" }];
   });
 
   test("the email of --add-user reaches the provider in its normal form, and text that is none is refused before any look: without this a typing slip is sent to the provider", async () => {

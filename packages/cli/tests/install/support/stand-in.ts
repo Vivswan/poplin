@@ -96,6 +96,9 @@ interface Options {
   /** What standard input holds. */
   readonly stdin?: string;
 
+  /** The machine's `process.platform`; this machine's own unless given. */
+  readonly platform?: string;
+
   /** The status the install's address answers each question of the wait with, in order; the last one stands for every question after it. 401, an install that is up, unless given. */
   readonly statuses?: readonly number[];
 
@@ -360,7 +363,7 @@ export async function runLine(line: string, account: Account, options: Options =
 
       throw new TypeError("no network in this test");
     },
-    machine: { env: options.env ?? {}, platform: process.platform, home: "/nowhere" },
+    machine: { env: options.env ?? {}, platform: options.platform ?? process.platform, home: "/nowhere" },
     terminal: { asks: options.asks ?? false, progress: false },
     timeoutMs: 2000,
     computer: "test-computer",
