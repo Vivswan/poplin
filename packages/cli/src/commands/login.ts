@@ -30,6 +30,9 @@ const BEGIN_RESTS = 5;
 /** The variables that hold a login of their own, which every command uses before the saved one. */
 const LOGIN_VARIABLES = ["POPLIN_SERVER", "POPLIN_TOKEN"];
 
+/** What a login is told that asked for every right and was allowed its own sites only, in the words the dashboard has for the two choices. */
+const ALLOWED_LESS = "the dashboard allowed Own sites only; for Everything, log in again and choose it there";
+
 /** What an install answers a begun login with. */
 type Begun = v.InferOutput<typeof BEGUN_LOGIN_ANSWER>;
 
@@ -107,7 +110,11 @@ function announce(page: string, begun: Begun, json: boolean, io: Io): void {
   }
 
   const minutes = Math.round(begun.expires_in / SECONDS_PER_MINUTE);
-  for (const line of ["open this address, and allow this login there:", `  ${page}`, "the page asks for the last 4 letters of this code:", `  ${begun.code}`, `the code works for ${minutes} minutes`]) io.screen.line("plain", line);
+  io.screen.line("note", "open this address, and allow this login there:");
+  io.screen.line("plain", `  ${page}`);
+  io.screen.line("note", "the page asks for the last 4 letters of this code:");
+  io.screen.line("plain", `  ${begun.code}`);
+  io.screen.line("plain", `the code works for ${minutes} minutes`);
 }
 
 /** Ask for the token once: the token, the reason to stop, or the seconds to wait before the next question. */
@@ -147,21 +154,26 @@ async function collect(client: Client, begun: Begun, io: Io): Promise<Collected 
   return problem("login_expired");
 }
 
-/** Say who the saved token is, and which variables of this shell stand in the saved login's way. */
-function saved(server: string, record: Collected["record"], io: Io): Outcome {
+/**
+ * Say who the saved token is, that it may do less than was asked for where the dashboard allowed less, and which variables of this shell stand in the saved login's way.
+ *
+ * @param asked - the role the login asked for
+ */
+function saved(server: string, record: Collected["record"], asked: "publisher" | "admin", io: Io): Outcome {
   const facts = [
     ["install", server],
     ["role", record.scope],
     ["token", record.note === "" ? record.id : `${record.id} (${record.note})`],
     ["expires", record.expires === "never" ? "never" : dayText(record.expires)],
   ];
-  const lines = ["logged in: the token is saved on this machine", ...columns(facts)];
+  const lines = [{ tone: "done", text: "logged in: the token is saved on this machine" } as const, ...columns(facts)];
+  const less = asked === "admin" && record.scope === "publisher" ? [ALLOWED_LESS] : [];
   const shadowing = LOGIN_VARIABLES.filter((name) => (io.machine.env[name] ?? "") !== "");
-  if (shadowing.length === 0) return { ok: true, value: { server, token: record }, lines };
+  if (shadowing.length === 0) return { ok: true, value: { server, token: record }, lines, notes: less };
 
   const [verb, them] = shadowing.length === 1 ? ["is", "it"] : ["are", "both"];
 
-  return { ok: true, value: { server, token: record }, lines, notes: [`${shadowing.join(" and ")} ${verb} set in this shell: unset ${them} to use the saved login`] };
+  return { ok: true, value: { server, token: record }, lines, notes: [...less, `${shadowing.join(" and ")} ${verb} set in this shell: unset ${them} to use the saved login`] };
 }
 
 /**
@@ -198,5 +210,5 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
 
   await saveLogin(login.login, io.machine);
 
-  return saved(server, collected.record, io);
+  return saved(server, collected.record, request.publisher ? "publisher" : "admin", io);
 }

@@ -138,7 +138,7 @@ function exported(target: string, manifest: Manifest, sites: readonly Exported[]
   return {
     ok: true,
     value: { file: target, ...facts, sites, zip_bytes: zipBytes },
-    lines: [...columns(rows), `wrote ${target}: ${countText(count, "site")}, ${countText(manifest.files, "file")}, ${showBytes(zipBytes)}`],
+    lines: [...columns(rows), { tone: "done", text: `wrote ${target}: ${countText(count, "site")}, ${countText(manifest.files, "file")}, ${showBytes(zipBytes)}` }],
   };
 }
 
