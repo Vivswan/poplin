@@ -30,11 +30,12 @@ async function pause(ms: number): Promise<"over" | "interrupted"> {
   }
 }
 
-/** Stop the command, and end it here when it has not ended by itself after its last words. */
+/** Stop the command, and end it here when it has not ended by itself after its last words. Whichever way it was stopped, by Ctrl-C or by a key the spinner took, the Ctrl-C after it ends the process at once. */
 function stop(): void {
   if (STOP.signal.aborted) return;
 
   STOP.abort();
+  process.off("SIGINT", stop);
 
   setTimeout(() => {
     for (const line of problemLines(problem("stopped"))) console.error(line);
@@ -43,7 +44,7 @@ function stop(): void {
   }, LAST_WORDS_MS).unref();
 }
 
-/** Take the first Ctrl-C as a stop. The listener is gone once it ran, so a second Ctrl-C ends the process at once. */
+/** Take the first Ctrl-C as a stop. The listener is gone once the command is stopped, so a second Ctrl-C ends the process at once. */
 function listenForStop(): void {
   process.once("SIGINT", stop);
 }

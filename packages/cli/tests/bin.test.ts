@@ -22,8 +22,9 @@ const SUPPORT = join(import.meta.dir, "mcp", "support", "in-process-install.ts")
 /** What says, on the child's stderr, that a file is on its way and that the upload is being given up. */
 const SAID = { sending: "a file is on its way", givingUp: "the upload is being given up" };
 
-/** What the child runs: the real API in its own process behind a `fetch` that holds every file, and with `HOLD_GIVE_UP` the call that gives the upload up, until the request's signal aborts; then the command, publishing `FOLDER`. */
+/** What the child runs: the real API behind a `fetch` that holds every file, and with `HOLD_GIVE_UP` the giving up of the upload, until the request's signal aborts; then the command, publishing `FOLDER`. With `SPINNER` its stderr counts as a terminal. */
 const CHILD = [
+  "if (process.env.SPINNER === '1') process.stderr.isTTY = true;",
   `import { ${installInProcess.name} } from ${JSON.stringify(SUPPORT)};`,
   `await ${installInProcess.name}();`,
   "const answer = globalThis.fetch;",
@@ -90,6 +91,26 @@ describe("bin", () => {
     const [code, signal] = child.exitCode === null && child.signalCode === null ? await once(child, "exit") : [child.exitCode, child.signalCode];
 
     expect([{ code, signal }, stderr]).toEqual([exit, said]);
+  });
+
+  // Drift: a stop key the spinner took stopped the command and left the signal's listener standing, so the Ctrl-C after it was swallowed and the command hung on until its last words ran out.
+  test.skipIf(process.platform === "win32")("a Ctrl-C after a stop key the spinner took ends a command that is still giving its upload up, at once", async () => {
+    const folder = folderOf("notes", { "index.html": "<h1>notes</h1>" });
+    const env = { ...process.env, HOLD_GIVE_UP: "1", SPINNER: "1", CI: "", NO_COLOR: "", TERM: "xterm", FOLDER: folder, POPLIN_CONFIG_DIR: join(folder, "..", "config") };
+    const child = spawn(process.execPath, ["-e", CHILD], { env, stdio: ["pipe", "ignore", "pipe"] });
+    const steps = [
+      { mark: SAID.sending, act: (): void => void child.stdin.write("\u0003") },
+      { mark: SAID.givingUp, act: (): void => void child.kill("SIGINT") },
+    ];
+    let said = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      said += chunk.toString();
+      if (steps[0] !== undefined && said.includes(steps[0].mark)) steps.shift()?.act();
+    });
+
+    const [code, signal] = await once(child, "exit");
+
+    expect([{ code, signal }, steps.length]).toEqual([{ code: null, signal: "SIGINT" }, 0]);
   });
 
   // Drift: the npm package exports the commands' modules to other programs; a signal handler in one of them would take Ctrl-C away from a program that only imported it.
