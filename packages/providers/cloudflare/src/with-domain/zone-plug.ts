@@ -22,6 +22,7 @@ import type { KeyRefusal } from "@poplin/app/src/console/key/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
 import type { TokenFacts } from "@poplin/core/src/install/token-facts";
+import { alertAddresses } from "@poplin/core/src/records/settings";
 import { type KeptKey, keyed } from "../shared/install/key/kept-key";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "../shared/install/pieces/access/access";
 import { type AccountAlert, listAlerts, syncAlert } from "../shared/install/pieces/alerts/account-alert";
@@ -161,12 +162,12 @@ const RIGHT = {
   bucket: { name: "Workers R2 Storage: Edit", chosen: "by hand" },
   notifications: {
     name: "Notifications: Edit",
-    adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.",
+    adds: "Cloudflare emails the users the alert_users setting chooses when the account's usage charges for the billing period reach 1 US dollar.",
     how: BY_ITSELF,
   },
   certificates: {
     name: "Notifications: Edit",
-    adds: "Cloudflare emails your first user when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone.",
+    adds: "Cloudflare emails the users the alert_users setting chooses when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone.",
     how: BY_ITSELF,
   },
   tokens: { name: "Account API Tokens: Edit", key: "account_api_tokens", type: "edit" },
@@ -245,7 +246,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Public word": "rest",
 };
 
-/** The objects that hold the install's users: the policy lists every one of them, and each alert is mailed to the first. */
+/** The objects that hold the install's users: the policy lists every one of them, and each alert is mailed to the ones the settings choose. */
 const HOLDS_USERS: readonly (Piece | "Public word")[] = ["Access policy", "Budget alert", "Certificate alert"];
 
 /** Where Cloudflare's form for a new token is. The link asks for every account and every zone, the one scope a link can carry: the person narrows it on the form. */
@@ -840,10 +841,9 @@ export async function variablesPiece(progress: Progress, mode: Mode, placed: Pla
   if (ready) progress.steps.push({ text: LOGIN_READY, address: `https://${placed.adminHost}` });
 }
 
-/** The pieces of an install's alerts, each a row of its own, read from one list of the account's policies. Each alert goes to the first user alone, the one who holds the Cloudflare account an install is made in. */
-async function alertPieces(progress: Progress, mode: Mode, placed: Placed, connection: Connection, users: Logins | undefined, kept: readonly { readonly object: Piece; readonly alert: AccountAlert }[]): Promise<void> {
-  const [first] = users ?? [];
-  if (progress.stopped || first === undefined) {
+/** The pieces of an install's alerts, each a row of its own, read from one list of the account's policies. Each alert goes to the given emails: the first user by default, the one who holds the Cloudflare account an install is made in. */
+async function alertPieces(progress: Progress, mode: Mode, placed: Placed, connection: Connection, emails: readonly Login[], kept: readonly { readonly object: Piece; readonly alert: AccountAlert }[]): Promise<void> {
+  if (progress.stopped || emails.length === 0) {
     progress.rows.push(...kept.map(({ object }): Found => ({ object, state: "not-run", detail: "" })));
 
     return;
@@ -856,7 +856,7 @@ async function alertPieces(progress: Progress, mode: Mode, placed: Placed, conne
       progress,
       mode,
       () => object,
-      () => syncAlert(connection, placed.accountId, alert, first, mode, read),
+      () => syncAlert(connection, placed.accountId, alert, emails, mode, read),
     );
   }
 }
@@ -872,8 +872,8 @@ export async function logsPiece(progress: Progress, mode: Mode, placed: Placed, 
 }
 
 /** The budget alert's piece, of an install of either kind: the alert is the account's. */
-export function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, users: Logins | undefined): Promise<void> {
-  return alertPieces(progress, mode, placed, connection, users, [{ object: "Budget alert", alert: BUDGET_ALERT }]);
+export function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, emails: readonly Login[]): Promise<void> {
+  return alertPieces(progress, mode, placed, connection, emails, [{ object: "Budget alert", alert: BUDGET_ALERT }]);
 }
 
 /** The database's piece. A check the install makes by itself asks Cloudflare nothing of it: the key holds no right to a database, and the install read its settings from its own for this very check. */
@@ -991,7 +991,7 @@ async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connec
   await fromRecords("Bot settings", () => syncZoneBots(connection, zone.id, { blockBots: settings.block_bots, plan, sharesZone }, mode));
   await databasePiece(progress, mode, placed, connection);
   // Cloudflare takes no zone for the certificate alert: it is of every domain of the account, and its name says so.
-  await alertPieces(progress, mode, placed, connection, users, [
+  await alertPieces(progress, mode, placed, connection, users === undefined ? [] : alertAddresses(settings), [
     { object: "Budget alert", alert: BUDGET_ALERT },
     { object: "Certificate alert", alert: CERTIFICATE_ALERT },
   ]);
@@ -1182,7 +1182,7 @@ export function createDomainPlug(parts: PlugParts): DomainPlug {
   return {
     ...tokenFacts("domain"),
     words: { thing: "the domain", line: null },
-    carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"],
+    carriedSettings: ["alert_users", "outside_pages", "search_engines_allowed", "block_bots"],
     idleSettings: {},
     check: (token, settings) => read(parts, "plan", token, settings),
     repair: (token, settings) => read(parts, "apply", token, settings),

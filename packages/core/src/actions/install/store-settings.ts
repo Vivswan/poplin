@@ -1,4 +1,4 @@
-// The one way an action changes the stored settings: a change of the users is stored only while it leaves somebody able to log in, and `auto_update` is stored on only beside `update_check`.
+// The one way an action changes the stored settings: a change of the users is stored only while it leaves somebody able to log in, `auto_update` is stored on only beside `update_check`, and `alert_users` only while each is a user.
 //
 // The login page in front of an install keeps a list of its own, which follows the stored users when the install carries them there or an admin repairs it from the dashboard.
 // So an email that was just stored may get nobody in yet, and a list made of such emails alone shuts the dashboard on everyone, the way back included.
@@ -29,12 +29,15 @@ function keepsWorkingLogin(actor: Actor, stored: readonly Login[], next: readonl
   return next.some((login) => stored.includes(login));
 }
 
-/** The settings a change would leave, each key it names replaced whole, with nothing stored; or the refusal of a pair of update settings the store does not take. */
-function rehearsed(stored: SettingValues, changes: Partial<SettingValues>): Stored | Refused<"needs_update_check"> {
+/** The settings a change would leave, each key it names replaced whole, with nothing stored; or the refusal of a pair of settings the store does not take. */
+function rehearsed(stored: SettingValues, changes: Partial<SettingValues>): Stored | Refused<"needs_update_check" | "not_a_user"> {
   // A key given with no value names no change, as the store reads it.
-  const values = { ...stored, ...Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined)) };
+  const merged = { ...stored, ...Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined)) };
+  // New users given without the users the alerts go to take whoever they drop out of that list, as the store does.
+  const values = changes.alert_users === undefined ? { ...merged, alert_users: merged.alert_users.filter((login) => merged.users.includes(login)) } : merged;
+  if (values.auto_update && !values.update_check) return refuse("needs_update_check", "auto_update");
 
-  return values.auto_update && !values.update_check ? refuse("needs_update_check", "auto_update") : { ok: true, values };
+  return values.alert_users.every((login) => values.users.includes(login)) ? { ok: true, values } : refuse("not_a_user", "alert_users");
 }
 
 /**
@@ -44,9 +47,10 @@ function rehearsed(stored: SettingValues, changes: Partial<SettingValues>): Stor
  * @param how - with `dry_run` nothing is stored: the answer is every setting as the change would leave it, judged against the settings as they are read
  * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_user` about `users` for new users with no login that works among them.
  *   `needs_update_check` about `auto_update` for a change that would leave it on with `update_check` off, whichever of the two the change names.
+ *   `not_a_user` about `alert_users` for a change that names them and would leave an email there that is none of the users.
  *   `not_allowed` for a token whose user was removed while it asked, and for a person removed while they asked. A refusal changes nothing
  */
-export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>, how: Rehearsal = {}): Promise<Stored | Refused<"not_set_up" | "no_working_user" | "needs_update_check" | "not_allowed">> {
+export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>, how: Rehearsal = {}): Promise<Stored | Refused<"not_set_up" | "no_working_user" | "needs_update_check" | "not_a_user" | "not_allowed">> {
   const rehearsing = how.dry_run === true;
   if (changes.users !== undefined || rehearsing) {
     const stored = await install.database.readSettings();
@@ -61,6 +65,8 @@ export async function storeSettings(install: Install, actor: Actor, changes: Par
   if (changed.kind === "done" || changed.kind === "unchanged") return { ok: true, values: changed.values };
 
   if (changed.kind === "needs_update_check") return refuse("needs_update_check", "auto_update");
+
+  if (changed.kind === "not_a_user") return refuse("not_a_user", "alert_users");
 
   return refuse(changed.kind === "signer_gone" ? "not_allowed" : "not_set_up");
 }

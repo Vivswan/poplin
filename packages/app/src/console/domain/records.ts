@@ -12,7 +12,7 @@ import type { SettingValues } from "@poplin/core/src/records/settings";
 import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 
 /** The settings the provider's side is made to match. */
-export type DomainSettings = Pick<SettingValues, "users" | "outside_pages" | "search_engines_allowed" | "block_bots" | "provider_logs">;
+export type DomainSettings = Pick<SettingValues, "users" | "alert_users" | "outside_pages" | "search_engines_allowed" | "block_bots" | "provider_logs">;
 
 /** Reads the settings the provider's side is made to match: an install has them before it answers any request. A plug calls it only after the token has proven itself, so a refused token learns nothing of the install. */
 export type ReadSettings = () => Promise<DomainSettings>;

@@ -6,7 +6,7 @@
 //                      NULL         none ever waited
 //
 // A change of the rules' settings waits until a try that read the domain long enough after the last write found nothing to write: a read just after a write may still answer the domain as it was.
-// The users' list is written whole by every try, so a try the domain took settles it. The alerts that go to the first user are compared, so they wait until such a read:
+// The users' list is written whole by every try, so a try the domain took settles it. The install's alerts, which go to the users the settings choose, are compared, so they wait until such a read:
 //
 //   alerts_changed_at  above zero   a try of the users may have changed the alerts, at this moment
 //                      NULL         a later read confirmed them, or no try ever was
@@ -106,8 +106,24 @@ export function usersReplaced(users: readonly string[], signed: Signed, when?: S
 }
 
 /**
+ * Build the statement that remembers the users changed when a list replaces the users the alerts go to: what follows the users at the provider is carried with them. It goes before that replacement in a batch.
+ * It writes only on an install that keeps a run, for a list that differs from the stored one. The alerts are marked as changed from that moment on, as a try of the users marks them.
+ *
+ * @param chosen - the list that replaces the stored one
+ * @param signed - who signs the change and its moment; a signer who no longer stands remembers nothing
+ * @param when - what else must hold for the replacement to be written; left out, nothing else
+ */
+export function alertUsersReplaced(chosen: readonly string[], signed: Signed, when?: SQL): Statement {
+  const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND json_extract(${settings.value}, '$.alert_users') <> json(${JSON.stringify(chosen)}))`;
+
+  const marks = { users_changed_at: laterMark(signed.at), alerts_changed_at: v.parse(MOMENT, signed.at) };
+
+  return built(BUILD.update(domainCheck).set(marks).where(and(eq(domainCheck.id, 1), differs, signerStands(signed), when)));
+}
+
+/**
  * Build the statement that marks the users as waiting before a try to carry them to the domain, with a mark later than every one before it. It writes only on an install that keeps a run.
- * The alerts that go to the first user may change with the try, and are marked so from this moment on.
+ * The install's alerts may change with the try, and are marked so from this moment on.
  *
  * @param at - the moment of the try
  */

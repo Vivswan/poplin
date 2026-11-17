@@ -35,8 +35,8 @@ A restore is `poplin import backup.zip --settings --users` into an install that 
 | each file                              | its path, its bytes, and its type                                                     |
 | the live version                       | under its number, with who published it and when                                      |
 | the other kept versions                | the same, from a zip made with `--all-versions`. A site too large to import with every version is tried again with its live version alone |
-| the settings, with `--settings`        | every one but the users                                                               |
-| the users, with `--settings --users`   | the whole list                                                                        |
+| the settings, with `--settings`        | every one but `users` and `alert_users`                                               |
+| the users, with `--settings --users`   | the whole list, and `alert_users` with it                                             |
 
 | Stays behind                    | So                                           |
 | ------------------------------- | -------------------------------------------- |
@@ -84,7 +84,7 @@ A site that is refused for one of these two has a line that says `failed` in ste
 | a link you shared             | stops where the address is new, once the old install is removed. Nothing sends it on: send the new one |
 | a public name                 | comes back with its site, at the new install's address                                          |
 | each machine's login         | made anew: the zip holds no token. Run `npx poplin login`, with `--server` and the new URL, on each one     |
-| the users                     | the first login of the new install. `--settings --users` puts the old list in its place, where that list holds a login of the new install. Else it is refused with `no_working_user`  |
+| the users                     | the first login of the new install. `--settings --users` puts the old list in its place, where that list holds a login of the new install. Else it is refused with `no_working_user`. `alert_users` comes with the list, and else starts at `first` |
 | the install's keys            | made anew by the new install: the zip holds none                                                |
 | the activity log              | starts anew                                                                                     |
 | the kept versions             | come back from a zip made with `--all-versions`, and from no other. A site too large to import with every version is tried again with its live version alone |

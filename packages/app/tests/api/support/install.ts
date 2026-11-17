@@ -62,7 +62,7 @@ export interface Answered {
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
  * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`. `rules` and `logs` stand in for the provider's side of the domain's rules and of the logs, with a key: `pushed` holds every try.
- * `users` stands in for the provider's side of the users: `pushed` holds every list of users handed over, `ended` counts the tries to end every login, and `takes` says whether the provider takes either; it starts with no key, and takes none.
+ * `users` stands in for the provider's side of the users: `pushed` holds every list of users handed over and `mailed` the emails for the alerts, `ended` counts the tries to end every login, and `takes` says whether the provider takes either.
  * `host` stands in for the install's host: `key` is whether it holds the key an update is sent with, `release` the newest release above the running version or `null`, `refusal` what it refuses that release with, and `put` every version it put in place.
  * `direct` stands in for the host's tickets past the install: with `tickets` set, the host hands those out; it starts as a host that has none.
  */
@@ -75,7 +75,7 @@ export interface ApiInstall {
   readonly counters: MemoryCounters;
   readonly host: UpdateHost;
   readonly clock: { now: number };
-  readonly users: { takes: boolean; readonly pushed: (readonly string[])[]; ended: number };
+  readonly users: { takes: boolean; readonly pushed: (readonly string[])[]; readonly mailed: (readonly string[])[]; ended: number };
   readonly rules: { readonly pushed: RuleSettings[] };
   readonly logs: { readonly pushed: boolean[] };
   readonly direct: { tickets: Tickets | undefined };
@@ -179,7 +179,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const reported: unknown[] = [];
   const counters = new MemoryCounters();
   const host = updateHost("7.9.0");
-  const users: ApiInstall["users"] = { takes: false, pushed: [], ended: 0 };
+  const users: ApiInstall["users"] = { takes: false, pushed: [], mailed: [], ended: 0 };
   const rules: ApiInstall["rules"] = { pushed: [] };
   const logs: ApiInstall["logs"] = { pushed: [] };
   const direct: ApiInstall["direct"] = { tickets: undefined };
@@ -207,8 +207,9 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     follow: {
       where: "Example Cloud",
       holdsKey: () => users.takes,
-      push: async (emails) => {
+      push: async (emails, alerts) => {
         users.pushed.push(emails);
+        users.mailed.push(alerts);
 
         return users.takes ? { ok: true, stood: false } : { ok: false, refusal: "no_key" };
       },

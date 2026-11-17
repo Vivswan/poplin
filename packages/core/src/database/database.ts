@@ -14,7 +14,7 @@ import type { CarriedRules, CarriedUsers, DomainCheck, RememberedCheck } from ".
 import type { Holder } from "../records/fields";
 import type { Mend, Problem } from "../records/problem";
 import type { SiteId } from "../sites/ids";
-import type { SettingValues } from "../records/settings";
+import type { SettingValues, StoredUsers } from "../records/settings";
 import type { Site, SiteAccess, SiteFolder } from "../records/site";
 import type { SweepPlace } from "../records/sweep-place";
 import type { Totals } from "../records/sizes";
@@ -951,20 +951,20 @@ export interface Database {
 
   /**
    * Begin a try to carry the users to the domain: mark them as waiting, with a mark later than every one before it, and read the users to carry, in one step.
-   * The alerts that go to the first user are marked as changed from its moment on, until a later try that confirmed them settles.
+   * The install's alerts are marked as changed from its moment on, until a later try that confirmed them settles.
    *
-   * @returns the users stored now, `undefined` before setup stored any; the mark, `undefined` on an install that keeps no run of its domain, where nothing remembers that a change waits;
+   * @returns the users stored now and who the alerts go to among them; the mark, `undefined` on an install that keeps no run of its domain, where nothing remembers that a change waits;
    *   and the moment of the last change or try before this one, `undefined` where there was none
    */
-  claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined; readonly last: number | undefined }>;
+  claimUsers(at: number): Promise<StoredUsers & { readonly mark: number | undefined; readonly last: number | undefined }>;
 
   /**
    * Settle a change of the users after a try to carry them to the domain, in one step with the comparison.
    * The change waits no more only while the stored users are exactly the list the domain took and no mark was set since the try began. Otherwise it waits under a later mark.
    *
-   * @returns the users stored now, `undefined` before setup stored any; and whether a change of the users waits after it
+   * @returns the users stored now and who the alerts go to among them; and whether a change of the users waits after it
    */
-  settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly waits: boolean }>;
+  settleUsers(carried: CarriedUsers, at: number): Promise<StoredUsers & { readonly waits: boolean }>;
 
   /**
    * Begin a try to carry the settings of the domain's rules to the domain: give a change of them that waits a mark later than every one before it, and read the settings, in one step.
@@ -1014,15 +1014,15 @@ export interface Database {
    *
    * The `settings_changed` audit entry holds the values the change sets, and beside new users the emails they add and the ones they leave out, as `added` and `removed`.
    * Logins that add or drop a user, or that put another user first, are remembered, in the same step, as changed users by an install that keeps a check of its domain. The same users in another order behind the same first one are not.
-   *
+   * New `alert_users` that differ are remembered so too. New users given without them take whoever they drop out of that list in the same step: no email stored there is ever one that is no user.
    * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited; it writes nothing.
-   *   `needs_update_check` for a change that would leave `auto_update` on with `update_check` off, read against the settings as they are in the same step; it writes nothing either, of any key
+   *   `needs_update_check` for a change that would leave `auto_update` on with `update_check` off, and `not_a_user` for one whose `alert_users` name an email that is no user: both read in the same step, and nothing is written
    * @throws {Error} a value breaks its rule
    */
   changeSettings(
     changes: Partial<SettingValues>,
     signed: Signed,
-  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check">>;
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check" | "not_a_user">>;
 
   /**
    * Let one more email log in. It is one step that reads no list first: of users added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which names the email as `added`.
@@ -1036,7 +1036,7 @@ export interface Database {
   /**
    * Stop one email from logging in, in the same one step, and only while a login that works stays: the signer's own email when it is a login, and any login at all when the signer is none.
    *
-   * It writes one `settings_changed` audit entry, which names the email as `removed`, and an install that keeps a check of its domain remembers that the users changed.
+   * It writes one `settings_changed` audit entry, which names the email as `removed`, and an install that keeps a check of its domain remembers that the users changed. The email leaves `alert_users` in the same step.
    *
    * @returns `unchanged` for an email that is no user, `no_working_user` for the signer's own email or the last user there is, and `signer_gone` as `changeSettings` answers it; none writes anything
    * @throws {Error} the login is no email in its normal form

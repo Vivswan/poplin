@@ -377,6 +377,11 @@ describe("createApi", () => {
     await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, users: users.join(",") }, users: true }, query: {} }));
     await done((api) => api.import.settings.$post({ json: { format: 1, settings: { ...settings, trash_days: "8" } }, query: {} }));
     expect([install.users.pushed, settled, (await install.database.readDomainCheck())?.users_changed_at]).toEqual([[three, users], null, null]);
+    // Drift: `poplin config alert_users` goes through this route too. A choice that was carried nowhere would leave the provider mailing the users chosen before, and one that names no user would be stored.
+    const chosen = ["bo@example.com" as Login];
+    await done((api) => api.config.$patch({ json: { alert_users: chosen }, query: {} }));
+    const stranger = await answered(install.routes.config.$patch({ json: { alert_users: ["cy@example.com" as Login] }, query: {} }));
+    expect([install.users.pushed.slice(2), install.users.mailed, stranger.status, part(stranger, "error")]).toEqual([[users], [[ada], [ada], chosen], 404, { code: "not_a_user", about: "alert_users", message: "that email is no user" }]);
     // Drift: `poplin config outside_pages` goes through this route too. A change that reached no rule of the domain would wait for a repair the command never mentions, and one carried on any setting would call the provider for nothing.
     await done((api) => api.config.$patch({ json: { outside_pages: "allowed", trash_days: 9 }, query: {} }));
     await done((api) => api.config.$patch({ json: { block_bots: "off" }, query: {} }));

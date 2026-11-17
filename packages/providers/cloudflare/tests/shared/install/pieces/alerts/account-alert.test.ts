@@ -66,8 +66,17 @@ describe("planAlert", () => {
     { name: "the certificate alert sent to a user who is no longer the first", alert: CERTIFICATE_ALERT, policies: [{ ...CERTIFICATES, mechanisms: { email: [{ id: "second@example.com" }] } }], steps: certificates.change },
   ];
 
+  // Drift: the alerts go to the users the settings choose, and Cloudflare may list them in any order. Compared in order, an alert that stands would be written again at every run and named in Activity each day.
+  test("an alert that goes to several chosen users is left in any order of them, and changed where one is missing or one more is there", () => {
+    const [second, third] = ["second@example.com", "third@example.com"];
+    const sent = (...ids: readonly string[]): typeof OWN => ({ ...OWN, mechanisms: { email: ids.map((id) => ({ id })) } });
+    const planned = [sent(second, EMAIL), sent(EMAIL), sent(EMAIL, second, third), sent(EMAIL, EMAIL)].map((policy) => planAlert(BUDGET_ALERT, [policy], [EMAIL, second])[0]?.kind);
+
+    expect(planned).toEqual(["leave", "change", "change", "change"]);
+  });
+
   test.each(cases)("$name: the one step names poplin's policy and no other, and leaves it only as written, or the email would go nowhere, late, or to the wrong person unseen", ({ alert, policies, steps: planned }) => {
-    expect<unknown>(planAlert(alert, policies, EMAIL)).toEqual(planned);
+    expect<unknown>(planAlert(alert, policies, [EMAIL])).toEqual(planned);
   });
 });
 
@@ -86,15 +95,15 @@ describe("syncAlert", () => {
     };
 
     await withFake(holding(policies), async (connection, asked) => {
-      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, EMAIL, "plan")).toMatchObject({ ok: true, report: { created: [BUDGET_ALERT.name] } });
+      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, [EMAIL], "plan")).toMatchObject({ ok: true, report: { created: [BUDGET_ALERT.name] } });
       expect(asked.map((entry) => entry.method)).toEqual(["GET"]);
-      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, EMAIL, "apply")).toMatchObject({ ok: true, report: { created: [BUDGET_ALERT.name], changedNothing: false } });
-      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, EMAIL, "apply")).toMatchObject({ ok: true, report: { left: [BUDGET_ALERT.name], changedNothing: true } });
+      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, [EMAIL], "apply")).toMatchObject({ ok: true, report: { created: [BUDGET_ALERT.name], changedNothing: false } });
+      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, [EMAIL], "apply")).toMatchObject({ ok: true, report: { left: [BUDGET_ALERT.name], changedNothing: true } });
 
       policies[1] = { ...policies[1], enabled: false };
 
-      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, EMAIL, "apply")).toMatchObject({ ok: true, report: { changed: [BUDGET_ALERT.name] } });
-      expect(await syncAlert(connection, "account-a", CERTIFICATE_ALERT, EMAIL, "apply")).toMatchObject({ ok: true, report: { created: [CERTIFICATE_ALERT.name] } });
+      expect(await syncAlert(connection, "account-a", BUDGET_ALERT, [EMAIL], "apply")).toMatchObject({ ok: true, report: { changed: [BUDGET_ALERT.name] } });
+      expect(await syncAlert(connection, "account-a", CERTIFICATE_ALERT, [EMAIL], "apply")).toMatchObject({ ok: true, report: { created: [CERTIFICATE_ALERT.name] } });
       expect(asked.filter((entry) => entry.method !== "GET").map((entry) => [entry.method, entry.path, entry.body])).toEqual([
         ["POST", "/accounts/account-a/alerting/v3/policies", body],
         ["PUT", "/accounts/account-a/alerting/v3/policies/made-1", body],
@@ -108,7 +117,7 @@ describe("syncAlert", () => {
     await withFake(
       () => refusal(403, 10000, "Authentication error"),
       async (connection, asked) => {
-        expect(await syncAlert(connection, "account-a", BUDGET_ALERT, EMAIL, "apply")).toMatchObject({ ok: false, failure: "refused", status: 403, report: { changedNothing: true } });
+        expect(await syncAlert(connection, "account-a", BUDGET_ALERT, [EMAIL], "apply")).toMatchObject({ ok: false, failure: "refused", status: 403, report: { changedNothing: true } });
         expect(asked.map((entry) => entry.method)).toEqual(["GET"]);
       },
     );
@@ -124,7 +133,7 @@ describe("keepAlerts", () => {
       const key = readKeptKey(KEY, { baseUrl: connection.baseUrl });
       const both = [BUDGET_ALERT, CERTIFICATE_ALERT];
 
-      expect([await keepAlerts(key, "account-a", both, EMAIL), await keepAlerts(key, "account-a", both, EMAIL), await keepAlerts(key, "account-a", [BUDGET_ALERT], EMAIL)]).toEqual([
+      expect([await keepAlerts(key, "account-a", both, [EMAIL]), await keepAlerts(key, "account-a", both, [EMAIL]), await keepAlerts(key, "account-a", [BUDGET_ALERT], [EMAIL])]).toEqual([
         { wrote: [BUDGET_ALERT.name, CERTIFICATE_ALERT.name] },
         { wrote: [] },
         { wrote: [] },
@@ -137,7 +146,7 @@ describe("keepAlerts", () => {
 
       const before = asked.length;
 
-      expect([await keepAlerts(undefined, "account-a", both, EMAIL), asked.length - before]).toEqual([{ wrote: [], refusal: "no_key" }, 0]);
+      expect([await keepAlerts(undefined, "account-a", both, [EMAIL]), asked.length - before]).toEqual([{ wrote: [], refusal: "no_key" }, 0]);
     });
   });
 
@@ -149,7 +158,7 @@ describe("keepAlerts", () => {
     await withFake(
       () => refusal(status, 10000, `Authentication error ${KEY}`),
       async (connection, asked) => {
-        const kept = await keepAlerts(readKeptKey(KEY, { baseUrl: connection.baseUrl }), "account-a", [BUDGET_ALERT, CERTIFICATE_ALERT], EMAIL);
+        const kept = await keepAlerts(readKeptKey(KEY, { baseUrl: connection.baseUrl }), "account-a", [BUDGET_ALERT, CERTIFICATE_ALERT], [EMAIL]);
 
         expect([kept, asked.map((entry) => entry.method), JSON.stringify(kept).includes(KEY)]).toEqual([ends, ["GET"], false]);
       },
@@ -164,7 +173,7 @@ describe("keepAlerts", () => {
     await withFake(
       (asked) => ((asked.body as { readonly name?: string } | undefined)?.name === CERTIFICATE_ALERT.name ? refusal(403, 10000, "Authentication error") : account(asked)),
       async (connection) => {
-        const kept = await keepAlerts(readKeptKey(KEY, { baseUrl: connection.baseUrl }), "account-a", [BUDGET_ALERT, CERTIFICATE_ALERT], EMAIL);
+        const kept = await keepAlerts(readKeptKey(KEY, { baseUrl: connection.baseUrl }), "account-a", [BUDGET_ALERT, CERTIFICATE_ALERT], [EMAIL]);
 
         expect([kept, policies.map((policy) => policy.name)]).toEqual([{ wrote: [BUDGET_ALERT.name], refusal: "lacks_right" }, [BUDGET_ALERT.name]]);
       },

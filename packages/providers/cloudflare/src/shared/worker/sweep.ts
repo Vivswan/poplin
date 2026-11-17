@@ -33,7 +33,7 @@ import type { Updating } from "@poplin/core/src/actions/start-update";
 import { SWEEP_SPARE_WRITES, sweepExpired } from "@poplin/core/src/actions/install/sweep";
 import { SWEEPER } from "@poplin/core/src/auth/scopes";
 import type { RememberedCheck } from "@poplin/core/src/records/domain-check";
-import type { SettingValues } from "@poplin/core/src/records/settings";
+import { alertAddresses, type SettingValues } from "@poplin/core/src/records/settings";
 import { followUsers, type UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import { followLogs, type LogsFollow } from "@poplin/app/src/console/settings/logs-follow";
 import { followRules, type RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
@@ -97,7 +97,7 @@ interface Running {
   readonly updating: Updating;
   readonly login: LoginRepair;
   readonly follow: UsersFollow;
-  readonly keepAlerts: (email: string) => Promise<KeptAlerts>;
+  readonly keepAlerts: (emails: readonly string[]) => Promise<KeptAlerts>;
   readonly rules: RulesFollow;
   readonly dailyLogs: LogsFollow;
 }
@@ -140,16 +140,16 @@ function beginsDay(now: number): boolean {
 }
 
 /**
- * Keep the alerts of the install's kind for its first user.
+ * Keep the alerts of the install's kind for the users its settings choose.
  *
- * @param first - the first user as the run read the users, or `undefined` on an install with none, which is asked nothing
+ * @param emails - who the alerts go to, as the run read the settings; none on an install with no user, which is asked nothing
  * @returns the name of each alert this call made or changed, those written before a refusal among them
  */
-async function keptAlerts(running: Pick<Running, "keepAlerts">, tally: Tally, first: string | undefined): Promise<readonly string[]> {
-  if (first === undefined) return [];
+async function keptAlerts(running: Pick<Running, "keepAlerts">, tally: Tally, emails: readonly string[]): Promise<readonly string[]> {
+  if (emails.length === 0) return [];
 
   tally.web += ALERT_CALLS;
-  const kept = await running.keepAlerts(first);
+  const kept = await running.keepAlerts(emails);
 
   return kept.wrote;
 }
@@ -160,17 +160,17 @@ async function keptAlerts(running: Pick<Running, "keepAlerts">, tally: Tally, fi
  * A repair of the login that stopped is noted as a problem, but for one Cloudflare gave no answer to: the next day's run tries again.
  * An alert that was not kept is noted nowhere: the Domain screen's check reads the alert with the same key, and its row says what to press.
  *
- * @param emails - the users the login is made to let through, as the run read them; the alerts go to the first
+ * @param settings - the settings as the run read them: the users the login is made to let through, and who the alerts go to
  * @returns whether a repair of the login came through, which leaves the login standing, whatever became of the alerts
  */
-async function repairLogin(install: Install, running: Pick<Running, "login" | "follow" | "keepAlerts">, tally: Tally, emails: SettingValues["users"]): Promise<boolean> {
+async function repairLogin(install: Install, running: Pick<Running, "login" | "follow" | "keepAlerts">, tally: Tally, settings: Pick<SettingValues, "users" | "alert_users">): Promise<boolean> {
   if (!running.login.holdsKey()) return false;
 
-  const { wrote, users, calls, refusal } = await running.login.repair(emails);
+  const { wrote, users, calls, refusal } = await running.login.repair(settings.users);
   tally.web += calls;
   // A key Cloudflare refuses, and a Cloudflare that does not answer, would say the same of the alerts.
-  const alert = refusal === "key_refused" || refusal === "unreachable" ? [] : await keptAlerts(running, tally, emails[0]);
-  // The users may have changed since the run read them: where their policy was written, they are carried anew, as stored now, and the alerts go to the first of them in that carry.
+  const alert = refusal === "key_refused" || refusal === "unreachable" ? [] : await keptAlerts(running, tally, alertAddresses(settings));
+  // The users may have changed since the run read them: where their policy was written, they are carried anew, as stored now, and the alerts go to whom the settings choose in that carry.
   if (users) {
     tally.web += FOLLOW_CALLS;
     await followUsers(install, running.follow);
@@ -239,7 +239,7 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   const taking = running.updating.self;
   const self = { ...taking, ready: counted({ ready: taking.ready }, tally, "web", SELF_UPDATE_REQUESTS).ready };
   if (learned !== undefined) await startDueUpdate(watched, { ...learned, version: running.version }, { ...running.updating, self });
-  if (beginsDay(install.now()) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings.users))) {
+  if (beginsDay(install.now()) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings))) {
     // What a broken login was noted as ends with a repair that came through. It is ended under the install's own database, which is what a request of this instance noted it under, so the call is counted here.
     tally.database += 1;
     await endProblems(install, ["login_stands"]);

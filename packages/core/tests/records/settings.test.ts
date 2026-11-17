@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import * as v from "valibot";
 
 import type { Login } from "../../src/auth/logins";
-import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, showBytes, sizeBytes, spanSeconds } from "../../src/records/settings";
+import { defaultSettings, MOST_ALERT_USERS, SETTING_VALUES, type SettingValues, settingFromText, settingsFromText, settingsToText, showBytes, sizeBytes, spanSeconds } from "../../src/records/settings";
 
 const INSTALL = { installer: "ada@example.com" as Login };
 const PUBLISHED_DEFAULTS = {
@@ -13,6 +13,7 @@ const PUBLISHED_DEFAULTS = {
   versions_kept: "3",
   trash_days: "7",
   users: "ada@example.com",
+  alert_users: "first",
   outside_pages: "blocked",
   search_engines_allowed: "off",
   block_bots: "auto",
@@ -36,6 +37,7 @@ const CHANGED = {
   versions_kept: "10",
   trash_days: "30",
   users: "ada@example.com,bo@example.com",
+  alert_users: "bo@example.com",
   outside_pages: "allowed",
   search_engines_allowed: "on",
   block_bots: "off",
@@ -59,6 +61,7 @@ const CHANGED_VALUES = {
   versions_kept: 10,
   trash_days: 30,
   users: ["ada@example.com", "bo@example.com"],
+  alert_users: ["bo@example.com"],
   outside_pages: "allowed",
   search_engines_allowed: true,
   block_bots: "off",
@@ -169,6 +172,10 @@ describe("settingsFromText and settingsToText", () => {
     ["users", "", "bad-form"],
     ["users", "ada@example.com,", "bad-form"],
     ["users", "ada@example.com,ADA@example.com", "out-of-range"],
+    ["alert_users", "", "bad-form"],
+    ["alert_users", "First", "bad-form"],
+    ["alert_users", "ada@example.com,ADA@example.com", "out-of-range"],
+    ["alert_users", "bo@example.com", "not-a-user"],
     ["default_access", "public", "unknown-key"],
   ])("refuses %s %j as %s", (key, text, refusal) => {
     expect<unknown>(settingsFromText({ ...PUBLISHED_DEFAULTS, [key]: text })).toEqual({ ok: false, key, refusal, every: [{ key, refusal }] });
@@ -208,6 +215,29 @@ describe("settingsFromText and settingsToText", () => {
       { key: "trash_days", refusal: "bad-form" },
       { key: "auto_update", refusal: "needs-update-check" },
     ]);
+  });
+
+  // Drift: an alert would be sent to somebody who cannot log in, or to more addresses than one alert takes; and a rule of the list itself would be told as a stranger among the users.
+  test("takes alert_users only among the users and up to the most, and tells the list's own rule before the pair's", () => {
+    const users = Array.from({ length: MOST_ALERT_USERS + 1 }, (_one, at) => `user${at}@example.com`);
+    const read = (chosen: readonly string[]): unknown => {
+      const checked = settingsFromText({ ...PUBLISHED_DEFAULTS, users: users.join(","), alert_users: chosen.join(",") });
+
+      return checked.ok ? checked.values.alert_users.length : checked.every;
+    };
+
+    expect([read(users.slice(1)), read(users), read([...users, "stranger@example.com"])]).toEqual([
+      MOST_ALERT_USERS,
+      [{ key: "alert_users", refusal: "out-of-range" }],
+      [{ key: "alert_users", refusal: "out-of-range" }],
+    ]);
+  });
+
+  // Drift: `poplin config alert_users` reads its one value with no other setting beside it; read among sample users, every real email would be refused before it was sent.
+  test("settingFromText reads one setting by its own rule alone, so a pair is left to the store", () => {
+    const read = [settingFromText("alert_users", "bo@example.com"), settingFromText("alert_users", "first"), settingFromText("alert_users", "bo"), settingFromText("auto_update", "on"), settingFromText("trash_days", "0")];
+
+    expect<unknown>(read).toEqual([["bo@example.com"], [], undefined, true, undefined]);
   });
 
   test("drift: a change is checked against every key, so a setting left out is named instead of silently keeping an unknown value", () => {

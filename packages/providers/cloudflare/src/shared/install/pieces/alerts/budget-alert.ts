@@ -1,4 +1,4 @@
-// The account's budget alert: Cloudflare emails the install's first user once the account's usage charges for the billing period reach one dollar.
+// The account's budget alert: Cloudflare emails the users the install's settings choose once the account's usage charges for the billing period reach one dollar.
 // It is an alert of an install of either kind: the charges are the account's.
 
 import type { AccountAlert } from "./account-alert";

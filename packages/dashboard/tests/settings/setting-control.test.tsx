@@ -1,10 +1,11 @@
 // The control of each kind of setting: every kind the server can name draws a control that a person can change, a number has its unit fixed beside it, and nothing is typed as a word.
+// The choice of who gets the install's alerts says the default with the email it stands for, offers the install's users alone, and sends the text the server takes.
 
 import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Field } from "@base-ui/react/field";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 
 import { CONTROL_KINDS } from "../../../app/src/console/settings/setting-controls";
@@ -50,6 +51,37 @@ function Held({ row, sent }: { readonly row: Row; readonly sent: string[] }): Re
       <SettingControl row={row} id="the-control" text={text} onChange={keep} refused={false} />
     </Field.Root>
   );
+}
+
+/** The install's users, the first of them first. */
+const USERS = ["mira@example.com", "noor@example.com", "omar@example.com"];
+
+/** The row of who gets the alerts, while no user is chosen. */
+const ALERT_USERS = rowOf("alert_users", { kind: "users", options: USERS }, "first");
+
+/** The button of a choice of users, by the name of its row: the open list has a field of the same role. */
+function button(): HTMLElement {
+  return within(document.body).getByRole("combobox", { name: /^Send alerts to/ });
+}
+
+/** Draw the choice of users over a text, under the name of its row, and collect every text it sends. */
+function choice(text: string): string[] {
+  const sent: string[] = [];
+  render(
+    <>
+      <h3 id="the-control-label">Send alerts to</h3>
+      <Held row={{ ...ALERT_USERS, text }} sent={sent} />
+    </>,
+  );
+
+  return sent;
+}
+
+/** Open the list and tick or untick one user. */
+async function tick(user: string): Promise<void> {
+  const page = within(document.body);
+  if (page.queryAllByRole("option").length === 0) fireEvent.click(button());
+  fireEvent.click(await page.findByRole("option", { name: user }));
 }
 
 afterAll(clearPage);
@@ -129,5 +161,30 @@ describe("the control of a setting", () => {
     fireEvent.change(after.page.getByRole("textbox"), { target: { value: "7" } });
 
     expect([chosenNever, after.page.getByRole("combobox").textContent?.includes("After"), document.body.textContent?.includes("days"), after.sent]).toEqual([[true, null], true, true, ["7d"]]);
+  });
+});
+
+describe("the choice of who gets the alerts", () => {
+  // Drift: the default would read as nobody, or as a user picked by hand; or the button would have no name a screen reader says.
+  test("says the first user with their email while none is chosen, under the name of its row", () => {
+    choice("first");
+
+    expect([button().textContent, button().getAttribute("aria-labelledby")]).toEqual(["First user (mira@example.com)", "the-control-label the-control"]);
+  });
+
+  // Drift: a typed address that is no user is refused by the install, so the list must offer the users and nothing else; and the text sent must be the form the install reads, with the default's word once nothing is ticked.
+  test("offers the install's users alone, sends the ticked ones in the users' order whatever order they were ticked in, and the default's word once none is left", async () => {
+    const sent = choice("first");
+    await tick("omar@example.com");
+    const offered = within(document.body)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    await tick("noor@example.com");
+    const shown = button().textContent;
+    await tick("omar@example.com");
+    await tick("noor@example.com");
+
+    await waitFor(() => expect(sent).toHaveLength(4));
+    expect([offered, shown, sent]).toEqual([USERS, "2 users", ["omar@example.com", "noor@example.com,omar@example.com", "noor@example.com", "first"]]);
   });
 });

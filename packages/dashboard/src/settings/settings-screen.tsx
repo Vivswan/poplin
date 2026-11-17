@@ -17,7 +17,7 @@ import { controlId, SettingRow } from "@/settings/setting-row";
 import { boundedBy, isOn } from "@/settings/setting-values";
 import { useDraft } from "@/settings/settings-draft";
 import { type Row, type Settings, useSettings } from "@/settings/settings-queries";
-import { type Block, blocksOf, UPDATES, wordsOf } from "@/settings/settings-words";
+import { ALERTS, type Block, blocksOf, UPDATES, wordsOf } from "@/settings/settings-words";
 import { AppShell } from "@/shell/app-shell";
 
 /** A group: its heading over its rows, and a line between it and the group before. */
@@ -41,15 +41,17 @@ const MARKED_FOR = 2000;
 /** The waiting changes of the settings, as the blocks need them. */
 type Draft = ReturnType<typeof useDraft>;
 
-/** What the line says changes after a repair: the rules, where every setting of the block waits for one, and else the waiting settings by their names. The others reach the domain by themselves. */
+/** What the line says changes after a repair: the alerts in their block; the rules, where every setting of the block waits for one; and else the waiting settings by their names. The others reach the domain by themselves. */
 function waitingWords(block: Block): string {
+  if (block.id === ALERTS) return "The alerts change";
+
   const waiting = block.rows.filter((row) => row.repair).map((row) => wordsOf(row.key).label);
   if (waiting.length === block.rows.length) return "The rules on your domain change";
 
   return `${new Intl.ListFormat("en").format(waiting)} ${waiting.length === 1 ? "changes" : "change"} on your domain`;
 }
 
-/** The line under the heading of a block with settings whose half on the domain waits for the next repair. */
+/** The line under the heading of a block with settings whose half at the provider waits for the next repair. */
 function RepairNote({ block }: { readonly block: Block }): ReactNode {
   return (
     <p className="mb-1 text-muted-foreground">

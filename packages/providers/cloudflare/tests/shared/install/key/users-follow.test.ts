@@ -21,6 +21,9 @@ const KEY = "kept-key-of-the-test";
 /** The users after a change: the first is the one the alert is mailed to. */
 const USERS = ["zoe@example.com", "ada@example.com"] as Login[];
 
+/** Who the alerts go to while no user is chosen: the first user alone. */
+const FIRST = USERS.slice(0, 1);
+
 /** Where the two kinds of policy are listed and written. */
 const PATHS = { policies: `/accounts/${ACCOUNT}/access/policies`, alerts: `/accounts/${ACCOUNT}/alerting/v3/policies` } as const;
 
@@ -64,7 +67,7 @@ describe("createUsersFollow", () => {
   test("a change writes the policy of the users with every user and sends the alert to the first, and touches no application", async () => {
     await withFake(account({}), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
-      const pushed = await follow.push(USERS);
+      const pushed = await follow.push(USERS, FIRST);
 
       const include = [{ email: { email: "ada@example.com" } }, { email: { email: "zoe@example.com" } }];
 
@@ -84,7 +87,7 @@ describe("createUsersFollow", () => {
 
     await withFake(account({ alerts: (asked) => page(asked, [sent]) }), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
-      const pushed = [await follow.push(["ada@example.com", "zoe@example.com"] as Login[]), await follow.push(["ada@example.com"] as Login[])];
+      const pushed = [await follow.push(["ada@example.com", "zoe@example.com"] as Login[], ["ada@example.com"] as Login[]), await follow.push(["ada@example.com"] as Login[], ["ada@example.com"] as Login[])];
       const body = (emails: readonly string[]): unknown => ({ name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: emails.map((email) => ({ email: { email } })) });
 
       expect([pushed, writes(asked)]).toEqual([
@@ -105,7 +108,7 @@ describe("createUsersFollow", () => {
     await withFake(account({ alerts: (asked) => page(asked, []) }), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
 
-      expect(await follow.push(USERS)).toEqual({ ok: true, stood: false });
+      expect(await follow.push(USERS, FIRST)).toEqual({ ok: true, stood: false });
       expect(writes(asked).at(-1)).toEqual(["POST", PATHS.alerts, expect.objectContaining({ name: BUDGET_ALERT.name, alert_type: "billing_budget_alert", mechanisms: { email: [{ id: "zoe@example.com" }] } })]);
       expect(new Set(asked.map((entry) => entry.key))).toEqual(new Set([`Bearer ${KEY}`]));
     });
@@ -117,11 +120,29 @@ describe("createUsersFollow", () => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT, CERTIFICATE_ALERT]);
       const to = { mechanisms: { email: [{ id: "zoe@example.com" }] } };
 
-      expect(await follow.push(USERS)).toEqual({ ok: true, stood: false });
+      expect(await follow.push(USERS, FIRST)).toEqual({ ok: true, stood: false });
       expect(writes(asked).slice(1)).toEqual([
         ["PUT", `${PATHS.alerts}/alert-1`, expect.objectContaining({ name: BUDGET_ALERT.name, ...to })],
         ["POST", PATHS.alerts, expect.objectContaining({ name: CERTIFICATE_ALERT.name, alert_type: "universal_ssl_event_type", ...to })],
       ]);
+    });
+  });
+
+  // Drift: the alerts go to the users the settings choose. A carry that sent them to the first user alone would drop every other chosen one, and one that compared the addresses in order would write an alert that already goes to them.
+  test("the alerts go to every chosen user, and an alert that goes to the same users in another order is left as it stands", async () => {
+    const chosen = ["ada@example.com", "zoe@example.com"] as Login[];
+    const sent = { ...HELD_ALERT, mechanisms: { email: [{ id: "zoe@example.com" }, { id: "ada@example.com" }] } };
+
+    await withFake(account({}), async (connection, asked) => {
+      const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
+
+      expect(await follow.push(USERS, chosen)).toEqual({ ok: true, stood: false });
+      expect(writes(asked).at(-1)).toEqual(["PUT", `${PATHS.alerts}/alert-1`, expect.objectContaining({ mechanisms: { email: [{ id: "ada@example.com" }, { id: "zoe@example.com" }] } })]);
+    });
+    await withFake(account({ alerts: (asked) => page(asked, [sent]) }), async (connection, asked) => {
+      const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
+
+      expect([await follow.push(USERS, chosen), writes(asked).length]).toEqual([{ ok: true, stood: true }, 1]);
     });
   });
 
@@ -139,7 +160,7 @@ describe("createUsersFollow", () => {
   test.each(refused)("$name ends as $ends, and no text of the answer holds the key", async ({ answers, ends, written }) => {
     await withFake(account(answers), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
-      const pushed = await follow.push(USERS);
+      const pushed = await follow.push(USERS, FIRST);
 
       expect([pushed, writes(asked).length]).toEqual([ends, written]);
       expect([JSON.stringify([follow, pushed]), Bun.inspect(follow), Bun.inspect(pushed)].join("\n")).not.toContain(KEY);
@@ -150,7 +171,7 @@ describe("createUsersFollow", () => {
     await withFake(account({}), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(undefined, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
 
-      expect([follow.holdsKey(), await follow.push(USERS), asked, follow.where]).toEqual([false, { ok: false, refusal: "no_key" }, [], "Cloudflare"]);
+      expect([follow.holdsKey(), await follow.push(USERS, FIRST), asked, follow.where]).toEqual([false, { ok: false, refusal: "no_key" }, [], "Cloudflare"]);
     });
   });
 });

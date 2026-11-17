@@ -11,7 +11,7 @@ import type { Asked } from "../shared/install/support/replies";
 import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "../shared/install/support/fake-install";
 import { LAYOUT, layoutOf } from "../shared/install/support/layouts";
 
-const STORED: DomainSettings = { users: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
+const STORED: DomainSettings = { users: ["owner@example.com" as Login], alert_users: [], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
 const REFUSED = { ok: false, refusal: "token" } as const;
 
@@ -157,6 +157,24 @@ test("a login added to the settings: the check says the Access policy lets other
     await plug.repair(TOKEN, async () => added);
 
     expect(account.policies.map((policy) => policy.include)).toEqual([[{ everyone: {} }], [{ email: { email: "owner@example.com" } }, { email: { email: "second@example.com" } }]]);
+  });
+});
+
+// Drift: the two alerts of an install under a domain go to the users the setting `alert_users` chooses. A repair that read the first user alone would undo the choice at every run, on either alert.
+test("the two alerts a repair makes go to the first user, and a repair after users were chosen for them sends both to those", async () => {
+  const account = emptyAccount();
+  const chosen = ["second@example.com" as Login, "owner@example.com" as Login];
+  const picked: DomainSettings = { ...STORED, users: [...STORED.users, "second@example.com" as Login], alert_users: chosen };
+
+  await withAccount(account, async (plug) => {
+    await plug.repair(TOKEN, SETTINGS);
+    const first = account.alerts.map((alert) => alert.mechanisms);
+    await plug.repair(TOKEN, async () => picked);
+
+    expect([first, account.alerts.map((alert) => alert.mechanisms)]).toEqual([
+      [{ email: [{ id: "owner@example.com" }] }, { email: [{ id: "owner@example.com" }] }],
+      [{ email: chosen.map((id) => ({ id })) }, { email: chosen.map((id) => ({ id })) }],
+    ]);
   });
 });
 
@@ -1200,10 +1218,10 @@ describe("a check the install makes with the key it holds", () => {
     waf: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin. To switch this on, add this permission to the account token and press Repair: Zone WAF: Edit",
     bots: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says. To switch this on, add this permission to the account token and press Repair: Bot Management: Edit",
     alert:
-      "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. " +
+      "Cloudflare emails the users the alert_users setting chooses when the account's usage charges for the billing period reach 1 US dollar. " +
       "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair: Notifications: Edit",
     certificates:
-      "Cloudflare emails your first user when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone. " +
+      "Cloudflare emails the users the alert_users setting chooses when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone. " +
       "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair: Notifications: Edit",
   } as const;
 

@@ -12,7 +12,7 @@ import { ADDRESSES } from "../shared/install/support/layouts";
 import type { Asked } from "../shared/install/support/replies";
 
 /** The settings the install holds. */
-const STORED: DomainSettings = { users: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
+const STORED: DomainSettings = { users: ["owner@example.com" as Login], alert_users: [], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
 
 /** Reads them, as a plug asks once a token is proven. */
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
@@ -33,7 +33,7 @@ function deployed(): Account {
 /** The one optional right of the token, with what its piece's row says where the token lacks it. */
 const OPTIONAL = {
   right: "Notifications: Edit",
-  adds: "Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar.",
+  adds: "Cloudflare emails the users the alert_users setting chooses when the account's usage charges for the billing period reach 1 US dollar.",
   how: "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair: Notifications: Edit",
 } as const;
 
@@ -263,7 +263,8 @@ test("a repair with a token without Notifications: Edit fails nothing: every oth
 });
 
 // Drift: the alert is mailed to the first user. One made for another address, or left as it was after the users changed, would warn somebody who no longer holds the account.
-test("the alert a repair makes is the account's own, at 1 dollar, mailed to the first user alone, and a repair after the first user changed sends it to the new one", async () => {
+// The users the setting `alert_users` chooses get it in the first user's place: a repair that read the first user alone would undo the choice at every run.
+test("the alert a repair makes is the account's own, at 1 dollar, mailed to the first user alone; a repair after the first user changed sends it to the new one, and one after users were chosen for it to those", async () => {
   const account = deployed();
 
   await withAccount(account, async (plug) => {
@@ -271,9 +272,13 @@ test("the alert a repair makes is the account's own, at 1 dollar, mailed to the 
     const first = structuredClone(account.alerts);
     const moved = async (): Promise<DomainSettings> => ({ ...STORED, users: ["second@example.com" as Login, "owner@example.com" as Login] });
     const rows = shown(await plug.repair(TOKEN, moved));
+    const afterMove = account.alerts.map((alert) => alert.mechanisms);
+    const chosen = ["owner@example.com" as Login, "second@example.com" as Login];
+    await plug.repair(TOKEN, async () => ({ ...(await moved()), alert_users: chosen }));
 
     expect(first).toMatchObject([{ name: "poplin: usage charges reached 1 dollar", alert_type: "billing_budget_alert", enabled: true, filters: { total_spend_dollars: ["1"] }, mechanisms: { email: [{ id: "owner@example.com" }] } }]);
-    expect([rows.filter((row) => row.startsWith("Budget alert")), account.alerts.map((alert) => alert.mechanisms)]).toEqual([["Budget alert | changed | poplin: usage charges reached 1 dollar"], [{ email: [{ id: "second@example.com" }] }]]);
+    expect([rows.filter((row) => row.startsWith("Budget alert")), afterMove]).toEqual([["Budget alert | changed | poplin: usage charges reached 1 dollar"], [{ email: [{ id: "second@example.com" }] }]]);
+    expect(account.alerts.map((alert) => alert.mechanisms)).toEqual([{ email: chosen.map((id) => ({ id })) }]);
   });
 });
 

@@ -92,10 +92,39 @@ export function settingsAndSigner(signed: Signed): Statement {
 }
 
 /** Whether the settings a change comes to keep `auto_update` on only beside `update_check`. It reads the stored settings by itself, so a statement on any table can wait on it. */
-export function updatePairKept(patched: SQL): SQL {
+function updatePairKept(patched: SQL): SQL {
   const alone = fragment`json_extract(${patched}, '$.auto_update') = 1 AND json_extract(${patched}, '$.update_check') = 0`;
 
   return fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND NOT (${alone}))`;
+}
+
+/** Whether each user the alerts go to, in the settings a change comes to, is one of the users there. It reads the stored settings by itself, as `updatePairKept` does. */
+function alertUsersFit(patched: SQL): SQL {
+  const stranger = fragment`EXISTS (SELECT 1 FROM json_each(${patched}, '$.alert_users') AS chosen WHERE chosen.value NOT IN (SELECT value FROM json_each(${patched}, '$.users')))`;
+
+  return fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND NOT ${stranger})`;
+}
+
+/** The settings a change of the users comes to, with the users the alerts go to kept among them: one who is no user any more leaves that list in the same write, in the list's order. */
+export function alertUsersKept(changed: SQL<string>): SQL<string> {
+  const kept = fragment`(SELECT json_group_array(chosen.value) FROM json_each(${changed}, '$.alert_users') AS chosen WHERE chosen.value IN (SELECT value FROM json_each(${changed}, '$.users')))`;
+
+  return fragment<string>`json_set(${changed}, '$.alert_users', json(${kept}))`;
+}
+
+/**
+ * The settings a change comes to, and what must hold of them for any statement of the change to write.
+ * New users with no word of who the alerts go to keep that list among themselves.
+ * Only a change of an update setting can part the two, and only one that names who the alerts go to can name somebody who is no user.
+ *
+ * @returns the settings as JSON, a merge patch that replaces each key the change names and leaves every other; and the condition, `undefined` for a change that can break neither pair
+ */
+export function settingsPatched(changes: Partial<SettingValues>): { readonly patched: SQL<string>; readonly fits: SQL | undefined } {
+  const merged = fragment<string>`json_patch(${settings.value}, ${JSON.stringify(changes)})`;
+  const patched = changes.users !== undefined && changes.alert_users === undefined ? alertUsersKept(merged) : merged;
+  const pair = changes.update_check === undefined && changes.auto_update === undefined ? undefined : updatePairKept(patched);
+
+  return { patched, fits: and(pair, changes.alert_users === undefined ? undefined : alertUsersFit(patched)) };
 }
 
 /** Whether the read of `settingsAndSigner` found a signer who no longer stands. */

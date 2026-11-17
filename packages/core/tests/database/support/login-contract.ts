@@ -6,6 +6,7 @@ import type { LoginId, PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tokens";
 import type { Signed } from "../../../src/database/database";
+import type { SettingValues } from "../../../src/records/settings";
 import {
   ADA,
   ADMIN,
@@ -393,6 +394,48 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       ]);
       await expect(database.addLogin("Bo@Example.com" as Login, BY_ADA)).rejects.toThrow();
       await expect(database.removeLogin("" as Login, BY_ADA)).rejects.toThrow();
+    });
+
+    // Drift: an alert of the install is mailed to the users `alert_users` holds. One stored there who is no user any more would go on getting the install's alerts after being removed, and a stored row that names one could not be read at all.
+    test("alert_users holds users alone: a removed user and one new users leave out go from it in the same write, a stranger named there is refused with nothing written, and an emptied list is the default again", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy, di] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login];
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo, cy] }, BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
+      const state = async (): Promise<unknown> => {
+        const [stored, check] = [await database.readSettings(), await database.readDomainCheck()];
+
+        return { users: stored?.users, chosen: stored?.alert_users, trash: stored?.trash_days, marks: [check?.users_changed_at, check?.alerts_changed_at], entries: (await auditDetails(database, "settings_changed")).length };
+      };
+      const kinds: string[] = [];
+      const change = async (changes: Partial<SettingValues>, at: number): Promise<unknown> => {
+        kinds.push((await database.changeSettings(changes, { as: "person", by: ADMIN, at })).kind);
+
+        return state();
+      };
+
+      const chosen = await change({ alert_users: [cy, bo] }, NOW + 1);
+      const same = await change({ alert_users: [cy, bo] }, NOW + 2);
+      const stranger = await change({ alert_users: [bo, di], trash_days: 9 }, NOW + 3);
+      const both = await change({ users: [ADMIN, bo], alert_users: [cy] }, NOW + 4);
+      const dropped = await change({ users: [ADMIN, cy, di] }, NOW + 5);
+      const removed = (await database.removeLogin(cy, { as: "person", by: ADMIN, at: NOW + 6 })).kind;
+      const emptied = await state();
+      const claimed = await database.claimUsers(NOW + 7);
+
+      expect(kinds).toEqual(["done", "unchanged", "not_a_user", "not_a_user", "done"]);
+      // The first change marks the users and the alerts as changed; the one that sets what is stored, and the refused ones, mark nothing and write no entry.
+      expect([chosen, same, stranger, both]).toEqual(Array.from({ length: 4 }, () => ({ users: [ADMIN, bo, cy], chosen: [cy, bo], trash: SETTINGS.trash_days, marks: [NOW + 1, NOW + 1], entries: 1 })));
+      expect([dropped, removed, emptied]).toEqual([
+        { users: [ADMIN, cy, di], chosen: [cy], trash: SETTINGS.trash_days, marks: [NOW + 5, NOW + 1], entries: 2 },
+        "done",
+        { users: [ADMIN, di], chosen: [], trash: SETTINGS.trash_days, marks: [NOW + 6, NOW + 1], entries: 3 },
+      ]);
+      expect([claimed.users, claimed.alerts]).toEqual([
+        [ADMIN, di],
+        [ADMIN],
+      ]);
+      await expect(database.changeSettings({ alert_users: [bo, bo] }, BY_ADA)).rejects.toThrow();
     });
 
     // Drift: a token is its user's. A removal that left the user's tokens alive would keep that person in through every computer they allowed; one that ended a token of a user who stays would break a working agent.

@@ -16,7 +16,7 @@ import type { updateSite } from "@poplin/core/src/actions/sites/set";
 import type { getSite } from "@poplin/core/src/actions/sites/show";
 import type { signEveryoneOut } from "@poplin/core/src/actions/access/sign-out";
 import { type startUpdate, TAKEN_BY_REPAIR } from "@poplin/core/src/actions/start-update";
-import { MOST_DAYS, MOST_OF_A_COUNT } from "@poplin/core/src/records/settings";
+import { MOST_ALERT_USERS, MOST_DAYS, MOST_OF_A_COUNT } from "@poplin/core/src/records/settings";
 
 import type { DomainReading } from "./domain/records";
 
@@ -96,6 +96,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     versions_kept: COUNT_RANGE,
     trash_days: DAYS_RANGE,
     users: "Use whole email addresses, each one once.",
+    alert_users: `Choose ${MOST_ALERT_USERS} users at most.`,
     login: "Type an email address, such as name@example.com.",
     max_total_size: SIZE_RANGE,
     max_site_size: SIZE_RANGE,
@@ -113,6 +114,9 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     outside_pages: "Use blocked or allowed.",
     search_engines_allowed: "Use on or off.",
     block_bots: "Use auto, on, or off.",
+  },
+  not_a_user: {
+    alert_users: "A chosen user is no user any more, so nothing was changed. Choose again.",
   },
   logins_not_ended: {
     no_key: "poplin holds no key for the provider, so nobody was signed out. Repair makes one: open Domain and press Repair.",

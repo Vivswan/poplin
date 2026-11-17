@@ -176,12 +176,12 @@ Three settings save without these permissions. The dashboard has them in Setting
 
 ## Optional: an email when charges reach 1 dollar
 
-Cloudflare emails your first user when the account's usage charges for the billing period reach 1 US dollar. The install makes that budget alert by itself, with [the key it keeps](../about/security.md#the-kept-key), under a domain and without one:
+Cloudflare emails your first user, or the users [`alert_users`](settings.md#who-gets-the-alerts) chooses, when the account's usage charges for the billing period reach 1 US dollar. The install makes that budget alert by itself, with [the key it keeps](../about/security.md#the-kept-key), under a domain and without one:
 
 | When                                   | The install                                                         |
 | -------------------------------------- | ------------------------------------------------------------------- |
-| a user is added or removed             | makes the alert where the account has none, and sends it to the first user |
-| the first clean-up run a minute or more after poplin last wrote the list, the runs being 15 minutes apart | reads the alert again, and sends it to the first user where it goes to someone else |
+| a user is added or removed, or `alert_users` changes | makes the alert where the account has none, and sends it to the chosen users |
+| the first clean-up run a minute or more after poplin last wrote the list, the runs being 15 minutes apart | reads the alert again, and sends it to the chosen users where it goes to someone else |
 | the first clean-up run of each UTC day | the same                                                            |
 | it holds no key, or one Cloudflare no longer takes | makes none: press Repair, which makes a key             |
 
@@ -189,7 +189,7 @@ The fourth optional permission on the account token lets Repair make the alert a
 
 | First box | Second box    | Third box | With it, Repair                                      | Without it                                                        |
 | --------- | ------------- | --------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| Account   | Notifications | Edit      | makes the alert, and sends it to your first user     | makes no alert, and leaves one that is there. Its row says `optional` |
+| Account   | Notifications | Edit      | makes the alert, and sends it to the chosen users    | makes no alert, and leaves one that is there. Its row says `optional` |
 
 The alert is named `poplin: usage charges reached 1 dollar`, under Notifications in Cloudflare. It counts the whole account's charges, and it stops nothing. [Limits and cost](../upkeep/cost/what-can-cost-money.md) says what can cost money.
 
@@ -197,7 +197,7 @@ A key that may not make the alert shows in a check: the row `Budget alert` says 
 
 ## An email about certificates
 
-Under a domain the install keeps a second alert: Cloudflare emails your first user when a certificate it issues for a domain fails to validate, is issued, is renewed, or runs out.
+Under a domain the install keeps a second alert: Cloudflare emails the same users when a certificate it issues for a domain fails to validate, is issued, is renewed, or runs out.
 
 | Question               | Answer                                                                                                   |
 | ---------------------- | -------------------------------------------------------------------------------------------------------- |

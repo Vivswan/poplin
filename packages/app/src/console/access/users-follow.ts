@@ -1,4 +1,5 @@
 // The users carried to the login in front of the install, by itself, after every change of them: the provider's list is written with the key the install keeps.
+// What else follows the users at the provider goes with them: the install's alerts, sent to the users the setting `alert_users` chooses, so a change of that setting is carried the same way.
 //
 //   the list took the users                    carried   the change waits no more
 //   the install holds no key                   waits     Domain says to press Repair, which makes a key
@@ -12,7 +13,8 @@
 // The list carried is read after the change was stored, under a mark set in the same step. The change is settled only if the stored users are still that list and no mark was set since: by a later change, or by another try at the provider.
 // A list that is stale by then is carried once more, and where that is too the change is left waiting.
 // A try the provider refused sets a mark anew before it answers: its write of the list may have landed after a newer one that was settled meanwhile.
-// The list is written whole by every try. The alerts that go to the first user are compared, and a read just after a write may still answer them as they were: they wait under a mark of their own, which no try after a change lets go.
+// The list is written whole by every try. The install's alerts, which go to the users the settings choose, are compared, and a read just after a write may still answer them as they were.
+// So they wait under a mark of their own, which no try after a change lets go.
 // The scheduled run tries again once that mark is old enough, as a try that confirms, and lets it go where nothing but the list was written.
 
 import { noteProblem } from "@poplin/core/src/actions/install/problems";
@@ -40,6 +42,9 @@ const SENTENCES: Readonly<Record<Waiting, string>> = {
 /** The refusals no later try mends: a person must repair the domain. An install with no key says so on Domain already. */
 const NOTED: readonly FollowRefusal[] = ["key_refused", "lacks_right", "not_made"];
 
+/** The settings whose change this follow carries: the users, and the ones among them the alerts go to. */
+export const USER_SETTINGS = ["users", "alert_users"] as const;
+
 /** Why the provider's list did not take the users: one of the four answers of a call made with the install's key, or `not_made` for a list that is not at the provider, which a repair makes. */
 export type FollowRefusal = KeyRefusal | "not_made";
 
@@ -49,13 +54,13 @@ type Waiting = FollowRefusal | "changed_again" | "forgotten" | "half_retried" | 
 /** How a try reads the provider: as `carry` it trusts no read. Otherwise it trusts its reads where nothing changed or tried after a moment, one long enough ago that the provider's reads show every write made by then. */
 export type FollowTry = "carry" | { readonly quietSince: number };
 
-/** What one try at the provider answered: `stood` says that the alerts read as going to the first user, so the list alone was written. A refusal says `written` where the list itself took the users and what else follows them did not. */
+/** What one try at the provider answered: `stood` says that the alerts read as going to the emails given, so the list alone was written. A refusal says `written` where the list itself took the users and what else follows them did not. */
 type Pushed = { readonly ok: true; readonly stood: boolean } | { readonly ok: false; readonly refusal: FollowRefusal; readonly written?: true };
 
 /** A try at the provider that was refused. */
 type Refusal = Extract<Pushed, { readonly ok: false }>;
 
-/** The provider's side of the users: the list of who may log in, and whatever else there follows the first of them. */
+/** The provider's side of the users: the list of who may log in, and the alerts that go to some of them. */
 export interface UsersFollow {
   /** The provider's name for itself, as a sentence says where the list is. */
   readonly where: string;
@@ -63,8 +68,8 @@ export interface UsersFollow {
   /** Whether the install holds a key, so a change that waits is carried by a later try with no person. No call to the provider. */
   holdsKey(): boolean;
 
-  /** Write the users into the provider's list, and nothing else of the login. It throws for nothing the provider answers, and no answer holds the key. */
-  push(users: readonly Login[]): Promise<Pushed>;
+  /** Write the users into the provider's list, and nothing else of the login, and send the install's alerts to `alerts`, the emails the stored settings choose. It throws for nothing the provider answers, and no answer holds the key. */
+  push(users: readonly Login[], alerts: readonly Login[]): Promise<Pushed>;
 }
 
 /** Whether the users reached the provider, and for a change that waits the sentence a screen shows after the word that it is saved. */
@@ -94,6 +99,15 @@ function waitingOf(pushed: Refusal, remembers: boolean): Waiting {
   if (pushed.written === true) return mends ? "half_retried" : "half_refused";
 
   return mends || NOTED.includes(pushed.refusal) ? pushed.refusal : "forgotten";
+}
+
+/**
+ * Say whether a change of the settings names one this follow carries.
+ *
+ * @param changes - the body of a change, unchecked
+ */
+export function namesUsers(changes: unknown): boolean {
+  return typeof changes === "object" && changes !== null && USER_SETTINGS.some((key) => key in changes);
 }
 
 /**
@@ -128,19 +142,19 @@ export async function followUsers(install: Pick<Install, "database" | "now">, fo
 
   for (let tries = 0; tries < MOST_TRIES; tries += 1) {
     const claimed = await install.database.claimUsers(install.now());
-    const { users } = claimed;
+    const { users, alerts } = claimed;
     // An install with no settings has no users to carry.
     if (users === undefined) return { carried: true };
 
     remembers = claimed.mark !== undefined;
-    const pushed = await follow.push(users);
+    const pushed = await follow.push(users, alerts);
     if (!pushed.ok) return refused(install, follow, pushed, claimed.mark);
 
     const since = claimed.mark ?? 0;
     // A second try comes just after the first one's write, so its read confirms nothing.
     const confirmed = pushed.stood && tries === 0 && trusts(how, claimed.last);
     const settled = await install.database.settleUsers(confirmed ? { users, since, confirmed } : { users, since }, install.now());
-    if (!settled.waits && settled.users !== undefined && same(settled.users, users)) return { carried: true };
+    if (!settled.waits && settled.users !== undefined && same(settled.users, users) && same(settled.alerts, alerts)) return { carried: true };
   }
 
   if (remembers) return waits(follow, "changed_again");

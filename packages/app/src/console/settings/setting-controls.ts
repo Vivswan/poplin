@@ -7,12 +7,14 @@
 //   one word, or one of the above  that control, with the word that stands for no number
 //   array                          lines, one entry on each
 //   string, anything else          text, in the form the setting is typed in
+//
+// A setting whose value is some of the install's users has a control the schema cannot say: a choice among those users, which the screen's route gives it.
 
 import { type SettingValues, sizeBytes, spanSeconds } from "@poplin/core/src/records/settings";
 import type * as v from "valibot";
 
 /** The kind of control each schema type gets. A type missing here has no control, and a test fails for the setting that has it. */
-export const CONTROL_KINDS: Readonly<Record<string, Control["kind"]>> = {
+export const CONTROL_KINDS: Readonly<Record<string, Exclude<Control["kind"], "users">>> = {
   boolean: "switch",
   picklist: "choice",
   number: "number",
@@ -50,10 +52,10 @@ type SettingSchema = v.GenericSchema & {
   readonly entries?: Readonly<Record<string, v.GenericSchema>>;
 };
 
-/** A control and what it needs to be drawn: a choice its options; a number the word its text is when it holds no number, `null` where it always holds one. */
+/** A control and what it needs to be drawn: a choice its options; a choice of users the install's users, its text the chosen ones or the default's word for none; a number the word its text is when it holds no number, `null` where it always holds one. */
 export type Control =
   | { readonly kind: "switch" | "lines" | "text" }
-  | { readonly kind: "choice"; readonly options: readonly string[] }
+  | { readonly kind: "choice" | "users"; readonly options: readonly string[] }
   | { readonly kind: "number"; readonly word: string | null };
 
 /** The kind of amount a schema holds: the one whose screen unit is among the units the schema takes. None for a schema that is no amount, or an amount of a kind the screen has no unit for. */
