@@ -356,6 +356,6 @@ describe("the words of a repair", () => {
     const [help = ""] = ran.out;
 
     expect([ran.code, help.split("\n")[0]]).toEqual([0, "Usage: poplin doctor --repair (--place <name> | --no-place) [options]"]);
-    expect(["--add-user <email>", "--update", "--dry-run", "--token-stdin", "--place <name>", "POPLIN_INSTALL_TOKEN", "a read-only token adds nobody"].filter((part) => !help.includes(part))).toEqual([]);
+    expect(["--add-user <email>", "--update", "--dry-run", "--token-stdin", "--place <name>", "POPLIN_INSTALL_TOKEN", "  - Programs: Edit"].filter((part) => !help.includes(part))).toEqual([]);
   });
 });

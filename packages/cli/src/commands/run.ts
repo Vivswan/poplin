@@ -296,13 +296,12 @@ function mcpHost(io: Io): Host {
 /** Show a help text as its stream shows it: the one that was asked for on stdout, and the one an empty command line gets on stderr. The help of every command reads the providers first. */
 async function showHelp(parsed: { readonly topic?: CommandName; readonly asked: boolean; readonly full?: true }, io: Io, ends: () => InstallEnds): Promise<void> {
   const looks = io.looks ?? { out: PLAIN_LOOK, err: PLAIN_LOOK };
-  // The help nobody asked for goes through the screen, which shows no line wider than its widest.
-  const look = parsed.asked ? looks.out : { ...looks.err, width: Math.min(looks.err.width, PLAIN_LOOK.width) };
+  const look = parsed.asked ? looks.out : looks.err;
   const help = parsed.full === true ? fullHelp(await ends().providers(), look) : helpText(parsed.topic, look);
   const text = foldedText(pasted(help, runnerOf(io.machine.env)), look.width);
 
   if (parsed.asked) io.out(text);
-  else io.screen.aside("plain", text);
+  else io.screen.aside("laid", text);
 }
 
 /**

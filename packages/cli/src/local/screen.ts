@@ -34,8 +34,8 @@ const FOLDER = Object.assign(new Help(), { minWidthToWrap: MIN_FOLD, displayWidt
 /** The look where nobody watches: plain lines of at most the widest width of the screen. */
 export const PLAIN_LOOK: Look = { width: MAX_WIDTH, colour: false };
 
-/** What a line is, which on a terminal chooses its mark and its colour. */
-export type Tone = "done" | "note" | "warning" | "error" | "plain";
+/** What a line is, which on a terminal chooses its mark and its colour. A `laid` one is a text already laid out for the stream, written as it is where it fits. */
+export type Tone = "done" | "note" | "warning" | "error" | "plain" | "laid";
 
 /** One line as it is shown: its text, what kind of line it is, and how far its later rows stand in once it is folded; the line's own indent when left out. */
 export interface Line {
@@ -107,6 +107,7 @@ function say(consola: ConsolaInstance, tone: Tone, line: string): void {
     warning: () => consola.warn({ message: line, badge: false }),
     error: () => consola.error({ message: line, badge: false }),
     plain: () => consola.log(line),
+    laid: () => consola.log(line),
   };
 
   ways[tone]();
@@ -172,7 +173,9 @@ function writer(stream: NodeJS.WriteStream, colour: boolean): (tone: Tone, line:
   const width = (): number => Math.min(stream.columns ?? MAX_WIDTH, MAX_WIDTH);
   // A plain line is written by this module: the library would read a backtick in it as a mark of its own.
   const plain = (line: string, hang?: number): void => void stream.write(`${(stream.isTTY === true ? folded(line, width(), hang) : [line]).join("\n")}\n`);
-  if (!colour) return (_tone, line, hang) => plain(line, hang);
+  // A text laid out for the stream is as wide as its look: only a terminal narrower than that, which a plain look of 80 can be, folds it.
+  const laid = (text: string): void => void stream.write(`${stream.isTTY === true && stream.columns !== undefined ? foldedText(text, stream.columns) : text}\n`);
+  if (!colour) return (tone, line, hang) => (tone === "laid" ? laid(line) : plain(line, hang));
 
   // Every level goes to the one stream, with a mark, each line as often as it is said and no wider than the widest: which stream a line is for and whether it shows are the caller's choice, whatever the environment says.
   // The options stand in a constant because the types TypeScript reads are the browser build's, which name no `fancy`.
@@ -180,6 +183,7 @@ function writer(stream: NodeJS.WriteStream, colour: boolean): (tone: Tone, line:
   const consola = createConsola(marked);
 
   return (tone, line, hang) => {
+    if (tone === "laid") return laid(line);
     if (tone === "plain") return plain(line, hang);
 
     const [first = "", ...rest] = folded(line, width() - MARK_WIDTH, hang);

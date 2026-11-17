@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { join } from "node:path";
-
 import { COMMANDS, type CommandName, type CommandSpec, SESSION } from "../../../src/commands/command-table";
 import { helpText } from "../../../src/commands/line/help";
 import { SETTING_SAMPLES } from "../../../src/commands/install/install-settings";
 import { parseCommand } from "../../../src/commands/line/parse-command";
 import { words } from "../support/command-line";
-import { cleanUp, jsonOf, openBench, scratch } from "../support/harness";
+import { cleanUp } from "../support/harness";
 
 /** A site label in the published form. */
 const LABEL = "report--k3f9x2ab71qz";
@@ -14,8 +12,8 @@ const LABEL = "report--k3f9x2ab71qz";
 /** The width of a help text where no terminal is. */
 const MAX_LINE = 80;
 
-/** Where the later rows of a folded description start: under the description of its row. */
-const UNDER_DESCRIPTION = /^ {28}\S/;
+/** A width no line of a help text reaches, so nothing is folded at it. */
+const UNFOLDED = 1000;
 
 /** A line of printable ASCII. */
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
@@ -41,19 +39,6 @@ const FLAG_VALUES: Readonly<Record<string, string>> = {
 
 /** A word for each argument a command needs. */
 const ARGUMENTS: Readonly<Record<string, string>> = { path: "./report", site: LABEL, zip: "backup.zip", key: "versions_kept" };
-
-/** The flag that asks for an answer as JSON. */
-const JSON_FLAG = "--json";
-
-/** Commands that answer no one site, each with a key of the object its `--json` prints and the words its help names that key by. The logout comes last: it ends the login the others run under. */
-const PRINTED: readonly (readonly [line: string, key: string, named: string])[] = [
-  ["doctor --json", "checks", "the checks"],
-  ["config --json", "values", "the settings"],
-  ["whoami --json", "token", "the token"],
-  ["update --dry-run --json", "key", "what a start would do"],
-  ["list --json", "sites", "the sites"],
-  ["logout --json", "revoked", "revoked"],
-];
 
 /** What a flag needs beside it to be a whole command: `set` needs a setting, a public name goes with `--public`, and the options of a repair go with `--repair`. */
 const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
@@ -81,13 +66,10 @@ function lineWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string
 /** Every flag of every command, each beside the command that lists it. */
 const LISTED = SPECS.flatMap((spec) => spec.flags.map((flag) => ({ spec, flag })));
 
-/** What the help of a command says its `--json` prints; empty for a command that takes no such flag. */
-function jsonLine(command: string): string {
-  return SPECS.find((spec) => spec.name === command)?.flags.find((flag) => flag.name === JSON_FLAG)?.about ?? "";
-}
-
 function isPrinted(help: string, flag: CommandSpec["flags"][number]): boolean {
-  return help.includes(`\n  ${flag.value === undefined ? flag.name : `${flag.name} ${flag.value}`} `);
+  const term = flag.value === undefined ? flag.name : `${flag.name} ${flag.value}`;
+
+  return `${help}\n`.includes(`\n  ${term} `) || `${help}\n`.includes(`\n  ${term}\n`);
 }
 
 /** The kind a line with this flag answers with: the two flags every command takes answer for themselves, and so does the one that makes `doctor` a repair. */
@@ -129,28 +111,6 @@ describe("helpText", () => {
     );
   });
 
-  // Drift: one sentence stood under every command, so doctor, config, update, whoami, and export each promised a site object that none of them answers with.
-  test("the help of a command names what its --json really prints: each key below is in the printed object, and the help says its words", async () => {
-    const bench = await openBench();
-    const rows = [[`export --out "${join(scratch(), "backup.zip")}" --json`, "zip_bytes", "the zip"] as const, ...PRINTED];
-    const wrong: string[] = [];
-
-    for (const [line, key, named] of rows) {
-      const printed = jsonOf(await bench.run(line));
-      if (!(key in printed) || !jsonLine(line.split(" ")[0] ?? "").includes(named)) wrong.push(line);
-    }
-
-    expect(wrong).toEqual([]);
-  });
-
-  test("every --json line of the help has one form, and only a command that takes one site or a path promises the site", () => {
-    const takers = SPECS.filter((spec) => jsonLine(spec.name) !== "");
-    const oneSite = takers.filter((spec) => spec.arguments.some((argument) => argument.required && ["site", "path"].includes(argument.name)));
-
-    expect(takers.filter((spec) => !/^Print JSON: .*, or the error object$/.test(jsonLine(spec.name))).map((spec) => spec.name)).toEqual([]);
-    expect(takers.filter((spec) => /the (site|copy)\b/.test(jsonLine(spec.name))).map((spec) => spec.name)).toEqual(oneSite.map((spec) => spec.name));
-  });
-
   test("every help text is plain ASCII in lines of at most 80 characters and names its command where no look is given: a pipe, a file, and a log of CI hold no colour sequence", () => {
     const texts = [helpText(), ...SPECS.map((spec) => helpText(spec.name))];
     const lines = texts.flatMap((text) => text.split("\n"));
@@ -160,19 +120,23 @@ describe("helpText", () => {
     expect(SPECS.filter((spec) => !helpText().includes(`\n  ${spec.name}`)).map((spec) => spec.name)).toEqual([]);
   });
 
-  test("a terminal 200 wide folds no description, and one 60 wide folds each under its own column: the help follows the terminal, not a fixed 80", () => {
+  test("a terminal 200 wide folds nothing, and one 60 wide folds: the help follows the terminal, not a fixed 80", () => {
     const rows = (width: number): string[] => [undefined, ...SPECS.map((spec) => spec.name)].flatMap((topic) => helpText(topic, { width, colour: false }).split("\n"));
 
-    expect([rows(200).filter((row) => UNDER_DESCRIPTION.test(row)), rows(60).some((row) => UNDER_DESCRIPTION.test(row))]).toEqual([[], true]);
+    // The names of the settings are one list folded to the width, and no description.
+    const unfolded = (width: number): string[] => rows(width).filter((row) => !row.includes("default_expires") && !row.includes("max_files_per_day"));
+
+    expect([unfolded(200), rows(60).length > rows(200).length]).toEqual([unfolded(UNFOLDED), true]);
   });
 
-  test("a painted help has its titles bold, its left column cyan, and its descriptions grey, and its notes and examples as they are written", () => {
+  test("a painted help has its titles bold, what is typed cyan, and what is read dim, each line closed: a description in bright black is unreadable on a dark theme", () => {
     const painted = helpText("doctor", { width: MAX_LINE, colour: true }).split("\n");
 
-    expect(painted.slice(0, 3)).toEqual(["\x1b[1mUsage:\x1b[22m \x1b[36mpoplin\x1b[39m \x1b[36mdoctor\x1b[39m [flags]", "", "\x1b[90mCheck the install; --repair fixes it\x1b[39m"]);
+    expect(painted.slice(0, 3)).toEqual(["\x1b[1mUsage:\x1b[22m \x1b[36mpoplin\x1b[39m \x1b[36mdoctor\x1b[39m [options]", "", "\x1b[2mCheck the install, or repair it with --repair\x1b[22m"]);
     expect(painted).toContain("\x1b[1mOptions:\x1b[22m");
-    expect(painted).toContain(`  \x1b[36m--yes\x1b[39m${" ".repeat(21)}\x1b[90mNever prompt\x1b[39m`);
-    expect(painted.slice(-2)).toEqual(["\x1b[1mExamples:\x1b[22m", "  poplin doctor"]);
+    expect(painted).toContain("  \x1b[36m--json\x1b[39m");
+    expect(painted).toContain(`  \x1b[36m--yes\x1b[39m${" ".repeat(20)}\x1b[2mNever prompt. A missing answer stops the run.\x1b[22m`);
+    expect(painted.slice(-6, -4)).toEqual(["\x1b[1mExamples:\x1b[22m", "  \x1b[36mpoplin doctor\x1b[39m"]);
   });
 
   test("the flags of doctor that only act with --repair stand in a part of their own, and each is refused without it: a flag listed beside --json reads as one of a check", () => {
@@ -194,7 +158,8 @@ describe("helpText", () => {
     const refused = examples.filter(([command, line]) => {
       const parsed = parseCommand(words(line));
 
-      return parsed.kind === "usage-error" || parsed.kind === "help" || (command !== undefined && parsed.kind !== command);
+      // An example of `doctor` that carries `--repair` is a repair, whose own parser reads the rest.
+      return parsed.kind === "usage-error" || parsed.kind === "help" || (command !== undefined && parsed.kind !== (line.includes(" --repair") ? "provider" : command));
     });
 
     expect(refused).toEqual([]);

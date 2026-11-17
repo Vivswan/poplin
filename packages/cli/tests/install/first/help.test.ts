@@ -11,73 +11,66 @@ const MAX_LINE = 80;
 const PROVIDER = standIn(emptyAccount()) as Installer<unknown, unknown>;
 
 /** The help of the command itself, with the one provider listed. */
-const COMMAND_HELP = `Usage: poplin install <provider> [options]
+const COMMAND_HELP = `Usage: poplin install [<provider>] [options]
 
-Install poplin in your provider account. An existing install is reported and
-left unchanged.
+Install poplin in your provider account
 
 Providers:
-  stand-in                  Stand-In Host: under your own place, or without one
+  stand-in                 Stand-In Host: under your own place, or without one
 
 Options:
-  --user <email>            Email of the first user  (POPLIN_USER)
-  --dry-run                 Read everything and show the plan; change nothing
-  --adopt                   Reuse what an earlier install left behind
-  --yes                     Never prompt; a missing answer stops the run
-  --token-stdin             Read the account token from stdin; never prompt
-  --log-in                  Log this machine in when done
-  --no-log-in               Do not log this machine in; do not ask
-  --no-wait                 Do not wait for the install to answer
-  --json                    Print one JSON value, and nothing else on stdout
+  --user <email>           Email of the first user
+                           Or set POPLIN_USER.
+  --dry-run                Show what would change. Change nothing.
+  --adopt                  Reuse resources left by an earlier install
+  --yes                    Never prompt. A missing answer stops the run.
+  --token-stdin            Read the account token from stdin
+  --log-in                 Log this machine in when done
+  --no-log-in
+  --no-wait                Do not wait for the install to respond
+  --json
+  --help
+  --version
 
-Notes:
-  --dry-run exits as the real run would, as far as reading can tell: 0 when it
-  would go through, and 1 when something would stop it first.
-
-  The account token is read from POPLIN_INSTALL_TOKEN, from stdin with
-  --token-stdin, or from a hidden prompt. It is used for the run and stored
-  nowhere.
+Token:
+  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt.
 
 Related:
-  poplin install stand-in --help  Provider options and token permissions
-  poplin doctor                   Check the install
-  poplin doctor --repair          Repair the install
-  poplin update                   Update the install
-  poplin uninstall <provider>     Remove the install`;
+  poplin install stand-in --help
+  poplin doctor
+  poplin doctor --repair
+  poplin update
+  poplin uninstall <provider>`;
 
-/** The help of the made-up provider: its own options before the shared ones, and what its token needs in its own words. */
+/** The help of the made-up provider: its own options before the shared ones, and what its token needs, a permission a point. */
 const PROVIDER_HELP = `Usage: poplin install stand-in (--place <name> | --no-place) [options]
 
 Stand-In Host: under your own place, or without one
 
 Options:
-  --place <name>            Your own place: example.com  (POPLIN_PLACE)
-  --no-place                The address the host gives the account
-                            (POPLIN_PLACE=none)
-  --account <id>            Account id, when the token can access more than one
-                            (POPLIN_ACCOUNT)
-  --user <email>            Email of the first user  (POPLIN_USER)
-  --dry-run                 Read everything and show the plan; change nothing
-  --adopt                   Reuse what an earlier install left behind
-  --yes                     Never prompt; a missing answer stops the run
-  --token-stdin             Read the account token from stdin; never prompt
-  --log-in                  Log this machine in when done
-  --no-log-in               Do not log this machine in; do not ask
-  --no-wait                 Do not wait for the install to answer
-  --json                    Print one JSON value, and nothing else on stdout
+  --place <name>           Your own place, such as example.com
+                           Or set POPLIN_PLACE.
+  --no-place               The address the host gives the account
+                           Or set POPLIN_PLACE=none.
+  --account <id>           Account id, if the token can access several accounts
+                           Or set POPLIN_ACCOUNT.
+  --user <email>           Email of the first user
+                           Or set POPLIN_USER.
+  --dry-run                Show what would change. Change nothing.
+  --adopt                  Reuse resources left by an earlier install
+  --yes                    Never prompt. A missing answer stops the run.
+  --token-stdin            Read the account token from stdin
+  --log-in                 Log this machine in when done
+  --no-log-in
+  --no-wait                Do not wait for the install to respond
+  --json
+  --help
+  --version
 
 Token:
-  The account token needs:
-    with a place   two permissions: Places: Read, Programs: Edit
-    without        one permission: Programs: Edit
-
-Notes:
-  --dry-run exits as the real run would, as far as reading can tell: 0 when it
-  would go through, and 1 when something would stop it first.
-
-  The account token is read from POPLIN_INSTALL_TOKEN, from stdin with
-  --token-stdin, or from a hidden prompt. It is used for the run and stored
-  nowhere.`;
+  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt. Needs:
+  - Programs: Edit
+  - Places: Read (--place)`;
 
 describe("installHelp", () => {
   test("the command's own help lists the providers and every shared option the parser takes: without this an option is taken and nowhere shown", () => {
@@ -95,13 +88,14 @@ describe("installHelp", () => {
     expect(own).toContain("  none: this build of poplin includes no provider");
   });
 
-  // Drift: a provider words its own rows and the lines of what its token needs, as long as it likes; the help that carried them through unfolded broke 10 of them in the middle of a word on a terminal 80 wide.
-  test("a provider's long rows are folded at their spaces to 80 columns, under their own indent, and its address stands whole on a line", () => {
-    const address = `https://host.example.com/tokens/new?rights=${"chosen".repeat(15)}`;
-    const wordy = { ...PROVIDER, tokenHelp: ["The account token needs:", `  with a place   ${"Places: Read, ".repeat(9)}Programs: Edit`, `                 ${address}`] };
+  // Drift: a provider words what its token needs, as long as it likes: a permission folded under its dash read as two.
+  test("a provider's long permission is folded at its spaces to 80 columns, under its own words: without this the help wraps in the middle of a word", () => {
+    const long = `${"Places: Read, ".repeat(9)}Programs: Edit`;
+    const wordy = { ...PROVIDER, tokenHelp: { ...PROVIDER.tokenHelp, install: [long] } };
     const lines = installHelp([wordy], wordy).split("\n");
+    const first = lines.findIndex((line) => line.startsWith("  - Places: Read"));
 
-    expect(lines.filter((line) => line.length > MAX_LINE)).toEqual([`                   ${address}`]);
-    expect(lines.filter((line) => line.includes("Places: Read")).map((line) => line.startsWith("  "))).toEqual([true, true]);
+    expect(lines.filter((line) => line.length > MAX_LINE)).toEqual([]);
+    expect([first > 0, lines[first + 1]?.startsWith("    Places: Read") ?? lines[first + 1]]).toEqual([true, true]);
   });
 });

@@ -22,7 +22,7 @@ const BUILD_TIMEOUT_MS = 60_000;
 
 /** A provider's file as it is built: one module that exports `installer` under the given id. */
 function providerFile(id: string): string {
-  const words = `id: ${JSON.stringify(id)}, name: "Host", about: "a host", usage: "", options: [], tokenHelp: []`;
+  const words = `id: ${JSON.stringify(id)}, name: "Host", about: "a host", usage: "", options: [], tokenHelp: { install: [], repair: [], remove: [] }`;
   const calls = "token: () => undefined, read: () => ({ ok: false, why: 'open', open: [] }), placeWords: () => [], facts: () => ({}), find: async () => ({}), install: async () => ({}), remove: async () => ({}), repair: async () => ({})";
 
   return `export const installer = { ${words}, ${calls} };\n`;
@@ -68,7 +68,7 @@ describe("the built package", () => {
       expect(folders.length).toBeGreaterThan(0);
       expect(providers.map((one) => one.id)).toEqual(folders);
       expect(listed.providers.map((one) => one.id)).toEqual(folders);
-      expect(providers.filter((one) => one.options.length === 0 || one.tokenHelp.length === 0 || one.usage === "")).toEqual([]);
+      expect(providers.filter((one) => one.options.length === 0 || one.tokenHelp.install.length === 0 || one.usage === "")).toEqual([]);
     },
     BUILD_TIMEOUT_MS,
   );

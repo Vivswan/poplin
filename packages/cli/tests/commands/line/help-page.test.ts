@@ -21,11 +21,23 @@ const WIDTHS = [60, 80, 120, 200] as const;
 /** A line that titles a part: one capitalised word, or the flag the part's flags go with, and a colon. */
 const TITLE = /^(?:[A-Z][a-z]+|With --[a-z-]+):$/;
 
-/** The parts whose lines are whole lines as they are written, and no rows. */
-const WRITTEN: ReadonlySet<string> = new Set(["Notes:", "Examples:", "Token:", "Keys:"]);
+/** The parts that hold no rows: command lines as they are typed, the permissions of a token a point each under one line, and the names of the settings. */
+const WRITTEN: ReadonlySet<string> = new Set(["Examples:", "Related:", "Token:", "Keys:"]);
 
-/** A row of a part: a term, two spaces or more, and what the term means. */
-const ROW = /^ {2}(\S.*?) {2,}(\S.*)$/;
+/** A row of a part: a term, then two spaces or more and what the term means, or nothing where the term's name says it. */
+const ROW = /^ {2}(\S.*?)(?: {2,}(\S.*))?$/;
+
+/** A line that goes on under the description of a row. */
+const UNDER = /^ {20,}\S/;
+
+/** The longest a line of a description is, so that it stands whole beside the widest term on a line of 80. */
+const LONGEST = 53;
+
+/** How many lines a description has at most: what the term means, and two cases a person must know before a run. */
+const MOST_LINES = 3;
+
+/** A width no line of a help text reaches, so nothing is folded at it. */
+const UNFOLDED = 1000;
 
 /** The one made-up provider. */
 const PROVIDER = standIn(emptyAccount()) as Installer<unknown, unknown>;
@@ -58,11 +70,52 @@ function rowsOf(text: string): { readonly title: string; readonly term: string; 
   });
 }
 
+/** The blocks of a help text between empty lines, without the names of the settings, which are one list folded to the width. */
+function blocksOf(text: string): string[][] {
+  return text
+    .split("\n\n")
+    .map((block) => block.split("\n"))
+    .filter(([title]) => title !== "Keys:");
+}
+
+/** The lines of a block that are prose: neither its title, a usage, a row or what goes on under one, a point, nor a command line. */
+function proseOf(block: readonly string[]): string[] {
+  const [title = ""] = block;
+  if (title.startsWith("Usage:") || title === "Examples:" || title === "Related:") return [];
+
+  return block.filter((line) => line !== title || !TITLE.test(title)).filter((line) => !(title !== "Token:" && ROW.test(line)) && !UNDER.test(line) && !line.startsWith("  - "));
+}
+
 describe("helpPage", () => {
   test("a page lays its usage out under one title, folds what the command does, and leaves an empty part out: every help of poplin is this one layout", () => {
-    const page = { usage: ["poplin wash <cloth> [options]", "poplin <cloth>"], about: "Wash a cloth.", parts: [{ title: "Options:", rows: [["--cold", "Use cold water"] as const] }, { title: "Notes:" }] };
+    const page = { usage: ["poplin wash <cloth> [options]", "poplin <cloth>"], about: "Wash a cloth.", parts: [{ title: "Options:", rows: [["--cold", "Use cold water"] as const, ["--json", ""] as const] }, { title: "Examples:" }] };
 
-    expect(helpPage(page, { width: 80, colour: false })).toBe(`Usage: poplin wash <cloth> [options]\n       poplin <cloth>\n\nWash a cloth.\n\nOptions:\n  --cold${" ".repeat(20)}Use cold water`);
+    expect(helpPage(page, { width: 80, colour: false })).toBe(`Usage: poplin wash <cloth> [options]\n       poplin <cloth>\n\nWash a cloth.\n\nOptions:\n  --cold${" ".repeat(19)}Use cold water\n  --json`);
+  });
+
+  test("a point folded at a narrow width goes on under its words, not under its dash: a list whose rows start at the dash reads as more points", () => {
+    const page = { usage: ["poplin wash"], parts: [{ title: "Token:", text: "Needs:", points: ["Wash and rinse every cloth of the house in cold water"] }] };
+
+    expect(helpPage(page, { width: 40, colour: false }).split("\n").slice(2)).toEqual(["Token:", "  Needs:", "  - Wash and rinse every cloth of the", "    house in cold water"]);
+  });
+
+  // Drift: a note under the options grew into paragraphs nobody read, and a description folded at 80 pushed the next flag out of sight.
+  test.each(HELPS)("$line has no notes and no two lines of prose together, and each description is whole lines of at most 53 characters, three at most", ({ text }) => {
+    const plain = text();
+    const lines = plain.split("\n");
+    const under = lines.map((line, index) => (ROW.test(line) && !UNDER.test(line) ? lines.slice(index + 1).findIndex((next) => !UNDER.test(next)) : 0));
+
+    expect([lines.includes("Notes:"), blocksOf(plain).filter((block) => proseOf(block).length > 1)]).toEqual([false, []]);
+    expect(blocksOf(plain)).toEqual(blocksOf(text({ width: UNFOLDED, colour: false })));
+    expect(rowsOf(plain).filter((row) => row.about.length > LONGEST)).toEqual([]);
+    expect(lines.filter((line) => UNDER.test(line) && line.trim().length > LONGEST)).toEqual([]);
+    expect(under.filter((more) => more >= MOST_LINES)).toEqual([]);
+  });
+
+  test.each(HELPS)("$line painted holds no bright black, which a dark theme hides, and paints what is read dim", ({ text }) => {
+    const painted = text({ width: 80, colour: true });
+
+    expect([painted.includes("\x1b[90m"), painted.includes("\x1b[2m")]).toEqual([false, true]);
   });
 
   // Drift: the helps of install, uninstall and a repair were written apart from the command table's, so a change of the look or the voice reached one family and not the other.
@@ -71,16 +124,16 @@ describe("helpPage", () => {
     const lines = plain.split("\n");
 
     expect([plain.startsWith("Usage: poplin "), lines.filter((line) => !line.startsWith(" ") && line.endsWith(":") && !TITLE.test(line))]).toEqual([true, []]);
-    expect(rowsOf(plain).filter((row) => !/^["A-Z]/.test(row.about))).toEqual([]);
+    expect(rowsOf(plain).filter((row) => row.about !== "" && !/^["A-Z]/.test(row.about))).toEqual([]);
     expect(lines.filter((line) => line.length > 80 || !/^[\x20-\x7e]*$/.test(line) || line !== line.trimEnd())).toEqual([]);
   });
 
   test.each(HELPS.flatMap((help) => (help.options === undefined ? [] : [{ line: help.line, text: help.text, options: help.options }])))(
-    "$line lists every option its parser reads, the provider's own among them, and no other",
+    "$line lists every option its parser reads, the provider's own among them, then the two flags every command takes, and no other",
     ({ text, options }) => {
       const listed = rowsOf(text()).flatMap((row) => (row.title === "Options:" ? [row.term] : []));
 
-      expect(listed).toEqual(options.map((row) => (row.value === null ? row.flag : `${row.flag} ${row.value}`)));
+      expect(listed).toEqual([...options.map((row) => (row.value === null ? row.flag : `${row.flag} ${row.value}`)), "--help", "--version"]);
     },
   );
 

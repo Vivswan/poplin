@@ -8,9 +8,6 @@ import { SETTING_SAMPLES } from "../install/install-settings";
 import { type HelpPage, type HelpPart, helpPage } from "./help-page";
 import { argumentsOf, buildProgram } from "./program";
 
-/** What the bare form of the program does, beside its usage. */
-const BARE_ABOUT = "Publish a folder or one HTML file";
-
 function specOf(command: Command): CommandSpec | undefined {
   return COMMANDS.find((spec) => spec.name === command.name());
 }
@@ -28,12 +25,12 @@ function overview(program: Command): HelpPage {
   const listing: HelpPart[] = [...groups].map(([title, commands]) => ({ title, rows: commands.map((command) => [term(command), command.description()]) }));
 
   return {
-    usage: [[`${program.name()} <path> [flags]`, BARE_ABOUT], `${program.name()} <command> [flags]`],
-    parts: [...listing, { title: "Options:", rows: flagRows([...everywhere.filter((flag) => flag.name === HELP_FLAG), FULL_HELP, ...everywhere.filter((flag) => flag.name !== HELP_FLAG)]) }, { title: "Examples:", lines: SESSION }],
+    usage: [`${program.name()} <path> [options]`, `${program.name()} <command> [options]`],
+    parts: [...listing, { title: "Options:", rows: flagRows([...everywhere.filter((flag) => flag.name === HELP_FLAG), FULL_HELP, ...everywhere.filter((flag) => flag.name !== HELP_FLAG)]) }, { title: "Examples:", commands: SESSION }],
   };
 }
 
-/** The help of one command: what it takes, and what the table adds in notes and examples. */
+/** The help of one command: what it takes, and the command lines the table shows for it. */
 function commandHelp(program: Command, command: Command, spec: CommandSpec): HelpPage {
   const usage = `${program.name()} ${command.name()} ${command.usage()}`;
   const alone = spec.flags.filter((flag) => flag.with === undefined);
@@ -47,8 +44,7 @@ function commandHelp(program: Command, command: Command, spec: CommandSpec): Hel
       { title: "Options:", rows: flagRows(alone) },
       ...under.map((flag) => ({ title: `With ${flag}:`, rows: flagRows(spec.flags.filter((other) => other.with === flag)) })),
       spec.name === "config" ? { title: "Keys:", text: Object.keys(SETTING_SAMPLES).join(", ") } : { title: "Keys:" },
-      { title: "Notes:", lines: spec.notes ?? [] },
-      { title: "Examples:", lines: spec.examples },
+      { title: "Examples:", commands: spec.examples },
     ],
   };
 }

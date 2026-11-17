@@ -115,13 +115,13 @@ describe("run", () => {
     const painted = (ran: Ran, stream: "out" | "err"): boolean => ran[stream].join("\n").includes("\x1b[1mUsage:\x1b[22m");
     const widest = (ran: Ran, stream: "out" | "err"): number => Math.max(...stripVTControlCharacters(ran[stream].join("\n")).split("\n").map((line) => line.length));
 
-    const asked = await bench.run("help import", { looks: { out: wide, err: plain } });
-    const piped = await bench.run("help import", { looks: { out: plain, err: wide } });
+    const asked = await bench.run("help config", { looks: { out: wide, err: plain } });
+    const piped = await bench.run("help config", { looks: { out: plain, err: wide } });
     const unasked = await bench.run("", { looks: { out: plain, err: { width: 200, colour: true } } });
-    const nowhere = await bench.run("help import");
+    const nowhere = await bench.run("help config");
 
     expect([painted(asked, "out"), widest(asked, "out") > 80, painted(piped, "out"), widest(piped, "out") <= 80, nowhere.out]).toEqual([true, true, false, true, piped.out]);
-    expect([unasked.code, unasked.out, painted(unasked, "err"), widest(unasked, "err") <= 80]).toEqual([2, [], true, true]);
+    expect([unasked.code, unasked.out, painted(unasked, "err")]).toEqual([2, [], true]);
   });
   test("each command about one site prints what was done and the address the install answered, and --json prints the install's answer whole", async () => {
     const { bench, label } = await withSite();

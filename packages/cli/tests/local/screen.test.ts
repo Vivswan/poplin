@@ -7,7 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 
 import stringWidth from "string-width";
 
-import { lookOf, processScreen, showsColour } from "../../src/local/screen";
+import { lookOf, plainScreen, processScreen, showsColour } from "../../src/local/screen";
 
 /** The ends of a screen nobody types into and nothing stops. */
 const NOBODY = { input: new PassThrough(), stop: () => undefined };
@@ -132,6 +132,20 @@ describe("processScreen", () => {
     expect(out.widest()).toBeLessThanOrEqual(Math.max(80, stringWidth(`  ${address}`)));
     expect(rows.slice(3)).toEqual([`  ${address}`]);
     expect(err.rows()).toEqual(["a narrower terminal folds a line at its own width and never", "past it"]);
+  });
+
+  // Drift: the help of `poplin` typed alone went through the screen, which folded it at 80 on a terminal twice as wide.
+  test("a text laid out for its stream is written as it is, on a terminal and off one, and folded only by a terminal narrower than it: without this a help as wide as the terminal is folded again at 80", () => {
+    const wide = terminal(200);
+    const narrow = terminal(60);
+    const laid = `${"wide ".repeat(30)}row\n  under it`;
+    const kept: string[] = [];
+
+    processScreen({ out: wide.stream, err: wide.stream, colour: { out: true, err: true }, ...NOBODY }).aside("laid", laid);
+    plainScreen({ out: (line) => kept.push(line), err: (line) => kept.push(line) }).aside("laid", laid);
+    processScreen({ out: narrow.stream, err: narrow.stream, colour: { out: false, err: false }, ...NOBODY }).aside("laid", laid);
+
+    expect([wide.rows(), kept, narrow.widest() <= 60, narrow.rows().at(-1)]).toEqual([laid.split("\n"), [laid], true, "  under it"]);
   });
 
   test("where no colour shows, a line is written as it is whatever its tone, the result and the rest apart, and nothing else: without this a pipe or a log file holds marks and control sequences", () => {

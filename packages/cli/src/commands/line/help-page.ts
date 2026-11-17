@@ -1,6 +1,6 @@
-// The one layout of every help text, by commander: a usage, what the command does, and titled parts of rows or of lines.
+// The one layout of every help text, by commander: a usage, what the command does, and titled parts of rows, of text, or of command lines.
 //
-//   a terminal      as wide as the terminal, titles bold, the left column cyan, descriptions grey
+//   a terminal      as wide as the terminal, titles bold, what is typed cyan, what is read dim
 //   a pipe, a file  the same words, plain, in lines of at most 80 characters
 
 import { styleText } from "node:util";
@@ -9,8 +9,8 @@ import { Help } from "commander";
 
 import { foldedText, type Look } from "../../local/screen";
 
-/** How wide the left column of a list is at least, so that the descriptions start at column 28: wide enough for the longest flag of a command with its value. */
-const TERM_WIDTH = 24;
+/** How wide the left column of a page is at least: as wide as the longest flag of a command with its value, so that a sentence of 53 characters stands whole on a line of 80. */
+const TERM_WIDTH = 23;
 
 /** The narrowest column a description is still folded into: on a terminal under 48 wide a row is left to the terminal. */
 const MIN_FOLD = 20;
@@ -18,46 +18,67 @@ const MIN_FOLD = 20;
 /** How far a line of a list stands in. */
 const INDENT = "  ";
 
+/** What a point of a list starts with, under which its later rows hang. */
+const POINT = "- ";
+
 /** What a usage starts with. */
 const USAGE = "Usage:";
 
 /** What stands before each line of a usage after the first, under its title. */
 const USAGE_NEXT = " ".repeat(USAGE.length + 1);
 
-/** The room between a line of the usage and what it does. */
-const USAGE_GAP = "       ";
-
 /** Paints a text whatever the stream is: a help text is painted only for a look in colour. */
 const ALWAYS = { validateStream: false } as const;
 
-/** The paint of a help text, as commander's hooks: the colours the questions of the screen are asked in. The lines of a part keep the terminal's own colour, as what a person reads whole or copies. */
+/** The paint of a help text, as commander's hooks. What is read is dim on the terminal's own colour, never the bright black a dark theme hides. */
 const PAINT: Partial<Help> = {
   styleTitle: (title) => styleText("bold", title, ALWAYS),
   styleCommandText: (words) => styleText("cyan", words, ALWAYS),
   styleOptionTerm: (term) => styleText("cyan", term, ALWAYS),
-  styleDescriptionText: (words) => styleText("gray", words, ALWAYS),
+  styleDescriptionText: (words) => styleText("dim", words, ALWAYS),
 };
 
-/** One part of a help text under its title: rows of a term and what it means, then a text folded to the look, then whole lines as they are written. An empty line parts two paragraphs. A part with none of them is left out. */
+/** One part of a help text under its title: rows of a term and what it means, then a text folded to the look, then points of one fact each, then command lines as they are typed. A part with none of them is left out. */
 export interface HelpPart {
   readonly title: string;
   readonly rows?: readonly (readonly [term: string, about: string])[];
   readonly text?: string;
-  readonly lines?: readonly string[];
+  readonly points?: readonly string[];
+  readonly commands?: readonly string[];
 }
 
-/** A help text before it is laid out: each form of the command line, the first with what it does where the page says so, what the command does, and its parts in order. */
+/** A help text before it is laid out: each form of the command line, what the command does, and its parts in order. */
 export interface HelpPage {
-  readonly usage: readonly (string | readonly [line: string, about: string])[];
+  readonly usage: readonly string[];
   readonly about?: string;
   readonly parts: readonly HelpPart[];
 }
 
-function rowsOf(part: HelpPart, helper: Help): string[] {
-  const rows = part.rows ?? [];
-  const width = Math.max(TERM_WIDTH, ...rows.map(([term]) => term.length));
+/** Paint what is read line by line, so that no line is left with an open sequence; nothing for an empty text. */
+function read(words: string, helper: Help): string {
+  return words
+    .split("\n")
+    .map((line) => (line === "" ? line : helper.styleDescriptionText(line)))
+    .join("\n");
+}
 
-  return rows.map(([term, about]) => helper.formatItem(helper.styleOptionTerm(term), width, helper.styleOptionDescription(about), helper));
+/** The rows of a part, the left column as wide as the widest term of the page. */
+function rowsOf(part: HelpPart, helper: Help, width: number): string[] {
+  return (part.rows ?? []).map(([term, about]) => helper.formatItem(helper.styleOptionTerm(term), width, read(about, helper), helper));
+}
+
+/** The lines of a part under its rows, each standing in: its text folded, each point with its later rows under its words, and its command lines. */
+function linesOf(part: HelpPart, helper: Help, width: number): string[] {
+  const room = width - INDENT.length;
+  const text = part.text === undefined ? [] : read(helper.boxWrap(part.text, room), helper).split("\n");
+  const points = (part.points ?? []).flatMap((point) =>
+    read(helper.boxWrap(point, room - POINT.length), helper)
+      .split("\n")
+      .map((row, index) => `${index === 0 ? helper.styleDescriptionText(POINT) : " ".repeat(POINT.length)}${row}`),
+  );
+  const commands = (part.commands ?? []).map((line) => helper.styleCommandText(line));
+
+  return [...text, ...points, ...commands].map((line) => `${INDENT}${line}`);
 }
 
 /**
@@ -68,16 +89,11 @@ function rowsOf(part: HelpPart, helper: Help): string[] {
  */
 export function helpPage(page: HelpPage, look: Look): string {
   const helper = Object.assign(new Help(), look.colour ? PAINT : {}, { helpWidth: look.width, minWidthToWrap: MIN_FOLD });
-  const usage = page.usage.map((form, index) => {
-    const [line, about] = typeof form === "string" ? [form, undefined] : form;
-    const shown = about === undefined ? helper.styleUsage(line) : `${helper.styleUsage(line)}${USAGE_GAP}${helper.styleDescriptionText(about)}`;
-
-    return index === 0 ? `${helper.styleTitle(USAGE)} ${shown}` : `${USAGE_NEXT}${shown}`;
-  });
-  const about = page.about === undefined ? [] : [[helper.boxWrap(helper.styleCommandDescription(page.about), look.width)]];
-  const folded = (text: string | undefined): string[] => (text === undefined ? [] : helper.boxWrap(text, look.width - INDENT.length).split("\n"));
+  const usage = page.usage.map((line, index) => (index === 0 ? `${helper.styleTitle(USAGE)} ${helper.styleUsage(line)}` : `${USAGE_NEXT}${helper.styleUsage(line)}`));
+  const about = page.about === undefined ? [] : [[read(helper.boxWrap(page.about, look.width), helper)]];
+  const column = Math.max(TERM_WIDTH, ...page.parts.flatMap((part) => (part.rows ?? []).map(([term]) => term.length)));
   const parts = page.parts
-    .map((part) => ({ title: part.title, lines: [...rowsOf(part, helper), ...[...folded(part.text), ...(part.lines ?? [])].map((line) => (line === "" ? line : `${INDENT}${line}`))] }))
+    .map((part) => ({ title: part.title, lines: [...rowsOf(part, helper, column), ...linesOf(part, helper, look.width)] }))
     .filter((part) => part.lines.length > 0)
     .map((part) => [helper.styleTitle(part.title), ...part.lines]);
 

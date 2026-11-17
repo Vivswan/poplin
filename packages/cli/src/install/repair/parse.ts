@@ -3,6 +3,7 @@
 
 import { type Login, parseLogin } from "../../../../core/src/auth/logins";
 import type { OptionRow, Question, Run, Token } from "../../../../core/src/install/installer";
+import { FLAG_WORDS } from "../../commands/command-table";
 import { TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, Parsed, Provider, Stop } from "../records";
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, usage, type Variables } from "../words";
@@ -12,13 +13,13 @@ export const REPAIR_COMMAND = "doctor --repair";
 
 /** The options of a repair, which every provider takes. The parser reads these rows and the help prints them. */
 export const REPAIR_OPTIONS: readonly OptionRow[] = [
-  { flag: "--repair", value: null, about: "Repair the install with a provider account token", variable: null },
-  { flag: "--update", value: null, about: "Update to the latest release first", variable: null },
-  { flag: "--dry-run", value: null, about: "Show what a repair would change; change nothing", variable: null },
-  { flag: "--add-user", value: "<email>", about: "Allow one more person to log in", variable: null },
-  { flag: "--yes", value: null, about: "Never prompt; a missing answer stops the run", variable: null },
-  { flag: "--token-stdin", value: null, about: "Read the account token from stdin; never prompt", variable: null },
-  { flag: "--json", value: null, about: "Print one JSON value, and nothing else on stdout", variable: null },
+  { flag: "--repair", value: null, about: FLAG_WORDS.repair, variable: null },
+  { flag: "--update", value: null, about: FLAG_WORDS.update, variable: null },
+  { flag: "--dry-run", value: null, about: FLAG_WORDS.dryRun, variable: null },
+  { flag: "--add-user", value: "<email>", about: FLAG_WORDS.addUser, variable: null },
+  { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },
+  { flag: "--token-stdin", value: null, about: FLAG_WORDS.tokenStdin, variable: null },
+  { flag: "--json", value: null, about: "", variable: null },
 ];
 
 /** The options a person may reach for that a repair does not take, each with the line that says why or where. */

@@ -4,9 +4,9 @@
 import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/installer";
 import { type HelpPage, helpPage } from "../../commands/line/help-page";
 import { type Line, type Look, PLAIN_LOOK } from "../../local/screen";
-import { TOKEN_HELP } from "../ask";
+import { tokenPart } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, NEXT, optionRows, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, NEXT, optionRows, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -144,35 +144,19 @@ export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>,
  * @param providers - the providers the built package carries
  * @param provider - the provider whose own options and token the help also lists; the only one the package carries when absent
  * @param look - how wide the stream shows it and whether in colour; plain lines of at most 80 characters when absent
- * @returns lines with no trailing newline; a provider's own lines are as long as its words make them
+ * @returns lines with no trailing newline
  */
 export function repairHelp(providers: readonly Provider[], provider?: Provider, look: Look = PLAIN_LOOK): string {
   const [first, ...others] = providers;
   const shown = provider ?? (others.length === 0 ? first : undefined);
   const page: HelpPage = {
     usage: [`poplin ${REPAIR_COMMAND} ${shown === undefined ? "<provider>" : `${others.length === 0 ? "" : `${shown.id} `}${shown.usage}`} [options]`],
-    about: "Repair the install at its provider with an account token. It needs no login, so it also recovers access. It finds the install, then creates or fixes each piece that is missing or differs, and leaves the rest.",
+    about: "Repair the install at its provider. It needs no login.",
     parts: [
       { title: "Providers:", rows: shown === undefined ? providers.map((one) => [one.id, one.about]) : [] },
       { title: "Options:", rows: optionRows([...(shown?.options ?? []), ...REPAIR_OPTIONS]) },
-      { title: "Token:", lines: shown?.tokenHelp ?? [] },
-      {
-        title: "Notes:",
-        lines: [
-          "A repair installs no newer release: a row reports one that is available.",
-          "--update updates first, for an install that cannot update itself. For",
-          "routine updates: poplin update",
-          "",
-          ...DRY_RUN_HELP,
-          "",
-          ...TOKEN_HELP,
-          "The token an install was created with has every permission a repair needs.",
-          "",
-          "--add-user stores the email only after the provider accepted a change to",
-          "who may log in with this token: a read-only token adds nobody.",
-        ],
-      },
-      { title: "Related:", rows: [["poplin doctor", "Check the install with this machine's login"]] },
+      tokenPart("repair", shown),
+      { title: "Related:", commands: ["poplin doctor", "poplin update"] },
     ],
   };
 

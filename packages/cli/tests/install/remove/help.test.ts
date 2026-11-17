@@ -8,77 +8,58 @@ import { emptyAccount, runLine, standIn } from "../support/stand-in";
 const PROVIDER = standIn(emptyAccount()) as Installer<unknown, unknown>;
 
 /** The help of the command itself, with the one provider listed. */
-const COMMAND_HELP = `Usage: poplin uninstall <provider> [options]
+const COMMAND_HELP = `Usage: poplin uninstall [<provider>] [options]
 
-Remove the install from the provider: every object that carries poplin's names
-and marks, and nothing else. The site files and the database are removed last.
+Remove the install from the provider
 
 Providers:
-  stand-in                  Stand-In Host: under your own place, or without one
+  stand-in                 Stand-In Host: under your own place, or without one
 
 Options:
-  --dry-run                 List what would be removed and kept; remove nothing
-  --confirm <address>       Install address, as confirmation; else prompted
-  --keep-data               Keep the site files and the database
-  --yes                     Never prompt; a missing answer stops the run
-  --token-stdin             Read the account token from stdin; never prompt
-  --json                    Print one JSON value, and nothing else on stdout
+  --dry-run                Show what would change. Change nothing.
+  --confirm <address>      Confirm the removal with the address --dry-run shows
+  --keep-data              Keep the site files and the database
+  --yes                    Never prompt. A missing answer stops the run.
+  --token-stdin            Read the account token from stdin
+  --json
+  --help
+  --version
 
-Notes:
-  A run lists what it would remove, then prompts for the install's address.
-  Without prompts, pass it with --confirm; --yes alone confirms nothing.
-
-  --dry-run exits as the real run would, as far as reading can tell: 0 when it
-  would go through, and 1 when something would stop it first.
-
-  The account token is read from POPLIN_INSTALL_TOKEN, from stdin with
-  --token-stdin, or from a hidden prompt. It is used for the run and stored
-  nowhere.
-
-  No machine is logged out: run poplin logout on each one first.
+Token:
+  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt.
 
 Related:
-  poplin uninstall stand-in --help  Provider options and token permissions`;
+  poplin uninstall stand-in --help
+  poplin logout`;
 
 /** The help of the made-up provider, made from what it declares. */
 const PROVIDER_HELP = `Usage: poplin uninstall stand-in (--place <name> | --no-place) [options]
 
-Remove the install from Stand-In Host. The provider's options locate the
-install.
+Remove the install from Stand-In Host
 
 Options:
-  --place <name>            Your own place: example.com  (POPLIN_PLACE)
-  --no-place                The address the host gives the account
-                            (POPLIN_PLACE=none)
-  --account <id>            Account id, when the token can access more than one
-                            (POPLIN_ACCOUNT)
-  --dry-run                 List what would be removed and kept; remove nothing
-  --confirm <address>       Install address, as confirmation; else prompted
-  --keep-data               Keep the site files and the database
-  --yes                     Never prompt; a missing answer stops the run
-  --token-stdin             Read the account token from stdin; never prompt
-  --json                    Print one JSON value, and nothing else on stdout
+  --place <name>           Your own place, such as example.com
+                           Or set POPLIN_PLACE.
+  --no-place               The address the host gives the account
+                           Or set POPLIN_PLACE=none.
+  --account <id>           Account id, if the token can access several accounts
+                           Or set POPLIN_ACCOUNT.
+  --dry-run                Show what would change. Change nothing.
+  --confirm <address>      Confirm the removal with the address --dry-run shows
+  --keep-data              Keep the site files and the database
+  --yes                    Never prompt. A missing answer stops the run.
+  --token-stdin            Read the account token from stdin
+  --json
+  --help
+  --version
 
 Token:
-  The account token needs:
-    with a place   two permissions: Places: Read, Programs: Edit
-    without        one permission: Programs: Edit
-
-Notes:
-  A run lists what it would remove, then prompts for the install's address.
-  Without prompts, pass it with --confirm; --yes alone confirms nothing.
-
-  --dry-run exits as the real run would, as far as reading can tell: 0 when it
-  would go through, and 1 when something would stop it first.
-
-  The account token is read from POPLIN_INSTALL_TOKEN, from stdin with
-  --token-stdin, or from a hidden prompt. It is used for the run and stored
-  nowhere.
-
-  No machine is logged out: run poplin logout on each one first.`;
+  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt. Needs:
+  - Programs: Edit
+  - Places: Read (--place)`;
 
 describe("the help of poplin uninstall", () => {
-  test("the command's own help says what goes, how a removal is confirmed, and each option: without this the one text a person reads before a removal drifts from the options", () => {
+  test("the command's own help says what goes, what confirms a removal, and each option: without this the one text a person reads before a removal drifts from the options", () => {
     expect(uninstallHelp([PROVIDER])).toBe(COMMAND_HELP);
   });
 

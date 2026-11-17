@@ -27,7 +27,7 @@ import { BY_NAME, INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
-import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
+import { createDomainPlug, lacksRight, rightFor, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, placeWords, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { placeBinding } from "../kind/started-place";
@@ -46,9 +46,9 @@ const ACCOUNT_ID = /^[0-9a-f]{32}$/;
 
 /** The provider's own options. */
 const OPTIONS: readonly OptionRow[] = [
-  { flag: "--domain", value: "<name>", about: "Your own domain, Active on the account: example.com", variable: "POPLIN_DOMAIN" },
-  { flag: "--no-domain", value: null, about: "The free address Cloudflare gives the account", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
-  { flag: "--account", value: "<id>", about: "Account id, when the token can access more than one", variable: "POPLIN_ACCOUNT" },
+  { flag: "--domain", value: "<name>", about: "Your own domain, Active on the account", variable: "POPLIN_DOMAIN" },
+  { flag: "--no-domain", value: null, about: "The account's workers.dev address", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
+  { flag: "--account", value: "<id>", about: "Account id, if the token can access several accounts", variable: "POPLIN_ACCOUNT" },
 ];
 
 /** What a line of the run says, where no row of a piece's own says it. */
@@ -145,27 +145,22 @@ function read(given: Given): Read<Where> {
   return typed === undefined || typed.trim() === "" ? { ok: false, why: "open", open: [whichPlace(named)] } : whereOf(typed, named);
 }
 
-/** The lines of the help that say what the account token needs, for each kind of install. */
-function tokenHelp(): string[] {
-  const [domain, none] = [tokenFacts("domain", MADE_FIRST), tokenFacts("noDomain", MADE_FIRST)];
-  const gap = " ".repeat(16);
-  // The link cannot choose every permission: the line under it says how many it chooses, and names the rest.
-  const chosen = (kind: "domain" | "noDomain", needed: number): string[] => {
-    const byHand = rightsByHand(kind, MADE_FIRST);
+/**
+ * What the account token needs for one kind of work, a permission a line, each with when it holds where that is not always: under one kind of install alone, or only to do more.
+ *
+ * @param also - the objects the token is to make beside the ones a repair makes
+ */
+function tokenHelp(also: typeof MADE_FIRST | readonly []): string[] {
+  const [domain, none] = [tokenFacts("domain", also), tokenFacts("noDomain", also)];
+  const optional = { domain: domain.tokenOptional.map((one) => one.right), none: none.tokenOptional.map((one) => one.right) };
+  const line = (right: string, where: { readonly domain: readonly string[]; readonly none: readonly string[] }, more: readonly string[]): string => {
+    const marks = [...(where.none.includes(right) ? [] : ["--domain"]), ...(where.domain.includes(right) ? [] : ["--no-domain"]), ...more];
 
-    return byHand.length === 0 ? [] : [`${gap}the link chooses ${needed - byHand.length} of them: choose ${byHand.join(", ")} on the form yourself`];
+    return marks.length === 0 ? right : `${right} (${marks.join(", ")})`;
   };
+  const needed = [...new Set([...none.tokenRights, ...domain.tokenRights])].map((right) => line(right, { domain: domain.tokenRights, none: none.tokenRights }, []));
 
-  return [
-    "The account token needs:",
-    `  with a domain ${domain.tokenRights.length} permissions: ${domain.tokenRights.join(", ")}`,
-    `${gap}${domain.tokenLink}`,
-    ...chosen("domain", domain.tokenRights.length),
-    `  without       ${none.tokenRights.length} permissions: ${none.tokenRights.join(", ")}`,
-    `${gap}${none.tokenLink}`,
-    ...chosen("noDomain", none.tokenRights.length),
-    `  optional      ${domain.tokenOptional.map((optional) => optional.right).join(", ")}`,
-  ];
+  return [...needed, ...[...new Set([...optional.none, ...optional.domain])].map((right) => line(right, optional, ["optional"]))];
 }
 
 /** Why a call failed, with nothing Cloudflare said but its status and the numbers of its codes. */
@@ -484,7 +479,7 @@ export const installer: Installer<Where, Place> = {
   about: "Cloudflare: under your own domain, or without one",
   options: OPTIONS,
   usage: "(--domain <name> | --no-domain)",
-  tokenHelp: tokenHelp(),
+  tokenHelp: { install: tokenHelp(MADE_FIRST), repair: tokenHelp([]), remove: tokenHelp(MADE_FIRST) },
   token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
   read,
   placeWords,

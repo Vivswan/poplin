@@ -3,6 +3,7 @@
 
 import { type Login, parseLogin } from "../../../../core/src/auth/logins";
 import type { OptionRow, Token } from "../../../../core/src/install/installer";
+import { FLAG_WORDS } from "../../commands/command-table";
 import { TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, InstallMode, Missing, ParsedInstall, Plan, Provider, Stop } from "../records";
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
@@ -13,14 +14,14 @@ const USER_VARIABLE = "POPLIN_USER";
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
 export const SHARED_OPTIONS: readonly OptionRow[] = [
   { flag: "--user", value: "<email>", about: "Email of the first user", variable: USER_VARIABLE },
-  { flag: "--dry-run", value: null, about: "Read everything and show the plan; change nothing", variable: null },
-  { flag: "--adopt", value: null, about: "Reuse what an earlier install left behind", variable: null },
-  { flag: "--yes", value: null, about: "Never prompt; a missing answer stops the run", variable: null },
-  { flag: "--token-stdin", value: null, about: "Read the account token from stdin; never prompt", variable: null },
+  { flag: "--dry-run", value: null, about: FLAG_WORDS.dryRun, variable: null },
+  { flag: "--adopt", value: null, about: "Reuse resources left by an earlier install", variable: null },
+  { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },
+  { flag: "--token-stdin", value: null, about: FLAG_WORDS.tokenStdin, variable: null },
   { flag: "--log-in", value: null, about: "Log this machine in when done", variable: null },
-  { flag: "--no-log-in", value: null, about: "Do not log this machine in; do not ask", variable: null },
-  { flag: "--no-wait", value: null, about: "Do not wait for the install to answer", variable: null },
-  { flag: "--json", value: null, about: "Print one JSON value, and nothing else on stdout", variable: null },
+  { flag: "--no-log-in", value: null, about: "", variable: null },
+  { flag: "--no-wait", value: null, about: "Do not wait for the install to respond", variable: null },
+  { flag: "--json", value: null, about: "", variable: null },
 ];
 
 /** The options a person may reach for that belong to another command, each with the line that says which. */
