@@ -49,8 +49,8 @@ interface Draft {
   /** Drop every waiting change and the refusal. */
   readonly discard: () => void;
 
-  /** Send every waiting change in one request. It answers whether nothing is left refused: `true` also when nothing waited. */
-  readonly save: () => Promise<boolean>;
+  /** Send every waiting change in one request. It answers how the save ended: `saved`, also when nothing waited, `carried` for a save the install carries to the provider by itself, or `refused`. */
+  readonly save: () => Promise<"saved" | "carried" | "refused">;
 }
 
 /** The sentence of every setting a save was refused about: each one the answer lists, or the one it is about. */
@@ -174,15 +174,15 @@ export function useDraft(rows: readonly Row[], onRefused: (key: string) => void)
     setRefusals({});
   };
 
-  const save = async (): Promise<boolean> => {
-    if (pending.length === 0) return true;
+  const save = async (): Promise<"saved" | "carried" | "refused"> => {
+    if (pending.length === 0) return "saved";
 
     const texts = Object.fromEntries(pending.map((row) => [row.key, shown(row)]));
     const before = Object.fromEntries(pending.map((row) => [row.key, row.text]));
 
     return saving.mutateAsync({ texts, before }).then(
-      () => true,
-      () => false,
+      (done) => (done.carried ? "carried" : "saved"),
+      () => "refused",
     );
   };
 

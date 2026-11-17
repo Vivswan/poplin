@@ -82,7 +82,7 @@ import type {
   UploadSize,
   UploadsPage,
 } from "./database";
-import { domainCheckAsked, domainCheckIn, domainCheckKept, rulesCarried, rulesClaimed, rulesReplaced, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
+import { domainCheckAsked, domainCheckIn, domainCheckKept, lastMark, rulesCarried, rulesClaimed, rulesReplaced, usersCarried, usersChanged, usersClaimed, usersReplaced, waitingMark } from "./domain-check";
 import type { SqlDriver, Statement, StatementResult } from "./driver";
 import { type ProblemNote, problemNoted, problemsAsked, problemsEnded, problemsForgotten, problemsIn } from "./problems";
 import { contentsValues, servedIn, versionsWithContents } from "./served";
@@ -1136,9 +1136,9 @@ export class SqlDatabase implements Database {
   }
 
   async readSweepStart(): Promise<SweepStart> {
-    const [update, stored, place] = await this.#driver.batch([READ_UPDATE_CHECK, READ_SETTINGS, READ_SWEEP_PLACE]);
+    const [update, stored, place, domain] = await this.#driver.batch([READ_UPDATE_CHECK, READ_SETTINGS, READ_SWEEP_PLACE, domainCheckAsked()]);
 
-    return { updateCheck: updateCheckIn(update), settings: settingsIn(stored), place: placeIn(place) };
+    return { updateCheck: updateCheckIn(update), settings: settingsIn(stored), place: placeIn(place), domainCheck: domainCheckIn(domain) };
   }
 
   async keepSweepPlace(place: SweepPlace | undefined): Promise<void> {
@@ -1196,9 +1196,11 @@ export class SqlDatabase implements Database {
     await this.#driver.batch([domainCheckKept(check), ...entry, ...settling, ...(ended === undefined ? [] : [ended])]);
   }
 
-  async claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined }> {
-    const [, read, kept] = await this.#driver.batch([usersClaimed(at), READ_SETTINGS, domainCheckAsked()]);
-    return { users: settingsIn(read)?.users, mark: waitingMark(kept?.rows[0]?.users_changed_at) };
+  async claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined; readonly last: number | undefined }> {
+    const [before, , read, kept] = await this.#driver.batch([domainCheckAsked(), usersClaimed(at), READ_SETTINGS, domainCheckAsked()]);
+    const was = before?.rows[0];
+
+    return { users: settingsIn(read)?.users, mark: waitingMark(kept?.rows[0]?.users_changed_at), last: lastMark([was?.users_changed_at, was?.alerts_changed_at]) };
   }
 
   async settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly waits: boolean }> {
@@ -1207,12 +1209,12 @@ export class SqlDatabase implements Database {
     return { users: settingsIn(read)?.users, waits: waitingMark(kept?.rows[0]?.users_changed_at) !== undefined };
   }
 
-  async claimRules(at: number): Promise<{ readonly settings: SettingValues | undefined; readonly mark: number | null | undefined }> {
-    const [, read, kept] = await this.#driver.batch([rulesClaimed(at), READ_SETTINGS, domainCheckAsked()]);
+  async claimRules(at: number): Promise<{ readonly settings: SettingValues | undefined; readonly mark: number | null | undefined; readonly last: number | undefined }> {
+    const [before, , read, kept] = await this.#driver.batch([domainCheckAsked(), rulesClaimed(at), READ_SETTINGS, domainCheckAsked()]);
     const row = kept?.rows[0];
-    if (row === undefined) return { settings: settingsIn(read), mark: undefined };
+    if (row === undefined) return { settings: settingsIn(read), mark: undefined, last: undefined };
 
-    return { settings: settingsIn(read), mark: waitingMark(row.rules_changed_at) ?? null };
+    return { settings: settingsIn(read), mark: waitingMark(row.rules_changed_at) ?? null, last: lastMark([before?.rows[0]?.rules_changed_at]) };
   }
 
   async settleRules(carried: CarriedRules, at: number): Promise<{ readonly waits: boolean; readonly settings: SettingValues | undefined }> {

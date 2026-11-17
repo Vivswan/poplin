@@ -14,6 +14,7 @@ import manifest from "../../../../../cli/package.json?raw";
 import { INSTALL_OBJECTS } from "../../../src/shared/install/install-objects";
 import { BUDGET_ALERT } from "../../../src/shared/install/pieces/alerts/budget-alert";
 import { CERTIFICATE_ALERT } from "../../../src/with-domain/pieces/alerts/certificate-alert";
+import type { Bindings } from "../../../src/shared/worker/bindings";
 import { runSweep } from "../../../src/shared/worker/sweep";
 import { ACCOUNT, emptyAccount, TEAM, TOKEN } from "../install/support/fake-install";
 import type { Asked } from "../install/support/replies";
@@ -38,6 +39,15 @@ const MOST_REPAIR_CALLS = 29;
 
 /** The names of the two alerts an install with a domain keeps, in the order they are kept. */
 const ALERTS = [BUDGET_ALERT.name, CERTIFICATE_ALERT.name];
+
+/** The two kinds of install, each with the key it keeps: the bindings its Worker carries, where its dashboard answers, and the alerts it keeps. */
+const KEYED = [
+  { kind: "a domain", bindings: { ...BINDINGS, KEPT_KEY: TOKEN }, admin: ADMIN, alerts: ALERTS },
+  { kind: "an account address", bindings: { ...BINDINGS, KEPT_KEY: TOKEN, ZONE: { account_address: "example" } } as Bindings, admin: "https://poplin.example.workers.dev", alerts: [BUDGET_ALERT.name] },
+] as const;
+
+/** Where Cloudflare answers the guard rules of the install's zone, and the account's alerts. */
+const READS = { rules: "/zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint", alerts: `/accounts/${ACCOUNT}/alerting/v3/policies` } as const;
 
 /** The version the Worker under test runs: the one the released package's manifest states, which a release moves. */
 const OWN_VERSION = (JSON.parse(manifest) as { version: string }).version;
@@ -237,7 +247,8 @@ describe("the scheduled run", () => {
   });
 
   // Drift: a user added while Cloudflare refused the list can log in only once the list is carried. Without the run nothing carries it but a person's repair, and a run that carried with nothing waiting would call Cloudflare every 15 minutes for nothing.
-  test("a change of the users that Cloudflare did not take is carried by the next run, which settles it, and a run with nothing waiting asks Cloudflare nothing", async () => {
+  // The alerts that carry made are read once more by a later run, which writes nothing and ends the waiting: a run that never ended it would list the alerts 96 times a day.
+  test("a change of the users that Cloudflare did not take is carried by the next run, which settles it; a later run confirms the alerts with reads alone, and a run with nothing waiting asks Cloudflare nothing", async () => {
     const account = emptyAccount();
     account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
     const asked: Asked[] = [];
@@ -258,14 +269,21 @@ describe("the scheduled run", () => {
     const carried = [await waits(), emails()];
     const calls = asked.length;
     await sweep(worker, w, keyed);
+    const tooSoon = asked.length - calls;
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
+    const confirmed = [asked.slice(calls).filter((entry) => entry.path.includes("/alerting/")).map((entry) => entry.method), (await database.readDomainCheck())?.alerts_changed_at];
+    const after = asked.length;
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
 
     expect(refused).toEqual(["Cloudflare refused poplin's key, so the login list there is as it was. Open Domain and press Repair.", true, [[OWNER]], [["users_not_carried", 1, null]]]);
-    expect([carried, asked.length - calls]).toEqual([[false, [["bo@example.com", OWNER]]], 0]);
+    expect([carried, tooSoon, confirmed, asked.length - after]).toEqual([[false, [["bo@example.com", OWNER]]], 0, [["GET"], null], 0]);
     expect(JSON.stringify(added)).not.toContain(TOKEN);
   });
 
   // Drift: a saved setting whose rule Cloudflare did not take is in force at the edge only once the rule is written. Without the run nothing writes it but a person's repair, and the save itself must be answered as saved whatever Cloudflare said.
-  test("a changed setting of the guard rules that Cloudflare did not take is carried by the next run, which settles it, and a run with nothing waiting asks Cloudflare nothing", async () => {
+  test("a changed setting of the guard rules that Cloudflare did not take is carried by a run a quarter of an hour later and no sooner; the run after it writes nothing and ends the waiting, and a run with nothing waiting asks nothing", async () => {
     const account = emptyAccount();
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
@@ -283,13 +301,97 @@ describe("the scheduled run", () => {
     const saved = await send(worker, `${ADMIN}/data/settings`, { texts: { outside_pages: "allowed" } }, session, keyed);
     const refused = [other.status, unasked, saved.status, await saved.json(), await waits(), refs(), await problemsOf(w)];
     account.refuse = [];
+    const before = asked.length;
+    await sweep(worker, w, keyed);
+    const tooSoon = [asked.length - before, await waits()];
+    wait(w, 0.25);
     await sweep(worker, w, keyed);
     const carried = [await waits(), refs()];
+    const written = asked.filter((entry) => entry.method !== "GET").length;
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
+    const confirmed = [await waits(), asked.filter((entry) => entry.method !== "GET").length - written];
     const calls = asked.length;
+    wait(w, 0.25);
     await sweep(worker, w, keyed);
 
-    expect(refused).toEqual([200, 0, 200, { ok: true, waits: { repair: [], update: [] } }, true, [], [["rules_not_carried", 1, null]]]);
-    expect([carried, asked.length - calls]).toEqual([[false, [INSTALL_OBJECTS.botsRef]], 0]);
+    expect(refused).toEqual([200, 0, 200, { ok: true, waits: { repair: [], update: [] }, carried: true }, true, [], [["rules_not_carried", 1, null]]]);
+    expect([tooSoon, carried, confirmed, asked.length - calls]).toEqual([[0, true], [true, [INSTALL_OBJECTS.botsRef]], [false, 0], 0]);
+  });
+
+  // Drift: a setting changed and put back within seconds. The carry of the put-back reads the rules as they were before the first carry's write, finds its rule standing, and writes nothing, so the rule stays removed while the setting says blocked.
+  // A carry that ended the waiting there would leave it so until the next change or a repair: the next run, a quarter of an hour later, must read the rules anew and write the rule.
+  test("outside_pages allowed and blocked again at once, where the read of the rules trails the first write, leaves the rule removed and the change waiting; the next run writes the rule, and the run after it ends the waiting", async () => {
+    const account = emptyAccount();
+    const asked: Asked[] = [];
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    const worker = instance(w, cloudflareOf(account, asked));
+    const session = await logIn(worker, w, keyed);
+    const { database } = await installOf(w);
+    await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+    const waits = async (): Promise<boolean> => database.readDomainCheck().then((kept) => (kept?.rules_changed_at ?? null) !== null);
+    const refs = (): unknown => (account.rulesets.http_request_firewall_custom?.rules ?? []).map((rule) => rule.ref).sort();
+    const save = async (value: string): Promise<number> => (await send(worker, `${ADMIN}/data/settings`, { texts: { outside_pages: value } }, session, keyed)).status;
+    const both = [INSTALL_OBJECTS.botsRef, INSTALL_OBJECTS.outsideRef].sort();
+
+    // The rules as a repair leaves them for the first settings: both stand.
+    await save("allowed");
+    await save("blocked");
+    const stood = structuredClone(account.rulesets.http_request_firewall_custom);
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
+    const start = [refs(), await waits()];
+
+    await save("allowed");
+    account.trails = { [READS.rules]: [stood] };
+    const saved = await save("blocked");
+    const lost = [saved, (await database.readSettings())?.outside_pages, refs(), await waits()];
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
+    const written = [refs(), await waits()];
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
+    const calls = asked.length;
+    wait(w, 0.25);
+    await sweep(worker, w, keyed);
+
+    expect([start, lost]).toEqual([[both, false], [200, "blocked", [INSTALL_OBJECTS.botsRef], true]]);
+    expect([written, await waits(), asked.length - calls, await problemsOf(w)]).toEqual([[both, true], false, 0, []]);
+  });
+
+  // Drift: the first user changed to another person and back within seconds. The carry of the put-back reads the alerts as they were before the first carry's write and writes nothing, so they go on to the other person.
+  // The run that begins a day would correct that a day later at the worst: the next run, a quarter of an hour later, must read the alerts anew and write them, on an install of either kind.
+  test.each(KEYED)("with $kind, a first user changed and put back at once, where the list of the alerts trails the first write: the next run mails the first user, and the run after it ends the waiting", async ({ bindings, admin, alerts }) => {
+    const account = emptyAccount();
+    account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
+    const asked: Asked[] = [];
+    const worker = instance(w, cloudflareOf(account, asked));
+    const calls = api(worker, await tokenOf(w, "admin"), (input, init) => ask(worker, input, init, bindings), admin);
+    const { database } = await installOf(w);
+    await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+    const mailed = (): unknown => account.alerts.map((alert) => [alert.name, alert.mechanisms]);
+    const to = (email: string): unknown => alerts.map((name) => [name, { email: [{ id: email }] }]);
+    const users = async (emails: string[]): Promise<unknown> => done(await calls.config.$patch({ query: {}, json: { users: emails as Login[] } }));
+    const marks = async (): Promise<unknown> => database.readDomainCheck().then((kept) => [kept?.users_changed_at ?? null, (kept?.alerts_changed_at ?? null) !== null]);
+
+    await users([OWNER, "bo@example.com"]);
+    const first = structuredClone(account.alerts);
+    await users(["bo@example.com", OWNER]);
+    account.trails = { [READS.alerts]: [first] };
+    await users([OWNER, "bo@example.com"]);
+    const lost = [mailed(), await marks()];
+    wait(w, 0.25);
+    await sweep(worker, w, bindings);
+    const written = [mailed(), await marks()];
+    wait(w, 0.25);
+    await sweep(worker, w, bindings);
+    const confirmed = await marks();
+    const before = asked.length;
+    wait(w, 0.25);
+    await sweep(worker, w, bindings);
+
+    expect(lost).toEqual([to("bo@example.com"), [null, true]]);
+    expect([written, confirmed, asked.length - before, await problemsOf(w)]).toEqual([[to(OWNER), [null, true]], [null, false], 0, []]);
   });
 
   // Drift: without the handler, or with one that never reaches the later parts of the walk, expired sites stay live in the listing and the bucket fills with files nothing serves.
@@ -345,6 +447,45 @@ describe("the scheduled run", () => {
     later.push(await run());
 
     expect([first, later, await states()]).toEqual([7, [6, 6], { live: 12, trash: 0 }]);
+  });
+
+  // Drift: the same run on an install that holds a key, which also confirms what a change carried to Cloudflare. A run that read the marks in a call of its own, or asked Cloudflare with no mark set, would spend a call 96 times a day for nothing;
+  // one that confirms must stay at the two calls its table counts, whether it finds Cloudflare as the settings ask or writes there.
+  test("on an install that holds a key, a run with no mark set asks the database the same six questions and Cloudflare nothing; a run that confirms the rules or the alerts asks two more, whether it writes or finds them standing", async () => {
+    const tally = { calls: 0 };
+    const account = emptyAccount();
+    account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
+    const asked: Asked[] = [];
+    const keyed = { ...countedBindings(tally), KEPT_KEY: TOKEN };
+    const worker = instance(w, cloudflareOf(account, asked));
+    const session = await logIn(worker, w, keyed);
+    const { database } = await installOf(w);
+    await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+    // One run a quarter of an hour on: its calls to the database, and to Cloudflare.
+    const run = async (): Promise<readonly [number, number]> => {
+      wait(w, 0.25);
+      tally.calls = 0;
+      const before = asked.length;
+      await sweep(worker, w, keyed);
+
+      return [tally.calls, asked.length - before];
+    };
+
+    // The first run an install makes also keeps what the website said of the newest version.
+    await run();
+    const quiet = await run();
+    await send(worker, `${ADMIN}/data/settings`, { texts: { outside_pages: "allowed" } }, session, keyed);
+    // The rule the save wrote is gone again, as after a write that never landed.
+    account.rulesets.http_request_firewall_custom?.rules.splice(0);
+    const rulesWritten = await run();
+    const rulesStand = await run();
+    await send(worker, `${ADMIN}/data/people/add`, { login: "bo@example.com" }, session, keyed);
+    account.alerts.splice(0);
+    const alertsWritten = await run();
+    const alertsStand = await run();
+
+    expect([quiet, await run()]).toEqual([[6, 0], [6, 0]]);
+    expect([rulesWritten, rulesStand, alertsWritten, alertsStand]).toEqual([[8, 4], [8, 3], [8, 6], [8, 4]]);
   });
 
   // Drift: R2 bills every listing past a month's free million writes, and the sweep lists a folder to empty it. A run that listed uncounted would have no bound; one that shared the day's bound with every publish could be kept from removing files for good.

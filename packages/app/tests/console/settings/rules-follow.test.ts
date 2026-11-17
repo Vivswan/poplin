@@ -1,10 +1,11 @@
 // The settings of the domain's rules carried to the provider after a change of them: which values the provider ends with, what keeps waiting, and what is noted for a person.
 // Without these a saved setting could wait for a repair nobody is told to press, the provider could keep rules of older values while nothing waits, or a save of any other setting could call the provider for nothing.
+// The fake reads its rules before it writes them, as the provider's side does, and a test may make one read answer what the rules held before the last write.
 
 import { describe, expect, test } from "bun:test";
 import type { RuleSettings, SettingValues } from "@poplin/core/src/records/settings";
 
-import type { FollowRefusal } from "../../../src/console/access/users-follow";
+import type { FollowRefusal, FollowTry } from "../../../src/console/access/users-follow";
 import { followRules, type RulesFollow } from "../../../src/console/settings/rules-follow";
 import { openConsole } from "../support/console";
 import { usualPlug } from "../support/fake-plug";
@@ -20,7 +21,13 @@ interface FakeRules extends RulesFollow {
 
   /** The values the provider's rules were last written from, `undefined` before any. */
   held: RuleSettings | undefined;
+
+  /** What the next try reads the rules as, in place of what they hold: a read that trails a write. */
+  trails: RuleSettings | undefined;
 }
+
+/** The values every test install starts with. */
+const BLOCKED: RuleSettings = { outside_pages: "blocked", search_engines_allowed: false };
 
 /**
  * Make a provider's side of the rules.
@@ -31,15 +38,19 @@ function fakeRules(answer: (earlier: number) => Promise<FollowRefusal | undefine
   const rules: FakeRules = {
     pushed: [],
     held: undefined,
+    trails: undefined,
     holdsKey: () => holdsKey,
     async push(values) {
       rules.pushed.push(values);
       const refusal = await answer(rules.pushed.length - 1);
       if (refusal !== undefined) return { ok: false, refusal };
 
-      rules.held = values;
+      const read = rules.trails ?? rules.held;
+      rules.trails = undefined;
+      const stood = read?.outside_pages === values.outside_pages && read.search_engines_allowed === values.search_engines_allowed;
+      if (!stood) rules.held = values;
 
-      return { ok: true };
+      return { ok: true, rules: stood ? "stood" : "written" };
     },
   };
 
@@ -56,6 +67,13 @@ async function changed(opened: Owned, changes: Partial<SettingValues>): Promise<
   await opened.install.database.changeSettings(changes, { as: "person", by: opened.owner, at: opened.install.now() });
 }
 
+/** Move the clock a minute on, and answer a try that trusts its reads where nothing changed or tried in that minute, as the scheduled run makes one. */
+function aMinuteOn(opened: Owned): FollowTry {
+  opened.clock.now += 60_000;
+
+  return { quietSince: opened.install.now() - 30_000 };
+}
+
 /** Whether a change of the settings of the rules waits. */
 async function waits(opened: Owned): Promise<boolean> {
   return ((await opened.install.database.readDomainCheck())?.rules_changed_at ?? null) !== null;
@@ -66,14 +84,56 @@ async function problems(opened: Owned): Promise<string[]> {
 }
 
 describe("followRules", () => {
-  // Drift: the reason of the whole file. A changed setting that the provider took must stop waiting, and the provider must have been handed the values stored after the change.
-  test("a changed setting is written to the provider's rules, and waits no more", async () => {
+  // Drift: the reason of the whole file. The provider must have been handed the values stored after the change, and the change must stop waiting once a later try found the rules standing, or every run would read the provider for good.
+  test("a changed setting is written to the provider's rules, and waits until a try that confirms finds them standing", async () => {
     const opened = await openOwned();
     const rules = fakeRules();
     await changed(opened, { outside_pages: "allowed" });
 
-    expect([await waits(opened), await followRules(opened.install, rules), await waits(opened)]).toEqual([true, { carried: true }, false]);
-    expect([rules.pushed, await problems(opened)]).toEqual([[{ outside_pages: "allowed", search_engines_allowed: false }], []]);
+    expect([await waits(opened), await followRules(opened.install, rules), await waits(opened)]).toEqual([true, { carried: true }, true]);
+    // A try that comes at once finds the rules standing too, and is trusted with nothing: its read may be of before the write.
+    expect([await followRules(opened.install, rules, { quietSince: opened.install.now() - 30_000 }), await waits(opened)]).toEqual([{ carried: true }, true]);
+    expect([await followRules(opened.install, rules, aMinuteOn(opened)), await waits(opened), rules.held]).toEqual([{ carried: true }, false, { outside_pages: "allowed", search_engines_allowed: false }]);
+    expect([rules.pushed.length, await problems(opened)]).toEqual([3, []]);
+  });
+
+  // Drift: a setting changed and put back at once. The second try reads the rules as they were before the first one's write, finds them standing, and writes nothing: the provider keeps the other state.
+  // A try that let the mark go there would leave the rules against the setting with nothing waiting, until the next change or a repair.
+  test("a setting put back at once, whose try reads the rules of before the first write, leaves the change waiting, and the try that confirms writes the rules; the mark goes with the one after it", async () => {
+    const opened = await openOwned();
+    const rules = fakeRules();
+    rules.held = BLOCKED;
+    await changed(opened, { outside_pages: "allowed" });
+    await followRules(opened.install, rules);
+    rules.trails = BLOCKED;
+    await changed(opened, { outside_pages: "blocked" });
+
+    expect([await followRules(opened.install, rules), rules.held?.outside_pages, await waits(opened)]).toEqual([{ carried: true }, "allowed", true]);
+    expect([await followRules(opened.install, rules, aMinuteOn(opened)), rules.held?.outside_pages, await waits(opened)]).toEqual([{ carried: true }, "blocked", true]);
+    expect([await followRules(opened.install, rules, aMinuteOn(opened)), rules.held?.outside_pages, await waits(opened)]).toEqual([{ carried: true }, "blocked", false]);
+  });
+
+  // Drift: a try that confirms is trusted for its read alone. One that found the rules standing over settings that changed while it read would let go of a change it never compared.
+  test("a try that confirms, and finds the rules standing while the setting changes, leaves the change waiting", async () => {
+    const opened = await openOwned();
+    const rules = fakeRules(async (earlier) => {
+      if (earlier === 1) await changed(opened, { search_engines_allowed: true });
+
+      return undefined;
+    });
+    await changed(opened, { outside_pages: "allowed" });
+    await followRules(opened.install, rules);
+
+    expect([await followRules(opened.install, rules, aMinuteOn(opened)), rules.held, await waits(opened)]).toEqual([{ carried: true }, { outside_pages: "allowed", search_engines_allowed: true }, true]);
+  });
+
+  // Drift: a provider that keeps no such rules has nothing a later run could read. A change left waiting there would have every run ask for good.
+  test("where the provider keeps no such rules, a change waits no more after the first try", async () => {
+    const opened = await openOwned();
+    await changed(opened, { outside_pages: "allowed" });
+    const none: RulesFollow = { holdsKey: () => true, push: async () => ({ ok: true, rules: "none" }) };
+
+    expect([await followRules(opened.install, none), await waits(opened)]).toEqual([{ carried: true }, false]);
   });
 
   // Drift: a try that began with nothing waiting and left a mark behind would have the scheduled run call the provider for a change nobody made, and a refusal of it would note a problem of a domain that is in order.
@@ -111,11 +171,11 @@ describe("followRules", () => {
     });
     await changed(opened, { outside_pages: "allowed" });
 
-    expect([await followRules(opened.install, rules), rules.held, await waits(opened)]).toEqual([{ carried: true }, { outside_pages: "blocked", search_engines_allowed: true }, false]);
+    expect([await followRules(opened.install, rules), rules.held, await waits(opened)]).toEqual([{ carried: true }, { outside_pages: "blocked", search_engines_allowed: true }, true]);
   });
 
-  // Drift: two saves whose writes land out of order. The older try's write lands after the newer try found nothing to do and settled, so the provider holds the older values with nothing waiting, unless the older try sees that its values are stale.
-  test("an older try whose write lands after a newer one settled writes the stored values again", async () => {
+  // Drift: two saves whose writes land out of order. The older try's write lands after the newer try's, so the provider holds the older values until the scheduled run, unless the older try sees that its values are stale.
+  test("an older try whose write lands after a newer one's writes the stored values again", async () => {
     const opened = await openOwned();
     const rules = fakeRules(async (earlier) => {
       if (earlier > 0) return undefined;
@@ -127,7 +187,7 @@ describe("followRules", () => {
     });
     await changed(opened, { outside_pages: "allowed" });
 
-    expect([await followRules(opened.install, rules), rules.held?.outside_pages, rules.pushed.length, await waits(opened)]).toEqual([{ carried: true }, "blocked", 2, false]);
+    expect([await followRules(opened.install, rules), rules.held?.outside_pages, rules.pushed.length, await waits(opened)]).toEqual([{ carried: true }, "blocked", 2, true]);
   });
 
   // Drift: a setting that changes on every try. Nothing more is tried in this request, so the change must go on waiting for the scheduled run.
@@ -168,8 +228,8 @@ describe("followRules, on an install that keeps its first run of the domain whil
     expect([await followRules(opened.install, rules), await waits(opened), await problems(opened)]).toEqual([{ carried: false, why: "unreachable" }, true, []]);
   });
 
-  // Drift: the same try, taken by the provider, while a later change was stored and settled in the run kept meanwhile. Left unsettled, the rules would hold the older values with nothing waiting.
-  test("a try the provider took after a later change was settled writes the stored values again", async () => {
+  // Drift: the same try, taken by the provider, while a later change was stored and carried in the run kept meanwhile. A try that took the provider's answer for the end would leave the rules of the older values until the scheduled run.
+  test("a try the provider took after a later change was carried writes the stored values again", async () => {
     const opened = await openOwned();
     const rules = fakeRules(async (earlier) => {
       if (earlier > 0) return undefined;
@@ -181,12 +241,12 @@ describe("followRules, on an install that keeps its first run of the domain whil
     });
     await opened.install.database.changeSettings({ outside_pages: "allowed" }, { as: "person", by: opened.owner, at: opened.install.now() });
 
-    expect([await followRules(opened.install, rules), rules.held?.outside_pages, await waits(opened)]).toEqual([{ carried: true }, "blocked", false]);
+    expect([await followRules(opened.install, rules), rules.held?.outside_pages, await waits(opened)]).toEqual([{ carried: true }, "blocked", true]);
   });
 });
 
 describe("followRules, when an older try ends after a newer one", () => {
-  // Drift: the older try wrote one rule and failed at the other, after the newer try had settled the change. A refusal that left the settled mark alone would leave the provider with half of the older rules, nothing waiting, and nothing noted.
+  // Drift: the older try wrote one rule and failed at the other, after the newer try had carried the change. A refusal that set no mark would leave the provider with half of the older rules and a mark no later than the newer try's own.
   test("an older try that the provider refused part of the way leaves the change waiting again", async () => {
     const opened = await openOwned();
     const rules = fakeRules(async () => {
@@ -248,7 +308,7 @@ describe("a save on the Settings screen", () => {
     const afterOther = [...rules.pushed];
     const saved = await opened.change("/data/settings", { texts: { outside_pages: "allowed" } });
 
-    expect([other.status, afterOther, saved.status, rules.pushed, await waits(opened.base)]).toEqual([200, [], 200, [{ outside_pages: "allowed", search_engines_allowed: false }], false]);
+    expect([other.status, afterOther, saved.status, rules.pushed, await waits(opened.base)]).toEqual([200, [], 200, [{ outside_pages: "allowed", search_engines_allowed: false }], true]);
   });
 
   // Drift: a save is answered as saved whatever the provider says, since the setting is stored: a refusal is a problem of the domain, never a refusal of the save.
@@ -273,11 +333,11 @@ describe("a save on the Settings screen", () => {
     const save = new Request(`${ORIGIN}/data/settings`, { method: "POST", headers, body: JSON.stringify({ texts: { outside_pages: "allowed" } }) });
 
     const saved = await opened.fetch(save, (work) => left.push(work));
-    const answered = [saved.status, left.length, rules.held, await waits(opened.base)];
+    const answered = [saved.status, left.length, rules.held];
     gate.resolve(undefined);
     await Promise.all(left);
 
-    expect([answered, rules.held?.outside_pages, await waits(opened.base)]).toEqual([[200, 1, undefined, true], "allowed", false]);
+    expect([answered, rules.held?.outside_pages]).toEqual([[200, 1, undefined], "allowed"]);
   });
 
   // Drift: the line that sends a person to Domain to press Repair. It must stay on every setting a repair alone carries, and go from the ones the install carries by itself; on an install with no key a repair carries all three, as before.

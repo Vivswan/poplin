@@ -198,6 +198,7 @@ export interface SweepStart {
   readonly updateCheck: UpdateCheck | undefined;
   readonly settings: SettingValues | undefined;
   readonly place: SweepPlace | undefined;
+  readonly domainCheck: RememberedCheck | undefined;
 }
 
 /** What a site is made with beside its record: what its first version holds, and the site it is a copy of. */
@@ -908,7 +909,7 @@ export interface Database {
   /** Where the scheduled sweep's walk stopped: `undefined` before a run kept a place, once a walk ended, and for a kept place no walk can go on from. */
   readSweepPlace(): Promise<SweepPlace | undefined>;
 
-  /** Read what a scheduled run starts from, in one step: the last asking for a newer version, the settings, and where the walk stopped. */
+  /** Read what a scheduled run starts from, in one step: the last asking for a newer version, the settings, where the walk stopped, and the last check or repair of the domain with what waits under it. */
   readSweepStart(): Promise<SweepStart>;
 
   /** Keep where the scheduled sweep's walk stopped, in place of what was kept; `undefined` forgets it, for a walk that ended. */
@@ -950,10 +951,12 @@ export interface Database {
 
   /**
    * Begin a try to carry the users to the domain: mark them as waiting, with a mark later than every one before it, and read the users to carry, in one step.
+   * The alerts that go to the first user are marked as changed from its moment on, until a later try that confirmed them settles.
    *
-   * @returns the users stored now, `undefined` before setup stored any; and the mark, `undefined` on an install that keeps no run of its domain, where nothing remembers that a change waits
+   * @returns the users stored now, `undefined` before setup stored any; the mark, `undefined` on an install that keeps no run of its domain, where nothing remembers that a change waits;
+   *   and the moment of the last change or try before this one, `undefined` where there was none
    */
-  claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined }>;
+  claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined; readonly last: number | undefined }>;
 
   /**
    * Settle a change of the users after a try to carry them to the domain, in one step with the comparison.
@@ -967,12 +970,14 @@ export interface Database {
    * Begin a try to carry the settings of the domain's rules to the domain: give a change of them that waits a mark later than every one before it, and read the settings, in one step.
    * A try sets no mark where none waits, so one the domain refuses leaves waiting exactly what waited.
    *
-   * @returns the settings stored now, `undefined` before setup stored any; and the mark: `null` where no change waits, and `undefined` on an install that keeps no run of its domain, where nothing remembers that one does
+   * @returns the settings stored now, `undefined` before setup stored any; the mark: `null` where no change waits, and `undefined` on an install that keeps no run of its domain, where nothing remembers that one does;
+   *   and the moment of the last change or try before this one, `undefined` where there was none
    */
-  claimRules(at: number): Promise<{ readonly settings: SettingValues | undefined; readonly mark: number | null | undefined }>;
+  claimRules(at: number): Promise<{ readonly settings: SettingValues | undefined; readonly mark: number | null | undefined; readonly last: number | undefined }>;
 
   /**
    * Settle a change of the settings of the domain's rules after a try to carry them to the domain, in one step with the comparison, as `settleUsers` settles the users.
+   * Only a try that confirmed the rules lets the change wait no more: after any other it waits under a later mark, on an install that keeps a run of its domain.
    *
    * @returns whether a change of those settings waits after it, and the settings stored now, `undefined` before setup stored any: on an install that keeps no run of its domain nothing waits, and only they say whether the values carried are stale
    */

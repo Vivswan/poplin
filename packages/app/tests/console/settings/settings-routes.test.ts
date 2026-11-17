@@ -11,7 +11,7 @@ import { openConsole } from "../support/console";
 import { usualPlug } from "../support/fake-plug";
 
 /** The provider's side of a setting on an install that holds its key: every change is taken. */
-const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const }) };
+const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const, rules: "written" as const }) };
 
 /** One setting as the route answers it. */
 interface Row {
@@ -140,15 +140,16 @@ describe("the rows", () => {
 describe("a save", () => {
   // Drift: a rule of the domain that only a repair writes, or the logs of an install with no key, would be answered as in effect; or an install that carries the change by itself, or one with no domain, would be told to wait.
   test.each([
-    ["with a domain and no key", usualPlug(), {}, { repair: ["search_engines_allowed", "block_bots"], update: ["provider_logs"] }],
-    ["with a domain and a key", usualPlug(), { rules: CARRIES, logs: CARRIES }, { repair: ["block_bots"], update: [] }],
-    ["whose repair carries no setting, with no key", { ...usualPlug(), carriedSettings: [] }, {}, { repair: [], update: ["provider_logs"] }],
-    ["with no Domain screen and a key", undefined, { logs: CARRIES }, { repair: [], update: [] }],
-  ] as const)("answers which saved settings wait at the provider, and for what, on an install %s", async (_name, domain, sides, waits) => {
+    ["with a domain and no key", usualPlug(), {}, { repair: ["search_engines_allowed", "block_bots"], update: ["provider_logs"] }, false],
+    ["with a domain and a key", usualPlug(), { rules: CARRIES, logs: CARRIES }, { repair: ["block_bots"], update: [] }, true],
+    ["whose repair carries no setting, with no key", { ...usualPlug(), carriedSettings: [] }, {}, { repair: [], update: ["provider_logs"] }, false],
+    ["with no Domain screen and a key", undefined, { logs: CARRIES }, { repair: [], update: [] }, true],
+    ["whose domain has no rule to write, with a key for the rules alone", { ...usualPlug(), carriedSettings: [] }, { rules: CARRIES }, { repair: [], update: ["provider_logs"] }, false],
+  ] as const)("answers which saved settings wait at the provider, and for what, and whether the install carries one by itself, on an install %s", async (_name, domain, sides, waits, carried) => {
     const opened = await openConsole("", domain, sides);
     const saved = await opened.change("/data/settings", { texts: { trash_days: "30", search_engines_allowed: "on", block_bots: "off", provider_logs: "off" } });
 
-    expect(await saved.json()).toEqual({ ok: true, waits });
+    expect(await saved.json()).toEqual({ ok: true, waits, carried });
   });
 
   // Drift: a save would write a setting it does not name, or refuse the settings that also change the domain's rules, which this screen changes.
@@ -157,7 +158,7 @@ describe("a save", () => {
     const before = await textsOf(opened);
     const saved = await opened.change("/data/settings", { texts: { trash_days: "30", default_search_engines: "on", block_bots: "off", outside_pages: "allowed" } });
 
-    expect(await saved.json()).toEqual({ ok: true, waits: { repair: [], update: [] } });
+    expect(await saved.json()).toEqual({ ok: true, waits: { repair: [], update: [] }, carried: false });
     expect(await textsOf(opened)).toEqual({ ...before, trash_days: "30", default_search_engines: "on", block_bots: "off", outside_pages: "allowed" });
   });
 

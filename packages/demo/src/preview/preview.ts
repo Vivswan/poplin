@@ -106,7 +106,7 @@ const END_LOGINS: EndLogins = async () => ({ ok: true });
 const NO_KEY_UPDATE: SelfUpdate = { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) };
 
 /** The stand-in for the provider's side of a setting the install carries there by itself, with the key it keeps: every change is taken. Nothing is sent anywhere. */
-const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const }) };
+const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const, rules: "written" as const }) };
 
 /** A day in milliseconds. */
 const DAY_MS = 86_400_000;

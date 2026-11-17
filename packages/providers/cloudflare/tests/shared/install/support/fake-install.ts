@@ -103,6 +103,9 @@ export interface Account {
   /** What the next reads of the Worker's settings answer in place of its own, each once and in order, as settings that trail a change do: at once, or from the Worker's next upload on. */
   trailing?: { from: "now" | "upload"; readonly answers: Row[] };
 
+  /** What the next reads of a path answer in place of what the account holds, each once and in order, as a read that trails a write does: a list as its rows, anything else as the one object. */
+  trails?: Record<string, unknown[]>;
+
   /** Whether the account has no Worker named `poplin`: every read of it is then answered 404, until an upload makes it. */
   noWorker?: boolean;
 
@@ -567,6 +570,14 @@ function barred(account: Account, asked: Asked, path: string): Response | undefi
   return refused ? refusal(account.refuseAs?.status ?? 403, account.refuseAs?.code ?? 10000, account.refuseMessage ?? `Authentication error for ${asked.key}${quoted}`) : undefined;
 }
 
+/** The answer of a read a test set to trail a write: the next one kept for its path. */
+function trailed(account: Account, asked: Asked, path: string): Response | undefined {
+  const next = asked.method === "GET" ? account.trails?.[path]?.shift() : undefined;
+  if (next === undefined) return undefined;
+
+  return Array.isArray(next) ? page(asked, next) : reply(next);
+}
+
 /**
  * Answer one request as the account's API would.
  *
@@ -588,7 +599,7 @@ export function answer(account: Account, asked: Asked): Response {
   // A token of another account reads its own free address, and reaches nothing of this account.
   if (owner !== ACCOUNT && path === `/accounts/${owner}/workers/subdomain`) return reply({ subdomain: FREE_ADDRESSES[owner] });
 
-  return barred(account, asked, path) ?? inAccount(account, asked, path.split("/").slice(1));
+  return barred(account, asked, path) ?? trailed(account, asked, path) ?? inAccount(account, asked, path.split("/").slice(1));
 }
 
 /**

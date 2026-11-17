@@ -1,4 +1,5 @@
-// The Settings screen under the wheel: its rows scroll, and the page around them never does. A count too large to keep, which is refused at its field. And the switch of the logs, which stays as it was saved.
+// The Settings screen under the wheel: its rows scroll, and the page around them never does. A count too large to keep, which is refused at its field. The switch of the logs, which stays as it was saved.
+// And the moment Save rests after a save the install carries by itself.
 
 import { expect, type Page } from "@playwright/test";
 
@@ -108,4 +109,29 @@ test("Keep logs stands under Logs with its sentence, stays off once it is switch
   await page.reload();
   await expect(page.getByRole("switch", { name: LOGS.label, exact: true })).not.toBeChecked();
   await expect(page.getByText(LOGS.waits, { exact: false })).toHaveCount(0);
+});
+
+// Drift: a rule or the logs saved on an install that holds its key is written to the provider by itself, once for each save. A Save that took the next press at once would let a switch be flipped three times in two seconds;
+// one that never took a press again would leave the second change unsaved.
+test("after a save the install carries by itself, Save and Discard take no press for a moment, and then the next change is saved", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  const keep = page.getByRole("switch", { name: LOGS.label, exact: true });
+  const save = page.getByRole("button", { name: "Save", exact: true });
+
+  await keep.click();
+  await save.click();
+  await expect(said(page, "Saved.")).toBeVisible();
+
+  await keep.click();
+  await expect(page.getByText("1 unsaved change", { exact: true })).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
+
+  // The moment is five seconds: the wait is twice that, for a machine that is busy.
+  await expect(save).toBeEnabled({ timeout: 10_000 });
+  await save.click();
+  await expect(save).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("switch", { name: LOGS.label, exact: true })).toBeChecked();
 });

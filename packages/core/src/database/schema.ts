@@ -325,7 +325,7 @@ export const updateCheck = sqliteTable(
   ],
 );
 
-/** The last check or repair of the domain: when, by whom, which of the two, and its pieces as JSON; a run replaces the row. `users_changed_at`, `rules_changed_at`: above zero, a change of the users or the rules waits; below zero, none does. */
+/** The last check or repair of the domain: when, by whom, which of the two, and its pieces as JSON; a run replaces the row. `users_changed_at`, `rules_changed_at`, `alerts_changed_at`: above zero, a change of them waits or is not confirmed. */
 export const domainCheck = sqliteTable(
   "domain_check",
   {
@@ -336,6 +336,7 @@ export const domainCheck = sqliteTable(
     pieces: text().notNull(),
     users_changed_at: integer(),
     rules_changed_at: integer(),
+    alerts_changed_at: integer(),
   },
   (table) => [
     check("domain_check_one_row", sql`${table.id} = 1`),

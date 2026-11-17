@@ -74,16 +74,17 @@ describe("createRulesFollow", () => {
       const pushed = await followOf(connection).push({ outside_pages: "allowed", search_engines_allowed: true });
       const edit = asked.find((entry) => entry.method === "PATCH");
 
-      expect([pushed, writes(asked)]).toEqual([{ ok: true }, [`DELETE ${PATHS.rules}/o1`, `PATCH ${PATHS.rules}/b1`]]);
+      expect([pushed, writes(asked)]).toEqual([{ ok: true, rules: "written" }, [`DELETE ${PATHS.rules}/o1`, `PATCH ${PATHS.rules}/b1`]]);
       expect(edit?.body).toMatchObject({ expression: botsExpression(LAYOUT, true) });
       expect([asked.length <= RULES_PUSH_CALLS, new Set(asked.map((entry) => entry.key))]).toEqual([true, new Set([`Bearer ${KEY}`])]);
     });
   });
 
-  // Drift: rules that already stand as the settings ask are written again by nothing: the scheduled run carries a waiting change once a run, and must cost only the reads there.
-  test("settings the rules already hold are written nowhere", async () => {
+  // Drift: rules that already stand as the settings ask are written again by nothing: the scheduled run confirms a change by this read, and must cost only the reads there.
+  // A try that wrote nothing and did not say so would never let the change stop waiting; one that said so after a write would end the waiting on a read made before it.
+  test("settings the rules already hold are written nowhere, and the try says that they stood", async () => {
     await withFake(zone({}), async (connection, asked) => {
-      expect([await followOf(connection).push({ outside_pages: "blocked", search_engines_allowed: false }), writes(asked), asked.length]).toEqual([{ ok: true }, [], 3]);
+      expect([await followOf(connection).push({ outside_pages: "blocked", search_engines_allowed: false }), writes(asked), asked.length]).toEqual([{ ok: true, rules: "stood" }, [], 3]);
     });
   });
 

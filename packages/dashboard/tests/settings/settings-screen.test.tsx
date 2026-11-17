@@ -2,7 +2,7 @@
 
 import { clearPage, type Within } from "../lib/support/page";
 
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
@@ -49,6 +49,7 @@ interface Served {
   readonly holds?: boolean;
   readonly keyed?: boolean;
   readonly waits?: { readonly repair?: readonly string[]; readonly update?: readonly string[] };
+  readonly carried?: readonly string[];
 }
 
 function rowOf(key: string, control: Row["control"], unit = ""): Row {
@@ -61,8 +62,9 @@ function rowOf(key: string, control: Row["control"], unit = ""): Row {
  * @param holds - whether a save waits until a test lets it through
  * @param keyed - whether the install holds its key
  * @param waits - the settings whose half at the provider waits after a save that holds them, by what they wait for
+ * @param carried - the settings the install carries to the provider by itself after a save that holds them
  */
-function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false, waits = {} }: Served = {}): void {
+function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false, waits = {}, carried = [] }: Served = {}): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
     if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: keyed, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
@@ -94,7 +96,7 @@ function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false, wai
     Object.assign(stored, texts);
     const waiting = (keys: readonly string[] = []): readonly string[] => keys.filter((key) => Object.hasOwn(texts, key));
 
-    return Response.json({ ok: true, waits: { repair: waiting(waits.repair), update: waiting(waits.update) } });
+    return Response.json({ ok: true, waits: { repair: waiting(waits.repair), update: waiting(waits.update) }, carried: waiting(carried).length > 0 });
   }) as typeof fetch;
 }
 
@@ -280,6 +282,55 @@ describe("the one Save", () => {
     await page.findByText("Saved.");
 
     expect(saves).toEqual([{ trash_days: "30" }]);
+  });
+
+  // Drift: the install writes a saved rule or the logs to the provider by itself, once for each save. A screen that took the next save at once would let a switch be flipped three times in two seconds, and the writes could land in another order.
+  // One that held back after every save would make a person wait for nothing.
+  test("takes no further save for 5 seconds after one the install carries to the provider: Save and Discard are off and a press sends nothing, then the save is sent; any other save holds nothing back", async () => {
+    serve({ carried: ["provider_logs"], holds: true });
+    const page = await drawn();
+    const logs = page.getByRole("switch", { name: "Keep logs" });
+    const off = (name: string): boolean => (page.getByRole("button", { name }) as HTMLButtonElement).disabled;
+    // Let the held save through, and let the screen take in what follows, by the clock the test moves.
+    const answered = async (): Promise<void> => {
+      for (let turn = 0; turn < 20; turn++) {
+        await act(async () => {
+          if (turn === 0) held.shift()?.();
+          jest.advanceTimersByTime(1);
+          await Promise.resolve();
+        });
+      }
+    };
+
+    type(page, "Keep deleted sites", "30");
+    await press(page.getByRole("button", { name: "Save" }));
+    await act(async () => held.shift()?.());
+    await page.findByText("Saved.");
+    type(page, "Keep deleted sites", "31");
+    const afterAnother = off("Save");
+    await press(logs);
+    await press(page.getByRole("button", { name: "Save" }));
+    jest.useFakeTimers();
+    try {
+      await answered();
+      act(() => fireEvent.click(logs));
+      const during = [bar(page), off("Save"), off("Discard")];
+      act(() => fireEvent.click(page.getByRole("button", { name: "Save" })));
+      act(() => void jest.advanceTimersByTime(4000));
+      const sent = saves.length;
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+
+      expect([afterAnother, during, sent, off("Save")]).toEqual([false, ["1 unsaved change", true, true], 2, false]);
+    } finally {
+      jest.useRealTimers();
+    }
+    await press(page.getByRole("button", { name: "Save" }));
+    await act(async () => held.shift()?.());
+
+    expect(saves).toEqual([{ trash_days: "30" }, { trash_days: "31", provider_logs: "off" }, { provider_logs: "on" }]);
   });
 
   // Drift: a setting whose half at the provider waits for a repair, or for the next upload of the install's code, would be said as "Saved." alone, and read as in effect.

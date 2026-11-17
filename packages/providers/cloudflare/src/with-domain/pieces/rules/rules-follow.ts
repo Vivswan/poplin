@@ -27,7 +27,8 @@ export const RULES_PUSH_CALLS = 5;
  *
  * @param key - the kept key, or `undefined` on an install that holds none, which answers every try `no_key` and calls nothing
  * @param place - the account the zone is in, and the install's hostnames, which the rules read
- * @returns the rules' side at Cloudflare. A try is done only when both rules stand as the settings ask: one that stopped after the first has written it. A rule the zone's plan has no room for is left out, as a repair leaves it
+ * @returns the rules' side at Cloudflare. A try is done only when both rules stand as the settings ask: one that stopped after the first has written it. A rule the zone's plan has no room for is left out, as a repair leaves it.
+ *   The rules are planned from one read, which may trail a write: a try that wrote nothing says so, and the install trusts that only of a try made long after the last write
  */
 export function createRulesFollow(key: KeptKey | undefined, place: { readonly accountId: string; readonly layout: DomainLayout }): RulesFollow {
   return {
@@ -44,10 +45,10 @@ export function createRulesFollow(key: KeptKey | undefined, place: { readonly ac
       const written = await keyed(key, RULES_RIGHT, async (connection) => {
         const synced = await syncGuards(connection, zone.id, desired, "apply");
 
-        return synced.ok ? { ok: true, value: undefined } : synced;
+        return synced.ok ? { ok: true, value: synced.report.changedNothing } : synced;
       });
 
-      return written.ok ? { ok: true } : { ok: false, refusal: written.refusal };
+      return written.ok ? { ok: true, rules: written.value ? "stood" : "written" } : { ok: false, refusal: written.refusal };
     },
   };
 }

@@ -380,7 +380,8 @@ describe("createApi", () => {
     // Drift: `poplin config outside_pages` goes through this route too. A change that reached no rule of the domain would wait for a repair the command never mentions, and one carried on any setting would call the provider for nothing.
     await done((api) => api.config.$patch({ json: { outside_pages: "allowed", trash_days: 9 }, query: {} }));
     await done((api) => api.config.$patch({ json: { block_bots: "off" }, query: {} }));
-    expect([install.rules.pushed, (await install.database.readDomainCheck())?.rules_changed_at]).toEqual([[{ outside_pages: "allowed", search_engines_allowed: false }], null]);
+    // The change waits on after the provider took it, for the scheduled run to confirm.
+    expect([install.rules.pushed, ((await install.database.readDomainCheck())?.rules_changed_at ?? null) !== null]).toEqual([[{ outside_pages: "allowed", search_engines_allowed: false }], true]);
     expect(part(await done((api) => api.sites[":site"].$delete({ param: { site: moved }, query: { no_trash: "true" } })), "before").id).toBe(moved);
     expect(part(await done((api) => api.import.settings.$post({ json: { format: 1, settings }, query: {} })), "values").trash_days).toBe(7);
     const files = manifest(PAGES).map((file) => ({ ...file, path: `v1/${file.path}` }));

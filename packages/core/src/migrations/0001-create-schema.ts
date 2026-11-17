@@ -218,7 +218,7 @@ CREATE TABLE update_check (
   CHECK ((news IS NULL) = (seen_at IS NULL))
 ) STRICT`;
 
-/** The last check or repair of the domain: when, by whom, which of the two, and its pieces as JSON; a run replaces the row. `users_changed_at`, `rules_changed_at`: above zero, a change of the users or the rules waits; below zero, none does. */
+/** The last check or repair of the domain: when, by whom, which of the two, and its pieces as JSON; a run replaces the row. `users_changed_at`, `rules_changed_at`, `alerts_changed_at`: above zero, a change of them waits or is not confirmed. */
 const DOMAIN_CHECK = `
 CREATE TABLE domain_check (
   id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
@@ -227,7 +227,8 @@ CREATE TABLE domain_check (
   run TEXT NOT NULL CHECK (run IN ('check', 'repair')),
   pieces TEXT NOT NULL CHECK (json_valid(pieces) AND json_type(pieces) = 'array'),
   users_changed_at INTEGER,
-  rules_changed_at INTEGER
+  rules_changed_at INTEGER,
+  alerts_changed_at INTEGER
 ) STRICT`;
 
 /** What went wrong, per UTC day and kind. `count` is a floor, since a kind is written once an hour, and `more` says it came more often than it was written; `name` and `message` are of the latest failure. */

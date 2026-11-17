@@ -113,12 +113,12 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepDomainCheck": [1, 2],
   "keepDomainCheck, 200 pieces over the run before": [1, 2],
   "readDomainCheck": [1, 0],
-  "claimUsers": [3, 1],
-  "settleUsers, the stored users carried": [4, 1],
+  "claimUsers": [4, 1],
+  "settleUsers, the stored users carried": [5, 1],
   "settleUsers, a try whose outcome is unknown": [3, 1],
-  "claimRules": [3, 1],
+  "claimRules": [4, 1],
   "settleRules, the stored settings carried": [4, 1],
-  "claimRules, nothing waits": [3, 0],
+  "claimRules, nothing waits": [4, 0],
   "readFrame": [4, 0],
   "noteProblem, the day's first": [1, 1],
   "noteProblem, the same hour": [1, 0],
@@ -662,9 +662,9 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await runSweep(install, latest, running);
 
     expect([first, idle, rows, website.asked]).toEqual([
-      { read: 27, written: 1 },
-      { read: 25, written: 0 },
-      { read: 25, written: 0 },
+      { read: 28, written: 1 },
+      { read: 26, written: 0 },
+      { read: 26, written: 0 },
       1,
     ]);
   });
@@ -923,11 +923,11 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("readDomainCheck", () => database.readDomainCheck());
     const carried = (await database.readSettings())?.users ?? [];
     await cost("claimUsers", () => database.claimUsers(NOW + 2));
-    await cost("settleUsers, the stored users carried", () => database.settleUsers({ users: carried, since: NOW + 2 }, NOW + 2));
+    await cost("settleUsers, the stored users carried", () => database.settleUsers({ users: carried, since: NOW + 2, confirmed: true }, NOW + 2));
     await cost("settleUsers, a try whose outcome is unknown", () => database.settleUsers({ users: null, since: NOW + 2 }, NOW + 2));
     await database.changeSettings({ outside_pages: "allowed" }, { ...BY_ADA, at: NOW + 3 });
     await cost("claimRules", () => database.claimRules(NOW + 4));
-    await cost("settleRules, the stored settings carried", () => database.settleRules({ rules: { outside_pages: "allowed", search_engines_allowed: false }, since: NOW + 4 }, NOW + 4));
+    await cost("settleRules, the stored settings carried", () => database.settleRules({ rules: { outside_pages: "allowed", search_engines_allowed: false }, since: NOW + 4, confirmed: true }, NOW + 4));
     await cost("claimRules, nothing waits", () => database.claimRules(NOW + 5));
     await cost("readFrame", () => database.readFrame(NOW));
 

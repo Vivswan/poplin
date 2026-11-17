@@ -68,7 +68,7 @@ describe("createUsersFollow", () => {
 
       const include = [{ email: { email: "ada@example.com" } }, { email: { email: "zoe@example.com" } }];
 
-      expect(pushed).toEqual({ ok: true });
+      expect(pushed).toEqual({ ok: true, stood: false });
       expect(writes(asked)).toEqual([
         ["PUT", `${PATHS.policies}/policy-1`, { name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include }],
         ["PUT", `${PATHS.alerts}/alert-1`, expect.objectContaining({ name: BUDGET_ALERT.name, mechanisms: { email: [{ id: "zoe@example.com" }] } })],
@@ -79,7 +79,7 @@ describe("createUsersFollow", () => {
   });
 
   // Drift: a list of the policies that trails a write still answers the users as they were. A carry that left out the write for a list that matches would lose a user removed just after being added, and Cloudflare's policy would go on naming that user.
-  test("a user removed just after being added is written out of the policy, where the list still answers the users as they were before the first write; an alert that goes to the first user is left", async () => {
+  test("a user removed just after being added is written out of the policy, where the list still answers the users as they were before the first write; an alert that goes to the first user is left, and the carry says that it stood", async () => {
     const sent = { ...HELD_ALERT, mechanisms: { email: [{ id: "ada@example.com" }] } };
 
     await withFake(account({ alerts: (asked) => page(asked, [sent]) }), async (connection, asked) => {
@@ -88,7 +88,10 @@ describe("createUsersFollow", () => {
       const body = (emails: readonly string[]): unknown => ({ name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: emails.map((email) => ({ email: { email } })) });
 
       expect([pushed, writes(asked)]).toEqual([
-        [{ ok: true }, { ok: true }],
+        [
+          { ok: true, stood: true },
+          { ok: true, stood: true },
+        ],
         [
           ["PUT", `${PATHS.policies}/policy-1`, body(["ada@example.com", "zoe@example.com"])],
           ["PUT", `${PATHS.policies}/policy-1`, body(["ada@example.com"])],
@@ -102,7 +105,7 @@ describe("createUsersFollow", () => {
     await withFake(account({ alerts: (asked) => page(asked, []) }), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
 
-      expect(await follow.push(USERS)).toEqual({ ok: true });
+      expect(await follow.push(USERS)).toEqual({ ok: true, stood: false });
       expect(writes(asked).at(-1)).toEqual(["POST", PATHS.alerts, expect.objectContaining({ name: BUDGET_ALERT.name, alert_type: "billing_budget_alert", mechanisms: { email: [{ id: "zoe@example.com" }] } })]);
       expect(new Set(asked.map((entry) => entry.key))).toEqual(new Set([`Bearer ${KEY}`]));
     });
@@ -114,7 +117,7 @@ describe("createUsersFollow", () => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT, CERTIFICATE_ALERT]);
       const to = { mechanisms: { email: [{ id: "zoe@example.com" }] } };
 
-      expect(await follow.push(USERS)).toEqual({ ok: true });
+      expect(await follow.push(USERS)).toEqual({ ok: true, stood: false });
       expect(writes(asked).slice(1)).toEqual([
         ["PUT", `${PATHS.alerts}/alert-1`, expect.objectContaining({ name: BUDGET_ALERT.name, ...to })],
         ["POST", PATHS.alerts, expect.objectContaining({ name: CERTIFICATE_ALERT.name, alert_type: "universal_ssl_event_type", ...to })],
