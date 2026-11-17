@@ -92,7 +92,7 @@ describe("startDueUpdate", () => {
   test.each([
     { name: "every rule holds", settings: SWITCHED_ON, after: WAIT, expected: { sent: 1, auto: TAKEN, audit: [ENTRY] }, asked: 1 },
     { name: "auto_update is off, as in a new install", settings: {}, after: WAIT },
-    { name: "update_check was switched off after the release was learned", settings: SWITCHED_ON, later: { update_check: false }, after: WAIT },
+    { name: "both were switched off after the release was learned", settings: SWITCHED_ON, later: { update_check: false, auto_update: false }, after: WAIT },
     { name: "the website does not answer that day", settings: SWITCHED_ON, website: { fetch: async () => new Response("down", { status: 503 }) }, after: WAIT },
     { name: "the release changes the database", settings: SWITCHED_ON, release: { ...RELEASE, schema: OWN_SCHEMA + 1 }, after: WAIT },
     { name: "the release changes the database, a year on", settings: SWITCHED_ON, release: { ...RELEASE, schema: OWN_SCHEMA + 1 }, after: 365 * DAY },

@@ -54,6 +54,12 @@ const ONE_DETAIL: Readonly<Record<string, (value: unknown) => string>> = {
 /** What a change of a site's title and name together says: the one form sets both. */
 const TITLE_AND_NAME = "Changed the title and the name";
 
+/** What new logins that hold the same users say: only their order changed. */
+const USERS_MOVED = "Changed the order of the users";
+
+/** The keys an entry of new logins holds for the users: the list, who it adds, and who it leaves out. Any other key is a setting changed in the same step. */
+const USER_KEYS = ["logins", "added", "removed"];
+
 function named(words: string, name: unknown): string | undefined {
   return typeof name === "string" && name !== "" ? `${words} "${name}"` : undefined;
 }
@@ -67,11 +73,20 @@ function detailsWords(detail: AuditEntry["detail"]): string | undefined {
   return keys.length === 2 && "title" in detail && "name" in detail ? TITLE_AND_NAME : undefined;
 }
 
-/** A change of the users says so, with how many may log in after it: its entry holds them and nothing else. A change of any setting holds no user. */
-function usersWords(detail: AuditEntry["detail"]): string | undefined {
-  if (Object.keys(detail).join() !== "logins" || !Array.isArray(detail.logins)) return undefined;
+/** What a list of emails an entry holds says, after the word of what was done to them. Nothing for a list that is empty or is none. */
+function usersNamed(done: string, emails: unknown): string[] {
+  if (!Array.isArray(emails) || emails.length === 0) return [];
 
-  return `Changed the users: ${detail.logins.length} now`;
+  return [`${done} ${emails.length === 1 ? "a user" : "users"}: ${emails.join(", ")}`];
+}
+
+/** A change of the users says who was added and who was removed, by the emails its entry holds, after the settings changed in the same step. A change of settings alone holds no user. */
+function usersWords(detail: AuditEntry["detail"]): string | undefined {
+  const users = [...usersNamed("Added", detail.added), ...usersNamed("Removed", detail.removed)];
+  const alone = Object.keys(detail).every((key) => USER_KEYS.includes(key));
+  if (users.length === 0) return alone && "logins" in detail ? USERS_MOVED : undefined;
+
+  return [...(alone ? [] : [WORDS.settings_changed]), ...users].join(". ");
 }
 
 /** A run at the provider says which it was, and a repair with a failure names the first step that failed: the run may have gone on past it. */

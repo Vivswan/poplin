@@ -14,7 +14,7 @@ const SCREENS = [
 const [TURN, TURNS] = [400, 12] as const;
 
 /** A count larger than any a number holds exactly, and what its field is told. */
-const TOO_LARGE = { typed: "99999999999999999999", refusal: "Use a whole number, 1 or more." } as const;
+const TOO_LARGE = { typed: "99999999999999999999", refusal: "Use a whole number from 1 to 1,000,000,000." } as const;
 
 /** Turn the wheel down to the end with the pointer at a place of the window. */
 async function wheelDown(page: Page, x: number, y: number): Promise<void> {

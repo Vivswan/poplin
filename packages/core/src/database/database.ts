@@ -996,18 +996,20 @@ export interface Database {
   /**
    * Change some settings. Each given key is replaced; every other key stays as it is, even when another change lands at the same moment. A change that leaves every value as it is writes nothing.
    *
+   * The `settings_changed` audit entry holds the values the change sets, and beside new logins the emails they add and the ones they leave out, as `added` and `removed`.
    * Logins that add or drop a user, or that put another user first, are remembered, in the same step, as changed users by an install that keeps a check of its domain. The same users in another order behind the same first one are not.
    *
-   * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited; it writes nothing
+   * @returns `signer_gone` for a signer who no longer stands: a token that was removed or whose user is no user any more, or a person whose email is no login any more, as when that user was removed while the request waited; it writes nothing.
+   *   `needs_update_check` for a change that would leave `auto_update` on with `update_check` off, read against the settings as they are in the same step; it writes nothing either, of any key
    * @throws {Error} a value breaks its rule
    */
   changeSettings(
     changes: Partial<SettingValues>,
     signed: Signed,
-  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">>;
+  ): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone" | "needs_update_check">>;
 
   /**
-   * Let one more email log in. It is one step that reads no list first: of logins added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which holds the logins after it.
+   * Let one more email log in. It is one step that reads no list first: of logins added and removed at the same moment, each change lands. It writes one `settings_changed` audit entry, which names the email as `added`.
    * An install that keeps a check of its domain remembers, in the same step, that the users changed: one more row written.
    *
    * @returns `unchanged` for an email that already is a login, and `signer_gone` as `changeSettings` answers it; neither writes anything
@@ -1018,7 +1020,7 @@ export interface Database {
   /**
    * Stop one email from logging in, in the same one step, and only while a login that works stays: the signer's own email when it is a login, and any login at all when the signer is none.
    *
-   * It writes one `settings_changed` audit entry, which holds the logins after it, and an install that keeps a check of its domain remembers that the users changed.
+   * It writes one `settings_changed` audit entry, which names the email as `removed`, and an install that keeps a check of its domain remembers that the users changed.
    *
    * @returns `unchanged` for an email that is no login, `no_working_login` for the signer's own email or the last login there is, and `signer_gone` as `changeSettings` answers it; none writes anything
    * @throws {Error} the login is no email in its normal form

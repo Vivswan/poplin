@@ -294,6 +294,58 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       await expect(database.changeSettings({ logins: [] }, BY_ADA)).rejects.toThrow();
     });
 
+    // Drift: the two update settings are written by requests that each name one, so only the store sees both. A refused change that still ended a token, or marked the users or the rules as changed, would be half a change.
+    test("auto_update is stored on only beside update_check, whichever of the two a change names, and a change that would part them writes nothing of any key", async () => {
+      const database = await opened(makeDatabase);
+      const bo = "bo@example.com" as Login;
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo] }, BY_ADA);
+      await database.keepDomainCheck({ ran_at: NOW, by: ADA, run: "check", pieces: [] }, null);
+      await database.addToken((await mintToken({ scope: "publisher", note: "of bo", now: NOW })).record, { as: "person", by: bo, at: NOW });
+      const state = async (): Promise<unknown> => {
+        const [stored, tokens, check, entries] = [await database.readSettings(), await database.listTokenStates(NOW + 9, 50), await database.readDomainCheck(), await database.listAudit({ limit: 100 })];
+
+        return { pair: [stored?.update_check, stored?.auto_update], logins: stored?.logins, outside: stored?.outside_pages, trash: stored?.trash_days, live: tokens.live.length, entries: entries.length, check };
+      };
+      const kinds = async (...changes: readonly Partial<typeof SETTINGS>[]): Promise<string[]> => {
+        const answers: string[] = [];
+        for (const change of changes) answers.push((await database.changeSettings(change, BY_ADA)).kind);
+
+        return answers;
+      };
+
+      const off = await kinds({ update_check: false });
+      const before = await state();
+      const alone = await kinds({ auto_update: true, trash_days: 9, logins: [ADMIN], outside_pages: "allowed" }, { auto_update: true, update_check: false }, { auto_update: true });
+      const untouched = await state();
+      const both = await kinds({ update_check: true, auto_update: true });
+      const parted = await kinds({ update_check: false, logins: [ADMIN], outside_pages: "allowed" }, { update_check: false });
+      const kept = await state();
+      const together = await kinds({ update_check: false, auto_update: false }, { update_check: true }, { auto_update: true }, { auto_update: true });
+      // Asked at the same moment from the pair on and off, each of the two changes alone is fine: one of them lands, never both.
+      await kinds({ auto_update: false });
+      const raced = await Promise.all([database.changeSettings({ auto_update: true }, BY_ADA), database.changeSettings({ update_check: false }, BY_ADA)]);
+
+      expect([off, alone, untouched, both, parted]).toEqual([["done"], ["needs_update_check", "needs_update_check", "needs_update_check"], before, ["done"], ["needs_update_check", "needs_update_check"]]);
+      expect(kept).toMatchObject({ pair: [true, true], logins: [ADMIN, bo], outside: "blocked", live: 1 });
+      expect(together).toEqual(["done", "done", "done", "unchanged"]);
+      expect(raced.map(({ kind }) => kind).sort()).toEqual(["done", "needs_update_check"]);
+    });
+
+    // Drift: the log is the record of who was given access. A list that replaces the logins is compared with the one it replaces in the same step, so its entry cannot name a user another change added a moment before.
+    test("the entry of new logins holds the list, who it adds and who it leaves out, each in the order of its list, beside every other value set; the same users in another order add and leave out nobody", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy, di, ed] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login, "ed@example.com" as Login];
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy] }, BY_ADA);
+      await database.changeSettings({ logins: [ed, ADMIN, di], trash_days: 9 }, BY_ADA);
+      await database.changeSettings({ logins: [ADMIN, di, ed] }, BY_ADA);
+      await database.changeSettings({ logins: [ADMIN, di, ed] }, BY_ADA);
+
+      expect(await auditDetails(database, "settings_changed")).toEqual([
+        { logins: [ed, ADMIN, di], trash_days: 9, added: [ed, di], removed: [bo, cy] },
+        { logins: [ADMIN, di, ed], added: [], removed: [] },
+      ]);
+    });
+
     // Drift: two admins changing people at the same moment must both be heard, and somebody must always be able to log in; a list read and written back would let the second undo the first, or let two removals empty it.
     test("one login is added or removed in one step: changes made at the same moment all land, and a login that works always stays", async () => {
       const database = await opened(makeDatabase);
@@ -327,7 +379,18 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
 
       const details = await auditDetails(database, "settings_changed");
 
-      expect([details.length, details.slice(-2), await stored()]).toEqual([7, [{ logins: [ADMIN, di] }, { logins: [ADMIN] }], [ADMIN]]);
+      expect([details.length, details.slice(0, 2), details.slice(-2), await stored()]).toEqual([
+        7,
+        [
+          { added: [bo], removed: [] },
+          { added: [cy], removed: [] },
+        ],
+        [
+          { added: [], removed: [cy] },
+          { added: [], removed: [di] },
+        ],
+        [ADMIN],
+      ]);
       await expect(database.addLogin("Bo@Example.com" as Login, BY_ADA)).rejects.toThrow();
       await expect(database.removeLogin("" as Login, BY_ADA)).rejects.toThrow();
     });

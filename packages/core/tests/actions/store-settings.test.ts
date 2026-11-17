@@ -13,6 +13,43 @@ const ADA = "ada@example.com" as Login;
 const BO = "bo@example.com" as Login;
 const CY = "cy@example.com" as Login;
 
+describe("a change of the update settings", () => {
+  const REFUSED = { ok: false, code: "needs_update_check", about: "auto_update" };
+
+  // Drift: the dashboard locks the switch, and the API, the CLI and an agent do not go through it. Each row is one request of theirs that would leave an install set to update by itself and never asking for a release.
+  test.each([
+    { name: "automatic updates on while the check is off", stored: { update_check: false }, change: { auto_update: true } },
+    { name: "the check off while automatic updates are on", stored: { auto_update: true }, change: { update_check: false } },
+    { name: "both in one change", stored: {}, change: { update_check: false, auto_update: true } },
+  ])("$name is refused by name, and nothing of the change is stored", async ({ stored, change }) => {
+    const world = await makeWorld(stored);
+    const refused = await changeConfig(world.install, TOKEN, { ...change, trash_days: 9 });
+    const after = await readConfig(world.install, ADMIN);
+
+    expect<unknown>([refused, after.ok && after.values.trash_days, await world.audit()]).toEqual([REFUSED, 7, []]);
+  });
+
+  test("drift: a rule that refused the way out would lock the pair: the check goes off together with automatic updates, and both go on together", async () => {
+    const world = await makeWorld({ auto_update: true });
+    const changes = [{ update_check: false, auto_update: false }, { update_check: true, auto_update: true }];
+    const stored: unknown[] = [];
+    for (const change of changes) stored.push(await changeConfig(world.install, TOKEN, change));
+
+    expect(stored).toMatchObject(changes.map((values) => ({ ok: true, values })));
+  });
+
+  // Drift: a backup is text a person can edit, and an import replaces every setting at once, so the store never compares it with a pair it holds.
+  test("a backup that holds automatic updates on with the check off is refused by the same name", async () => {
+    const world = await makeWorld();
+    const exported = await exportSettings(world.install, ADMIN);
+    if (!exported.ok) throw new Error("the export was refused");
+
+    const refused = await importSettings(world.install, TOKEN, { format: exported.format, settings: { ...exported.settings, update_check: "off", auto_update: "on" } });
+
+    expect<unknown>([refused, await world.audit()]).toEqual([REFUSED, []]);
+  });
+});
+
 describe("a change of the logins", () => {
   const cases: readonly { readonly name: string; readonly by: Actor; readonly stored: readonly Login[]; readonly next: readonly Login[]; readonly kept: boolean }[] = [
     { name: "an admin at the dashboard adds an email beside their own", by: ADMIN, stored: [ADA], next: [ADA, BO], kept: true },

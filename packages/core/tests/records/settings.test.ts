@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import * as v from "valibot";
 
 import type { Login } from "../../src/auth/logins";
-import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, showBytes, sizeBytes } from "../../src/records/settings";
+import { defaultSettings, SETTING_VALUES, type SettingValues, settingsFromText, settingsToText, showBytes, sizeBytes, spanSeconds } from "../../src/records/settings";
 
 const INSTALL = { installer: "ada@example.com" as Login };
 const PUBLISHED_DEFAULTS = {
@@ -48,7 +48,7 @@ const CHANGED = {
   site_share_of_day: "100%",
   site_requests_per_minute: "1",
   visitor_requests_per_minute: "2",
-  update_check: "off",
+  update_check: "on",
   auto_update: "on",
 };
 const CHANGED_VALUES = {
@@ -70,7 +70,7 @@ const CHANGED_VALUES = {
   site_share_of_day: 100,
   site_requests_per_minute: 1,
   visitor_requests_per_minute: 2,
-  update_check: false,
+  update_check: true,
   auto_update: true,
 };
 
@@ -109,6 +109,16 @@ describe("settingsFromText and settingsToText", () => {
     expect(read.ok && settingsToText(read.values)[key as keyof SettingValues]).toBe(typed);
   });
 
+  // Drift: a span and a count of days become a moment, and a moment past the last a date holds is no date: with no top, every new site of the install would be refused its expiry and a trashed site shown no day it is gone on.
+  test("takes each number at its top, and the moments made of the longest span and the most trash days are dates", () => {
+    const tops = { default_expires: "36500d", trash_days: "36500", max_total_size: "1000000GB", max_site_size: "1000000000MB", requests_per_day: "1000000000", max_sites: "1000000000" };
+    const read = settingsFromText({ ...PUBLISHED_DEFAULTS, ...tops });
+    const farthest = Date.UTC(9999, 11, 31);
+    const moments = read.ok && read.values.default_expires !== "never" ? [farthest + spanSeconds(read.values.default_expires) * 1000, farthest + read.values.trash_days * 86_400_000] : [];
+
+    expect([read.ok && settingsToText(read.values), moments.map((moment) => Number.isNaN(new Date(moment).getTime()))]).toEqual([{ ...PUBLISHED_DEFAULTS, ...tops }, [false, false]]);
+  });
+
   test("drift: a login is compared in its normal form, so the list is stored and shown that way however it was typed", () => {
     const read = settingsFromText({ ...PUBLISHED_DEFAULTS, logins: " Ada@Example.com ,bo@example.com" });
 
@@ -129,6 +139,13 @@ describe("settingsFromText and settingsToText", () => {
     ["max_total_size", "9GiB", "bad-form"],
     ["max_total_size", "0GB", "out-of-range"],
     ["max_total_size", "99999999999GB", "out-of-range"],
+    ["max_total_size", "1000000001MB", "out-of-range"],
+    ["max_site_size", "1000001GB", "out-of-range"],
+    ["default_expires", "36501d", "out-of-range"],
+    ["default_expires", "876001h", "out-of-range"],
+    ["trash_days", "36501", "out-of-range"],
+    ["requests_per_day", "1000000001", "out-of-range"],
+    ["versions_kept", "999999999999999999999", "out-of-range"],
     ["site_share_of_day", "25", "bad-form"],
     ["site_share_of_day", "0%", "out-of-range"],
     ["site_share_of_day", "101%", "out-of-range"],
@@ -177,6 +194,17 @@ describe("settingsFromText and settingsToText", () => {
     const read = settingsFromText({ ...rest, trash_days: "" });
 
     expect<unknown>(read.ok ? undefined : [read.key, read.refusal]).toEqual(["trash_days", "bad-form"]);
+  });
+
+  // Drift: the import of a backup and the dashboard's save tell the two refusals apart by this name, and a screen that marks every refused field at the first Save would mark the switch only at the second.
+  test("names auto_update on beside update_check off by a refusal of its own, beside every other refused setting", () => {
+    const read = settingsFromText({ ...PUBLISHED_DEFAULTS, trash_days: "", versions_kept: "0", update_check: "off", auto_update: "on" });
+
+    expect<unknown>(read.ok ? undefined : read.every).toEqual([
+      { key: "versions_kept", refusal: "out-of-range" },
+      { key: "trash_days", refusal: "bad-form" },
+      { key: "auto_update", refusal: "needs-update-check" },
+    ]);
   });
 
   test("drift: a change is checked against every key, so a setting left out is named instead of silently keeping an unknown value", () => {
