@@ -32,6 +32,9 @@ const [AUTO_UPDATE, NEEDS_KEY] = ["auto_update", `Needs poplin's key to work.${G
 /** The setting the provider's logs follow, and what its row says while the install holds no key: a change then waits for the next upload of the install's code. */
 const [PROVIDER_LOGS, AT_NEXT_UPDATE] = ["provider_logs", "Takes effect at the next update or Repair."] as const;
 
+/** How long Save takes no press after a save the install carries to the provider, in milliseconds: each such save is written there by itself, and two sent close together may land in the other order. */
+const CARRIED_HOLD = 5000;
+
 /** How long a block an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
 
@@ -176,8 +179,10 @@ export function SettingsScreen(): ReactNode {
   const last = useRef<HTMLElement | null>(null);
   const kept = useFocusHome(() => last.current);
 
-  // A second press comes before the page draws its Save as off: one save is sent at a time.
-  const { press: send, busy: pressed } = useOnePress(draft.save);
+  // A second press comes before the page draws its Save as off: one save is sent at a time. A save the install carries to the provider holds the next one back for a moment.
+  const { press: send, busy: pressed } = useOnePress(async () => {
+    if ((await draft.save()) === "carried") await new Promise((resolve) => window.setTimeout(resolve, CARRIED_HOLD));
+  });
   const save = (event: FormEvent): void => {
     event.preventDefault();
     if (!busy && count > 0) send();

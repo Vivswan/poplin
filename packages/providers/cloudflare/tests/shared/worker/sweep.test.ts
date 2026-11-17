@@ -315,7 +315,7 @@ describe("the scheduled run", () => {
     wait(w, 0.25);
     await sweep(worker, w, keyed);
 
-    expect(refused).toEqual([200, 0, 200, { ok: true, waits: { repair: [], update: [] } }, true, [], [["rules_not_carried", 1, null]]]);
+    expect(refused).toEqual([200, 0, 200, { ok: true, waits: { repair: [], update: [] }, carried: true }, true, [], [["rules_not_carried", 1, null]]]);
     expect([tooSoon, carried, confirmed, asked.length - calls]).toEqual([[0, true], [true, [INSTALL_OBJECTS.botsRef]], [false, 0], 0]);
   });
 

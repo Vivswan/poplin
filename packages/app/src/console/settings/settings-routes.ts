@@ -3,7 +3,8 @@
 //   GET  /settings                         every setting with its control, its text, its default, and the limits it can be put above: the host's free ones, and the install's own that bound it
 //   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting.
 //                                          A saved setting the domain's rules are written from is then carried to them, and the one of the logs to the provider, on an install that holds a key.
-//                                          The answer names the saved settings whose half at the provider waits: for the next repair, or for the next update or repair
+//                                          The answer names the saved settings whose half at the provider waits: for the next repair, or for the next update or repair,
+//                                          and says whether the install carries one of the saved settings to the provider by itself
 //   POST /settings/sign-everyone-out       end every login of the dashboard at the provider; a refusal says why they are not known to have ended
 
 import { vValidator } from "@hono/valibot-validator";
@@ -182,7 +183,11 @@ export const settingsRoutes = new Hono<Shared>()
     const repair = held.filter((key) => waitsForRepair(key, context.get("domain"), context.get("rules")?.holdsKey() === true));
     const update = held.filter((key) => namesLogs({ [key]: true }) && context.get("logs")?.holdsKey() !== true);
 
-    return context.json({ ok: true as const, waits: { repair, update } });
+    // A save the install carries to the provider by itself: the screen takes no further save for a moment after one. A rule's setting counts only where the domain has such a rule.
+    const written = (context.get("domain")?.carriedSettings ?? []) as readonly Key[];
+    const carried = held.some((key) => (written.includes(key) && isCarried(key, context.get("rules")?.holdsKey() === true)) || (namesLogs({ [key]: true }) && context.get("logs")?.holdsKey() === true));
+
+    return context.json({ ok: true as const, waits: { repair, update }, carried });
   })
   .post("/settings/sign-everyone-out", vValidator("json", NOTHING, refuseInvalid), async (context) => {
     const { install, actor } = context.get("asker");
