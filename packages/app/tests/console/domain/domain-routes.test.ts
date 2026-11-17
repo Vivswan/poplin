@@ -121,9 +121,9 @@ describe("what the screen opens with", () => {
     const checked = await shown();
     lines.push(await ran("repair"));
 
-    const [quiet, raised] = [[false, "Nothing to repair", "good", null], [true, "Users changed. Press Repair.", "bad", "Users changed. Open Domain and press Repair."]];
+    const [quiet, raised] = [[false, "Nothing to repair", "good", null], [true, "Users or alerts changed. Press Repair.", "bad", "Users or alerts changed. Open Domain and press Repair."]];
     expect([before, waiting, checked, await shown()]).toEqual([quiet, raised, raised, quiet]);
-    expect(lines).toEqual(["Nothing to repair", "Users changed. Press Repair.", "Nothing to repair"]);
+    expect(lines).toEqual(["Nothing to repair", "Users or alerts changed. Press Repair.", "Nothing to repair"]);
   });
 
   // Drift: a console built without the provider's side would answer a screen it cannot run.
@@ -272,8 +272,8 @@ describe("the line that counts a run's rows", () => {
 
   // Drift: a user added in Access cannot log in until a repair, and a green "Nothing to repair" would say there is nothing to do. Said over a count of work, it would hide the pieces a repair must also mend.
   test.each([
-    ["check", rowsIn("present", "optional"), "Users changed. Press Repair.", "bad", 0],
-    ["repair", rowsIn("created", "present"), "Users changed. Press Repair.", "bad", 0],
+    ["check", rowsIn("present", "optional"), "Users or alerts changed. Press Repair.", "bad", 0],
+    ["repair", rowsIn("created", "present"), "Users or alerts changed. Press Repair.", "bad", 0],
     ["check", rowsIn("present", "missing"), "1 to repair", "bad", 1],
     ["repair", rowsIn("created", "failed"), "1 not done", "bad", 0],
   ] as const)("after a %s of %p while changed users wait for a repair says %s", (run, rows, line, tone, waiting) => {

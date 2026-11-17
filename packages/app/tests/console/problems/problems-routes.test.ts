@@ -115,7 +115,7 @@ describe("what the problems of the Domain screen ask for", () => {
     await note(bare, "users_not_carried", HOUR_MS);
     const [raised, checked, checkedAsks, repaired] = [await asks(), await ran("check"), await asks(), await ran("repair")];
 
-    const both = ["A changed setting did not reach every rule of the domain", "A change of the users did not reach the login page"];
+    const both = ["A changed setting did not reach every rule of the domain", "A change of the users or the alerts did not take effect"];
 
     expect([quiet, raised, checked, checkedAsks, repaired, await asks(), await asks(bare)]).toEqual([[], both, 200, both, 200, [], []]);
   });

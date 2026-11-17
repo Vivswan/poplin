@@ -10,7 +10,7 @@ What the dashboard's Domain screen shows and does, the last check it keeps, and 
 | On the screen       | What it is                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------- |
 | the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it. The count is of everything on the screen a Repair ends: the rows that need repair, and each problem over the table that asks for a Repair |
-| the line after a Repair | counts what the Repair ended the same way, such as `3 repaired`: the rows it changed, and each problem that asked for it. Such a problem is named under the line: `Repaired: A change of the users did not reach the login page` |
+| the line after a Repair | counts what the Repair ended the same way, such as `3 repaired`: the rows it changed, and each problem that asked for it. Such a problem is named under the line: `Repaired: A change of the users or the alerts did not take effect` |
 | Check               | lists every piece and changes nothing                                                          |
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
@@ -55,7 +55,7 @@ An install that holds no key says `Not checked yet` before any run, and its Chec
 
 Cloudflare's login page keeps its own list of users. After a user is added or removed, under Access or [another way](access.md#add-a-user), poplin writes the new list there by itself, with [the key it keeps](../about/security.md#the-kept-key).
 
-On an install that holds no key, the line says `Users changed. Press Repair.` until a Repair. Where a piece is to repair or was not done, the line counts those first, such as `2 to repair` or `2 not done`.
+On an install that holds no key, the line says `Users or alerts changed. Press Repair.` until a Repair, after a change of the users or of [who gets the alerts](settings.md#who-gets-the-alerts). Where a piece is to repair or was not done, the line counts those first, such as `2 to repair` or `2 not done`.
 
 A saved `search_engines_allowed` or `outside_pages` is written into its WAF rule the same way, with the key, and makes a rule the domain lacks: [which rule is made when](#optional-block-junk-traffic-and-crawlers). `block_bots`, the DNS records, the routes, and the redirect change only when you press Repair.
 

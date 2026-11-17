@@ -52,7 +52,7 @@ const TYPED_EMAIL = "walk@example.com";
 const ADDED_EMAIL = "walk-user@example.com";
 
 /** What the Domain screen says at its top once a user was added or removed, until a repair. */
-const USERS_CHANGED = "Users changed. Press Repair.";
+const USERS_CHANGED = "Users or alerts changed. Press Repair.";
 
 /** The kinds of file whose refusal breaks a screen. */
 const NEEDED_KINDS = ["document", "script", "stylesheet", "font"];
@@ -1367,7 +1367,7 @@ test("a section whose screen holds a problem says so at the side, Usage lists wh
   await expect(rows(page, true, "Problems").getByRole("button", { name: "Details of A request failed", exact: true })).toBeFocused();
 
   await toSection(page, "Domain");
-  await expect(page.getByRole("group", { name: "A change of the users did not reach the login page", exact: true }).getByRole("button", { name: "Copy the details", exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "A change of the users or the alerts did not take effect", exact: true }).getByRole("button", { name: "Copy the details", exact: true })).toBeVisible();
 });
 
 // Drift: Enter after typing would tick nothing again, or tick the first site of the list from before the typed text, which the text does not find.

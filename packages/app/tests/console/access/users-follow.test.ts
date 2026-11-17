@@ -384,10 +384,10 @@ describe("the console", () => {
     expect(await (await opened.change("/data/people/add", { login: BO })).json()).toEqual({ ok: true, login: BO, note });
   });
 
-  // Drift: "Users changed. Press Repair." is for a change nothing carries by itself. Said on an install that holds a key, it sends a person to paste a token for what the next scheduled run does; left unsaid on one with no key, the new user waits for good.
+  // Drift: "Users or alerts changed. Press Repair." is for a change nothing carries by itself. Said on an install that holds a key, it asks for a token for what the next scheduled run does; left unsaid on one with no key, the new user waits for good.
   test.each([
     ["holds a key", true, [false, "Nothing to repair", null]],
-    ["holds no key", false, [true, "Users changed. Press Repair.", "Users changed. Open Domain and press Repair."]],
+    ["holds no key", false, [true, "Users or alerts changed. Press Repair.", "Users or alerts changed. Open Domain and press Repair."]],
   ] as const)("Domain asks for a repair after a change the provider did not take only on an install that %s", async (_name, holdsKey, shown) => {
     const follow = fakeFollow(() => (holdsKey ? "unreachable" : "no_key"), holdsKey);
     const opened = await openConsole("", fakePlug(() => ({ ok: true, rows: LOGIN_STANDS, steps: [] })), { follow });

@@ -173,12 +173,12 @@ describe("on an install whose check needs no token", () => {
     const last = lastOf(1);
     serve(true, last);
     const page = await drawn();
-    Object.assign(last, { summary: { line: "Users changed. Press Repair.", tone: "bad" } });
+    Object.assign(last, { summary: { line: "Users or alerts changed. Press Repair.", tone: "bad" } });
     await act(async () => {
       await client.invalidateQueries({ queryKey: ["domain"] });
     });
 
-    await waitFor(() => expect(shown(page).line.startsWith("Users changed. Press Repair.")).toBe(true));
+    await waitFor(() => expect(shown(page).line.startsWith("Users or alerts changed. Press Repair.")).toBe(true));
 
     expect(checks).toEqual([]);
   });
@@ -211,7 +211,7 @@ describe("on an install whose check needs no token", () => {
   });
 
   // Drift: a line that says what a repair did not do, or that the users changed, says more than a count: a count of the problems put in its place would hide it.
-  test.each(["2 not done", "Users changed. Press Repair."])("a run whose line is %s keeps it over problems that ask for a repair", async (line) => {
+  test.each(["2 not done", "Users or alerts changed. Press Repair."])("a run whose line is %s keeps it over problems that ask for a repair", async (line) => {
     serve(true, { ...lastOf(1), summary: { line, tone: "bad" } });
     frame.asks = 2;
     const page = await drawn();

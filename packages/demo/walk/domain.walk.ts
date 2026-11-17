@@ -8,7 +8,7 @@ import { arrive, said, screenHeading, test, toSection } from "./visit";
 const PAST_FRESH = "11:00";
 
 /** The sample install's problem of the domain, which a repair mends: what it says. */
-const MENDED_BY_REPAIR = "A change of the users did not reach the login page";
+const MENDED_BY_REPAIR = "A change of the users or the alerts did not take effect";
 
 /** The line at the top of the Domain screen, by what it says. */
 function domainLine(page: Page, says: string): Locator {

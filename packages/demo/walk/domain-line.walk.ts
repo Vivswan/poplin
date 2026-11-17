@@ -5,7 +5,7 @@ import { expect } from "@playwright/test";
 import { arrive, said, test, toSection } from "./visit";
 
 /** The sample install's problem of the domain, which says to press Repair. */
-const ASKS_REPAIR = "A change of the users did not reach the login page";
+const ASKS_REPAIR = "A change of the users or the alerts did not take effect";
 
 // Drift: every piece of the sample domain is in place, and a problem of the last day says "press Repair" right under the line.
 // A line that counted the pieces alone would say "Nothing to repair" beside a green tick over a box that asks for a repair.

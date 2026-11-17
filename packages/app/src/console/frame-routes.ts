@@ -15,8 +15,8 @@ import { Hono } from "hono";
 import { refused, refuseInvalid, type Shared } from "./data";
 import { type Marked, markedIn, NOTHING_MARKED } from "./problems/problems-routes";
 
-/** What the side says in a few words when a piece of the domain needs work, when the users changed since the last repair, and when the last check is only old. */
-const [NEEDS_FIXING, USERS_CHANGED, CHECK_IS_OLD] = ["Domain needs fixing", "Users changed", "Domain check is old"];
+/** What the side says in a few words when a piece of the domain needs work, when the users or who gets the alerts changed since the last repair, and when the last check is only old. */
+const [NEEDS_FIXING, USERS_CHANGED, CHECK_IS_OLD] = ["Domain needs fixing", "Users or alerts changed", "Domain check is old"];
 
 /** The one thing to act on at the domain, as the side shows it. */
 interface DomainNote {
