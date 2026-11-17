@@ -78,7 +78,7 @@ function foundWords(found: Found<unknown, unknown>): string {
 
 /** The stop a look that found nothing a removal can start from is. */
 function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held" | "blocked" | "refused" }>, provider: Provider, careful: readonly Careful[], place: readonly string[]): Stop {
-  if (found.state === "held") return heldStop(found, NEXT.uninstall(provider, careful, place), provider, place);
+  if (found.state === "held") return heldStop(found, NEXT.uninstall(provider, careful, place), provider, place, NEXT.repair);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 

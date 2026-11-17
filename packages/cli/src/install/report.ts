@@ -139,9 +139,10 @@ export function againWords(careful: readonly Careful[]): string {
  * @param again - what runs the command that stopped again, with the careful choices of its line: it is also the next step where the sentence names this same command
  * @param provider - the provider, which an install's command line names
  * @param place - the place the run knows, which the provider's sentence writes after the command it names
+ * @param repair - what names a repair as a next step: `NEXT.repair`, or a repair's own way, which keeps the user of its line
  */
-export function heldStop(found: Extract<Found<unknown, unknown>, { readonly state: "held" }>, again: Next, provider: Provider, place: readonly string[]): Stop {
-  const named = { again, install: NEXT.install(provider, [], place), repair: NEXT.repair("this", [], place) };
+export function heldStop(found: Extract<Found<unknown, unknown>, { readonly state: "held" }>, again: Next, provider: Provider, place: readonly string[], repair: typeof NEXT.repair): Stop {
+  const named = { again, install: NEXT.install(provider, [], place), repair: repair("this", [], place) };
   const next = named[found.after];
 
   return { problem: "name_held", exit: 1, words: found.words, address: found.address, next: next.step === again.step ? again : next };
@@ -171,12 +172,22 @@ export function updateWords(update: boolean): readonly string[] {
  * @param careful - the careful choices of the repair's own line; none where another command names the repair
  * @param place - the place the run knows, which is left out where the provider says the install answers elsewhere
  * @param update - whether the repair's own line asked for the newest release; false where another command names the repair
- * @param user - the user the repair's own line was given to add, which the repair of an install that is behind carries as its sentence does; none where another command names the repair
+ * @param repair - what names the repair: `NEXT.repair` where another command names it, or a repair's own way, which keeps the user of its line
  */
-export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean, user: ReturnType<typeof userOption>): Next {
-  if (refused.why === "behind") return leaving(NEXT.repair("this", careful, ["--update", ...place, ...user.words]), user.add);
+export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean, repair: typeof NEXT.repair): Next {
+  const named = [...updateWords(update || refused.why === "behind"), ...(refused.why === "elsewhere" ? [] : place)];
 
-  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, [...updateWords(update), ...(refused.why === "elsewhere" ? [] : place)]);
+  return repair(refused.why === "another" ? "newest" : "this", careful, named);
+}
+
+/**
+ * The one way a repair's own line names a repair as its next step: every such step keeps the user the line named, after the words of the step.
+ *
+ * @param user - that user, as `userOption` writes it on this machine
+ * @returns what takes the place of `NEXT.repair` for that line: the same step, with the user's option at its end, or with `add` where the line leaves the option out
+ */
+export function repairFor(user: ReturnType<typeof userOption>): typeof NEXT.repair {
+  return (poplin = "this", careful = [], named = []) => leaving(NEXT.repair(poplin, careful, [...named, ...user.words]), user.add);
 }
 
 /**
@@ -229,7 +240,7 @@ export function userOption(login: Login | undefined, platform: string): { readon
  * @param add - the option left out; `undefined` for a line that holds every word
  * @returns the same step, with `add` where it names a command and something was left out
  */
-export function leaving(next: Next, add: string | undefined): Next {
+function leaving(next: Next, add: string | undefined): Next {
   return add === undefined || next.step === "none" ? next : { ...next, add };
 }
 
@@ -241,9 +252,7 @@ export function leaving(next: Next, add: string | undefined): Next {
  * @param platform - the machine's `process.platform`, which says how the email is written
  */
 export function letInNext(login: Login, place: readonly string[], platform: string): Next {
-  const user = userOption(login, platform);
-
-  return leaving(NEXT.repair("this", [], [...place, ...user.words]), user.add);
+  return repairFor(userOption(login, platform))("this", [], place);
 }
 
 /**

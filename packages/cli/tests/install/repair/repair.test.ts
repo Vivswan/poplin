@@ -287,6 +287,32 @@ describe("what a repair does not go on from", () => {
       [1, "another_version", said(""), { step: "repair", command: updated, add: "--add-user <email>" }],
     ]);
   });
+
+  // Drift: a person who came to add a user follows the next step of whatever stopped the repair. A stop that built its own line without the user would mend, or only run again, and let nobody in. Both kinds of install are held to it.
+  describe.each(["--no-place", "--place example.com"])("a repair with %s that was given a user to add", (place) => {
+    const held = { state: "held", words: "A program named poplin is in this account.", address: "https://host.example.com/programs/poplin" } as const;
+    const refusal = (why: "elsewhere" | "another" | "token" | "unreachable" | "changed"): Account => installed({ ok: false, why, words: "The host says why." });
+
+    test.each([
+      ["a look the provider refuses the token of", () => installed(undefined, { state: "refused", why: "token", words: "The host refused the token." }), `npx poplin doctor --repair ${place}`],
+      ["a look the provider gives no answer to", () => installed(undefined, { state: "refused", why: "unreachable", words: "The host gave no answer." }), `npx poplin doctor --repair ${place}`],
+      ["a held name the same command goes on from", () => installed(undefined, { ...held, after: "again" }), `npx poplin doctor --repair ${place}`],
+      ["a held name a repair goes on from", () => installed(undefined, { ...held, after: "repair" }), `npx poplin doctor --repair ${place}`],
+      ["an install that answers elsewhere", () => refusal("elsewhere"), "npx poplin doctor --repair"],
+      ["records of another version", () => refusal("another"), `npx poplin@latest doctor --repair ${place}`],
+      ["a token the provider refuses at the install", () => refusal("token"), `npx poplin doctor --repair ${place}`],
+      ["a provider that gives no answer", () => refusal("unreachable"), `npx poplin doctor --repair ${place}`],
+      ["an install that changed since it was found", () => refusal("changed"), `npx poplin doctor --repair ${place}`],
+    ] as const)("and stops at %s names a next step that keeps the user, as one word of a shell, or names the option where Windows holds no such word", async (_, account, command) => {
+      const line = `doctor --repair ${place} --yes --json --add-user o'brien@example.com`;
+      const [posix, windows] = [await runLine(line, account(), { env: HELD, platform: "linux" }), await runLine(line, account(), { env: HELD, platform: "win32" })];
+
+      expect([jsonOf(posix).next, jsonOf(windows).next]).toEqual([
+        { step: "repair", command: `${command} --add-user 'o'\\''brien@example.com'` },
+        { step: "repair", command, add: "--add-user <email>" },
+      ]);
+    });
+  });
 });
 
 describe("the words of a repair", () => {

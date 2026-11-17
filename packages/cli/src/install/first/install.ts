@@ -63,7 +63,7 @@ async function standing(found: Whole<unknown>, where: unknown, request: InstallR
   const there = { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest } as const;
   const place = placeOf(request.provider, where);
   const read = await request.provider.repair(found, where, { run: "dry-run", update: false, addUser: undefined }, ends.reach, () => undefined);
-  if (!read.ok) return { ...there, mend: "unread", unread: refusedWords(read, []), next: repairAfter(read, [], place, false, { words: [] }) };
+  if (!read.ok) return { ...there, mend: "unread", unread: refusedWords(read, []), next: repairAfter(read, [], place, false, NEXT.repair) };
 
   if (!read.ready || changesIn(read.rows) > 0) return { ...there, mend: "something", next: NEXT.repair("this", [], place) };
 
@@ -72,7 +72,7 @@ async function standing(found: Whole<unknown>, where: unknown, request: InstallR
 
 /** The stop a look that found no ground to start from is, and no install either. */
 function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>, provider: Provider, careful: readonly Careful[], place: readonly string[]): Stop {
-  if (found.state === "held") return heldStop(found, NEXT.install(provider, careful, place), provider, place);
+  if (found.state === "held") return heldStop(found, NEXT.install(provider, careful, place), provider, place, NEXT.repair);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
