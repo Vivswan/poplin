@@ -10,6 +10,7 @@ What the dashboard's Domain screen shows and does, the last check it keeps, and 
 | On the screen       | What it is                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------- |
 | the line at the top | how the domain stands, such as `Nothing to repair` or `2 to repair`, then the last run and who made it. The count is of everything on the screen a Repair ends: the rows that need repair, and each problem over the table that asks for a Repair |
+| the line after a Repair | counts what the Repair ended the same way, such as `3 repaired`: the rows it changed, and each problem that asked for it. Such a problem is named under the line: `Repaired: A change of the users did not reach the login page` |
 | Check               | lists every piece and changes nothing                                                          |
 | Repair              | fixes every piece that needs it                                                                |
 | the table           | one row per piece, in the columns Piece, State, and Detail                                     |
