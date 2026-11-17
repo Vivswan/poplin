@@ -2,7 +2,7 @@
 //
 // A made-up site `n` has the id `000000000001`, the folder `0000000000000001`, and the name `site-1`; a made-up token `n` has the id `0000000000000001`.
 
-import { beginLogin } from "@poplin/core/src/actions/computer-logins";
+import { beginLogin } from "@poplin/core/src/actions/access/computer-logins";
 import { parseLoginSecret } from "@poplin/core/src/auth/computer-logins";
 import { PROBLEM_KINDS } from "@poplin/core/src/records/problem";
 import { BINDINGS, done, OWNER } from "./install";

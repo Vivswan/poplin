@@ -4,16 +4,16 @@
 //   POST /update   start the update: the host takes the newest release, or the one version the body names, and puts it in place
 
 import { vValidator } from "@hono/valibot-validator";
-import { domainSentence, domainStateOf } from "@poplin/core/src/actions/domain-state";
+import { domainSentence, domainStateOf } from "@poplin/core/src/actions/install/domain-state";
 import type { Install } from "@poplin/core/src/actions/records";
-import { type WayBack, wayBack } from "@poplin/core/src/actions/go-back";
+import { type WayBack, wayBack } from "@poplin/core/src/actions/update/go-back";
 import { startUpdate, UPDATE_REQUEST } from "@poplin/core/src/actions/start-update";
-import { type Update, updateIn } from "@poplin/core/src/actions/update";
+import { type Update, updateIn } from "@poplin/core/src/actions/update/update";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono } from "hono";
 
 import { refused, refuseInvalid, type Shared } from "./data";
-import { type Marked, markedIn, NOTHING_MARKED } from "./problems-routes";
+import { type Marked, markedIn, NOTHING_MARKED } from "./problems/problems-routes";
 
 /** What the side says in a few words when a piece of the domain needs work, when the users changed since the last repair, and when the last check is only old. */
 const [NEEDS_FIXING, USERS_CHANGED, CHECK_IS_OLD] = ["Domain needs fixing", "Users changed", "Domain check is old"];

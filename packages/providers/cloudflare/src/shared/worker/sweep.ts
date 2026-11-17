@@ -24,13 +24,13 @@
 // A change of the users that did not reach Cloudflare is carried once a run, until it is settled, and so is a changed setting that did not reach the zone's guard rules. The setting of the logs keeps no mark: the run that begins a UTC day states it whole.
 // A run that listed the bucket adds its listings to the day's count in one row. It may list a thousand times a day beyond `max_storage_writes_per_day`, so no other work of a day keeps it from removing files.
 
-import { startDueUpdate } from "@poplin/core/src/actions/auto-update";
-import { type Asking, checkForUpdate } from "@poplin/core/src/actions/check-update";
-import { endProblems, meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
-import { signedBy } from "@poplin/core/src/actions/reach";
+import { startDueUpdate } from "@poplin/core/src/actions/update/auto-update";
+import { type Asking, checkForUpdate } from "@poplin/core/src/actions/update/check-update";
+import { endProblems, meterNoted, noteProblem } from "@poplin/core/src/actions/install/problems";
+import { signedBy } from "@poplin/core/src/actions/access/reach";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Updating } from "@poplin/core/src/actions/start-update";
-import { SWEEP_SPARE_WRITES, sweepExpired } from "@poplin/core/src/actions/sweep";
+import { SWEEP_SPARE_WRITES, sweepExpired } from "@poplin/core/src/actions/install/sweep";
 import { SWEEPER } from "@poplin/core/src/auth/scopes";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import { followUsers, type UsersFollow } from "@poplin/app/src/console/access/users-follow";

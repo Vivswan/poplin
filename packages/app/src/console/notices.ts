@@ -1,20 +1,20 @@
 // The one table of sentences the dashboard says when it refuses a change: the client shows the sentence it is sent, so the words live here alone.
 
-import type { abandonPublish } from "@poplin/core/src/actions/abandon-publish";
-import type { listAudit } from "@poplin/core/src/actions/audit-log";
-import type { decideLogin, showLogin } from "@poplin/core/src/actions/computer-logins";
-import type { changeConfig, readConfig } from "@poplin/core/src/actions/config";
-import type { deleteSite } from "@poplin/core/src/actions/delete";
-import type { duplicateSite } from "@poplin/core/src/actions/duplicate";
-import type { listSitesWithNames } from "@poplin/core/src/actions/list";
-import type { addLogin, removeLogin } from "@poplin/core/src/actions/logins";
-import type { listTokens } from "@poplin/core/src/actions/manage-tokens";
-import type { newLink } from "@poplin/core/src/actions/new-link";
-import type { restoreSite } from "@poplin/core/src/actions/restore";
-import type { rollbackSite } from "@poplin/core/src/actions/rollback";
-import type { updateSite } from "@poplin/core/src/actions/set";
-import type { getSite } from "@poplin/core/src/actions/show";
-import type { signEveryoneOut } from "@poplin/core/src/actions/sign-out";
+import type { abandonPublish } from "@poplin/core/src/actions/publish/abandon-publish";
+import type { listAudit } from "@poplin/core/src/actions/install/audit-log";
+import type { decideLogin, showLogin } from "@poplin/core/src/actions/access/computer-logins";
+import type { changeConfig, readConfig } from "@poplin/core/src/actions/install/config";
+import type { deleteSite } from "@poplin/core/src/actions/sites/delete";
+import type { duplicateSite } from "@poplin/core/src/actions/sites/duplicate";
+import type { listSitesWithNames } from "@poplin/core/src/actions/sites/list";
+import type { addLogin, removeLogin } from "@poplin/core/src/actions/access/logins";
+import type { listTokens } from "@poplin/core/src/actions/access/manage-tokens";
+import type { newLink } from "@poplin/core/src/actions/sites/new-link";
+import type { restoreSite } from "@poplin/core/src/actions/sites/restore";
+import type { rollbackSite } from "@poplin/core/src/actions/sites/rollback";
+import type { updateSite } from "@poplin/core/src/actions/sites/set";
+import type { getSite } from "@poplin/core/src/actions/sites/show";
+import type { signEveryoneOut } from "@poplin/core/src/actions/access/sign-out";
 import { type startUpdate, TAKEN_BY_REPAIR } from "@poplin/core/src/actions/start-update";
 import { MOST_DAYS, MOST_OF_A_COUNT } from "@poplin/core/src/records/settings";
 

@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { join, posix } from "node:path";
 
 import { COMMANDS, type CommandSpec } from "../packages/cli/src/commands/command-table";
-import { parseCommand } from "../packages/cli/src/commands/parse-command";
+import { parseCommand } from "../packages/cli/src/commands/line/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { words } from "../packages/cli/tests/commands/support/command-line";
 import { TOOL_INPUTS } from "../packages/core/src/actions/tool-inputs";

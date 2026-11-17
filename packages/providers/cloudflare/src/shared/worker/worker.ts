@@ -21,7 +21,7 @@ import { createConsole } from "@poplin/app/src/console/console";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { admit } from "@poplin/app/src/login/admit";
 import { toHttps } from "@poplin/app/src/transport/to-https";
-import { meterNoted, noteProblem } from "@poplin/core/src/actions/problems";
+import { meterNoted, noteProblem } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Database } from "@poplin/core/src/database/database";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";

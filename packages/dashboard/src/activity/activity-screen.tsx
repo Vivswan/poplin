@@ -1,6 +1,6 @@
 // The Activity screen: the audit log in one table, the newest entry first or the oldest, narrowed by the kind of action and by a site.
 
-import { MOST_IN_FILE } from "@poplin/app/src/console/activity-file";
+import { MOST_IN_FILE } from "@poplin/app/src/console/activity/activity-file";
 import { useNavigate } from "@tanstack/react-router";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";

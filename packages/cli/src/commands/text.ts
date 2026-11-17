@@ -3,7 +3,7 @@
 import stringWidth from "string-width";
 
 import type { Run } from "../../../core/src/install/installer";
-import type { SiteObject } from "../../../core/src/actions/site-object";
+import type { SiteObject } from "../../../core/src/actions/sites/site-object";
 import type { Line, Screen, Tone } from "../local/screen";
 
 /** How many characters of an ISO moment are its day. */

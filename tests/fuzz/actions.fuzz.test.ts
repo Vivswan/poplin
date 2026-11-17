@@ -3,11 +3,11 @@
 import { expect, spyOn } from "bun:test";
 import fc from "fast-check";
 
-import { MAX_PAGE_TITLE_LENGTH, MAX_TITLE_LENGTH } from "../../packages/core/src/actions/changes";
-import { deleteSite } from "../../packages/core/src/actions/delete";
-import { publishSite } from "../../packages/core/src/actions/publish";
-import { updateSite } from "../../packages/core/src/actions/set";
-import { sweepExpired } from "../../packages/core/src/actions/sweep";
+import { MAX_PAGE_TITLE_LENGTH, MAX_TITLE_LENGTH } from "../../packages/core/src/actions/sites/changes";
+import { deleteSite } from "../../packages/core/src/actions/sites/delete";
+import { publishSite } from "../../packages/core/src/actions/publish/publish";
+import { updateSite } from "../../packages/core/src/actions/sites/set";
+import { sweepExpired } from "../../packages/core/src/actions/install/sweep";
 import { ADMIN, file, made, makeWorld, OWNER, pages } from "../../packages/core/tests/actions/support/actions-fixture";
 import { fuzzTarget } from "./config";
 

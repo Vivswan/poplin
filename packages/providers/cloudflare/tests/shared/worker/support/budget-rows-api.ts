@@ -1,6 +1,6 @@
 // What each route of the API may cost: one row a route, seeded for the worst the product's own limits let it meet.
 
-import { decideLogin } from "@poplin/core/src/actions/computer-logins";
+import { decideLogin } from "@poplin/core/src/actions/access/computer-logins";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { emptyAccount, TOKEN } from "../../install/support/fake-install";
 import { ADMIN, cloudflareOf, done, OWNER } from "./install";

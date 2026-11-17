@@ -12,8 +12,8 @@
 // A change is JSON and nothing else, which a page of another origin cannot send unless this origin lets it, and it never does.
 
 import type { Install } from "@poplin/core/src/actions/records";
-import type { EndLogins } from "@poplin/core/src/actions/sign-out";
-import { wayBack } from "@poplin/core/src/actions/go-back";
+import type { EndLogins } from "@poplin/core/src/actions/access/sign-out";
+import { wayBack } from "@poplin/core/src/actions/update/go-back";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
 import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";

@@ -4,8 +4,8 @@ import { expect } from "bun:test";
 import fc from "fast-check";
 
 import { COMMANDS } from "../../packages/cli/src/commands/command-table";
-import { parseCommand } from "../../packages/cli/src/commands/parse-command";
-import { looksLikePath } from "../../packages/cli/src/commands/util";
+import { parseCommand } from "../../packages/cli/src/commands/line/parse-command";
+import { looksLikePath } from "../../packages/cli/src/commands/line/util";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 

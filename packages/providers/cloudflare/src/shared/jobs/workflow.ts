@@ -8,7 +8,7 @@
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
-import { meterNoted } from "@poplin/core/src/actions/problems";
+import { meterNoted } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import { JOB, type Job } from "@poplin/core/src/jobs/jobs";
 import { failJob, runJob } from "@poplin/core/src/jobs/run-job";

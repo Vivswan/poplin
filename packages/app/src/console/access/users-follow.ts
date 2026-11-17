@@ -13,7 +13,7 @@
 // A list that is stale by then is carried once more, and where that is too the change is left waiting.
 // A try the provider refused sets a mark anew before it answers: its write of the list may have landed after a newer one that was settled meanwhile.
 
-import { noteProblem } from "@poplin/core/src/actions/problems";
+import { noteProblem } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 

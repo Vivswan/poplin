@@ -3,7 +3,7 @@
 
 import { introspectWorkflow, reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { publishSite } from "@poplin/core/src/actions/publish";
+import { publishSite } from "@poplin/core/src/actions/publish/publish";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ADMIN, type ApiCalls, api, ask, BINDINGS, done, installOf, instance, OWNER, problemsOf, tokenOf, type World, world } from "../worker/support/install";
 

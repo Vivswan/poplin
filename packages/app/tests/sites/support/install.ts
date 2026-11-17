@@ -1,7 +1,7 @@
 // An install the serving tests ask requests of: a real database on bun's SQLite, a store in memory that records every key it is asked for, and a login that takes a test header as its proof.
 // A key is recorded once for every request the store's contract says a call costs: twice for a read of a range that selects no byte of the object.
 
-import { signedBy } from "@poplin/core/src/actions/reach";
+import { signedBy } from "@poplin/core/src/actions/access/reach";
 import { type Login, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Database, NewSite } from "@poplin/core/src/database/database";
 import { openDatabase } from "@poplin/core/src/database/open";

@@ -1,6 +1,6 @@
 // The sample sites of an install that is put back: every site of the demo's own table, published through the CLI as its history leaves it.
 //
-//   packages/demo/src/preview/sample-sites.ts   the table: the demo's seed plays all of it, and this publishes what it ends in
+//   packages/demo/src/preview/world/sample-sites.ts   the table: the demo's seed plays all of it, and this publishes what it ends in
 //
 //   a site of the table        one publish, with its name, who may open it, its title, and its other settings
 //   the site published most    three publishes: its list of versions holds three, as the demo's does
@@ -12,15 +12,15 @@
 
 import { cpSync } from "node:fs";
 import { join } from "node:path";
-import { PUBLISHED_SITE } from "@poplin/core/src/actions/finish-publish";
-import type { SiteObject } from "@poplin/core/src/actions/site-object";
+import { PUBLISHED_SITE } from "@poplin/core/src/actions/publish/finish-publish";
+import type { SiteObject } from "@poplin/core/src/actions/sites/site-object";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 import * as v from "valibot";
 
 import type { Io } from "../../../../cli/src/commands/records";
 import { run as runCli } from "../../../../cli/src/commands/run";
-import { type RealSites, readRealSites } from "../../../../demo/src/preview/real-sites";
-import { type Standing, standingSites, THE_DEMO } from "../../../../demo/src/preview/sample-sites";
+import { type RealSites, readRealSites } from "../../../../demo/src/preview/world/real-sites";
+import { type Standing, standingSites, THE_DEMO } from "../../../../demo/src/preview/world/sample-sites";
 import type { Wanted } from "./same-site";
 import type { Stop } from "./util";
 

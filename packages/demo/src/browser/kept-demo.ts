@@ -5,10 +5,10 @@
 import type { SqlJsStatic } from "sql.js";
 
 import type { ClientFiles } from "../../../app/src/console/shell";
-import { insidePath } from "../preview/base";
+import { insidePath } from "../preview/addresses/base";
 import { createPreview } from "../preview/preview";
-import type { RealSites } from "../preview/real-sites";
-import type { Samples } from "../preview/seed";
+import type { RealSites } from "../preview/world/real-sites";
+import type { Samples } from "../preview/world/seed";
 import { KeptStore, type SavedStore } from "./kept-store";
 import { SqlJsDriver } from "./sqljs-driver";
 

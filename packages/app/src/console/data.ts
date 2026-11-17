@@ -1,7 +1,7 @@
 // What every data route of the console shares: who asks, how a refusal is answered, and how a request that fails its schema is refused.
 
 import type { Install } from "@poplin/core/src/actions/records";
-import type { EndLogins } from "@poplin/core/src/actions/sign-out";
+import type { EndLogins } from "@poplin/core/src/actions/access/sign-out";
 import type { Updating } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";

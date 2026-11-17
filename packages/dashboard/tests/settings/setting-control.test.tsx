@@ -7,7 +7,7 @@ import { Field } from "@base-ui/react/field";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 
-import { CONTROL_KINDS } from "../../../app/src/console/setting-controls";
+import { CONTROL_KINDS } from "../../../app/src/console/settings/setting-controls";
 
 import { SettingControl } from "@/settings/setting-control";
 import type { Row } from "@/settings/settings-queries";

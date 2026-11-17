@@ -66,7 +66,7 @@ const NAMED_ON_PURPOSE: readonly { readonly path: string; readonly name?: RegExp
   // The test that the binding refuses the old key.
   { path: "packages/providers/cloudflare/tests/shared/install/kind/zone-binding.test.ts", name: /admin_hostname/ },
   // The preview's page of its own samples, which it calls its gallery and switches by an option of that name.
-  { path: "tests/preview.test.ts", name: /gallery: false/ },
+  { path: "packages/demo/tests/preview/preview.test.ts", name: /gallery: false/ },
 ];
 
 function inMigrations(path: string): boolean {

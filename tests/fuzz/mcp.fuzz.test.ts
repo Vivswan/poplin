@@ -15,7 +15,7 @@ import { plainScreen } from "../../packages/cli/src/local/screen";
 import { protocolMessages } from "../../packages/cli/tests/mcp/support/bench";
 import { TOOL_INPUTS } from "../../packages/core/src/actions/tool-inputs";
 import { STARTED_UPDATE } from "../../packages/core/src/actions/start-update";
-import { UPDATE_STATE } from "../../packages/core/src/actions/update";
+import { UPDATE_STATE } from "../../packages/core/src/actions/update/update";
 import { fuzzTarget } from "./config";
 import { hostile } from "./hostile";
 

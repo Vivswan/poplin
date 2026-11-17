@@ -14,7 +14,7 @@
 //
 // The numbers and the sentences are the host's: this file names no plan and no price.
 
-import { COPY_CALLS } from "@poplin/core/src/actions/duplicate";
+import { COPY_CALLS } from "@poplin/core/src/actions/sites/duplicate";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 
 import { MOST_STORE_CALLS } from "../../sites/serve";

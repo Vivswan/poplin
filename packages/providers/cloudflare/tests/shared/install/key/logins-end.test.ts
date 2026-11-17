@@ -2,7 +2,7 @@
 // Without these a press could end the logins of another application, read as done when Cloudflare refused it, or give the key away in an answer.
 
 import { describe, expect, test } from "bun:test";
-import type { EndLogins } from "@poplin/core/src/actions/sign-out";
+import type { EndLogins } from "@poplin/core/src/actions/access/sign-out";
 import { readKeptKey } from "../../../../src/shared/install/key/kept-key";
 import { createEndLogins } from "../../../../src/shared/install/key/logins-end";
 import { INSTALL_OBJECTS } from "../../../../src/shared/install/install-objects";

@@ -4,7 +4,7 @@ import { createApi } from "../../../packages/app/src/api/api";
 import { MemoryCounters } from "../../../packages/app/src/limits/memory-counters";
 import { hostnameAddresses } from "../../../packages/app/src/sites/hostname-addresses";
 import { serveSite } from "../../../packages/app/src/sites/serve";
-import { issueToken } from "../../../packages/core/src/actions/manage-tokens";
+import { issueToken } from "../../../packages/core/src/actions/access/manage-tokens";
 import type { Install } from "../../../packages/core/src/actions/records";
 import type { SelfUpdate } from "../../../packages/core/src/actions/start-update";
 import { type Login, parseLogins } from "../../../packages/core/src/auth/logins";

@@ -1,9 +1,9 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
-import { cancelCopy, duplicateSite } from "../../src/actions/duplicate";
-import { listSites } from "../../src/actions/list";
-import { publishSite } from "../../src/actions/publish";
-import { sweepExpired } from "../../src/actions/sweep";
+import { cancelCopy, duplicateSite } from "../../src/actions/sites/duplicate";
+import { listSites } from "../../src/actions/sites/list";
+import { publishSite } from "../../src/actions/publish/publish";
+import { sweepExpired } from "../../src/actions/install/sweep";
 import type { Job, Jobs } from "../../src/jobs/jobs";
 import { failJob, runJob } from "../../src/jobs/run-job";
 import { dayOf } from "../../src/records/views";

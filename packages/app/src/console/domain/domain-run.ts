@@ -3,7 +3,7 @@
 // A repair that leaves every piece of the login and every object that holds the users standing has carried the users it read to the domain: a change of the users waits no more while those are still the stored ones.
 // A repair that wrote such an object and stopped short may have left the domain with users of an earlier moment, so the change waits.
 
-import { keepDomainRun } from "@poplin/core/src/actions/problems";
+import { keepDomainRun } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { AuditEntry } from "@poplin/core/src/records/audit";

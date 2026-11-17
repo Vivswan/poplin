@@ -4,8 +4,8 @@ import { describe, expect, test } from "bun:test";
 import { dirname, join, normalize } from "node:path";
 
 import { COMMANDS, type CommandSpec } from "../packages/cli/src/commands/command-table";
-import { SETTING_SAMPLES } from "../packages/cli/src/commands/install-settings";
-import { parseCommand } from "../packages/cli/src/commands/parse-command";
+import { SETTING_SAMPLES } from "../packages/cli/src/commands/install/install-settings";
+import { parseCommand } from "../packages/cli/src/commands/line/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
 import { TOOLS } from "../packages/cli/src/mcp/tools";
 import { PROBLEM_KINDS } from "../packages/core/src/records/problem";
