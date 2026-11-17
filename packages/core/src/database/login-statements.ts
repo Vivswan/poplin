@@ -89,13 +89,13 @@ export function userTokenCounts(now: number): Statement {
  * End every token that works and whose user leaves, each with a `token_revoked` audit entry that names the user. A token that ran out stays as it ended.
  *
  * @param leaves - true of a token row whose user is no login once the batch is through
- * @param after - `change` for a batch where the entries follow the one audit entry of the change that makes the user leave: nothing is written where that entry was not
+ * @param after - `change` for a batch where the entries follow the one statement that says the user leaves, the change itself or its audit entry: nothing is written where that wrote nothing
  * @returns the entries, then the marks: two statements that read the same rows
  */
 function endTokensWhere(leaves: SQL, signed: Signed, after?: "change"): readonly [Statement, Statement] {
   const ends = and(worksAt(signed.at), leaves);
   const named = fragment`json_object('token', ${tokens.id}, 'scope', ${tokens.scope}, 'note', ${tokens.note}, 'user', ${tokens.allowed_by})`;
-  // The entries follow one entry written, and the marks follow the entries: as many as the tokens that end.
+  // The entries follow one row written, and the marks follow the entries: as many as the tokens that end.
   const [entered, marked] = after === undefined ? [ends, ends] : [and(ends, CHANGED), and(ends, fragment`changes() > 0`)];
   const entries = fragment`SELECT ${signed.at}, ${signed.by}, 'token_revoked', ${named} FROM ${tokens} WHERE ${entered} ORDER BY ${tokens.created_at}, ${tokens.id}`;
 
@@ -122,7 +122,7 @@ export function endTokensOfDropped(next: readonly string[], signed: Signed, when
   return endTokensWhere(fragment`${tokens.allowed_by} IN ${dropped} AND ${tokens.id} <> ${signed.by} AND ${signerStands(signed)} AND ${when}`, signed);
 }
 
-/** End the token that signs a list of logins which leaves its own user out: it goes right after the audit entry of the list's change in a batch, and does nothing where the list was refused. */
+/** End the token that signs a list of logins which leaves its own user out: it goes right after the list's change in a batch, and does nothing where the list was refused. */
 export function endSignerLeftOut(signed: Signed): readonly [Statement, Statement] {
   return endTokensWhere(fragment`${tokens.id} = ${signed.by} AND NOT ${isUser(fragment`${tokens.allowed_by}`)}`, signed, "change");
 }

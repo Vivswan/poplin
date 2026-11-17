@@ -331,6 +331,21 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       expect(raced.map(({ kind }) => kind).sort()).toEqual(["done", "needs_update_check"]);
     });
 
+    // Drift: the log is the record of who was given access. A list that replaces the logins is compared with the one it replaces in the same step, so its entry cannot name a user another change added a moment before.
+    test("the entry of new logins holds the list, who it adds and who it leaves out, each in the order of its list, beside every other value set; the same users in another order add and leave out nobody", async () => {
+      const database = await opened(makeDatabase);
+      const [bo, cy, di, ed] = ["bo@example.com" as Login, "cy@example.com" as Login, "di@example.com" as Login, "ed@example.com" as Login];
+      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo, cy] }, BY_ADA);
+      await database.changeSettings({ logins: [ed, ADMIN, di], trash_days: 9 }, BY_ADA);
+      await database.changeSettings({ logins: [ADMIN, di, ed] }, BY_ADA);
+      await database.changeSettings({ logins: [ADMIN, di, ed] }, BY_ADA);
+
+      expect(await auditDetails(database, "settings_changed")).toEqual([
+        { logins: [ed, ADMIN, di], trash_days: 9, added: [ed, di], removed: [bo, cy] },
+        { logins: [ADMIN, di, ed], added: [], removed: [] },
+      ]);
+    });
+
     // Drift: two admins changing people at the same moment must both be heard, and somebody must always be able to log in; a list read and written back would let the second undo the first, or let two removals empty it.
     test("one login is added or removed in one step: changes made at the same moment all land, and a login that works always stays", async () => {
       const database = await opened(makeDatabase);
@@ -364,7 +379,18 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
 
       const details = await auditDetails(database, "settings_changed");
 
-      expect([details.length, details.slice(-2), await stored()]).toEqual([7, [{ logins: [ADMIN, di] }, { logins: [ADMIN] }], [ADMIN]]);
+      expect([details.length, details.slice(0, 2), details.slice(-2), await stored()]).toEqual([
+        7,
+        [
+          { added: [bo], removed: [] },
+          { added: [cy], removed: [] },
+        ],
+        [
+          { added: [], removed: [cy] },
+          { added: [], removed: [di] },
+        ],
+        [ADMIN],
+      ]);
       await expect(database.addLogin("Bo@Example.com" as Login, BY_ADA)).rejects.toThrow();
       await expect(database.removeLogin("" as Login, BY_ADA)).rejects.toThrow();
     });

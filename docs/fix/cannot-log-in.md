@@ -148,7 +148,7 @@ It adds one email and takes none away. Once you are in, in this order:
 | 2. log your computers in again             | `npx poplin login`, with `--server` and your dashboard's address: removing an email ends every login that email allowed |
 | 3. delete the account token, or keep it    | at Cloudflare, under My Profile, then API Tokens. Keep it where you keep passwords until step 1 is done |
 
-The dashboard's Activity lists the new user as `Changed the users: 2 now`, with the count of users after the change, by `doctor-repair@poplin.invalid`. No user of yours has that email: it marks a change made from a terminal.
+The dashboard's Activity lists the new user as `Added a user:` and the email, by `doctor-repair@poplin.invalid`. No user of yours has that email: it marks a change made from a terminal.
 
 ## The token it needs
 
