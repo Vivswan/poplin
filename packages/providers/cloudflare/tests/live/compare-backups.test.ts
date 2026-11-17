@@ -75,7 +75,7 @@ async function drilled(form: string): Promise<{ readonly from: Bench; readonly i
   await seeded(from);
 
   const first = await exportedZip(from, form);
-  const ran = await into.run(`import ${first} --settings --logins`);
+  const ran = await into.run(`import ${first} --settings --users`);
   expect([ran.code, ran.err, ran.out.at(-1)]).toEqual([0, [], `${SEEDED} imported, 0 skipped, 0 failed`]);
 
   return { from, into, first, second: await exportedZip(into, form) };

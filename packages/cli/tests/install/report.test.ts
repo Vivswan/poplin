@@ -9,7 +9,7 @@ import { ADDRESS, type Account, emptyAccount, installedOf, type Place, removedOf
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
 
 /** The three commands, each as a run that gives every answer; the removal as its dry run. */
-const [INSTALL, UNINSTALL, REPAIR] = ["install stand-in --no-place --login you@example.com --yes", "uninstall stand-in --no-place --dry-run --yes", "doctor --repair --no-place --yes"] as const;
+const [INSTALL, UNINSTALL, REPAIR] = ["install stand-in --no-place --user you@example.com --yes", "uninstall stand-in --no-place --dry-run --yes", "doctor --repair --no-place --yes"] as const;
 
 /** A removal that gives its proof. */
 const REMOVAL = "uninstall stand-in --no-place --confirm poplin.example.com --yes";

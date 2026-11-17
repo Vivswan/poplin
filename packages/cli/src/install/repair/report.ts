@@ -2,11 +2,11 @@
 // Each object's own line is the one `poplin install` prints for it.
 
 import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/installer";
-import { columns } from "../../commands/text";
-import type { Line } from "../../local/screen";
-import { TOKEN_HELP } from "../ask";
+import { type HelpPage, helpPage } from "../../commands/line/help-page";
+import { type Line, type Look, PLAIN_LOOK } from "../../local/screen";
+import { permissionsPart } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, NEXT, optionLines, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, NEXT, optionRows, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -26,10 +26,6 @@ type Mended = Extract<Repaired, { readonly ok: true }>;
 
 /** What a look found that a repair does not go on from, but the choice between places. */
 type NotWhole = Exclude<Found<unknown, unknown>, { readonly state: "whole" | "choice" }>;
-
-function indented(lines: readonly string[]): string[] {
-  return lines.map((line) => `${INDENT}${line}`);
-}
 
 /** What the repair a run names next holds of the line it was run by: its words, and the way that line names a repair, which keeps its user. */
 interface Named {
@@ -147,26 +143,22 @@ export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>,
  *
  * @param providers - the providers the built package carries
  * @param provider - the provider whose own options and token the help also lists; the only one the package carries when absent
- * @returns lines with no trailing newline; a provider's are as long as its own words make them
+ * @param look - how wide the stream shows it and whether in colour; plain lines of at most 80 characters when absent
+ * @returns lines with no trailing newline
  */
-export function repairHelp(providers: readonly Provider[], provider?: Provider): string {
+export function repairHelp(providers: readonly Provider[], provider?: Provider, look: Look = PLAIN_LOOK): string {
   const [first, ...others] = providers;
   const shown = provider ?? (others.length === 0 ? first : undefined);
-  const listed = shown === undefined ? [["Providers:", ...indented(columns(providers.map((one) => [one.id, one.about])))]] : [];
-  const own = shown === undefined ? [] : [[`Options of ${shown.name}:`, ...optionLines(shown.options)], [...shown.tokenHelp]];
+  const page: HelpPage = {
+    usage: [`poplin ${REPAIR_COMMAND} ${shown === undefined ? "<provider>" : `${others.length === 0 ? "" : `${shown.id} `}${shown.usage}`} [options]`],
+    about: "Repair the install at its provider. It needs no login.",
+    parts: [
+      { title: "Providers:", rows: shown === undefined ? providers.map((one) => [one.id, one.about]) : [] },
+      { title: "Options:", rows: optionRows([...(shown?.options ?? []), ...REPAIR_OPTIONS]) },
+      permissionsPart("repair", shown),
+      { title: "Related:", commands: ["poplin doctor", "poplin update"] },
+    ],
+  };
 
-  return [
-    [`poplin ${REPAIR_COMMAND} ${shown === undefined ? "<provider>" : `${others.length === 0 ? "" : `${shown.id} `}${shown.usage}`} [options]`],
-    ["Mend your install at its provider, with an account token. It needs no login,", "so it is the way back in. It finds the install first, then makes each piece", "that is missing or differs, and leaves the rest."],
-    ["A repair takes no newer release: where one is out, a row says so. With", "--update it first brings the install to the newest release, the way an", "install takes a release it cannot take by itself. Day to day: poplin update"],
-    ...listed,
-    ["Options:", ...optionLines(REPAIR_OPTIONS)],
-    [...DRY_RUN_HELP],
-    ...own,
-    [...TOKEN_HELP, "The token an install is made with has every permission a repair needs."],
-    ["--add-user stores the email only after the provider took a change of who may", "log in from this token: a token that may only read adds nobody."],
-    indented(columns([["poplin doctor", "check the install with this computer's login, and change nothing"]])),
-  ]
-    .map((lines) => lines.join("\n"))
-    .join("\n\n");
+  return helpPage(page, look);
 }

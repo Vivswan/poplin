@@ -3,6 +3,7 @@
 
 import { type Login, parseLogin } from "../../../../core/src/auth/logins";
 import type { OptionRow, Question, Run, Token } from "../../../../core/src/install/installer";
+import { FLAG_WORDS } from "../../commands/command-table";
 import { TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, Parsed, Provider, Stop } from "../records";
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, usage, type Variables } from "../words";
@@ -12,20 +13,20 @@ export const REPAIR_COMMAND = "doctor --repair";
 
 /** The options of a repair, which every provider takes. The parser reads these rows and the help prints them. */
 export const REPAIR_OPTIONS: readonly OptionRow[] = [
-  { flag: "--repair", value: null, about: "mend the install at its provider, with an account token", variable: null },
-  { flag: "--update", value: null, about: "first bring an install that is behind to the newest release", variable: null },
-  { flag: "--dry-run", value: null, about: "say what a repair would change, and change nothing", variable: null },
-  { flag: "--add-user", value: "<email>", about: "let one more person log in", variable: null },
-  { flag: "--yes", value: null, about: "ask nothing; a missing answer stops the run and is named", variable: null },
-  { flag: "--token-stdin", value: null, about: "read the account token from standard input, and ask nothing", variable: null },
-  { flag: "--json", value: null, about: "print one JSON value, and nothing else on stdout", variable: null },
+  { flag: "--repair", value: null, about: FLAG_WORDS.repair, variable: null },
+  { flag: "--update", value: null, about: FLAG_WORDS.update, variable: null },
+  { flag: "--dry-run", value: null, about: FLAG_WORDS.dryRun, variable: null },
+  { flag: "--add-user", value: "<email>", about: FLAG_WORDS.addUser, variable: null },
+  { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },
+  { flag: "--token-stdin", value: null, about: FLAG_WORDS.tokenStdin, variable: null },
+  { flag: "--json", value: null, about: "", variable: null },
 ];
 
 /** The options a person may reach for that a repair does not take, each with the line that says why or where. */
 const ELSEWHERE: Readonly<Record<string, string>> = {
   "--server": "--repair works with the account token, not a login: leave out --server",
   "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
-  "--login": "a repair keeps the users the install has. To let one more person in: --add-user <email>",
+  "--user": "a repair keeps the users the install has. To let one more person in: --add-user <email>",
   "--remove": "To remove an install: poplin uninstall <provider>",
 };
 

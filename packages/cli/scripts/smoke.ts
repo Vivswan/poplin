@@ -130,7 +130,7 @@ function assertBin(project: string, version: string): void {
 
   const bare = spawnSync(bin, [], { cwd: project, encoding: "utf8" });
 
-  if (bare.status !== USAGE_STATUS || !bare.stderr.startsWith("usage:")) {
+  if (bare.status !== USAGE_STATUS || !bare.stderr.startsWith("Usage:")) {
     throw new Error(`${NAME} with no arguments exited ${bare.status} with ${JSON.stringify(bare.stderr)}, not ${USAGE_STATUS} with its usage`);
   }
 }

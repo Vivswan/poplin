@@ -5,7 +5,7 @@ import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import { type Client, createClient } from "../client/client";
 import { currentLogin, TOKEN_VARIABLES } from "../local/current-login";
 import { pasted, runnerOf } from "../local/invoked";
-import { foldedText } from "../local/screen";
+import { foldedText, PLAIN_LOOK } from "../local/screen";
 import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
@@ -15,7 +15,9 @@ import { runInstall } from "../install/first/install";
 import { runUninstall } from "../install/remove/uninstall";
 import { runRepair } from "../install/repair/repair";
 import type { InstallEnds } from "../install/records";
+import type { CommandName } from "./command-table";
 import { exitCode } from "./exit-codes";
+import { fullHelp } from "./line/full-help";
 import { runExport } from "../backup/export";
 import { helpText } from "./line/help";
 import { runImport } from "../backup/import";
@@ -291,6 +293,17 @@ function mcpHost(io: Io): Host {
   };
 }
 
+/** Show a help text as its stream shows it: the one that was asked for on stdout, and the one an empty command line gets on stderr. The help of every command reads the providers first. */
+async function showHelp(parsed: { readonly topic?: CommandName; readonly asked: boolean; readonly full?: true }, io: Io, ends: () => InstallEnds): Promise<void> {
+  const looks = io.looks ?? { out: PLAIN_LOOK, err: PLAIN_LOOK };
+  const look = parsed.asked ? looks.out : looks.err;
+  const help = parsed.full === true ? fullHelp(await ends().providers(), look) : helpText(parsed.topic, look);
+  const text = foldedText(pasted(help, runnerOf(io.machine.env)), look.width);
+
+  if (parsed.asked) io.out(text);
+  else io.screen.aside("laid", text);
+}
+
 /**
  * Run the words after `poplin`.
  *
@@ -316,8 +329,7 @@ export async function run(
   }
 
   if (parsed.kind === "help") {
-    const put = parsed.asked ? io.out : (text: string): void => io.screen.aside("plain", text);
-    put(foldedText(pasted(helpText(parsed.topic), runnerOf(io.machine.env))));
+    await showHelp(parsed, io, () => installEnds(io));
 
     return exitCode(parsed);
   }

@@ -17,7 +17,7 @@ Export downloads sites and the settings as one zip, and import puts them back. T
 | `poplin import backup.zip --dry-run`                 | checks the zip, lists its sites, and imports nothing    |
 | `poplin import backup.zip --site report--k3f9x2ab71qz` | puts one site back                                    |
 | `poplin import backup.zip --settings`                | replaces the install's settings too, but for the logins |
-| `poplin import backup.zip --settings --logins`       | replaces the logins as well                             |
+| `poplin import backup.zip --settings --users`        | replaces the logins as well                             |
 
 Every other example runs the same way, with `npx` before `poplin`.
 
@@ -27,7 +27,7 @@ Every other example runs the same way, with `npx` before `poplin`.
 
 ## What a restore brings back
 
-A restore is `poplin import backup.zip --settings --logins` into an install that holds none of the zip's sites. A test does that, exports the restored install, and compares the two zips: they hold the same, but for the moment the zip was made.
+A restore is `poplin import backup.zip --settings --users` into an install that holds none of the zip's sites. A test does that, exports the restored install, and compares the two zips: they hold the same, but for the moment the zip was made.
 
 | Comes back                             | As it was                                                                             |
 | -------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -36,7 +36,7 @@ A restore is `poplin import backup.zip --settings --logins` into an install that
 | the live version                       | under its number, with who published it and when                                      |
 | the other kept versions                | the same, from a zip made with `--all-versions`. A site too large to import with every version is tried again with its live version alone |
 | the settings, with `--settings`        | every one but the logins                                                              |
-| the logins, with `--settings --logins` | the whole list                                                                        |
+| the logins, with `--settings --users`  | the whole list                                                                        |
 
 | Stays behind                    | So                                           |
 | ------------------------------- | -------------------------------------------- |
@@ -84,7 +84,7 @@ A site that is refused for one of these two has a line that says `failed` in ste
 | a link you shared             | stops where the address is new, once the old install is removed. Nothing sends it on: send the new one |
 | a public name                 | comes back with its site, at the new install's address                                          |
 | each computer's login         | made anew: the zip holds no token. Run `npx poplin login`, with `--server` and the new address, on each one |
-| the users                     | the first login of the new install. `--settings --logins` puts the old list in its place, where that list holds a login of the new install. Else it is refused with `no_working_login` |
+| the users                     | the first login of the new install. `--settings --users` puts the old list in its place, where that list holds a login of the new install. Else it is refused with `no_working_login` |
 | the install's keys            | made anew by the new install: the zip holds none                                                |
 | the activity log              | starts anew                                                                                     |
 | the kept versions             | come back from a zip made with `--all-versions`, and from no other. A site too large to import with every version is tried again with its live version alone |

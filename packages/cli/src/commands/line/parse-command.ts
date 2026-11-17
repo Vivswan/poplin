@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { type Command, CommanderError } from "commander";
 
-import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, HELP_FLAG, PROVIDER_COMMANDS, REPAIR_FLAG, VERSION_FLAG } from "../command-table";
+import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, FULL_HELP, HELP_FLAG, PROVIDER_COMMANDS, REPAIR_FLAG, VERSION_FLAG } from "../command-table";
 import { argumentsOf, buildProgram } from "./program";
 import { buildRequest, type TypedRequest } from "./requests";
 import { type Flags, isUsageError, looksLikePath, nearest, type UsageError, usageError } from "./util";
@@ -52,14 +52,14 @@ interface TypedWords {
 }
 
 /**
- * What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets.
+ * What a command line asks for: a command's request, the help of a command or of `poplin` itself, the version, or a refusal. `asked` is false for the help an empty command line gets, and `full` is set for the help of every command at once.
  *
  * `install`, `uninstall`, and `doctor` with `--repair` are the commands whose words are not read here: their options are their providers', which only the built package knows. `words` are the ones after the command's own.
  */
 export type Parsed =
   | TypedRequest
   | { readonly kind: "provider"; readonly command: ProviderCommand; readonly words: readonly string[] }
-  | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean }
+  | { readonly kind: "help"; readonly topic?: CommandName; readonly asked: boolean; readonly full?: true }
   | { readonly kind: "version" }
   | UsageError;
 
@@ -123,6 +123,8 @@ function asks(argv: readonly string[], flag: string): boolean {
 
 /** Answer for a line with no argument on it: the help or the version when asked, and else what its first flag lacks. */
 function withoutWord(argv: readonly string[], flags: readonly TypedFlag[]): Parsed {
+  if (asks(argv, FULL_HELP.name)) return { kind: "help", asked: true, full: true };
+
   if (asks(argv, HELP_FLAG)) return { kind: "help", asked: true };
 
   if (asks(argv, VERSION_FLAG)) return { kind: "version" };
@@ -197,11 +199,22 @@ function handedOn(name: string, argv: readonly string[], first: number | undefin
   return { kind: "provider", command, words: [...argv.slice(0, first), ...argv.slice(first + 1)] };
 }
 
+/**
+ * Hand the help of a command that works at a provider on to its own parser, which prints it: `help install`, `help install cloudflare`, `help doctor --repair`.
+ *
+ * @param words - the words after `help`: the command, and the provider where one is named
+ * @returns `undefined` for the help of any other command, and for more words than the two
+ */
+function helpHandedOn(words: readonly string[], argv: readonly string[]): Parsed | undefined {
+  const [topic = "", ...named] = words;
+  const command: ProviderCommand | undefined = topic === "doctor" && asks(argv, REPAIR_FLAG) ? "repair" : providerCommand(topic);
+  if (command === undefined || named.length > 1) return undefined;
+
+  return { kind: "provider", command, words: [...named, ...(command === "repair" ? [REPAIR_FLAG] : []), HELP_FLAG] };
+}
+
 function helpOf(topic: string | undefined): Parsed {
   if (topic === undefined) return { kind: "help", asked: true };
-
-  const provider = providerCommand(topic);
-  if (provider !== undefined) return { kind: "provider", command: provider, words: [HELP_FLAG] };
 
   const spec = SPECS.get(topic);
   if (spec === undefined) return unknownCommand(topic, false);
@@ -247,6 +260,9 @@ export function parseCommand(argv: readonly string[], now: number = Date.now()):
     if (asks(argv, HELP_FLAG)) throw new Answered({ kind: "help", topic: spec.name, asked: true });
 
     if (asks(argv, VERSION_FLAG)) throw new Answered({ kind: "version" });
+
+    const handed = spec.name === "help" ? helpHandedOn(given, argv) : undefined;
+    if (handed !== undefined) throw new Answered(handed);
 
     const flags = readFlags(typed.flags, spec);
     if (isUsageError(flags)) throw new Answered(flags);

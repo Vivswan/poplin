@@ -324,8 +324,8 @@ function importBackup(words: Words): TypedRequest | UsageError {
   if (zip === "") return usageError("the path of the zip is empty", "poplin import <zip>");
 
   const settings = words.flags.has("--settings");
-  const logins = words.flags.has("--logins");
-  if (logins && !settings) return usageError("--logins replaces the logins among the settings, so it needs --settings", "poplin import <zip> --settings --logins");
+  const logins = words.flags.has("--users");
+  if (logins && !settings) return usageError("--users replaces the logins among the settings, so it needs --settings", "poplin import <zip> --settings --users");
 
   const asked = { zip, settings, logins, dryRun: words.flags.has(DRY_RUN) };
   const siteText = flagValue(words.flags, "--site");

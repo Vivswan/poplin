@@ -23,7 +23,7 @@ const SHAPE = v.object({
   about: v.string(),
   usage: v.string(),
   options: v.array(v.unknown()),
-  tokenHelp: v.array(v.unknown()),
+  tokenHelp: v.object({ install: v.array(v.string()), repair: v.array(v.string()), remove: v.array(v.string()) }),
   token: v.function(),
   read: v.function(),
   placeWords: v.function(),

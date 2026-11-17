@@ -11,7 +11,7 @@ import { AFTER_STOP_TIMEOUT_MS, run } from "./commands/run";
 import { openBrowser } from "./local/browser";
 import { thisMachine } from "./local/login-file";
 import { pastedScreen, runnerOf } from "./local/invoked";
-import { processScreen, showsColour } from "./local/screen";
+import { lookOf, processScreen } from "./local/screen";
 
 /** What the first Ctrl-C aborts: the one way a command hears that the person stopped it. */
 const STOP = new AbortController();
@@ -52,7 +52,8 @@ function listenForStop(): void {
 /** This process as a command sees it. A person can be asked when stdin and stderr are both a terminal, and what is being worked on shows when stderr shows colour. */
 function thisProcess(): Io {
   const machine = thisMachine();
-  const colour = { out: showsColour(process.stdout.isTTY, machine.env), err: showsColour(process.stderr.isTTY, machine.env) };
+  const looks = { out: lookOf(process.stdout, machine.env), err: lookOf(process.stderr, machine.env) };
+  const colour = { out: looks.out.colour, err: looks.err.colour };
 
   return {
     out: (line) => console.log(line),
@@ -61,6 +62,7 @@ function thisProcess(): Io {
     fetch: (input, init) => fetch(input, init),
     machine,
     terminal: { asks: process.stderr.isTTY === true && process.stdin.isTTY === true, progress: colour.err },
+    looks,
     computer: hostname(),
     open: (address) => void openBrowser(address, machine),
     pause,

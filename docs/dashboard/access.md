@@ -34,7 +34,7 @@ To remove another user, choose Remove in the menu at the end of that user's row,
 
 Every token that user allowed stops working in the same step: the logins of their computers, their agents, and their build servers. The question before the removal says how many. Adding the user again brings none of them back.
 
-A list changed with `poplin config logins`, or by `poplin import` with `--settings --logins`, is written to Cloudflare's list the same way, and a user it leaves out loses their tokens the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
+A list changed with `poplin config logins`, or by `poplin import` with `--settings --users`, is written to Cloudflare's list the same way, and a user it leaves out loses their tokens the same way. `poplin config logins` prints one more step where a Repair is still needed. The budget alert is mailed to the first user, and follows when another email becomes the first.
 
 Sign out, in the menu your email opens at the foot of the side menu, ends the login of this browser alone: Cloudflare shows its own page, and the next visit asks for a code again.
 

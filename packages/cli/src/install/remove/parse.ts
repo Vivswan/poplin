@@ -2,6 +2,7 @@
 // A line that contradicts itself is refused here with one line, and so is a run that asks nothing and lacks an answer. `--yes` is no proof of which install is meant.
 
 import type { OptionRow } from "../../../../core/src/install/installer";
+import { FLAG_WORDS } from "../../commands/command-table";
 import { TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, Missing, Parsed, Provider, Stop } from "../records";
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
@@ -9,18 +10,18 @@ import type { RemovalMode, UninstallPlan } from "./records";
 
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
 export const UNINSTALL_OPTIONS: readonly OptionRow[] = [
-  { flag: "--dry-run", value: null, about: "list what a run would remove and keep, and remove nothing", variable: null },
-  { flag: "--confirm", value: "<address>", about: "the install's address, as proof; asked for when left out", variable: null },
-  { flag: "--keep-data", value: null, about: "leave the sites' files and the database", variable: null },
-  { flag: "--yes", value: null, about: "ask nothing; a missing answer stops the run and is named", variable: null },
-  { flag: "--token-stdin", value: null, about: "read the account token from standard input, and ask nothing", variable: null },
-  { flag: "--json", value: null, about: "print one JSON value, and nothing else on stdout", variable: null },
+  { flag: "--dry-run", value: null, about: FLAG_WORDS.dryRun, variable: null },
+  { flag: "--confirm", value: "<address>", about: "Confirm the removal with the address --dry-run shows", variable: null },
+  { flag: "--keep-data", value: null, about: "Keep the site files and the database", variable: null },
+  { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },
+  { flag: "--token-stdin", value: null, about: FLAG_WORDS.tokenStdin, variable: null },
+  { flag: "--json", value: null, about: "", variable: null },
 ];
 
 /** The options a person may reach for that this command has none of, each with the line that says what to give. */
 const ELSEWHERE: Readonly<Record<string, string>> = {
   "--force": "The proof of a removal is the install's address: --confirm <address>",
-  "--login": "uninstall takes no login: the install that is there says who logs in",
+  "--user": "uninstall takes no login: the install that is there says who logs in",
   "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
 };
 

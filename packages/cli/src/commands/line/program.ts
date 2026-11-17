@@ -47,7 +47,7 @@ export function buildProgram(): Command {
   ];
 
   for (const spec of ordered) {
-    const command = program.command(spec.name).description(spec.about).helpGroup(spec.group).usage(`${argumentsOf(spec)} [flags]`.trimStart());
+    const command = program.command(spec.name).description(spec.about).helpGroup(spec.group).usage(`${argumentsOf(spec)} [options]`.trimStart());
 
     for (const argument of spec.arguments) command.argument(argument.required ? `<${argument.name}>` : `[${argument.name}]`, argument.about);
   }

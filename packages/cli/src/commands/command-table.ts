@@ -1,5 +1,7 @@
 // The command table: every command, its arguments, and its flags. The parser accepts what it lists and the help prints what it lists, so the two cannot disagree.
 
+import { TOKEN_VARIABLES } from "../local/current-login";
+
 /** The flag that asks for a command's help. */
 export const HELP_FLAG = "--help";
 
@@ -9,25 +11,52 @@ export const VERSION_FLAG = "--version";
 /** The flag that turns `poplin doctor` into a repair with an account token, whose words its own parser reads. */
 export const REPAIR_FLAG = "--repair";
 
-/** The two flags every command takes. */
+/** The flag that asks for the help of every command at once, which works with no command alone. */
+export const FULL_HELP = { name: "--full-help", about: "Show every command's help" } as const satisfies FlagSpec;
+
+/** What the flags that more than one parser reads mean, the same in every help that lists them. */
+export const FLAG_WORDS = {
+  dryRun: "Show what would change. Change nothing.",
+  repair: "Repair the install with an account token",
+  update: "Update to the latest version first",
+  addUser: "Add one user",
+  yes: "Never prompt. A missing answer stops the run.",
+  tokenStdin: `Read the account token from stdin\nOr set ${TOKEN_VARIABLES.install}.`,
+  server: "Refuse to use a login for another install",
+} as const;
+
+/** The two flags every command takes, whose names say what they do. */
 const EVERYWHERE: readonly FlagSpec[] = [
-  { name: HELP_FLAG, about: "show this help" },
-  { name: VERSION_FLAG, about: "print the version" },
+  { name: HELP_FLAG, about: "" },
+  { name: VERSION_FLAG, about: "" },
 ];
 
+/** The flags of a command that talks to an install. */
+const INSTALL_FLAGS: readonly FlagSpec[] = installFlags(FLAG_WORDS.server);
+
+/** The variables a command reads beside its flags, for the help of `poplin` itself. */
+export const ENVIRONMENT: readonly (readonly [name: string, about: string])[] = [
+  ["POPLIN_SERVER", "Address of the install, set with POPLIN_TOKEN"],
+  ["POPLIN_TOKEN", "Token used instead of the stored login"],
+  ["POPLIN_CONFIG_DIR", "Folder of the stored login"],
+];
+
+/** The flag that asks what a command would do, with nothing changed. */
+const DRY_RUN: FlagSpec = { name: "--dry-run", about: FLAG_WORDS.dryRun };
+
 /** The argument that names one site. */
-const SITE = { name: "site", about: "its label, id, public name, or address" };
+const SITE = { name: "site", about: "Site label, id, public name, or URL" };
 
 /** The settings of a site, the same when it is published and when it is changed. */
 const SITE_SETTINGS: readonly FlagSpec[] = [
-  { name: "--private", about: "only the users of your install can open it" },
-  { name: "--unlisted", about: "anyone who has the address can open it" },
-  { name: "--public", about: "everyone can open it, at its public name" },
-  { name: "--public-name", value: "<name>", about: "with --public: its public name, when not its name" },
-  { name: "--title", value: "<title>", about: 'its title on your dashboard; "" is the page\'s own' },
-  { name: "--search-engines", value: "on|off", about: "may search engines list it, if the install allows" },
-  { name: "--embeddable", value: "on|off", about: "may other pages show it in a frame and load its files" },
-  { name: "--expires", value: "<when>", about: "when it moves to the trash: 7d, 2026-12-01, never" },
+  { name: "--private", about: "Only users of this install can open it" },
+  { name: "--unlisted", about: "Anyone with the URL can open it" },
+  { name: "--public", about: "Everyone can open it, at its public name" },
+  { name: "--public-name", value: "<name>", about: "Public name\nDefaults to the site's public name, else to its name.", with: "--public" },
+  { name: "--title", value: "<title>", about: 'Dashboard title\n"" uses the page title.' },
+  { name: "--search-engines", value: "on|off", about: "Allow search indexing, if the install permits" },
+  { name: "--embeddable", value: "on|off", about: "Allow other pages to frame it and load its files" },
+  { name: "--expires", value: "<when>", about: "Move to the trash after 7d, on 2026-12-01, or never" },
 ];
 
 /** The command the bare form `poplin <path>` runs. */
@@ -36,11 +65,8 @@ export const BARE_COMMAND = "publish";
 /** A short session from the first publish to the trash, for the help of `poplin` itself. */
 export const SESSION = [
   "poplin ./report",
-  "poplin set report--k3f9x2ab71qz --unlisted",
   "poplin ./report --site report--k3f9x2ab71qz",
-  "poplin rollback report--k3f9x2ab71qz",
   "poplin set report--k3f9x2ab71qz --public",
-  "poplin ./report --site report",
   "poplin delete report",
 ];
 
@@ -48,15 +74,15 @@ export const SESSION = [
 export const PROVIDER_COMMANDS = [
   {
     name: "install",
-    group: "the install",
-    about: "make your own install at a provider",
-    arguments: [{ name: "provider", about: "where to install; without it, the providers are listed", required: false }],
+    group: "Install:",
+    about: "Install poplin in your provider account",
+    arguments: [{ name: "provider", about: "Where to install (default: list the providers)", required: false }],
   },
   {
     name: "uninstall",
-    group: "the install",
-    about: "remove your install from a provider",
-    arguments: [{ name: "provider", about: "where the install is; without it, the providers are listed", required: false }],
+    group: "Install:",
+    about: "Remove the install from the provider",
+    arguments: [{ name: "provider", about: "Where the install is (default: list the providers)", required: false }],
   },
 ] as const;
 
@@ -64,277 +90,230 @@ export const PROVIDER_COMMANDS = [
 export const COMMANDS = [
   {
     name: "publish",
-    group: "publish",
-    about: "put a new site up, or update one with --site",
-    arguments: [{ name: "path", about: "a folder with an index.html, or one HTML file", required: true }],
+    group: "Publish:",
+    about: "Publish a folder or one HTML file",
+    arguments: [{ name: "path", about: "A folder with an index.html, or one HTML file\nWith no publish command, prefix the path: ./report", required: true }],
     flags: [
-      { name: "--site", value: "<site>", about: "update it: its label, id, public name, or address" },
-      { name: "--name", value: "<name>", about: "the site's name; with --site, its new name" },
-      { name: "--dry-run", about: "list the files and the name, and upload nothing" },
+      { name: "--site", value: "<site>", about: "Update this site: label, id, public name, or URL" },
+      { name: "--name", value: "<name>", about: "Name the site. With --site, rename it." },
+      DRY_RUN,
       ...SITE_SETTINGS,
-      ...installFlags("the site, or what --dry-run lists"),
+      ...INSTALL_FLAGS,
     ],
     examples: [
       "poplin ./report",
       "poplin ./report.html",
-      "poplin publish ./report",
       "poplin ./demo --unlisted --expires 7d",
       "poplin ./report --site report--k3f9x2ab71qz",
-      "poplin ./report --site docs",
     ],
   },
   {
     name: "set",
-    group: "one site",
-    about: "change a site's settings",
+    group: "Sites:",
+    about: "Change a site's settings",
     arguments: [{ ...SITE, required: true }],
     flags: [
-      { name: "--name", value: "<name>", about: "a new name; its id and every address stay" },
-      dryRun("say what would change, and change nothing"),
+      { name: "--name", value: "<name>", about: "Rename the site. Old URLs keep working." },
+      DRY_RUN,
       ...SITE_SETTINGS,
-      ...installFlags("the site, or what --dry-run says it would be"),
+      ...INSTALL_FLAGS,
     ],
     examples: [
       "poplin set report--k3f9x2ab71qz --unlisted",
-      "poplin set report--k3f9x2ab71qz --public",
       "poplin set report--w8t1c5n0ze4u --public --public-name docs",
-      "poplin set report--k3f9x2ab71qz --name q3-report",
       'poplin set report--k3f9x2ab71qz --title "Q3 sales"',
-      "poplin set report--k3f9x2ab71qz --public --dry-run",
     ],
   },
   {
     name: "show",
-    group: "one site",
-    about: "look at a site",
+    group: "Sites:",
+    about: "Show a site's details",
     arguments: [{ ...SITE, required: true }],
-    flags: installFlags("the site"),
+    flags: INSTALL_FLAGS,
     examples: [],
   },
   {
     name: "rollback",
-    group: "one site",
-    about: "go back a version",
+    group: "Sites:",
+    about: "Roll back a site to its previous version",
     arguments: [{ ...SITE, required: true }],
     flags: [
-      { name: "--to", value: "<version>", about: "go to that version, not one back" },
-      dryRun("say which version would be live, and change nothing"),
-      ...installFlags("the site, or what --dry-run says it would be"),
+      { name: "--to", value: "<version>", about: "Roll back to this version instead" },
+      DRY_RUN,
+      ...INSTALL_FLAGS,
     ],
-    examples: ["poplin rollback report--k3f9x2ab71qz", "poplin rollback report--k3f9x2ab71qz --dry-run"],
+    examples: ["poplin rollback report--k3f9x2ab71qz --to 4"],
   },
   {
     name: "new-link",
-    group: "one site",
-    about: "give a site a new id, so a new address",
+    group: "Sites:",
+    about: "Rotate a site id. URLs with the old id stop working.",
     arguments: [{ ...SITE, required: true }],
-    flags: [dryRun("say which address would stop, and change nothing"), ...installFlags("the site; with --dry-run, the site as it is")],
-    examples: ["poplin new-link report--k3f9x2ab71qz"],
+    flags: [DRY_RUN, ...INSTALL_FLAGS],
+    examples: [],
   },
   {
     name: "duplicate",
-    group: "one site",
-    about: "make a private copy of a site, with a new address",
+    group: "Sites:",
+    about: "Make a private copy of a site",
     arguments: [{ ...SITE, required: true }],
     flags: [
-      { name: "--name", value: "<name>", about: "the copy's name; the site's own without it" },
-      dryRun("say what the copy would be, and copy nothing"),
-      ...installFlags("the copy, or what --dry-run says it would be"),
+      { name: "--name", value: "<name>", about: "Name of the copy (default: the site's name)" },
+      DRY_RUN,
+      ...INSTALL_FLAGS,
     ],
-    examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report--k3f9x2ab71qz --name report-draft"],
-    notes: [
-      "The copy holds the live version's files and the site's settings, but for",
-      "when it expires: that is set as for a new site.",
-      "Its title is the one the site shows, with (copy) after it.",
-      "A title that ends that way already is kept as it is.",
-      "It is always private, whatever the site is, and the site is not changed.",
-    ],
+    examples: ["poplin duplicate report--k3f9x2ab71qz --name report-draft"],
   },
   {
     name: "delete",
-    group: "one site",
-    about: "move a site into the trash",
+    group: "Sites:",
+    about: "Move a site to the trash",
     arguments: [{ ...SITE, required: true }],
     flags: [
-      { name: "--no-trash", about: "remove it now, after you type its label" },
-      dryRun("say what would go, and delete nothing"),
-      ...installFlags("the site, or what --no-trash left"),
+      { name: "--no-trash", about: "Delete permanently. Prompts for the site's label.\nPermanent deletion needs a terminal." },
+      DRY_RUN,
+      ...INSTALL_FLAGS,
     ],
-    examples: ["poplin delete report--k3f9x2ab71qz", "poplin delete report", "poplin delete report --no-trash --dry-run"],
+    examples: ["poplin delete report --no-trash --dry-run"],
   },
   {
     name: "restore",
-    group: "one site",
-    about: "take a site back out of the trash",
+    group: "Sites:",
+    about: "Restore a site from the trash",
     arguments: [{ ...SITE, required: true }],
-    flags: [dryRun("say what would come back, and restore nothing"), ...installFlags("the site, or what --dry-run says it would be")],
+    flags: [DRY_RUN, ...INSTALL_FLAGS],
     examples: [],
   },
   {
     name: "list",
-    group: "all sites",
-    about: "list every site",
+    group: "Sites:",
+    about: "List sites",
     arguments: [],
-    flags: [{ name: "--trash", about: "list the deleted sites instead" }, ...installFlags("the sites")],
-    examples: ["poplin list", "poplin list --trash"],
+    flags: [{ name: "--trash", about: "List trashed sites instead" }, ...INSTALL_FLAGS],
+    examples: [],
   },
   {
     name: "login",
-    group: "you, on this machine",
-    about: "log this machine in: you allow it on the dashboard",
+    group: "Auth:",
+    about: "Log this machine in. Approve it in the dashboard.",
     arguments: [],
     flags: [
-      { name: "--publisher", about: "save a publisher's token: only its own sites" },
-      { name: "--name", value: "<name>", about: "what the dashboard calls this machine" },
-      { name: "--no-browser", about: "print the address, and open no browser" },
-      ...installFlags("the address and the code, then the login"),
+      { name: "--publisher", about: "Store a publisher token, limited to its own sites" },
+      { name: "--name", value: "<name>", about: "Machine name in the dashboard" },
+      { name: "--no-browser", about: "" },
+      ...installFlags("Install to log in to (default: the stored login's)"),
     ],
     examples: ["poplin login --server https://poplin.example.com", "poplin login --publisher --name ci-runner"],
-    notes: [
-      "It prints an address and a code. Open the address in a browser where you",
-      "are logged in to the dashboard, check the code, and allow it. The token is",
-      "saved on this machine. With --json the address and the code are the first",
-      "line, and the result the second.",
-    ],
   },
   {
     name: "logout",
-    group: "you, on this machine",
-    about: "forget this machine's token",
+    group: "Auth:",
+    about: "Revoke and delete the stored token",
     arguments: [],
-    flags: [dryRun("say what a logout would do, and keep the login"), ...installFlags("whether the token was revoked, or would be")],
-    examples: ["poplin logout", "poplin logout --dry-run"],
+    flags: [DRY_RUN, ...INSTALL_FLAGS],
+    examples: [],
   },
   {
     name: "whoami",
-    group: "you, on this machine",
-    about: "print the install, your role, and the token's id",
+    group: "Auth:",
+    about: "Show the install, role, and token id",
     arguments: [],
-    flags: installFlags("the install, the token, and the version"),
-    examples: ["poplin whoami"],
+    flags: INSTALL_FLAGS,
+    examples: [],
   },
   {
     name: "config",
-    group: "the install",
-    about: "show the install's settings, or change one",
+    group: "Install:",
+    about: "Get or set install settings",
     arguments: [
-      { name: "key", about: "the setting to show; without it, every setting", required: false },
-      { name: "value", about: "the value to give it: 7d, 9GB, 25%, on", required: false },
+      { name: "key", about: "Setting to get or set (default: get all)", required: false },
+      { name: "value", about: "New value, written as its key's example below", required: false },
     ],
-    flags: [dryRun("with a value: say what it would be, change nothing"), ...installFlags("the settings, or the one named as key and value")],
-    examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed", "poplin config trash_days 9 --dry-run"],
-    notes: [
-      "outside_pages, search_engines_allowed, and block_bots also change your",
-      "domain. An install that holds its key writes the rules of the first two",
-      "there itself. block_bots changes there at the next Repair on Domain.",
-    ],
+    flags: [DRY_RUN, ...INSTALL_FLAGS],
+    examples: ["poplin config versions_kept 10", "poplin config outside_pages allowed"],
   },
   {
     name: "doctor",
-    group: "the install",
-    about: "check that the install works, and report; --repair mends it",
+    group: "Install:",
+    about: "Check the install, or repair it with --repair",
     arguments: [],
     flags: [
-      { name: REPAIR_FLAG, about: "mend the install at its provider, with an account token" },
-      { name: "--update", about: "with --repair: first bring the install to the newest release" },
-      { name: "--dry-run", about: "with --repair: say what it would change, and change nothing" },
-      { name: "--add-user", value: "<email>", about: "with --repair: let one more person log in" },
-      { name: "--yes", about: "with --repair: ask nothing" },
-      { name: "--token-stdin", about: "with --repair: read the account token from standard input" },
-      ...installFlags("the checks and the versions, or what --repair came to"),
+      { name: REPAIR_FLAG, about: `${FLAG_WORDS.repair}\nMore options: poplin doctor --repair --help` },
+      { name: "--update", about: FLAG_WORDS.update, with: REPAIR_FLAG },
+      { ...DRY_RUN, with: REPAIR_FLAG },
+      { name: "--add-user", value: "<email>", about: FLAG_WORDS.addUser, with: REPAIR_FLAG },
+      { name: "--yes", about: FLAG_WORDS.yes, with: REPAIR_FLAG },
+      { name: "--token-stdin", about: FLAG_WORDS.tokenStdin, with: REPAIR_FLAG },
+      ...installFlags(`${FLAG_WORDS.server}\n--repair takes no --server.`),
     ],
-    examples: ["poplin doctor"],
-    notes: [
-      "--repair needs an account token and no login, so it is the way back in:",
-      "  poplin doctor --repair --dry-run",
-      "  poplin doctor --repair --add-user you@example.com",
-      "A repair mends, and takes a newer release only with --update:",
-      "  poplin doctor --repair --update",
-      "It takes no --server. Its own help lists the options of the provider and",
-      "how the token is given: poplin doctor --repair --help",
-    ],
+    examples: ["poplin doctor --repair --dry-run", "poplin doctor --repair --add-user you@example.com", "poplin doctor --repair --update"],
   },
   {
     name: "update",
-    group: "the install",
-    about: "update the install to the newest version",
+    group: "Install:",
+    about: "Update the install to the latest version",
     arguments: [],
     flags: [
-      { name: "--dry-run", about: "say what an update would come to, and start nothing" },
-      { name: "--to", value: "<version>", about: "take this version, not the newest: a lower one goes back" },
-      ...installFlags("what was put in place, or what a start would come to"),
+      { name: "--to", value: "<version>", about: "Update to this version instead\nA downgrade can only undo the last update.\nA downgrade fails if the update changed the schema." },
+      DRY_RUN,
+      ...INSTALL_FLAGS,
     ],
-    examples: ["poplin update", "poplin update --dry-run", "poplin update --to 0.2.0"],
-    notes: [
-      "The install fetches the built files of the newest release, checks them",
-      "against what the project published, and puts them in place of its",
-      "running code with the key it keeps. No build runs anywhere. An install",
-      "that holds no key cannot update itself: --dry-run says which it is. One",
-      "update a minute can be started. --to with a lower version goes back to",
-      "it, by the same steps: it is refused when the database changed since",
-      "that version, whose code cannot read it. --dry-run names the version an",
-      "install can go back to.",
-    ],
+    examples: ["poplin update --to 0.2.0"],
   },
   {
     name: "export",
-    group: "the install",
-    about: "download everything, or one site, as a zip",
-    arguments: [{ ...SITE, about: "the one site to export; without it, every site", required: false }],
+    group: "Backup:",
+    about: "Export all sites with the settings, or one, as a zip",
+    arguments: [{ ...SITE, about: `${SITE.about} (default: all)`, required: false }],
     flags: [
-      { name: "--out", value: "<file>", about: "the zip to write; poplin-backup-<day>.zip without it" },
-      { name: "--overwrite", about: "replace a file that is already there" },
-      { name: "--all-versions", about: "add the kept versions" },
-      ...installFlags("the zip's file and its sites"),
+      { name: "--out", value: "<file>", about: "Output zip (default: poplin-backup-<day>.zip)" },
+      { name: "--overwrite", about: "" },
+      { name: "--all-versions", about: "Include kept versions (default: live only)" },
+      ...INSTALL_FLAGS,
     ],
-    examples: ["poplin export", "poplin export --all-versions --out backup.zip", "poplin export report--k3f9x2ab71qz"],
-    notes: ["The zip holds plain files: every site's record and files, and the settings.", "It holds no token and no key of the install."],
+    examples: ["poplin export --all-versions --out backup.zip", "poplin export report--k3f9x2ab71qz"],
   },
   {
     name: "import",
-    group: "the install",
-    about: "put a backup back",
-    arguments: [{ name: "zip", about: "the zip that export made", required: true }],
+    group: "Backup:",
+    about: "Import a backup zip without overwriting sites",
+    arguments: [{ name: "zip", about: "A zip made by export", required: true }],
     flags: [
-      { name: "--site", value: "<site>", about: "import that one site of the backup" },
-      { name: "--settings", about: "replace the install's settings, but for the logins" },
-      { name: "--logins", about: "with --settings: replace the logins too" },
-      { name: "--dry-run", about: "check the zip and list its sites, and import nothing" },
-      ...installFlags("the sites, and the counts unless --dry-run"),
+      { name: "--site", value: "<site>", about: "Import only this site" },
+      { name: "--settings", about: "Replace the install's settings, except the users" },
+      { name: "--users", about: "Replace the users too", with: "--settings" },
+      DRY_RUN,
+      ...INSTALL_FLAGS,
     ],
-    examples: ["poplin import backup.zip", "poplin import backup.zip --dry-run", "poplin import backup.zip --site report--k3f9x2ab71qz"],
-    notes: [
-      "The whole zip is checked before anything is sent. A site the install",
-      "already has is skipped: nothing is ever overwritten. A site too large to",
-      "import with every version is imported with its live version alone.",
-    ],
+    examples: ["poplin import backup.zip --site report--k3f9x2ab71qz", "poplin import backup.zip --settings --users"],
   },
   {
     name: "mcp",
-    group: "the install",
-    about: "run the MCP server on this machine, over stdio",
+    group: "Agent:",
+    about: "Run the MCP server over stdio",
     arguments: [],
     flags: EVERYWHERE,
-    examples: ["poplin mcp"],
+    examples: [],
   },
   {
     name: "help",
-    group: "help",
-    about: "show the help of a command",
-    arguments: [{ name: "command", about: "the command to explain; without it, every command", required: false }],
+    group: "Help:",
+    about: "Show help for a command",
+    arguments: [{ name: "command", about: "Command to explain (default: the overview)", required: false }],
     flags: EVERYWHERE,
     examples: [],
   },
 ] as const satisfies readonly CommandSpec[];
 
-/** One flag of a command. A flag with a `value` takes one; a flag without is a switch. */
+/** One flag of a command: a switch, or with a `value` one that takes it. One `with` another is listed under it in the help. An empty `about` is for a name that says it all; a case to know before a run is a sentence on a line of its own. */
 interface FlagSpec {
   readonly name: `--${string}`;
   readonly value?: string;
   readonly about: string;
+  readonly with?: `--${string}`;
 }
 
-/** One command: the word that runs it, the arguments it takes in order, the flags it accepts, and what its help adds in whole lines. */
+/** One command: the word that runs it, the arguments it takes in order, the flags it accepts, and the command lines its help shows. */
 export interface CommandSpec {
   readonly name: string;
   readonly group: string;
@@ -342,26 +321,16 @@ export interface CommandSpec {
   readonly arguments: readonly { readonly name: string; readonly about: string; readonly required: boolean }[];
   readonly flags: readonly FlagSpec[];
   readonly examples: readonly string[];
-  readonly notes?: readonly string[];
 }
 
 /** The word of a command in the table. */
 export type CommandName = (typeof COMMANDS)[number]["name"];
 
-/** The flag that asks what a command would do, with nothing changed, in the words of one command. */
-function dryRun(about: string): FlagSpec {
-  return { name: "--dry-run", about };
-}
-
 /**
  * The flags of a command that talks to an install.
  *
- * @param prints - what the command's `--json` prints once it is done, as the words that follow `print JSON:`
+ * @param server - what `--server` means on that command
  */
-function installFlags(prints: string): readonly FlagSpec[] {
-  return [
-    { name: "--json", about: `print JSON: ${prints}, or the error object` },
-    { name: "--server", value: "<address>", about: "the address of the install to talk to" },
-    ...EVERYWHERE,
-  ];
+function installFlags(server: string): readonly FlagSpec[] {
+  return [{ name: "--json", about: "" }, { name: "--server", value: "<address>", about: server }, ...EVERYWHERE];
 }

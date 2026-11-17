@@ -25,7 +25,7 @@ export interface OptionRow {
   /** The name of the value it takes, such as `<name>`; `null` for an option that takes none. */
   readonly value: string | null;
 
-  /** What it means, in one line of the help. */
+  /** What it means in the help, in one line: empty where the option's name says it. */
   readonly about: string;
 
   /** The variable that answers the same, as the help shows it, such as `POPLIN_DOMAIN`; `null` for an option with none. */
@@ -233,8 +233,8 @@ export interface Installer<Where, Place> {
   /** How its options go together, such as `(--domain <name> | --no-domain)`. */
   readonly usage: string;
 
-  /** The lines of its help that say what the account token needs. */
-  readonly tokenHelp: readonly string[];
+  /** What the account token needs for each kind of work, as the help of that work lists it: a permission a line. */
+  readonly tokenHelp: Readonly<Record<"install" | "repair" | "remove", readonly string[]>>;
 
   /** Check a token's form; `undefined` for text that is none, which then reaches no request. */
   token(text: string): Token | undefined;

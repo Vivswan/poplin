@@ -5,6 +5,7 @@
 
 import { type Login, parseLogin } from "../../../core/src/auth/logins";
 import type { Found, Question, Token } from "../../../core/src/install/installer";
+import type { HelpPart } from "../commands/line/help-page";
 import { TOKEN_VARIABLES } from "../local/current-login";
 import type { Screen } from "../local/screen";
 import type { GivenToken, InstallEnds, InstallRequest, Plan, Provider, Stop } from "./records";
@@ -12,9 +13,6 @@ import { factsLines, placeOf, type Unsettled } from "./report";
 
 /** The variable the account token is read from. */
 export const TOKEN_VARIABLE = TOKEN_VARIABLES.install;
-
-/** The lines of a help text that say where the account token is read from. */
-export const TOKEN_HELP: readonly string[] = [`The account token is read from ${TOKEN_VARIABLE}, or from standard input`, "with --token-stdin, or asked for without being shown. It is used for the run", "and stored nowhere."];
 
 /** The command line whose help lists what the token of each kind of work needs. */
 const HELP_OF: Readonly<Record<"install" | "repair" | "remove", (provider: Provider) => string>> = {
@@ -61,6 +59,16 @@ async function askLogin(screen: Screen): Promise<Login | undefined> {
 
     screen.aside("warning", "that is no email address, such as you@example.com");
   }
+}
+
+/**
+ * The part of a help text that lists what the account token needs, a permission a point.
+ *
+ * @param work - what the help's command does with the token
+ * @param provider - the provider whose permissions for that work are listed; an empty part, which a page leaves out, when absent
+ */
+export function permissionsPart(work: Parameters<Provider["facts"]>[1], provider?: Provider): HelpPart {
+  return { title: "Permissions:", points: provider?.tokenHelp[work] ?? [] };
 }
 
 /**

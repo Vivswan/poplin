@@ -85,7 +85,7 @@ describe("a repair with the account token", () => {
 
     expect<unknown>([valued.code, account.repairs[0]?.where]).toEqual([0, { kind: "none", account: "stand-in" }]);
     expect([unnamed.code, unnamed.err]).toEqual([2, ["poplin doctor --repair: an answer is missing: the provider. Name it after doctor --repair: poplin doctor --repair <provider>."]]);
-    expect(help.out[0]?.split("\n")[0]).toBe("poplin doctor --repair other (--place <name> | --no-place) [options]");
+    expect(help.out[0]?.split("\n")[0]).toBe("Usage: poplin doctor --repair other (--place <name> | --no-place) [options]");
   });
 
   test("a run that mends says so and exits with 0, and tells the person what the provider says is theirs to do: without this a mended login is not followed by where to log in", async () => {
@@ -332,7 +332,7 @@ describe("the words of a repair", () => {
 
   test.each([
     ["--server https://poplin.example.com", ["poplin doctor --repair: no option --server", "--repair works with the account token, not a login: leave out --server"]],
-    ["--login you@example.com", ["poplin doctor --repair: no option --login", "a repair keeps the users the install has. To let one more person in: --add-user <email>"]],
+    ["--user you@example.com", ["poplin doctor --repair: no option --user", "a repair keeps the users the install has. To let one more person in: --add-user <email>"]],
     ["--place example.com --no-place", ["poplin doctor --repair: give one of --place <name> and --no-place"]],
   ])("a repair with %s is refused with a line that says what to type: without this a wrong option is ignored", async (options, err) => {
     const account = installed();
@@ -354,8 +354,10 @@ describe("the words of a repair", () => {
   test("the help of a repair lists its own options, the provider's, and how the token is given: without this --repair has options no help shows", async () => {
     const ran = await runLine("doctor --repair --help", installed());
     const [help = ""] = ran.out;
+    // `poplin help doctor --repair` is the same page: a page only `--help` reaches is out of the reach of `help`.
+    expect((await runLine("help doctor --repair", installed())).out).toEqual(ran.out);
 
-    expect([ran.code, help.split("\n")[0]]).toEqual([0, "poplin doctor --repair (--place <name> | --no-place) [options]"]);
-    expect(["--add-user <email>", "--update", "--dry-run", "--token-stdin", "--place <name>", "POPLIN_INSTALL_TOKEN", "a token that may only read adds nobody"].filter((part) => !help.includes(part))).toEqual([]);
+    expect([ran.code, help.split("\n")[0]]).toEqual([0, "Usage: poplin doctor --repair (--place <name> | --no-place) [options]"]);
+    expect(["--add-user <email>", "--update", "--dry-run", "--token-stdin", "--place <name>", "POPLIN_INSTALL_TOKEN", "  - Programs: Edit"].filter((part) => !help.includes(part))).toEqual([]);
   });
 });
