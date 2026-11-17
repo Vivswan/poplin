@@ -16,6 +16,13 @@ export const TOKEN_VARIABLE = TOKEN_VARIABLES.install;
 /** The lines of a help text that say where the account token is read from. */
 export const TOKEN_HELP: readonly string[] = [`The account token is read from ${TOKEN_VARIABLE}, or from standard input`, "with --token-stdin, or asked for without being shown. It is used for the run", "and stored nowhere."];
 
+/** The command line whose help lists what the token of each kind of work needs. */
+const HELP_OF: Readonly<Record<"install" | "repair" | "remove", (provider: Provider) => string>> = {
+  install: (provider) => `npx poplin install ${provider.id} --help`,
+  repair: () => "npx poplin doctor --repair --help",
+  remove: (provider) => `npx poplin uninstall ${provider.id} --help`,
+};
+
 /** The stop of a run whose person ended a question, which is before any change. */
 export const STOPPED: Stop = { problem: "stopped", exit: 1, words: "stopped: nothing was changed" };
 
@@ -64,7 +71,7 @@ async function askLogin(screen: Screen): Promise<Login | undefined> {
  * @returns the token, or `undefined` once the person ended the question
  */
 export async function askToken(provider: Provider, where: unknown, screen: Screen, work: Parameters<Provider["facts"]>[1]): Promise<Token | undefined> {
-  for (const line of factsLines(provider.facts(where, work))) screen.aside("plain", line);
+  for (const line of factsLines(provider.facts(where, work), HELP_OF[work](provider))) screen.aside("plain", line);
 
   for (;;) {
     const typed = await screen.ask("Account token (not shown):", "secret");

@@ -4,6 +4,7 @@ import { WHOAMI_ANSWER } from "../../../core/src/actions/manage-tokens";
 import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import { type Client, createClient } from "../client/client";
 import { currentLogin, TOKEN_VARIABLES } from "../local/current-login";
+import { pasted, runnerOf } from "../local/invoked";
 import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
@@ -311,7 +312,7 @@ export async function run(
 
   if (parsed.kind === "help") {
     const put = parsed.asked ? io.out : (text: string): void => io.screen.aside("plain", text);
-    put(helpText(parsed.topic));
+    put(pasted(helpText(parsed.topic), runnerOf(io.machine.env)));
 
     return exitCode(parsed);
   }

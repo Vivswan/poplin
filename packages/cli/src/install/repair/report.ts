@@ -19,7 +19,7 @@ const PROBLEMS = { elsewhere: "other_place", changed: "changed" } as const;
 const ADOPT = "--adopt";
 
 /** What each end of a repair that left nothing undone is called. */
-const DONE = { same: `the install is as it should be. ${UNCHANGED}`, mended: "the install is mended." } as const;
+const DONE = { same: "the install is as it should be. Nothing was changed.", mended: "the install is mended." } as const;
 
 /** A repair that worked through its rows. */
 type Mended = Extract<Repaired, { readonly ok: true }>;

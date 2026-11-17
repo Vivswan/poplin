@@ -8,6 +8,7 @@ import type { Run } from "../../../core/src/install/installer";
 import { exitCode } from "../commands/exit-codes";
 import type { Io } from "../commands/records";
 import { guardedScreen, written } from "../commands/util";
+import { pasted, runnerOf } from "../local/invoked";
 import { loadProviders } from "../local/providers";
 import type { Tone } from "../local/screen";
 import { VERSION } from "../poplin";
@@ -137,7 +138,7 @@ export function stopped(stop: Stop, show: Show, at: StoppedAt): number {
 /** The list of providers, for a line that names none where nobody can be asked. */
 function list<Planned>(command: CommandRun<Planned>, providers: readonly Provider[], json: boolean, io: Io): number {
   if (json) io.out(JSON.stringify({ ok: true, providers: providers.map((one) => ({ id: one.id, name: one.name, about: one.about })) }));
-  else io.out(command.help(providers));
+  else io.out(pasted(command.help(providers), runnerOf(io.machine.env)));
 
   return exitCode({ kind: "done" });
 }
@@ -164,7 +165,7 @@ async function answered<Planned>(line: Line<Planned>, parsed: Parsed<Planned>, p
   const { command } = line;
   const { name } = command;
   if (parsed.kind === "help" || parsed.kind === "version") {
-    io.out(parsed.kind === "help" ? command.help(providers, parsed.provider) : VERSION);
+    io.out(parsed.kind === "help" ? pasted(command.help(providers, parsed.provider), runnerOf(io.machine.env)) : VERSION);
 
     return exitCode({ kind: "done" });
   }

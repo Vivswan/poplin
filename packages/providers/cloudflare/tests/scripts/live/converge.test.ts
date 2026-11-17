@@ -78,7 +78,7 @@ const [READ_MADE, READ_MENDED] = [`Release: read as ${COMMIT} after the install 
 
 /** The lines of `poplin install` on an account that holds an install, which the command says beside its value: the address with the account's own name hidden. */
 const ALREADY = [
-  `This account already holds poplin ${COMMIT}, at https://poplin.[hidden], and it is as it should be. nothing was changed.`,
+  `This account already holds poplin ${COMMIT}, at https://poplin.[hidden], and it is as it should be. Nothing was changed.`,
   "The way on: npx poplin login --server https://poplin.[hidden]",
   "  to check it   npx poplin doctor",
   "  to mend it    npx poplin doctor --repair",

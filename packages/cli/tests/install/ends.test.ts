@@ -20,7 +20,7 @@ test("a provider's sentence reaches the screen on one line with no control chara
   const env = { [TOKEN_VARIABLE]: TOKEN };
   const [said, valued] = [await runLine(LINE, account, { env }), await runLine(`${LINE} --json`, account, { env })];
 
-  expect(said.err).toEqual(["The host refused the token. The way on: npx poplin uninstall stand-in. nothing was changed"]);
+  expect(said.err).toEqual(["The host refused the token. The way on: npx poplin uninstall stand-in. Nothing was changed."]);
   expect([valued.err, jsonOf(valued).words]).toEqual([said.err, `${FORGED}. nothing was changed`]);
 });
 

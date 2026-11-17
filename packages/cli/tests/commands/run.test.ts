@@ -567,7 +567,9 @@ describe("run", () => {
       await bench.run(`delete ${label} --no-trash`, { terminal: { asks: true, progress: true }, typed: { stop: true } }),
     ];
 
-    expect(refused.map((ran) => [ran.code, ran.err[0]])).toEqual([
+    const warned = `This removes ${label} and every file of it for good.`;
+
+    expect(refused.map((ran) => [ran.code, ran.err.find((line) => line !== warned)])).toEqual([
       [1, "no site with that id or public name"],
       [1, "no site with that id or public name"],
       [1, "no site with that id or public name"],
@@ -587,8 +589,8 @@ describe("run", () => {
 
     const deleted = await bench.run(`delete ${label.slice(-12)} --no-trash`, { terminal: { asks: true, progress: true }, typed: `${label}\n` });
 
-    expect(summary(deleted)).toEqual({ code: 0, out: [`deleted for good  ${label}`, "gone: 1 file in 1 kept version; nothing can restore them", `stopped working: ${site.addresses.site}`], err: [] });
-    expect(deleted.asked).toEqual([`This removes ${label} and every file of it for good.\nType ${label} to go on:`]);
+    expect(summary(deleted)).toEqual({ code: 0, out: [`deleted for good  ${label}`, "gone: 1 file in 1 kept version; nothing can restore them", `stopped working: ${site.addresses.site}`], err: [`This removes ${label} and every file of it for good.`] });
+    expect(deleted.asked).toEqual([`Type ${label} to go on:`]);
     expect(await stateOf(bench)).toEqual([{ sites: [] }, { sites: [] }, []]);
   });
 

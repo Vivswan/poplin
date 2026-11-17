@@ -202,7 +202,7 @@ class Pace {
     if (this.#stopped !== undefined) return false;
 
     const ms = againPauseMs(sendings);
-    await this.#pause(ms, `the install did not take ${path}: sending it again in ${Math.round(ms / MS_PER_SECOND)} s, ${sendings + 1} of ${UPLOAD_RETRIES + 1}`);
+    await this.#pause(ms, `sending ${path} again in ${Math.round(ms / MS_PER_SECOND)} s, try ${sendings + 1} of ${UPLOAD_RETRIES + 1}`);
 
     return this.#stopped === undefined;
   }

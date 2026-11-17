@@ -321,7 +321,8 @@ async function deleteForever(request: Asked<"delete">, session: Session): Promis
   if (!found.ok) return failed(found, "reads");
 
   const { label } = found.value.site;
-  const typed = await io.screen.ask(`This removes ${label} and every file of it for good.\nType ${label} to go on:`);
+  io.screen.aside("warning", `This removes ${label} and every file of it for good.`);
+  const typed = await io.screen.ask(`Type ${label} to go on:`);
   if (typed === undefined) return { ok: false, problem: problem("stopped", "nothing was deleted") };
 
   if (typed.trim() !== label) return { ok: false, problem: problem("not_confirmed") };
