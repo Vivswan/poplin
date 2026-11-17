@@ -117,7 +117,7 @@ async function grounded(found: Extract<Found<unknown, unknown>, { readonly state
 
 /** Look for an install with the token, and bring what is found to ground a run can start from. */
 async function look(request: InstallRequest, ends: InstallEnds, show: Show): Promise<Ground | Stop> {
-  const looked = await lookFor(request, ends, {
+  const looked = await lookFor({ ...request, work: "install" }, ends, {
     looking: () => show.working(LOOKING),
     found: (found) => show.line(found.state === "none" || found.state === "started" ? "note" : "warning", `${LOOKING} ... ${FOUND_WORDS[found.state]}`),
   });
@@ -188,7 +188,7 @@ async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, g
 
   if (installed.ready) return installed.address === undefined ? NEXT.none() : NEXT.login(installed.address);
 
-  const found = await provider.find(request.token, ground.where, ends.reach);
+  const found = await provider.find(request.token, ground.where, ends.reach, "install");
 
   return found.state === "whole" ? NEXT.repair() : NEXT.install(provider);
 }
