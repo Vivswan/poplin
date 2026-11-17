@@ -16,9 +16,9 @@ const REMOVAL = "uninstall stand-in --no-place --confirm poplin.example.com --ye
 
 /** The three commands, each with what it says after a provider's sentence of a stop before any change. */
 const COMMANDS = [
-  ["install", INSTALL, "Nothing was changed."],
-  ["uninstall", UNINSTALL, "Nothing was removed."],
-  ["doctor --repair", REPAIR, "Nothing was changed."],
+  ["install", INSTALL, "Nothing changed."],
+  ["uninstall", UNINSTALL, "Nothing changed."],
+  ["doctor --repair", REPAIR, "Nothing changed."],
 ] as const;
 
 /** What a provider says of a token it refuses, as one that ends its sentence with a full stop writes it and as one that does not. */
@@ -148,9 +148,21 @@ describe.each(["--no-place", "--place example.com"])("a careful choice of the li
   });
 
   // Drift: the sentence a person reads and the value a program reads name the next step from one list, so the sentence cannot leave out what the value carries.
-  test("a removal that keeps the data and left a kind tells a person to run it again with --keep-data", async () => {
+  test("a removal that keeps the data and left a kind tells a person to rerun it with --keep-data", async () => {
     const ran = await runLine(placed(`${REMOVAL} --keep-data`), half, { env: HELD });
 
-    expect([ran.code, ran.out.at(-2)]).toEqual([1, "1 not done, 1 kind removed. Run this command again with --keep-data: it removes what is left."]);
+    expect([ran.code, ran.out.slice(-2)]).toEqual([1, ["1 resource type was removed and 1 remains", "Next: rerun this command with --keep-data"]]);
+  });
+});
+
+describe("a piece the run never reached", () => {
+  // Drift: a provider gives such a row no words, so the line said `skipped` and a name and nothing of why. The value a program reads keeps the empty detail.
+  test("says on the screen that an earlier row stopped the run, and keeps its empty detail in the JSON value", async () => {
+    const account = { ...emptyAccount(), installed: installedOf([{ object: "Jobs", state: "not-run", detail: "" }], { ready: false }) };
+    const ran = await runLine(INSTALL, account, { env: HELD });
+    const json = await runLine(`${INSTALL} --json`, account, { env: HELD });
+
+    expect(ran.out.filter((line) => line.startsWith("skipped"))).toEqual(["skipped    Jobs                  an earlier row stopped the run"]);
+    expect(jsonOf(json).rows).toEqual([{ object: "Jobs", did: "not-run", detail: "" }]);
   });
 });

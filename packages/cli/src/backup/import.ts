@@ -10,7 +10,7 @@ import { showBytes } from "../../../core/src/records/settings";
 import { type Backup, type BackupSite, openBackup } from "./read";
 import type { Called, Failure } from "../client/client";
 import { sha256Of } from "../files/hash";
-import { type Problem, problem, problemOf } from "../commands/problems";
+import { aboutOf, type Problem, problem, problemOf } from "../commands/problems";
 import { refusedByLayout } from "../commands/sites/publish";
 import type { Outcome, RequestOf, Session } from "../commands/records";
 import type { Line, Tone } from "../local/screen";
@@ -36,8 +36,8 @@ const REFUSED_FOR_ALL: readonly number[] = [401, 403, 429, 503];
 /** How many files of a backup are read at once to be hashed. */
 const HASHED_AT_ONCE = 4;
 
-/** What goes with a zip refused after the install read the address `--site` gave. */
-const ONLY_ASKED = "nothing of the backup was sent: the install was asked only how it reads the site's address";
+/** What goes with a zip refused after the install read the URL `--site` gave. */
+const ONLY_ASKED = "Nothing was uploaded. Only read-only requests resolved the site URL.";
 
 /** The refusal of a site whose live pages this install cannot serve; every other refusal before a site is begun is the install not answering, which each later site would meet too. */
 const ROOT_LINKS = "root_links";
@@ -47,16 +47,16 @@ const NAME_TAKEN = "name_taken";
 
 /** The way through for a site whose public name another site of the install holds, a site in the trash included: no flag imports it under another name. */
 const NAME_TAKEN_STEP =
-  "another site of this install holds that public name, and keeps it in the trash too: free the name there (poplin set <that site> --unlisted, after poplin restore <that site> if it is in the trash), then: poplin import <zip> --site <label>";
+  "Another site of this install has that public name, also while trashed. Fix: free the name with poplin set <that site> --unlisted, after poplin restore <that site> if trashed, then poplin import <zip> --site <label>";
 
 /** What a dry run cannot see: it reads the zip alone, and what the install already holds shows only once a site is sent. */
-const NOT_CHECKED = "an id or a public name the install already holds shows only once a site is sent";
+const NOT_CHECKED = "A dry run does not check ids and public names the install already has";
 
 /** What became of an upload that was not finished, in words. */
 const AFTERMATH = {
-  abandoned: "the upload was given up and the site was not made",
-  unknown: "the upload could not be given up: it runs out by itself within a day, and poplin list shows whether the site was made",
-  live: "the site was made all the same, and its answer was lost; poplin list shows it",
+  abandoned: "upload aborted, site not created",
+  unknown: "the abort is unconfirmed, and an upload left open expires within 24 h. See: poplin list",
+  live: "the site was created but the response was lost. See: poplin list",
 } as const;
 
 /** The `import` command as the parser read it. */
@@ -182,7 +182,9 @@ async function begin(session: Pick<Session, "client" | "io">, format: number, si
 }
 
 function sentenceOf(said: Problem): string {
-  return said.about === undefined ? said.message : `${said.message} (${said.about})`;
+  const about = aboutOf(said);
+
+  return about === undefined ? said.message : `${said.message} (${about})`;
 }
 
 /** A site of which nothing was sent: its live version has a link the install cannot serve, or the install did not say how its addresses are laid out. */
@@ -195,7 +197,7 @@ function unsent(site: BackupSite, said: Problem): Result {
 function unfinished(site: BackupSite, failure: Failure, aftermath?: string): Result {
   const said = problemOf(failure);
   const sentence = sentenceOf(said);
-  const message = aftermath === undefined ? sentence : `${sentence}; ${aftermath}`;
+  const message = aftermath === undefined ? sentence : `${sentence}: ${aftermath}`;
   const result = isRefusedAs(failure, ALREADY_THERE) ? "skipped" : "failed";
   const forAll = failure.kind !== "refused" || REFUSED_FOR_ALL.includes(failure.status);
 
@@ -230,7 +232,7 @@ async function importSite(session: Session, format: number, site: BackupSite): P
     const sent = await sendUpload(client, begun.value, sending.files, {
       arrived: () => {
         arrived += 1;
-        if (io.terminal.progress) io.screen.working(`importing ${site.label}: ${arrived}/${countText(sending.files.length, "file")}`);
+        if (io.terminal.progress) io.screen.working(`Importing ${site.label}: ${arrived}/${countText(sending.files.length, "file")}`);
       },
       io,
     });
@@ -275,12 +277,12 @@ function reported(request: ImportRequest, results: readonly Result[]): Outcome {
   const counts = { imported: count("imported"), skipped: count("skipped"), failed: count("failed") };
   const stopped = results.some(stopsRun);
   const lines: (string | Line)[] = results.map(lineOf);
-  if (request.settings) lines.unshift(request.logins ? "restored the settings and the logins" : "restored the settings, but for the logins");
+  if (request.settings) lines.unshift(request.logins ? "Restored the settings and the users" : "Restored the settings except the users");
 
   lines.push(`${counts.imported} imported, ${counts.skipped} skipped, ${counts.failed} failed`);
   const sites = results.map(shown);
   const value = { file: request.zip, settings: request.settings, ...counts, stopped, sites };
-  const notes = stopped ? ["the import stopped there: the sites after it were not tried"] : [];
+  const notes = stopped ? ["Import stopped. The remaining sites were not attempted."] : [];
   if (results.some((done) => done.result === "failed" && done.code === NAME_TAKEN)) notes.push(NAME_TAKEN_STEP);
 
   if (counts.failed === 0) return { ok: true, value, lines, notes };
@@ -325,12 +327,12 @@ async function preview(backup: Backup, request: ImportRequest, chosen: Chosen, a
   }
 
   const lines = sites.map((site) => ["would import", site.label, countText(site.versions, "version"), countText(site.files, "file"), showBytes(site.bytes)].join(GAP));
-  if (request.settings) lines.unshift(request.logins ? "would restore the settings and the logins" : "would restore the settings, but for the logins");
+  if (request.settings) lines.unshift(request.logins ? "Would restore the settings and the users" : "Would restore the settings except the users");
 
   return {
     ok: true,
     value: { dry_run: true, file: request.zip, format: backup.manifest.format, settings: request.settings, sites },
-    lines: [...lines, `the backup passed every check of the zip; ${dryRunText(asked)}`],
+    lines: [...lines, "The backup passed every check", dryRunText(asked)],
     notes: [NOT_CHECKED],
   };
 }

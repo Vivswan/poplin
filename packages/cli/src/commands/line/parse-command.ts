@@ -93,7 +93,7 @@ function splitWords(argv: readonly string[]): TypedWords {
 function unknownFlag(typed: string, known: readonly string[], listedBy: string): UsageError {
   const meant = nearest(typed, known);
 
-  return usageError(`unknown flag ${JSON.stringify(typed)}`, meant === undefined ? `${listedBy} lists the flags` : `did you mean ${meant}?`);
+  return usageError(`Unknown option ${typed}`, meant === undefined ? `See: ${listedBy}` : `Did you mean ${meant}?`);
 }
 
 /** The command that works at a provider a word names, if it names one. */
@@ -105,13 +105,13 @@ function unknownCommand(word: string, publishHint: boolean): UsageError {
   const meant = nearest(word, [...SPECS.keys(), ...PROVIDER_COMMANDS.map((command) => command.name)]);
   const hints: string[] = [];
 
-  if (meant !== undefined) hints.push(`Did you mean: poplin ${meant}?`);
+  if (meant !== undefined) hints.push(`Did you mean poplin ${meant}?`);
 
-  if (publishHint && PLAIN_WORD.test(word)) hints.push(`To publish a ${word.endsWith(".html") ? "file" : "folder"} with that name: poplin ./${word}`);
+  if (publishHint && PLAIN_WORD.test(word)) hints.push(`To publish a ${word.endsWith(".html") ? "file" : "folder"} of that name: poplin ./${word}`);
 
-  if (hints.length === 0) hints.push("poplin --help lists the commands");
+  if (hints.length === 0) hints.push("See: poplin --help");
 
-  return usageError(`unknown command ${JSON.stringify(word)}`, hints.join(" "));
+  return usageError(`Unknown command ${JSON.stringify(word)}`, hints.join(" "));
 }
 
 /** Whether a flag stands as a word of its own before `--`, even where the flag before it would take it as a value. */
@@ -132,15 +132,15 @@ function withoutWord(argv: readonly string[], flags: readonly TypedFlag[]): Pars
   const [first] = flags;
   if (first === undefined) return { kind: "help", asked: false };
 
-  if (!TAKES_VALUE.has(first.name)) return unknownFlag(first.name, [...TAKES_VALUE.keys()], "poplin help <command>");
+  if (!TAKES_VALUE.has(first.name)) return unknownFlag(first.name, [...TAKES_VALUE.keys()], "poplin <command> --help");
 
-  return usageError(`${first.name} needs a command or a path before or after it`, "poplin --help lists the commands");
+  return usageError(`${first.name} requires a command or a path`, "See: poplin --help");
 }
 
 /** Answer for a line whose first word is neither a command nor a path. */
 function withoutCommand(word: string, flags: readonly TypedFlag[]): UsageError {
   const stray = flags.find((flag) => !TAKES_VALUE.has(flag.name));
-  if (stray !== undefined) return unknownFlag(stray.name, [...TAKES_VALUE.keys()], "poplin help <command>");
+  if (stray !== undefined) return unknownFlag(stray.name, [...TAKES_VALUE.keys()], "poplin <command> --help");
 
   return unknownCommand(word, true);
 }
@@ -152,22 +152,22 @@ function readFlag(flag: TypedFlag, spec: CommandSpec, seen: Flags): string | tru
     return unknownFlag(
       flag.name,
       spec.flags.map((candidate) => candidate.name),
-      `poplin help ${spec.name}`,
+      `poplin ${spec.name} --help`,
     );
 
-  if (seen.has(flag.name)) return usageError(`${flag.name} was given twice`);
+  if (seen.has(flag.name)) return usageError(`${flag.name} was passed more than once`);
 
   if (known.value === undefined && flag.value !== undefined) return usageError(`${flag.name} takes no value`);
 
   if (known.value === undefined) return true;
 
-  if (flag.value === undefined) return usageError(`${flag.name} needs a value: ${flag.name} ${known.value}`);
+  if (flag.value === undefined) return usageError(`${flag.name} requires a value: ${flag.name} ${known.value}`);
 
   // An unjoined value that starts with a dash is far more often the next flag than a value.
   if (!flag.joined && flag.value.length > 1 && flag.value.startsWith("-"))
     return usageError(
-      `${flag.name} needs a value: ${flag.name} ${known.value}`,
-      `for a value that starts with a dash, join the two with =: ${flag.name}=${known.value}`,
+      `${flag.name} requires a value: ${flag.name} ${known.value}`,
+      `For a value starting with a dash: ${flag.name}=${known.value}`,
     );
 
   return flag.value;
@@ -224,14 +224,14 @@ function helpOf(topic: string | undefined): Parsed {
 
 /** A refusal of commander in the product's words: a command was given too few arguments, or too many. */
 function refusalOf(refused: CommanderError, spec: CommandSpec, given: readonly string[]): UsageError | undefined {
-  const usage = `poplin ${spec.name} ${argumentsOf(spec)}`.trimEnd();
-  if (refused.code === REFUSALS.missing) return usageError(`poplin ${spec.name} needs a ${QUOTED.exec(refused.message)?.[1] ?? ""}`, usage);
+  const usage = `Usage: poplin ${spec.name} ${argumentsOf(spec)}`.trimEnd();
+  if (refused.code === REFUSALS.missing) return usageError(`Missing argument <${QUOTED.exec(refused.message)?.[1] ?? ""}>`, usage);
 
   if (refused.code !== REFUSALS.tooMany) return undefined;
 
   const extra = given.slice(spec.arguments.length).map((word) => JSON.stringify(word));
 
-  return usageError(`too many arguments for poplin ${spec.name}: ${extra.join(" ")}`, usage);
+  return usageError(`Unexpected ${extra.length === 1 ? "argument" : "arguments"} ${extra.join(" ")}`, usage);
 }
 
 /**

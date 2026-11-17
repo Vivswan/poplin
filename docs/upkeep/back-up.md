@@ -40,7 +40,7 @@ A restore is `poplin import backup.zip --settings --users` into an install that 
 
 | Stays behind                    | So                                           |
 | ------------------------------- | -------------------------------------------- |
-| every token                     | each computer logs in again                  |
+| every token                     | each machine logs in again                  |
 | the activity log                | the log starts anew, with the import         |
 | a version the zip does not hold | a zip of live versions restores those alone  |
 
@@ -59,15 +59,15 @@ the old install  ->  backup.zip  ->  a new install, where you want it
 | 2    | check the zip: it lists its sites, and sends nothing                  | `npx poplin import backup.zip --dry-run`                |
 | 3    | in the same account: remove the old install, whole                    | [Remove](remove.md) from its step 2, without `--keep-data` |
 | 4    | install anew, where you want it                                       | `npx poplin install cloudflare`, as [Install](../start/install.md) has it |
-| 5    | log this computer in to the new install, with Can change: Everything  | `npx poplin login --server https://poplin.example.com`  |
+| 5    | log this machine in to the new install, with Can change: Everything  | `npx poplin login --server https://poplin.example.com`  |
 | 6    | bring the sites and the settings back                                 | `npx poplin import backup.zip --settings`               |
 | 7    | to another account: remove the old install                            | [Remove](remove.md) from its step 3                     |
 
 One account holds one install. So a move inside an account, to a domain or off one, removes the old install in step 3, before the new one is made. A move to another account leaves the old install up until step 7: remove it once step 6 put every site back.
 
-**Leave Remove's step 1 out.** It is the export of step 1 here, and a second run is refused with `file_exists`, since `backup.zip` is there already. In step 7, leave its step 2 out on this computer too: step 5 logged it in to the new install, and a logout would end that login.
+**Leave Remove's step 1 out.** It is the export of step 1 here, and a second run is refused with `file_exists`, since `backup.zip` is there already. In step 7, leave its step 2 out on this machine too: step 5 logged it in to the new install, and a logout would end that login.
 
-**Keep the zip safe.** After step 3 it is the only copy of your sites until step 6 is done. The last line of step 2 starts `the backup passed every check` for a zip that can be read. It does not try the sites against the new install.
+**Keep the zip safe.** After step 3 it is the only copy of your sites until step 6 is done. The last line of step 2 is `The backup passed every check`, before the line of the dry run, for a zip that can be read. It does not try the sites against the new install.
 
 **Before step 1, where the move is off a domain**, mend what an install without a domain does not take, and publish those sites again:
 
@@ -83,7 +83,7 @@ A site that is refused for one of these two has a line that says `failed` in ste
 | a site's address              | built from the site's name and id, which stay, and the new install's address. It changes when the domain or the kind of install changes, and stays the same under the same domain |
 | a link you shared             | stops where the address is new, once the old install is removed. Nothing sends it on: send the new one |
 | a public name                 | comes back with its site, at the new install's address                                          |
-| each computer's login         | made anew: the zip holds no token. Run `npx poplin login`, with `--server` and the new address, on each one |
+| each machine's login         | made anew: the zip holds no token. Run `npx poplin login`, with `--server` and the new address, on each one |
 | the users                     | the first login of the new install. `--settings --users` puts the old list in its place, where that list holds a login of the new install. Else it is refused with `no_working_login` |
 | the install's keys            | made anew by the new install: the zip holds none                                                |
 | the activity log              | starts anew                                                                                     |

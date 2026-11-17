@@ -16,17 +16,17 @@ const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
 const GROUP_AND_OTHERS = 0o077;
 const WINDOWS = "win32";
-const AGAIN = "run `poplin login` again";
+const AGAIN = "rerun poplin login";
 const READ_WITHOUT_WAITING = constants.O_RDONLY | (constants.O_NONBLOCK ?? 0);
 
 /** The facts about a machine that decide where its login is: the environment, `process.platform`, and the home folder. */
 export type Machine = { readonly env: Readonly<Record<string, string | undefined>>; readonly platform: string; readonly home: string };
 
-/** What the login file says. `refused` is a file that exists and cannot be trusted; `message` names the fix. */
-type SavedLogin = { readonly state: "missing" } | { readonly state: "saved"; readonly login: Login } | { readonly state: "refused"; readonly message: string };
+/** What the login file says. `refused` is a file that exists and cannot be trusted; `fix` is the line that names the fix. */
+type SavedLogin = { readonly state: "missing" } | { readonly state: "saved"; readonly login: Login } | { readonly state: "refused"; readonly message: string; readonly fix: string };
 
-function refuse(path: string, problem: string, fix: string = AGAIN): { readonly state: "refused"; readonly message: string } {
-  return { state: "refused", message: `${path} ${problem}; ${fix}` };
+function refuse(path: string, problem: string, fix: string = AGAIN): { readonly state: "refused"; readonly message: string; readonly fix: string } {
+  return { state: "refused", message: `${path} ${problem}`, fix: `Fix: ${fix}` };
 }
 
 function pathsOf(machine: Machine): typeof posix {
@@ -105,12 +105,12 @@ export async function readLoginFile(machine: Machine): Promise<SavedLogin> {
 
   // Windows has no mode bits: the per-user folder's access list is what keeps other users out.
   if (machine.platform !== WINDOWS && (facts.mode & GROUP_AND_OTHERS) !== 0) {
-    return refuse(path, "holds a token and other users can read it", `run \`chmod 600\` on it, or ${AGAIN}`);
+    return refuse(path, "holds a token and is readable by other users", `chmod 600 the file, or ${AGAIN}`);
   }
 
   const parsed = parseLogin(readJson(await handle.readFile("utf8")));
 
-  if (!parsed.ok) return refuse(path, `is not a saved login (${parsed.problem})`);
+  if (!parsed.ok) return refuse(path, `is not a stored login: ${parsed.problem}`);
 
   return { state: "saved", login: parsed.login };
 }

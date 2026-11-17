@@ -96,6 +96,6 @@ describe("loadProviders", () => {
   ])("a file that %s is refused by its name: without this a damaged package fails somewhere inside a run", async (_name, text) => {
     const folder = folderOf({ "broken-host.mjs": text });
 
-    expect(loadProviders(folder)).rejects.toThrow("broken-host.mjs is no provider of this poplin");
+    expect(loadProviders(folder)).rejects.toThrow("broken-host.mjs is not a provider of this poplin build");
   });
 });

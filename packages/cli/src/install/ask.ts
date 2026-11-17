@@ -9,7 +9,7 @@ import type { HelpPart } from "../commands/line/help-page";
 import { TOKEN_VARIABLES } from "../local/current-login";
 import type { Screen } from "../local/screen";
 import type { GivenToken, InstallEnds, InstallRequest, Plan, Provider, Stop } from "./records";
-import { factsLines, placeOf, type Unsettled } from "./report";
+import { factsLines, placeOf, UNCHANGED, type Unsettled } from "./report";
 
 /** The variable the account token is read from. */
 export const TOKEN_VARIABLE = TOKEN_VARIABLES.install;
@@ -22,7 +22,7 @@ const HELP_OF: Readonly<Record<"install" | "repair" | "remove", (provider: Provi
 };
 
 /** The stop of a run whose person ended a question, which is before any change. */
-export const STOPPED: Stop = { problem: "stopped", exit: 1, words: "stopped: nothing was changed" };
+export const STOPPED: Stop = { problem: "stopped", exit: 1, words: `Cancelled. ${UNCHANGED}.` };
 
 /**
  * Ask a provider's questions until it has its answer of where the install goes.
@@ -51,13 +51,13 @@ export async function askWhere(questions: readonly Question<unknown>[], screen: 
 
 async function askLogin(screen: Screen): Promise<Login | undefined> {
   for (;;) {
-    const typed = await screen.ask("Your email, the first login:");
+    const typed = await screen.ask("First user's email:");
     if (typed === undefined) return undefined;
 
     const login = parseLogin(typed);
     if (login.ok) return login.value;
 
-    screen.aside("warning", "that is no email address, such as you@example.com");
+    screen.aside("warning", "The input is not an email address");
   }
 }
 
@@ -82,29 +82,27 @@ export async function askToken(provider: Provider, where: unknown, screen: Scree
   for (const line of factsLines(provider.facts(where, work), HELP_OF[work](provider))) screen.aside("plain", line);
 
   for (;;) {
-    const typed = await screen.ask("Account token (not shown):", "secret");
+    const typed = await screen.ask("Account token (hidden):", "secret");
     if (typed === undefined) return undefined;
 
     const token = provider.token(typed.trim());
     if (token !== undefined) return token;
 
-    screen.aside("warning", `that is no account token of ${provider.name}`);
+    screen.aside("warning", `The input is not a ${provider.name} account token`);
   }
 }
 
 /**
  * The token a run that asks nothing was given: the variable's, or the first line of standard input.
- *
- * @param command - the command as it is typed after `poplin`, which the refusal of a piped line that is no token starts with
  */
-export async function givenToken(given: GivenToken, provider: Provider, input: InstallEnds["input"], command: string): Promise<Token | Stop> {
+export async function givenToken(given: GivenToken, provider: Provider, input: InstallEnds["input"]): Promise<Token | Stop> {
   if (given.from === "environment") return given.token;
 
   const [line = ""] = (await input()).split("\n");
   const token = provider.token(line.trim());
   if (token !== undefined) return token;
 
-  return { problem: "usage", exit: 2, lines: [`poplin ${command}: standard input does not hold an account token of ${provider.name}`] };
+  return { problem: "usage", exit: 2, lines: [`The first line of stdin is not a ${provider.name} account token`] };
 }
 
 /** Ask which of the places a token shows is meant. A run that asks nothing is told which option answers it. */
@@ -152,7 +150,7 @@ export async function settle(plan: Plan, ends: Pick<InstallEnds, "screen" | "inp
   const { provider, json } = plan;
 
   if (plan.asking === "never") {
-    const token = await givenToken(plan.token, provider, ends.input, "install");
+    const token = await givenToken(plan.token, provider, ends.input);
     if (typeof token === "object") return { stop: token, place: placeOf(provider, plan.where) };
 
     return { provider, json, asking: "never", mode: plan.mode, where: plan.where, login: plan.login, token };

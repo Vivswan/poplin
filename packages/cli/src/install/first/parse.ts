@@ -26,11 +26,11 @@ export const SHARED_OPTIONS: readonly OptionRow[] = [
 
 /** The options a person may reach for that belong to another command, each with the line that says which. */
 const ELSEWHERE: Readonly<Record<string, string>> = {
-  "--repair": "To mend an install: poplin doctor --repair",
-  "--update": "To update an install: poplin update",
-  "--force": "install changes no install that is there. To remove one: poplin uninstall <provider>",
-  "--remove": "To remove an install: poplin uninstall <provider>",
-  "--token": `The account token is never an argument: set ${TOKEN_VARIABLE}, or pipe it with --token-stdin`,
+  "--repair": "Fix: poplin doctor --repair",
+  "--update": "Fix: poplin update",
+  "--force": "Fix: remove the existing install first with poplin uninstall <provider>",
+  "--remove": "Fix: poplin uninstall <provider>",
+  "--token": `Fix: pass --token-stdin or set ${TOKEN_VARIABLE}`,
 };
 
 /** The options of a real run alone, which a dry run refuses. */
@@ -55,16 +55,16 @@ function readLogin(shared: Typed, env: Variables): Login | undefined | Stop {
   const login = parseLogin(typeof typed === "string" ? typed : held);
   if (login.ok) return login.value;
 
-  return typeof typed === "string" ? usage(COMMAND, "--user takes an email address", "for example: --user you@example.com") : usage(COMMAND, `${USER_VARIABLE} holds no email address`);
+  return typeof typed === "string" ? usage("--user requires an email address") : usage(`${USER_VARIABLE} is not an email address`);
 }
 
 /** How the run goes, from its switches. `open` is what an answer no switch gave is: `"ask"` on a terminal, and `"no"` where nothing is asked. */
 function modeOf<Open extends "ask" | "no">(shared: Typed, open: Open): InstallMode<Open> | Stop {
-  if (shared.has("log-in") && shared.has("no-log-in")) return usage(COMMAND, "give one of --log-in and --no-log-in");
+  if (shared.has("log-in") && shared.has("no-log-in")) return usage("--log-in and --no-log-in are mutually exclusive");
 
   const adopt = shared.has("adopt") ? "yes" : undefined;
   const stray = RUN_ALONE.find((flag) => shared.has(flag.slice(2)));
-  if (shared.has("dry-run")) return stray === undefined ? { mode: "dry-run", adopt: adopt ?? "no" } : usage(COMMAND, `--dry-run changes nothing: leave out ${stray}`);
+  if (shared.has("dry-run")) return stray === undefined ? { mode: "dry-run", adopt: adopt ?? "no" } : usage(`--dry-run and ${stray} are mutually exclusive`);
 
   const refused = shared.has("no-log-in") ? "no" : undefined;
 
@@ -75,12 +75,12 @@ function modeOf<Open extends "ask" | "no">(shared: Typed, open: Open): InstallMo
 function readAnswers(read: Named, env: Variables): Answers | Stop {
   const { provider, shared } = read;
   const where = provider.read({ flags: read.own, env });
-  if (!where.ok && where.why === "refused") return usage(COMMAND, where.refused);
+  if (!where.ok && where.why === "refused") return usage(where.refused);
 
   const login = readLogin(shared, env);
   if (typeof login === "object") return login;
 
-  const token = heldToken(read, env, COMMAND);
+  const token = heldToken(read, env);
   if (typeof token === "object") return token;
 
   return { where, login, token };
@@ -98,7 +98,7 @@ function fixedPlan(read: Named, env: Variables, json: boolean): Plan | Stop {
   const piped: GivenToken | undefined = read.shared.has("token-stdin") ? { from: "stdin" } : undefined;
   const token = answers.token === undefined ? piped : ({ from: "environment", token: answers.token } as const);
   const missing: Missing[] = where.ok ? [] : where.open.map(missingOf);
-  if (login === undefined) missing.push({ key: "user", name: "the first login", give: `Give --user <email> (or ${USER_VARIABLE}).` });
+  if (login === undefined) missing.push({ key: "user", name: "first user", give: `pass --user <email> or set ${USER_VARIABLE}` });
 
   if (token === undefined) missing.push(MISSING_TOKEN);
 

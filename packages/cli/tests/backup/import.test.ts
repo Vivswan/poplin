@@ -180,7 +180,7 @@ describe("import", () => {
     const said = jsonOf(await into.run(`import ${zip} --json`));
 
     expect([said.imported, said.failed, said.stopped, into.sent.filter((line) => line === "POST /api/import/sites").length]).toEqual([0, 1, true, 1]);
-    expect(said.sites).toMatchObject([{ code: "allowance_spent", message: "a day's allowance of the install is used up until 00:00 UTC (writing)" }]);
+    expect(said.sites).toMatchObject([{ code: "allowance_spent", message: "The install's daily quota is exhausted (writing)" }]);
   });
 
   // A start answered 429 began nothing, so the start made again makes each site once.
@@ -262,7 +262,7 @@ describe("import", () => {
     const said = jsonOf(stopped);
     const sent = (start: string): number => into.sent.filter((line) => line.startsWith(start)).length;
 
-    expect([stopped.code, said.stopped, said.sites]).toMatchObject([1, true, [{ code: "stopped", message: "the command was stopped; the upload was given up and the site was not made" }]]);
+    expect([stopped.code, said.stopped, said.sites]).toMatchObject([1, true, [{ code: "stopped", message: "Cancelled: upload aborted, site not created" }]]);
     expect([sent("POST /api/import/sites"), sent("PUT"), sent("DELETE /api/uploads/")]).toEqual([1, 2, 1]);
     expect((await answered(into.install.routes.export.sites.$get())).body.sites).toEqual([]);
   });
@@ -290,7 +290,7 @@ describe("import", () => {
     expect(linesOf(jsonOf(runs.name_taken))).toEqual({ demo: "imported", docs: "name_taken", notes: "imported", old: "imported", typed: "imported" });
     // Drift: a site failed on a taken public name with no next step, and no flag imports it under another name.
     expect([runs.name_taken.err, runs.too_many_sites.err.some((line) => line.includes("public name"))]).toEqual([
-      ["another site of this install holds that public name, and keeps it in the trash too: free the name there (poplin set <that site> --unlisted, after poplin restore <that site> if it is in the trash), then: poplin import <zip> --site <label>"],
+      ["Another site of this install has that public name, also while trashed. Fix: free the name with poplin set <that site> --unlisted, after poplin restore <that site> if trashed, then poplin import <zip> --site <label>"],
       false,
     ]);
     expect(linesOf(jsonOf(runs.bad_argument)).docs).toBe("bad_argument");
@@ -315,7 +315,7 @@ describe("import", () => {
     const failed = (jsonOf(refused).sites as (Line & { readonly message?: string })[]).find((site) => site.result === "failed");
 
     expect([refused.code, linesOf(jsonOf(refused)), taken.code, linesOf(jsonOf(taken))]).toEqual([1, { linked: "root_links", rooted: "imported" }, 0, { linked: "imported", rooted: "imported" }]);
-    expect(failed?.message).toBe('this install has no domain, so a link that starts with "/" would not open (/about.html in index.html)');
+    expect(failed?.message).toBe('A link starting with "/" breaks on an install without a domain (/about.html in index.html)');
     expect([under.sent.filter((line) => line === "GET /api/whoami").length, under.sent.filter((line) => line.startsWith("POST /api/import/sites")).length]).toEqual([1, 1]);
     expect((await held(under.install)).sites.map((site) => site.name)).toEqual(["rooted"]);
   });
@@ -351,12 +351,12 @@ describe("import", () => {
     const byId = jsonOf(await into.run(`import ${zip} --site ${notes.split("--")[1]} --json`));
     const absent = await into.run(`import ${zip} --site zzzzzzzzzzzz`);
 
-    expect([dry.code, dry.out.length, dry.out[0], dry.out.at(-1)]).toEqual([0, 8, "would restore the settings, but for the logins", "the backup passed every check of the zip; nothing was sent: --dry-run calls no install"]);
+    expect([dry.code, dry.out.length, dry.out[0], dry.out.slice(-2)]).toEqual([0, 9, "Would restore the settings except the users", ["The backup passed every check", "Dry run: no request was sent"]]);
     // Drift: a dry run that "passed every check" was read as a promise that the import would go through, and a public name the install held then failed it.
-    expect(dry.err).toEqual(["an id or a public name the install already holds shows only once a site is sent"]);
+    expect(dry.err).toEqual(["A dry run does not check ids and public names the install already has"]);
     expect([one, byWideName].map((ran) => (ran.sites as Line[]).map((site) => site.label))).toEqual([[docs], [wide]]);
     expect([byId.imported, (byId.sites as Line[])[0]?.label]).toEqual([1, notes]);
-    expect([absent.code, absent.err[0]]).toEqual([1, "the backup holds no such site: zzzzzzzzzzzz"]);
+    expect([absent.code, absent.err[0]]).toEqual([1, "Site not found in the backup: zzzzzzzzzzzz"]);
     expect(into.sent.filter((sent) => !sent.includes("/uploads/"))).toEqual(["GET /api/whoami", "POST /api/import/sites"]);
   });
 
@@ -382,8 +382,8 @@ describe("import", () => {
     const refused = await into.run(`import ${one} --settings`);
 
     expect([bare, kept[0], kept[1]]).toEqual([before, 9, before[1]]);
-    expect([(await settings())[1], restored.out[0]]).toEqual([["ada@example.com", "grace@example.com"], "restored the settings, but for the logins"]);
-    expect([refused.code, refused.err[0]]).toEqual([1, "the backup holds no settings: it is the backup of one site"]);
+    expect([(await settings())[1], restored.out[0]]).toEqual([["ada@example.com", "grace@example.com"], "Restored the settings except the users"]);
+    expect([refused.code, refused.err[0]]).toEqual([1, "The backup has no settings: it holds one site"]);
   });
 
   test("a zip that fails a check is refused before any request, whatever else in it is right: without this a half-read backup could leave a half-restored install", async () => {
@@ -399,12 +399,12 @@ describe("import", () => {
     const runs = [];
     for (const zip of zips) runs.push(await bench.run(`import ${zip}`));
 
-    expect(runs.map((ran) => [ran.code, ran.out, ran.err[1]])).toEqual(Array(4).fill([1, [], "nothing was sent to the install"]));
+    expect(runs.map((ran) => [ran.code, ran.out, ran.err.length])).toEqual(Array(4).fill([1, [], 1]));
     expect(runs.map((ran) => ran.err[0])).toEqual([
-      "the file is not a backup: it is of format 2, which a newer poplin made; this one reads up to format 1",
-      'the file is not a backup: "notes.txt" is no entry of a backup',
-      "the file is not a backup: its manifest counts other sites, files, or bytes than it holds",
-      `the file is not a backup: "${zips[3]}" cannot be opened`,
+      "Not a backup: format 2 is newer than this CLI reads, which is up to format 1. Nothing was uploaded.",
+      'Not a backup: "notes.txt" is not a backup entry. Nothing was uploaded.',
+      "Not a backup: the manifest counts differ from the sites, files, or bytes in the zip. Nothing was uploaded.",
+      `Not a backup: cannot open "${zips[3]}". Nothing was uploaded.`,
     ]);
     expect([bench.sent, readdirSync(dirname(zips[0] ?? "")).length]).toEqual([[], 3]);
   });

@@ -192,104 +192,104 @@ describe("readFiles refusals", () => {
       "a folder with a page but no index.html at its top",
       { "site/about.html": PAGE, "site/docs/index.html": PAGE },
       "site",
-      'the folder "<root>/site" has no index.html at its top',
+      'folder "<root>/site" has no index.html at its root',
     ],
-    ["a folder whose index.html is a folder", { "site/index.html/page.html": PAGE }, "site", 'the folder "<root>/site" has no index.html at its top'],
+    ["a folder whose index.html is a folder", { "site/index.html/page.html": PAGE }, "site", 'folder "<root>/site" has no index.html at its root'],
     [
       "a folder that is empty once hidden files and node_modules are left out",
       { "site/.env": "TOKEN=1", "site/node_modules/index.html": PAGE, "site/.well-known/index.html": PAGE },
       "site",
-      'the folder "<root>/site" holds nothing to publish; hidden files and node_modules are never sent',
+      'folder "<root>/site" has no files to publish. Hidden files and node_modules are skipped.',
     ],
     [
       "a link to a system file",
       { "site/index.html": PAGE, "site/hosts.txt": { link: "/etc/hosts" } },
       "site",
-      expect.stringMatching(/^the link "hosts\.txt" points outside the folder, at "(\/private)?\/etc\/hosts"; remove it$/),
+      expect.stringMatching(/^symlink "hosts\.txt" points outside the folder, to "(\/private)?\/etc\/hosts"\. Remove it\.$/),
     ],
     [
       "a link to a folder beside the folder",
       { "site/index.html": PAGE, "sitemap/secret.txt": "s", "site/more": { link: "sitemap" } },
       "site",
-      'the link "more" points outside the folder, at "<root>/sitemap"; remove it',
+      'symlink "more" points outside the folder, to "<root>/sitemap". Remove it.',
     ],
     [
       "a link below the top that climbs out",
       { "site/index.html": PAGE, "site/a/b/up": { link: "." } },
       "site",
-      'the link "a/b/up" points outside the folder, at "<root>"; remove it',
+      'symlink "a/b/up" points outside the folder, to "<root>". Remove it.',
     ],
     [
       "a page that is itself a link",
       { "site/secret.txt": "s", "page.html": { link: "site/secret.txt" } },
       "page.html",
-      '"<root>/page.html" is a link, to "<root>/site/secret.txt"; name the page itself',
+      '"<root>/page.html" is a symlink to "<root>/site/secret.txt". Pass the file itself.',
     ],
     [
       "a link back to a folder that holds it",
       { "site/index.html": PAGE, "site/a/b/loop": { link: "site/a" } },
       "site",
-      'the link "a/b/loop" loops back to a folder that holds it; remove it',
+      'symlink "a/b/loop" loops back to a parent folder. Remove it.',
     ],
     [
       "a link to the folder itself",
       { "site/index.html": PAGE, "site/self": { link: "site" } },
       "site",
-      'the link "self" loops back to a folder that holds it; remove it',
+      'symlink "self" loops back to a parent folder. Remove it.',
     ],
     [
       "a link to itself",
       { "site/index.html": PAGE, "site/again": { link: "site/again" } },
       "site",
-      expect.stringMatching(/^the link "again" cannot be followed \([A-Z]+\); fix or remove it$/),
+      expect.stringMatching(/^symlink "again" cannot be resolved \([A-Z]+\)\. Fix or remove it\.$/),
     ],
     [
       "a link to a missing file",
       { "site/index.html": PAGE, "site/gone.css": { link: "site/removed.css" } },
       "site",
-      expect.stringMatching(/^the link "gone\.css" cannot be followed \([A-Z]+\); fix or remove it$/),
+      expect.stringMatching(/^symlink "gone\.css" cannot be resolved \([A-Z]+\)\. Fix or remove it\.$/),
     ],
     [
       "a link with a plain name to a hidden file",
       { "site/index.html": PAGE, "site/.env": "TOKEN=1", "site/settings.txt": { link: "site/.env" } },
       "site",
-      'the link "settings.txt" points at ".env", which is hidden or under node_modules; remove it',
+      'symlink "settings.txt" points to ".env", which is hidden or under node_modules. Remove it.',
     ],
     [
       "a link into node_modules",
       { "site/index.html": PAGE, "site/node_modules/left/index.js": "0", "site/vendor": { link: "site/node_modules/left" } },
       "site",
-      'the link "vendor" points at "node_modules/left", which is hidden or under node_modules; remove it',
+      'symlink "vendor" points to "node_modules/left", which is hidden or under node_modules. Remove it.',
     ],
     [
       "a name holding the mark Node leaves for bytes that are not UTF-8",
       { "site/index.html": PAGE, "site/docs/\ufffd.txt": "x" },
       "site",
-      '"docs/\ufffd.txt" has a name that is not valid text; rename or remove it',
+      '"docs/\ufffd.txt" has a name with an invalid character. Rename or remove it.',
     ],
     [
       "a file whose name decodes to a parent folder",
       { "site/index.html": PAGE, "site/docs/%2e%2E/page.html": PAGE },
       "site",
-      'the file "docs/%2e%2E/page.html" has a name that cannot be stored (dot-segment); rename or remove it',
+      'file "docs/%2e%2E/page.html" has a name that cannot be stored (dot-segment). Rename or remove it.',
     ],
     [
       "a file with a line break in its name",
       { "site/index.html": PAGE, "site/two\nlines.txt": "x" },
       "site",
-      'the file "two\\nlines.txt" has a name that cannot be stored (bad-character); rename or remove it',
+      'file "two\\nlines.txt" has a name that cannot be stored (bad-character). Rename or remove it.',
     ],
     [
       "a file with a backslash in its name",
       { "site/index.html": PAGE, "site/notes\\draft.txt": "x" },
       "site",
-      'the file "notes\\\\draft.txt" has a name that cannot be stored (backslash); rename or remove it',
+      'file "notes\\\\draft.txt" has a name that cannot be stored (backslash). Rename or remove it.',
     ],
     [
       "a file whose name is not in the form a store keeps",
       { "site/index.html": PAGE, "site/resume\u0301.txt": "x" },
       "site",
-      'the file "resume\u0301.txt" has a name that cannot be stored (not-normalized); rename or remove it',
+      'file "resume\u0301.txt" has a name that cannot be stored (not-normalized). Rename or remove it.',
     ],
   ];
 
@@ -307,7 +307,7 @@ describe("readFiles refusals", () => {
 
     expect(await listing({ "site/index.html": PAGE }, "site")).toEqual({
       ok: false,
-      reason: 'the file "half\\ud800.txt" has a name that cannot be stored (bad-character); rename or remove it',
+      reason: 'file "half\\ud800.txt" has a name that cannot be stored (bad-character). Rename or remove it.',
     });
   });
 });
@@ -322,7 +322,7 @@ describe("readFiles and the longest path", () => {
 
     expect(await listing({ "site/index.html": PAGE }, "site")).toEqual({
       ok: false,
-      reason: `the file "${name}" has a name that cannot be stored (too-long); rename or remove it`,
+      reason: `file "${name}" has a name that cannot be stored (too-long). Rename or remove it.`,
     });
   });
 });
@@ -332,8 +332,8 @@ describe("readFiles default name", () => {
   test.each([
     ["q3-report", { ok: true, value: "q3-report" }],
     ["Field-Notes", { ok: true, value: "field-notes" }],
-    ["My Site", { ok: false, reason: 'no usable name, pass --name: "My Site" cannot name a site (bad-character)' }],
-    ["q3", { ok: false, reason: 'no usable name, pass --name: "q3" cannot name a site (too-short)' }],
+    ["My Site", { ok: false, reason: '"My Site" is not a valid name (bad-character). Pass --name <name>.' }],
+    ["q3", { ok: false, reason: '"q3" is not a valid name (too-short). Pass --name <name>.' }],
   ] as ReadonlyArray<readonly [string, unknown]>)("of a folder called %j", async (folder, name) => {
     expect(await listing({ [`${folder}/index.html`]: PAGE }, folder)).toMatchObject({ ok: true, count: 1, name });
   });

@@ -33,9 +33,9 @@ Every other example runs the same way, with `npx` before `poplin`.
 
 ```text
 $ npx poplin ./report
-sent      3 files, 48 kB
-made      report--k3f9x2ab71qz
-private   only your users can open it
+uploaded  3 files, 48 kB
+created   report--k3f9x2ab71qz
+private   login required
 
 https://report--k3f9x2ab71qz-p-poplin.example.com
 ```
@@ -48,17 +48,17 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 - **Each file is read before it is sent,** for its fingerprint, a SHA-256 of its bytes. `--dry-run` takes the fingerprints too.
 - **A file whose bytes are not the ones fingerprinted is refused** with `hash_mismatch`, and nothing of it is stored: it changed after it was read, or was damaged on its way. The publish is given up and no site changes.
 - **Each file goes straight to the bucket,** by a ticket the install hands out for it, where the install holds its [upload key](../about/security.md#the-upload-key). Without the key it goes through the install.
-- **A file the bucket refuses twice goes through the install,** told once as `the store did not take a file sent straight to it: sending the files through the install`.
+- **A file the bucket refuses twice goes through the install,** told once as `Storage rejected a direct upload. Uploading through the install instead.`.
 - **A file that changed after it was read, sent straight to the bucket,** is not stored there. The publish asks for it up to 3 times, then is given up as `missing_files`, and no site changes.
 - **A file the install fails on,** or gives no answer to, is sent up to 4 times, with a pause of seconds before each new try. After the fourth the publish is given up.
-- **A connection cut before any answer** has its request sent once more, at once, when the request is a read or the first step of a publish or an import. It is told in a plain line on stderr: `the connection to the install was cut before any answer: sending the request again`.
-- **A request that never left this computer,** the install's name not found or no connection opened, is tried once more after a second, whatever it asks: nothing of it was sent. It is told as `no connection to the install: trying once more in 1 s`. A second failure is `unreachable`. A file is sent again as every file the install gives no answer to is.
+- **A connection cut before any answer** has its request sent once more, at once, when the request is a read or the first step of a publish or an import. It is told in a plain line on stderr: `Connection closed before a response: resending the request`.
+- **A request that never left this computer,** the install's name not found or no connection opened, is tried once more after a second, whatever it asks: nothing of it was sent. It is told as `No connection to the install: retrying once in 1 s`. A second failure is `unreachable`. A file is sent again as every file the install gives no answer to is.
 - **Ctrl-C** stops a publish, an import, or a copy: the upload on its way is given up, so its site is not made or changed, and the command exits 1. A second Ctrl-C ends it at once.
-- **A file that is sent again is told,** as `sending index.html again in 2 s, try 2 of 4`.
+- **A file that is sent again is told,** as `Retrying index.html in 2 s, attempt 2 of 4`.
 
 | Run                              | The line shows                                             |
 | -------------------------------- | ---------------------------------------------------------- |
-| with stderr on a terminal        | on the progress line, with `(Ctrl-C stops)` after it       |
+| with stderr on a terminal        | on the progress line, with `(Ctrl-C cancels)` after it       |
 | with stderr in a pipe or a file, or with `TERM=dumb` | once, as a plain line on stderr        |
 | with `--json`                    | on stderr, as above; stdout stays the one JSON value       |
 | by an agent's tool               | in the log of `poplin mcp`, never in the tool's answer     |

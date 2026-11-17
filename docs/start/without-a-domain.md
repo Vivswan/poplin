@@ -44,7 +44,7 @@ The five steps of [Install](install.md), each with what differs here:
 | 2. Run the command               | press Enter at the first question, or add `--no-domain`              |
 | 3. Make the account token        | [the other link, and six permissions](#the-account-token)            |
 | 4. Read what it made             | [forwarders in place of records and routes](#what-it-prints)         |
-| 5. Log this computer in          | the same question and the same page, at [your own address](#log-in)  |
+| 5. Log this machine in          | the same question and the same page, at [your own address](#log-in)  |
 
 ## What you need
 
@@ -55,7 +55,7 @@ The table of [Install](install.md#what-you-need), without the row of the domain.
 At the first question, press Enter:
 
 ```text
-Your own domain (example.com), or Enter for none:
+Custom domain (Enter for workers.dev):
 ```
 
 Or give the answer as an option, and the question is not asked:
@@ -67,12 +67,19 @@ npx poplin install cloudflare --no-domain
 ## The account token
 
 ```text
-The account token does the work of this run: 6 permissions, for this account; 1 more is optional.
-This link opens the form with them chosen:
+The account token needs 6 permissions on this account:
+  Access: Apps and Policies: Edit
+  Workers Scripts: Edit
+  Access: Organizations, Identity Providers, and Groups: Read
+  D1: Edit
+  Workers R2 Storage: Edit
+  Account API Tokens: Edit
+See: npx poplin install cloudflare --help for 1 optional permission
+Create the account token here:
   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
-On the form, choose your account under Account Resources, then create the account token and copy it. The link does not choose this permission, so choose it on the form yourself: Workers R2 Storage: Edit.
-Every permission by name: npx poplin install cloudflare --help
-Account token (not shown):
+On the form, limit it to this account
+Select manually: Workers R2 Storage: Edit
+Account token (hidden):
 ```
 
 The link opens Cloudflare's form with five rows filled, and none of a domain. The install needs six permissions: the link cannot choose Workers R2 Storage, so add that one yourself.
@@ -88,7 +95,7 @@ The link opens Cloudflare's form with five rows filled, and none of a domain. Th
 | the bottom        | press Continue to summary, then Create Token                                         |
 | the next page     | the token is shown once: copy it, and leave the page open                            |
 
-Then paste the token at the command's question, `Account token (not shown):`.
+Then paste the token at the command's question, `Account token (hidden):`.
 
 ```text
 Mac:      click the terminal, press Command and V, then Enter
@@ -105,35 +112,34 @@ One permission is optional here: Notifications: Edit. **Skip it on a first insta
 ## What it prints
 
 ```text
-looking for an install ... none
-made      R2 bucket             poplin-sites
-made      D1 database           poplin
-made      Worker                poplin, runs 0.1.0
-made      Worker address        on: poplin.your-name.workers.dev
-made      Forwarder             poplin-private: https://poplin-private.your-name.workers.dev (private sites)
-made      Forwarder             poplin-sites: https://poplin-sites.your-name.workers.dev (unlisted and public sites)
-made      Access application    poplin: poplin.your-name.workers.dev, poplin-private.your-name.workers.dev
-made      Key                   poplin kept key
-waiting for https://poplin.your-name.workers.dev to answer
-https://poplin.your-name.workers.dev answers
-poplin 0.1.0 is installed.
-Your dashboard: https://poplin.your-name.workers.dev
-The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
-Log this computer in now?
+This account has no install
+created    R2 bucket             poplin-sites
+created    D1 database           poplin
+created    Worker                poplin, runs 0.1.0
+updated    workers.dev route     enabled: poplin.your-name.workers.dev
+created    Forwarder             poplin-private: https://poplin-private.your-name.workers.dev (private sites)
+created    Forwarder             poplin-sites: https://poplin-sites.your-name.workers.dev (unlisted and public sites)
+created    Access application    poplin: poplin.your-name.workers.dev, poplin-private.your-name.workers.dev
+created    Key                   poplin kept key
+Waiting for https://poplin.your-name.workers.dev to respond
+poplin 0.1.0 is installed
+Dashboard: https://poplin.your-name.workers.dev
+The account token was not stored. Delete it at Cloudflare.
+Log this machine in now?
 ```
 
 The sample shows a few of the rows. Two pieces are of this kind alone:
 
 | Piece          | It is                                                                                   |
 | -------------- | --------------------------------------------------------------------------------------- |
-| Worker address | the address Cloudflare gives the Worker, switched on: your dashboard answers there      |
+| workers.dev route | the address Cloudflare gives the Worker, enabled: your dashboard answers there       |
 | Forwarder      | a small Worker that gives the sites of one kind their hostname and hands every request on |
 
 The Access application is Cloudflare's login in front of the dashboard and of every private site.
 
 ## Log in
 
-The command's last question logs this computer in, as [step 5 of Install](install.md#5-log-this-computer-in-and-check) shows: the pages in your browser are the same. After a no, or on another computer, the address after `--server` is the dashboard's, as the command printed it:
+The command's last question logs this machine in, as [step 5 of Install](install.md#5-log-this-machine-in-and-check) shows: the pages in your browser are the same. After a no, or on another machine, the address after `--server` is the dashboard's, as the command printed it:
 
 ```sh
 npx poplin login --server https://poplin.your-name.workers.dev
@@ -153,7 +159,7 @@ No command puts this install under a domain. The way is to [move it](../upkeep/b
 | --------------------- | ------------------------------------------------------------------ |
 | a site's address      | new: a hostname of its own under your domain                       |
 | a link you shared     | stops with this install. Send the new one                          |
-| each computer's login | made anew, with `npx poplin login`: the zip holds no token         |
+| each machine's login | made anew, with `npx poplin login`: the zip holds no token         |
 | the users             | the first login of the new install. `--settings --users` brings the old list |
 | the activity log      | starts anew: the zip does not hold it                              |
 

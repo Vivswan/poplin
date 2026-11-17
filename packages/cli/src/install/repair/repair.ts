@@ -14,8 +14,8 @@ import { carefulOf, NEXT, placeOf, repairFor, rowLine, type Unsettled, updateWor
 import { parseRepair, REPAIR_COMMAND, type RepairPlan } from "./parse";
 import { foundWords, repairedLines, repairedValue, repairHelp, stopOf, unmended } from "./report";
 
-/** What the look for an install is called while it runs and in its line. */
-const LOOKING = "looking for an install";
+/** What the look for an install is called while it runs. */
+const LOOKING = "Checking the account for an install";
 
 /** The careful choice the command takes. */
 const CAREFUL = ["--dry-run"] as const;
@@ -40,7 +40,7 @@ function commandOf(update: boolean, repair: typeof NEXT.repair): { readonly name
 /** Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks. A stop holds the place the run knew by then. */
 async function settled(plan: RepairPlan, ends: InstallEnds): Promise<Request | Unsettled> {
   if (plan.asking === "never") {
-    const token = await givenToken(plan.token, plan.provider, ends.input, REPAIR_COMMAND);
+    const token = await givenToken(plan.token, plan.provider, ends.input);
 
     return typeof token === "object" ? { stop: token, place: placeOf(plan.provider, plan.where) } : { plan, where: plan.where, token };
   }
@@ -63,7 +63,7 @@ async function look(request: Request, ends: InstallEnds, show: Show, repair: typ
   const looked = await lookFor({ provider: plan.provider, token, where, asking: plan.asking, work: "repair" }, ends, {
     looking: () => show.working(LOOKING),
     found: (found) => {
-      if (found.state === "whole") show.line("note", `${LOOKING} ... ${foundWords(found)}`);
+      if (found.state === "whole") show.line("note", foundWords(found));
     },
   });
   if ("problem" in looked) return looked;
@@ -85,7 +85,7 @@ async function planned(plan: RepairPlan, io: Io, ends: InstallEnds, show: Show, 
   const ground = await look(request, ends, show, repair);
   if ("problem" in ground) return stopped(ground, show, at);
 
-  const doing = run === "dry-run" ? "reading what a repair would change" : "mending the install";
+  const doing = run === "dry-run" ? "Planning the repair" : "Repairing the install";
   show.working(doing);
 
   const repaired = await provider.repair(ground.found, ground.where, { run, update, addUser: plan.addUser }, ends.reach, (row) => {

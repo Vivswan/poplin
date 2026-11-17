@@ -34,8 +34,8 @@ An opened problem says when it came, how often, and what to do. Copy the details
 | The row                                                         | When                                |
 | --------------------------------------------------------------- | ----------------------------------- |
 | `ok  problems  none in 7 days`                                  | no problem came in 7 days           |
-| `ok  problems  none today; in 7 days: sweep_failed`             | none came today; older kinds follow |
-| `failed  problems  2 kinds today: request_failed, sweep_failed` | a problem came today                |
+| `ok  problems  none today, in 7 days: sweep_failed`             | none came today; older kinds follow |
+| `failed  problems  2 types today: request_failed, sweep_failed` | a problem came today                |
 
 ## What is noted
 

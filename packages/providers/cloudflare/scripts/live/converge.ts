@@ -83,7 +83,7 @@ const AGAIN_AFTER_MS = 60_000;
 const NOT_REMOVED: ReadonlySet<string> = new Set(["block", "fail", "not-run"]);
 
 /** The objects nothing answers without. */
-const VITAL: ReadonlySet<string> = new Set(["R2 bucket", "D1 database", "Worker", "Sweep trigger", "Worker address", "Forwarder", "DNS record", "Worker route"]);
+const VITAL: ReadonlySet<string> = new Set(["R2 bucket", "D1 database", "Worker", "Cron trigger", "workers.dev route", "Forwarder", "DNS record", "Worker route"]);
 
 /** How a row words a refusal by Cloudflare, with its status. */
 const REFUSAL_STATUS = /refused with status \d+/;
@@ -114,7 +114,6 @@ const CAPABILITIES: Readonly<Record<string, string>> = {
   "Bot settings": "bot-block",
   "Access application": "access",
   "Access policy": "access",
-  "Access open paths": "access",
   Key: "kept-key",
   Workflow: "jobs",
   "Upload key": "upload-key",

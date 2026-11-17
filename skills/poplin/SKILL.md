@@ -7,7 +7,7 @@ description: Use when the user asks to publish, share, host, or put online an HT
 
 > Poplin publishes a folder, or one HTML file, as a static site on an install in the user's own Cloudflare account. Each site gets its own address, and a new site is private.
 
-**Not set up yet, or asked to set poplin up?** Follow [`references/setup.md`](references/setup.md). It makes a first install with the user when they have none, with one command, `npx poplin install cloudflare`. It uses the login saved on this computer, and adds the tools after the user's yes.
+**Not set up yet, or asked to set poplin up?** Follow [`references/setup.md`](references/setup.md). It makes a first install with the user when they have none, with one command, `npx poplin install cloudflare`. It uses the login stored on this machine, and adds the tools after the user's yes.
 
 **The user cannot log in, or wants the install removed?** The same page has the two commands: `npx poplin doctor --repair` and `npx poplin uninstall cloudflare`. Both take the user's account token, which never passes through the chat.
 
@@ -15,7 +15,7 @@ description: Use when the user asks to publish, share, host, or put online an HT
 
 - The user asks to publish, share, host, or put online a page, a report, a chart, a dashboard, or a folder of static files
 - The user asks to update, roll back, re-link, delete, or restore something published this way
-- The user asks to set poplin up, or you have neither the tools below nor a login (`npx poplin whoami` prints `not logged in`)
+- The user asks to set poplin up, or you have neither the tools below nor a login (`npx poplin whoami` prints `Not logged in`)
 
 ## The tools
 
@@ -131,7 +131,7 @@ Take the address from `url` in the answer; do not build one yourself. After an u
 
 A refusal from a tool, or from a command run with `--json`, is one object with a `code`, a sentence, and often a hint. Without `--json` a command prints the sentence and the hint as text. Read the hint first, then look the code up in [`references/refusals.md`](references/refusals.md).
 
-**You act as the user, with their own login:** the one saved on this computer. You reach what they reach. You never replace a login that works: [`references/setup.md`](references/setup.md) logs this computer in only with none saved, or on the user's yes for one that ran out.
+**You act as the user, with their own login:** the one stored on this machine. You reach what they reach. You never replace a login that works: [`references/setup.md`](references/setup.md) logs this machine in only with none stored, or on the user's yes for one that ran out.
 
 Two rules hold for every refusal. A refusal about the login (`no_login`, `not_logged_in`) or about what the login may do (`not_allowed`) goes to the user: do not log in again or look for a way around it unasked. And when no answer came back (`unreachable`, `timeout`, `internal`), check `list_sites` before you repeat a publish: it may have gone through, and a second one with no `site` makes a second site.
 

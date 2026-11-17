@@ -56,7 +56,7 @@ async function filesOf(folder: string): Promise<string[]> {
 async function loadOne(folder: string, file: string): Promise<Installer<unknown, unknown>> {
   const loaded: { readonly installer?: unknown } = await import(pathToFileURL(join(folder, file)).href);
   const { installer } = loaded;
-  if (!isInstaller(installer) || installer.id !== basename(file, EXTENSION)) throw new Error(`${file} is no provider of this poplin: the package is damaged, so install it again`);
+  if (!isInstaller(installer) || installer.id !== basename(file, EXTENSION)) throw new Error(`${file} is not a provider of this poplin build. The package is corrupt: reinstall it.`);
 
   return installer;
 }

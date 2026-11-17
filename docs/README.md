@@ -24,4 +24,4 @@ Agent:  Published. It is private: only the users of your install can open it, af
 | [Fix](fix/README.md)                | when something fails, or nobody can log in      |
 | [About](about/README.md)            | security and the build                          |
 
-The examples write `poplin`. Type `npx poplin` in its place, as [Install](start/install.md) does, unless you ran `npm install -g poplin` on the computer. `example.com` stands for your own domain. An install [without a domain](start/without-a-domain.md) has other addresses, and that page shows them.
+The examples write `poplin`. Type `npx poplin` in its place, as [Install](start/install.md) does, unless you ran `npm install -g poplin` on the machine. `example.com` stands for your own domain. An install [without a domain](start/without-a-domain.md) has other addresses, and that page shows them.

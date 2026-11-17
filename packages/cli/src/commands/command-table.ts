@@ -332,5 +332,5 @@ export type CommandName = (typeof COMMANDS)[number]["name"];
  * @param server - what `--server` means on that command
  */
 function installFlags(server: string): readonly FlagSpec[] {
-  return [{ name: "--json", about: "" }, { name: "--server", value: "<address>", about: server }, ...EVERYWHERE];
+  return [{ name: "--json", about: "" }, { name: "--server", value: "<url>", about: server }, ...EVERYWHERE];
 }

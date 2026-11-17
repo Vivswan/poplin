@@ -13,6 +13,7 @@ import type { Ticket } from "../../../../core/src/storage/tickets";
 import type { Called, Client, Failure } from "../../client/client";
 import { problem, problemOf } from "../problems";
 import type { Io, Outcome, Session } from "../records";
+import { sentenceCase } from "../text";
 import { TicketBook } from "./tickets";
 
 /** How many files are on their way at once. */
@@ -37,7 +38,7 @@ const TOO_MANY_REQUESTS = 429;
 const TICKET_REFUSED = 403;
 
 /** What an upload says, once, when the place its tickets name refuses them and its files go through the install after all. */
-const THROUGH_INSTALL = "the store did not take a file sent straight to it: sending the files through the install";
+const THROUGH_INSTALL = "Storage rejected a direct upload. Uploading through the install instead.";
 
 /** The code of an install whose database takes no more for the day. */
 const ALLOWANCE_SPENT = "allowance_spent";
@@ -151,7 +152,7 @@ class Pace {
   /** Wait on the command's one clock, and say why first: on the progress line where there is one, else in one line on stderr, so whatever runs the command in a pipe sees why it waits. */
   async #pause(ms: number, reason: string): Promise<void> {
     if (this.#io.terminal.progress) {
-      this.#io.screen.working(`${reason} (Ctrl-C stops)`);
+      this.#io.screen.working(`${reason} (Ctrl-C cancels)`);
       this.#told = true;
     } else {
       this.#io.screen.aside("note", reason);
@@ -164,7 +165,7 @@ class Pace {
     const seconds = restSeconds(failure, rests);
 
     try {
-      await this.#pause(seconds * MS_PER_SECOND, `the install asks for a pause: going on in ${seconds} s`);
+      await this.#pause(seconds * MS_PER_SECOND, `Rate limited by the install: resuming in ${seconds} s`);
     } finally {
       this.#rest = undefined;
     }
@@ -202,7 +203,7 @@ class Pace {
     if (this.#stopped !== undefined) return false;
 
     const ms = againPauseMs(sendings);
-    await this.#pause(ms, `sending ${path} again in ${Math.round(ms / MS_PER_SECOND)} s, try ${sendings + 1} of ${UPLOAD_RETRIES + 1}`);
+    await this.#pause(ms, `Retrying ${path} in ${Math.round(ms / MS_PER_SECOND)} s, attempt ${sendings + 1} of ${UPLOAD_RETRIES + 1}`);
 
     return this.#stopped === undefined;
   }
@@ -339,7 +340,7 @@ export function givenUp(failure: Failure, aftermath: string): Outcome {
   if (failure.kind === "stopped") return { ok: false, problem: problem("stopped", aftermath) };
 
   const said = problemOf(failure);
-  const hint = said.hint === undefined ? aftermath : `${aftermath}; ${said.hint}`;
+  const hint = said.hint === undefined ? sentenceCase(aftermath) : `${sentenceCase(aftermath)}. ${said.hint}`;
 
   return { ok: false, problem: { ...said, hint } };
 }

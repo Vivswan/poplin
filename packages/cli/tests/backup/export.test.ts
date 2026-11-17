@@ -60,9 +60,9 @@ describe("export", () => {
 
     expect(live).toMatchObject({ code: 0, err: [] });
     expect(live.out.map((line) => line.replace(/ {2,}/g, "  ").replace(/, [\d.]+ k?B$/, ", <size>")).sort()).toEqual([
+      `Wrote ${join(folder, "live.zip")}: 2 sites, 3 files, <size>`,
       `exported  ${docs}  1 version  1 file  19 B`,
       `exported  ${notes}  1 version  2 files  27 B`,
-      `wrote ${join(folder, "live.zip")}: 2 sites, 3 files, <size>`,
     ]);
     expect((await namesIn("live.zip")).filter((name) => name.startsWith("sites/notes/"))).toEqual(["sites/notes/site.json", "sites/notes/versions/2/files/css/site.css", "sites/notes/versions/2/files/index.html", "sites/notes/versions/2/files.json"]);
     expect(all).toMatchObject({ file: join(folder, "all.zip"), format: 1, all_versions: true, settings: true, files: 5, bytes: 72, zip_bytes: readFileSync(join(folder, "all.zip")).length });
@@ -104,7 +104,7 @@ describe("export", () => {
     const asked = [...bench.sent];
     const replaced = await bench.run(`export --out ${zip} --overwrite`);
 
-    expect([refused.code, refused.err, asked, readdirSync(dirname(zip))]).toEqual([1, [`a file is already there: ${zip}`, "to replace it: --overwrite; to write another: --out <file>"], [], ["backup.zip"]]);
+    expect([refused.code, refused.err, asked, readdirSync(dirname(zip))]).toEqual([1, [`File already exists: ${zip}`, "Fix: pass --overwrite, or another --out <file>"], [], ["backup.zip"]]);
     expect([replaced.code, (await readZip(zip)).at(-1)?.[0]]).toEqual([0, "manifest.json"]);
   });
 
@@ -118,16 +118,16 @@ describe("export", () => {
     const onto = [await bench.run(`export --out ${folder}`), await bench.run(`export --out ${folder} --overwrite`)];
     const nowhere = await bench.run(`export --out ${join(folder, "none", "backup.zip")}`);
 
-    expect(onto.map((ran) => [ran.code, ran.err])).toEqual(Array(2).fill([1, [`the backup cannot be written: "${folder}" is a folder; --out names the file to write`]]));
-    expect([nowhere.code, nowhere.err]).toEqual([1, [`the backup cannot be written: the folder "${join(folder, "none")}" does not exist`]]);
+    expect(onto.map((ran) => [ran.code, ran.err])).toEqual(Array(2).fill([1, [`Cannot write the backup: "${folder}" is a folder, and --out requires a file`]]));
+    expect([nowhere.code, nowhere.err]).toEqual([1, [`Cannot write the backup: folder "${join(folder, "none")}" does not exist`]]);
     expect([bench.sent, readdirSync(folder)]).toEqual([[], []]);
   });
 
   test.each<[string, () => Response, RegExp, number]>([
-    ["a refusal half way", () => answer(500, { error: { code: "internal", message: "no" } }), /^the install failed to do that/, 1],
-    ["a file that stops arriving", () => new Response(new ReadableStream({ pull: (controller) => controller.error(new Error("reset")) }), { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } }), /^the backup cannot be written: /, 1],
-    ["a file shorter than the install said", () => new Response("bo", { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } }), /^the backup cannot be written: /, 1],
-    ["a streamed file shorter than the listing said", () => new Response("bo", { headers: { "Poplin-Content-Type": "text%2Fcss" } }), /^the backup cannot be written: /, 1],
+    ["a refusal half way", () => answer(500, { error: { code: "internal", message: "no" } }), /^Internal error on the install/, 1],
+    ["a file that stops arriving", () => new Response(new ReadableStream({ pull: (controller) => controller.error(new Error("reset")) }), { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } }), /^Cannot write the backup: /, 1],
+    ["a file shorter than the install said", () => new Response("bo", { headers: { "Content-Length": "6", "Poplin-Content-Type": "text%2Fcss" } }), /^Cannot write the backup: /, 1],
+    ["a streamed file shorter than the listing said", () => new Response("bo", { headers: { "Poplin-Content-Type": "text%2Fcss" } }), /^Cannot write the backup: /, 1],
   ])("an export that meets %s leaves no file, and an older backup under --overwrite keeps its bytes: without this half a backup would stand under the name of a whole one", async (_what, respond, said, code) => {
     const bench = await openBench();
     await publishedTwice(bench, "notes");
@@ -154,7 +154,7 @@ describe("export", () => {
     expect([over.code, readdirSync(folder), readFileSync(zip, "utf8")]).toEqual([code, ["backup.zip"], "an older backup"]);
   });
 
-  // Drift: a stop that broke a file off half way ended as "the backup cannot be written", which names a fault of the disk and says nothing of the zip.
+  // Drift: a stop that broke a file off half way ended as "Cannot write the backup", which names a fault of the disk and says nothing of the zip.
   test.each<[string, (bench: Bench, request: Request, files: number) => Response | Promise<Response> | undefined]>([
     ["at its first call", (bench, _request, files) => (files === 0 ? heldUntilStopped(bench) : undefined)],
     ["half way through its first file", (bench, request, files) => (files === 1 ? brokenOffByStop(bench, request) : undefined)],
@@ -165,7 +165,7 @@ describe("export", () => {
     await publishedTwice(bench, "more");
     const folder = scratch();
     const zip = join(folder, "backup.zip");
-    const stopped = [1, [`the command was stopped: the backup was given up and nothing was written to ${zip}`], []];
+    const stopped = [1, [`Cancelled: export aborted, ${zip} not written`], []];
     let files = 0;
     bench.hook = (request) => {
       if (isFileRequest(request)) files += 1;

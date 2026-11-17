@@ -138,7 +138,7 @@ function exported(target: string, manifest: Manifest, sites: readonly Exported[]
   return {
     ok: true,
     value: { file: target, ...facts, sites, zip_bytes: zipBytes },
-    lines: [...columns(rows), { tone: "done", text: `wrote ${target}: ${countText(count, "site")}, ${countText(manifest.files, "file")}, ${showBytes(zipBytes)}` }],
+    lines: [...columns(rows), { tone: "done", text: `Wrote ${target}: ${countText(count, "site")}, ${countText(manifest.files, "file")}, ${showBytes(zipBytes)}` }],
   };
 }
 
@@ -159,7 +159,7 @@ export async function runExport(request: ExportRequest, { client, io }: Session)
   let files = 0;
   const arrived = (label: string): void => {
     files += 1;
-    if (io.terminal.progress) io.screen.working(`exporting ${label}: ${countText(files, "file")} so far`);
+    if (io.terminal.progress) io.screen.working(`Exporting ${label}: ${countText(files, "file")} exported`);
   };
 
   try {
@@ -183,7 +183,7 @@ export async function runExport(request: ExportRequest, { client, io }: Session)
     await writer.abandon();
 
     // A stop reaches here as a call that failed, or as a file whose stream broke off.
-    if (io.stopped.aborted) return { ok: false, problem: problem("stopped", `the backup was given up and nothing was written to ${target}`) };
+    if (io.stopped.aborted) return { ok: false, problem: problem("stopped", `export aborted, ${target} not written`) };
 
     if (error instanceof Stopped) return { ok: false, problem: error.problem };
 

@@ -1,11 +1,10 @@
 // How `poplin install` words what it found and did: one line per object, the same words for a dry run and for a run but for the tense, and one JSON value for a program.
 //
-//   a dry run    would make   <object>   <detail>
-//   a run        made         <object>   <detail>
+//   a dry run    would create   <object>   <detail>
+//   a run        created        <object>   <detail>
 
 import type { Login } from "../../../core/src/auth/logins";
-import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
-import type { TokenFacts } from "../../../core/src/install/token-facts";
+import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run, WorkTokenFacts } from "../../../core/src/install/installer";
 import { HELP_FLAG, VERSION_FLAG } from "../commands/command-table";
 import { columns, countText, type StateWords, wordedRow } from "../commands/text";
 import type { Line } from "../local/screen";
@@ -13,32 +12,38 @@ import type { Careful, Next, Provider, Stop } from "./records";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
 const STATES: Readonly<Record<RowState, StateWords>> = {
-  make: { "dry-run": "would make", apply: "made", tone: "done" },
-  change: { "dry-run": "would change", apply: "changed", tone: "done" },
+  make: { "dry-run": "would create", apply: "created", tone: "done" },
+  change: { "dry-run": "would update", apply: "updated", tone: "done" },
   remove: { "dry-run": "would remove", apply: "removed", tone: "done" },
-  leave: { "dry-run": "would leave", apply: "left", tone: "note" },
-  "leave-out": { "dry-run": "would leave out", apply: "left out", tone: "warning" },
-  block: { "dry-run": "blocked", apply: "stopped", tone: "error" },
+  leave: { "dry-run": "unchanged", apply: "unchanged", tone: "note" },
+  "leave-out": { "dry-run": "would skip", apply: "skipped", tone: "warning" },
+  block: { "dry-run": "blocked", apply: "blocked", tone: "error" },
   fail: { "dry-run": "failed", apply: "failed", tone: "error" },
-  "not-run": { "dry-run": "not run", apply: "not run", tone: "warning" },
+  "not-run": { "dry-run": "would skip", apply: "skipped", tone: "warning" },
 };
+
+/** What the line of a piece the run never reached says: an earlier piece stopped the run. */
+const UNREACHED = "an earlier row stopped the run";
 
 /** The states of an object that a run changes, or a dry run would. */
 const CHANGES: ReadonlySet<RowState> = new Set(["make", "change", "remove"]);
 
-/** What the line of an install that is there says of it, by whether it needs mending. */
-const STANDING = { nothing: ", and it is as it should be", something: ", and it is not as it should be", unread: "" } as const;
+/** What the line of an install that is there says of it, by whether it needs a repair. */
+const STANDING = { nothing: " and needs no repair", something: " and needs a repair", unread: "" } as const;
 
 /** The states of an object a run did not bring to what it should be. */
 const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);
 
 /** The states a dry run counts in its last line, in the order it names them, each with its word there. */
 const COUNTED: readonly (readonly [RowState, string])[] = [
-  ["make", "make"],
-  ["change", "change"],
+  ["make", "create"],
+  ["change", "update"],
   ["remove", "remove"],
-  ["leave-out", "leave out"],
+  ["leave-out", "skip"],
 ];
+
+/** Where a provider's sentence ends and the lead of its hint starts: the hint goes on a line of its own. */
+const LEAD_BREAK = /(?<=\.) (?=(?:Fix|See|Next): )/;
 
 /** What a line that stands under another starts with. */
 const INDENT = "  ";
@@ -58,14 +63,8 @@ const WINDOWS = "win32";
 /** The option of a repair's user, as a line that leaves it out names it for a person to add. */
 const ADD_USER = "--add-user <email>";
 
-/** What every stop before the first change ends in, as the one JSON value holds it at the end of a stop's words. */
-export const UNCHANGED = "nothing was changed";
-
-/** The same as the sentence a person reads, which every line that ends in it ends in alike. */
-const UNCHANGED_SENTENCE = "Nothing was changed.";
-
-/** The ending of a stop's words as it was written: after a full stop, after a colon, or alone, with a full stop of its own or without. */
-const UNCHANGED_ENDING = /(^|\. |: )nothing was changed\.?$/;
+/** The sentence every stop before the first change ends in, on the screen and in the one JSON value alike. */
+export const UNCHANGED = "Nothing changed";
 
 /** What a help lists in place of the providers where the built package carries none. */
 export const NO_PROVIDER = "none: this build of poplin includes no provider";
@@ -124,9 +123,9 @@ export function carefulOf(run: Run): readonly Careful[] {
   return run === "dry-run" ? ["--dry-run"] : [];
 }
 
-/** Say `this command again` with each careful choice the line carried, so the sentence names what the next step's command line holds. */
+/** Say `rerun this command` with each careful choice the line carried, so the sentence names what the next step's command line holds. */
 export function againWords(careful: readonly Careful[]): string {
-  return careful.length === 0 ? "this command again" : `this command again with ${careful.join(" and ")}`;
+  return careful.length === 0 ? "rerun this command" : `rerun this command with ${careful.join(" and ")}`;
 }
 
 /**
@@ -144,9 +143,14 @@ export function heldStop(found: Extract<Found<unknown, unknown>, { readonly stat
   return { problem: "name_held", exit: 1, words: found.words, address: found.address, next: next.step === again.step ? again : next };
 }
 
+/** Say that the account token was not stored and where it can be deleted: the last line of a run that used one. */
+function tokenLine(provider: Provider): string {
+  return `The account token was not stored. Delete it at ${provider.name}.`;
+}
+
 /** Name the poplin an install runs: with its version, or with the words for one that could not be read. */
 export function runningWords(version: string | undefined): string {
-  return `poplin ${version ?? "(version not read)"}`;
+  return `poplin ${version ?? "(unknown version)"}`;
 }
 
 /** The problem a look that the provider refused stops with, by why it was refused. */
@@ -257,7 +261,7 @@ export function letInNext(login: Login, place: readonly string[], platform: stri
  * @param next - the repair that lets them in, whose command the sentence names
  */
 export function unusedLine(login: Login, next: Next): Line {
-  return plain(`To let ${login} log in too: ${next.command}`);
+  return plain(`Add ${login} as a user: ${next.command}`);
 }
 
 /**
@@ -269,7 +273,7 @@ export function unusedLine(login: Login, next: Next): Line {
 export function leftOutLines(login: Login, next: Next): Line[] {
   if (next.step === "none" || next.add === undefined) return [];
 
-  return [plain(`Add ${next.add} to that line yourself, with ${login}: no line a Windows terminal reads holds that email safely.`)];
+  return [plain(`Append ${next.add} to that command yourself, with ${login}: poplin cannot quote this email safely for a Windows shell`)];
 }
 
 /** How many objects a run changed, or with a dry run would. */
@@ -287,19 +291,19 @@ function lineOf(words: readonly (string | undefined)[], careful: readonly Carefu
   return [...words.filter((word) => word !== undefined), ...careful].join(" ");
 }
 
-/** Name what to run next in a sentence: the command that just ran as `this command again`, and another by its line. */
+/** Name what to run next in a sentence: the command that just ran as `rerun this command`, and another by its line. */
 function nextWords(next: Next, again: Next): string {
-  return next.step === again.step || next.command === null ? "this command again" : next.command;
+  return next.step === again.step || next.command === null ? againWords([]) : `run ${next.command}`;
 }
 
-/** The four commands that own an install that is there, each with what it is for. */
-function ownerLines(provider: Provider, version: string | undefined, newest: string | undefined): string[] {
-  const out = newest === undefined || newest === version ? "" : `(${newest} is out)`;
+/** The commands that own an install that is there, each with what it is for: the repair among them unless the install was read to need none. */
+function ownerLines(provider: Provider, version: string | undefined, newest: string | undefined, repairs: boolean): string[] {
+  const out = newest === undefined || newest === version ? "" : `(${newest} is available)`;
   const rows = [
-    ["to check it", "npx poplin doctor", ""],
-    ["to mend it", "npx poplin doctor --repair", ""],
-    ["to update it", "npx poplin update", out],
-    ["to remove it", `npx poplin uninstall ${provider.id}`, ""],
+    ["check", "npx poplin doctor", ""],
+    ...(repairs ? [["repair", "npx poplin doctor --repair", ""]] : []),
+    ["update", "npx poplin update", out],
+    ["remove", `npx poplin uninstall ${provider.id}`, ""],
   ];
 
   return columns(rows).map((line) => `${INDENT}${line}`);
@@ -321,7 +325,8 @@ export function optionRows(rows: readonly OptionRow[]): [term: string, about: st
  * @returns the line, and what kind of line it is
  */
 export function rowLine(row: Row, run: Run): Line {
-  return wordedRow(STATES, row, run);
+  // A piece the run never reached has no words of its own: the line says why it was skipped, and the JSON value keeps its empty detail.
+  return wordedRow(STATES, row.state === "not-run" && row.detail === "" ? { ...row, detail: UNREACHED } : row, run);
 }
 
 /**
@@ -342,17 +347,17 @@ export function rowValues(rows: readonly Row[], run: Run): Readonly<Record<strin
  */
 export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "blocked" | "ready">): Line[] {
   const count = (state: RowState): number => installed.rows.filter((row) => row.state === state).length;
-  const proof = "the token's permissions: each read was allowed, and a write is proven by the run";
+  const proof = "A dry run does not test the account token's write permissions";
 
   if (!installed.ready) {
-    const undone = [...UNDONE].filter((state) => count(state) > 0).map((state) => `${count(state)} ${STATES[state]["dry-run"]}`);
+    const undone = [...UNDONE].filter((state) => count(state) > 0).map((state) => `${count(state)} ${STATES[state].apply}`);
 
-    return [...blockedLines(installed.blocked), { tone: "error", text: `not ready: ${undone.length === 0 ? "a person must act first" : LIST.format(undone)}. ${UNCHANGED_SENTENCE}` }];
+    return [...blockedLines(installed.blocked), { tone: "error", text: undone.length === 0 ? "A run would be incomplete until the steps above are done" : `A run would be incomplete: ${LIST.format(undone)}` }];
   }
 
-  const parts = COUNTED.filter(([state]) => count(state) > 0).map(([state, word]) => `${word} ${count(state)}`);
+  const parts = COUNTED.filter(([state]) => count(state) > 0).map(([state, word], at) => `${word} ${at === 0 ? countText(count(state), "resource") : count(state)}`);
 
-  return [plain(proof), { tone: "done", text: `ready: a run would ${parts.length === 0 ? "change nothing" : LIST.format(parts)}. ${UNCHANGED_SENTENCE}` }];
+  return [plain(proof), { tone: "done", text: `A run would ${parts.length === 0 ? "change nothing" : LIST.format(parts)}` }];
 }
 
 /**
@@ -366,13 +371,13 @@ export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: tr
  */
 export function runLines(installed: Pick<Extract<Installed, { readonly ok: true }>, "rows" | "steps" | "blocked" | "address" | "ready">, provider: Provider, answers: boolean | null, ending: Ending): Line[] {
   const { address } = installed;
-  const silent: Line = { tone: "warning", text: `no answer yet at ${address}: it can take a few more minutes` };
-  const answer = answers === null ? [] : [answers ? plain(`${address} answers`) : silent];
-  const dashboard = address === undefined ? [] : [plain(`Your dashboard: ${address}`)];
-  const stored = plain(`The token was used for this run and is stored nowhere. You can delete it at ${provider.name}.`);
+  const silent: Line = { tone: "warning", text: `${address} has not responded yet. This can take a few more minutes.` };
+  const answer = answers === false ? [silent] : [];
+  const dashboard = address === undefined ? [] : [plain(`Dashboard: ${address}`)];
+  const stored = plain(tokenLine(provider));
 
   if (installed.ready && answers === false && address !== undefined) {
-    const later = ending.next.step === "login" ? [`Once it answers, log in: ${ending.next.command}`, `If it still does not: ${ending.repair.command}`] : [];
+    const later = ending.next.step === "login" ? [`When it responds, log in: ${ending.next.command}`, `If it does not respond: ${ending.repair.command}`] : [];
 
     return [...answer, { tone: "warning", text: ending.done }, ...dashboard, ...later.map(plain), stored];
   }
@@ -380,69 +385,70 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
   if (installed.ready) return [...answer, { tone: "done", text: ending.done }, ...dashboard, stored];
 
   const next = nextWords(ending.next, ending.again);
-  if (installed.rows.length === 0) return [...answer, ...blockedLines(installed.blocked), { tone: "error", text: `${UNCHANGED_SENTENCE} Run ${next} once what the lines above say is no longer so.` }, stored];
+  if (installed.rows.length === 0) return [...answer, ...blockedLines(installed.blocked), { tone: "error", text: `${UNCHANGED}. Fix the above, then ${next}.` }, plain("The account token was not stored")];
 
-  const undone = installed.rows.filter((row) => UNDONE.has(row.state)).length;
+  const undone = [...UNDONE].flatMap((state) => {
+    const count = installed.rows.filter((row) => row.state === state).length;
+
+    return count === 0 ? [] : [`${count} ${STATES[state].apply}`];
+  });
+  const kept = plain("The account token was not stored");
   const steps = installed.steps.flatMap((step) => [`${INDENT}${step.text}`, `${INDENT}${step.address}`]);
-  const byHand = steps.length === 0 ? [] : [`Do this in your browser, then run ${next}:`, ...steps];
+  const byHand = steps.length === 0 ? [] : [`Do these steps in a browser, then ${next}:`, ...steps];
 
-  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `${undone} not done. Run ${next}: it goes on from what stands.` }, stored];
+  return [...answer, ...blockedLines(installed.blocked), ...byHand.map(plain), { tone: "error", text: `The run is incomplete${undone.length === 0 ? "" : `: ${LIST.format(undone)}`}` }, plain(`Next: ${next}`), kept];
 }
 
 /**
  * Word what the account token is for and where it is made, before a person is asked for it: what a person needs at that moment, and where the rest stands.
  *
  * @param help - the command line whose help lists every permission
- * @returns what the token does, the form's address alone on a line, what the form still asks, a permission the link cannot choose among it, and that line
+ * @returns what the token is for, a permission a line, where the optional ones are listed, the form's address alone on a line, and each permission the link cannot choose
  */
-export function factsLines(facts: TokenFacts, help: string): string[] {
+export function factsLines(facts: WorkTokenFacts, help: string): string[] {
   const more = facts.tokenOptional.length;
-  const optional = more === 0 ? "" : `; ${more} more ${more === 1 ? "is" : "are"} optional`;
+  const optional = more === 0 ? [] : [`See: ${help} for ${countText(more, "optional permission")}`];
 
   return [
-    `The account token does the work of this run: ${countText(facts.tokenRights.length, "permission")}, for ${facts.tokenFor}${optional}.`,
-    "This link opens the form with them chosen:",
+    `The account token needs ${countText(facts.tokenRights.length, "permission")} on ${facts.tokenFor}:`,
+    ...facts.tokenRights.map((right) => `${INDENT}${right}`),
+    ...optional,
+    "Create the account token here:",
     `${INDENT}${facts.tokenLink}`,
-    facts.tokenNote,
-    `Every permission by name: ${help}`,
+    `On the form, limit it to ${facts.tokenFor}`,
+    ...facts.tokenByHand.map((right) => `Select manually: ${right}`),
   ];
-}
-
-/** End a stop's words as every line that says nothing was changed ends: with the one sentence, after a full stop. */
-function sentenceEnd(words: string): string {
-  return words.replace(UNCHANGED_ENDING, (_ending, before: string) => `${before === ": " ? ". " : before}${UNCHANGED_SENTENCE}`);
 }
 
 /** The words of a stop that is one message: its first line says what it is, and the rest stand under it. */
 function stopWords(stop: Exclude<Stop, { readonly problem: "missing_answer" | "blocked" }>, provider: Provider | undefined): string[] {
   if (stop.problem === "usage" || stop.problem === "no_provider") return [...stop.lines];
 
-  if (stop.problem === "leftover") return [stop.words, "To use it, with what it holds: run this again with --adopt. To start without it, delete it here first, with what it holds:", `${INDENT}${stop.address}`, UNCHANGED_SENTENCE];
+  if (stop.problem === "leftover") return [stop.words, "To reuse them with their data, rerun with --adopt. For a fresh install, delete them here first:", `${INDENT}${stop.address}`, UNCHANGED];
 
-  if (stop.problem === "name_held") return [stop.words, `${INDENT}${stop.address}`, UNCHANGED_SENTENCE];
+  if (stop.problem === "name_held") return [stop.words, `${INDENT}${stop.address}`, UNCHANGED];
 
-  if (stop.problem !== "already_installed") return [stop.words];
+  if (stop.problem !== "already_installed") return stop.words.split(LEAD_BREAK);
 
-  const owners = provider === undefined ? [] : ownerLines(provider, stop.version, stop.newest);
+  const owners = provider === undefined ? [] : ownerLines(provider, stop.version, stop.newest, stop.mend !== "nothing");
 
-  const way = stop.mend === "unread" ? [`Whether it is as it should be was not read: ${stop.unread}`, `To see: ${stop.next.command} --dry-run`] : [`The way on: ${stop.next.command}`];
+  const way = stop.mend === "unread" ? [`The repair check failed: ${stop.unread}`, `Next: ${stop.next.command} --dry-run`] : [`Next: ${stop.next.command}`];
 
-  return [`This account already holds ${runningWords(stop.version)}, at ${stop.address}${STANDING[stop.mend]}. ${UNCHANGED_SENTENCE}`, ...way, ...owners];
+  return [`${runningWords(stop.version)} is already installed at ${stop.address}${STANDING[stop.mend]}. ${UNCHANGED}.`, ...way, ...owners];
 }
 
 /**
  * Word why a command stopped before its work was done.
  *
  * @param provider - the provider the line names, when the command got as far as one
- * @param command - the command as it is typed after `poplin`, such as `install`
  * @returns the lines for a person, the first of which says what it is
  */
-export function stopLines(stop: Stop, provider: Provider | undefined, command: string): Line[] {
-  if (stop.problem === "missing_answer") return stop.missing.map((one) => ({ tone: "error", text: `poplin ${command}: an answer is missing: ${one.name}. ${one.give}` }));
+export function stopLines(stop: Stop, provider: Provider | undefined): Line[] {
+  if (stop.problem === "missing_answer") return stop.missing.flatMap((one): Line[] => [{ tone: "error", text: `Missing ${one.name}` }, plain(`Fix: ${one.give}`)]);
 
-  if (stop.problem === "blocked") return [...blockedLines(stop.blocked), { tone: "error", text: UNCHANGED_SENTENCE }];
+  if (stop.problem === "blocked") return [...blockedLines(stop.blocked), { tone: "error", text: UNCHANGED }];
 
-  return stopWords(stop, provider).map((text, at) => (at === 0 ? { tone: "error", text: sentenceEnd(text) } : plain(text)));
+  return stopWords(stop, provider).map((text, at) => (at === 0 ? { tone: "error", text } : plain(text)));
 }
 
 /**

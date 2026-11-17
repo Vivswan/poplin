@@ -1,6 +1,6 @@
 # Add the MCP server to your own configuration
 
-Open this at step 5 of [`setup.md`](setup.md), after the user's yes of step 1, which covers this: do not ask again. The MCP server is a program on this computer, started by you, that speaks over stdio.
+Open this at step 5 of [`setup.md`](setup.md), after the user's yes of step 1, which covers this: do not ask again. The MCP server is a program on this machine, started by you, that speaks over stdio.
 
 | Field     | Value        |
 | --------- | ------------ |
@@ -28,9 +28,9 @@ The tools may not appear until the agent is restarted or its servers are reloade
 
 ## Optional: a login of your own
 
-By default the server uses the login saved on this computer, the user's own. Offer this step only when the user wants to tell your work apart from theirs.
+By default the server uses the login stored on this machine, the user's own. Offer this step only when the user wants to tell your work apart from theirs.
 
-The server then reads its login from a folder of its own, named by `POPLIN_CONFIG_DIR` in the entry's environment. The computer's saved login is not touched. `POPLIN_SERVER` and `POPLIN_TOKEN`, where they are set, stand in for any saved login, this one included.
+The server then reads its login from a folder of its own, named by `POPLIN_CONFIG_DIR` in the entry's environment. The machine's stored login is not touched. `POPLIN_SERVER` and `POPLIN_TOKEN`, where they are set, stand in for any stored login, this one included.
 
 ```json
 { "mcpServers": { "poplin": { "command": "npx", "args": ["poplin", "mcp"], "env": { "POPLIN_CONFIG_DIR": "/home/user/.config/poplin-agent" } } } }
@@ -54,4 +54,4 @@ In PowerShell the first line is `$env:POPLIN_CONFIG_DIR = "C:\Users\user\poplin-
 | each change you make shows that name           | the dashboard's Activity screen, until the login is removed: then its id |
 | the user can end it alone                      | Remove, in the menu of its row under Tokens; their own login stays |
 
-The login is saved as a file in that folder, and it runs out after 30 days, like the user's own. A command you run outside the server uses the computer's saved login, unless the variable is set for it too.
+The login is stored as a file in that folder, and it runs out after 30 days, like the user's own. A command you run outside the server uses the machine's stored login, unless the variable is set for it too.

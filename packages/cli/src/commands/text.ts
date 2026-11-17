@@ -19,10 +19,10 @@ const OBJECT_WIDTH = 20;
 const DONE_WIDTH = 8;
 
 /** Who can open a site, by its access. */
-const ACCESS_WORDS = { private: "only your users can open it", unlisted: "anyone with the link can open it", public: "anyone can open it" } as const;
+const ACCESS_WORDS = { private: "login required", unlisted: "open to anyone with the URL", public: "open to everyone" } as const;
 
 /** The last line of a dry run that asked the install what a change would come to. */
-export const REHEARSED = "nothing was changed: --dry-run asked the install what this would come to";
+export const REHEARSED = "Dry run: the install validated the request";
 
 /** One row of what a command did: what kind of line it is, the word of what was done, and what it was done to. */
 export interface DoneRow {
@@ -61,10 +61,15 @@ export function dayText(moment: number): string {
 /**
  * Say that a dry run sent nothing.
  *
- * @param asked - whether the install was asked how it reads the site's address, the one thing a dry run may ask
+ * @param asked - whether the install was asked how it reads the site's URL, the one thing a dry run may ask
  */
 export function dryRunText(asked: boolean): string {
-  return asked ? "nothing was sent: --dry-run asked the install only how it reads the site's address" : "nothing was sent: --dry-run calls no install";
+  return asked ? "Dry run: only read-only requests were sent" : "Dry run: no request was sent";
+}
+
+/** A phrase as the start of a line: its first letter in upper case. */
+export function sentenceCase(phrase: string): string {
+  return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`;
 }
 
 /** Word a count with its noun: `1 file`, `42 files`. */
@@ -147,7 +152,7 @@ function accessRow(site: SiteObject): DoneRow {
 /**
  * The lines every answer about one site ends in: what was done to which site, who can open it, and its address alone on a line.
  *
- * @param done - the word for what was done, such as `made` or `restored`
+ * @param done - the word for what was done, such as `created` or `restored`
  * @param facts - what else the first row says, after the label
  * @param more - the rows between the first and the one of who can open the site
  */
@@ -174,8 +179,8 @@ export function addressChange(before: SiteObject | null, site: SiteObject, moved
  * @param stored - what became of the setting: a dry run says what would
  * @returns one note, or none when the switch was not turned on or the site is public
  */
-export function searchNotes(changes: { readonly search_engines?: boolean | undefined }, site: SiteObject, stored = "is stored"): string[] {
+export function searchNotes(changes: { readonly search_engines?: boolean | undefined }, site: SiteObject, stored = "is saved"): string[] {
   if (changes.search_engines !== true || site.access === "public") return [];
 
-  return [`search engines list a site only once it is public; the setting ${stored}`];
+  return [`Search engines index only a public site. The setting ${stored}.`];
 }

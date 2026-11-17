@@ -106,7 +106,7 @@ class BoundedFile extends yauzl.RandomAccessReader {
 
   override read(buffer: Buffer, offset: number, length: number, position: number, callback: (error: Error | null, bytesRead?: number) => void): void {
     if (!Number.isSafeInteger(position) || position < 0 || position + length > this.size) {
-      callback(new Error("it names a place outside the file"));
+      callback(new Error("an entry points outside the file"));
 
       return;
     }
@@ -126,18 +126,18 @@ function quote(name: string): string {
 /** Check a JSON value against the form its entry has. */
 function shaped<const Schema extends v.GenericSchema>(schema: Schema, value: unknown, entry: Entry): v.InferOutput<Schema> {
   const read = v.safeParse(schema, value);
-  if (!read.success) refuse(`${quote(entry.fileName)} is not in the form a backup holds it in`);
+  if (!read.success) refuse(`${quote(entry.fileName)} does not match the backup schema`);
 
   return read.output;
 }
 
 function damaged(entry: Entry): never {
-  return refuse(`${quote(entry.fileName)} is damaged: its bytes are not the ones it was written with`);
+  return refuse(`${quote(entry.fileName)} fails its checksum`);
 }
 
 /** Read a JSON entry whole, under the cap, and check its bytes against the checksum the zip was written with. */
 async function readJson(zip: ZipFile, entry: Entry): Promise<unknown> {
-  if (entry.uncompressedSize > MAX_JSON_BYTES) refuse(`${quote(entry.fileName)} is too long to read`);
+  if (entry.uncompressedSize > MAX_JSON_BYTES) refuse(`${quote(entry.fileName)} is too large to read`);
 
   const written = await buffer(await zip.openReadStreamPromise(entry));
   if (crc32(written) !== entry.crc32) damaged(entry);
@@ -149,7 +149,7 @@ async function readJson(zip: ZipFile, entry: Entry): Promise<unknown> {
 
     return value;
   } catch {
-    return refuse(`${quote(entry.fileName)} is not JSON that can be read and written again`);
+    return refuse(`${quote(entry.fileName)} is not JSON that can be parsed and serialized again`);
   }
 }
 
@@ -163,15 +163,15 @@ async function verify(zip: ZipFile, entry: Entry): Promise<void> {
 
 /** Read a site's record. The folder it sits in must be the label of that very site, so no two sites share a folder and no folder name is taken on trust. */
 async function openSite(zip: ZipFile, entry: Entry, label: string, seen: Set<string>): Promise<OpenSite> {
-  if (seen.has(label)) refuse(`the site ${quote(label)} is there twice`);
+  if (seen.has(label)) refuse(`site ${quote(label)} appears twice`);
 
   const record = shaped(SITE_RECORD, await readJson(zip, entry), entry);
   const named = siteReference(label);
   if (!named.ok || named.value.kind !== "site" || named.value.name !== record.name || named.value.id !== record.id)
-    refuse(`${quote(entry.fileName)} does not sit in the folder of its site's label`);
+    refuse(`${quote(entry.fileName)} is not in the folder of its site's label`);
 
   const numbers = new Set(record.versions.map((version) => version.number));
-  if (numbers.size !== record.versions.length || !numbers.has(record.live_version)) refuse(`${quote(entry.fileName)} names a version twice, or does not keep its live version`);
+  if (numbers.size !== record.versions.length || !numbers.has(record.live_version)) refuse(`${quote(entry.fileName)} lists a version twice, or lacks its live version`);
 
   seen.add(label);
 
@@ -181,7 +181,7 @@ async function openSite(zip: ZipFile, entry: Entry, label: string, seen: Set<str
 /** The version whose entries are due: the first the record names that has no index yet. An entry of any other version is out of place. */
 function dueVersion(site: OpenSite, entry: Entry, version: number): SiteRecord["versions"][number] {
   const due = site.record.versions[site.versions.length];
-  if (due === undefined || due.number !== version) return refuse(`${quote(entry.fileName)} is out of place: the versions of a site come in its record's order, each ended by its files.json`);
+  if (due === undefined || due.number !== version) return refuse(`${quote(entry.fileName)} is out of order: a site's versions follow its record's order, each ending with its files.json`);
 
   return due;
 }
@@ -189,9 +189,9 @@ function dueVersion(site: OpenSite, entry: Entry, version: number): SiteRecord["
 function addFile(site: OpenSite, entry: Entry, name: Extract<EntryName, { readonly kind: "file" }>): void {
   dueVersion(site, entry, name.version);
 
-  if (!parseObjectKey(name.path).ok) refuse(`${quote(entry.fileName)} has a path no site can hold`);
+  if (!parseObjectKey(name.path).ok) refuse(`${quote(entry.fileName)} has a path no site can store`);
 
-  if (site.pending.has(name.path)) refuse(`${quote(entry.fileName)} is there twice`);
+  if (site.pending.has(name.path)) refuse(`${quote(entry.fileName)} appears twice`);
 
   site.pending.set(name.path, entry);
 }
@@ -204,7 +204,7 @@ async function closeVersion(zip: ZipFile, site: OpenSite, entry: Entry, checks: 
 
   for (const listed of shaped(FILE_INDEX, await readJson(zip, entry), entry)) {
     const held = site.pending.get(listed.path);
-    if (held === undefined || held.uncompressedSize !== listed.size) refuse(`${quote(entry.fileName)} lists ${quote(listed.path)}, which the version does not hold at that size`);
+    if (held === undefined || held.uncompressedSize !== listed.size) refuse(`${quote(entry.fileName)} lists ${quote(listed.path)}, which the version lacks at that size`);
 
     site.pending.delete(listed.path);
     if (checks.bytes) await verify(zip, held);
@@ -220,13 +220,13 @@ async function closeVersion(zip: ZipFile, site: OpenSite, entry: Entry, checks: 
 
   if (site.pending.size > 0) refuse(`${quote(entry.fileName)} does not list every file of its version`);
 
-  if (files.length !== due.files || bytes !== due.bytes) refuse(`version ${due.number} of ${quote(site.label)} does not hold the files its record counts`);
+  if (files.length !== due.files || bytes !== due.bytes) refuse(`version ${due.number} of ${quote(site.label)} does not match the file count or size in its record`);
 
   site.versions.push({ number: due.number, files });
 }
 
 function closeSite(site: OpenSite): BackupSite {
-  if (site.versions.length !== site.record.versions.length || site.pending.size > 0) refuse(`the site ${quote(site.label)} is there without every version its record names`);
+  if (site.versions.length !== site.record.versions.length || site.pending.size > 0) refuse(`site ${quote(site.label)} lacks a version its record lists`);
 
   const all = site.versions.flatMap((version) => version.files);
 
@@ -236,7 +236,7 @@ function closeSite(site: OpenSite): BackupSite {
 /** Take one entry of the site being read: a file of the version that is due, or the index that ends that version. */
 async function addEntry(zip: ZipFile, site: OpenSite | undefined, entry: Entry, checks: { readonly name: Extract<EntryName, { readonly label: string }>; readonly bytes: boolean }): Promise<void> {
   const { name } = checks;
-  if (site === undefined || site.label !== name.label) return refuse(`${quote(entry.fileName)} is out of place: a site's entries follow its site.json`);
+  if (site === undefined || site.label !== name.label) return refuse(`${quote(entry.fileName)} is out of order: a site's entries follow its site.json`);
 
   if (name.kind === "file") addFile(site, entry, name);
 
@@ -256,7 +256,7 @@ async function* sitesOf(file: BoundedFile, checkBytes: boolean): AsyncGenerator<
 
   for await (const entry of zip.eachEntry()) {
     const name = readEntryName(entry.fileName);
-    if (name === undefined) refuse(`${quote(entry.fileName)} is no entry of a backup`);
+    if (name === undefined) refuse(`${quote(entry.fileName)} is not a backup entry`);
 
     if (name.kind === "settings" || name.kind === "manifest") continue;
 
@@ -280,23 +280,23 @@ async function readHead(file: BoundedFile): Promise<Pick<Backup, "manifest" | "s
   let last: Entry | undefined;
 
   for await (const entry of zip.eachEntry()) {
-    if (last?.fileName === LAYOUT.manifest) refuse("an entry follows its manifest.json, which is always the last");
+    if (last?.fileName === LAYOUT.manifest) refuse("an entry follows manifest.json, which must be last");
 
-    if (entry.fileName === LAYOUT.settings && last !== undefined) refuse("its settings.json is not the first entry, or is there twice");
+    if (entry.fileName === LAYOUT.settings && last !== undefined) refuse("settings.json is not the first entry, or appears twice");
 
     if (entry.fileName === LAYOUT.settings) settings = entry;
 
     last = entry;
   }
 
-  if (last?.fileName !== LAYOUT.manifest) return refuse("it does not end in a manifest.json: it is no backup, or its end is cut off");
+  if (last?.fileName !== LAYOUT.manifest) return refuse("the zip does not end with manifest.json, so it is not a backup or is truncated");
 
   const written = await readJson(zip, last);
   const { format } = shaped(FORMAT_ALONE, written, last);
-  if (format > BACKUP_FORMAT) refuse(`it is of format ${format}, which a newer poplin made; this one reads up to format ${BACKUP_FORMAT}`);
+  if (format > BACKUP_FORMAT) refuse(`format ${format} is newer than this CLI reads, which is up to format ${BACKUP_FORMAT}`);
 
   const manifest = shaped(MANIFEST, written, last);
-  if (manifest.settings !== (settings !== undefined)) refuse("its manifest and its entries disagree on whether it holds the settings");
+  if (manifest.settings !== (settings !== undefined)) refuse("the manifest and the entries disagree on whether the settings are included");
 
   if (settings === undefined) return { manifest, settings: undefined };
 
@@ -313,7 +313,7 @@ async function checkContents(file: BoundedFile, manifest: Manifest): Promise<voi
     held.bytes += site.bytes;
   }
 
-  if (held.sites !== manifest.sites || held.files !== manifest.files || held.bytes !== manifest.bytes) refuse("its manifest counts other sites, files, or bytes than it holds");
+  if (held.sites !== manifest.sites || held.files !== manifest.files || held.bytes !== manifest.bytes) refuse("the manifest counts differ from the sites, files, or bytes in the zip");
 }
 
 /**
@@ -325,11 +325,11 @@ async function checkContents(file: BoundedFile, manifest: Manifest): Promise<voi
  */
 export async function openBackup(path: string): Promise<{ readonly ok: true; readonly backup: Backup } | { readonly ok: false; readonly reason: string }> {
   const handle = await fs.open(path, "r").catch(() => undefined);
-  if (handle === undefined) return { ok: false, reason: `"${path}" cannot be opened` };
+  if (handle === undefined) return { ok: false, reason: `cannot open "${path}"` };
 
   try {
     const found = await handle.stat();
-    if (found.isDirectory()) refuse(`"${path}" is a folder; a backup is the zip poplin export writes`);
+    if (found.isDirectory()) refuse(`"${path}" is a folder, and a backup is a zip written by poplin export`);
 
     const file = new BoundedFile(handle, found.size);
     const head = await readHead(file);
@@ -340,6 +340,6 @@ export async function openBackup(path: string): Promise<{ readonly ok: true; rea
     await handle.close();
     if (error instanceof Refusal) return { ok: false, reason: error.message };
 
-    return { ok: false, reason: `it is not a zip that can be read: ${error instanceof Error ? error.message : String(error)}` };
+    return { ok: false, reason: "the file is not a readable zip" };
   }
 }

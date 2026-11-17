@@ -93,9 +93,9 @@ describe("the MCP server", () => {
 
   // Drift: a wait told in a tool's answer reads as an error to the agent, or breaks the answer's shape; one told nowhere leaves whoever runs the server no trace of why a call took seconds.
   test.each([
-    ["a file that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), "index.html", "sending index.html again in 2 s, try 2 of 4"],
-    ["a file named after the token that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), ".txt", "sending [token].txt again in 2 s, try 2 of 4"],
-    ["a rest the install asks for", () => Response.json({ error: { code: "too_many_requests", message: "no" } }, { status: 429, headers: { "Retry-After": "3" } }), "index.html", "the install asks for a pause: going on in 3 s"],
+    ["a file that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), "index.html", "Retrying index.html in 2 s, attempt 2 of 4"],
+    ["a file named after the token that is sent again", () => new Response("<html>bad gateway</html>", { status: 502 }), ".txt", "Retrying [token].txt in 2 s, attempt 2 of 4"],
+    ["a rest the install asks for", () => Response.json({ error: { code: "too_many_requests", message: "no" } }, { status: 429, headers: { "Retry-After": "3" } }), "index.html", "Rate limited by the install: resuming in 3 s"],
   ])("%s during a publish is one line in the server's log, and the tool answers as a publish that met nothing", async (_name, fault, failing, line) => {
     const bench = await open();
     const folder = folderOf("report", { "index.html": "<title>Report</title>", [`${bench.install.tokens.admin}.txt`]: "x" });
@@ -134,7 +134,7 @@ describe("the MCP server", () => {
     expect({ error: made.error, begins: bench.sent.filter((sent) => sent === "POST /api/uploads").length, logged: bench.logged, sites }).toEqual({
       error: false,
       begins: 2,
-      logged: ["no connection to the install: trying once more in 1 s"],
+      logged: ["No connection to the install: retrying once in 1 s"],
       sites: 1,
     });
   });
@@ -152,9 +152,9 @@ describe("the MCP server", () => {
     expect({ created: second.created, label: second.label, version: second.live_version }).toEqual({ created: false, label: first.label, version: 2 });
     expect(made.text.split("\n")).toEqual([
       `read ${folder}`,
-      "sent      2 files, 22 B (2 skipped as hidden or node_modules)",
-      `made      ${first.label}`,
-      "private   only your users can open it",
+      "uploaded  2 files, 22 B (2 skipped: hidden or node_modules)",
+      `created   ${first.label}`,
+      "private   login required",
       "",
       first.url,
     ]);
@@ -212,16 +212,16 @@ describe("the MCP server", () => {
     expect(shown.text.split("\n").slice(0, 2)).toEqual([site.label, site.url]);
     expect({ access: siteOf(unlisted).access, lines: unlisted.text.split("\n") }).toEqual({
       access: "unlisted",
-      lines: [`changed   ${site.label}  title, access, and expires`, `moved     from ${site.url}`, "unlisted  anyone with the link can open it", "", siteOf(unlisted).url],
+      lines: [`updated   ${site.label}  title, access, and expires`, `moved     from ${site.url}`, "unlisted  open to anyone with the URL", "", siteOf(unlisted).url],
     });
     expect({ version: siteOf(rolled).live_version, lines: rolled.text.split("\n") }).toEqual({
       version: 1,
-      lines: [`rolled back  ${site.label}  version 1 is live`, "unlisted     anyone with the link can open it", "", siteOf(rolled).url],
+      lines: [`rolled back  ${site.label}  version 1 is live`, "unlisted     open to anyone with the URL", "", siteOf(rolled).url],
     });
     expect((listed.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
     expect({ state: siteOf(trashed).state, last: trashed.text.split("\n").at(-1) }).toEqual({
       state: "trash",
-      last: `to take it back: restore_site with site ${site.label}`,
+      last: `Undo: restore_site with site ${site.label}`,
     });
     expect((trash.data.sites as Site[]).map((one) => one.label)).toEqual([site.label]);
     expect({ state: siteOf(restored).state, access: siteOf(restored).access }).toEqual({ state: "live", access: "unlisted" });
@@ -235,7 +235,7 @@ describe("the MCP server", () => {
 
     const answer = await bench.call("list_sites");
 
-    expect([answer.error, answer.text]).toEqual([true, `not_json: the answer is plain text, status 503: ${sentence}`]);
+    expect([answer.error, answer.text]).toEqual([true, `not_json: The install responded with plain text, status 503: ${sentence}`]);
   });
 
   // Drift: a tool reads a site as its command does. Only the install knows how its addresses are laid out; a tool that guessed would update or delete the site of another public name, or of another install.
@@ -286,7 +286,7 @@ describe("the MCP server", () => {
     const copy = siteOf(copied);
     const original = siteOf(await bench.call("get_site", { site: site.label }));
 
-    expect(copied.text.split("\n")).toEqual([`copied    ${copy.label}  1 file`, "private   only your users can open it", "", copy.url]);
+    expect(copied.text.split("\n")).toEqual([`copied    ${copy.label}  1 file`, "private   login required", "", copy.url]);
     expect({ sameId: copy.id === site.id, label: copy.label.slice(0, -12), access: copy.access, created: copy.created }).toEqual({ sameId: false, label: "report-draft--", access: "private", created: true });
     expect({ id: original.id, access: original.access, live: original.live_version }).toEqual({ id: site.id, access: "unlisted", live: 1 });
     expect(codeOf(await bench.call("duplicate_site", { site: site.label, name: "Not A Name" }))).toBe("bad_name");
@@ -318,9 +318,9 @@ describe("the MCP server", () => {
     const after = await bench.call("get_site", { site: moved.label });
 
     expect(linked.text.split("\n")).toEqual([
-      `new link  ${moved.label}`,
-      `stopped   ${site.label}  ${site.addresses.site}`,
-      "private   only your users can open it",
+      `rotated   ${moved.label}`,
+      `revoked   ${site.label}  ${site.addresses.site}`,
+      "private   login required",
       "",
       moved.url,
     ]);
@@ -328,9 +328,8 @@ describe("the MCP server", () => {
     expect(codeOf(old)).toBe("not_found");
     expect(siteOf(kept).state).toBe("trash");
     expect(gone.text.split("\n")).toEqual([
-      `deleted for good  ${moved.label}`,
-      "gone: 1 file in 1 kept version; nothing can restore them",
-      `stopped working: ${moved.addresses.site}`,
+      `deleted  ${moved.label}  1 file in 1 version`,
+      `No longer served: ${moved.addresses.site}`,
     ]);
     expect({ site: gone.data.site, before: (gone.data.before as Site).label }).toEqual({ site: null, before: moved.label });
     expect(codeOf(after)).toBe("not_found");
@@ -353,10 +352,10 @@ describe("the MCP server", () => {
     ];
 
     expect(refused.map((answer) => answer.text.split("\n"))).toEqual([
-      ["not_found: no site with that id or public name", "list_sites shows every site"],
-      ["no_such_version: the site keeps no such version", "get_site lists the versions"],
-      ["name_taken: another site holds that public name: public_name", "to pick another: update_site with access public and another public_name"],
-      ["in_trash: the site sits in the trash", "to take it back: restore_site"],
+      ["not_found: Site not found", "See: list_sites"],
+      ["no_such_version: Version not found", "See: get_site"],
+      ["name_taken: The public name is taken", "Fix: update_site with access public and another public_name"],
+      ["in_trash: The site is in the trash", "Fix: restore_site"],
     ]);
     expect<unknown>(refused.map((answer) => (answer.data.error as { hint: string }).hint)).toEqual(refused.map((answer) => answer.text.split("\n")[1]));
   });
@@ -373,9 +372,9 @@ describe("the MCP server", () => {
       "root_links",
       {
         code: "root_links",
-        message: 'this install has no domain, so a link that starts with "/" would not open',
+        message: 'A link starting with "/" breaks on an install without a domain',
         about: "/logo@2x.png in index.html",
-        hint: "nothing was sent; write the link from its own page, as css/site.css or ../css/site.css",
+        hint: "Nothing was uploaded. Fix: link relative to the page, such as css/site.css or ../css/site.css",
       },
       ["GET /api/whoami"],
       [],
@@ -453,7 +452,7 @@ describe("the MCP server", () => {
       expect({
         error: answer.error,
         code: codeOf(answer),
-        sentence: answer.text.startsWith("bad_argument: an argument is missing, unknown, or of the wrong form: "),
+        sentence: answer.text.startsWith("bad_argument: Invalid argument: "),
         names: answer.text.includes(names),
       }).toEqual({ error: true, code: "bad_argument", sentence: true, names: true });
       expect(bench.sent).toEqual([]);
@@ -461,8 +460,8 @@ describe("the MCP server", () => {
   );
 
   test.each([
-    ["no login", {}, "no_login", "not logged in", "run `poplin login --server <address>` on this computer"],
-    ["half a login", { POPLIN_SERVER: ORIGIN }, "bad_login", "the login cannot be used", "POPLIN_TOKEN"],
+    ["no login", {}, "no_login", "Not logged in", "run `poplin login --server <url>` on this machine"],
+    ["half a login", { POPLIN_SERVER: ORIGIN }, "bad_login", "The login is unusable", "POPLIN_TOKEN"],
   ])(
     "with %s the server starts, lists its tools, and answers every call with how to log in: a server that exits at start breaks the agent's app with no word why",
     async (_name, env, code, sentence, fix) => {
@@ -533,10 +532,10 @@ describe("the MCP server", () => {
     const mistyped = await bench.call("delete_site", { site: site.label, no_trash: token });
     const unknown = await bench.client.callTool({ name: token, arguments: {} }).catch((error: Error) => error.message);
 
-    expect(echoed.text).toBe("internal: the install failed to do that: [token]\ntry again; poplin doctor reports on the install");
+    expect(echoed.text).toBe("internal: Internal error on the install: [token]\nFix: retry. If it persists: poplin doctor");
     expect((titled.data.site as { title: string }).title).toBe("the [token]");
     expect(mistyped.text).toBe(
-      'bad_argument: an argument is missing, unknown, or of the wrong form: no_trash: Invalid type: Expected boolean but received "[token]"',
+      'bad_argument: Invalid argument: no_trash: Invalid type: Expected boolean but received "[token]"',
     );
     expect(JSON.stringify(unknown)).toContain("[token]");
     expect(bench.written.join("\n")).not.toContain(token);

@@ -25,9 +25,9 @@ export interface Pipes {
 /** Say on stderr that no login can be used, for the person who reads the agent app's log. The server runs all the same, and every tool call answers the same problem. */
 async function warnOfNoLogin(host: Host): Promise<void> {
   const session = await host.session();
-  if (session === "logged-out") return host.log("poplin mcp: not logged in; every tool call answers no_login until this computer is logged in: poplin login --server <the install's address>");
+  if (session === "logged-out") return host.log("poplin mcp: not logged in. Tool calls return no_login until this machine is logged in: poplin login --server <url>");
 
-  if ("code" in session) host.log(await host.withoutTokens(`poplin mcp: ${problemLines(session).join("; ")}`));
+  if ("code" in session) host.log(await host.withoutTokens(`poplin mcp: ${problemLines(session).join(". ")}`));
 }
 
 /**
@@ -52,7 +52,7 @@ export async function serveOnPipes(host: Host, pipes: Pipes): Promise<number> {
 
   if (ended === "closed") return CLOSED;
 
-  host.log("poplin mcp: the server was stopped");
+  host.log("poplin mcp: server stopped");
 
   return exitCode({ kind: "failed" });
 }

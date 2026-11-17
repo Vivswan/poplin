@@ -27,7 +27,7 @@ import { BY_NAME, INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
-import { createDomainPlug, lacksRight, rightFor, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
+import { commandRows, createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, placeWords, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { placeBinding } from "../kind/started-place";
@@ -53,24 +53,24 @@ const OPTIONS: readonly OptionRow[] = [
 
 /** What a line of the run says, where no row of a piece's own says it. */
 const WORDS = {
-  both: "give one of --domain <name> and --no-domain",
-  noName: "--domain takes a name, such as example.com",
-  account: "--account takes an account's id: 32 characters of 0-9 and a-f",
-  domain: { "bad-domain": "is no domain name", "domain-too-long": "is too long: an address of the login under it passes 63 characters", "bad-public-word": "is no domain name" },
-  noRelease: "The project's website names no release now. Run this again in a few minutes.",
-  badRelease: "The release's files are not the ones the project published. Nothing was uploaded.",
-  newerRelease: "This release needs a newer poplin: run npx poplin@latest install",
-  noAddress: "This account has no free address yet, or one whose name is too long for the login. Open Workers & Pages in your browser and set the account's subdomain.",
+  both: "--domain and --no-domain are mutually exclusive",
+  noName: "--domain requires a domain name, such as example.com",
+  account: "--account requires an account id: 32 lowercase hex characters",
+  domain: { "bad-domain": "is not a domain name", "domain-too-long": "is too long: a login hostname under it exceeds 63 characters", "bad-public-word": "is not a domain name" },
+  noRelease: "The project website lists no release. Rerun in a few minutes.",
+  badRelease: "The release files failed validation. Nothing was uploaded.",
+  newerRelease: "This release requires a newer CLI: npx poplin@latest install",
+  noAddress: "This account has no workers.dev subdomain, or one too long for the login hostname. Set it under Workers & Pages in the Cloudflare dashboard.",
   lacks: LACKS,
-  refusedLater: "Cloudflare refused the token before the install was finished",
-  notUsed: "it is not used, and an install needs a database of this name",
-  unchecked: "its code was there before this run, and this run did not check it",
-  allowance: "the database's free allowance for the day is used up",
-  unreadUsers: "its records are not at the schema of this poplin, so the users it holds were not read, and --user is used",
+  refusedLater: "Cloudflare refused the account token before the install finished",
+  notUsed: "not reused, but an install needs a database with this name",
+  unchecked: "its code predates this run and was not checked against a release",
+  allowance: "the D1 free daily quota is exhausted",
+  unreadUsers: "its schema does not match this CLI, so its users were not read and --user is used",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
-const UNREACHABLE: Installed = { ok: false, why: "unreachable", words: "Cloudflare or the project's website gave no usable answer." };
+const UNREACHABLE: Installed = { ok: false, why: "unreachable", words: "Cloudflare or the project website gave no valid response" };
 
 /** What an install makes that no repair does, so that its token needs the permission for it. */
 const MADE_FIRST = ["R2 bucket"] as const;
@@ -122,9 +122,9 @@ function whereOf(text: string, account: string | undefined): Read<Where> {
 function whichPlace(account: string | undefined): Question<Where> {
   return {
     key: "where",
-    name: "where it answers",
-    ask: "Your own domain (example.com), or Enter for none:",
-    give: "Give --domain <name> or --no-domain (or POPLIN_DOMAIN).",
+    name: "domain",
+    ask: "Custom domain (Enter for workers.dev):",
+    give: "pass --domain <name> or --no-domain, or set POPLIN_DOMAIN",
     answer: (text) => whereOf(text, account),
   };
 }
@@ -169,7 +169,7 @@ function whyOf(failure: NotWritten): string {
 
   if (failure.failure === "allowance") return WORDS.allowance;
 
-  return failure.failure === "needs-hand" ? WORDS.newerRelease : "Cloudflare named no database";
+  return failure.failure === "needs-hand" ? WORDS.newerRelease : "Cloudflare returned no database id";
 }
 
 /** Add a row to the run and tell the command. */
@@ -181,9 +181,9 @@ function note(work: Work, row: Row): boolean {
 }
 
 /** The row of a piece whose call failed: blocked where the token lacks its permission, which the row names. A piece of the Worker's needs the permission its variables need. */
-function failed(work: Work, object: "R2 bucket" | "D1 database" | "Worker" | "Sweep trigger" | "Worker address", detail: string, failure: NotWritten): false {
+function failed(work: Work, object: "R2 bucket" | "D1 database" | "Worker" | "Cron trigger" | "workers.dev route", detail: string, failure: NotWritten): false {
   const right = rightFor(object === "R2 bucket" || object === "D1 database" ? object : "Worker variable");
-  if (lacksRight(failure)) note(work, { object, state: "block", detail: `${detail}: ${WORDS.lacks}: ${right}`, right });
+  if (lacksRight(failure)) note(work, { object, state: "block", detail: `${detail}: ${WORDS.lacks} ${right}`, right });
   else note(work, { object, state: "fail", detail: `${detail}: ${whyOf(failure)}` });
 
   return false;
@@ -197,26 +197,27 @@ function synced(work: Work, object: "R2 bucket" | "D1 database", detail: string,
 }
 
 /**
- * Settle one piece of the Worker: its code, its sweep trigger, or its free address.
+ * Settle one piece of the Worker: its code, its cron trigger, or its free address.
  *
+ * @param row - `setting` is on a piece that is a switch of the Worker: a run writes it and makes nothing, so its row never says made
  * @param stands - reads whether the piece is as it should be, on a Worker that was there before the run; `undefined` on a Worker the run makes, where the piece is made with it
  * @param write - makes the piece match; never called by a dry run, nor for a piece that stands
  */
 async function workerPiece(
   work: Work,
-  row: { readonly object: "Worker" | "Sweep trigger" | "Worker address"; readonly detail: string },
+  row: { readonly object: "Worker" | "Cron trigger" | "workers.dev route"; readonly detail: string; readonly setting?: true },
   stands: (() => Promise<CloudflareResult<boolean>>) | undefined,
   write: () => Promise<{ readonly ok: true } | NotWritten>,
 ): Promise<boolean> {
   const stood = stands === undefined ? undefined : await stands();
   if (stood?.ok === false) return failed(work, row.object, row.detail, stood);
 
-  if (stood?.value === true) return note(work, { ...row, state: "leave" });
+  if (stood?.value === true) return note(work, { object: row.object, detail: row.detail, state: "leave" });
 
   const written = work.mode === "apply" ? await write() : ({ ok: true } as const);
   if (!written.ok) return failed(work, row.object, row.detail, written);
 
-  return note(work, { ...row, state: stood === undefined ? "make" : "change" });
+  return note(work, { object: row.object, detail: row.detail, state: stood === undefined && row.setting !== true ? "make" : "change" });
 }
 
 /** Whether two cron lists hold the same crons. */
@@ -234,7 +235,7 @@ async function targetOf(place: Place, where: Where, form: string): Promise<Targe
   if (!address.ok && lacksRight(address)) {
     const right = rightFor("Forwarder");
 
-    return { what: "right_lacking", right, words: `Free address: ${WORDS.lacks}: ${right}`, address: form };
+    return { what: "right_lacking", right, words: `Free address: ${WORDS.lacks} ${right}`, address: form };
   }
 
   if (!address.ok) return address;
@@ -288,7 +289,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
   const scheduled = await workerPiece(
     work,
-    { object: "Sweep trigger", detail: bundle.deploy.crons.join(", ") },
+    { object: "Cron trigger", detail: bundle.deploy.crons.join(", ") },
     reads(
       () => readCrons(connection, worker),
       (crons) => sameCrons(crons, bundle.deploy.crons),
@@ -299,7 +300,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
   return workerPiece(
     work,
-    { object: "Worker address", detail: target.kind === "no-domain" ? `on: ${target.layout.adminHost}` : "off: the install answers under its domain" },
+    { object: "workers.dev route", detail: target.kind === "no-domain" ? `enabled: ${target.layout.adminHost}` : "disabled", setting: true },
     reads(
       () => callCloudflare(connection, (api) => new BaseSubdomain(api).get(SCRIPT, { account_id: accountId })),
       (current) => current.enabled === wanted.enabled && current.previews_enabled === wanted.previews_enabled,
@@ -331,7 +332,7 @@ async function finish(work: Work, target: Target, login: Login, kept: SettingVal
   }
 
   const loginOff = work.blocked.some((block) => block.what === "login_off");
-  for (const row of reading.rows.filter((entry) => !OWN_ROWS.has(entry.object))) note(work, rowOf(row, work.mode, loginOff));
+  for (const row of commandRows(reading.rows.filter((entry) => !OWN_ROWS.has(entry.object)))) note(work, rowOf(row, work.mode, loginOff));
 
   work.steps.push(...reading.steps);
 
@@ -361,7 +362,7 @@ async function prepared(work: Work, where: Where, reach: Reach): Promise<{ reado
 
 /** Say that the users a kept database holds were not read, and name the repair that mends the login to them, at the place of the install. */
 function unreadUsers(target: Target): string {
-  return `${WORDS.unreadUsers}. Once the install answers, ${["npx poplin doctor --repair", ...placeWords(target)].join(" ")} mends the login to the users it holds`;
+  return `${WORDS.unreadUsers}. When the install responds, ${["npx poplin doctor --repair", ...placeWords(target)].join(" ")} syncs the login to its stored users`;
 }
 
 /**
@@ -420,10 +421,10 @@ function keptUsersRow(login: Login, kept: SettingValues | undefined): Row | unde
   if (kept === undefined) return undefined;
 
   const users = kept.logins.length === 1 ? "its user" : `its ${kept.logins.length} users`;
-  const held = `The database holds ${users} already, and they are who logs in: ${namedUsers(kept.logins)}.`;
-  if (unusedLogin(login, kept) === undefined) return { object: "First login", state: "leave", detail: `${login}: a user already. ${held}` };
+  const held = `The database already has ${users}, and only they can log in: ${namedUsers(kept.logins)}.`;
+  if (unusedLogin(login, kept) === undefined) return { object: "First user", state: "leave", detail: `${login}: already a user. ${held}` };
 
-  return { object: "First login", state: "leave-out", detail: `${login}: not used. ${held}` };
+  return { object: "First user", state: "leave-out", detail: `${login}: not used. ${held}` };
 }
 
 /**
@@ -483,7 +484,11 @@ export const installer: Installer<Where, Place> = {
   token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
   read,
   placeWords,
-  facts: (where, work) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST),
+  facts: (where, work) => {
+    const [kind, also] = [where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST] as const;
+
+    return { ...tokenFacts(kind, also), tokenByHand: rightsByHand(kind, also) };
+  },
   find: (token, where, reach, work) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor, buckets: work !== "repair" }),
   install,
   remove: (found, where, removal, _reach, say) => removeInstall(found, where, removal, tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST).tokenLink, say),

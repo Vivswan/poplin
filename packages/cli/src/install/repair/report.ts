@@ -19,7 +19,7 @@ const PROBLEMS = { elsewhere: "other_place", changed: "changed" } as const;
 const ADOPT = "--adopt";
 
 /** What each end of a repair that left nothing undone is called. */
-const DONE = { same: "the install is as it should be. Nothing was changed.", mended: "the install is mended." } as const;
+const DONE = { same: "The install needs no repair", mended: "The repair is complete" } as const;
 
 /** A repair that worked through its rows. */
 type Mended = Extract<Repaired, { readonly ok: true }>;
@@ -42,7 +42,7 @@ function nextOf(repaired: Mended, run: Run, named: Named): Next {
 
 /** Say which install a look found: its version where it could be read, and where its dashboard is. */
 export function foundWords(found: Whole<unknown>): string {
-  return `found: ${runningWords(found.version)}, at ${found.address}`;
+  return `${runningWords(found.version)} is installed at ${found.address}`;
 }
 
 /**
@@ -59,26 +59,26 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
   const next = NEXT.install(provider, [], place);
   const install = next.command;
 
-  if (found.state === "none") return { problem: "no_install", exit: 1, words: `No install is in this account. To make one: ${install}`, next };
+  if (found.state === "none") return { problem: "no_install", exit: 1, words: `This account has no install. Fix: ${install}`, next };
 
-  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To make an install that uses it: ${install} ${ADOPT}`), next };
+  if (found.state === "leftover") return { problem: "no_install", exit: 1, words: followed(found.words, `To reuse them: ${install} ${ADOPT}`), next };
 
-  if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
+  if (found.state === "started") return { problem: "unfinished", exit: 1, words: `This account has an incomplete install. Fix: ${install}`, next };
 
   if (found.state === "held") return heldStop(found, repair("this", careful, [...updateWords(update), ...place]), provider, place, repair);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
-  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNCHANGED) };
+  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, `${UNCHANGED}.`) };
 
   if (found.why === "other_place") {
     // A repair at the place it was started for would stop again: the install is not set, so the install goes on with it there.
     const finish = NEXT.install(provider, [], [found.give]);
 
-    return { problem: "unfinished", exit: 1, words: followed(found.words, `To finish it: ${finish.command}`), next: finish };
+    return { problem: "unfinished", exit: 1, words: followed(found.words, `Fix: ${finish.command}`), next: finish };
   }
 
-  return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
+  return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, `${UNCHANGED}.`) };
 }
 
 /**
@@ -89,7 +89,7 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
  * @param repair - the way the line names a repair as a next step, which keeps that user
  */
 export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean, user: readonly string[], repair: typeof NEXT.repair): Stop {
-  const words = followed(refusedWords(repaired, user), UNCHANGED);
+  const words = followed(refusedWords(repaired, user), `${UNCHANGED}.`);
   if (repaired.why === "unreachable") return { problem: "unreachable", exit: 5, words };
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
@@ -109,8 +109,8 @@ export function repairedLines(repaired: Mended, run: Run, provider: Provider): L
   const same = changesIn(repaired.rows) === 0;
   if (run === "dry-run") return repaired.ready && same ? [{ tone: "done", text: DONE.same }] : dryRunLines(repaired);
 
-  // What a person is told to do after a run that mended everything, such as where to log in, stands before its last lines.
-  const told = repaired.ready ? repaired.steps.flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
+  // What a person is told to do after a run that mended everything stands before its last lines. A step at the dashboard's own address is left to the line that names the dashboard; the JSON value keeps it.
+  const told = repaired.ready ? repaired.steps.filter((step) => step.address !== repaired.address).flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
 
   return [...told, ...runLines(repaired, provider, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair(), repair: NEXT.repair() })];
 }

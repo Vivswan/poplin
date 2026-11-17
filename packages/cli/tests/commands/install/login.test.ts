@@ -67,7 +67,7 @@ interface Desk {
   /** The audit entries written after the install was opened, the newest first, as who did what. */
   readonly audit: () => Promise<unknown[]>;
 
-  /** The saved login, `undefined` when the machine holds none. */
+  /** The stored login, `undefined` when the machine holds none. */
   readonly saved: () => { server: string; token: string } | undefined;
 }
 
@@ -190,9 +190,9 @@ describe("logIn", () => {
     expect([ran.code, ran.err, ran.out.slice(0, 5)]).toEqual([
       0,
       [],
-      ["open this address, and allow this login there:", `  ${ORIGIN}/tokens/review/${shown?.id}`, "the page asks for the last 4 letters of this code:", `  ${code}`, "the code works for 10 minutes"],
+      ["Open this URL and approve the login:", `  ${ORIGIN}/tokens/review/${shown?.id}`, "Enter the last 4 characters of this code on that page:", `  ${code}`, "The code expires in 10 minutes"],
     ]);
-    expect(ran.out.slice(5).map((line) => line.split(/ {2,}/)[0])).toEqual(["logged in: the token is saved on this machine", "install", "role", "token", "expires"]);
+    expect(ran.out.slice(5).map((line) => line.split(/ {2,}/)[0])).toEqual(["Logged in. The token is stored on this machine.", "install", "role", "token", "expires"]);
     expect([ran.opened, ran.waits, desk.bench.sent]).toEqual([[`${ORIGIN}/tokens/review/${shown?.id}`], [5000], ["POST /api/logins", "POST /api/logins/token"]]);
     // Drift: the address the terminal prints and opens, or what the page is given, would hold a part of the code, and whoever is sent the address would need no terminal.
     expect([code.slice(0, 4), code.slice(-4)].filter((half) => (ran.opened[0] ?? "").includes(half) || JSON.stringify(shown).includes(half))).toEqual([]);
@@ -222,9 +222,9 @@ describe("logIn", () => {
 
   // Drift: a denied, unanswered, or stopped login must leave the machine as it was; a file written early would hold a token that never came, or drop the login that was there.
   test.each([
-    ["denied on the dashboard", "the login was denied on the dashboard", [[ADA, "login_denied", { scope: "admin", computer: "test-computer" }]]],
-    ["answered by nobody for ten minutes", "nobody allowed the login before it ran out", []],
-    ["stopped by the person", "the login was stopped", []],
+    ["denied on the dashboard", "The login was denied on the dashboard. Nothing was stored.", [[ADA, "login_denied", { scope: "admin", computer: "test-computer" }]]],
+    ["answered by nobody for ten minutes", "The login expired before approval", []],
+    ["stopped by the person", "Cancelled. Nothing changed.", []],
   ] as const)("a login %s exits 1, saves nothing, and makes no token", async (how, sentence, audit) => {
     const desk = await openDesk();
 
@@ -258,7 +258,7 @@ describe("logIn", () => {
     });
 
     expect([answered?.status, ((await answered?.json()) as { code?: string } | undefined)?.code]).toEqual([status, refusal]);
-    expect([ran.code, ran.err[0], desk.saved(), await desk.audit(), (await desk.bench.install.database.listTokens()).length]).toEqual([1, "nobody allowed the login before it ran out", undefined, [], 3]);
+    expect([ran.code, ran.err[0], desk.saved(), await desk.audit(), (await desk.bench.install.database.listTokens()).length]).toEqual([1, "The login expired before approval", undefined, [], 3]);
   });
 
   // Drift: an agent's shell holds a publisher token so it can touch its own sites alone; a login that ignored the flag would hand every agent the whole install.
@@ -287,7 +287,7 @@ describe("logIn", () => {
       await desk.decide({ login: idIn(address), allow: true, scope: "publisher", letters: lettersOf(soFar) });
     });
 
-    expect([ran.code, ran.err, ran.out.includes("role     publisher")]).toEqual([0, ["the dashboard allowed Own sites only; for Everything, log in again and choose it there"], true]);
+    expect([ran.code, ran.err, ran.out.includes("role     publisher")]).toEqual([0, ["The dashboard approved \"Own sites only\". Fix: for \"Everything\", log in again and select it there"], true]);
   });
 
   // Drift: an agent relays the address to its user from the first line while the command still waits; a line that came late, or that was not JSON, would leave the user with nothing to open.
@@ -321,7 +321,7 @@ describe("logIn", () => {
       questions += 1;
       if (questions > 1) return inner?.(request);
 
-      return Response.json({ error: { code: "too_many_requests", message: "the install is asked too often" } }, { status: 429, headers: { "Retry-After": "90" } });
+      return Response.json({ error: { code: "too_many_requests", message: "Rate limited by the install" } }, { status: 429, headers: { "Retry-After": "90" } });
     };
 
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address, soFar) => {
@@ -351,7 +351,7 @@ describe("logIn", () => {
       begun += 1;
       if (begun > refusals) return inner?.(request);
 
-      return Response.json({ error: { code: "too_many_requests", message: "the install is asked too often" } }, { status: 429, headers: begun === 1 ? { "Retry-After": "39" } : {} });
+      return Response.json({ error: { code: "too_many_requests", message: "Rate limited by the install" } }, { status: 429, headers: begun === 1 ? { "Retry-After": "39" } : {} });
     };
 
     desk.bench.paused = async (soFar) => {
@@ -362,7 +362,7 @@ describe("logIn", () => {
 
     const ran = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
 
-    expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "the install is asked too often"]);
+    expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "Rate limited by the install"]);
   });
 
   // Drift: the browser goes where the install says; an install, or whatever answers in its place, that named another site would send the admin there with the dashboard's trust.
@@ -372,7 +372,7 @@ describe("logIn", () => {
 
     const ran = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
 
-    expect([ran.code, ran.err[0], ran.out, ran.opened, ran.waits, desk.saved()]).toEqual([5, "the install answered in a form this poplin does not know: the address to open is not the install's", [], [], [], undefined]);
+    expect([ran.code, ran.err[0], ran.out, ran.opened, ran.waits, desk.saved()]).toEqual([5, "Unexpected response from the install: the approval URL is not on the install's origin", [], [], [], undefined]);
   });
 
   // Drift: a login is saved in the file, and a shell that sets either variable does not read the file; a login that took its install from the variable, or said nothing, would save a token the next command refuses to use.
@@ -384,12 +384,12 @@ describe("logIn", () => {
     const unnamed = await desk.bench.run("login", { env });
     const named = await desk.bench.run(`login --server ${ORIGIN}`, { env });
 
-    expect([unnamed.code, unnamed.err[0], unnamed.waits]).toEqual([3, "login needs the address of the install", []]);
-    expect([named.code, named.err, desk.saved()?.server]).toEqual([0, ["POPLIN_SERVER is set in this shell: unset it to use the saved login"], ORIGIN]);
+    expect([unnamed.code, unnamed.err[0], unnamed.waits]).toEqual([3, "--server is required when not logged in", []]);
+    expect([named.code, named.err, desk.saved()?.server]).toEqual([0, ["POPLIN_SERVER is set in this shell. Fix: unset it to use the stored login"], ORIGIN]);
   });
 
-  // Drift: a second login is how a token is renewed; one that needed the address again, or that lost the saved login when it was denied, would lock a person out of an install they were in.
-  test("with a login saved, login asks the same install again, and a denied one leaves the saved login as it was", async () => {
+  // Drift: a second login is how a token is renewed; one that needed the address again, or that lost the stored login when it was denied, would lock a person out of an install they were in.
+  test("with a login saved, login asks the same install again, and a denied one leaves the stored login as it was", async () => {
     const desk = await openDesk();
     await desk.login(`login --server ${ORIGIN}`, (address, ran) => allow(desk, address, ran));
     const before = desk.saved();
@@ -419,6 +419,6 @@ describe("logIn", () => {
 
     const stopped = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
 
-    expect([stopped.code, stopped.out, stopped.err, desk.saved()]).toEqual([1, [], ["the command was stopped"], undefined]);
+    expect([stopped.code, stopped.out, stopped.err, desk.saved()]).toEqual([1, [], ["Cancelled"], undefined]);
   });
 });

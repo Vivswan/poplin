@@ -31,7 +31,7 @@ const BEGIN_RESTS = 5;
 const LOGIN_VARIABLES = ["POPLIN_SERVER", "POPLIN_TOKEN"];
 
 /** What a login is told that asked for every right and was allowed its own sites only, in the words the dashboard has for the two choices. */
-const ALLOWED_LESS = "the dashboard allowed Own sites only; for Everything, log in again and choose it there";
+const ALLOWED_LESS = 'The dashboard approved "Own sites only". Fix: for "Everything", log in again and select it there';
 
 /** What an install answers a begun login with. */
 type Begun = v.InferOutput<typeof BEGUN_LOGIN_ANSWER>;
@@ -95,7 +95,7 @@ async function begin(client: Client, asked: { readonly scope: "publisher" | "adm
     if (failure.kind !== "refused" || failure.code !== "too_many_requests" || rests === BEGIN_RESTS) return problemOf(failure);
 
     const seconds = clamped(failure.retryAfter ?? INTERVAL_BOUNDS.max);
-    if (io.terminal.progress) io.screen.working(`the install asks for a pause: beginning the login in ${seconds} s (Ctrl-C stops)`);
+    if (io.terminal.progress) io.screen.working(`Rate limited by the install: starting the login in ${seconds} s (Ctrl-C cancels)`);
 
     if ((await io.pause(seconds * MS_PER_SECOND)) === "interrupted") return problem("interrupted");
   }
@@ -110,11 +110,11 @@ function announce(page: string, begun: Begun, json: boolean, io: Io): void {
   }
 
   const minutes = Math.round(begun.expires_in / SECONDS_PER_MINUTE);
-  io.screen.line("note", "open this address, and allow this login there:");
+  io.screen.line("note", "Open this URL and approve the login:");
   io.screen.line("plain", `  ${page}`);
-  io.screen.line("note", "the page asks for the last 4 letters of this code:");
+  io.screen.line("note", "Enter the last 4 characters of this code on that page:");
   io.screen.line("plain", `  ${begun.code}`);
-  io.screen.line("plain", `the code works for ${minutes} minutes`);
+  io.screen.line("plain", `The code expires in ${minutes} minutes`);
 }
 
 /** Ask for the token once: the token, the reason to stop, or the seconds to wait before the next question. */
@@ -139,7 +139,7 @@ async function collect(client: Client, begun: Begun, io: Io): Promise<Collected 
   let left = begun.expires_in;
 
   while (left > 0) {
-    if (io.terminal.progress) io.screen.working(`waiting to be allowed, ${Math.ceil(left / SECONDS_PER_MINUTE)} min left (Ctrl-C stops)`);
+    if (io.terminal.progress) io.screen.working(`Waiting for approval, ${Math.ceil(left / SECONDS_PER_MINUTE)} min left (Ctrl-C cancels)`);
 
     if ((await io.pause(wait * MS_PER_SECOND)) === "interrupted") return problem("interrupted");
 
@@ -166,14 +166,14 @@ function saved(server: string, record: Collected["record"], asked: "publisher" |
     ["token", record.note === "" ? record.id : `${record.id} (${record.note})`],
     ["expires", record.expires === "never" ? "never" : dayText(record.expires)],
   ];
-  const lines = [{ tone: "done", text: "logged in: the token is saved on this machine" } as const, ...columns(facts)];
+  const lines = [{ tone: "done", text: "Logged in. The token is stored on this machine." } as const, ...columns(facts)];
   const less = asked === "admin" && record.scope === "publisher" ? [ALLOWED_LESS] : [];
   const shadowing = LOGIN_VARIABLES.filter((name) => (io.machine.env[name] ?? "") !== "");
   if (shadowing.length === 0) return { ok: true, value: { server, token: record }, lines, notes: less };
 
   const [verb, them] = shadowing.length === 1 ? ["is", "it"] : ["are", "both"];
 
-  return { ok: true, value: { server, token: record }, lines, notes: [...less, `${shadowing.join(" and ")} ${verb} set in this shell: unset ${them} to use the saved login`] };
+  return { ok: true, value: { server, token: record }, lines, notes: [...less, `${shadowing.join(" and ")} ${verb} set in this shell. Fix: unset ${them} to use the stored login`] };
 }
 
 /**
@@ -195,7 +195,7 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   if ("exit" in begun) return refused(begun);
 
   const page = pageOf(begun.verify_url, server);
-  if (page === undefined) return refused(problem("unexpected_answer", "the address to open is not the install's"));
+  if (page === undefined) return refused(problem("unexpected_answer", "the approval URL is not on the install's origin"));
 
   announce(page, begun, request.json, io);
   if (request.browser) io.open(page);
@@ -206,7 +206,7 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   if ("code" in collected) return refused(collected);
 
   const login = parseLogin({ server, token: collected.token });
-  if (!login.ok) return refused(problem("unexpected_answer", "the token is not one"));
+  if (!login.ok) return refused(problem("unexpected_answer", "the response has no valid token"));
 
   await saveLogin(login.login, io.machine);
 

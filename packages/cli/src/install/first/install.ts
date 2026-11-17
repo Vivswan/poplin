@@ -18,26 +18,20 @@ import { parseInstall } from "./parse";
 import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
 import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, refusedWords, repairAfter, rowLine, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
 
-/** What the look for an install is called while it runs and in its line. */
-const LOOKING = "looking for an install";
+/** What the look for an install is called while it runs. */
+const LOOKING = "Checking the account for an install";
 
-/** What each state of a look is, in the line that says what was found. */
-const FOUND_WORDS: Readonly<Record<Found<unknown, unknown>["state"], string>> = {
-  none: "none",
-  leftover: "none, but something was left behind",
-  started: "one that was started and not finished",
-  whole: "found",
-  held: "a name is held",
-  blocked: "blocked",
-  choice: "more than one place",
-  refused: "no",
+/** What a look found that a run goes on from, in the line that says so. Every other state is said by the stop or the question that follows it. */
+const FOUND_WORDS: Readonly<Partial<Record<Found<unknown, unknown>["state"], string>>> = {
+  none: "This account has no install",
+  started: "This account has an incomplete install. A run resumes it.",
 };
 
 /** The command as it is typed after `poplin`, what runs it again, and the careful choice it takes. `--adopt` is none: it is a consent, given anew as a removal's proof is, and a line without it changes nothing. */
 const COMMAND = { name: "install", again: NEXT.install, careful: ["--dry-run"] } as const;
 
 /** What follows the name of a run that named no release: it went on with a program that was there, and uploaded none. */
-const UNCHECKED = "Its code was there before this run, and this run did not check it against a release.";
+const UNCHECKED = "Its code predates this run and was not checked against a release";
 
 /** What a look came to that a run goes on from, with the place the provider was last asked about. */
 interface Ground {
@@ -76,9 +70,9 @@ function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none"
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
-  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, UNCHANGED) };
+  if (found.why === "unreachable") return { problem: "unreachable", exit: 5, words: followed(found.words, `${UNCHANGED}.`) };
 
-  return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
+  return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, `${UNCHANGED}.`) };
 }
 
 /** Decide whether a run takes what an earlier install left behind: the option said so, or a person is asked. */
@@ -90,7 +84,7 @@ async function adopted(found: Extract<Found<unknown, unknown>, { readonly state:
   if (adopt === "no") return { problem: "leftover", exit: 1, words: found.words, address: found.address };
 
   show.aside("warning", found.words);
-  const use = await ends.screen.confirm("Use it, with what it holds?", false);
+  const use = await ends.screen.confirm("Reuse these resources and their data?", false);
   if (use === undefined) return STOPPED;
 
   return use ? { ...left, state: "adopted" } : { problem: "leftover", exit: 1, words: found.words, address: found.address };
@@ -105,7 +99,7 @@ async function noted(found: Startable<unknown>, request: InstallRequest, ends: I
 
   if (found.notes.length === 0 || request.asking === "never" || request.mode.mode === "dry-run") return found;
 
-  const on = await ends.screen.confirm("Go on all the same? No stops here, so that you can switch it on first.", false);
+  const on = await ends.screen.confirm("Continue anyway?", false);
 
   return on === true ? found : STOPPED;
 }
@@ -121,13 +115,16 @@ async function grounded(found: Extract<Found<unknown, unknown>, { readonly state
 async function look(request: InstallRequest, ends: InstallEnds, show: Show): Promise<Ground | Stop> {
   const looked = await lookFor({ ...request, work: "install" }, ends, {
     looking: () => show.working(LOOKING),
-    found: (found) => show.line(found.state === "none" || found.state === "started" ? "note" : "warning", `${LOOKING} ... ${FOUND_WORDS[found.state]}`),
+    found: (found) => {
+      const words = FOUND_WORDS[found.state];
+      if (words !== undefined) show.line("note", words);
+    },
   });
   if ("problem" in looked) return looked;
 
   const { found, where } = looked;
   if (found.state === "whole") {
-    show.working("reading whether it needs mending");
+    show.working("Checking whether it needs a repair");
 
     return standing(found, where, request, ends);
   }
@@ -141,10 +138,10 @@ async function look(request: InstallRequest, ends: InstallEnds, show: Show): Pro
 
 /** Log this computer in to the install that was made, when the person or the option says so; else say how. Answers what the value of the run gains: how the login went, and after one that worked, that nothing is left to run. */
 async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: string, io: Io, ends: InstallEnds, show: Show): Promise<Readonly<Record<string, unknown>>> {
-  const wanted = login === "ask" ? await ends.screen.confirm("Log this computer in now?", true) : login === "yes";
+  const wanted = login === "ask" ? await ends.screen.confirm("Log this machine in now?", true) : login === "yes";
 
   if (wanted !== true) {
-    show.line("plain", `To log this computer in: ${NEXT.login(address).command}`);
+    show.line("plain", `Next: ${NEXT.login(address).command}`);
 
     return {};
   }
@@ -154,7 +151,7 @@ async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: s
   if (!outcome.ok) {
     for (const line of problemLines(outcome.problem)) show.aside("error", line);
 
-    show.aside("plain", `To try again: ${NEXT.login(address).command}`);
+    show.aside("plain", `Next: ${NEXT.login(address).command}`);
 
     return { login: { ok: false, problem: outcome.problem.code } };
   }
@@ -171,8 +168,8 @@ async function waited(installed: Extract<Installed, { readonly ok: true }>, mode
   const { address } = installed;
   if (mode.mode === "dry-run" || !mode.wait || !installed.ready || address === undefined) return null;
 
-  show.line("note", `waiting for ${address} to answer`);
-  show.working(`waiting for ${address} to answer`);
+  show.line("note", `Waiting for ${address} to respond`);
+  show.working(`Waiting for ${address} to respond`);
 
   return installAnswers(address, ends);
 }
@@ -201,15 +198,15 @@ async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, g
 }
 
 /**
- * Say what a run that left nothing undone is called: installed, or made where its address gave no answer yet.
+ * Say what a run that left nothing undone is called: installed, with the note that its address gave no answer yet where it gave none.
  *
  * @param release - the version the run uploaded; `undefined` for a run that went on with code that was there
  * @param answers - whether the install answered at its address; `null` for a run that did not wait
  */
 function doneWords(release: string | undefined, answers: boolean | null): string {
-  const state = answers === false ? "is made, and its address does not answer yet." : "is installed.";
+  const state = answers === false ? "is installed, but its URL does not respond yet" : "is installed";
 
-  return release === undefined ? `poplin ${state} ${UNCHECKED}` : `poplin ${release} ${state}`;
+  return release === undefined ? `poplin ${state}. ${UNCHECKED}.` : `poplin ${release} ${state}`;
 }
 
 /** Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. A run that did not use the first login offers none: it ends with the repair that lets that person in. */
@@ -240,9 +237,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
   const at = { command: COMMAND, careful: carefulOf(mode.mode), provider, place: placeOf(provider, request.where), run: mode.mode };
   if ("problem" in ground) return stopped(ground, show, at);
 
-  if (ground.found.state === "started") show.line("note", "An install was started here and not finished: this run goes on with it.");
-
-  const doing = mode.mode === "dry-run" ? "reading what a run would make" : "making the install";
+  const doing = mode.mode === "dry-run" ? "Planning the install" : "Installing";
   show.working(doing);
 
   const installed = await provider.install(ground.found, ground.where, request.login, mode.mode, ends.reach, (row) => {

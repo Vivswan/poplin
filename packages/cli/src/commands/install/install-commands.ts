@@ -19,16 +19,16 @@ import type { Line } from "../../local/screen";
 import { columns, countText, dayText, GAP, REHEARSED } from "../text";
 
 /** What the login is still good for after a logout that the install did not answer: an install that was removed answers none, and its tokens went with it. */
-const STILL_LIVE = "if the install still stands, the token may still be live: revoke it on the install's dashboard";
+const STILL_LIVE = "The token may still be valid. Fix: revoke it on the dashboard";
 
 /** What a change of the logins still needs on an install that did not carry it to the login page by itself: that page keeps a list of its own. */
-const LOGINS_STEP = "one more step: on the dashboard's Domain screen, paste an account token and press Repair, so the login page lets a new email in; until then only an email that was already a login gets in";
+const LOGINS_STEP = ["New users cannot log in yet", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"] as const;
 
 /** What a dry run of a change of the logins says of that step: whether it is needed shows only once the change is stored. */
-const LOGINS_MAY_STEP = "a run may need one more step, which it names: a Repair on the dashboard's Domain screen, so the login page lets a new email in";
+const LOGINS_MAY_STEP = "Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair";
 
-/** What follows the two versions of an install and a command that differ, in the words the list of problems has for them. */
-const TWO_VERSIONS = "the install and this poplin are of two versions; update the older one";
+/** What follows the two versions of an install and a command that differ. */
+const TWO_VERSIONS = "versions differ";
 
 /** What a sentence calls the install's side at its provider, by how the install lays out its addresses: one under a domain of its own, or one on paths with none. */
 const THINGS = { hostname: "the domain", path: "the install" } as const satisfies Record<AddressLayout["kind"], string>;
@@ -70,7 +70,7 @@ async function whoami({ client, server, source }: Session): Promise<Outcome> {
     ["role", token.scope],
     ["token", token.note === "" ? token.id : `${token.id} (${token.note})`],
     ["expires", expiryText(token.expires)],
-    ["login", source === "file" ? "saved on this machine" : "POPLIN_SERVER and POPLIN_TOKEN"],
+    ["source", source === "file" ? "stored login" : "POPLIN_SERVER and POPLIN_TOKEN"],
   ];
 
   return { ok: true, value: { server, ...answered.value }, lines: columns(facts) };
@@ -91,8 +91,8 @@ async function rehearseLogout({ client, server, source }: Session): Promise<Outc
   const failure = answered.ok ? undefined : answered.failure;
   if (failure !== undefined && !isRevoked(failure)) return failed(failure);
 
-  const local = source === "file" ? "the saved login would be removed from this machine" : "POPLIN_SERVER and POPLIN_TOKEN would still be set in this shell";
-  const lines = [{ tone: "done", text: `would log out of ${server}` } as const, failure === undefined ? "the token would be revoked" : "the token is dead already", local, REHEARSED];
+  const local = source === "file" ? "The stored login would be deleted" : "POPLIN_SERVER and POPLIN_TOKEN would stay set in this shell";
+  const lines = [{ tone: "done", text: `Would log out of ${server}` } as const, failure === undefined ? "The token would be revoked" : "The token is already invalid", local, "Dry run: one read-only request checked the token"];
 
   return { ok: true, value: { dry_run: true, server, revoked: failure === undefined }, lines };
 }
@@ -107,15 +107,15 @@ async function logout({ client, io, server, source }: Session): Promise<Outcome>
   const failure = revoked.ok ? undefined : revoked.failure;
   if (source === "file") await clearLogin(io.machine);
 
-  const local = source === "file" ? "the saved login was removed from this machine" : "POPLIN_SERVER and POPLIN_TOKEN are still set in this shell";
+  const local = source === "file" ? "The stored login is deleted" : "POPLIN_SERVER and POPLIN_TOKEN are still set in this shell";
 
   if (failure !== undefined && !isRevoked(failure)) {
     const said: Problem = problemOf(failure);
 
-    return { ok: false, problem: { ...said, hint: `${local}; ${STILL_LIVE}` } };
+    return { ok: false, problem: { ...said, hint: `${local}. ${STILL_LIVE}` } };
   }
 
-  const lines = [{ tone: "done", text: `logged out of ${server}` } as const, failure === undefined ? "the token is revoked" : "the token was dead already"];
+  const lines = [{ tone: "done", text: `Logged out of ${server}` } as const, failure === undefined ? "The token is revoked" : "The token was already invalid"];
 
   return { ok: true, value: { server, revoked: failure === undefined }, lines, notes: source === "file" ? [] : [local] };
 }
@@ -145,7 +145,7 @@ async function changeSetting(action: Extract<ConfigAction, { readonly kind: "cha
   const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
   const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
 
-  return { ok: true, value: answer, lines, notes: settled ? [] : [LOGINS_STEP] };
+  return { ok: true, value: answer, lines, notes: settled ? [] : [...LOGINS_STEP] };
 }
 
 async function config(action: ConfigAction, session: Session): Promise<Outcome> {
@@ -167,7 +167,7 @@ async function config(action: ConfigAction, session: Session): Promise<Outcome> 
 function checkOf(check: string, failure: Failure | undefined, detail: string): Check {
   if (failure === undefined) return { check, ok: true, detail };
 
-  if (failure.kind === "refused" && failure.code === "not_allowed") return { check, ok: true, detail: "not read: this token is no admin's" };
+  if (failure.kind === "refused" && failure.code === "not_allowed") return { check, ok: true, detail: "skipped: requires an admin token" };
 
   const said = problemOf(failure);
 
@@ -176,14 +176,14 @@ function checkOf(check: string, failure: Failure | undefined, detail: string): C
 
 /** The versions of the install and of this command, side by side. Two that differ are a finding, not a failure: every call the report makes was still answered. */
 function versionCheck(install: string): Check {
-  const both = `install ${install}, this poplin ${VERSION}`;
+  const both = `install ${install}, CLI ${VERSION}`;
 
   return { check: "version", ok: true, detail: install === VERSION ? both : `${both}: ${TWO_VERSIONS}` };
 }
 
 /** The newer release the install has learned of, as one line of the report. It is a finding, not a failure. */
 function updateCheck(update: { readonly current: string; readonly newest: string; readonly notes: string }): Check {
-  return { check: "update", ok: true, detail: `${update.newest} is out (this install runs ${update.current}): ${update.notes}` };
+  return { check: "update", ok: true, detail: `${update.newest} is available (the install runs ${update.current}): ${update.notes}` };
 }
 
 /**
@@ -207,9 +207,9 @@ function problemsFinding(listed: Called<v.InferOutput<typeof PROBLEMS_LISTED>>):
 
   const week = [...new Set(listed.value.problems.map((problem) => problem.kind))];
   const today = [...new Set(listed.value.problems.filter((problem) => problem.day === listed.value.today).map((problem) => problem.kind))];
-  if (today.length > 0) return { problems: { today, week }, checks: [{ check: "problems", ok: false, detail: `${countText(today.length, "kind")} today: ${today.join(", ")}` }] };
+  if (today.length > 0) return { problems: { today, week }, checks: [{ check: "problems", ok: false, detail: `${countText(today.length, "type")} today: ${today.join(", ")}` }] };
 
-  const detail = week.length === 0 ? "none in 7 days" : `none today; in 7 days: ${week.join(", ")}`;
+  const detail = week.length === 0 ? "none in 7 days" : `none today, in 7 days: ${week.join(", ")}`;
 
   return { problems: { today, week }, checks: [{ check: "problems", ok: true, detail }] };
 }
@@ -232,14 +232,14 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const trash = await client.call(LISTED_SITES, (api) => api.sites.$get({ query: { trash: "true" } }));
   const domain = domainFinding(await client.call(DOMAIN_STATE, (api) => api.domain.$get()), THINGS[layout.kind]);
   const noted = await notedProblems(client, token.scope);
-  const kept = settings.ok ? `${Object.keys(settings.value.values).length} settings read` : "";
-  const live = sites.ok ? `${countText(sites.value.sites.length, "site")}${sites.value.next === undefined ? "" : " and more"}` : "";
-  const trashed = trash.ok ? `${countText(trash.value.sites.length, "site")}${trash.value.next === undefined ? "" : " and more"}` : "";
+  const kept = settings.ok ? `${Object.keys(settings.value.values).length} settings` : "";
+  const live = sites.ok ? `${sites.value.next === undefined ? "" : "more than "}${countText(sites.value.sites.length, "site")}` : "";
+  const trashed = trash.ok ? `${trash.value.next === undefined ? "" : "more than "}${countText(trash.value.sites.length, "site")}` : "";
   const checks: Check[] = [
-    { check: "install", ok: true, detail: `${server} answers` },
+    { check: "install", ok: true, detail: `${server} responds` },
     versionCheck(version),
     ...(update === undefined ? [] : [updateCheck(update)]),
-    { check: "login", ok: true, detail: `${token.scope} token ${token.id}, ${source === "file" ? "saved on this machine" : "from the environment"}, expires ${expiryText(token.expires)}` },
+    { check: "login", ok: true, detail: `${token.scope} token ${token.id}, ${source === "file" ? "stored on this machine" : "from the environment"}, expires ${expiryText(token.expires)}` },
     checkOf("settings", settings.ok ? undefined : settings.failure, kept),
     checkOf("sites", sites.ok ? undefined : sites.failure, live),
     checkOf("trash", trash.ok ? undefined : trash.failure, trashed),
@@ -251,7 +251,7 @@ async function doctor({ client, server, source }: Session): Promise<Outcome> {
   const hang = Math.max(...marks.map((mark) => mark.length)) + Math.max(...checks.map((check) => check.check.length)) + 2 * GAP.length;
   const lines = columns(checks.map((check, at) => [marks[at] ?? "", check.check, check.detail])).map((text, at): Line => ({ tone: checks[at]?.ok === true ? "done" : "error", text, hang }));
 
-  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, problems: noted.problems, token, checks }, lines: [...lines, "nothing was changed"] };
+  const outcome: Outcome = { ok: true, value: { server, version, poplin: VERSION, update: update ?? null, domain: domain.note, problems: noted.problems, token, checks }, lines };
 
   return checks.every((check) => check.ok) ? outcome : { ...outcome, found: "failed" };
 }

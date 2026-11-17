@@ -20,8 +20,8 @@ test("a provider's sentence reaches the screen on one line with no control chara
   const env = { [TOKEN_VARIABLE]: TOKEN };
   const [said, valued] = [await runLine(LINE, account, { env }), await runLine(`${LINE} --json`, account, { env })];
 
-  expect(said.err).toEqual(["The host refused the token. The way on: npx poplin uninstall stand-in. Nothing was changed."]);
-  expect([valued.err, jsonOf(valued).words]).toEqual([said.err, `${FORGED}. nothing was changed`]);
+  expect(said.err).toEqual(["The host refused the token. The way on: npx poplin uninstall stand-in. Nothing changed."]);
+  expect([valued.err, jsonOf(valued).words]).toEqual([said.err, `${FORGED}. Nothing changed.`]);
 });
 
 // Drift: an escape sequence ends at its first letter, so one written right before the token takes the token's first letter with it. Taken out before the token is hidden, it leaves the rest of the token on the screen, where no hiding finds it.

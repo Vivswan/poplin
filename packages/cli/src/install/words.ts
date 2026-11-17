@@ -26,7 +26,7 @@ const REFUSALS = { unknownOption: "commander.unknownOption", missingValue: "comm
 const ASK_NOTHING = ["yes", "token-stdin"] as const;
 
 /** The token a run that asks nothing lacks, as a missing answer. */
-export const MISSING_TOKEN: Missing = { key: "token", name: "the account token", give: `Set ${TOKEN_VARIABLE}, or pipe it with --token-stdin.` };
+export const MISSING_TOKEN: Missing = { key: "token", name: "account token", give: `pass --token-stdin or set ${TOKEN_VARIABLE}` };
 
 /** One command of the family, as its words are read. */
 export interface CommandWords {
@@ -69,9 +69,9 @@ class Refused extends Error {
   }
 }
 
-/** The stop of a line written wrong: its first line starts with the command's name. */
-export function usage(command: CommandWords, ...lines: string[]): Stop {
-  return { problem: "usage", exit: 2, lines: lines.map((line, at) => (at === 0 ? `poplin ${command.name}: ${line}` : line)) };
+/** The stop of a line written wrong: its first line says what is wrong, and a second, where there is one, what to do. */
+export function usage(...lines: string[]): Stop {
+  return { problem: "usage", exit: 2, lines };
 }
 
 /** Whether a flag stands as a word of its own before `--`. */
@@ -88,7 +88,7 @@ function addOptions(command: Command, rows: readonly OptionRow[], typed: Typed):
     command.addOption(option);
 
     command.on(`option:${option.name()}`, (value: string | undefined) => {
-      if (typed.has(option.name())) throw new Refused(`${row.flag} was given twice`);
+      if (typed.has(option.name())) throw new Refused(`${row.flag} is given twice`);
 
       typed.set(option.name(), value ?? true);
     });
@@ -109,18 +109,18 @@ function quiet(command: Command): Command {
 function unknownOption(typed: string, command: CommandWords, provider: Provider | undefined, providers: readonly Provider[]): Refused {
   const [flag = typed] = typed.split("=");
   const elsewhere = Object.hasOwn(command.elsewhere, flag) ? command.elsewhere[flag] : undefined;
-  if (elsewhere !== undefined) return new Refused(`no option ${flag}`, elsewhere);
+  if (elsewhere !== undefined) return new Refused(`Unknown option ${flag}`, elsewhere);
 
   const owner = providers.find((other) => other !== provider && other.options.some((row) => row.flag === flag));
-  if (owner !== undefined && provider !== undefined) return new Refused(`${flag} is no option of ${provider.id}`, `it is an option of ${owner.id}`);
+  if (owner !== undefined && provider !== undefined) return new Refused(`${flag} is an option of ${owner.id}, not of ${provider.id}`);
 
-  if (owner !== undefined) return new Refused(`${flag} is an option of ${owner.id}`, `name the provider first: poplin ${command.name} ${owner.id} ${flag}`);
+  if (owner !== undefined) return new Refused(`${flag} is an option of ${owner.id}`, `Usage: poplin ${command.name} ${owner.id} ${flag}`);
 
   const known = [...command.options, ...(provider?.options ?? [])].map((row) => row.flag);
   const meant = nearest(flag, known);
   const helpOf = provider === undefined ? `poplin ${command.name} --help` : `poplin ${command.name} ${provider.id} --help`;
 
-  return new Refused(`no option ${flag}`, meant === undefined ? `${helpOf} lists the options` : `did you mean ${meant}?`);
+  return new Refused(`Unknown option ${flag}`, meant === undefined ? `See: ${helpOf}` : `Did you mean ${meant}?`);
 }
 
 /** A refusal of commander in the product's words. */
@@ -129,12 +129,12 @@ function refusalOf(refused: CommanderError, root: Command, command: CommandWords
 
   if (refused.code === REFUSALS.unknownOption) return unknownOption(quoted ?? "", command, provider, providers);
 
-  if (refused.code === REFUSALS.missingValue) return new Refused(`${(quoted ?? "").split(" ")[0]} needs a value: ${quoted}`);
+  if (refused.code === REFUSALS.missingValue) return new Refused(`${(quoted ?? "").split(" ")[0]} requires a value`, `Usage: ${quoted}`);
 
   if (refused.code !== REFUSALS.tooMany) return undefined;
 
   // Commander names the subcommand that was given too much; with no name it is the command itself, whose one word is a provider.
-  if (quoted !== undefined) return new Refused(`too many words after ${quoted}`, `poplin ${command.name} ${quoted} --help lists the options`);
+  if (quoted !== undefined) return new Refused(`Unexpected argument after ${quoted}`, `See: poplin ${command.name} ${quoted} --help`);
 
   const [word = ""] = root.args;
   const meant = nearest(
@@ -142,7 +142,7 @@ function refusalOf(refused: CommanderError, root: Command, command: CommandWords
     providers.map((one) => one.id),
   );
 
-  return new Refused(`no provider ${JSON.stringify(word)}`, meant === undefined ? `poplin ${command.name} lists the providers` : `did you mean: poplin ${command.name} ${meant}?`);
+  return new Refused(`Unknown provider ${JSON.stringify(word)}`, meant === undefined ? `See: poplin ${command.name}` : `Did you mean poplin ${command.name} ${meant}?`);
 }
 
 /** A line commander refused: why, and the provider it had gone into by then. */
@@ -171,7 +171,7 @@ function readWords(words: readonly string[], command: CommandWords, providers: r
     root.parse([...words], { from: "user" });
   } catch (error) {
     const refused = error instanceof CommanderError ? refusalOf(error, root, command, provider, providers) : error;
-    if (refused instanceof Refused) return { refused: usage(command, ...refused.lines), provider };
+    if (refused instanceof Refused) return { refused: usage(...refused.lines), provider };
 
     throw error;
   }
@@ -194,13 +194,13 @@ export function missingOf(question: Question<unknown>): Missing {
  *
  * @returns the token; `undefined` for a variable that is not set or holds nothing; or the refusal of a token given twice, and of a variable that holds none
  */
-export function heldToken(read: Named, env: Variables, command: CommandWords): Token | undefined | Stop {
+export function heldToken(read: Named, env: Variables): Token | undefined | Stop {
   const held = env[TOKEN_VARIABLE] ?? "";
   if (held === "") return undefined;
 
-  if (read.shared.has("token-stdin")) return usage(command, `the token is given twice: ${TOKEN_VARIABLE} is set, and --token-stdin was given`);
+  if (read.shared.has("token-stdin")) return usage(`${TOKEN_VARIABLE} and --token-stdin are mutually exclusive`);
 
-  return read.provider.token(held) ?? usage(command, `${TOKEN_VARIABLE} does not hold an account token of ${read.provider.name}`);
+  return read.provider.token(held) ?? usage(`${TOKEN_VARIABLE} is not a ${read.provider.name} account token`);
 }
 
 /**
@@ -216,7 +216,7 @@ function withoutProvider<Plan extends object>(read: Read, canAsk: boolean, comma
 
   if (bare) return { kind: "list", json };
 
-  return { kind: "stop", json, provider: sole, stop: lacking([{ key: "provider", name: "the provider", give: `Name it after ${command.name}: poplin ${command.name} <provider>.` }]) };
+  return { kind: "stop", json, provider: sole, stop: lacking([{ key: "provider", name: "provider", give: `poplin ${command.name} <provider>` }]) };
 }
 
 /**

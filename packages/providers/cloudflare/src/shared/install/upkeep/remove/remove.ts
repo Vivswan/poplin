@@ -87,26 +87,26 @@ const TOKENS_PAGE = "https://dash.cloudflare.com/profile/api-tokens";
 
 /** What a line says, where no object's own name says it. */
 const WORDS = {
-  lacks: "the token lacks a permission. Add this one",
-  optional: "the token lacks an optional permission, so this was not looked for. If the install has one, delete it by hand, or add this one",
-  workerStands: "the Worker still stands: it goes first",
-  applicationsStand: "an application still stands: it goes first",
-  notOwn: "not this install's: the Worker is bound to another",
-  stays: "it stays",
-  strangers: "a Worker of this name is not poplin's, and stays",
-  othersRules: "it holds rules that are not poplin's, and stays",
-  bots: "the domain's AI crawler block and Bot Fight Mode are settings of the domain, and stay as they are set",
+  lacks: "the account token lacks",
+  optional: "The account token lacks",
+  workerStands: "the Worker must be removed first",
+  applicationsStand: "an Access application must be removed first",
+  notOwn: "not this install's: the Worker binds another",
+  stays: "left in place",
+  strangers: "a Worker with this name is not poplin's and is left in place",
+  othersRules: "it has rules that are not poplin's and is left in place",
+  bots: "AI crawler blocking and Bot Fight Mode are zone settings and keep their values",
   token: `delete it at Cloudflare: ${TOKENS_PAGE}`,
-  unreachable: "Cloudflare gave no usable answer. Nothing was removed.",
-  notConfirmed: "What was typed is not this install's",
-  changed: "The account changed since it was looked at. Run this again. Nothing was removed.",
+  unreachable: "Cloudflare gave no valid response. Nothing changed.",
+  notConfirmed: "The confirmation does not match",
+  changed: "The account changed after it was checked. Rerun this command. Nothing changed.",
 } as const;
 
 /** The row of a kind of rule, or of the ruleset poplin makes for it. */
 type RuleKind = (typeof OWN_RULES)[number]["object" | "holder"];
 
 /** The object of each row, as the table of rights names it. The Worker and its Workflow need the permission its variables need, and a ruleset the one its rules need. */
-type Kind = "Worker route" | "DNS record" | RuleKind | "Forwarder" | "Access application" | "Access policy" | (typeof OWN_ALERTS)[number]["object"] | "Key" | "Upload key" | "Workflow" | "Worker" | "Sites' files" | "Database";
+type Kind = "Worker route" | "DNS record" | RuleKind | "Forwarder" | "Access application" | "Access policy" | (typeof OWN_ALERTS)[number]["object"] | "Key" | "Upload key" | "Workflow" | "Worker" | "R2 bucket" | "D1 database";
 
 /** What one run gathers. `zoneId` is of an install under a domain alone, and `form` is where a permission is added to the token. */
 interface Work {
@@ -131,10 +131,6 @@ interface Held {
 
 /** The permission a token needs to remove an object, as the token form names it. */
 function rightOf(object: Kind): string {
-  if (object === "Sites' files") return rightFor("R2 bucket");
-
-  if (object === "Database") return rightFor("D1 database");
-
   if (object === "Worker") return rightFor("Worker variable");
 
   if (object === "Redirect ruleset") return rightFor("Redirect rule");
@@ -159,9 +155,9 @@ function note(work: Work, row: RemovalRow): boolean {
 function failed(work: Work, object: Kind, failure: CloudflareFailure, before: readonly string[] = [], unlisted = false): boolean {
   const right = rightOf(object);
   const went = before.length === 0 ? "" : `removed ${before.join(", ")}; then: `;
-  if (lacksRight(failure) && unlisted) return note(work, { object, state: "stay", detail: `${WORDS.optional}: ${right}`, right });
+  if (lacksRight(failure) && unlisted) return note(work, { object, state: "stay", detail: `${WORDS.optional} ${right}`, right });
 
-  if (lacksRight(failure)) return note(work, { object, state: "block", detail: `${went}${WORDS.lacks}: ${right}`, right });
+  if (lacksRight(failure)) return note(work, { object, state: "block", detail: `${went}${WORDS.lacks} ${right}`, right });
 
   return note(work, { object, state: "fail", detail: `${went}${failureWords(failure)}` });
 }
@@ -379,7 +375,7 @@ async function removeWorker(work: Work, stands: boolean): Promise<boolean> {
 }
 
 /** The row of data a run leaves: it was told to keep it, the Worker still stands, or the Worker was bound to another. */
-function left(work: Work, object: "Sites' files" | "Database", detail: string, why: { readonly own: boolean; readonly workerGone: boolean }, held: Held = {}): boolean {
+function left(work: Work, object: "R2 bucket" | "D1 database", detail: string, why: { readonly own: boolean; readonly workerGone: boolean }, held: Held = {}): boolean {
   if (!why.own) return note(work, { object, state: "skip", detail: `${detail}: ${WORDS.notOwn}`, ...held });
 
   if (work.data === "keep") return note(work, { object, state: "keep", detail, ...held });
@@ -393,7 +389,7 @@ function unread(name: string, bound: boolean): string {
 }
 
 /** The row of data whose holdings a list could not read. A run that leaves the data never reads them, so its list names the data with no count; for data a run removes, the read failed. */
-function uncounted(work: Work, object: "Sites' files" | "Database", detail: string, why: { readonly own: boolean; readonly workerGone: boolean; readonly leaves: boolean }, failure: CloudflareFailure): boolean {
+function uncounted(work: Work, object: "R2 bucket" | "D1 database", detail: string, why: { readonly own: boolean; readonly workerGone: boolean; readonly leaves: boolean }, failure: CloudflareFailure): boolean {
   return why.leaves ? left(work, object, detail, why) : failed(work, object, failure);
 }
 
@@ -402,22 +398,22 @@ async function removeFiles(work: Work, why: { readonly own: boolean; readonly bo
   const { connection, accountId } = work.place;
   const name = INSTALL_OBJECTS.bucket;
   const buckets = await listBuckets(connection, accountId);
-  if (!buckets.ok) return failed(work, "Sites' files", buckets);
+  if (!buckets.ok) return failed(work, "R2 bucket", buckets);
 
   if (!planBucket(buckets.value).some((step) => step.kind === "leave")) return true;
 
   const leaves = !why.own || work.data === "keep" || !why.workerGone;
-  if (leaves && work.mode === "apply") return left(work, "Sites' files", unread(name, why.bound), why);
+  if (leaves && work.mode === "apply") return left(work, "R2 bucket", unread(name, why.bound), why);
 
   const objects = await callCloudflare(connection, (api) => Array.fromAsync(new BaseObjects(api).list(name, { account_id: accountId })));
   // A bucket that went between the two reads is gone, which is no failure.
-  if (!objects.ok && objects.failure === "refused" && objects.status === NOT_FOUND) return note(work, { object: "Sites' files", state: "gone", detail: name });
+  if (!objects.ok && objects.failure === "refused" && objects.status === NOT_FOUND) return note(work, { object: "R2 bucket", state: "gone", detail: name });
 
-  if (!objects.ok) return uncounted(work, "Sites' files", unread(name, why.bound), { ...why, leaves }, objects);
+  if (!objects.ok) return uncounted(work, "R2 bucket", unread(name, why.bound), { ...why, leaves }, objects);
 
   const held = { count: objects.value.length, bytes: objects.value.reduce((sum, object) => sum + (object.size ?? 0), 0) };
   const named = `${name} (files: ${held.count}, ${showBytes(held.bytes)}${why.bound ? "" : `; ${BY_NAME}`})`;
-  if (leaves) return left(work, "Sites' files", named, why, held);
+  if (leaves) return left(work, "R2 bucket", named, why, held);
 
   const emptied = await removeOwn(
     work,
@@ -425,11 +421,11 @@ async function removeFiles(work: Work, why: { readonly own: boolean; readonly bo
     (object) => object.key,
     (object) => callCloudflare(connection, (api) => new BaseObjects(api).delete(object.key ?? "", { account_id: accountId, bucket_name: name })),
   );
-  if (!emptied.ok) return failed(work, "Sites' files", emptied, [`${emptied.names.length} of the ${held.count} files`]);
+  if (!emptied.ok) return failed(work, "R2 bucket", emptied, [`${emptied.names.length} of the ${held.count} files`]);
 
   const bucket = await removeOwn(work, { ok: true, value: [named] }, (bucketName) => bucketName, () => callCloudflare(connection, (api) => new BaseBuckets(api).delete(name, { account_id: accountId })));
 
-  return settled(work, "Sites' files", bucket, held);
+  return settled(work, "R2 bucket", bucket, held);
 }
 
 /** How many sites a database holds; `undefined` where it does not say, as one no Worker ever opened, or one whose day of free use is over. */
@@ -468,29 +464,29 @@ async function removeDatabase(work: Work, why: { readonly boundId: string | unde
   const { connection, accountId } = work.place;
   const name = INSTALL_OBJECTS.database;
   const found = await syncDatabase(connection, accountId, "plan");
-  if (!found.ok) return found.failure === "no-id" ? note(work, { object: "Database", state: "fail", detail: "Cloudflare named no database" }) : failed(work, "Database", found);
+  if (!found.ok) return found.failure === "no-id" ? note(work, { object: "D1 database", state: "fail", detail: "Cloudflare returned no database id" }) : failed(work, "D1 database", found);
 
   const { id } = found;
   if (id === undefined) return true;
 
   const reasons = { own: !why.bound || why.boundId === id, workerGone: why.workerGone };
   const leaves = !reasons.own || work.data === "keep" || !reasons.workerGone;
-  if (leaves && work.mode === "apply") return left(work, "Database", unread(name, why.bound), reasons);
+  if (leaves && work.mode === "apply") return left(work, "D1 database", unread(name, why.bound), reasons);
 
   const read = await databaseFacts(work, id, why.bound);
-  if ("ok" in read) return uncounted(work, "Database", unread(name, why.bound), { ...reasons, leaves }, read);
+  if ("ok" in read) return uncounted(work, "D1 database", unread(name, why.bound), { ...reasons, leaves }, read);
 
   const { holder, sites } = read;
-  if (holder === "other") return note(work, { object: "Database", state: "skip", detail: `${name}: ${holderWords(holder)}: ${WORDS.stays}` });
+  if (holder === "other") return note(work, { object: "D1 database", state: "skip", detail: `${name}: ${holderWords(holder)}: ${WORDS.stays}` });
 
   const held = sites === undefined ? {} : { count: sites };
   const facts = [...(sites === undefined ? [] : [`sites: ${sites}`]), ...(holder === undefined ? [] : [holderWords(holder)])];
   const named = facts.length === 0 ? name : `${name} (${facts.join("; ")})`;
-  if (leaves) return left(work, "Database", named, reasons, held);
+  if (leaves) return left(work, "D1 database", named, reasons, held);
 
   const taken = await removeOwn(work, { ok: true, value: [named] }, (databaseName) => databaseName, () => callCloudflare(connection, (api) => new BaseDatabase(api).delete(id, { account_id: accountId })));
 
-  return settled(work, "Database", taken, held);
+  return settled(work, "D1 database", taken, held);
 }
 
 /** What the Worker that stands is bound to: its bucket's name and its database's id. */
@@ -536,7 +532,7 @@ function otherPlace(found: Removable<Place>, where: Where): string | undefined {
 
   const named = where.kind === "domain" ? `under ${where.layout.domain}` : "without a domain";
 
-  return `The install in this account answers at ${found.address}, and that is none ${named}. Say where it is with --domain <name> or --no-domain. Nothing was removed.`;
+  return `The install in this account is at ${found.address}, not ${named}. Pass the matching --domain <name> or --no-domain. Nothing changed.`;
 }
 
 /** What points at the Worker, by the kind of install: the zone's routes, records, and rules, or the two forwarders. */
@@ -553,7 +549,7 @@ async function removeReach(work: Work): Promise<void> {
 /** What a run came to, from what it gathered. Each permission a blocked row names is a block too, once. */
 function done(work: Work, confirm: string): Removed {
   const rights = [...new Set(work.rows.flatMap((row) => (row.state === "block" && row.right !== undefined ? [row.right] : [])))];
-  const blocked = rights.map((right): Blocked => ({ what: "right_lacking", right, words: `${WORDS.lacks}: ${right}`, address: work.form }));
+  const blocked = rights.map((right): Blocked => ({ what: "right_lacking", right, words: `${WORDS.lacks} ${right}`, address: work.form }));
 
   return { ok: true, rows: work.rows, blocked, confirm, ready: !work.rows.some((row) => UNDONE.has(row.state)) };
 }
@@ -572,7 +568,7 @@ export async function removeInstall(found: Removable<Place>, where: Where, remov
   if (other !== undefined) return { ok: false, why: "other_place", words: other };
 
   const confirm = confirmOf(found);
-  if (removal.run === "apply" && typedOf(removal.confirmed) !== confirm) return { ok: false, why: "not_confirmed", words: `${WORDS.notConfirmed}: this install is ${confirm}. Nothing was removed.` };
+  if (removal.run === "apply" && typedOf(removal.confirmed) !== confirm) return { ok: false, why: "not_confirmed", words: `${WORDS.notConfirmed} ${confirm}. Nothing changed.` };
 
   const zone = await zoneOf(place, where);
   if (!zone.ok) return { ok: false, why: "unreachable", words: WORDS.unreachable };

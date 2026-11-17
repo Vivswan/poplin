@@ -227,7 +227,7 @@ export function processScreen(streams: Streams): Screen {
   const aside = writer(streams.err, streams.colour.err);
   const common = { output: streams.err };
   // The spinner stands alone between lines, so it draws no guide of a question above itself. A signal it hears stops the command, which else would go on.
-  const spin = spinner({ ...common, withGuide: false, cancelMessage: "stopped", onCancel: streams.stop });
+  const spin = spinner({ ...common, withGuide: false, cancelMessage: "Cancelled", onCancel: streams.stop });
   updateSettings({ aliases: { [END_OF_INPUT]: "cancel" } });
   let spinning = false;
 
