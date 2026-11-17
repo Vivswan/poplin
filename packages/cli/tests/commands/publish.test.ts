@@ -41,11 +41,11 @@ describe("publish", () => {
     const folder = folderOf("notes", PAGES);
 
     const made = await bench.run(folder);
-    const label = made.out[1]?.split("  ")[1] ?? "";
+    const label = made.out[1]?.split(/ {2,}/)[1] ?? "";
 
     expect(made).toMatchObject({
       code: 0,
-      out: ["uploaded 2 files, 46 B (1 skipped as hidden or node_modules)", `made  ${label}  private`, `https://${label}-p-poplin.example.com`],
+      out: ["sent      2 files, 46 B (1 skipped as hidden or node_modules)", `made      ${label}`, "private   only your users can open it", "", `https://${label}-p-poplin.example.com`],
       err: [],
       status: [],
     });
@@ -59,7 +59,7 @@ describe("publish", () => {
 
     const human = await bench.run(`${folder} --site ${label}`);
 
-    expect(human.out).toEqual(["uploaded 2 files, 27 B (1 skipped as hidden or node_modules)", `updated  ${label}  version 3  unlisted`, `https://${label}-u-poplin.example.com`]);
+    expect(human.out).toEqual(["sent      2 files, 27 B (1 skipped as hidden or node_modules)", `updated   ${label}  version 3`, "unlisted  anyone with the link can open it", "", `https://${label}-u-poplin.example.com`]);
   });
 
   test("an update leaves a typed title alone, takes a new one only from --title, and --title \"\" goes back to the page's own: without this every update undoes set --title", async () => {
@@ -216,7 +216,7 @@ describe("publish", () => {
     const made = await bench.run(folder);
 
     expect(made.code).toBe(0);
-    expect(made.out[1]).toMatch(/^made {2}notes--[0-9a-z]{12} {2}private$/);
+    expect(made.out[1]).toMatch(/^made {6}notes--[0-9a-z]{12}$/);
   });
 
   test.each([
@@ -300,9 +300,10 @@ describe("publish", () => {
     const watched = await bench.run(folder, { terminal: { asks: true, progress: true } });
 
     expect(piped.status).toEqual([]);
-    expect(watched.status.at(-2)).toBe("uploading 2/2 files, 46 B of 46 B");
+    expect(watched.status[0]).toBe("Publishing notes");
+    expect(watched.status.at(-2)).toBe("Publishing notes: 2/2 files, 46 B of 46 B");
     expect(watched.status.at(-1)).toBe("");
-    expect(watched.out.length).toBe(3);
+    expect(watched.out.length).toBe(5);
   });
 
   // Drift: the 429 here is the zone's and no code of this repository's: its page is no JSON, its rule counts every request to the zone, and nothing but these rows says what the upload makes of it.
@@ -450,7 +451,7 @@ describe("publish", () => {
 
     const made = await bench.run(folder, { terminal: { asks: false, progress: true } });
 
-    expect([made.code, shown, made.status[1]]).toEqual([0, [["the install asks for a pause: going on in 4 s (Ctrl-C stops)"]], "uploading 1/2 files, 14 B of 17 B"]);
+    expect([made.code, shown, made.status[2]]).toEqual([0, [["Publishing notes", "the install asks for a pause: going on in 4 s (Ctrl-C stops)"]], "Publishing notes: 1/2 files, 14 B of 17 B"]);
   });
 
   // Drift: a zone that never lets up, or a person who stops the command, must end the upload; a rest with no bound would hang a script for good.

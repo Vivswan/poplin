@@ -13,12 +13,16 @@ import { sha256Of } from "../files/hash";
 import { type Problem, problem, problemOf } from "./problems";
 import { refusedByLayout } from "./publish";
 import type { Outcome, RequestOf, Session } from "./records";
+import type { Line, Tone } from "../local/screen";
 import { countText, dryRunText } from "./text";
 import { abandonUpload, callUnhurried, giveUpUpload, sendUpload, type UploadFile } from "./upload";
 import { siteWord } from "./wire";
 
 /** What stands between two facts of a line. */
 const GAP = "  ";
+
+/** What kind of line the row of a site is, by what became of the site. */
+const RESULT_TONES: Readonly<Record<Result["result"], Tone>> = { imported: "done", skipped: "note", failed: "error" };
 
 /** The refusal of a site this install already has, as a run that is started again meets it: the site is passed over, and nothing failed. */
 const ALREADY_THERE = "id_taken";
@@ -258,19 +262,19 @@ function shown(done: Result): Result {
   return said;
 }
 
-function lineOf(done: Result): string {
-  if (done.result !== "imported") return [done.result, done.label, `${done.code}: ${done.message}`].join(GAP);
+function lineOf(done: Result): Line {
+  if (done.result !== "imported") return { tone: RESULT_TONES[done.result], text: [done.result, done.label, `${done.code}: ${done.message}`].join(GAP) };
 
   const versions = done.live_only === true ? "live version only" : countText(done.versions, "version");
 
-  return ["imported", done.label, versions, countText(done.files, "file"), showBytes(done.bytes)].join(GAP);
+  return { tone: RESULT_TONES.imported, text: ["imported", done.label, versions, countText(done.files, "file"), showBytes(done.bytes)].join(GAP) };
 }
 
 function reported(request: ImportRequest, results: readonly Result[]): Outcome {
   const count = (result: Result["result"]): number => results.filter((done) => done.result === result).length;
   const counts = { imported: count("imported"), skipped: count("skipped"), failed: count("failed") };
   const stopped = results.some(stopsRun);
-  const lines = results.map(lineOf);
+  const lines: (string | Line)[] = results.map(lineOf);
   if (request.settings) lines.unshift(request.logins ? "restored the settings and the logins" : "restored the settings, but for the logins");
 
   lines.push(`${counts.imported} imported, ${counts.skipped} skipped, ${counts.failed} failed`);

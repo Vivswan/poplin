@@ -25,6 +25,7 @@ import { planPublish, previewPublish, sendPublish } from "./publish";
 import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request, TypedRequest } from "./requests";
 import { runSiteCommand } from "./site-commands";
+import { showLine } from "./text";
 import { runUpdate } from "./update";
 import { guardedScreen, hide, written } from "./util";
 import { readByInstall } from "./wire";
@@ -260,7 +261,7 @@ function print(outcome: Outcome, json: boolean, { out, screen }: Io, tokens: Rea
   if (json) {
     out(written(outcome.value, tokens));
   } else {
-    for (const line of [...outcome.lines, ...(outcome.steps ?? [])]) screen.line("plain", line);
+    for (const line of [...outcome.lines, ...(outcome.steps ?? [])]) showLine(screen, line);
   }
 
   return exitCode({ kind: outcome.found ?? "done" });

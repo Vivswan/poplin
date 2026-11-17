@@ -66,7 +66,7 @@ An install without a domain writes other addresses: [Without a domain](#without-
 
 Change `access` only when the user asks, in either direction. A public site that goes private or unlisted gives up its public name, and that address stops working.
 
-**To or from private changes the address.** The answer then ends in a line `address changed: <old> is now <new>`. Give the user the new `url`, and say that the old address sends visitors on to it. The label you pass as `site` stays the same.
+**To or from private changes the address.** The answer then holds a line that starts with moved and names the old address, and ends in the new address. Give the user the new `url`, and say that the old address sends visitors on to it. The label you pass as `site` stays the same.
 
 **A rename never breaks a link.** `update_site` with `name` (`poplin set <site> --name q3-report`) changes the name in the label and nothing else: the id, the public name, and every address handed out before stay as they are. The answer carries the new label.
 
@@ -109,7 +109,7 @@ An install is one of two kinds: under the user's own domain, or without a domain
 
 **Sites of a kind share one browser origin.** Every unlisted and public site is on one hostname, and every private site on another. A script of one site can read another site of its kind whose address it knows, and that site's browser storage. So publish there only pages the user trusts, and say so before you publish a page with scripts neither of you wrote.
 
-**To or from private, the hostname changes** in place of the letter. The answer ends in the same `address changed` line.
+**To or from private, the hostname changes** in place of the letter. The answer holds the same line.
 
 ## After you publish, tell the user
 
@@ -123,7 +123,7 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 Say the word if you want a link that works for others without a login.
 ```
 
-Take the address from `url` in the answer; do not build one yourself. After an update, say that the same address now shows the new version, unless the answer carries an `address changed` line. Do not paste the address anywhere else, and do not open it to "check" a private site: you are not logged in to it.
+Take the address from `url` in the answer; do not build one yourself. After an update, say that the same address now shows the new version, unless the answer carries the line that starts with moved. Do not paste the address anywhere else, and do not open it to "check" a private site: you are not logged in to it.
 
 ## When poplin refuses
 

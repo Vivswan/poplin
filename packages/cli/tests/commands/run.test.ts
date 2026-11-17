@@ -111,18 +111,20 @@ describe("run", () => {
     const url = `https://${label}-p-poplin.example.com`;
     const open = `https://${label}-u-poplin.example.com`;
 
-    expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`unlisted  ${label}`, open, `address changed: ${url} is now ${open}`]);
-    expect((await bench.run(`set ${label} --public --public-name docs`)).out).toEqual([`public  ${label}  public name "docs"`, "https://docs-page.example.com"]);
-    expect((await bench.run("set docs --private")).out).toEqual([`private  ${label}`, url, `address changed: ${open} is now ${url}`]);
+    expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`changed   ${label}  access and search engines`, `moved     from ${url}`, "unlisted  anyone with the link can open it", "", open]);
+    expect((await bench.run(`set ${label} --public --public-name docs`)).out).toEqual([`changed   ${label}  access and public name`, 'public    anyone can open it, as "docs"', "", "https://docs-page.example.com"]);
+    expect((await bench.run("set docs --private")).out).toEqual([`changed   ${label}  access and public name`, `moved     from ${open}`, "private   only your users can open it", "", url]);
+    expect((await bench.run(`set ${label} --private --embeddable off`)).out[0]).toBe(`changed   ${label}  embeddable`);
+    expect((await bench.run(`set ${label} --private`)).out[0]).toBe(`changed   ${label}  nothing: it was so already`);
     expect((await bench.run(`delete ${label}`)).out).toEqual([`in the trash  ${label}  gone for good on 2023-11-21`, `to take it back: poplin restore ${label}`]);
     expect((await bench.run("list --trash")).out).toEqual([`${label}  gone for good on 2023-11-21  Report`]);
-    expect((await bench.run(`restore ${label}`)).out).toEqual([`restored  ${label}  private`, url]);
-    expect((await bench.run("list")).out).toEqual([`${label}  private  ${url}  Report`]);
+    expect((await bench.run(`restore ${label}`)).out).toEqual([`restored  ${label}`, "private   only your users can open it", "", url]);
+    expect((await bench.run("list")).out).toEqual([`${label}  private  Report`, `  ${url}`]);
 
     const shown = await bench.run(`show ${label}`);
     const json = jsonOf(await bench.run(`show ${label} --json`));
 
-    expect(shown.out.slice(0, 4)).toEqual([label, url, `id              ${label.slice(-12)}`, "name            report"]);
+    expect(shown.out.slice(0, 5)).toEqual([label, url, "", `id              ${label.slice(-12)}`, "name            report"]);
     expect(shown.out.at(-1)).toMatch(/^version 1 {2}2023-11-14 {2}by [0-9a-f]{16} {2}live$/);
     expect(shown.out.filter((line) => line.startsWith("pages opened"))).toEqual(["pages opened    about 10 or fewer times today, about 10 or fewer in the last 7 days"]);
     expect(json).toEqual((await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body);
@@ -240,9 +242,11 @@ describe("run", () => {
     const { bench, label } = await withSite();
     const renamed = `notes--${label.slice(-12)}`;
 
-    expect((await bench.run(`set ${label} --name notes`)).out.slice(0, 2)).toEqual([`private  ${renamed}  renamed from report`, `https://${renamed}-p-poplin.example.com`]);
-    expect((await bench.run(`set ${label} --unlisted`)).out[0]).toBe(`unlisted  ${renamed}`);
-    expect((await bench.run(`${folderOf("report", { "index.html": "<title>Second</title>" })} --site ${label} --name q3-report`)).out[1]).toBe(`updated  q3-report--${label.slice(-12)}  version 2  unlisted`);
+    const moved = `moved     from https://${label}-p-poplin.example.com`;
+
+    expect((await bench.run(`set ${label} --name notes`)).out).toEqual([`changed   ${renamed}  name`, "renamed   from report", moved, "private   only your users can open it", "", `https://${renamed}-p-poplin.example.com`]);
+    expect((await bench.run(`set ${label} --unlisted`)).out[0]).toBe(`changed   ${renamed}  access`);
+    expect((await bench.run(`${folderOf("report", { "index.html": "<title>Second</title>" })} --site ${label} --name q3-report`)).out[1]).toBe(`updated   q3-report--${label.slice(-12)}  version 2`);
   });
 
   test("rollback and new-link print the version now live and the new label: the old label is dead, so the new one must be on stdout", async () => {
@@ -250,15 +254,15 @@ describe("run", () => {
     const folder = folderOf("report", { "index.html": "<title>Second</title>" });
     await bench.run(`${folder} --site ${label}`);
 
-    expect((await bench.run(`rollback ${label}`)).out).toEqual([`rolled back  ${label}  version 1 is live`, `https://${label}-p-poplin.example.com`]);
+    expect((await bench.run(`rollback ${label}`)).out).toEqual([`rolled back  ${label}  version 1 is live`, "private      only your users can open it", "", `https://${label}-p-poplin.example.com`]);
     expect((await bench.run(`rollback ${label} --to 2`)).out[0]).toBe(`rolled back  ${label}  version 2 is live`);
 
     const linked = await bench.run(`new-link ${label}`);
-    const fresh = linked.out[0]?.split("  ")[1] ?? "";
+    const fresh = linked.out[0]?.split(/ {2,}/)[1] ?? "";
 
     expect(fresh).toMatch(/^report--[0-9a-z]{12}$/);
     expect(fresh).not.toBe(label);
-    expect(linked.out).toEqual([`new link  ${fresh}`, `https://${fresh}-p-poplin.example.com`, `the old label ${label} and its address https://${label}-p-poplin.example.com stopped working`]);
+    expect(linked.out).toEqual([`new link  ${fresh}`, `stopped   ${label}  https://${label}-p-poplin.example.com`, "private   only your users can open it", "", `https://${fresh}-p-poplin.example.com`]);
     expect((await bench.run(`show ${label}`)).code).toBe(1);
   });
 
@@ -270,12 +274,12 @@ describe("run", () => {
     bench.sent.length = 0;
 
     const copied = await bench.run(`duplicate ${label} --name report-draft`);
-    const fresh = copied.out[0]?.split("  ")[1] ?? "";
+    const fresh = copied.out[0]?.split(/ {2,}/)[1] ?? "";
 
     expect(fresh).toMatch(/^report-draft--[0-9a-z]{12}$/);
-    expect(summary(copied)).toEqual({ code: 0, out: [`copied  ${fresh}  private  130 files`, `https://${fresh}-p-poplin.example.com`], err: [] });
+    expect(summary(copied)).toEqual({ code: 0, out: [`copied    ${fresh}  130 files`, "private   only your users can open it", "", `https://${fresh}-p-poplin.example.com`], err: [] });
     expect(bench.sent).toEqual(Array.from({ length: 2 }, () => `POST /api/sites/${label}/duplicate`));
-    expect((await bench.run("list")).out).toHaveLength(2);
+    expect((await bench.run("list")).out).toHaveLength(4);
     expect(summary(await bench.run("duplicate zzzzzzzzzzzz"))).toMatchObject({ code: 1, out: [] });
   });
 
@@ -331,7 +335,7 @@ describe("run", () => {
     const sent = bench.sent.map((line) => line.replace(/[0-9a-z]{16}$/, ":upload"));
 
     expect([copied.code, copied.waits, copied.out[0]?.replace(/--[0-9a-z]{12}/, "--:id"), copied.err.join(" ").includes("the copy was given up and no site was made")]).toEqual(
-      stop === undefined ? [code, waits, "copied  report-draft--:id  private  130 files", false] : [code, waits, undefined, true],
+      stop === undefined ? [code, waits, "copied    report-draft--:id  130 files", false] : [code, waits, undefined, true],
     );
     expect(sent).toEqual([...Array.from({ length: stop === undefined ? 3 : 2 }, () => `POST /api/sites/${label}/duplicate`), ...(stop === undefined ? [] : ["DELETE /api/uploads/:upload"])]);
   });
@@ -384,7 +388,7 @@ describe("run", () => {
 
     const copied = await bench.run(`duplicate ${label} --name report-draft`);
 
-    expect([copied.code, copied.out[0]?.replace(/--[0-9a-z]{12}/, "--:id"), copied.err]).toEqual([0, "copied  report-draft--:id  private  130 files", []]);
+    expect([copied.code, copied.out[0]?.replace(/--[0-9a-z]{12}/, "--:id"), copied.err]).toEqual([0, "copied    report-draft--:id  130 files", []]);
   });
 
   test("list follows every page of the install: without this a listing stops at the first hundred sites", async () => {

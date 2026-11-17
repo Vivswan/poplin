@@ -11,6 +11,7 @@ import { problemLines } from "../../commands/problems";
 import type { Io } from "../../commands/records";
 import { installAnswers } from "./answers";
 import { lookFor, STOPPED, settle } from "../ask";
+import { showLine } from "../../commands/text";
 import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
@@ -158,7 +159,7 @@ async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: s
     return { login: { ok: false, problem: outcome.problem.code } };
   }
 
-  for (const line of outcome.lines) show.line("plain", line);
+  for (const line of outcome.lines) showLine(show, line);
 
   for (const note of outcome.notes ?? []) show.aside("note", note);
 
