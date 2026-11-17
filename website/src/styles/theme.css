@@ -186,6 +186,11 @@ main {
   gap: 4px 26px;
 }
 
+/* The bar's entries draw closer in a narrow window, so a phone shows them on the mark's line. */
+.top ul {
+  column-gap: clamp(18px, 5vw, 26px);
+}
+
 .top a,
 .foot a {
   text-decoration: none;
@@ -247,8 +252,9 @@ main {
   height: 28px;
 }
 
-/* The switch and the copy buttons need a script; without one they are not offered. */
-html:not(.js) [data-slot="button"] {
+/* The switch, the copy buttons, and the demo's menu need a script; without one they are not offered. */
+html:not(.js) [data-slot="button"],
+html:not(.js) [data-slot="menu-trigger"] {
   display: none;
 }
 

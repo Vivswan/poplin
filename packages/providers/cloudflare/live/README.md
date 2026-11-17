@@ -321,7 +321,8 @@ For each account:
 | `CLOUDFLARE_API_TOKEN`  | a secret of the environment  | every step that calls Cloudflare                                          |
 | `CLOUDFLARE_ACCOUNT_ID` | a secret of the environment  | the same                                                                  |
 | `POPLIN_LIVE_LOGIN`     | a secret of the environment  | the login the install lets in                                             |
-| `DEMO_URL`              | a variable of the repository | the demo's whole https address, for the website; absent, it shows no link |
+| `DEMO_URL`              | a variable of the repository | the demo's whole https address on the install under a domain, for the website |
+| `DEMO_URL_NO_DOMAIN`    | a variable of the repository | the same on the install without a domain. Both set: Demo is a menu of the two. One set: a plain link. Neither: no link |
 
 ## The test install without a domain
 

@@ -6,7 +6,7 @@ project:
 npm:
   path: packages/cli
 site:
-  vars: [DEMO_URL]
+  vars: [DEMO_URL, DEMO_URL_NO_DOMAIN]
 # What a fix-lint label may commit back (the platform's docs/modules/autofix.md); the hook is .github/actions/autofix.
 autofix:
   # Every kind of file biome reads: the hook runs `bun run lint:fix`, which changes no other.

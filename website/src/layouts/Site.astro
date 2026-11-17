@@ -5,8 +5,9 @@ import "@fontsource/libre-franklin/latin-700.css";
 import "../styles/theme.css";
 import "../styles/ui.css";
 import { getImage } from "astro:assets";
+import { DemoMenu } from "../controls/demo-menu.tsx";
 import { ThemeSwitch } from "../controls/theme-switch.tsx";
-import { demoAddress } from "../lib/demo.ts";
+import { demoEntry } from "../lib/demo.ts";
 import { REPOSITORY_URL, sitePath } from "../lib/paths.ts";
 import { released } from "../lib/released.ts";
 
@@ -19,12 +20,11 @@ interface Props {
 const { title, description, path } = Astro.props;
 const pageUrl = new URL(sitePath(path), Astro.site).href;
 const newest = released();
-const demo = demoAddress();
-const links = [{ href: sitePath("docs/"), label: "Docs" }];
-if (demo !== undefined) {
-  links.push({ href: demo, label: "Demo" });
-}
-links.push({ href: REPOSITORY_URL, label: "GitHub" });
+const demo = demoEntry({ domain: process.env.DEMO_URL, noDomain: process.env.DEMO_URL_NO_DOMAIN });
+const links = [
+  { href: sitePath("docs/"), label: "Docs" },
+  { href: REPOSITORY_URL, label: "GitHub" },
+];
 
 const brand = import.meta.glob<ImageMetadata>("../../../brand/{favicon,icon,social}.svg", { eager: true, import: "default" });
 const favicon = brand["../../../brand/favicon.svg"];
@@ -79,6 +79,23 @@ const card = await getImage({ src: social, width: 1200, height: 630, format: "pn
       </a>
       <nav aria-label="Site">
         <ul>
+          {
+            demo.kind === "one" && (
+              <li>
+                <a href={demo.link.href}>Demo</a>
+              </li>
+            )
+          }
+          {
+            demo.kind === "two" && (
+              <li>
+                <DemoMenu client:idle links={demo.links} />
+                <noscript>
+                  <a href={demo.links[0].href}>Demo</a>
+                </noscript>
+              </li>
+            )
+          }
           {
             links.map((link) => (
               <li>

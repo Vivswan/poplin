@@ -10,8 +10,8 @@ description: |
   Before the build it asks GitHub which releases carry the release workflow's attestation, and the build
   publishes those, each with the digest of its files, as `releases.json`.
 
-  The build reads `DEMO_URL` from the deploy job's environment: `site.vars` in .repo-platform.yml
-  names the repository variable the fleet exports there.
+  The build reads `DEMO_URL` and `DEMO_URL_NO_DOMAIN` from the deploy job's environment: `site.vars` in
+  .repo-platform.yml names the repository variables the fleet exports there.
 
   The contract and examples are the fleet's docs/modules/site.md.
 
