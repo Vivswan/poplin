@@ -1,0 +1,45 @@
+# The live upgrade of the two test installs: a real install of the last release, on each test account, takes the release
+# as it would merge as an update and must answer as before (packages/providers/cloudflare/live/README.md, "The upgrade").
+#
+#   the pull request of a release -> live-upgrade.yml, once for each kind of install
+#   every other pull request      -> both jobs skip
+#
+# It is its own workflow, started by the event, and not a job of release-gate.yml: a called workflow is handed only the
+# secrets its caller passes, and the caller of the release gate passes none, so a job under the gate reads an empty value.
+# Each upgrade waits in the lane of its kind's live checks (live-upgrade.yml), and no newer run stops one that started.
+
+name: Release Live Upgrade
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The branch is the one release-please opens the release from. The called job asks the rest: this repository, and the
+  # release bot as the one who opened it.
+  domain:
+    name: live upgrade (domain)
+    if: github.head_ref == 'release-please--branches--main'
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+    # Only the names the steps read. The called job names the environment, and its secret of a name is the one it reads, not a value handed over here.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  account-address:
+    name: live upgrade (account address)
+    if: github.head_ref == 'release-please--branches--main'
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: account address
+      environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}

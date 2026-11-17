@@ -84,7 +84,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Only a run by hand with the box ticked. The release gate calls the same file, for the pull request of a release.
+  # Only a run by hand with the box ticked. release-live-upgrade.yml calls the same file, for the pull request of a release.
   upgrade:
     name: live (account address)
     if: inputs.upgrade == true
