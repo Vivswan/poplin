@@ -30,11 +30,11 @@ function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
 }
 
-/** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the repair at the same place where a run has something to mend yet. */
-function nextOf(repaired: Mended, run: Run, place: readonly string[]): Next {
+/** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the same repair, by the words in `named`, where a run has something to mend yet. */
+function nextOf(repaired: Mended, run: Run, named: readonly string[]): Next {
   const mended = repaired.ready && (run === "apply" || changesIn(repaired.rows) === 0);
 
-  return mended ? NEXT.login(repaired.address) : NEXT.repair("this", carried(carefulOf(run), repaired.ready), place);
+  return mended ? NEXT.login(repaired.address) : NEXT.repair("this", carried(carefulOf(run), repaired.ready), named);
 }
 
 /** Say which install a look found: its version where it could be read, and where its dashboard is. */
@@ -110,11 +110,11 @@ export function repairedLines(repaired: Mended, run: Run, provider: Provider): L
  * The JSON value of a repair that worked through its rows.
  *
  * @param found - the install the repair went on from
- * @param place - the place of the install, which the repair named next carries
+ * @param named - the place of the install and the user the line was given to add, which the repair named next carries: without the user, the run after a dry run would add nobody
  * @returns `ok` and `ready` are whether the command exits with 0: nothing is left undone, or a run would leave nothing. `changes` is how many objects were changed or would be.
  *   Each row's state is under `will` in a dry run and under `did` in a run
  */
-export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>, place: readonly string[]): Readonly<Record<string, unknown>> {
+export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>, named: readonly string[]): Readonly<Record<string, unknown>> {
   return {
     ok: repaired.ready,
     run,
@@ -124,7 +124,7 @@ export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>,
     rows: rowValues(repaired.rows, run),
     blocked: repaired.blocked,
     steps: repaired.steps,
-    next: nextOf(repaired, run, place),
+    next: nextOf(repaired, run, named),
   };
 }
 

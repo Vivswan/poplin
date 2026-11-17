@@ -375,7 +375,7 @@ With `--json`, the value of a run, and of a run that stopped, names what to run 
 | ------------------------------------------------------ | --------------------------------------------------------------------- |
 | the place: `--domain example.com`, or `--no-domain`    | the run knew it: from your line, the variable, or your answer         |
 | `--dry-run`, and a removal's `--keep-data`             | `next` names the same command again, after a stop or a run not ready  |
-| `--add-user` and an email                              | an install kept its users and did not use `--login`                   |
+| `--add-user` and an email                              | an install kept its users and did not use `--login`; or a repair given it has something to mend yet |
 | no token, no login, no account, no proof, no `--adopt` | always: these are yours to add                                        |
 
 So a repair it names runs as written where nothing can be asked, with the token in `POPLIN_INSTALL_TOKEN`.

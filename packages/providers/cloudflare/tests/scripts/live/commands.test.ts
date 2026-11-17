@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import { OWN_SCHEMA } from "../../../../../core/src/database/open";
 import { command, placeWords, publish, reachOf } from "../../../scripts/live/commands";
-import type { Found } from "../../../scripts/live/util";
+import { type Found, openRun } from "../../../scripts/live/util";
 import { MAP_FILE, MODULE_FILE } from "../../../src/shared/release/publish/bundle-manifest";
 import { projectReleases } from "../../../src/shared/release/publish/release-source";
 import { checkedBundle } from "../../../src/shared/release/update/bundle-files";
@@ -82,6 +82,31 @@ describe.each(["domain", "account address"] as const)("the commands of an instal
     expect({ listed: listed.kind === "rows" && listed.confirm, removed: statesOf(removed), gone }).toEqual({ listed: confirm, removed: ["remove", "stay"], gone: { kind: "stopped", problem: "no_install", version: undefined } });
     // The command's own lines beside its value went to the log, with the token and every hidden name taken out.
     expect({ said: lines.length > 0, named: [TOKEN, ACCOUNT, "example.com", "example.workers.dev"].filter((name) => lines.join("\n").includes(name)) }).toEqual({ said: true, named: [] });
+  });
+
+  // Drift: a command names the next command at the install's place, so a line of it holds the zone's name after `--domain`. Printed as it came on any path, it would put the name of the test zone in a public log.
+  test("a line that names the next command at the install's place is printed with the place's name hidden: as a plain line, beside the one value, and as an annotation; the value itself is never printed", async () => {
+    using step = catchStep();
+    const { run, world } = await harnessOf(freshAccount(), kind);
+    const opened = openRun({ CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT });
+    const names = ["example.com", "example.workers.dev"];
+    for (const name of names) opened.hide(name);
+
+    // The run prints as a run of the harness does, so what reaches the log here is what reaches it there.
+    const live = { ...run, say: opened.say, annotate: opened.annotate };
+    const repair = ["--repair", ...placeWords(run, found), "--yes"];
+    await command(live, "repair", repair, world.ends);
+    await command(live, "repair", [...repair, "--json"], world.ends);
+    live.annotate("error", `The repair stopped: npx poplin install cloudflare ${kind === "domain" ? "--domain example.com" : "--no-domain"}, at https://${found.adminHost}`);
+
+    const printed = step.lines.filter((line) => !line.startsWith("::add-mask::"));
+    const next = `npx poplin install cloudflare ${kind === "domain" ? "--domain [hidden]" : "--no-domain"}`;
+
+    expect({ told: printed.filter((line) => line.includes("npx poplin")), named: names.filter((name) => printed.join("\n").includes(name)), value: printed.some((line) => line.includes('"next"')) }).toEqual({
+      told: [`No install is in this account. To make one: ${next}`, `No install is in this account. To make one: ${next}`, `::error::The repair stopped: ${next}, at https://poplin.[hidden]`],
+      named: [],
+      value: false,
+    });
   });
 
   test("a line the command refuses is a stop with its problem's code, and a command that prints no JSON value is told apart from both", async () => {

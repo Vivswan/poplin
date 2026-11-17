@@ -10,7 +10,7 @@ import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor, STOPPED } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { Careful, InstallEnds, Provider, Stop } from "../records";
-import { carefulOf, NEXT, placeOf, rowLine, type Unsettled } from "../report";
+import { carefulOf, NEXT, placeOf, rowLine, type Unsettled, userWords } from "../report";
 import { parseRepair, REPAIR_COMMAND, type RepairPlan } from "./parse";
 import { foundWords, repairedLines, repairedValue, repairHelp, stopOf, unmended } from "./report";
 
@@ -85,7 +85,7 @@ async function planned(plan: RepairPlan, _io: Io, ends: InstallEnds, show: Show,
 
   for (const line of repairedLines(repaired, run, provider)) show.line(line.tone, line.text);
 
-  show.value(repairedValue(repaired, run, ground.found, at.place));
+  show.value(repairedValue(repaired, run, ground.found, [...at.place, ...userWords(plan.addUser)]));
 
   return exitCode({ kind: repaired.ready ? "done" : "failed" });
 }

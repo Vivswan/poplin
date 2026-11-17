@@ -181,13 +181,23 @@ export function placeOf(provider: Provider, where: unknown): readonly string[] {
 }
 
 /**
+ * The option of a repair that lets one more person log in, as the command it is named in carries it.
+ *
+ * @param login - the email of that person; `undefined` for a line that adds nobody
+ * @returns the option and the email as one word of a POSIX shell, or no word
+ */
+export function userWords(login: Login | undefined): readonly string[] {
+  return login === undefined ? [] : ["--add-user", shellWord(login)];
+}
+
+/**
  * The repair that lets one more person log in, as the next step of an install that kept the users its records hold.
  *
- * @param login - the first login the run did not use, which its line holds as one word of a POSIX shell
+ * @param login - the first login the run did not use
  * @param place - the place of the install, which the line holds before the user
  */
 export function letInNext(login: Login, place: readonly string[]): Next {
-  return NEXT.repair("this", [], [...place, "--add-user", shellWord(login)]);
+  return NEXT.repair("this", [], [...place, ...userWords(login)]);
 }
 
 /**

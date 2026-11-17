@@ -148,6 +148,20 @@ describe("a repair with the account token", () => {
     ]);
   });
 
+  // Drift: a dry run is followed by the run. A next step that dropped the user the line named would mend the install and add nobody, with no line to say so. Both kinds of install are held to it.
+  test.each(["--no-place", "--place example.com"])("a dry run with %s that was given a user to add names the run with that user, as one word of a shell: without this an agent that follows `next` adds nobody", async (place) => {
+    const line = `doctor --repair ${place} --yes --dry-run --json`;
+    const dry = await runLine(`${line} --add-user new@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
+    const quoted = await runLine(`${line} --add-user o'brien@example.com`, installed(repairedOf(ONE_GONE)), { env: HELD });
+    const undone = await runLine(`${line.replace(" --dry-run", "")} --add-user new@example.com`, installed(repairedOf(ONE_GONE, { ready: false })), { env: HELD });
+
+    expect([dry, quoted, undone].map((ran) => [ran.code, jsonOf(ran).next])).toEqual([
+      [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
+      [0, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user 'o'\\''brien@example.com'` }],
+      [1, { step: "repair", command: `npx poplin doctor --repair ${place} --add-user new@example.com` }],
+    ]);
+  });
+
   test("the email of --add-user reaches the provider in its normal form, and text that is none is refused before any look: without this a typing slip is sent to the provider", async () => {
     const account = installed(repairedOf([{ object: "User", state: "make", detail: "lost@example.com" }]));
     const ran = await runLine(`${RUN} --add-user Lost@Example.com`, account, { env: HELD });

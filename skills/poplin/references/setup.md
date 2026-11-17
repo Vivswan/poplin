@@ -304,7 +304,7 @@ Without a domain, `--no-domain` stands in place of `--domain example.com`. When 
 | `ok` is true                                | 0         | nothing is left undone: keep `address` under `found`, and go to step 4 |
 | `ready` is false, and no `problem`          | 1         | tell the user each row that did not come to make, change, or leave, and each entry of `blocked` and `steps`; then this line again |
 
-With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits as the run after it would: with 0 where a run would go through, also while `changes` is above 0. `next.step` is `repair` then, and `login` once nothing is left to mend.
+With `--dry-run` in place of `--yes` it changes nothing, and `changes` counts what a run would make or change. It exits as the run after it would: with 0 where a run would go through, also while `changes` is above 0. `next.step` is `repair` then, with `--add-user` where your line had it, and `login` once nothing is left to mend.
 
 ## 4. Log this computer in
 
