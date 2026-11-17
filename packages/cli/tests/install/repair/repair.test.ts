@@ -354,6 +354,8 @@ describe("the words of a repair", () => {
   test("the help of a repair lists its own options, the provider's, and how the token is given: without this --repair has options no help shows", async () => {
     const ran = await runLine("doctor --repair --help", installed());
     const [help = ""] = ran.out;
+    // `poplin help doctor --repair` is the same page: a page only `--help` reaches is out of the reach of `help`.
+    expect((await runLine("help doctor --repair", installed())).out).toEqual(ran.out);
 
     expect([ran.code, help.split("\n")[0]]).toEqual([0, "Usage: poplin doctor --repair (--place <name> | --no-place) [options]"]);
     expect(["--add-user <email>", "--update", "--dry-run", "--token-stdin", "--place <name>", "POPLIN_INSTALL_TOKEN", "  - Programs: Edit"].filter((part) => !help.includes(part))).toEqual([]);

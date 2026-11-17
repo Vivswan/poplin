@@ -54,7 +54,7 @@ export interface HelpPage {
   readonly parts: readonly HelpPart[];
 }
 
-/** Paint what is read line by line, so that no line is left with an open sequence; nothing for an empty text. */
+/** Paint what is read, each written line by itself; nothing for an empty text. */
 function read(words: string, helper: Help): string {
   return words
     .split("\n")

@@ -1,5 +1,7 @@
 // The command table: every command, its arguments, and its flags. The parser accepts what it lists and the help prints what it lists, so the two cannot disagree.
 
+import { TOKEN_VARIABLES } from "../local/current-login";
+
 /** The flag that asks for a command's help. */
 export const HELP_FLAG = "--help";
 
@@ -19,7 +21,8 @@ export const FLAG_WORDS = {
   update: "Update to the latest version first",
   addUser: "Add one user",
   yes: "Never prompt. A missing answer stops the run.",
-  tokenStdin: "Read the account token from stdin",
+  tokenStdin: `Read the account token from stdin\nOr set ${TOKEN_VARIABLES.install}.`,
+  server: "Refuse to use a login for another install",
 } as const;
 
 /** The two flags every command takes, whose names say what they do. */
@@ -29,7 +32,14 @@ const EVERYWHERE: readonly FlagSpec[] = [
 ];
 
 /** The flags of a command that talks to an install. */
-const INSTALL_FLAGS: readonly FlagSpec[] = [{ name: "--json", about: "" }, { name: "--server", value: "<address>", about: "Address of the install" }, ...EVERYWHERE];
+const INSTALL_FLAGS: readonly FlagSpec[] = installFlags(FLAG_WORDS.server);
+
+/** The variables a command reads beside its flags, for the help of `poplin` itself. */
+export const ENVIRONMENT: readonly (readonly [name: string, about: string])[] = [
+  ["POPLIN_SERVER", "Address of the install, set with POPLIN_TOKEN"],
+  ["POPLIN_TOKEN", "Token used instead of the stored login"],
+  ["POPLIN_CONFIG_DIR", "Folder of the stored login"],
+];
 
 /** The flag that asks what a command would do, with nothing changed. */
 const DRY_RUN: FlagSpec = { name: "--dry-run", about: FLAG_WORDS.dryRun };
@@ -42,7 +52,7 @@ const SITE_SETTINGS: readonly FlagSpec[] = [
   { name: "--private", about: "Only users of this install can open it" },
   { name: "--unlisted", about: "Anyone with the URL can open it" },
   { name: "--public", about: "Everyone can open it, at its public name" },
-  { name: "--public-name", value: "<name>", about: "", with: "--public" },
+  { name: "--public-name", value: "<name>", about: "Public name\nDefaults to the site's public name, else to its name.", with: "--public" },
   { name: "--title", value: "<title>", about: 'Dashboard title\n"" uses the page title.' },
   { name: "--search-engines", value: "on|off", about: "Allow search indexing, if the install permits" },
   { name: "--embeddable", value: "on|off", about: "Allow other pages to frame it and load its files" },
@@ -55,11 +65,8 @@ export const BARE_COMMAND = "publish";
 /** A short session from the first publish to the trash, for the help of `poplin` itself. */
 export const SESSION = [
   "poplin ./report",
-  "poplin set report--k3f9x2ab71qz --unlisted",
   "poplin ./report --site report--k3f9x2ab71qz",
-  "poplin rollback report--k3f9x2ab71qz",
   "poplin set report--k3f9x2ab71qz --public",
-  "poplin ./report --site report",
   "poplin delete report",
 ];
 
@@ -96,10 +103,8 @@ export const COMMANDS = [
     examples: [
       "poplin ./report",
       "poplin ./report.html",
-      "poplin publish ./report",
       "poplin ./demo --unlisted --expires 7d",
       "poplin ./report --site report--k3f9x2ab71qz",
-      "poplin ./report --site docs",
     ],
   },
   {
@@ -108,18 +113,15 @@ export const COMMANDS = [
     about: "Change a site's settings",
     arguments: [{ ...SITE, required: true }],
     flags: [
-      { name: "--name", value: "<name>", about: "Rename the site. Its id and URLs stay." },
+      { name: "--name", value: "<name>", about: "Rename the site. Old URLs keep working." },
       DRY_RUN,
       ...SITE_SETTINGS,
       ...INSTALL_FLAGS,
     ],
     examples: [
       "poplin set report--k3f9x2ab71qz --unlisted",
-      "poplin set report--k3f9x2ab71qz --public",
       "poplin set report--w8t1c5n0ze4u --public --public-name docs",
-      "poplin set report--k3f9x2ab71qz --name q3-report",
       'poplin set report--k3f9x2ab71qz --title "Q3 sales"',
-      "poplin set report--k3f9x2ab71qz --public --dry-run",
     ],
   },
   {
@@ -140,7 +142,7 @@ export const COMMANDS = [
       DRY_RUN,
       ...INSTALL_FLAGS,
     ],
-    examples: ["poplin rollback report--k3f9x2ab71qz", "poplin rollback report--k3f9x2ab71qz --dry-run"],
+    examples: ["poplin rollback report--k3f9x2ab71qz --to 4"],
   },
   {
     name: "new-link",
@@ -148,7 +150,7 @@ export const COMMANDS = [
     about: "Rotate a site id. URLs with the old id stop working.",
     arguments: [{ ...SITE, required: true }],
     flags: [DRY_RUN, ...INSTALL_FLAGS],
-    examples: ["poplin new-link report--k3f9x2ab71qz"],
+    examples: [],
   },
   {
     name: "duplicate",
@@ -160,7 +162,7 @@ export const COMMANDS = [
       DRY_RUN,
       ...INSTALL_FLAGS,
     ],
-    examples: ["poplin duplicate report--k3f9x2ab71qz", "poplin duplicate report--k3f9x2ab71qz --name report-draft"],
+    examples: ["poplin duplicate report--k3f9x2ab71qz --name report-draft"],
   },
   {
     name: "delete",
@@ -168,11 +170,11 @@ export const COMMANDS = [
     about: "Move a site to the trash",
     arguments: [{ ...SITE, required: true }],
     flags: [
-      { name: "--no-trash", about: "Delete permanently. Prompts for the site's label." },
+      { name: "--no-trash", about: "Delete permanently. Prompts for the site's label.\nPermanent deletion needs a terminal." },
       DRY_RUN,
       ...INSTALL_FLAGS,
     ],
-    examples: ["poplin delete report--k3f9x2ab71qz", "poplin delete report", "poplin delete report --no-trash --dry-run"],
+    examples: ["poplin delete report --no-trash --dry-run"],
   },
   {
     name: "restore",
@@ -188,7 +190,7 @@ export const COMMANDS = [
     about: "List sites",
     arguments: [],
     flags: [{ name: "--trash", about: "List trashed sites instead" }, ...INSTALL_FLAGS],
-    examples: ["poplin list", "poplin list --trash"],
+    examples: [],
   },
   {
     name: "login",
@@ -199,7 +201,7 @@ export const COMMANDS = [
       { name: "--publisher", about: "Store a publisher token, limited to its own sites" },
       { name: "--name", value: "<name>", about: "Machine name in the dashboard" },
       { name: "--no-browser", about: "" },
-      ...INSTALL_FLAGS,
+      ...installFlags("Install to log in to (default: the stored login's)"),
     ],
     examples: ["poplin login --server https://poplin.example.com", "poplin login --publisher --name ci-runner"],
   },
@@ -209,7 +211,7 @@ export const COMMANDS = [
     about: "Revoke and delete the stored token",
     arguments: [],
     flags: [DRY_RUN, ...INSTALL_FLAGS],
-    examples: ["poplin logout", "poplin logout --dry-run"],
+    examples: [],
   },
   {
     name: "whoami",
@@ -217,7 +219,7 @@ export const COMMANDS = [
     about: "Show the install, role, and token id",
     arguments: [],
     flags: INSTALL_FLAGS,
-    examples: ["poplin whoami"],
+    examples: [],
   },
   {
     name: "config",
@@ -225,10 +227,10 @@ export const COMMANDS = [
     about: "Get or set install settings",
     arguments: [
       { name: "key", about: "Setting to get or set (default: get all)", required: false },
-      { name: "value", about: "New value: 7d, 9GB, 25%, on", required: false },
+      { name: "value", about: "New value, written as its key's example below", required: false },
     ],
     flags: [DRY_RUN, ...INSTALL_FLAGS],
-    examples: ["poplin config", "poplin config versions_kept 10", "poplin config outside_pages allowed", "poplin config trash_days 9 --dry-run"],
+    examples: ["poplin config versions_kept 10", "poplin config outside_pages allowed"],
   },
   {
     name: "doctor",
@@ -236,15 +238,15 @@ export const COMMANDS = [
     about: "Check the install, or repair it with --repair",
     arguments: [],
     flags: [
-      { name: REPAIR_FLAG, about: FLAG_WORDS.repair },
+      { name: REPAIR_FLAG, about: `${FLAG_WORDS.repair}\nMore options: poplin doctor --repair --help` },
       { name: "--update", about: FLAG_WORDS.update, with: REPAIR_FLAG },
       { ...DRY_RUN, with: REPAIR_FLAG },
       { name: "--add-user", value: "<email>", about: FLAG_WORDS.addUser, with: REPAIR_FLAG },
       { name: "--yes", about: FLAG_WORDS.yes, with: REPAIR_FLAG },
       { name: "--token-stdin", about: FLAG_WORDS.tokenStdin, with: REPAIR_FLAG },
-      ...INSTALL_FLAGS,
+      ...installFlags(`${FLAG_WORDS.server}\n--repair takes no --server.`),
     ],
-    examples: ["poplin doctor", "poplin doctor --repair --help", "poplin doctor --repair --dry-run", "poplin doctor --repair --add-user you@example.com", "poplin doctor --repair --update"],
+    examples: ["poplin doctor --repair --dry-run", "poplin doctor --repair --add-user you@example.com", "poplin doctor --repair --update"],
   },
   {
     name: "update",
@@ -256,20 +258,20 @@ export const COMMANDS = [
       DRY_RUN,
       ...INSTALL_FLAGS,
     ],
-    examples: ["poplin update", "poplin update --dry-run", "poplin update --to 0.2.0"],
+    examples: ["poplin update --to 0.2.0"],
   },
   {
     name: "export",
     group: "Backup:",
-    about: "Export all sites, or one, as a zip",
-    arguments: [{ ...SITE, required: false }],
+    about: "Export all sites with the settings, or one, as a zip",
+    arguments: [{ ...SITE, about: `${SITE.about} (default: all)`, required: false }],
     flags: [
       { name: "--out", value: "<file>", about: "Output zip (default: poplin-backup-<day>.zip)" },
       { name: "--overwrite", about: "" },
-      { name: "--all-versions", about: "Include the kept versions" },
+      { name: "--all-versions", about: "Include kept versions (default: live only)" },
       ...INSTALL_FLAGS,
     ],
-    examples: ["poplin export", "poplin export --all-versions --out backup.zip", "poplin export report--k3f9x2ab71qz"],
+    examples: ["poplin export --all-versions --out backup.zip", "poplin export report--k3f9x2ab71qz"],
   },
   {
     name: "import",
@@ -283,7 +285,7 @@ export const COMMANDS = [
       DRY_RUN,
       ...INSTALL_FLAGS,
     ],
-    examples: ["poplin import backup.zip", "poplin import backup.zip --dry-run", "poplin import backup.zip --site report--k3f9x2ab71qz"],
+    examples: ["poplin import backup.zip --site report--k3f9x2ab71qz", "poplin import backup.zip --settings --users"],
   },
   {
     name: "mcp",
@@ -291,7 +293,7 @@ export const COMMANDS = [
     about: "Run the MCP server over stdio",
     arguments: [],
     flags: EVERYWHERE,
-    examples: ["poplin mcp"],
+    examples: [],
   },
   {
     name: "help",
@@ -323,3 +325,12 @@ export interface CommandSpec {
 
 /** The word of a command in the table. */
 export type CommandName = (typeof COMMANDS)[number]["name"];
+
+/**
+ * The flags of a command that talks to an install.
+ *
+ * @param server - what `--server` means on that command
+ */
+function installFlags(server: string): readonly FlagSpec[] {
+  return [{ name: "--json", about: "" }, { name: "--server", value: "<address>", about: server }, ...EVERYWHERE];
+}

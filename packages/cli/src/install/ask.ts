@@ -14,12 +14,6 @@ import { factsLines, placeOf, type Unsettled } from "./report";
 /** The variable the account token is read from. */
 export const TOKEN_VARIABLE = TOKEN_VARIABLES.install;
 
-/** Where the account token is read from, as a help text says it. */
-const TOKEN_FROM = `Read from ${TOKEN_VARIABLE}, --token-stdin, or a prompt.`;
-
-/** What follows where the token is read from, on the same line, before the permissions it needs. */
-const TOKEN_NEEDS = "Needs:";
-
 /** The command line whose help lists what the token of each kind of work needs. */
 const HELP_OF: Readonly<Record<"install" | "repair" | "remove", (provider: Provider) => string>> = {
   install: (provider) => `npx poplin install ${provider.id} --help`,
@@ -68,15 +62,13 @@ async function askLogin(screen: Screen): Promise<Login | undefined> {
 }
 
 /**
- * The part of a help text about the account token: where it is read from, and what it needs where a provider is named.
+ * The part of a help text that lists what the account token needs, a permission a point.
  *
  * @param work - what the help's command does with the token
- * @param provider - the provider whose permissions for that work are listed, a point each; none when absent
+ * @param provider - the provider whose permissions for that work are listed; an empty part, which a page leaves out, when absent
  */
-export function tokenPart(work: Parameters<Provider["facts"]>[1], provider?: Provider): HelpPart {
-  const needs = provider?.tokenHelp[work] ?? [];
-
-  return needs.length === 0 ? { title: "Token:", text: TOKEN_FROM } : { title: "Token:", text: `${TOKEN_FROM} ${TOKEN_NEEDS}`, points: needs };
+export function permissionsPart(work: Parameters<Provider["facts"]>[1], provider?: Provider): HelpPart {
+  return { title: "Permissions:", points: provider?.tokenHelp[work] ?? [] };
 }
 
 /**

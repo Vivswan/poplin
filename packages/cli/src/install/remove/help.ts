@@ -3,7 +3,7 @@
 import { PROVIDER_COMMANDS } from "../../commands/command-table";
 import { type HelpPage, helpPage } from "../../commands/line/help-page";
 import { type Look, PLAIN_LOOK } from "../../local/screen";
-import { tokenPart } from "../ask";
+import { permissionsPart } from "../ask";
 import type { Provider } from "../records";
 import { NO_PROVIDER, optionRows } from "../report";
 import { UNINSTALL_OPTIONS } from "./parse";
@@ -16,7 +16,6 @@ function commandHelp(providers: readonly Provider[]): HelpPage {
     parts: [
       { title: "Providers:", rows: providers.map((one) => [one.id, one.about]), text: providers.length === 0 ? NO_PROVIDER : undefined },
       { title: "Options:", rows: optionRows(UNINSTALL_OPTIONS) },
-      tokenPart("remove"),
       { title: "Related:", commands: [...providers.map((one) => `poplin uninstall ${one.id} --help`), "poplin logout"] },
     ],
   };
@@ -27,7 +26,7 @@ function providerHelp(provider: Provider): HelpPage {
   return {
     usage: [`poplin uninstall ${provider.id} ${provider.usage} [options]`],
     about: `Remove the install from ${provider.name}`,
-    parts: [{ title: "Options:", rows: optionRows([...provider.options, ...UNINSTALL_OPTIONS]) }, tokenPart("remove", provider)],
+    parts: [{ title: "Options:", rows: optionRows([...provider.options, ...UNINSTALL_OPTIONS]) }, permissionsPart("remove", provider)],
   };
 }
 

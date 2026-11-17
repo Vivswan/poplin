@@ -16,24 +16,22 @@ const COMMAND_HELP = `Usage: poplin install [<provider>] [options]
 Install poplin in your provider account
 
 Providers:
-  stand-in                 Stand-In Host: under your own place, or without one
+  stand-in                 Installs on a place of your own or on the host's
 
 Options:
-  --user <email>           Email of the first user
+  --user <email>           First user
                            Or set POPLIN_USER.
   --dry-run                Show what would change. Change nothing.
   --adopt                  Reuse resources left by an earlier install
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin
+                           Or set POPLIN_INSTALL_TOKEN.
   --log-in                 Log this machine in when done
   --no-log-in
   --no-wait                Do not wait for the install to respond
   --json
   --help
   --version
-
-Token:
-  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt.
 
 Related:
   poplin install stand-in --help
@@ -45,7 +43,7 @@ Related:
 /** The help of the made-up provider: its own options before the shared ones, and what its token needs, a permission a point. */
 const PROVIDER_HELP = `Usage: poplin install stand-in (--place <name> | --no-place) [options]
 
-Stand-In Host: under your own place, or without one
+Install poplin on Stand-In Host
 
 Options:
   --place <name>           Your own place, such as example.com
@@ -54,12 +52,13 @@ Options:
                            Or set POPLIN_PLACE=none.
   --account <id>           Account id, if the token can access several accounts
                            Or set POPLIN_ACCOUNT.
-  --user <email>           Email of the first user
+  --user <email>           First user
                            Or set POPLIN_USER.
   --dry-run                Show what would change. Change nothing.
   --adopt                  Reuse resources left by an earlier install
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin
+                           Or set POPLIN_INSTALL_TOKEN.
   --log-in                 Log this machine in when done
   --no-log-in
   --no-wait                Do not wait for the install to respond
@@ -67,8 +66,7 @@ Options:
   --help
   --version
 
-Token:
-  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt. Needs:
+Permissions:
   - Programs: Edit
   - Places: Read (--place)`;
 

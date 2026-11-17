@@ -3,7 +3,7 @@
 import { PROVIDER_COMMANDS } from "../../commands/command-table";
 import { type HelpPage, helpPage } from "../../commands/line/help-page";
 import { type Look, PLAIN_LOOK } from "../../local/screen";
-import { tokenPart } from "../ask";
+import { permissionsPart } from "../ask";
 import { SHARED_OPTIONS } from "./parse";
 import type { Provider } from "../records";
 import { NO_PROVIDER, optionRows } from "../report";
@@ -16,7 +16,6 @@ function commandHelp(providers: readonly Provider[]): HelpPage {
     parts: [
       { title: "Providers:", rows: providers.map((one) => [one.id, one.about]), text: providers.length === 0 ? NO_PROVIDER : undefined },
       { title: "Options:", rows: optionRows(SHARED_OPTIONS) },
-      tokenPart("install"),
       { title: "Related:", commands: [...providers.map((one) => `poplin install ${one.id} --help`), "poplin doctor", "poplin doctor --repair", "poplin update", "poplin uninstall <provider>"] },
     ],
   };
@@ -26,8 +25,8 @@ function commandHelp(providers: readonly Provider[]): HelpPage {
 function providerHelp(provider: Provider): HelpPage {
   return {
     usage: [`poplin install ${provider.id} ${provider.usage} [options]`],
-    about: provider.about,
-    parts: [{ title: "Options:", rows: optionRows([...provider.options, ...SHARED_OPTIONS]) }, tokenPart("install", provider)],
+    about: `Install poplin on ${provider.name}`,
+    parts: [{ title: "Options:", rows: optionRows([...provider.options, ...SHARED_OPTIONS]) }, permissionsPart("install", provider)],
   };
 }
 

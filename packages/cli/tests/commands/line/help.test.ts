@@ -123,10 +123,7 @@ describe("helpText", () => {
   test("a terminal 200 wide folds nothing, and one 60 wide folds: the help follows the terminal, not a fixed 80", () => {
     const rows = (width: number): string[] => [undefined, ...SPECS.map((spec) => spec.name)].flatMap((topic) => helpText(topic, { width, colour: false }).split("\n"));
 
-    // The names of the settings are one list folded to the width, and no description.
-    const unfolded = (width: number): string[] => rows(width).filter((row) => !row.includes("default_expires") && !row.includes("max_files_per_day"));
-
-    expect([unfolded(200), rows(60).length > rows(200).length]).toEqual([unfolded(UNFOLDED), true]);
+    expect([rows(200), rows(60).length > rows(200).length]).toEqual([rows(UNFOLDED), true]);
   });
 
   test("a painted help has its titles bold, what is typed cyan, and what is read dim, each line closed: a description in bright black is unreadable on a dark theme", () => {
@@ -136,7 +133,7 @@ describe("helpText", () => {
     expect(painted).toContain("\x1b[1mOptions:\x1b[22m");
     expect(painted).toContain("  \x1b[36m--json\x1b[39m");
     expect(painted).toContain(`  \x1b[36m--yes\x1b[39m${" ".repeat(20)}\x1b[2mNever prompt. A missing answer stops the run.\x1b[22m`);
-    expect(painted.slice(-6, -4)).toEqual(["\x1b[1mExamples:\x1b[22m", "  \x1b[36mpoplin doctor\x1b[39m"]);
+    expect(painted.slice(-4, -2)).toEqual(["\x1b[1mExamples:\x1b[22m", "  \x1b[36mpoplin doctor --repair --dry-run\x1b[39m"]);
   });
 
   test("the flags of doctor that only act with --repair stand in a part of their own, and each is refused without it: a flag listed beside --json reads as one of a check", () => {
@@ -171,7 +168,7 @@ describe("helpText", () => {
     const help = helpText("config");
 
     expect(keys.length).toBeGreaterThan(0);
-    expect(keys.filter((key) => !new RegExp(`[ ,]${key}(,|$)`, "m").test(help) || parseCommand(["config", key]).kind !== "config")).toEqual([]);
+    expect(keys.filter((key) => !help.includes(`\n  ${key} `) || parseCommand(["config", key]).kind !== "config")).toEqual([]);
   });
 
   test("the flags that work with no command are printed in the help of poplin itself: without this --version is taken and nowhere shown", () => {

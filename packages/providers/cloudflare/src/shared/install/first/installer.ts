@@ -46,8 +46,8 @@ const ACCOUNT_ID = /^[0-9a-f]{32}$/;
 
 /** The provider's own options. */
 const OPTIONS: readonly OptionRow[] = [
-  { flag: "--domain", value: "<name>", about: "Your own domain, Active on the account", variable: "POPLIN_DOMAIN" },
-  { flag: "--no-domain", value: null, about: "The account's workers.dev address", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
+  { flag: "--domain", value: "<name>", about: "Custom domain, with an Active zone on the account", variable: "POPLIN_DOMAIN" },
+  { flag: "--no-domain", value: null, about: "Use the account's workers.dev subdomain", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
   { flag: "--account", value: "<id>", about: "Account id, if the token can access several accounts", variable: "POPLIN_ACCOUNT" },
 ];
 
@@ -476,7 +476,7 @@ async function install(found: Startable<Place>, where: Where, login: Login, run:
 export const installer: Installer<Where, Place> = {
   id: "cloudflare",
   name: "Cloudflare",
-  about: "Cloudflare: under your own domain, or without one",
+  about: "Installs on a custom domain or on workers.dev",
   options: OPTIONS,
   usage: "(--domain <name> | --no-domain)",
   tokenHelp: { install: tokenHelp(MADE_FIRST), repair: tokenHelp([]), remove: tokenHelp(MADE_FIRST) },

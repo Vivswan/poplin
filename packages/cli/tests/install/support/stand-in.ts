@@ -226,7 +226,7 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
   return {
     id,
     name: "Stand-In Host",
-    about: "Stand-In Host: under your own place, or without one",
+    about: "Installs on a place of your own or on the host's",
     options: [
       { flag: "--place", value: "<name>", about: "Your own place, such as example.com", variable: "POPLIN_PLACE" },
       { flag: "--no-place", value: null, about: "The address the host gives the account", variable: "POPLIN_PLACE=none" },

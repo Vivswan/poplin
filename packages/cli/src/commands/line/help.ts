@@ -3,7 +3,7 @@
 import type { Command } from "commander";
 
 import { type Look, PLAIN_LOOK } from "../../local/screen";
-import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, FULL_HELP, HELP_FLAG, PROVIDER_COMMANDS, SESSION } from "../command-table";
+import { BARE_COMMAND, COMMANDS, type CommandName, type CommandSpec, ENVIRONMENT, FULL_HELP, HELP_FLAG, PROVIDER_COMMANDS, SESSION } from "../command-table";
 import { SETTING_SAMPLES } from "../install/install-settings";
 import { type HelpPage, type HelpPart, helpPage } from "./help-page";
 import { argumentsOf, buildProgram } from "./program";
@@ -16,7 +16,7 @@ function flagRows(flags: CommandSpec["flags"]): [string, string][] {
   return flags.map((flag) => [flag.value === undefined ? flag.name : `${flag.name} ${flag.value}`, flag.about]);
 }
 
-/** The help of `poplin` itself: every command under its group, the flags every command takes, and a short session. */
+/** The help of `poplin` itself: every command under its group, the flags every command takes, the variables read beside them, and a short session. */
 function overview(program: Command): HelpPage {
   const [first, ...others]: readonly CommandSpec[] = COMMANDS;
   const everywhere = (first?.flags ?? []).filter((flag) => others.every((spec) => spec.flags.some((other) => other.name === flag.name)));
@@ -26,7 +26,12 @@ function overview(program: Command): HelpPage {
 
   return {
     usage: [`${program.name()} <path> [options]`, `${program.name()} <command> [options]`],
-    parts: [...listing, { title: "Options:", rows: flagRows([...everywhere.filter((flag) => flag.name === HELP_FLAG), FULL_HELP, ...everywhere.filter((flag) => flag.name !== HELP_FLAG)]) }, { title: "Examples:", commands: SESSION }],
+    parts: [
+      ...listing,
+      { title: "Options:", rows: flagRows([...everywhere.filter((flag) => flag.name === HELP_FLAG), FULL_HELP, ...everywhere.filter((flag) => flag.name !== HELP_FLAG)]) },
+      { title: "Environment:", rows: ENVIRONMENT },
+      { title: "Examples:", commands: SESSION },
+    ],
   };
 }
 
@@ -43,7 +48,7 @@ function commandHelp(program: Command, command: Command, spec: CommandSpec): Hel
       { title: "Arguments:", rows: spec.arguments.map((argument) => [`<${argument.name}>`, argument.about]) },
       { title: "Options:", rows: flagRows(alone) },
       ...under.map((flag) => ({ title: `With ${flag}:`, rows: flagRows(spec.flags.filter((other) => other.with === flag)) })),
-      spec.name === "config" ? { title: "Keys:", text: Object.keys(SETTING_SAMPLES).join(", ") } : { title: "Keys:" },
+      { title: "Keys:", rows: spec.name === "config" ? Object.entries(SETTING_SAMPLES) : [] },
       { title: "Examples:", commands: spec.examples },
     ],
   };

@@ -4,7 +4,7 @@
 import type { Found, Repaired, Run, Whole } from "../../../../core/src/install/installer";
 import { type HelpPage, helpPage } from "../../commands/line/help-page";
 import { type Line, type Look, PLAIN_LOOK } from "../../local/screen";
-import { tokenPart } from "../ask";
+import { permissionsPart } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
 import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, NEXT, optionRows, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
@@ -155,7 +155,7 @@ export function repairHelp(providers: readonly Provider[], provider?: Provider, 
     parts: [
       { title: "Providers:", rows: shown === undefined ? providers.map((one) => [one.id, one.about]) : [] },
       { title: "Options:", rows: optionRows([...(shown?.options ?? []), ...REPAIR_OPTIONS]) },
-      tokenPart("repair", shown),
+      permissionsPart("repair", shown),
       { title: "Related:", commands: ["poplin doctor", "poplin update"] },
     ],
   };

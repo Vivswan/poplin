@@ -13,7 +13,7 @@ const COMMAND_HELP = `Usage: poplin uninstall [<provider>] [options]
 Remove the install from the provider
 
 Providers:
-  stand-in                 Stand-In Host: under your own place, or without one
+  stand-in                 Installs on a place of your own or on the host's
 
 Options:
   --dry-run                Show what would change. Change nothing.
@@ -21,12 +21,10 @@ Options:
   --keep-data              Keep the site files and the database
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin
+                           Or set POPLIN_INSTALL_TOKEN.
   --json
   --help
   --version
-
-Token:
-  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt.
 
 Related:
   poplin uninstall stand-in --help
@@ -49,12 +47,12 @@ Options:
   --keep-data              Keep the site files and the database
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin
+                           Or set POPLIN_INSTALL_TOKEN.
   --json
   --help
   --version
 
-Token:
-  Read from POPLIN_INSTALL_TOKEN, --token-stdin, or a prompt. Needs:
+Permissions:
   - Programs: Edit
   - Places: Read (--place)`;
 
@@ -67,11 +65,12 @@ describe("the help of poplin uninstall", () => {
     expect(uninstallHelp([PROVIDER], PROVIDER)).toBe(PROVIDER_HELP);
   });
 
-  test("the command prints each help on stdout and exits 0, and `poplin help uninstall` is the same text: without this the help is reachable one way only", async () => {
+  test("the command prints each help on stdout and exits 0, and `poplin help uninstall`, with a provider or without, is the same text: without this a page of the help is reachable one way only", async () => {
     const own = await runLine("uninstall --help", emptyAccount());
     const topic = await runLine("help uninstall", emptyAccount());
     const provider = await runLine("uninstall stand-in --help", emptyAccount());
+    const named = await runLine("help uninstall stand-in", emptyAccount());
 
-    expect([own.code, own.out, topic.out, provider.out]).toEqual([0, [COMMAND_HELP], [COMMAND_HELP], [PROVIDER_HELP]]);
+    expect([own.code, own.out, topic.out, provider.out, named.out]).toEqual([0, [COMMAND_HELP], [COMMAND_HELP], [PROVIDER_HELP], [PROVIDER_HELP]]);
   });
 });

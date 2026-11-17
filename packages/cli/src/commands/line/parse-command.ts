@@ -199,11 +199,22 @@ function handedOn(name: string, argv: readonly string[], first: number | undefin
   return { kind: "provider", command, words: [...argv.slice(0, first), ...argv.slice(first + 1)] };
 }
 
+/**
+ * Hand the help of a command that works at a provider on to its own parser, which prints it: `help install`, `help install cloudflare`, `help doctor --repair`.
+ *
+ * @param words - the words after `help`: the command, and the provider where one is named
+ * @returns `undefined` for the help of any other command, and for more words than the two
+ */
+function helpHandedOn(words: readonly string[], argv: readonly string[]): Parsed | undefined {
+  const [topic = "", ...named] = words;
+  const command: ProviderCommand | undefined = topic === "doctor" && asks(argv, REPAIR_FLAG) ? "repair" : providerCommand(topic);
+  if (command === undefined || named.length > 1) return undefined;
+
+  return { kind: "provider", command, words: [...named, ...(command === "repair" ? [REPAIR_FLAG] : []), HELP_FLAG] };
+}
+
 function helpOf(topic: string | undefined): Parsed {
   if (topic === undefined) return { kind: "help", asked: true };
-
-  const provider = providerCommand(topic);
-  if (provider !== undefined) return { kind: "provider", command: provider, words: [HELP_FLAG] };
 
   const spec = SPECS.get(topic);
   if (spec === undefined) return unknownCommand(topic, false);
@@ -249,6 +260,9 @@ export function parseCommand(argv: readonly string[], now: number = Date.now()):
     if (asks(argv, HELP_FLAG)) throw new Answered({ kind: "help", topic: spec.name, asked: true });
 
     if (asks(argv, VERSION_FLAG)) throw new Answered({ kind: "version" });
+
+    const handed = spec.name === "help" ? helpHandedOn(given, argv) : undefined;
+    if (handed !== undefined) throw new Answered(handed);
 
     const flags = readFlags(typed.flags, spec);
     if (isUsageError(flags)) throw new Answered(flags);

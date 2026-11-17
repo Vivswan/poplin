@@ -13,7 +13,7 @@ const USER_VARIABLE = "POPLIN_USER";
 
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
 export const SHARED_OPTIONS: readonly OptionRow[] = [
-  { flag: "--user", value: "<email>", about: "Email of the first user", variable: USER_VARIABLE },
+  { flag: "--user", value: "<email>", about: "First user", variable: USER_VARIABLE },
   { flag: "--dry-run", value: null, about: FLAG_WORDS.dryRun, variable: null },
   { flag: "--adopt", value: null, about: "Reuse resources left by an earlier install", variable: null },
   { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },

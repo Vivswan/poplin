@@ -185,7 +185,7 @@ describe("--json", () => {
     const ran = await runLine("install --json", emptyAccount());
 
     expect(ran.code).toBe(0);
-    expect(jsonOf(ran)).toEqual({ ok: true, providers: [{ id: "stand-in", name: "Stand-In Host", about: "Stand-In Host: under your own place, or without one" }] });
+    expect(jsonOf(ran)).toEqual({ ok: true, providers: [{ id: "stand-in", name: "Stand-In Host", about: "Installs on a place of your own or on the host's" }] });
   });
 });
 

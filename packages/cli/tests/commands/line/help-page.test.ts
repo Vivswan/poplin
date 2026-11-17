@@ -21,8 +21,8 @@ const WIDTHS = [60, 80, 120, 200] as const;
 /** A line that titles a part: one capitalised word, or the flag the part's flags go with, and a colon. */
 const TITLE = /^(?:[A-Z][a-z]+|With --[a-z-]+):$/;
 
-/** The parts that hold no rows: command lines as they are typed, the permissions of a token a point each under one line, and the names of the settings. */
-const WRITTEN: ReadonlySet<string> = new Set(["Examples:", "Related:", "Token:", "Keys:"]);
+/** The parts that hold no rows of a term and what it means: command lines as they are typed, the permissions of a token a point each, and the settings with a value each. */
+const WRITTEN: ReadonlySet<string> = new Set(["Examples:", "Related:", "Permissions:", "Keys:"]);
 
 /** A row of a part: a term, then two spaces or more and what the term means, or nothing where the term's name says it. */
 const ROW = /^ {2}(\S.*?)(?: {2,}(\S.*))?$/;
@@ -70,12 +70,9 @@ function rowsOf(text: string): { readonly title: string; readonly term: string; 
   });
 }
 
-/** The blocks of a help text between empty lines, without the names of the settings, which are one list folded to the width. */
+/** The blocks of a help text between empty lines. */
 function blocksOf(text: string): string[][] {
-  return text
-    .split("\n\n")
-    .map((block) => block.split("\n"))
-    .filter(([title]) => title !== "Keys:");
+  return text.split("\n\n").map((block) => block.split("\n"));
 }
 
 /** The lines of a block that are prose: neither its title, a usage, a row or what goes on under one, a point, nor a command line. */
@@ -83,7 +80,7 @@ function proseOf(block: readonly string[]): string[] {
   const [title = ""] = block;
   if (title.startsWith("Usage:") || title === "Examples:" || title === "Related:") return [];
 
-  return block.filter((line) => line !== title || !TITLE.test(title)).filter((line) => !(title !== "Token:" && ROW.test(line)) && !UNDER.test(line) && !line.startsWith("  - "));
+  return block.filter((line) => line !== title || !TITLE.test(title)).filter((line) => !ROW.test(line) && !UNDER.test(line));
 }
 
 describe("helpPage", () => {
@@ -94,9 +91,9 @@ describe("helpPage", () => {
   });
 
   test("a point folded at a narrow width goes on under its words, not under its dash: a list whose rows start at the dash reads as more points", () => {
-    const page = { usage: ["poplin wash"], parts: [{ title: "Token:", text: "Needs:", points: ["Wash and rinse every cloth of the house in cold water"] }] };
+    const page = { usage: ["poplin wash"], parts: [{ title: "Permissions:", points: ["Wash and rinse every cloth of the house in cold water"] }] };
 
-    expect(helpPage(page, { width: 40, colour: false }).split("\n").slice(2)).toEqual(["Token:", "  Needs:", "  - Wash and rinse every cloth of the", "    house in cold water"]);
+    expect(helpPage(page, { width: 40, colour: false }).split("\n").slice(2)).toEqual(["Permissions:", "  - Wash and rinse every cloth of the", "    house in cold water"]);
   });
 
   // Drift: a note under the options grew into paragraphs nobody read, and a description folded at 80 pushed the next flag out of sight.
