@@ -156,7 +156,7 @@ Older install: made by the older build's own poplin install, which says the vers
 Older install: filled with 3 sites, a second version, a setting, and a user
 Update: the older build took 0.0.1 over 0.0.0, by its own start of an update
 Bucket writes and lists the upgrade asked for: 19 of at most 40
-Rows written this run: 144 of at most 300
+Rows written this run: 153 of at most 300
 Version: runs 0.0.1, and ran 0.0.0
 Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte
 Going back: offered, to 0.0.0
@@ -176,9 +176,9 @@ A check that fails says `FAILED` and what differs, by a site's place and access 
 A deployed Worker reads releases from the project's website alone, which names no build of a commit. So no run shows a deployed Worker that fetches a release and uploads itself with its kept key: the `self-update` row of the checklist does, once two releases are out.
 
 ```text
-the upgrade, as the harness counts it   144 rows and 19 bucket writes and lists on the local fake, of at most 300 and 40
+the upgrade, as the harness counts it   153 rows and 19 bucket writes and lists on the local fake, of at most 300 and 40
 beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
-a run with upgrade ticked               about 144 + 20 + 922 (the checks) + 390 (a reset that keeps no sample) = about 1,480 rows, on each account it runs on
+a run with upgrade ticked               about 153 + 20 + 1,006 (the checks) + 430 (a reset that keeps no sample) = about 1,610 rows, on each account it runs on
 ```
 
 The release gate reads it. `.github/workflows/release-gate.yml` runs on the pull request of a release, where no job may read a test account's secrets.
@@ -354,7 +354,7 @@ Each account has its own allowances, and every ceiling below holds for each inst
 | caps: 200MB stored, 20MB a site, 100 sites, 2,500 files a publish, 5,000 files a day   | `caps.ts`, on every run, once the install answers | the install refuses the publish                           |
 | bucket writes and lists: 150 by the checks, 300 by the midnight run's, 2,300 with the many-files check, 80 more with the load, 150 by a reset, 40 by an upgrade | `budget.ts`, around every request to the install | the request is not sent, and the step stops red       |
 | bucket lists and deletes: 300 together by the removal of the files no record names | `orphans.ts`, around every call to Cloudflare for the bucket | the removal stops, and the next run goes on |
-| rows written to the database: 1,100 by the checks, 600 more with the load, 600 by a reset, 300 by an upgrade | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
+| rows written to the database: 1,250 by the checks, 600 more with the load, 600 by a reset, 300 by an upgrade | `rows.ts`, around every request to the install | the request is not sent, and the step stops red |
 | every site the checks make is removed for good                                         | the checks' own sweep, then the reset         | the reset runs after failed checks too                        |
 | a site of a run that was killed                                                        | published with `--expires 1d`, trash of one day | the midnight reset removes it                               |
 | the sample sites and the demo: 12 sites, 120 files, and 4 MB at most                   | `caps.test.ts`, from a reset of a local fake  | the self-test fails                                           |
@@ -449,7 +449,7 @@ The install without a domain writes to the database of its own account: the same
 The harness's count is the most each request writes for a site a run made, so it runs a little above the database's own. A refusal or a missing file of a served site writes two rows the count leaves out. Each step prints its count:
 
 ```text
-Rows written this run: 947 of at most 1100
+Rows written this run: 947 of at most 1250
 ```
 
 ## The load

@@ -60,7 +60,7 @@ on:
         type: boolean
         default: false
       upgrade:
-        description: First install the older build, fill it, and update it to the build of main (removes the test install, and writes about 1,500 database rows)
+        description: First install the older build, fill it, and update it to the build of main (removes the test install, and writes about 1,600 database rows)
         type: boolean
         default: false
       load:
