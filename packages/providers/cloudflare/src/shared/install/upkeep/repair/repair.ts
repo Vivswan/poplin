@@ -15,7 +15,7 @@ import type { Mend, Reach, Repaired, Row, Step, Whole } from "@poplin/core/src/i
 import { createPathPlug } from "../../../../without-domain/path-plug";
 import { ACCESS_OFF, createDomainPlug, lacksRight, rightFor, tokenFacts } from "../../../../with-domain/zone-plug";
 import type { CloudflareFailure } from "../../client";
-import { boundInstall, jsonOf, type Place, type Where } from "../../first/find";
+import { boundInstall, jsonOf, type Place, placeWords, type Where } from "../../first/find";
 import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "../../first/rows";
 import { INSTALL_OBJECTS } from "../../install-objects";
 import { readFirstSettings } from "../../kind/first-settings";
@@ -87,6 +87,11 @@ function unread(failure: CloudflareFailure): Repaired {
   const token = failure.failure === "refused" && (failure.status === 401 || failure.status === 403);
 
   return token ? { ok: false, why: "token", words: WORDS.token } : { ok: false, why: "unreachable", words: WORDS.unreachable };
+}
+
+/** Put the option of the install's place after a refusal that ends in the command that goes on, so that the line runs as it is written. */
+function atPlace(words: string, where: Where): string {
+  return [words, ...placeWords(where)].join(" ");
 }
 
 /** Say that the install answers at another place than the one a person named; `undefined` where the two are one. */
@@ -204,11 +209,11 @@ async function userRow(work: Work, stored: Exclude<Stored, { readonly state: "an
  *
  * A dry run that named the steps of a release it did not place reads the records in the run after. Every other run whose rows say nothing of the records yet says so here: a release in place is no mended install.
  */
-function unreadRecords(work: Work, release: Extract<Awaited<ReturnType<typeof syncRelease>>, { readonly rows: readonly Row[] }>): Repaired {
+function unreadRecords(work: Work, release: Extract<Awaited<ReturnType<typeof syncRelease>>, { readonly rows: readonly Row[] }>, where: Where): Repaired {
   const named = work.mode === "plan" && release.rows.some((row) => row.object === RECORDS_WAIT.object && row.state === "change");
   const said = named || release.rows.some((row) => row.object === RECORDS_WAIT.object && UNDONE.has(row.state));
   if (release.state === "unplaced") note(work, RECORDS_WAIT);
-  else if (!said) note(work, { object: RECORDS_WAIT.object, state: "block", detail: WORDS.another });
+  else if (!said) note(work, { object: RECORDS_WAIT.object, state: "block", detail: atPlace(WORDS.another, where) });
 
   return done(work);
 }
@@ -230,15 +235,15 @@ export async function repair(found: Whole<Place>, where: Where, mend: Mend, reac
   const { tokenLink: form } = tokenFacts(install.kind === "domain" ? "domain" : "noDomain");
   const work: Work = { mode: mend.run === "apply" ? "apply" : "plan", place, form, address: found.address, rows: [], steps: [], say };
   const release = await syncRelease({ found, databaseId, mode: work.mode, reach, rights: { lacks: lacksRight, nameOf: rightFor } });
-  if (release.state === "stop") return { ok: false, why: "another", words: release.words };
+  if (release.state === "stop") return { ok: false, why: "another", words: atPlace(release.words, where) };
 
   const stored = await readStored(connection, { accountId, databaseId });
   // An install whose code this run left alone is another poplin's whole. One this run was to bring to its release has its rows to show, and its records are read by the run after.
-  if (stored.state === "another" && release.state === "left") return { ok: false, why: "another", words: WORDS.another };
+  if (stored.state === "another" && release.state === "left") return { ok: false, why: "another", words: atPlace(WORDS.another, where) };
 
   for (const row of release.rows) note(work, row);
 
-  if (stored.state === "another") return unreadRecords(work, release);
+  if (stored.state === "another") return unreadRecords(work, release, where);
 
   const settings = settingsOf(stored, bindings);
   if ("object" in settings) {

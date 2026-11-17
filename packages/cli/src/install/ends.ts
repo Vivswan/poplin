@@ -28,6 +28,9 @@ const CONTROL_RUN = /\p{Cc}+/gu;
 /** One control character that is no line break. */
 const CONTROL_BUT_BREAK = /[^\P{Cc}\n]/gu;
 
+/** The stops that say the install is at another place than the line named: the command that goes on carries no place, and the sentence names the option. */
+const ELSEWHERE: ReadonlySet<Stop["problem"]> = new Set(["other_place"]);
+
 /** The exits of a stop, as the endings the command table knows. */
 const ENDINGS = { 1: "failed", 2: "usage-error", 5: "unreachable" } as const;
 
@@ -51,8 +54,8 @@ export interface CommandRun<Planned> {
   /** The command as it is typed after `poplin`, such as `install`. */
   readonly name: string;
 
-  /** What runs the command again, at the provider the line got as far as and with the careful choices of the line: the next step of a stop that names no other. */
-  readonly again: (provider: Provider | undefined, careful: readonly Careful[]) => Next;
+  /** What runs the command again, at the provider the line got as far as, with the careful choices of the line and the place the run knows: the next step of a stop that names no other. */
+  readonly again: (provider: Provider | undefined, careful: readonly Careful[], place: readonly string[]) => Next;
 
   /** The careful choices the command takes, each as the word a line gives it by. */
   readonly careful: readonly Careful[];
@@ -76,11 +79,12 @@ interface Line<Planned> {
   readonly careful: readonly Careful[];
 }
 
-/** Where a stop came: in which command, with which careful choices on its line, at which provider when the line got as far as one, and in which kind of run when it came after the plan. */
+/** Where a stop came: in which command, with which careful choices on its line, at which provider when the line got as far as one, at which place once the run knows it, and in which kind of run when it came after the plan. */
 interface StoppedAt {
   readonly command: Pick<CommandRun<never>, "name" | "again">;
   readonly careful: readonly Careful[];
   readonly provider?: Provider | undefined;
+  readonly place?: readonly string[];
   readonly run?: Run;
 }
 
@@ -154,7 +158,8 @@ export function processEnds(io: Io): InstallEnds {
 export function stopped(stop: Stop, show: Show, at: StoppedAt): number {
   for (const line of stopLines(stop, at.provider, at.command.name)) show.aside(line.tone, line.text);
 
-  const value = stopValue(stop, at.command.again(at.provider, at.careful));
+  const place = ELSEWHERE.has(stop.problem) ? [] : (at.place ?? []);
+  const value = stopValue(stop, at.command.again(at.provider, at.careful, place));
   show.value(at.run === undefined ? value : { ...value, run: at.run, ready: false });
 
   return exitCode({ kind: ENDINGS[stop.exit] });

@@ -11,7 +11,7 @@ import type { Io } from "../../commands/records";
 import { askToken, askWhere, givenToken, lookFor } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { Careful, InstallEnds, Provider, Stop } from "../records";
-import { carefulOf, carried, followed, heldStop, NEXT, REFUSED_AS, runningWords } from "../report";
+import { carefulOf, carried, followed, heldStop, NEXT, placeOf, REFUSED_AS, runningWords, type Unsettled } from "../report";
 import { uninstallHelp } from "./help";
 import { parseUninstall } from "./parse";
 import type { RemovalMode, UninstallPlan, UninstallRequest } from "./records";
@@ -49,22 +49,22 @@ function choicesOf(mode: RemovalMode<unknown>): readonly Careful[] {
   return [...(mode.data === "keep" ? (["--keep-data"] as const) : []), ...carefulOf(mode.mode)];
 }
 
-/** Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks. The proof is asked for later, once the list was shown. */
-async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<UninstallRequest | Stop> {
+/** Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks. The proof is asked for later, once the list was shown. A stop holds the place the run knew by then. */
+async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<UninstallRequest | Unsettled> {
   const { provider, json } = plan;
 
   if (plan.asking === "never") {
     const token = await givenToken(plan.token, provider, ends.input, COMMAND.name);
 
-    return typeof token === "object" ? token : { provider, json, asking: "never", mode: plan.mode, where: plan.where, token };
+    return typeof token === "object" ? { stop: token, place: placeOf(provider, plan.where) } : { provider, json, asking: "never", mode: plan.mode, where: plan.where, token };
   }
 
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
-  if (where === undefined) return ENDED;
+  if (where === undefined) return { stop: ENDED, place: [] };
 
   const token = plan.token ?? (await askToken(provider, where.where, ends.screen, "remove"));
 
-  return token === undefined ? ENDED : { provider, json, asking: "terminal", mode: plan.mode, where: where.where, token };
+  return token === undefined ? { stop: ENDED, place: placeOf(provider, where.where) } : { provider, json, asking: "terminal", mode: plan.mode, where: where.where, token };
 }
 
 /** What a look found, in the line that says so. */
@@ -77,8 +77,8 @@ function foundWords(found: Found<unknown, unknown>): string {
 }
 
 /** The stop a look that found nothing a removal can start from is. */
-function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held" | "blocked" | "refused" }>, provider: Provider, careful: readonly Careful[]): Stop {
-  if (found.state === "held") return heldStop(found, NEXT.uninstall(provider, careful), provider);
+function stopOf(found: Extract<Found<unknown, unknown>, { readonly state: "held" | "blocked" | "refused" }>, provider: Provider, careful: readonly Careful[], place: readonly string[]): Stop {
+  if (found.state === "held") return heldStop(found, NEXT.uninstall(provider, careful, place), provider, place);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -97,7 +97,7 @@ async function look(request: UninstallRequest, ends: InstallEnds, show: Show): P
 
   const { found, where } = looked;
 
-  return found.state === "whole" || found.state === "started" || found.state === "leftover" || found.state === "none" ? { found, where } : stopOf(found, request.provider, choicesOf(request.mode));
+  return found.state === "whole" || found.state === "started" || found.state === "leftover" || found.state === "none" ? { found, where } : stopOf(found, request.provider, choicesOf(request.mode), placeOf(request.provider, where));
 }
 
 /**
@@ -124,7 +124,7 @@ async function removal(ground: Ground, request: UninstallRequest, how: Removal, 
   const unlooked = unlookedWords(removed, how.run, careful);
   const words = unlooked === undefined ? `${there} ${UNTOUCHED}` : `${there} ${unlooked} ${UNTOUCHED}`;
 
-  return { problem: "no_install", exit: 1, words, next: afterRemoval(removed, how.run, NEXT.uninstall(request.provider, careful)) };
+  return { problem: "no_install", exit: 1, words, next: afterRemoval(removed, how.run, NEXT.uninstall(request.provider, careful, placeOf(request.provider, ground.where))) };
 }
 
 /** Warn, then take the proof: what the person types once they saw what goes. `undefined` once they ended the question, or typed nothing. */
@@ -141,14 +141,14 @@ function ended(removed: Listed, run: Run, ground: Ground, request: UninstallRequ
   const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, request.provider, careful);
   for (const line of lines) show.line(line.tone, line.text);
 
-  show.value(removalValue(removed, run, ground.found.state, NEXT.uninstall(request.provider, carried(careful, removed.ready))));
+  show.value(removalValue(removed, run, ground.found.state, NEXT.uninstall(request.provider, carried(careful, removed.ready), placeOf(request.provider, ground.where))));
 
   return exitCode({ kind: removed.ready ? "done" : "failed" });
 }
 
 async function work(request: UninstallRequest, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
-  const at = { command: COMMAND, careful: choicesOf(mode), provider, run: mode.mode };
+  const at = { command: COMMAND, careful: choicesOf(mode), provider, place: placeOf(provider, request.where), run: mode.mode };
   const ground = await look(request, ends, show);
   if ("problem" in ground) return stopped(ground, show, at);
 
@@ -174,7 +174,7 @@ async function work(request: UninstallRequest, ends: InstallEnds, show: Show): P
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: UninstallPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const request = await settled(plan, ends);
-  if ("problem" in request) return stopped(request, show, { command: COMMAND, careful: choicesOf(plan.mode), provider: plan.provider, run: plan.mode.mode });
+  if ("stop" in request) return stopped(request.stop, show, { command: COMMAND, careful: choicesOf(plan.mode), provider: plan.provider, place: request.place, run: plan.mode.mode });
 
   secrets.add(request.token);
 

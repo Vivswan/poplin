@@ -50,7 +50,7 @@ A row says what happened to one piece. [Step 4 of Install](../start/install.md#4
 | `failed`, with other words                                         | the row says why, such as a Worker of the name that is not poplin's | do what the row asks                                  |
 | `failed`, ending `Cloudflare asked to wait` or `no answer from Cloudflare` | Cloudflare was busy, or gave no answer          | run the command again in a minute                                 |
 | `not run`                                                          | an earlier row stopped the run before this piece        | fix that row first                                                |
-| `no answer yet at` and the address, then `is made, and its address does not answer yet` | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-computer-in-and-check). If it still does not answer: `npx poplin doctor --repair`. Where the last line names a repair with `--add-user`, run that line |
+| `no answer yet at` and the address, then `is made, and its address does not answer yet` | the install is made, and its new address does not answer yet | wait a few minutes, then log in: [step 5](../start/install.md#5-log-this-computer-in-and-check). If it still does not answer, run the repair the run printed: `npx poplin doctor --repair` with your `--domain` or `--no-domain`. Where the last line names a repair with `--add-user`, run that line |
 
 ## The second run
 
@@ -59,7 +59,7 @@ The last line of a run that left something undone names the command that goes on
 | The last line says                               | The install is                                        | Run, after the fix                                         |
 | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
 | `Run this command again`                         | started, and not set yet                              | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `An install was started here and not finished`, and goes on. The other place is refused |
-| `Run npx poplin doctor --repair`                 | set: its address is written, and pieces are missing   | `npx poplin doctor --repair`, with the same token. Where the line has `--add-user` and an email, keep both: [the install kept its users](../upkeep/remove.md#keep-the-data) |
+| `Run npx poplin doctor --repair` and your `--domain` or `--no-domain` | set: its address is written, and pieces are missing   | that line as it is written, with the same token. Where the line has `--add-user` and an email, keep both: [the install kept its users](../upkeep/remove.md#keep-the-data) |
 | `nothing was changed. Run this command again once what the lines above say is no longer so.` | as it was before the run: the run printed no row, and changed nothing | the same line, once the line above it no longer holds: [Before any change](#before-any-change) has each |
 
 The first two go on from what stands: every piece reads before it writes. `poplin install` only makes a new install, so a second `install` on one that is set says `This account already holds poplin`, and changes nothing.
@@ -79,7 +79,7 @@ The login is ready. Open your dashboard and log in:
 the install is mended.
 ```
 
-The sample shows a few of the rows. The repair asks for the domain, or Enter for none, and for the token, as the install did. [I cannot log in](cannot-log-in.md) has every line it can stop at.
+The sample shows a few of the rows. The repair asks for the domain, or Enter for none, and for the token, as the install did. The line the install printed has `--domain` or `--no-domain` on it, and that repair asks for the token alone. [I cannot log in](cannot-log-in.md) has every line it can stop at.
 
 **A first login that was mistyped** gets no code, so nobody can log in. The repair lets the right email in:
 

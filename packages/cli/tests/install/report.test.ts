@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Found, RemovalRow, Row, Token } from "../../../core/src/install/installer";
+import type { Found, RemovalRow, Removed, Row, Token } from "../../../core/src/install/installer";
 import { TOKEN_VARIABLE } from "../../src/install/ask";
 import { jsonOf } from "../commands/support/harness";
 import { ADDRESS, type Account, emptyAccount, installedOf, type Place, removedOf, repairedOf, runLine, TOKEN, type Where } from "./support/stand-in";
@@ -44,9 +44,9 @@ const LEFT: readonly RemovalRow[] = [
 
 /** The command line of each step a run can name as the next, at the made-up provider and the made-up install. */
 const NEXT = {
-  install: { step: "install", command: "npx poplin install stand-in" },
-  repair: { step: "repair", command: "npx poplin doctor --repair" },
-  uninstall: { step: "uninstall", command: "npx poplin uninstall stand-in" },
+  install: { step: "install", command: "npx poplin install stand-in --no-place" },
+  repair: { step: "repair", command: "npx poplin doctor --repair --no-place" },
+  uninstall: { step: "uninstall", command: "npx poplin uninstall stand-in --no-place" },
   login: { step: "login", command: `npx poplin login --server ${ADDRESS}` },
   none: { step: "none", command: null },
 } as const;
@@ -64,8 +64,10 @@ describe("a provider's sentence and the command's own", () => {
   });
 });
 
-describe("the next step, in the one JSON value", () => {
+// Drift: a run with nobody to ask stops with exit 2 for the answer of where, so a next step without the place the run knew cannot be run as it is written. Each table below holds for both kinds of install.
+describe.each(["--no-place", "--place example.com"])("the next step, in the one JSON value, of a line with %s", (place) => {
   const undone = installedOf([UNDONE], { ready: false });
+  const placed = (text: string): string => text.replace("--no-place", place);
 
   // Drift: a person reads the next step in the last line, and `--json` prints no line. Without the key an agent runs a second command to learn what the first one already knew.
   test.each([
@@ -88,37 +90,66 @@ describe("the next step, in the one JSON value", () => {
     ["a removal that left a kind", REMOVAL, { ...accountWith(WHOLE), removed: () => removedOf(LEFT, { ready: false }) }, 1, NEXT.uninstall],
     ["a removal where no install is", REMOVAL, { ...emptyAccount(), removed: () => removedOf([]) }, 1, NEXT.none],
   ] as const)("%s names it", async (_name, line, account, code, next) => {
-    const ran = await runLine(`${line} --json`, account, { env: HELD });
+    const ran = await runLine(`${placed(line)} --json`, account, { env: HELD });
 
-    expect([ran.code, jsonOf(ran).next]).toEqual([code, next]);
+    expect([ran.code, jsonOf(ran).next]).toEqual([code, next.command === null ? next : { ...next, command: placed(next.command) }]);
   });
 });
 
-describe("a careful choice of the line, in the next step", () => {
+describe("a place the run was told is the wrong one, in the next step", () => {
+  const [install, removal, repair] = [INSTALL, REMOVAL, REPAIR].map((line) => line.replace("--no-place", "--place example.com"));
+
+  // Drift: a stop that says the install is at another place than the line named would send whoever follows `next` back to the wrong place, where the same stop waits.
+  test.each([
+    ["an install", install, accountWith({ state: "refused", why: "other_place", words: "An install was started here without a place: give --no-place.", give: "--no-place" }), "npx poplin install stand-in"],
+    ["a removal", removal, { ...accountWith(WHOLE), removed: (): Removed => ({ ok: false, why: "other_place", words: "The install here has no place: give --no-place." }) }, "npx poplin uninstall stand-in"],
+    ["a repair", repair, { ...accountWith(WHOLE), repaired: { ok: false, why: "elsewhere", words: "The install here has no place: give --no-place." } }, "npx poplin doctor --repair"],
+  ] as const)("%s that is told the install is at another place names the command with no place", async (_name, line, account, command) => {
+    const ran = await runLine(`${line} --json`, account, { env: HELD });
+
+    expect([ran.code, jsonOf(ran).problem, (jsonOf(ran).next as { readonly command: string }).command]).toEqual([1, "other_place", command]);
+  });
+});
+
+describe("a place given at its question, in the next step", () => {
+  // Drift: the place a person typed is known as much as one the line gave. A stop at the question after it that forgot the answer names a command that asks for it again, with nobody there to ask.
+  test.each([
+    ["install stand-in", "npx poplin install stand-in --place example.com"],
+    ["doctor --repair", "npx poplin doctor --repair --place example.com"],
+    ["uninstall stand-in", "npx poplin uninstall stand-in --place example.com"],
+  ])("poplin %s that is ended at the question after the place names the command at that place", async (line, command) => {
+    const ran = await runLine(`${line} --json`, emptyAccount(), { asks: true, typed: ["example.com", undefined] });
+
+    expect([ran.code, jsonOf(ran).problem, (jsonOf(ran).next as { readonly command: string }).command]).toEqual([1, "stopped", command]);
+  });
+});
+
+describe.each(["--no-place", "--place example.com"])("a careful choice of the line, in the next step, of a line with %s", (place) => {
+  const placed = (text: string): string => text.replace("--no-place", place);
   const refused = accountWith({ state: "refused", why: "token", words: "The host refused the token." });
   const half = { ...accountWith(WHOLE), removed: () => removedOf(LEFT, { ready: false }) };
 
   // Drift: a line without `--keep-data` removes the sites' files and the database, and one without `--dry-run` changes the account. A next step that dropped either sends whoever follows it past what the line before asked for.
   test.each([
-    ["a removal that keeps the data and left a kind", `${REMOVAL} --keep-data`, half, 1, "npx poplin uninstall stand-in --keep-data"],
-    ["a removal that keeps the data and is refused its token", `${REMOVAL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --keep-data"],
+    ["a removal that keeps the data and left a kind", `${REMOVAL} --keep-data`, half, 1, "npx poplin uninstall stand-in --no-place --keep-data"],
+    ["a removal that keeps the data and is refused its token", `${REMOVAL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --no-place --keep-data"],
     ["a removal that keeps the data and lacks its proof, a stop that comes while the line is read", "uninstall stand-in --no-place --keep-data --yes", accountWith(WHOLE), 2, "npx poplin uninstall stand-in --keep-data"],
-    ["a removal's dry run that keeps the data and is ready, which the run follows", `${UNINSTALL} --keep-data`, accountWith(WHOLE), 0, "npx poplin uninstall stand-in --keep-data"],
-    ["a removal's dry run that keeps the data and is refused its token", `${UNINSTALL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --keep-data --dry-run"],
-    ["a removal's dry run that is not ready", UNINSTALL, half, 1, "npx poplin uninstall stand-in --dry-run"],
-    ["an install's dry run that is refused its token", `${INSTALL} --dry-run`, refused, 1, "npx poplin install stand-in --dry-run"],
-    ["a repair's dry run that is refused its token", `${REPAIR} --dry-run`, refused, 1, "npx poplin doctor --repair --dry-run"],
-    ["a repair's dry run that is not ready", `${REPAIR} --dry-run`, { ...accountWith(WHOLE), repaired: repairedOf([UNDONE], { ready: false }) }, 1, "npx poplin doctor --repair --dry-run"],
-    ["an install told to adopt that is refused its token: the consent is given anew, as the proof of a removal is", `${INSTALL} --adopt`, refused, 1, "npx poplin install stand-in"],
+    ["a removal's dry run that keeps the data and is ready, which the run follows", `${UNINSTALL} --keep-data`, accountWith(WHOLE), 0, "npx poplin uninstall stand-in --no-place --keep-data"],
+    ["a removal's dry run that keeps the data and is refused its token", `${UNINSTALL} --keep-data`, refused, 1, "npx poplin uninstall stand-in --no-place --keep-data --dry-run"],
+    ["a removal's dry run that is not ready", UNINSTALL, half, 1, "npx poplin uninstall stand-in --no-place --dry-run"],
+    ["an install's dry run that is refused its token", `${INSTALL} --dry-run`, refused, 1, "npx poplin install stand-in --no-place --dry-run"],
+    ["a repair's dry run that is refused its token", `${REPAIR} --dry-run`, refused, 1, "npx poplin doctor --repair --no-place --dry-run"],
+    ["a repair's dry run that is not ready", `${REPAIR} --dry-run`, { ...accountWith(WHOLE), repaired: repairedOf([UNDONE], { ready: false }) }, 1, "npx poplin doctor --repair --no-place --dry-run"],
+    ["an install told to adopt that is refused its token: the consent is given anew, as the proof of a removal is", `${INSTALL} --adopt`, refused, 1, "npx poplin install stand-in --no-place"],
   ] as const)("%s names it", async (_name, line, account, code, command) => {
-    const ran = await runLine(`${line} --json`, account, { env: HELD });
+    const ran = await runLine(`${placed(line)} --json`, account, { env: HELD });
 
-    expect([ran.code, (jsonOf(ran).next as { readonly command: string }).command]).toEqual([code, command]);
+    expect([ran.code, (jsonOf(ran).next as { readonly command: string }).command]).toEqual([code, placed(command)]);
   });
 
   // Drift: the sentence a person reads and the value a program reads name the next step from one list, so the sentence cannot leave out what the value carries.
   test("a removal that keeps the data and left a kind tells a person to run it again with --keep-data", async () => {
-    const ran = await runLine(`${REMOVAL} --keep-data`, half, { env: HELD });
+    const ran = await runLine(placed(`${REMOVAL} --keep-data`), half, { env: HELD });
 
     expect([ran.code, ran.out.at(-2)]).toEqual([1, "1 not done, 1 kind removed. Run this command again with --keep-data: it removes what is left."]);
   });

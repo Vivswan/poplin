@@ -60,14 +60,14 @@ export const UNCHANGED = "nothing was changed";
 /** What every dry run of the three commands exits with, as each help says it. */
 export const DRY_RUN_HELP: readonly string[] = ["A dry run exits as the run after it would, as far as reading can tell: 0 when a", "run would go through, and 1 when something stops it first."];
 
-/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (a place or a user the stop's sentence names, never a consent), then each careful choice. */
+/** Every step a command can name as the next, with its command line: the provider where the line got as far as one, each option in `named` (the place the run knows or the stop names, or a user, never a consent), then each careful choice. */
 export const NEXT = {
   install: (provider: Provider | undefined, careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({ step: "install", command: lineOf(["npx poplin install", provider?.id, ...named], careful) }),
   repair: (poplin: "this" | "newest" = "this", careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({
     step: "repair",
     command: lineOf([poplin === "newest" ? "npx poplin@latest doctor --repair" : "npx poplin doctor --repair", ...named], careful),
   }),
-  uninstall: (provider: Provider | undefined, careful: readonly Careful[] = []): Next => ({ step: "uninstall", command: lineOf(["npx poplin uninstall", provider?.id], careful) }),
+  uninstall: (provider: Provider | undefined, careful: readonly Careful[] = [], named: readonly string[] = []): Next => ({ step: "uninstall", command: lineOf(["npx poplin uninstall", provider?.id, ...named], careful) }),
   login: (address: string): Next => ({ step: "login", command: `npx poplin login --server ${address}` }),
   none: (): Next => ({ step: "none", command: null }),
 } satisfies Readonly<Record<Next["step"], (...given: never[]) => Next>>;
@@ -79,11 +79,18 @@ export interface StateWords {
   readonly tone: Tone;
 }
 
-/** How the last lines of a run are worded: what a run that left nothing undone is called, what to run after it, which goes on from what stands where something is undone, and what runs the same command again. */
+/** How the last lines of a run are worded: what a run that left nothing undone is called, what to run after it, which goes on from what stands, what runs the same command again, and the repair of an install whose address stays silent. */
 export interface Ending {
   readonly done: string;
   readonly next: Next;
   readonly again: Next;
+  readonly repair: Next;
+}
+
+/** A stop that came while a plan's open answers were settled, with the place the run knew by then: none while that was still to ask. */
+export interface Unsettled {
+  readonly stop: Stop;
+  readonly place: readonly string[];
 }
 
 /** One line as it is shown: its text, and what kind of line it is. */
@@ -131,9 +138,10 @@ export function againWords(careful: readonly Careful[]): string {
  *
  * @param again - what runs the command that stopped again, with the careful choices of its line: it is also the next step where the sentence names this same command
  * @param provider - the provider, which an install's command line names
+ * @param place - the place the run knows, which the provider's sentence writes after the command it names
  */
-export function heldStop(found: Extract<Found<unknown, unknown>, { readonly state: "held" }>, again: Next, provider: Provider): Stop {
-  const named = { again, install: NEXT.install(provider), repair: NEXT.repair() };
+export function heldStop(found: Extract<Found<unknown, unknown>, { readonly state: "held" }>, again: Next, provider: Provider, place: readonly string[]): Stop {
+  const named = { again, install: NEXT.install(provider, [], place), repair: NEXT.repair("this", [], place) };
   const next = named[found.after];
 
   return { problem: "name_held", exit: 1, words: found.words, address: found.address, next: next.step === again.step ? again : next };
@@ -151,9 +159,10 @@ export const REFUSED_AS = { token: "token_refused", no_domain: "no_domain", othe
  * What runs a repair again that the provider refused: the newest poplin's where the install's records are of another version, which this poplin would stop at again.
  *
  * @param careful - the careful choices of the repair's own line; none where another command names the repair
+ * @param place - the place the run knows, which is left out where the provider says the install answers elsewhere
  */
-export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[] = []): Next {
-  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful);
+export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[]): Next {
+  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, refused.why === "elsewhere" ? [] : place);
 }
 
 /** Write a word so a POSIX shell reads it as that one word: as it is, or in single quotes with each one inside written `'\''`. */
@@ -162,12 +171,23 @@ function shellWord(word: string): string {
 }
 
 /**
+ * The place a run knows, as the command it names next carries it, so that the line runs as it is written where nothing can be asked.
+ *
+ * @param where - the provider's own answer of where the install goes
+ * @returns the provider's option of that place, each word as one word of a POSIX shell
+ */
+export function placeOf(provider: Provider, where: unknown): readonly string[] {
+  return provider.placeWords(where).map(shellWord);
+}
+
+/**
  * The repair that lets one more person log in, as the next step of an install that kept the users its records hold.
  *
  * @param login - the first login the run did not use, which its line holds as one word of a POSIX shell
+ * @param place - the place of the install, which the line holds before the user
  */
-export function letInNext(login: Login): Next {
-  return NEXT.repair("this", [], ["--add-user", shellWord(login)]);
+export function letInNext(login: Login, place: readonly string[]): Next {
+  return NEXT.repair("this", [], [...place, "--add-user", shellWord(login)]);
 }
 
 /**
@@ -277,7 +297,7 @@ export function dryRunLines(installed: Pick<Extract<Installed, { readonly ok: tr
  *
  * @param provider - the provider, whose name says where the token can be deleted
  * @param answers - whether the install answered at its address once it was made; `null` for a run that did not wait
- * @param ending - what a run that left nothing undone is called, what to run after one that did, and what runs this command again
+ * @param ending - what a run that left nothing undone is called, what to run after one that did, what runs this command again, and the repair at the run's place
  * @returns the last lines: what the run is called and the dashboard's address, what is not done and what only a person can do, or that nothing was changed by a run with no row.
  *   A run that never learned its address names none. One whose address gave no answer is told to log in once it does, and what to run if it does not, where the login is what follows it
  */
@@ -289,7 +309,7 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
   const stored = plain(`The token was used for this run and is stored nowhere. You can delete it at ${provider.name}.`);
 
   if (installed.ready && answers === false && address !== undefined) {
-    const later = ending.next.step === "login" ? [`Once it answers, log in: ${ending.next.command}`, `If it still does not: ${NEXT.repair().command}`] : [];
+    const later = ending.next.step === "login" ? [`Once it answers, log in: ${ending.next.command}`, `If it still does not: ${ending.repair.command}`] : [];
 
     return [...answer, { tone: "warning", text: ending.done }, ...dashboard, ...later.map(plain), stored];
   }

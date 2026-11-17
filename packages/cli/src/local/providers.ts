@@ -26,6 +26,7 @@ const SHAPE = v.object({
   tokenHelp: v.array(v.unknown()),
   token: v.function(),
   read: v.function(),
+  placeWords: v.function(),
   facts: v.function(),
   find: v.function(),
   install: v.function(),

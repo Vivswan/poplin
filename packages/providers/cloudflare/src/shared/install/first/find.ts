@@ -227,8 +227,22 @@ export function isOwn(bindings: readonly ListedBinding[]): boolean {
   return isNamed(bindings) && lackedBy(bindings).length === 0;
 }
 
-/** Why a Worker of the name that is not poplin's own stops a run: a stranger, or an install that lost a binding, which is told with what it lacks and the command that takes it once that is back. Neither is told to be deleted. */
-function heldBy(bindings: readonly ListedBinding[]): Pick<Extract<FoundHere, { readonly state: "held" }>, "words" | "after"> {
+/**
+ * The option that names a place again, as a command line gives it.
+ *
+ * @param where - the place, as a person named it or as a run settled it
+ * @returns each word of it: `--no-domain`, or `--domain` and the domain
+ */
+export function placeWords(where: { readonly kind: "domain"; readonly layout: Pick<DomainLayout, "domain"> } | { readonly kind: "no-domain" }): readonly string[] {
+  return where.kind === "domain" ? ["--domain", where.layout.domain] : ["--no-domain"];
+}
+
+/**
+ * Why a Worker of the name that is not poplin's own stops a run: a stranger, or an install that lost a binding, which is told with what it lacks and the command that takes it once that is back. Neither is told to be deleted.
+ *
+ * @param where - the place a person named, which the command the sentence names carries
+ */
+function heldBy(bindings: readonly ListedBinding[], where: Where): Pick<Extract<FoundHere, { readonly state: "held" }>, "words" | "after"> {
   if (!isNamed(bindings)) return { words: WORDS.held, after: "again" };
 
   const lacked = lackedBy(bindings);
@@ -237,7 +251,7 @@ function heldBy(bindings: readonly ListedBinding[]): Pick<Extract<FoundHere, { r
   const after = boundInstall(bindings) === undefined ? "install" : "repair";
   const words =
     `A Worker named ${SCRIPT} is in this account. It carries poplin's name and lacks ${LISTED.format(lacked)}: it looks like an install that was deployed again by hand. ` +
-    `Keep it: it may hold the install's keys. Put ${back} back on the Worker's Bindings page in your browser, then run ${HELD_COMMANDS[after]}.`;
+    `Keep it: it may hold the install's keys. Put ${back} back on the Worker's Bindings page in your browser, then run ${[HELD_COMMANDS[after], ...placeWords(where)].join(" ")}.`;
 
   return { words, after };
 }
@@ -397,7 +411,7 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
 
   if (bindings.value === undefined) return standing(place, false, rights);
 
-  if (!isOwn(bindings.value)) return { state: "held", ...heldBy(bindings.value), address: pagesOf(accountId).worker };
+  if (!isOwn(bindings.value)) return { state: "held", ...heldBy(bindings.value, where), address: pagesOf(accountId).worker };
 
   const address = dashboardOf(bindings.value);
   if (address !== undefined) return wholeAt(place, { address, version: readRelease(bindings.value) }, reach);

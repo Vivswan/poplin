@@ -28,7 +28,7 @@ import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layou
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
 import { createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
-import { findInstall, type Place, type Where } from "./find";
+import { findInstall, type Place, placeWords, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { placeBinding } from "../kind/started-place";
 import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "./rows";
@@ -66,7 +66,7 @@ const WORDS = {
   notUsed: "it is not used, and an install needs a database of this name",
   unchecked: "its code was there before this run, and this run did not check it",
   allowance: "the database's free allowance for the day is used up",
-  unreadUsers: "its records are not at the schema of this poplin, so the users it holds were not read, and --login is used. Once the install answers, npx poplin doctor --repair mends the login to the users it holds",
+  unreadUsers: "its records are not at the schema of this poplin, so the users it holds were not read, and --login is used",
 } as const;
 
 /** What a run answers that could not start its work, or lost Cloudflare on the way. */
@@ -364,6 +364,11 @@ async function prepared(work: Work, where: Where, reach: Reach): Promise<{ reado
   return "what" in release ? done({ ...work, blocked: [...work.blocked, release] }, {}) : { target, release };
 }
 
+/** Say that the users a kept database holds were not read, and name the repair that mends the login to them, at the place of the install. */
+function unreadUsers(target: Target): string {
+  return `${WORDS.unreadUsers}. Once the install answers, ${["npx poplin doctor --repair", ...placeWords(target)].join(" ")} mends the login to the users it holds`;
+}
+
 /**
  * Find the database of poplin's name that stood before the run, and read what it holds for it.
  *
@@ -373,7 +378,7 @@ async function prepared(work: Work, where: Where, reach: Reach): Promise<{ reado
  * @param adopted - whether the name alone matched the database, which its row then says
  * @returns the database with what its row says of it and the settings it holds; `undefined` where the account has none; or `false` once the row of a database that is not poplin's, or that could not be read, is in the run
  */
-async function stoodDatabase(work: Work, adopted: boolean): Promise<Stood | undefined | false> {
+async function stoodDatabase(work: Work, adopted: boolean, target: Target): Promise<Stood | undefined | false> {
   const { connection, accountId } = work.place;
   const name = INSTALL_OBJECTS.database;
   const found = await syncDatabase(connection, accountId, "plan");
@@ -393,7 +398,7 @@ async function stoodDatabase(work: Work, adopted: boolean): Promise<Stood | unde
   const stored = holder.value === "poplin" ? await readStored(connection, { accountId, databaseId: found.id }) : undefined;
   if (stored?.state === "unread") return failed(work, "D1 database", name, stored.failure);
 
-  const said = [...(adopted ? [holderWords(holder.value)] : []), ...(stored?.state === "another" ? [WORDS.unreadUsers] : [])];
+  const said = [...(adopted ? [holderWords(holder.value)] : []), ...(stored?.state === "another" ? [unreadUsers(target)] : [])];
 
   return { found, detail: said.length === 0 ? name : `${name} (${said.join("; ")})`, kept: stored?.state === "stored" ? stored.settings : undefined };
 }
@@ -435,7 +440,7 @@ async function madeFirst(work: Work, target: Target, release: Release, login: Lo
   const { connection, accountId } = work.place;
   const { standing } = stood;
   // A database that is somebody else's stops the run before the bucket is made beside it. One this run makes holds nothing to read.
-  const left = stood.adopted || standing ? await stoodDatabase(work, stood.adopted) : undefined;
+  const left = stood.adopted || standing ? await stoodDatabase(work, stood.adopted, target) : undefined;
   if (left === false) return false;
 
   const bucket = await syncBucket(connection, accountId, work.mode);
@@ -479,6 +484,7 @@ export const installer: Installer<Where, Place> = {
   tokenHelp: tokenHelp(),
   token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
   read,
+  placeWords,
   facts: (where, work) => tokenFacts(where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST),
   find: (token, where, reach, work) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor, buckets: work !== "repair" }),
   install,

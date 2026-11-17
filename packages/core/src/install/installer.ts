@@ -238,6 +238,9 @@ export interface Installer<Where, Place> {
   /** Read its own options and variables, once. */
   read(given: Given): Read<Where>;
 
+  /** The option that names the place of `where` again, word by word as a command line gives it: `--domain`, `example.com`. The account is no part of it. */
+  placeWords(where: Where): readonly string[];
+
   /** What its form for a new token is and asks for, at that place, for the work the token is made for: a repair makes less than an install, and a removal takes away all an install made. */
   facts(where: Where, work: "install" | "repair" | "remove"): TokenFacts;
 

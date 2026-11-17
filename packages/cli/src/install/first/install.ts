@@ -15,7 +15,7 @@ import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, REFUSED_AS, repairAfter, rowLine, runLines, runValue, UNCHANGED, unusedLine } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, repairAfter, rowLine, runLines, runValue, UNCHANGED, unusedLine } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -56,21 +56,22 @@ interface Ended {
  * A repair's dry run, which only reads, says whether the install needs mending: one that does not is logged in to, and one that does is mended.
  * Where the provider refuses that read, its own sentence says why, such as an install that answers at another place than the one named.
  *
- * @param where - the place the provider was last asked about
+ * @param where - the place the provider was last asked about, which the repair it names carries
  */
 async function standing(found: Whole<unknown>, where: unknown, request: InstallRequest, ends: InstallEnds): Promise<Stop> {
   const there = { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest } as const;
+  const place = placeOf(request.provider, where);
   const read = await request.provider.repair(found, where, { run: "dry-run", addUser: undefined }, ends.reach, () => undefined);
-  if (!read.ok) return { ...there, mend: "unread", unread: read.words, next: repairAfter(read) };
+  if (!read.ok) return { ...there, mend: "unread", unread: read.words, next: repairAfter(read, [], place) };
 
-  if (!read.ready || changesIn(read.rows) > 0) return { ...there, mend: "something", next: NEXT.repair() };
+  if (!read.ready || changesIn(read.rows) > 0) return { ...there, mend: "something", next: NEXT.repair("this", [], place) };
 
   return { ...there, mend: "nothing", next: NEXT.login(found.address) };
 }
 
 /** The stop a look that found no ground to start from is, and no install either. */
-function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>, provider: Provider, careful: readonly Careful[]): Stop {
-  if (found.state === "held") return heldStop(found, NEXT.install(provider, careful), provider);
+function stopOf(found: Exclude<Found<unknown, unknown>, { readonly state: "none" | "started" | "leftover" | "choice" | "whole" }>, provider: Provider, careful: readonly Careful[], place: readonly string[]): Stop {
+  if (found.state === "held") return heldStop(found, NEXT.install(provider, careful, place), provider, place);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -130,7 +131,7 @@ async function look(request: InstallRequest, ends: InstallEnds, show: Show): Pro
     return standing(found, where, request, ends);
   }
 
-  if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found, request.provider, carefulOf(request.mode.mode));
+  if (found.state !== "none" && found.state !== "started" && found.state !== "leftover") return stopOf(found, request.provider, carefulOf(request.mode.mode), placeOf(request.provider, where));
 
   const ground = await grounded(found, request, ends, show);
 
@@ -181,19 +182,21 @@ async function waited(installed: Extract<Installed, { readonly ok: true }>, mode
  * A dry run is followed by the run, and an install that was made by the login at its address.
  * A run that left something undone and got as far as writing where the install answers has made an install that is found whole: this command makes no change to it, and the repair finishes it.
  * So the account is looked in once more, and what is found there says which. Where the run did not use the first login, the repair that follows it lets that person in too.
+ * Each of the three commands it names carries the place of the run, so the line runs as written where nothing can be asked.
  */
 async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, ends: InstallEnds): Promise<Next> {
   const { provider } = request;
-  if (request.mode.mode === "dry-run") return NEXT.install(provider, carried(carefulOf("dry-run"), installed.ready));
+  const place = placeOf(provider, ground.where);
+  if (request.mode.mode === "dry-run") return NEXT.install(provider, carried(carefulOf("dry-run"), installed.ready), place);
 
-  if (installed.ready && installed.unused !== undefined) return letInNext(installed.unused);
+  if (installed.ready && installed.unused !== undefined) return letInNext(installed.unused, place);
 
   if (installed.ready) return installed.address === undefined ? NEXT.none() : NEXT.login(installed.address);
 
   const found = await provider.find(request.token, ground.where, ends.reach, "install");
-  if (found.state !== "whole") return NEXT.install(provider);
+  if (found.state !== "whole") return NEXT.install(provider, [], place);
 
-  return installed.unused === undefined ? NEXT.repair() : letInNext(installed.unused);
+  return installed.unused === undefined ? NEXT.repair("this", [], place) : letInNext(installed.unused, place);
 }
 
 /**
@@ -216,7 +219,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
   const value = runValue(installed, mode.mode, ground.found.state, answers, next);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
   const done = doneWords(installed.release, answers);
-  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next, again: NEXT.install(request.provider) });
+  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, request.provider, answers, { done, next, again: NEXT.install(request.provider), repair: NEXT.repair("this", [], placeOf(request.provider, ground.where)) });
 
   const { unused } = installed;
   const letIn = unused !== undefined && installed.ready && mode.mode === "apply" ? [unusedLine(unused, next)] : [];
@@ -231,7 +234,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
 async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
   const ground = await look(request, ends, show);
-  const at = { command: COMMAND, careful: carefulOf(mode.mode), provider, run: mode.mode };
+  const at = { command: COMMAND, careful: carefulOf(mode.mode), provider, place: placeOf(provider, request.where), run: mode.mode };
   if ("problem" in ground) return stopped(ground, show, at);
 
   if (ground.found.state === "started") show.line("note", "An install was started here and not finished: this run goes on with it.");
@@ -256,7 +259,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: Plan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
   const request = await settle(plan, ends);
-  if ("problem" in request) return stopped(request, show, { command: COMMAND, careful: carefulOf(plan.mode.mode), provider: plan.provider, run: plan.mode.mode });
+  if ("stop" in request) return stopped(request.stop, show, { command: COMMAND, careful: carefulOf(plan.mode.mode), provider: plan.provider, place: request.place, run: plan.mode.mode });
 
   secrets.add(request.token);
 

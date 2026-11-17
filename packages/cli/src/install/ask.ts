@@ -8,7 +8,7 @@ import type { Found, Question, Token } from "../../../core/src/install/installer
 import { TOKEN_VARIABLES } from "../local/current-login";
 import type { Screen } from "../local/screen";
 import type { GivenToken, InstallEnds, InstallRequest, Plan, Provider, Stop } from "./records";
-import { factsLines } from "./report";
+import { factsLines, placeOf, type Unsettled } from "./report";
 
 /** The variable the account token is read from. */
 export const TOKEN_VARIABLE = TOKEN_VARIABLES.install;
@@ -131,26 +131,27 @@ export async function lookFor(
  * Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks.
  *
  * @param ends - where the questions are put, and standard input
- * @returns the request, the refusal of a piped token that is none, or the stop of a person who ended a question
+ * @returns the request; or the refusal of a piped token that is none, or the stop of a person who ended a question, with the place the run knew by then
  */
-export async function settle(plan: Plan, ends: Pick<InstallEnds, "screen" | "input">): Promise<InstallRequest | Stop> {
+export async function settle(plan: Plan, ends: Pick<InstallEnds, "screen" | "input">): Promise<InstallRequest | Unsettled> {
   const { provider, json } = plan;
 
   if (plan.asking === "never") {
     const token = await givenToken(plan.token, provider, ends.input, "install");
-    if (typeof token === "object") return token;
+    if (typeof token === "object") return { stop: token, place: placeOf(provider, plan.where) };
 
     return { provider, json, asking: "never", mode: plan.mode, where: plan.where, login: plan.login, token };
   }
 
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
-  if (where === undefined) return STOPPED;
+  if (where === undefined) return { stop: STOPPED, place: [] };
 
+  const stopped = { stop: STOPPED, place: placeOf(provider, where.where) };
   const login = plan.login ?? (await askLogin(ends.screen));
-  if (login === undefined) return STOPPED;
+  if (login === undefined) return stopped;
 
   const token = plan.token ?? (await askToken(provider, where.where, ends.screen, "install"));
-  if (token === undefined) return STOPPED;
+  if (token === undefined) return stopped;
 
   return { provider, json, asking: "terminal", mode: plan.mode, where: where.where, login, token };
 }

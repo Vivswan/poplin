@@ -30,11 +30,11 @@ function indented(lines: readonly string[]): string[] {
   return lines.map((line) => `${INDENT}${line}`);
 }
 
-/** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the repair where a run has something to mend yet. */
-function nextOf(repaired: Mended, run: Run): Next {
+/** What to run after a repair that worked through its rows: the login where the install is as it should be now, and the repair at the same place where a run has something to mend yet. */
+function nextOf(repaired: Mended, run: Run, place: readonly string[]): Next {
   const mended = repaired.ready && (run === "apply" || changesIn(repaired.rows) === 0);
 
-  return mended ? NEXT.login(repaired.address) : NEXT.repair("this", carried(carefulOf(run), repaired.ready));
+  return mended ? NEXT.login(repaired.address) : NEXT.repair("this", carried(carefulOf(run), repaired.ready), place);
 }
 
 /** Say which install a look found: its version where it could be read, and where its dashboard is. */
@@ -47,12 +47,13 @@ export function foundWords(found: Whole<unknown>): string {
  *
  * @param provider - the provider, which the line that names `poplin install` names
  * @param careful - the careful choices of the repair's line, kept where the repair itself goes on
+ * @param place - the place the repair looked at, which the install it names carries
  * @returns why nothing is repaired: an account with no install or an unfinished one is sent to `poplin install`, which makes one and goes on with one.
  *   Where the install was started for another place, the sentence and the next step name one line: the install at that place.
  *   Where data was left behind, the sentence names `--adopt` and the next step is the install without it: the consent is a person's to add
  */
-export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[]): Stop {
-  const next = NEXT.install(provider);
+export function stopOf(found: NotWhole, provider: Provider, careful: readonly Careful[], place: readonly string[]): Stop {
+  const next = NEXT.install(provider, [], place);
   const install = next.command;
 
   if (found.state === "none") return { problem: "no_install", exit: 1, words: `No install is in this account. To make one: ${install}`, next };
@@ -61,7 +62,7 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
 
   if (found.state === "started") return { problem: "unfinished", exit: 1, words: `An install was started in this account and not finished. To finish it: ${install}`, next };
 
-  if (found.state === "held") return heldStop(found, NEXT.repair("this", careful), provider);
+  if (found.state === "held") return heldStop(found, NEXT.repair("this", careful, place), provider, place);
 
   if (found.state === "blocked") return { problem: "blocked", exit: 1, blocked: found.blocked };
 
@@ -77,14 +78,14 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
   return { problem: REFUSED_AS[found.why], exit: 1, words: followed(found.words, UNCHANGED) };
 }
 
-/** The stop of a repair that changed nothing, in the provider's own words. The repair that goes on from records of another version keeps the careful choices of the line. */
-export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[]): Stop {
+/** The stop of a repair that changed nothing, in the provider's own words. The repair that goes on from records of another version keeps the careful choices of the line and its place. */
+export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[]): Stop {
   const words = followed(repaired.words, UNCHANGED);
   if (repaired.why === "unreachable") return { problem: "unreachable", exit: 5, words };
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
 
-  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired, careful) };
+  if (repaired.why === "another") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired, careful, place) };
 
   return { problem: PROBLEMS[repaired.why], exit: 1, words };
 }
@@ -102,17 +103,18 @@ export function repairedLines(repaired: Mended, run: Run, provider: Provider): L
   // What a person is told to do after a run that mended everything, such as where to log in, stands before its last lines.
   const told = repaired.ready ? repaired.steps.flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
 
-  return [...told, ...runLines(repaired, provider, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair() })];
+  return [...told, ...runLines(repaired, provider, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair(), repair: NEXT.repair() })];
 }
 
 /**
  * The JSON value of a repair that worked through its rows.
  *
  * @param found - the install the repair went on from
+ * @param place - the place of the install, which the repair named next carries
  * @returns `ok` and `ready` are whether the command exits with 0: nothing is left undone, or a run would leave nothing. `changes` is how many objects were changed or would be.
  *   Each row's state is under `will` in a dry run and under `did` in a run
  */
-export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>): Readonly<Record<string, unknown>> {
+export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>, place: readonly string[]): Readonly<Record<string, unknown>> {
   return {
     ok: repaired.ready,
     run,
@@ -122,7 +124,7 @@ export function repairedValue(repaired: Mended, run: Run, found: Whole<unknown>)
     rows: rowValues(repaired.rows, run),
     blocked: repaired.blocked,
     steps: repaired.steps,
-    next: nextOf(repaired, run),
+    next: nextOf(repaired, run, place),
   };
 }
 

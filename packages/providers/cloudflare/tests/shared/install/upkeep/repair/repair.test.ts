@@ -331,7 +331,8 @@ describe.each(BOTH)("a release the install is behind, %s", (kind) => {
   ])("an install that %s is left whole: the repair stops before it reads the records, and names the newest poplin", async (_name, version, meets, why) => {
     const account = await behindInstall(kind, version);
     const { done, calls, changes } = await repaired(account, kind, {}, KINDS[kind].where, meets);
-    const words = `${why} Run the newest poplin: npx poplin@latest doctor --repair`;
+    // The command holds the option of the install's place, so the line runs as it is written where nobody can be asked.
+    const words = `${why} Run the newest poplin: npx poplin@latest doctor --repair ${kind === "domain" ? "--domain example.com" : "--no-domain"}`;
 
     expect([done, changes, calls.some((entry) => entry.path.endsWith("/query"))]).toEqual([{ ok: false, why: "another", words }, [], false]);
   });

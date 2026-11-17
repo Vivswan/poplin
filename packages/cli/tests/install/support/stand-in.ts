@@ -233,6 +233,7 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
     tokenHelp: ["The account token needs:", "  with a place   two permissions: Places: Read, Programs: Edit", "  without        one permission: Programs: Edit"],
     token: (text) => (/^tok_[a-z0-9]{8}$/.test(text) ? (text as Token) : undefined),
     read: readGiven,
+    placeWords: (where) => (where.kind === "place" ? ["--place", where.name] : ["--no-place"]),
     facts: (where, work) => {
       account.tokensFor.push(work);
 

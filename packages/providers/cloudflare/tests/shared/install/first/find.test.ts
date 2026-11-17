@@ -15,6 +15,12 @@ const [DOMAIN, NONE]: readonly [Where, Where] = [
   { kind: "no-domain", account: undefined },
 ];
 
+/** Each of the two, with the option a command line names it by. */
+const PLACED = [
+  [DOMAIN, "--domain example.com"],
+  [NONE, "--no-domain"],
+] as const;
+
 /** The bindings a first upload gives the Worker: poplin's marks. */
 const MARKS = [
   { name: "SITES", type: "r2_bucket", bucket_name: "poplin-sites" },
@@ -110,12 +116,13 @@ describe("the states of an account", () => {
   });
 
   // Drift: a person or an agent does what the stop says. A real install whose Worker lost a binding, told as a stranger to delete, loses both keys and leaves everything else behind.
+  // The command it names holds the place of the line, written here as `<place>`: with nobody to ask, the same command without it stops for the answer of where.
   test.each([
     [
       "a set install whose Worker lost its Workflow",
       [...MARKS.filter((mark) => mark.name !== "JOBS"), ...SET],
       "A Worker named poplin is in this account. It carries poplin's name and lacks JOBS (Workflow poplin-jobs, class PoplinJobs): it looks like an install that was deployed again by hand. " +
-        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin doctor --repair.",
+        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin doctor --repair <place>.",
       "repair",
     ],
     [
@@ -123,14 +130,14 @@ describe("the states of an account", () => {
       MARKS.slice(3),
       "A Worker named poplin is in this account. It carries poplin's name and lacks SITES (R2 bucket poplin-sites), DB (D1 database poplin), JOBS (Workflow poplin-jobs, class PoplinJobs), " +
         "and INSTALL_PLACE (plain text: the domain the install was started under, or none): it looks like an install that was deployed again by hand. " +
-        "Keep it: it may hold the install's keys. Put the bindings back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare.",
+        "Keep it: it may hold the install's keys. Put the bindings back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare <place>.",
       "install",
     ],
     [
       "a Worker that is not set and does not say where it was started for",
       MARKS,
       "A Worker named poplin is in this account. It carries poplin's name and lacks INSTALL_PLACE (plain text: the domain the install was started under, or none): it looks like an install that was deployed again by hand. " +
-        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare.",
+        "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare <place>.",
       "install",
     ],
     [
@@ -143,7 +150,7 @@ describe("the states of an account", () => {
   ] as const)("tells %s in words that never say to delete it, and names the command its words name for a program", async (_, bindings, words, after) => {
     const address = `https://dash.cloudflare.com/${ACCOUNT}/workers/services/view/poplin`;
 
-    for (const where of [DOMAIN, NONE]) expect((await found(fresh({ noWorker: false, bindings: [...bindings] }), where)).shown).toEqual({ state: "held", words, address, after });
+    for (const [where, place] of PLACED) expect((await found(fresh({ noWorker: false, bindings: [...bindings] }), where)).shown).toEqual({ state: "held", words: words.replace("<place>", place), address, after });
   });
 
   // Drift: a whole install is never touched by an install. Its version and its address are what the command tells the person in place of making anything.
@@ -298,7 +305,7 @@ describe("what stops an install before it is begun", () => {
 describe("a text the account holds, which whoever may write there chose", () => {
   const unplaced =
     "A Worker named poplin is in this account. It carries poplin's name and lacks INSTALL_PLACE (plain text: the domain the install was started under, or none): it looks like an install that was deployed again by hand. " +
-    "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare.";
+    "Keep it: it may hold the install's keys. Put the binding back on the Worker's Bindings page in your browser, then run npx poplin install cloudflare <place>.";
 
   // Drift: the binding is told back in the sentence that says which option to give, and an agent builds its next line from that sentence. A text that is no domain would be run as the words of a command.
   test.each([
@@ -308,7 +315,7 @@ describe("a text the account holds, which whoever may write there chose", () => 
   ])("a started Worker whose INSTALL_PLACE is %s reads as one that lacks it, for both kinds, and the text is told nowhere", async (_name, text) => {
     const bindings = [...MARKS, { name: "INSTALL_PLACE", type: "plain_text", text }];
 
-    for (const where of [DOMAIN, NONE]) expect((await found(fresh({ noWorker: false, bindings }), where)).shown).toMatchObject({ state: "held", words: unplaced, after: "install" });
+    for (const [where, place] of PLACED) expect((await found(fresh({ noWorker: false, bindings }), where)).shown).toMatchObject({ state: "held", words: unplaced.replace("<place>", place), after: "install" });
   });
 
   // Drift: the release is printed in the line that says which poplin an install runs, on a terminal. One that is no version could carry an escape sequence and a line of its own.

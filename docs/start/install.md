@@ -167,7 +167,7 @@ Log this computer in now?
 
 **It worked when** it says that the address `answers`, and then `poplin 0.1.0 is installed.`, with the version of the day. The sample shows a few of the rows. A new address can take a few minutes: the command waits up to five.
 
-**Where the address does not answer in that time**, the run says `poplin 0.1.0 is made, and its address does not answer yet.` and exits with 1. Under it are two lines: the login to run once the address answers, and `npx poplin doctor --repair` for an address that still does not. After a run that did not use `--login`, one line stands there: the repair with `--add-user`.
+**Where the address does not answer in that time**, the run says `poplin 0.1.0 is made, and its address does not answer yet.` and exits with 1. Under it are two lines: the login for once the address answers, and the repair, with your `--domain` or `--no-domain`, for one that still does not. A run that did not use `--login` has one line there: that repair with `--add-user`.
 
 | A row starts with | Means                                                                   |
 | ----------------- | ----------------------------------------------------------------------- |
@@ -205,7 +205,7 @@ The way on: npx poplin login --server https://poplin.example.com
 | The first line says            | The way on                                                                    |
 | ------------------------------ | ----------------------------------------------------------------------------- |
 | `it is as it should be`        | log in: the line under it has the address                                     |
-| `it is not as it should be`    | `npx poplin doctor --repair`                                                  |
+| `it is not as it should be`    | the repair, as the line under it writes it: with `--domain` or `--no-domain`  |
 | neither                        | the line under it says why that was not read, and names the repair's dry run  |
 
 An install that works needs none of them: log this computer in, as step 5 shows.
@@ -369,16 +369,27 @@ npx poplin install cloudflare --no-domain --login you@example.com --yes
 
 A run that asks nothing logs no computer in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--login` logs no computer in. It ends with the line that lets that email in, also where its address does not answer yet.
 
-With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command` without the answers your line gave. Where `next` names the same command again, the `command` keeps `--dry-run` of a dry run that stopped or is not ready, and a removal's keeps `--keep-data`.
+With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command`. A run without `--json` names the same command in its last lines. After an install that could not be read, that line adds `--dry-run`.
 
-A consent is never in `command`: `--adopt` is yours to add, as the line above the value says. A place is, where the stop names one: a repair that found an install started for another place names the install with that place's option.
+| The `command` holds                                    | When                                                                  |
+| ------------------------------------------------------ | --------------------------------------------------------------------- |
+| the place: `--domain example.com`, or `--no-domain`    | the run knew it: from your line, the variable, or your answer         |
+| `--dry-run`, and a removal's `--keep-data`             | `next` names the same command again, after a stop or a run not ready  |
+| `--add-user` and an email                              | an install kept its users and did not use `--login`                   |
+| no token, no login, no account, no proof, no `--adopt` | always: these are yours to add                                        |
+
+So a repair it names runs as written where nothing can be asked, with the token in `POPLIN_INSTALL_TOKEN`.
+
+Some stops name the command with no place. A stop that comes while the line is read does: the line is written wrong, or lacks an answer. So may a command that was stopped, or that failed with no word for it. `other_place` does too: the install is at another place than your line named, and its sentence names the option.
+
+A repair that found an install started for another place names the install with that place's option.
 
 | `next.step` | Run next                                                                    |
 | ----------- | --------------------------------------------------------------------------- |
-| `install`   | `npx poplin install cloudflare`, with the same answers. Where the `command` holds a place, run it as written, and add the rest |
-| `repair`    | the repair, as `command` writes it: `npx poplin doctor --repair`, the newest poplin's, or with `--add-user` after an install that kept its users and did not use `--login` |
+| `install`   | the install, as `command` writes it, with the login added                   |
+| `repair`    | the repair, as `command` writes it: the newest poplin's where it says `npx poplin@latest` |
 | `login`     | `npx poplin login`, with `--server` and the install's address               |
-| `uninstall` | `npx poplin uninstall cloudflare`: a removal's dry run, one that left a kind, or one whose token could not look for a kind |
+| `uninstall` | the removal, as `command` writes it, with its proof added: a removal's dry run, one that left a kind, or one whose token could not look for a kind |
 | `none`      | nothing                                                                     |
 
 | Exit code | Means                                                                              |
