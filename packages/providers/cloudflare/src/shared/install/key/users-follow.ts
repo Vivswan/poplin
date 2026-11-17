@@ -1,6 +1,7 @@
 // The users carried to Cloudflare with the key poplin keeps: the policy that lets the logins through is written, then the alerts of the install's kind are sent to the first of them.
 //
 //   the policy    every login, under "Access: Apps and Policies Write"   an account with no such policy answers `not_made`, and nothing is written
+//                 written every time: a list read just after a write may still answer the logins as they were
 //   the alerts    the first login, under "Notifications Write"           an account that lacks one gets it
 //
 // No application is read or changed, and no answer carries the key or a text Cloudflare sent.

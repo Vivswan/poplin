@@ -78,15 +78,22 @@ describe("createUsersFollow", () => {
     });
   });
 
-  // Drift: a list and an alert Cloudflare already holds are written again by nothing: a carry that wrote what stands would spend two writes on every change of a later user.
-  test("users Cloudflare already holds, and an alert that goes to the first of them, are written nowhere", async () => {
-    const same = { ...HELD_POLICY, include: [{ email: { email: "zoe@example.com" } }, { email: { email: "ada@example.com" } }] };
-    const sent = { ...HELD_ALERT, mechanisms: { email: [{ id: "zoe@example.com" }] } };
+  // Drift: a list of the policies that trails a write still answers the users as they were. A carry that left out the write for a list that matches would lose a user removed just after being added, and Cloudflare's policy would go on naming that user.
+  test("a user removed just after being added is written out of the policy, where the list still answers the users as they were before the first write; an alert that goes to the first user is left", async () => {
+    const sent = { ...HELD_ALERT, mechanisms: { email: [{ id: "ada@example.com" }] } };
 
-    await withFake(account({ policies: (asked) => page(asked, [same]), alerts: (asked) => page(asked, [sent]) }), async (connection, asked) => {
+    await withFake(account({ alerts: (asked) => page(asked, [sent]) }), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
+      const pushed = [await follow.push(["ada@example.com", "zoe@example.com"] as Login[]), await follow.push(["ada@example.com"] as Login[])];
+      const body = (emails: readonly string[]): unknown => ({ name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: emails.map((email) => ({ email: { email } })) });
 
-      expect([await follow.push(USERS), writes(asked)]).toEqual([{ ok: true }, []]);
+      expect([pushed, writes(asked)]).toEqual([
+        [{ ok: true }, { ok: true }],
+        [
+          ["PUT", `${PATHS.policies}/policy-1`, body(["ada@example.com", "zoe@example.com"])],
+          ["PUT", `${PATHS.policies}/policy-1`, body(["ada@example.com"])],
+        ],
+      ]);
     });
   });
 
