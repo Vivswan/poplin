@@ -316,10 +316,10 @@ describe("the sign-out of everyone", () => {
 
   // Drift: a press the provider did not take would read as done; each sentence is the only place the person learns why, and what to press next.
   test.each([
-    ["no_key", "poplin holds no key for the provider, so nobody was signed out. Repair makes one: open Domain and press Repair."],
-    ["key_refused", "The provider refused poplin's key, so nobody was signed out. Open Domain and press Repair."],
-    ["lacks_right", "poplin's key may not end logins at the provider, so nobody was signed out. Open Domain and press Repair."],
-    ["unreachable", "No answer from the provider, so the logins may not have ended. Try again."],
+    ["no_key", "The install holds no key for the provider, so nobody was signed out. Repair makes one: open Domain and press Repair."],
+    ["key_refused", "The provider refused the install's key, so nobody was signed out. Open Domain and press Repair."],
+    ["lacks_right", "The install's key may not sign users out at the provider, so nobody was signed out. Open Domain and press Repair."],
+    ["unreachable", "No answer from the provider, so users may still be signed in. Try again."],
     ["not_made", "The login in front of the dashboard is missing at the provider, so nobody was signed out. Open Domain and press Repair."],
   ] as const)("a try the provider refuses as %s says so in one sentence, and writes no entry", async (refusal, sentence) => {
     const opened = await openConsole();

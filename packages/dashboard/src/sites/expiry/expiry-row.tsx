@@ -1,4 +1,4 @@
-// When a site deletes itself, in its panel: the moment, and the menu that sets another or none.
+// When a site expires, in its panel: the moment, and the menu that sets another or none. A site that expires moves to the trash.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
@@ -77,13 +77,13 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
   const note = afterIt(site.expires, opened);
 
   return (
-    <PanelFact name="Deletes itself">
+    <PanelFact name="Expires">
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span>{expiryMoment(site.expires)}</span>
           <DropdownMenu onOpenChange={(open) => (open ? setOpened(Date.now()) : undefined)}>
             <DropdownMenuTrigger
-              render={<Button ref={opener} variant="outline" size="xs" aria-label="Change when it deletes itself" className="pointer-coarse:-my-2 pointer-coarse:h-9 pointer-coarse:px-3" />}
+              render={<Button ref={opener} variant="outline" size="xs" aria-label="Change when it expires" className="pointer-coarse:-my-2 pointer-coarse:h-9 pointer-coarse:px-3" />}
             >
               Change
             </DropdownMenuTrigger>

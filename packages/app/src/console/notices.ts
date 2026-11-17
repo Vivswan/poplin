@@ -35,7 +35,7 @@ const SPAN_RANGE = `Use a whole number from 1 to ${MOST_DAYS.toLocaleString("en-
 /** What each refusal code says. `{about}` is the field or setting the code is about. A code of an action missing here does not compile. */
 const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   not_set_up: "This install is not set up yet.",
-  not_allowed: "This login may not do that.",
+  not_allowed: "This token may not do that.",
   not_found: "No site is at this address. It may have been deleted, or the link is an old one.",
   in_trash: "The site sits in the trash. Restore it first.",
   not_in_trash: "The site is not in the trash.",
@@ -56,7 +56,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   too_large: "The request was too large, so nothing was changed.",
   no_page: "There is no such page.",
   too_many_tries: "Too many tries. Wait a minute.",
-  no_such_login: "That login is no longer waiting. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
+  no_such_login: "That login is no longer waiting. It was approved or denied already, or it expired after 10 minutes. Run poplin login again.",
   no_working_user: "Your own email has to stay among the users, so nothing was changed. Another admin can take it out.",
   needs_update_check: "Updating by itself needs the check for new versions, so nothing was changed. Switch the check on, or automatic updates off.",
   token_gone: "That token is gone already.",
@@ -69,13 +69,13 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   unreachable: "No answer from the provider. Try again.",
   no_update: "No newer version is known, so no update was started.",
   too_many_requests: "An update was tried in this minute already. Wait a minute.",
-  no_key: "poplin holds no key, so it cannot update itself. Open Domain and press Repair.",
-  key_refused: "The host no longer takes poplin's key, so nothing was updated. Open Domain and press Repair.",
-  lacks_right: "poplin's key may not replace the install's code, so nothing was updated. Open Domain and press Repair: it makes a key that may.",
+  no_key: "The install holds no key, so it cannot update itself. Open Domain and press Repair.",
+  key_refused: "The provider no longer takes the install's key, so nothing was updated. Open Domain and press Repair.",
+  lacks_right: "The install's key may not replace the install's code, so nothing was updated. Open Domain and press Repair: it makes a key that may.",
   release_refused: "The release could not be taken. Nothing was changed.",
-  version_refused: "The host refused the new version, so the install runs the version it ran before.",
-  logins_not_ended: "This install has no way to end logins, so nobody was signed out.",
-  update_unreachable: "The host did not answer. The update may be in all the same: reload in a minute.",
+  version_refused: "The provider refused the new version, so the install runs the version it ran before.",
+  logins_not_ended: "This install has no way to sign users out, so nobody was signed out.",
+  update_unreachable: "The provider did not answer. The update may be in all the same: reload in a minute.",
 };
 
 /** What a code says when what it is about gives it another meaning: `too_large` about a limit is a copy that does not fit it, `not_found` about an upload a copy, `logins_not_ended` the reason. `other` stands for any limit not named. */
@@ -119,10 +119,10 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     alert_users: "A chosen user is no user any more, so nothing was changed. Choose again.",
   },
   logins_not_ended: {
-    no_key: "poplin holds no key for the provider, so nobody was signed out. Repair makes one: open Domain and press Repair.",
-    key_refused: "The provider refused poplin's key, so nobody was signed out. Open Domain and press Repair.",
-    lacks_right: "poplin's key may not end logins at the provider, so nobody was signed out. Open Domain and press Repair.",
-    unreachable: "No answer from the provider, so the logins may not have ended. Try again.",
+    no_key: "The install holds no key for the provider, so nobody was signed out. Repair makes one: open Domain and press Repair.",
+    key_refused: "The provider refused the install's key, so nobody was signed out. Open Domain and press Repair.",
+    lacks_right: "The install's key may not sign users out at the provider, so nobody was signed out. Open Domain and press Repair.",
+    unreachable: "No answer from the provider, so users may still be signed in. Try again.",
     not_made: "The login in front of the dashboard is missing at the provider, so nobody was signed out. Open Domain and press Repair.",
   },
   not_found: {
@@ -135,10 +135,10 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     other_version: "The files published for the release say they are of another version. Nothing was changed. Tell the project.",
     database: "That release changes the database, and the version asked for cannot read it. Nothing was changed.",
     needs_hand: `Nothing was changed. ${TAKEN_BY_REPAIR}`,
-    host: "The host did not answer before anything was sent. Nothing was changed. Try again in a few minutes.",
+    host: "The provider did not answer before anything was sent. Nothing was changed. Try again in a few minutes.",
   },
   version_refused: {
-    code: "The host refused the new version: its code stops as it starts. The install runs the version it ran before. Tell the project.",
+    code: "The provider refused the new version: its code stops as it starts. The install runs the version it ran before. Tell the project.",
   },
 };
 

@@ -30,9 +30,6 @@ const LABEL_END = /\.|$/;
 /** Where an id ends in its label: at the dash after it, or at the end. An id holds no dash. */
 const ID_END = /-|$/;
 
-/** The most characters a site's name, or its public name, holds. */
-export const LONGEST_NAME = 40;
-
 /** What a site is called on a screen: its title, or its name where it has none. Its name is read in its link. */
 export function shownName(site: Pick<Site, "name" | "title">): string {
   return site.title ?? site.name;

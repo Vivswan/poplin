@@ -1430,8 +1430,8 @@ test("two times of the same length take the same room in the face the dashboard 
 
 // Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for.
 test("in a site's panel, a span is shown as the moment it ends before it is saved and after, Undo takes it away again, and a day is picked in a dialog that one Escape leaves", async ({ page }) => {
-  const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it deletes itself", exact: true }) });
-  const change = panel(page).getByRole("button", { name: "Change when it deletes itself", exact: true });
+  const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it expires", exact: true }) });
+  const change = panel(page).getByRole("button", { name: "Change when it expires", exact: true });
   await arrive(page);
   await openPanel(page, SAMPLE.site);
   await expect(fact).toHaveText("NeverChange");
@@ -1453,15 +1453,15 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
   // The dialog is opened from inside the panel, and dims the page as every dialog does.
   await expect(page.locator('[data-slot="dialog-overlay"]')).toBeVisible();
   await day.getByRole("gridcell").getByRole("button", { disabled: false }).first().click();
-  await expect(day.getByText(/^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
+  await expect(day.getByText(/^Expires \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
   await pressEscape(page);
   await expect(day).toBeHidden();
   await expect(change).toBeFocused();
   await expect(fact).toHaveText("NeverChange");
 });
 
-// Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title where its name is asked for.
-test("a site in the trash is deleted for good only once its name is typed, with the focus on Cancel first and back on its button after Escape; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
+// Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title or its bare name where its label is asked for: two sites may share a name.
+test("a site in the trash is deleted for good only once its label is typed, with the focus on Cancel first and back on its button after Escape; it then leaves the list with no Undo, and Activity says so", async ({ page }) => {
   const asks = question(page, `Delete ${TRASHED.title} for good?`);
   const remove = asks.getByRole("button", { name: "Delete for good", exact: true });
   await arrive(page);
@@ -1478,9 +1478,13 @@ test("a site in the trash is deleted for good only once its name is typed, with 
   await expect(asking).toBeFocused();
   await asking.click();
 
-  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.title);
-  await expect(remove).toBeDisabled();
-  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(TRASHED.name);
+  // The question writes the label to type: the site's name, two dashes, and its id.
+  const label = (await asks.getByText(new RegExp(`^${TRASHED.name}--[a-z0-9]+$`)).textContent()) ?? "";
+  for (const short of [TRASHED.title, TRASHED.name]) {
+    await asks.getByRole("textbox", { name: "Site's label", exact: true }).fill(short);
+    await expect(remove).toBeDisabled();
+  }
+  await asks.getByRole("textbox", { name: "Site's label", exact: true }).fill(label);
   await remove.click();
   await expect(said(page, `${TRASHED.title} deleted for good.`)).toBeVisible();
   await expect(siteName(page, TRASHED.title)).toHaveCount(0);

@@ -141,7 +141,7 @@ describe("starting an update", () => {
 
   // Drift: a refused start would reach the admin as a code with no sentence, and the list of problems would tell them to check a link that no longer exists.
   test.each<{ readonly name: string; readonly host: Partial<Opened["host"]>; readonly status: number; readonly code: string; readonly about: string | null; readonly sentence: string; readonly noted: boolean }>([
-    { name: "the host holds no key", host: { key: false }, status: 409, code: "no_key", about: null, sentence: "poplin holds no key, so it cannot update itself. Open Domain and press Repair.", noted: false },
+    { name: "the host holds no key", host: { key: false }, status: 409, code: "no_key", about: null, sentence: "The install holds no key, so it cannot update itself. Open Domain and press Repair.", noted: false },
     { name: "no newer version is out", host: { release: null }, status: 409, code: "no_update", about: null, sentence: "No newer version is known, so no update was started.", noted: false },
     {
       name: "the fetched files are not the published ones",

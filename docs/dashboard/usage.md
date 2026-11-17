@@ -90,8 +90,8 @@ When the key gave no figure at all, the line over the table says why and ends in
 | The line starts | Do |
 | --- | --- |
 | `Cloudflare did not answer.` | open Usage again after a minute |
-| `The kept key no longer works.` | open Domain and press Repair: it makes a new key |
-| `The kept key has no permission to read usage` | open Domain and press Repair: it makes a new key |
+| `The install's key no longer works.` | open Domain and press Repair: it makes a new key |
+| `The install's key has no permission to read usage` | open Domain and press Repair: it makes a new key |
 
 | On the screen | Is |
 | --- | --- |

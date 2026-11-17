@@ -114,7 +114,7 @@ test("the Undo of a site that went to the trash leaves once the site is deleted 
   await page.getByRole("row").getByRole("button", { name: `Details of ${GONE.title}`, exact: true }).press("Enter");
   await page.getByRole("dialog", { name: GONE.title, exact: true }).getByRole("button", { name: "Delete for good", exact: true }).click();
   const asks = page.getByRole("alertdialog", { name: `Delete ${GONE.title} for good?`, exact: true });
-  await asks.getByRole("textbox", { name: "Site's name", exact: true }).fill(GONE.name);
+  await asks.getByRole("textbox", { name: "Site's label", exact: true }).fill((await asks.getByText(new RegExp(`^${GONE.name}--[a-z0-9]+$`)).textContent()) ?? "");
   await asks.getByRole("button", { name: "Delete for good", exact: true }).click();
 
   await expect(said(page, `${GONE.title} deleted for good.`)).toBeVisible();
