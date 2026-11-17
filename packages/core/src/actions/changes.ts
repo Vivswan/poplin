@@ -251,3 +251,22 @@ export async function applyChanges(
 
   return { ok: true, site: changed.site };
 }
+
+/**
+ * What checked changes would make of a live site, with nothing written. The one thing asked of the database is whether another site holds the public name the site would claim.
+ *
+ * @param site - the site as it was read, which is not in the trash
+ * @returns the site as `applyChanges` would leave it, or its refusal of a public name that is taken
+ */
+export async function rehearseChanges(database: Database, site: Site, changes: CheckedChanges): Promise<{ readonly ok: true; readonly site: Site } | Refused<"name_taken">> {
+  const { access, details } = changes;
+  if (access === undefined) return { ok: true, site: { ...site, ...details } };
+
+  const held = site.access === "public" && access.access === "public" && site.public_name === access.public_name;
+  if (access.access === "public" && !held && (await database.findTaken(site.id, access.public_name)).publicName) return refuse("name_taken", "public_name");
+
+  // A public name goes with a public access alone.
+  const { public_name: freed, ...rest } = { public_name: null, ...site };
+
+  return { ok: true, site: { ...rest, ...details, ...access } };
+}

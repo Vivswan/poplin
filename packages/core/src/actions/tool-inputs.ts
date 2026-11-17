@@ -2,7 +2,7 @@
 //
 // Each input is built from the schema its action checks a request with, so a setting the API gains is one the tools take.
 // `publish_site` takes a `path` on the machine the server runs on in place of the list of files and of the entry page's title, which the server reads there.
-// `duplicate_site` takes no `upload`: the server makes every call of a copy itself.
+// `duplicate_site` takes no `upload`: the server makes every call of a copy itself. No tool takes `dry_run`: a tool call is a run.
 
 import * as v from "valibot";
 
@@ -25,7 +25,7 @@ export const TOOL_INPUTS = {
   list_sites: v.pick(LIST_QUERY, ["trash"]),
   rollback_site: v.strictObject({ ...ONE_SITE.entries, ...ROLLBACK_OPTIONS.entries }),
   new_link: ONE_SITE,
-  delete_site: v.strictObject({ ...ONE_SITE.entries, ...DELETE_OPTIONS.entries }),
+  delete_site: v.strictObject({ ...ONE_SITE.entries, ...v.omit(DELETE_OPTIONS, ["dry_run"]).entries }),
   restore_site: ONE_SITE,
   duplicate_site: v.strictObject({ ...ONE_SITE.entries, ...v.omit(DUPLICATE_REQUEST, ["upload"]).entries }),
 } as const satisfies Readonly<Record<(typeof SITE_ACTIONS)[number]["tool"], v.GenericSchema>>;

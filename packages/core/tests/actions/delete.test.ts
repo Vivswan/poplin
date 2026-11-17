@@ -4,7 +4,7 @@ import { deleteSite } from "../../src/actions/delete";
 import { publishSite } from "../../src/actions/publish";
 import { restoreSite } from "../../src/actions/restore";
 import { getSite } from "../../src/actions/show";
-import { ADMIN, DAY, made, makeWorld, NOW, OWNER, pages } from "./support/actions-fixture";
+import { ADMIN, DAY, made, makeWorld, NOW, OWNER, pages, rehearsedThenRun } from "./support/actions-fixture";
 
 describe("deleteSite", () => {
   // Drift: the trash is the one undo of a delete; a delete that removed files, or a restore that lost the public name, would make it no undo at all.
@@ -69,5 +69,29 @@ describe("deleteSite", () => {
     expect(await deleteSite(world.install, OWNER, { site: id, no_trash: true })).toMatchObject({ ok: true, left: [`${folder}/`] });
     expect(await getSite(world.install, ADMIN, id)).toEqual({ ok: false, code: "not_found" });
     expect(await world.install.database.listLeftovers({ limit: 10 })).toEqual({ folders: [folder] } as never);
+  });
+});
+
+describe("deleteSite with dry_run", () => {
+  // Drift: the one act nothing undoes is the one a person rehearses; a dry run that removed a file or a row, or that named another day or site than the run, is worse than none.
+  test("a dry run answers what the run after it answers, to the trash and for good, removes no file, and writes no row", async () => {
+    const world = await makeWorld();
+    const site = await made(world, OWNER, "report", { access: "public" });
+    const keys = await world.keys();
+    world.clock.now += DAY;
+
+    const trashed = await rehearsedThenRun(world, (how) => deleteSite(world.install, OWNER, { site, ...how }));
+    const again = await rehearsedThenRun(world, (how) => deleteSite(world.install, OWNER, { site, ...how }));
+    const held = await world.keys();
+    const before = await world.written();
+    const forGood = await deleteSite(world.install, OWNER, { site, no_trash: true, dry_run: true });
+    const left = [(await world.written()) - before, await world.keys()];
+    const gone = await deleteSite(world.install, OWNER, { site, no_trash: true });
+    const missing = await rehearsedThenRun(world, (how) => deleteSite(world.install, OWNER, { site, no_trash: true, ...how }));
+
+    expect([trashed, again, missing].map((step) => [step.written, step.rehearsal])).toEqual([trashed, again, missing].map((step) => [0, step.run]));
+    expect([trashed.run, again.run, missing.run]).toMatchObject([{ ok: true, site: { state: "trash", gone_on: NOW + DAY + 7 * DAY } }, { code: "in_trash" }, { code: "not_found" }]);
+    expect([left, held]).toEqual([[0, keys], keys]);
+    expect(forGood).toEqual(gone);
   });
 });

@@ -8,11 +8,11 @@ import type { Site, SiteFolder } from "../records/site";
 import type { SiteId } from "../sites/ids";
 import { removeFiles, sitePrefix } from "./files";
 import { reachSite } from "./reach";
-import { type Install, type Refused, refuse } from "./records";
+import { type Install, REHEARSAL, type Refused, refuse } from "./records";
 import { SITE_OBJECT, siteAnswer } from "./site-object";
 
-/** What a delete may ask for besides its site: whether the site goes now and for good. */
-export const DELETE_OPTIONS = v.strictObject({ no_trash: v.optional(v.boolean()) });
+/** What a delete may ask for besides its site: whether the site goes now and for good, and whether nothing is to change. */
+export const DELETE_OPTIONS = v.strictObject({ no_trash: v.optional(v.boolean()), ...REHEARSAL.entries });
 
 /** What a delete answers: the site as it was, the site in the trash or `null` once it is gone for good, and the prefix whose files are not all removed yet. */
 export const DELETED_SITE = v.object({ before: v.nullable(SITE_OBJECT), site: v.nullable(SITE_OBJECT), left: v.pipe(v.array(v.string()), v.readonly()) });
@@ -63,7 +63,8 @@ async function removeSite(install: Install, id: SiteId, signed: Signed): Promise
 /**
  * Move a site to the trash, or remove it for good.
  *
- * @param request - `site` is a reference to the site. `no_trash` removes the row and the files now, from the trash or not; without it the site goes to the trash and keeps its public name
+ * @param request - `site` is a reference to the site. `no_trash` removes the row and the files now, from the trash or not; without it the site goes to the trash and keeps its public name.
+ *   With `dry_run` nothing is changed and no file is removed: the answer is what the delete would come to, with `left` empty, since no file was looked for
  * @returns the site in the trash; with `no_trash`, `site` is `null` and `before` is the site as it last was. `left` names the prefix whose files are not all removed yet, which the sweep finishes; it is empty once all went
  */
 export async function deleteSite(
@@ -75,6 +76,14 @@ export async function deleteSite(
   if (!reached.ok) return reached;
 
   const { site, settings, signed } = reached;
+
+  if (request.dry_run === true) {
+    if (request.no_trash === true) return { ...siteAnswer({ before: site, after: site }, install, settings), site: null, left: [] };
+
+    if (site.state === "trash") return refuse("in_trash");
+
+    return { ...siteAnswer({ before: site, after: { ...site, state: "trash", trashed_at: signed.at } }, install, settings), left: [] };
+  }
 
   if (request.no_trash === true) {
     const removed = await removeSite(install, site.id, signed);

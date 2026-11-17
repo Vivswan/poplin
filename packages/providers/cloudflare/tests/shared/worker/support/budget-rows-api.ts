@@ -23,11 +23,133 @@ const KEPT = 3;
 /** The owner as the rule book's actor. */
 const ADMIN_ACTOR = { scope: "admin", holder: OWNER } as const;
 
+/** What the address of a dry run holds. */
+const DRY_RUN = { dry_run: "true" } as const;
+
+/** What a dry run may cost beside its queries: no row written, and nothing asked of the bucket. */
+const NOTHING_WRITTEN = { written: 0, reads: 0, writes: 0 } as const;
+
 /** Keep a newer release, so every route that names one has it to read. */
 async function knownUpdate(stage: Stage): Promise<void> {
   await stage.install.database.keepUpdateCheck({ checked_at: stage.w.clock.now, news: NEWER });
 }
 
+/** A dry run of each route that changes a site or the settings: the same reads as its run, and no row written. */
+export const DRY_RUN_ROWS: readonly BudgetRow[] = [
+  {
+    group,
+    name: "dry run: change a site, every setting at once",
+    route: "PATCH /api/sites/:site",
+    // Worst: the site would claim a public name, so the install is asked whether another site holds it.
+    arrange: async (stage) => {
+      await manySites(stage, 1, { versions: KEPT });
+      const token = await adminToken(stage);
+      const json = { access: "public", public_name: "report-page", name: "renamed", title: "A title", search_engines: true, embeddable: false, expires: "7d" } as const;
+
+      return (measured) => apiOf(measured, token).sites[":site"].$patch({ param: { site: siteId(1) }, query: DRY_RUN, json });
+    },
+    status: 200,
+    budget: { queries: 3, ...NOTHING_WRITTEN },
+  },
+  {
+    group,
+    name: "dry run: go back to an older version",
+    route: "POST /api/sites/:site/rollback",
+    arrange: async (stage) => {
+      await manySites(stage, 1, { versions: KEPT });
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).sites[":site"].rollback.$post({ param: { site: siteId(1) }, query: DRY_RUN, json: { version: 2 } });
+    },
+    status: 200,
+    budget: { queries: 2, ...NOTHING_WRITTEN },
+  },
+  {
+    group,
+    name: "dry run: new link",
+    route: "POST /api/sites/:site/new-link",
+    arrange: async (stage) => {
+      await manySites(stage, 1, { versions: KEPT });
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).sites[":site"]["new-link"].$post({ param: { site: siteId(1) }, query: DRY_RUN });
+    },
+    status: 200,
+    budget: { queries: 2, ...NOTHING_WRITTEN },
+  },
+  {
+    group,
+    name: "dry run: delete a site, to the trash",
+    route: "DELETE /api/sites/:site",
+    arrange: async (stage) => {
+      await manySites(stage, 1, { versions: KEPT });
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).sites[":site"].$delete({ param: { site: siteId(1) }, query: DRY_RUN });
+    },
+    status: 200,
+    budget: { queries: 2, ...NOTHING_WRITTEN },
+  },
+  {
+    group,
+    name: "dry run: delete a site for good, 1,001 files",
+    route: "DELETE /api/sites/:site",
+    // No file is looked for, whatever the site holds.
+    arrange: async (stage) => {
+      await siteWithFiles(stage, 1001);
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).sites[":site"].$delete({ param: { site: siteId(1) }, query: { ...DRY_RUN, no_trash: "true" } });
+    },
+    status: 200,
+    budget: { queries: 2, ...NOTHING_WRITTEN },
+  },
+  {
+    group,
+    name: "dry run: restore a site from the trash",
+    route: "POST /api/sites/:site/restore",
+    arrange: async (stage) => {
+      await manySites(stage, 1, { versions: KEPT, trashed: true });
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).sites[":site"].restore.$post({ param: { site: siteId(1) }, query: DRY_RUN });
+    },
+    status: 200,
+    budget: { queries: 2, ...NOTHING_WRITTEN },
+  },
+  {
+    group,
+    name: "dry run: duplicate a site of 1,001 files",
+    route: "POST /api/sites/:site/duplicate",
+    // No file is listed, whatever the site holds: the copy is sized by the site's record and measured against the install's limits, its room and then the day's.
+    arrange: async (stage) => {
+      await siteWithFiles(stage, 1001);
+      const token = await adminToken(stage);
+
+      return (measured) => apiOf(measured, token).sites[":site"].duplicate.$post({ param: { site: siteId(1) }, query: DRY_RUN, json: { name: "copy" } });
+    },
+    status: 200,
+    budget: { queries: 4, ...NOTHING_WRITTEN },
+  },
+  {
+    group,
+    name: "dry run: change a setting of the guard rules, with nothing carried to Cloudflare",
+    route: "PATCH /api/config",
+    // On an install that holds its key and keeps a run of its domain: a change that is not stored is not carried there either.
+    arrange: async (stage) => {
+      const token = await adminToken(stage);
+      stage.outside.cloudflare = cloudflareOf(emptyAccount(), []);
+      stage.keptKey = TOKEN;
+      await stage.install.database.keepDomainCheck({ ran_at: stage.w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+
+      return (measured) => apiOf(measured, token).config.$patch({ query: DRY_RUN, json: { outside_pages: "allowed" } });
+    },
+    status: 200,
+    budget: { queries: 2, ...NOTHING_WRITTEN },
+  },
+];
+
+/** One row a route of the API, and more where a route's worst differs by what it is asked. */
 export const API_ROWS: readonly BudgetRow[] = [
   {
     group,

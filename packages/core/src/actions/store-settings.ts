@@ -9,7 +9,7 @@ import type { Login } from "../auth/logins";
 import type { Actor } from "../auth/scopes";
 import { SETTING_VALUES, type SettingValues } from "../records/settings";
 import { signedBy } from "./reach";
-import { type Install, type Refused, refuse } from "./records";
+import { type Install, type Refused, type Rehearsal, refuse } from "./records";
 
 /** What reading or changing the settings answers: every setting. */
 export const SETTINGS_ANSWER = v.object({ values: SETTING_VALUES });
@@ -29,20 +29,32 @@ function keepsWorkingLogin(actor: Actor, stored: readonly Login[], next: readonl
   return next.some((login) => stored.includes(login));
 }
 
+/** The settings a change would leave, each key it names replaced whole, with nothing stored; or the refusal of a pair of update settings the store does not take. */
+function rehearsed(stored: SettingValues, changes: Partial<SettingValues>): Stored | Refused<"needs_update_check"> {
+  // A key given with no value names no change, as the store reads it.
+  const values = { ...stored, ...Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined)) };
+
+  return values.auto_update && !values.update_check ? refuse("needs_update_check", "auto_update") : { ok: true, values };
+}
+
 /**
  * Store a change of the settings an action has checked.
  *
  * @param changes - the new typed values; each key given is replaced whole
+ * @param how - with `dry_run` nothing is stored: the answer is every setting as the change would leave it, judged against the settings as they are read
  * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_login` about `logins` for new logins with no login that works among them.
  *   `needs_update_check` about `auto_update` for a change that would leave it on with `update_check` off, whichever of the two the change names.
  *   `not_allowed` for a token whose user was removed while it asked, and for a person removed while they asked. A refusal changes nothing
  */
-export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>): Promise<Stored | Refused<"not_set_up" | "no_working_login" | "needs_update_check" | "not_allowed">> {
-  if (changes.logins !== undefined) {
+export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>, how: Rehearsal = {}): Promise<Stored | Refused<"not_set_up" | "no_working_login" | "needs_update_check" | "not_allowed">> {
+  const rehearsing = how.dry_run === true;
+  if (changes.logins !== undefined || rehearsing) {
     const stored = await install.database.readSettings();
     if (stored === undefined) return refuse("not_set_up");
 
-    if (!keepsWorkingLogin(actor, stored.logins, changes.logins)) return refuse("no_working_login", "logins");
+    if (changes.logins !== undefined && !keepsWorkingLogin(actor, stored.logins, changes.logins)) return refuse("no_working_login", "logins");
+
+    if (rehearsing) return rehearsed(stored, changes);
   }
 
   const changed = await install.database.changeSettings(changes, signedBy(actor, install.now()));

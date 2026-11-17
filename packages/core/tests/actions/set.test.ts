@@ -5,7 +5,7 @@ import { newLink } from "../../src/actions/new-link";
 import { restoreSite } from "../../src/actions/restore";
 import { updateSite } from "../../src/actions/set";
 import { getSite } from "../../src/actions/show";
-import { ADMIN, DAY, made, makeWorld, NOW, OWNER } from "./support/actions-fixture";
+import { ADMIN, DAY, made, makeWorld, NOW, OWNER, rehearsedThenRun } from "./support/actions-fixture";
 
 type Changes = Omit<Parameters<typeof updateSite>[2], "site">;
 
@@ -192,5 +192,38 @@ describe("updateSite", () => {
     expect(same).toMatchObject({ ok: true, site: { access: "unlisted" } });
     expect(await updateSite(world.install, OWNER, { site: id, title: "late" })).toEqual({ ok: false, code: "in_trash" });
     expect(await world.audit()).toEqual(["create", "trash"]);
+  });
+});
+
+describe("updateSite with dry_run", () => {
+  // Drift: a dry run computes the site a change would leave beside the statement that makes the change; one that fell behind it would promise an address, a name, or a refusal the run does not give.
+  test("a dry run answers the site or the refusal the run after it answers, and writes no row", async () => {
+    const world = await makeWorld();
+    const site = await made(world, OWNER, "report");
+    const other = await made(world, OWNER, "notes", { access: "public", public_name: "docs" });
+    const trashed = await made(world, OWNER, "old");
+    await deleteSite(world.install, OWNER, { site: trashed });
+    const asked: readonly Parameters<typeof updateSite>[2][] = [
+      { site, access: "public" },
+      { site, access: "public" },
+      { site, access: "public", public_name: "docs" },
+      { site, access: "public", public_name: "sales", name: "q3-report" },
+      { site, name: "renamed", title: "A title", search_engines: true, embeddable: false, expires: "7d" },
+      { site, title: "", expires: "never" },
+      { site, access: "unlisted" },
+      { site, access: "private", title: "Kept" },
+      { site: other, access: "public", public_name: other },
+      { site: trashed, title: "Late" },
+      { site, public_name: "docs" },
+      { site },
+      { site: "nosuchsite00" },
+    ];
+    const steps = [];
+    for (const request of asked) steps.push(await rehearsedThenRun(world, (how) => updateSite(world.install, OWNER, { ...request, ...how })));
+
+    expect(steps.map((step) => [step.written, step.rehearsal])).toEqual(steps.map((step) => [0, step.run]));
+    expect(steps.map((step) => (step.run.ok ? step.run.site.access : step.run.code))).toEqual(
+      ["public", "public", "name_taken", "public", "public", "public", "unlisted", "private", "name_taken", "in_trash", "bad_argument", "bad_argument", "not_found"],
+    );
   });
 });

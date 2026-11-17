@@ -15,7 +15,7 @@ import { type CheckedChanges, defaultExpiry, readChanges, readExpires, PAGE_TITL
 import { checkFilePath } from "./files";
 import { noteProblem } from "./problems";
 import { enterInstall, reachSite } from "./reach";
-import { type Install, type Refused, refuse } from "./records";
+import { type Install, type Refused, type Rehearsal, refuse } from "./records";
 import { type BegunUpload, begunUpload } from "./uploads";
 
 /** The page every site has at its top. */
@@ -124,6 +124,19 @@ interface Planned {
 }
 
 /**
+ * Check how many files are declared against the install's own count and what one request can carry.
+ *
+ * @returns `undefined` for a count that fits, or `too_large` about the bound it passes
+ */
+export function checkCount(files: number, bounds: Pick<ManifestBounds, "perPublish" | "files">): Refused<"too_large"> | undefined {
+  if (files > bounds.perPublish) return refuse("too_large", "max_files_per_publish");
+
+  if (files > Math.min(bounds.files, MOST_FILES_PER_PUBLISH)) return refuse("too_large", "max_files");
+
+  return undefined;
+}
+
+/**
  * Check the declared files against the path rules, the install's own count, and what one request can carry.
  *
  * @param rules - a publish's by default: a path whose key fits under any version, and the entry page
@@ -134,9 +147,8 @@ export function checkManifest(
   bounds: ManifestBounds,
   rules: ManifestRules = { isStorable: (path) => checkFilePath(path).ok, entries: [ENTRY_PAGE] },
 ): Listed | Refused<"bad_path" | "no_index" | "too_large"> {
-  if (files.length > bounds.perPublish) return refuse("too_large", "max_files_per_publish");
-
-  if (files.length > Math.min(bounds.files, MOST_FILES_PER_PUBLISH)) return refuse("too_large", "max_files");
+  const counted = checkCount(files.length, bounds);
+  if (counted !== undefined) return counted;
 
   const paths = new Set<string>();
   let bytes = 0;
@@ -161,9 +173,10 @@ export function checkManifest(
  * Refuse an upload that did not fit its room. A limit of the day is noted as a problem only once the day is used up: an upload too large for what is left is refused and nothing more, since a smaller one still fits.
  *
  * @param full - what the database said the upload did not fit
+ * @param how - with `dry_run` no problem is noted
  */
-export async function refuseFull(install: Pick<Install, "database" | "now">, full: NotAdded): Promise<(typeof FULL)[keyof typeof FULL]> {
-  if ("left" in full && full.left === 0) await noteProblem(install, DAY_LIMITS[full.kind]);
+export async function refuseFull(install: Pick<Install, "database" | "now">, full: NotAdded, how: Rehearsal = {}): Promise<(typeof FULL)[keyof typeof FULL]> {
+  if (how.dry_run !== true && "left" in full && full.left === 0) await noteProblem(install, DAY_LIMITS[full.kind]);
 
   return FULL[full.kind];
 }

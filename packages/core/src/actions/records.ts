@@ -1,5 +1,7 @@
 // What every action is given, and the one form every refusal takes.
 
+import * as v from "valibot";
+
 import type { Database } from "../database/database";
 import type { PublicName, ReservedNames } from "../names/names";
 import type { SettingValues } from "../records/settings";
@@ -7,6 +9,9 @@ import type { Site } from "../records/site";
 import type { SiteLabel } from "../sites/labels";
 import type { ObjectStore } from "../storage/storage";
 import type { Tickets } from "../storage/tickets";
+
+/** What a route that changes something takes beside its own input. */
+export const REHEARSAL = v.strictObject({ dry_run: v.optional(v.boolean()) });
 
 /** One poplin: where its records and files are kept, its clock, and how it spells its addresses. */
 export interface Install {
@@ -41,6 +46,11 @@ export interface Refused<Code extends string> {
   readonly code: Code;
   readonly about?: string;
 }
+
+/**
+ * How a change is asked for. With `dry_run` the action reads what it would read, judges as it would judge, and answers what the change would come to: it writes no row, no file, and no audit entry.
+ */
+export type Rehearsal = v.InferInput<typeof REHEARSAL>;
 
 /**
  * Read the install's settings: the ones its request already read, or else the stored ones.

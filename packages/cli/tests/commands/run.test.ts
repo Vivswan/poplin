@@ -582,6 +582,90 @@ describe("run", () => {
     expect(await stateOf(bench)).toEqual(before);
   });
 
+  // Drift: --dry-run was taken by half the commands that change something, and the rest refused the flag: a person could not ask what a delete or a new link would do before the act nothing undoes.
+  test("a dry run of each command that changes something says in the run's own rows what would be, ends in the line of a dry run, exits 0, and changes nothing", async () => {
+    const { bench, label } = await withSite();
+    const url = `https://${label}-p-poplin.example.com`;
+    const open = `https://${label}-u-poplin.example.com`;
+    const before = [await stateOf(bench), jsonOf(await bench.run("config --json"))];
+    const last = "nothing was changed: --dry-run asked the install what this would come to";
+
+    const dry = [
+      await bench.run(`set ${label} --unlisted --name q3-report --dry-run`),
+      await bench.run(`rollback ${label} --to 1 --dry-run`),
+      await bench.run(`new-link ${label} --dry-run`),
+      await bench.run(`duplicate ${label} --name report-draft --dry-run`),
+      await bench.run(`delete ${label} --dry-run`),
+      await bench.run(`delete ${label} --no-trash --dry-run`),
+      await bench.run("config trash_days 9 --dry-run"),
+      await bench.run("logout --dry-run"),
+    ];
+
+    expect(dry.map(summary)).toEqual([
+      { code: 0, out: [`would change  q3-report--${label.slice(-12)}  name and access`, "would rename  from report", `would move    from ${url}`, "unlisted      anyone with the link can open it", "", open.replace("report", "q3-report"), last], err: [] },
+      { code: 0, out: [`would roll back  ${label}  version 1 would be live`, "private          only your users can open it", "", url, last], err: [] },
+      { code: 0, out: [`would get a new link  ${label}`, `would stop            ${label}  ${url}`, "the new id, and so the new address, is drawn when the link is made", last], err: [] },
+      { code: 0, out: [`would copy  ${label}  1 file, to a new private site named report-draft`, last], err: [] },
+      { code: 0, out: [`would go to the trash  ${label}  gone for good on 2023-11-21`, last], err: [] },
+      { code: 0, out: [`would delete for good  ${label}`, "would go: 1 file in 1 kept version; nothing could restore them", `would stop working: ${url}`, `a run asks you to type ${label} first`, last], err: [] },
+      { code: 0, out: ["would set  trash_days  9", last], err: [] },
+      { code: 0, out: [`would log out of ${ORIGIN}`, "the token would be revoked", "POPLIN_SERVER and POPLIN_TOKEN would still be set in this shell", last], err: [] },
+    ]);
+    expect([await stateOf(bench), jsonOf(await bench.run("config --json"))]).toEqual(before);
+  });
+
+  // Drift: a dry run that passed where the run is refused is a promise the run breaks; the install judges both, so both say the same and exit the same.
+  test("a dry run is refused as the run after it is, with the run's sentence and exit code, and --json marks an answer as a dry run", async () => {
+    const { bench, label } = await withSite();
+    await bench.run(`${folderOf("notes", { "index.html": "<h1>notes</h1>" })} --public --public-name docs`);
+    const asStranger = { env: { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.stranger } };
+    const lines: readonly (readonly [string, object?])[] = [
+      [`set ${label} --public --public-name docs`],
+      [`set ${label} --title Late`, asStranger],
+      [`rollback ${label}`],
+      [`rollback ${label} --to 7`],
+      [`restore ${label}`],
+      ["new-link zzzzzzzzzzzz"],
+      [`duplicate ${label}`, asStranger],
+      [`delete ${label} --no-trash`, asStranger],
+      ["config logins nobody@example.com"],
+      ["config trash_days 9", asStranger],
+    ];
+    const before = await stateOf(bench);
+    const refused = [];
+    for (const [line, options] of lines) refused.push([summary(await bench.run(`${line} --dry-run`, options)), await bench.run(`${line} --json --dry-run`, options)] as const);
+    const unchanged = await stateOf(bench);
+    const run = [];
+    for (const [line, options] of lines.slice(0, 5)) run.push(summary(await bench.run(line, options)));
+
+    expect(refused.map(([said, json]) => [said.code, said.out, json.code])).toEqual(refused.map(() => [1, [], 1]));
+    expect(refused.slice(0, 5).map(([said]) => said)).toEqual(run);
+    expect(unchanged).toEqual(before);
+    expect(jsonOf(await bench.run(`set ${label} --unlisted --json --dry-run`))).toMatchObject({ dry_run: true, before: { access: "private" }, site: { access: "unlisted" } });
+    expect(jsonOf(await bench.run("config trash_days 9 --json --dry-run"))).toEqual({ dry_run: true, key: "trash_days", value: 9 });
+    expect(jsonOf(await bench.run("logout --json --dry-run"))).toEqual({ dry_run: true, server: ORIGIN, revoked: true });
+    expect(summary(await bench.run("config trash_days --dry-run")).err[0]).toBe("poplin config changes nothing unless it is given a value: --dry-run goes with one");
+    expect(jsonOf(await bench.run("logout --json --dry-run", { env: {} }))).toEqual({ dry_run: true, revoked: false });
+    expect((await bench.run("logout --dry-run", { env: {} })).out).toEqual(["no login is saved on this machine", "nothing was sent: --dry-run calls no install"]);
+    expect((await bench.run(`set ${label} --search-engines on --dry-run`)).err).toEqual(["search engines list a site only once it is public; the setting would be stored"]);
+    expect((await bench.run("config logins ada@example.com,new@example.com --dry-run")).err).toEqual(["a run may need one more step, which it names: a Repair on the dashboard's Domain screen, so the login page lets a new email in"]);
+  });
+
+  // Drift: a copy's calls are made again after the rest an install asks for; a dry run that gave up at the first such answer failed where the copy after it goes through.
+  test("a dry run of a copy that is answered too many requests rests as long as the answer says, asks again, and exits 0", async () => {
+    const { bench, label } = await withSite();
+    let asked = 0;
+    bench.hook = async (request) => {
+      asked += request.method === "POST" ? 1 : 0;
+
+      return request.method === "POST" && asked === 1 ? Response.json({ error: { code: "too_many_requests", message: "the install is asked too often" } }, { status: 429, headers: { "Retry-After": "7" } }) : undefined;
+    };
+
+    const dry = await bench.run(`duplicate ${label} --dry-run`);
+
+    expect([dry.code, dry.out[0], dry.waits, asked]).toEqual([0, `would copy  ${label}  1 file, to a new private site named report`, [7000], 2]);
+  });
+
   // Drift: the one act nothing undoes ended in silence, and the person could not tell a removed site from a command that did nothing.
   test("delete --no-trash removes the site once its label is typed, and says what is gone in the words the agent's tool has for the same act", async () => {
     const { bench, label } = await withSite();
@@ -818,7 +902,7 @@ describe("run", () => {
     expect(report.out.at(-1)).toBe("nothing was changed");
   });
 
-  test("a change whose answer is lost says the change may have been made: the install rotated the link though the command failed", async () => {
+  test("a change whose answer is lost says the change may have been made: the install rotated the link though the command failed; a dry run, which changes nothing, puts nothing in doubt", async () => {
     const { bench, label } = await withSite();
     bench.hook = async (request) => {
       if (request.method !== "POST") return undefined;
@@ -835,6 +919,7 @@ describe("run", () => {
       out: [],
       err: [`the answer is not the install's: status 502 from ${ORIGIN}`, "the answer was lost, so the change may have been made all the same; poplin list shows the sites as they are"],
     });
+    expect(summary(await bench.run(`new-link ${label} --dry-run`))).toEqual({ code: 5, out: [], err: [`the answer is not the install's: status 502 from ${ORIGIN}`, "is that the address of your poplin install?"] });
   });
 
   test("a token the install echoes back is taken out of what is printed: the harness would fail this run otherwise", async () => {
