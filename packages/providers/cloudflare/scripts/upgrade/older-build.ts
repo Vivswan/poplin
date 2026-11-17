@@ -6,7 +6,7 @@
 //                     and the later step of later-step.ts written among the product's steps, so the update has a step to apply
 //
 // An install takes a release above its own version alone, and a commit of main says the version of the last release, as the older build does.
-// The stand-in is on npm as `0.1.0-main.767.20261117.gea52312`: a pre-release with main's first schema step and settings row, so main takes over the install it makes.
+// The stand-in is on npm as `0.1.0-main.792.20261117.g3da404f`: a pre-release with main's first schema step and settings row, so main takes over the install it makes.
 // A pre-release on npm is the command alone, with no built Worker and no line of the website's `releases.json`, so its Worker is built here from the commit.
 // Argument: the folder the older build goes in, which must not be there yet. The step that runs this holds no secret.
 
@@ -21,7 +21,7 @@ import { lastRelease } from "../../../../../tests/upgrade/support/trees";
 import { addLaterStep, stepLabel } from "./later-step";
 
 /** The commit of main that stands in for a release while none is cut. It moves forward whenever the first schema step or a stored shape is edited in place; once a release has a tag, the newest tag is taken and this is read no more. */
-const STAND_IN = "ea52312a4e298d36aa84ca1a22275eb4d51124ff";
+const STAND_IN = "3da404fe4bbeebb2076fc8944faf3e773ca4a11c";
 
 /** The file of a tree that says its version, from the tree's root. */
 const VERSION_FILE = join("packages", "cli", "package.json");
