@@ -275,7 +275,7 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
     const account = await installedAccount(kind, { refuse: `DELETE /accounts/${ACCOUNT}/workflows/poplin-jobs`, refuseAs: { status: 400, code: 7000 } });
     const stopped = await removed(account, kind, applyOf(KINDS[kind].confirm));
 
-    expect([shown(stopped.done).filter((row) => row.includes(" | fail | ")), stopped.done.ok && stopped.done.ready, left(account)]).toEqual([["Workflow | fail | refused with status 400"], false, { ...NOTHING, workflows: 1 }]);
+    expect([shown(stopped.done).filter((row) => row.includes(" | fail | ")), stopped.done.ok && stopped.done.ready, left(account)]).toEqual([["Workflow | fail | refused with status 400 and codes 7000"], false, { ...NOTHING, workflows: 1 }]);
 
     delete account.refuse;
     const again = await removed(account, kind, applyOf(`poplin@${ACCOUNT}`));

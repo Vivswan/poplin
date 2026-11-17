@@ -39,6 +39,7 @@ import { type HeldKey, type HeldKeys, type KeyRead, readBucket, readKeyStates } 
 import { type Minted, mintKeys, removeKeys, type WantedKey } from "../shared/install/key/mint";
 import { type Bucket, keyPolicies, uploadKeyPolicies } from "../shared/install/key/rights";
 import type { KeyRight } from "../shared/install/key/rights";
+import { failureWords } from "../shared/install/first/rows";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./pieces/routes/routes";
 import { syncGuards } from "./pieces/rules/guards";
@@ -410,18 +411,13 @@ export interface Progress {
   readonly own?: { readonly kept: KeptKey; fault?: "refused" | "lacking" };
 }
 
+/** Why a piece stopped: Cloudflare's answer in the words every row says it in, or else the piece's own message. */
 function failureText(stopped: Stopped): string {
   if (stopped.failure === "no-id") return "Cloudflare named no database";
 
-  if (stopped.failure === "rate-limited") return "Cloudflare asked to wait";
+  const failure = asFailure(stopped);
 
-  if (stopped.failure === "network") return "no answer from Cloudflare";
-
-  if (stopped.failure !== "refused") return stopped.message ?? stopped.failure;
-
-  const errors = (stopped.errors ?? []).map((error) => `${error.code} ${error.message}`).join("; ");
-
-  return errors === "" ? `refused with status ${stopped.status}` : `refused with status ${stopped.status}: ${errors}`;
+  return failure === undefined ? (stopped.message ?? stopped.failure) : failureWords(failure);
 }
 
 /** The permission a refused step lacked: of an object that needs two, the second where the step that failed is the one that reads with it. */
