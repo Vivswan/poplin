@@ -104,7 +104,7 @@ export async function fill(desk: Desk, settings: Readonly<Record<string, unknown
   if (first !== undefined) await ask(desk, ANY, "publish", desk.folder("<p>the second version, from before the update</p>"), "--site", first.id);
 
   await ask(desk, ANY, "config", CHANGED.key, String(CHANGED.value));
-  await ask(desk, ANY, "config", "logins", [...v.parse(v.array(v.string()), settings.logins), USER].join(","));
+  await ask(desk, ANY, "config", "users", [...v.parse(v.array(v.string()), settings.users), USER].join(","));
 
   return sites;
 }
@@ -112,7 +112,7 @@ export async function fill(desk: Desk, settings: Readonly<Record<string, unknown
 /** Put the two settings an upgrade changed back as they were. */
 export async function putBack(desk: Desk, settings: Readonly<Record<string, unknown>>): Promise<void> {
   await ask(desk, ANY, "config", CHANGED.key, String(settings[CHANGED.key]));
-  await ask(desk, ANY, "config", "logins", v.parse(v.array(v.string()), settings.logins).join(","));
+  await ask(desk, ANY, "config", "users", v.parse(v.array(v.string()), settings.users).join(","));
 }
 
 function digestOf(bytes: Uint8Array): string {
@@ -203,10 +203,10 @@ export function siteFaults(before: Reading, after: Reading): string[] {
 /** The settings of the older reading that the newer one holds otherwise, or not at all, and whether the two an upgrade changed are in it: by their keys alone. */
 export function settingFaults(before: Reading, after: Reading): string[] {
   const moved = Object.keys(before.settings).filter((key) => !isDeepStrictEqual(before.settings[key], after.settings[key]));
-  const users = v.safeParse(v.array(v.string()), after.settings.logins);
+  const users = v.safeParse(v.array(v.string()), after.settings.users);
   const lost = [
     ...(after.settings[CHANGED.key] === CHANGED.value ? [] : [`${CHANGED.key} is not the value it was given`]),
-    ...(users.success && users.output.includes(USER) ? [] : ["the user that was added is not among the logins"]),
+    ...(users.success && users.output.includes(USER) ? [] : ["the user that was added is not among the users"]),
   ];
 
   return [...moved.map((key) => `${key} changed`), ...lost];

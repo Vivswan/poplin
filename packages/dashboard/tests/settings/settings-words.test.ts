@@ -6,8 +6,8 @@ import { SETTING_VALUES } from "@poplin/core/src/records/settings";
 
 import { MOST_ABOUT, wordsOf } from "@/settings/settings-words";
 
-/** The settings the screen shows: every one of the install but the logins, which the Access screen changes. */
-const KEYS = Object.keys(SETTING_VALUES.entries).filter((key) => key !== "logins");
+/** The settings the screen shows: every one of the install but the users, which the Access screen changes. */
+const KEYS = Object.keys(SETTING_VALUES.entries).filter((key) => key !== "users");
 
 /** A sentence's end inside a note: a second sentence follows it. */
 const SECOND_SENTENCE = /[.!?] /;

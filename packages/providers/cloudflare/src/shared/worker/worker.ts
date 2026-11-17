@@ -123,7 +123,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held,
     version: instance.version,
     layout: instance.hosts.layout,
     admit: async (headers) => {
-      const who = await admit(headers, { identify: instance.identify, logins: held.logins, now });
+      const who = await admit(headers, { identify: instance.identify, users: held.users, now });
       if (who.ok) return who;
 
       // Logged by its kind, never with a value of the request.

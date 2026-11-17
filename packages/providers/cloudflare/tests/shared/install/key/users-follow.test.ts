@@ -24,7 +24,7 @@ const USERS = ["zoe@example.com", "ada@example.com"] as Login[];
 /** Where the two kinds of policy are listed and written. */
 const PATHS = { policies: `/accounts/${ACCOUNT}/access/policies`, alerts: `/accounts/${ACCOUNT}/alerting/v3/policies` } as const;
 
-/** The policy of the logins as the account holds it before the change: one user. */
+/** The policy of the users as the account holds it before the change: one user. */
 const HELD_POLICY = { id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: "ada@example.com" } }] };
 
 /** The alert as the account holds it before the change, mailed to the user who was first. */
@@ -61,7 +61,7 @@ const DOWN = (): Response => refusal(503, 1, `Service unavailable ${KEY}`, { "re
 
 describe("createUsersFollow", () => {
   // Drift: the policy is the one thing of Access a change of the users writes, by its own id and with every email. An application read or rewritten here would cost calls and could undo a repair.
-  test("a change writes the policy of the logins with every user and sends the alert to the first, and touches no application", async () => {
+  test("a change writes the policy of the users with every user and sends the alert to the first, and touches no application", async () => {
     await withFake(account({}), async (connection, asked) => {
       const follow = createUsersFollow(readKeptKey(KEY, { baseUrl: connection.baseUrl }), ACCOUNT, [BUDGET_ALERT]);
       const pushed = await follow.push(USERS);
@@ -126,7 +126,7 @@ describe("createUsersFollow", () => {
     { name: "a key Cloudflare no longer knows", answers: { policies: () => refusal(401, 10_000, `Authentication error ${KEY}`) }, ends: { ok: false, refusal: "key_refused" }, written: 0 },
     { name: "a key with no right for the policy", answers: { policyWrite: () => refusal(403, 10_000, "Authentication error") }, ends: { ok: false, refusal: "lacks_right" }, written: 1 },
     { name: "Cloudflare failing while the policy is read", answers: { policies: DOWN }, ends: { ok: false, refusal: "unreachable" }, written: 0 },
-    { name: "an account with no policy of the logins", answers: { policies: (asked) => page(asked, []) }, ends: { ok: false, refusal: "not_made" }, written: 0 },
+    { name: "an account with no policy of the users", answers: { policies: (asked) => page(asked, []) }, ends: { ok: false, refusal: "not_made" }, written: 0 },
     { name: "a key with no right for the alert, after the policy was written", answers: { alerts: () => refusal(403, 10_000, "Authentication error") }, ends: { ok: false, refusal: "lacks_right", written: true }, written: 1 },
     { name: "Cloudflare failing while the alert is written", answers: { alertWrite: DOWN }, ends: { ok: false, refusal: "unreachable", written: true }, written: 4 },
   ];

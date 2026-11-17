@@ -57,7 +57,7 @@ async function seeded(bench: Bench): Promise<void> {
 
   await bench.run("config trash_days 9");
   await bench.run("config versions_kept 5");
-  await bench.run("config logins ada@example.com,grace@example.com");
+  await bench.run("config users ada@example.com,grace@example.com");
 }
 
 /** Export an install into a zip in a folder of its own; answers the zip's path. */
@@ -68,7 +68,7 @@ async function exportedZip(bench: Bench, form: string): Promise<string> {
   return zip;
 }
 
-/** Seed an install, export it, put the backup into an empty install with its settings and logins, and export that one. */
+/** Seed an install, export it, put the backup into an empty install with its settings and users, and export that one. */
 async function drilled(form: string): Promise<{ readonly from: Bench; readonly into: Bench; readonly first: string; readonly second: string }> {
   const from = await openBench();
   const into = await openBench();
@@ -122,7 +122,7 @@ describe("the backup drill", () => {
       ["old", "private", "trash", 1, 1, true],
       ["showcase", "unlisted", "live", 1, 1, true],
     ]);
-    expect([settings.trash_days, settings.versions_kept, settings.logins]).toEqual(["9", "5", "ada@example.com,grace@example.com"]);
+    expect([settings.trash_days, settings.versions_kept, settings.users]).toEqual(["9", "5", "ada@example.com,grace@example.com"]);
   }, DRILL_MS);
 
   // Each control changes one thing the compare must not pass over; a compare that could not fail would make the drill above prove nothing.

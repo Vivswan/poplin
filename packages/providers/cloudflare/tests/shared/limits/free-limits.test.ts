@@ -9,10 +9,10 @@ import { expect, test } from "vitest";
 import { FREE_LIMITS } from "../../../src/shared/limits/free-limits";
 
 const settings = defaultSettings({ installer: "owner@example.com" as Login });
-/** The warnings of each setting that is above a mark of the free plan, by its key: a size counted in bytes, the logins as how many there are. */
+/** The warnings of each setting that is above a mark of the free plan, by its key: a size counted in bytes, the users as how many there are. */
 function told(changed: Partial<typeof settings>): Map<string, string[]> {
   const values = { ...settings, ...changed };
-  const counts: Readonly<Record<string, unknown>> = { ...values, max_total_size: sizeBytes(values.max_total_size), max_site_size: sizeBytes(values.max_site_size), logins: values.logins.length };
+  const counts: Readonly<Record<string, unknown>> = { ...values, max_total_size: sizeBytes(values.max_total_size), max_site_size: sizeBytes(values.max_site_size), users: values.users.length };
   const above = Object.entries(freeLimitMarks(values, FREE_LIMITS)).map(([key, marks]) => [key, marks.filter((mark) => Number(counts[key]) > mark.over).map((mark) => mark.warning)] as const);
 
   return new Map(above.filter(([, warnings]) => warnings.length > 0));

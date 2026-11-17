@@ -62,7 +62,7 @@ export interface Answered {
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
  * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`. `rules` and `logs` stand in for the provider's side of the domain's rules and of the logs, with a key: `pushed` holds every try.
- * `users` stands in for the provider's side of the users: `pushed` holds every list of logins handed over, `ended` counts the tries to end every login, and `takes` says whether the provider takes either; it starts with no key, and takes none.
+ * `users` stands in for the provider's side of the users: `pushed` holds every list of users handed over, `ended` counts the tries to end every login, and `takes` says whether the provider takes either; it starts with no key, and takes none.
  * `host` stands in for the install's host: `key` is whether it holds the key an update is sent with, `release` the newest release above the running version or `null`, `refusal` what it refuses that release with, and `put` every version it put in place.
  * `direct` stands in for the host's tickets past the install: with `tickets` set, the host hands those out; it starts as a host that has none.
  */
@@ -207,8 +207,8 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     follow: {
       where: "Example Cloud",
       holdsKey: () => users.takes,
-      push: async (logins) => {
-        users.pushed.push(logins);
+      push: async (emails) => {
+        users.pushed.push(emails);
 
         return users.takes ? { ok: true } : { ok: false, refusal: "no_key" };
       },

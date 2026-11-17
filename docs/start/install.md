@@ -187,7 +187,7 @@ Log this machine in now?
 | Piece              | It is                                                           |
 | ------------------ | --------------------------------------------------------------- |
 | R2 bucket          | the storage for your sites' files                               |
-| D1 database        | the list of your sites, the logins, and the settings            |
+| D1 database        | the list of your sites, the users, and the settings             |
 | Worker             | the program Cloudflare runs for you: it serves every site       |
 | DNS record         | what makes an address under your domain exist                   |
 | Worker route       | what sends that address to the Worker                           |

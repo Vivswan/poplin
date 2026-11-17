@@ -21,11 +21,11 @@ import { columns, countText, dayText, GAP, REHEARSED } from "../text";
 /** What the login is still good for after a logout that the install did not answer: an install that was removed answers none, and its tokens went with it. */
 const STILL_LIVE = "The token may still be valid. Fix: revoke it on the dashboard";
 
-/** What a change of the logins still needs on an install that did not carry it to the login page by itself: that page keeps a list of its own. */
-const LOGINS_STEP = ["New users cannot log in yet", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"] as const;
+/** What a change of the users still needs on an install that did not carry it to the login page by itself: that page keeps a list of its own. */
+const USERS_STEP = ["New users cannot log in yet", "Fix: on the dashboard's Domain screen, paste an account token and press Repair"] as const;
 
-/** What a dry run of a change of the logins says of that step: whether it is needed shows only once the change is stored. */
-const LOGINS_MAY_STEP = "Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair";
+/** What a dry run of a change of the users says of that step: whether it is needed shows only once the change is stored. */
+const USERS_MAY_STEP = "Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair";
 
 /** What follows the two versions of an install and a command that differ. */
 const TWO_VERSIONS = "versions differ";
@@ -137,15 +137,15 @@ async function changeSetting(action: Extract<ConfigAction, { readonly kind: "cha
   const shown = [action.key, settingsToText(changed.value.values)[action.key]];
   const lines = action.dryRun ? [...columns([["would set", ...shown]]), REHEARSED] : columns([shown]);
   const answer = action.dryRun ? { dry_run: true, ...oneSetting(action.key, changed.value.values) } : oneSetting(action.key, changed.value.values);
-  if (action.key !== "logins") return { ok: true, value: answer, lines, notes: [] };
+  if (action.key !== "users") return { ok: true, value: answer, lines, notes: [] };
 
-  if (action.dryRun) return { ok: true, value: answer, lines, notes: [LOGINS_MAY_STEP] };
+  if (action.dryRun) return { ok: true, value: answer, lines, notes: [USERS_MAY_STEP] };
 
   // The install says whether the change still waits for a repair. One that does not say, or that remembers no run of its domain to say it by, is taken to wait.
   const domain = await client.call(DOMAIN_STATE, (api) => api.domain.$get());
   const settled = domain.ok && domain.value.check !== null && !domain.value.waits;
 
-  return { ok: true, value: answer, lines, notes: settled ? [] : [...LOGINS_STEP] };
+  return { ok: true, value: answer, lines, notes: settled ? [] : [...USERS_STEP] };
 }
 
 async function config(action: ConfigAction, session: Session): Promise<Outcome> {

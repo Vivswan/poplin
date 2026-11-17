@@ -116,7 +116,7 @@ function waitsForRepair(key: Key, domain: Pick<DomainPlug, "carriedSettings"> | 
  */
 function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits; readonly domain: Pick<DomainPlug, "carriedSettings" | "idleSettings"> | undefined; readonly carries: boolean }): readonly Row[] {
   const texts = screenTexts(values);
-  const [installer] = values.logins;
+  const [installer] = values.users;
   const defaults = installer === undefined ? texts : screenTexts(defaultSettings({ installer }));
   const [free, pairs] = [freeLimitMarks(values, facts.freeLimits), pairMarks(values)];
   const shown = (Object.keys(texts) as Key[]).filter((key) => !ACCESS_SETTINGS.includes(key));

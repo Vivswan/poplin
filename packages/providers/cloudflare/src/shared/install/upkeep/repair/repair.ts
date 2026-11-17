@@ -188,13 +188,13 @@ async function userRow(work: Work, stored: Exclude<Stored, { readonly state: "an
   const unstored: Row = { object: USER, state: "block", detail: `${login}: ${WORDS.noUsers}: ${work.address}${OPEN_PATH}` };
   if (stored.state !== "stored") return unstored;
 
-  const { logins } = stored.settings;
-  const already = logins.includes(login);
+  const { users } = stored.settings;
+  const already = users.includes(login);
   const known: Row = { object: USER, state: "leave", detail: `${login}: ${WORDS.already}` };
   if (work.mode === "plan") return already ? known : { object: USER, state: "make", detail: login };
 
   const { connection, accountId } = work.place;
-  const written = await writeLogins(connection, accountId, already ? logins : [...logins, login]);
+  const written = await writeLogins(connection, accountId, already ? users : [...users, login]);
   if (!written.ok) return isAccessOff(written) ? { object: USER, state: "block", detail: `${login}: ${ACCESS_OFF}` } : failed(USER, login, written, rightFor("Access policy"));
 
   if (!written.value) return { object: USER, state: "block", detail: `${login}: ${WORDS.noLogin}` };

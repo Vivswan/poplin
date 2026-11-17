@@ -91,7 +91,7 @@ export interface ApiDeps extends Install, Gate {
   /** What takes a release and puts it in place of the running code. The starts are counted in `counters`. */
   readonly update: SelfUpdate;
 
-  /** The provider's side of the users: a change of the logins is carried there by itself. Without it a change waits for a repair. */
+  /** The provider's side of the users: a change of the users is carried there by itself. Without it a change waits for a repair. */
   readonly follow?: UsersFollow;
 
   /** The host's background work, which runs the rounds of a copy after its first request's. Without it the client's own requests run them, one each. */
@@ -113,18 +113,18 @@ export interface ApiDeps extends Install, Gate {
 /**
  * Carry a stored change of the settings to the provider: the users before the answer, and the settings of the domain's rules and of the logs with no answer held for them where the host holds the request open.
  *
- * @param named - whether the change named the logins, whether it named a setting the domain's rules are written from, and whether it named the setting of the logs
+ * @param named - whether the change named the users, whether it named a setting the domain's rules are written from, and whether it named the setting of the logs
  * @returns the action's own answer, whatever the provider said: a change that did not reach it waits, and the dashboard says so
  */
 async function carried<Answer extends { readonly ok: boolean; readonly values?: Pick<SettingValues, "provider_logs"> }>(
   deps: Omit<ApiDeps, "store">,
   context: Context,
   answer: Answer,
-  named: { readonly logins: boolean; readonly rules: boolean; readonly logs: boolean },
+  named: { readonly users: boolean; readonly rules: boolean; readonly logs: boolean },
 ): Promise<Answer> {
   if (!answer.ok) return answer;
 
-  if (deps.follow !== undefined && named.logins) await followUsers(deps, deps.follow);
+  if (deps.follow !== undefined && named.users) await followUsers(deps, deps.follow);
 
   if (named.rules) await carryRules(context, deps, deps.rules);
 
@@ -218,7 +218,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     })
     .post("/import/settings", token, install, json, noQuery, sent<v.InferInput<typeof SETTINGS_IMPORT>>(SETTINGS_BYTES), async (context) => {
       // A backup holds every setting, the ones the domain's rules are written from and the one of the logs among them.
-      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(deps, context, await importSettings(context.var.install, context.var.actor, request), { logins: request.logins === true, rules: true, logs: true })));
+      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(deps, context, await importSettings(context.var.install, context.var.actor, request), { users: request.users === true, rules: true, logs: true })));
     })
     .post("/import/sites", token, install, json, noQuery, sent<ImportRequest>(deps.limits.manifestBytes), async (context) => {
       return respond(await beginImport(ticketed(context.var.install, deps.direct), context.var.actor, context.req.valid("json"), deps.limits), deps.now());
@@ -229,7 +229,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
       const [changes, how] = [context.req.valid("json"), context.req.valid("query")];
       // A change that is not stored is carried nowhere.
       const stored = how.dry_run !== true;
-      const named = { logins: stored && typeof changes === "object" && changes !== null && "logins" in changes, rules: stored && namesRule(changes), logs: stored && namesLogs(changes) };
+      const named = { users: stored && typeof changes === "object" && changes !== null && "users" in changes, rules: stored && namesRule(changes), logs: stored && namesLogs(changes) };
 
       return respond(await carried(deps, context, await changeConfig(context.var.install, context.var.actor, changes, how), named));
     })

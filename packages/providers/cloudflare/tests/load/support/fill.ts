@@ -30,10 +30,10 @@ export function labelOf(n: number): string {
 
 /** Let so many users log in, the owner first. */
 async function manyUsers(stage: Stage, count: number): Promise<void> {
-  const logins = parseLogins([OWNER, ...Array.from({ length: count - 1 }, (_user, at) => `user-${at + 1}@example.com`)]);
-  if (!logins.ok) throw new Error("a made-up login is no email address");
+  const users = parseLogins([OWNER, ...Array.from({ length: count - 1 }, (_user, at) => `user-${at + 1}@example.com`)]);
+  if (!users.ok) throw new Error("a made-up login is no email address");
 
-  await stage.install.database.changeSettings({ logins: [...logins.value] }, { as: "person", by: OWNER, at: stage.w.clock.now });
+  await stage.install.database.changeSettings({ users: [...users.value] }, { as: "person", by: OWNER, at: stage.w.clock.now });
 }
 
 /**

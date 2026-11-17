@@ -1,7 +1,7 @@
-// The users carried to Cloudflare with the key poplin keeps: the policy that lets the logins through is written, then the alerts of the install's kind are sent to the first of them.
+// The users carried to Cloudflare with the key poplin keeps: the policy that lets the users through is written, then the alerts of the install's kind are sent to the first of them.
 //
 //   the policy    every login, under "Access: Apps and Policies Write"   an account with no such policy answers `not_made`, and nothing is written
-//                 written every time: a list read just after a write may still answer the logins as they were
+//                 written every time: a list read just after a write may still answer the users as they were
 //   the alerts    the first login, under "Notifications Write"           an account that lacks one gets it
 //
 // No application is read or changed, and no answer carries the key or a text Cloudflare sent.
@@ -28,9 +28,9 @@ export function createUsersFollow(key: KeptKey | undefined, accountId: string, a
 
     holdsKey: () => key !== undefined,
 
-    async push(logins) {
-      const [first] = logins;
-      const written = await keyed(key, POLICY_RIGHT, (connection) => writeLogins(connection, accountId, logins));
+    async push(users) {
+      const [first] = users;
+      const written = await keyed(key, POLICY_RIGHT, (connection) => writeLogins(connection, accountId, users));
       if (!written.ok) return { ok: false, refusal: written.refusal };
 
       if (!written.value) return { ok: false, refusal: "not_made" };

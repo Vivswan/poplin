@@ -193,7 +193,7 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
   // Drift: the Worker stores every setting its `FIRST_SETTINGS` names on its first start. A repair before that start that read the first login alone would mend the login to fewer users than the install is about to have.
   test("an install that never answered a request is mended to every setting its Worker starts with, each first login among them", async () => {
     const account = await wholeInstall(kind, {}, "nothing");
-    account.bindings = account.bindings.map((binding) => (binding.name === "FIRST_SETTINGS" ? { ...binding, json: { logins: `${OWNER}, ${LOST}` } } : binding));
+    account.bindings = account.bindings.map((binding) => (binding.name === "FIRST_SETTINGS" ? { ...binding, json: { users: `${OWNER}, ${LOST}` } } : binding));
     const { done } = await repaired(account, kind);
 
     expect([done.ok && done.ready, letThrough(account)]).toEqual([true, [LOST, OWNER]]);
@@ -504,7 +504,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
     const last = calls.slice(-ADD_CALLS.length).map((asked) => `${asked.method} ${asked.path.split("?")[0]}`);
 
     expect([shown(done).at(-1), done.ok && done.ready, changes, last]).toEqual(["User | make | lost@example.com", true, ADD_CALLS.slice(1), ADD_CALLS]);
-    expect([letThrough(account), (await account.store.database.readSettings())?.logins]).toEqual([[LOST, OWNER], [OWNER, LOST]]);
+    expect([letThrough(account), (await account.store.database.readSettings())?.users]).toEqual([[LOST, OWNER], [OWNER, LOST]]);
     expect(entry).toMatchObject({ action: "settings_changed", by: "doctor-repair@poplin.invalid", detail: { added: [LOST], removed: [] } });
   });
 
@@ -516,7 +516,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
 
     expect([shown(done).at(-1), done.ok && done.ready, changes]).toEqual([LACKS_ACCESS, false, [`PUT /accounts/${ACCOUNT}/access/policies/made-1`]]);
     expect(done).toMatchObject({ blocked: [{ what: "right_lacking", right: "Access: Apps and Policies: Edit" }] });
-    expect([letThrough(account), (await account.store.database.readSettings())?.logins, (await account.store.database.listAudit({ limit: 10 })).map((entry) => entry.action)]).toEqual([[OWNER], [OWNER], ["settings_set"]]);
+    expect([letThrough(account), (await account.store.database.readSettings())?.users, (await account.store.database.listAudit({ limit: 10 })).map((entry) => entry.action)]).toEqual([[OWNER], [OWNER], ["settings_set"]]);
   });
 
   // Drift: a policy that already holds the email proves nothing of the token: it was read. Storing on that would let a token that may only read finish what another began.
@@ -528,7 +528,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
     account.refuse = `PUT /accounts/${ACCOUNT}/access/policies/*`;
     const { done } = await repaired(account, kind, { addUser: LOST });
 
-    expect([shown(done).at(-1), (await account.store.database.readSettings())?.logins]).toEqual([LACKS_ACCESS, [OWNER]]);
+    expect([shown(done).at(-1), (await account.store.database.readSettings())?.users]).toEqual([LACKS_ACCESS, [OWNER]]);
   });
 
   // Drift: a write the provider did not take, for whatever reason, is no proof. The user must not be stored for a later run or the install's own key to carry.
@@ -537,7 +537,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
     Object.assign(account, { refuse: `PUT /accounts/${ACCOUNT}/access/policies/*`, refuseAs: { status: 400, code: 12130 } });
     const { done, changes } = await repaired(account, kind, { addUser: LOST });
 
-    expect([shown(done).at(-1), changes.filter((call) => call.endsWith("/query")), (await account.store.database.readSettings())?.logins]).toEqual(["User | fail | lost@example.com: refused with status 400 and codes 12130", [], [OWNER]]);
+    expect([shown(done).at(-1), changes.filter((call) => call.endsWith("/query")), (await account.store.database.readSettings())?.users]).toEqual(["User | fail | lost@example.com: refused with status 400 and codes 12130", [], [OWNER]]);
   });
 
   // Drift: the three statements of the store are one call, so a store that fails keeps nothing: no user without its entry, and no entry without its user.
@@ -555,7 +555,7 @@ describe.each(BOTH)("one more user, %s", (kind) => {
     const { done } = await repaired(account, kind, { addUser: LOST });
 
     expect(shown(done).at(-1)).toBe("User | fail | lost@example.com: the login admits the email, but the install did not store it. Rerun this command: refused with status 400 and codes 7500");
-    expect([letThrough(account), (await account.store.database.readSettings())?.logins, (await account.store.database.listAudit({ limit: 10 })).length]).toEqual([[LOST, OWNER], [OWNER], 1]);
+    expect([letThrough(account), (await account.store.database.readSettings())?.users, (await account.store.database.listAudit({ limit: 10 })).length]).toEqual([[LOST, OWNER], [OWNER], 1]);
   });
 
   // Drift: a dry run is what an agent runs first. One that wrote the login or stored the user would be no dry run, and one that named another row than the run would mislead.

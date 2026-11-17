@@ -9,7 +9,7 @@ import { ADMIN, DAY, makeWorld, NOW } from "../support/actions-fixture";
 /** The pieces of a small install, by a short name each: two of the login, two that make a site answer, and two others. */
 const PIECE = {
   login: { piece: "Login application", detail: "the dashboard's login", part: "login" },
-  policy: { piece: "Login policy", detail: "the logins of the settings", part: "login" },
+  policy: { piece: "Login policy", detail: "the users of the settings", part: "login" },
   record: { piece: "Record", detail: "every site", part: "reach" },
   route: { piece: "Route", detail: "every site", part: "reach" },
   rule: { piece: "Rate rule", detail: "sample-rate-rule", part: "rest" },
@@ -93,7 +93,7 @@ describe("domainState", () => {
     await world.install.database.keepDomainCheck(check, {});
     await world.install.database.addLogin("bo@example.com" as Login, signedBy(ADMIN, NOW));
     const waiting = await domainState(world.install, ADMIN);
-    await world.install.database.keepDomainCheck(check, {}, { logins: (await world.install.database.readSettings())?.logins ?? [], since: NOW });
+    await world.install.database.keepDomainCheck(check, {}, { users: (await world.install.database.readSettings())?.users ?? [], since: NOW });
 
     expect<unknown>([waiting, await domainState(world.install, ADMIN)]).toMatchObject([
       { check, waits: true, note },

@@ -13,7 +13,7 @@ import { OWN_KEY, ownRelease } from "./own-release";
 /** The group of every row here. */
 const group = "Each dashboard screen";
 
-/** Give the measured install a key, and an account that holds the policy of its logins, so a change of the users is carried there. */
+/** Give the measured install a key, and an account that holds the policy of its users, so a change of the users is carried there. */
 function carriesUsers(stage: Stage): void {
   const account = emptyAccount();
   account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
@@ -330,7 +330,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
     name: "Access screen: the people",
     guide: "Open the Access screen",
     route: "GET /data/people",
-    // The logins are one setting, read with the rest; the tokens each user allowed are counted in a statement of their own.
+    // The users are one setting, read with the rest; the tokens each user allowed are counted in a statement of their own.
     arrange: async (stage) => {
       const session = await sessionOf(stage);
 

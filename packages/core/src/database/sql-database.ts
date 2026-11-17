@@ -1196,15 +1196,15 @@ export class SqlDatabase implements Database {
     await this.#driver.batch([domainCheckKept(check), ...entry, ...settling, ...(ended === undefined ? [] : [ended])]);
   }
 
-  async claimUsers(at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly mark: number | undefined }> {
+  async claimUsers(at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly mark: number | undefined }> {
     const [, read, kept] = await this.#driver.batch([usersClaimed(at), READ_SETTINGS, domainCheckAsked()]);
-    return { logins: settingsIn(read)?.logins, mark: waitingMark(kept?.rows[0]?.users_changed_at) };
+    return { users: settingsIn(read)?.users, mark: waitingMark(kept?.rows[0]?.users_changed_at) };
   }
 
-  async settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly logins: readonly Login[] | undefined; readonly waits: boolean }> {
+  async settleUsers(carried: CarriedUsers, at: number): Promise<{ readonly users: readonly Login[] | undefined; readonly waits: boolean }> {
     const [, read, kept] = await this.#driver.batch([usersCarried(carried, at), READ_SETTINGS, domainCheckAsked()]);
 
-    return { logins: settingsIn(read)?.logins, waits: waitingMark(kept?.rows[0]?.users_changed_at) !== undefined };
+    return { users: settingsIn(read)?.users, waits: waitingMark(kept?.rows[0]?.users_changed_at) !== undefined };
   }
 
   async claimRules(at: number): Promise<{ readonly settings: SettingValues | undefined; readonly mark: number | null | undefined }> {
@@ -1293,11 +1293,11 @@ export class SqlDatabase implements Database {
     const update = built(BUILD.update(settings).set({ value: patched, updated_at: signed.at }).where(lands));
     // The marks of changed users and of changed rules read the settings as they still are, so they run before the change.
     const rules = rulesReplaced(checked, signed, fits);
-    // So do the tokens of the users the new logins leave out, which end in the same step.
-    const users = checked.logins === undefined ? [] : [usersReplaced(checked.logins, signed, fits), ...endTokensOfDropped(checked.logins, signed, fits)];
-    const marks = [...users, ...(rules === undefined ? [] : [rules])];
-    // The token that signs ends after the change, where the new logins leave its own user out: it stands for every statement before.
-    const own = checked.logins === undefined ? [] : endSignerLeftOut(signed);
+    // So do the tokens of the users the new list leaves out, which end in the same step.
+    const replaced = checked.users === undefined ? [] : [usersReplaced(checked.users, signed, fits), ...endTokensOfDropped(checked.users, signed, fits)];
+    const marks = [...replaced, ...(rules === undefined ? [] : [rules])];
+    // The token that signs ends after the change, where the new list leaves its own user out: it stands for every statement before.
+    const own = checked.users === undefined ? [] : endSignerLeftOut(signed);
     const answers = await this.#driver.batch([...marks, auditOfSettings(signed, checked, lands), update, ...own, settingsAndSigner(signed)]);
     const [updated, read] = [answers[marks.length + 1], answers.at(-1)];
     const values = settingsIn(read);
@@ -1314,7 +1314,7 @@ export class SqlDatabase implements Database {
 
   async addLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "signer_gone">> {
     const email = v.parse(LOGIN, login);
-    const added = fragment<string>`json_insert(${settings.value}, '$.logins[#]', ${email})`;
+    const added = fragment<string>`json_insert(${settings.value}, '$.users[#]', ${email})`;
     const add = BUILD.update(settings).set({ value: added, updated_at: signed.at }).where(and(eq(settings.id, 1), signerStands(signed), fragment`NOT ${isStoredLogin(email)}`));
     const entry = auditPlain(signed, "settings_changed", { added: [email], removed: [] });
     const [updated, , , read] = await this.#driver.batch([built(add), entry, usersChanged(signed.at), settingsAndSigner(signed)]);
@@ -1326,12 +1326,12 @@ export class SqlDatabase implements Database {
     return signerGone(read) ? { kind: "signer_gone" } : { kind: "unchanged", values };
   }
 
-  async removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_login" | "signer_gone">> {
+  async removeLogin(login: Login, signed: Signed): Promise<{ readonly kind: "done" | "unchanged"; readonly values: SettingValues } | Refused<"not_set_up" | "no_working_user" | "signer_gone">> {
     const email = v.parse(LOGIN, login);
-    const place = fragment`(SELECT j.key FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${email})`;
-    const removed = fragment<string>`json_remove(${settings.value}, '$.logins[' || ${place} || ']')`;
+    const place = fragment`(SELECT j.key FROM json_each(${settings.value}, '$.users') AS j WHERE j.value = ${email})`;
+    const removed = fragment<string>`json_remove(${settings.value}, '$.users[' || ${place} || ']')`;
     // A login works when the login page is known to let it in: the signer's own email, or any login for a signer that is none.
-    const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.logins') > 1 END`;
+    const keepsWorkingLogin = fragment`CASE WHEN ${isStoredLogin(signed.by)} THEN ${login} <> ${signed.by} ELSE json_array_length(${settings.value}, '$.users') > 1 END`;
     const lands = and(eq(settings.id, 1), signerStands(signed), isStoredLogin(login), keepsWorkingLogin);
     const remove = BUILD.update(settings).set({ value: removed, updated_at: signed.at }).where(lands);
     // The mark of changed users goes first, under the removal's own condition: the tokens of the removed user end right after its audit entry.
@@ -1345,7 +1345,7 @@ export class SqlDatabase implements Database {
 
     if (signerGone(read)) return { kind: "signer_gone" };
 
-    return values.logins.includes(login) ? { kind: "no_working_login" } : { kind: "unchanged", values };
+    return values.users.includes(login) ? { kind: "no_working_user" } : { kind: "unchanged", values };
   }
 
   async readVisitorKey(): Promise<Uint8Array<ArrayBuffer> | undefined> {

@@ -303,7 +303,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
     });
 
     // Drift: the domain's login lets in the users of the last repair. A change that no row remembered, or that a check or a repair of other users cleared, would leave Domain saying nothing is left to do while a new user cannot log in.
-    test("a user added or removed waits until a repair that carried the stored logins, and began no earlier than the change, settles it; a login left as it was changes nothing", async () => {
+    test("a user added or removed waits until a repair that carried the stored users, and began no earlier than the change, settles it; a login left as it was changes nothing", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
       const run = (kind: DomainCheck["run"]): DomainCheck => ({ ran_at: NOW + 9, by: ADMIN, run: kind, pieces: [] });
@@ -319,15 +319,15 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const afterAdd = await waits();
       await database.keepDomainCheck(run("check"), {});
       await database.keepDomainCheck(run("repair"), {});
-      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo], since: NOW + 9 });
+      await database.keepDomainCheck(run("repair"), {}, { users: [ADMIN, bo], since: NOW + 9 });
       const afterRepairOfOtherUsers = await waits();
-      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo, cy], since: NOW });
+      await database.keepDomainCheck(run("repair"), {}, { users: [ADMIN, bo, cy], since: NOW });
       const afterRepairBegunBeforeTheChange = await waits();
-      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo, cy], since: NOW + 10 });
+      await database.keepDomainCheck(run("repair"), {}, { users: [ADMIN, bo, cy], since: NOW + 10 });
       const afterRepair = await waits();
-      await database.keepDomainCheck(run("repair"), {}, { logins: null, since: NOW + 10 });
+      await database.keepDomainCheck(run("repair"), {}, { users: null, since: NOW + 10 });
       const afterRepairThatStoppedShort = await waits();
-      await database.keepDomainCheck(run("repair"), {}, { logins: [ADMIN, bo, cy], since: NOW + 9 });
+      await database.keepDomainCheck(run("repair"), {}, { users: [ADMIN, bo, cy], since: NOW + 9 });
       await database.removeLogin(cy, { as: "person", by: ADMIN, at: NOW + 3 });
       await database.removeLogin(cy, { as: "person", by: ADMIN, at: NOW + 4 });
       await database.removeLogin(ADMIN, { as: "person", by: ADMIN, at: NOW + 5 });
@@ -338,18 +338,18 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       expect([afterRepair, afterRepairThatStoppedShort, await waits()]).toEqual([null, NOW + 11, NOW + 13]);
     });
 
-    // Drift: the logins are also replaced as a setting, by `poplin config logins` and by an import with its users. A list that marked nothing would let Domain say all is well while the user it added cannot log in.
+    // Drift: the users are also replaced as a setting, by `poplin config users` and by an import with its users. A list that marked nothing would let Domain say all is well while the user it added cannot log in.
     // The first login is the one a domain may treat apart, so a list that only puts another user first waits too.
-    test("the logins replaced as a setting wait for a repair when the list adds or drops a user or puts another one first, and not when it holds the same users behind the same first one or names no logins", async () => {
+    test("the users replaced as a setting wait for a repair when the list adds or drops a user or puts another one first, and not when it holds the same users behind the same first one or names no users", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
       const waits = async (): Promise<number | null | undefined> => (await database.readDomainCheck())?.users_changed_at;
-      const replaced = async (logins: Login[], at: number, by = ADMIN): Promise<number | null | undefined> => {
-        await database.changeSettings({ logins, trash_days: at }, { as: "person", by, at: NOW + at });
+      const replaced = async (users: Login[], at: number, by = ADMIN): Promise<number | null | undefined> => {
+        await database.changeSettings({ users, trash_days: at }, { as: "person", by, at: NOW + at });
 
         return waits();
       };
-      await database.initSettings({ ...SETTINGS, logins: [ADMIN, bo] }, BY_ADA);
+      await database.initSettings({ ...SETTINGS, users: [ADMIN, bo] }, BY_ADA);
 
       const beforeAnyRun = await replaced([ADMIN], 1);
       await database.keepDomainCheck({ ran_at: NOW + 1, by: ADMIN, run: "repair", pieces: [] }, {});
@@ -364,7 +364,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const swapped = await replaced([cy], 8, bo);
 
       expect([beforeAnyRun, otherSetting, sameUser, added, otherOrderBehind, otherFirst, dropped, swapped]).toEqual([undefined, null, null, NOW + 4, NOW + 4, NOW + 6, NOW + 7, NOW + 8]);
-      expect((await database.readSettings())?.logins).toEqual([cy]);
+      expect((await database.readSettings())?.users).toEqual([cy]);
     });
 
     // Drift: three tries inside one moment of the clock. The second settles the change; the first, whose older list landed after it, is refused and sets the mark anew; the third, under way all along, then settles.
@@ -373,21 +373,21 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const database = await opened(makeDatabase);
       await database.initSettings(SETTINGS, BY_ADA);
       await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
-      const logins = [...SETTINGS.logins];
+      const users = [...SETTINGS.users];
 
       const first = await database.claimUsers(NOW);
       const third = await database.claimUsers(NOW);
       const second = await database.claimUsers(NOW);
-      const settledBySecond = await database.settleUsers({ logins, since: second.mark ?? 0 }, NOW);
-      await database.settleUsers({ logins: null, since: first.mark ?? 0 }, NOW);
-      const settledByThird = await database.settleUsers({ logins, since: third.mark ?? 0 }, NOW);
+      const settledBySecond = await database.settleUsers({ users, since: second.mark ?? 0 }, NOW);
+      await database.settleUsers({ users: null, since: first.mark ?? 0 }, NOW);
+      const settledByThird = await database.settleUsers({ users, since: third.mark ?? 0 }, NOW);
 
       expect([first.mark, third.mark, second.mark]).toEqual([NOW, NOW + 1, NOW + 2]);
       expect([settledBySecond.waits, settledByThird.waits, (await database.readDomainCheck())?.users_changed_at]).toEqual([false, true, NOW + 4]);
     });
 
     // Drift: a list is carried to the domain while the users may change again, and while another try may write the domain.
-    // Settled on the stored logins alone, a try that an older list overtook at the domain would end the waiting, and the domain would keep users the install no longer has.
+    // Settled on the stored users alone, a try that an older list overtook at the domain would end the waiting, and the domain would keep users the install no longer has.
     test("a change of the users is settled only by the very list that is stored and only while no mark was set since the try began; every other try leaves a later mark", async () => {
       const database = await opened(makeDatabase);
       const [bo, cy] = ["bo@example.com" as Login, "cy@example.com" as Login];
@@ -397,8 +397,8 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       await database.keepDomainCheck({ ran_at: NOW, by: ADMIN, run: "repair", pieces: [] }, {});
       await database.addLogin(bo, { as: "person", by: ADMIN, at: NOW + 1 });
       await database.addLogin(cy, { as: "person", by: ADMIN, at: NOW + 2 });
-      const settled = async (logins: Login[] | null, since: number, at: number): Promise<unknown> => {
-        const { waits } = await database.settleUsers({ logins, since }, at);
+      const settled = async (users: Login[] | null, since: number, at: number): Promise<unknown> => {
+        const { waits } = await database.settleUsers({ users, since }, at);
 
         return [waits, (await database.readDomainCheck())?.users_changed_at];
       };
@@ -413,7 +413,7 @@ function domainCheck(label: string, makeDatabase: DatabaseFactory): void {
       const clockBehind = await database.claimUsers(NOW);
 
       // Before any run is kept nothing holds a mark, which the answer says, so whoever carries the users can say that nothing remembers them.
-      expect([beforeAnyRun, claimed, clockBehind]).toEqual([{ logins: SETTINGS.logins, mark: undefined }, { logins: stored, mark: NOW + 3 }, { logins: stored, mark: NOW + 9 }]);
+      expect([beforeAnyRun, claimed, clockBehind]).toEqual([{ users: SETTINGS.users, mark: undefined }, { users: stored, mark: NOW + 3 }, { users: stored, mark: NOW + 9 }]);
       expect([stale, otherOrder, overtaken]).toEqual([[true, NOW + 4], [true, NOW + 5], [true, NOW + 6]]);
       expect([exact, again, unknown]).toEqual([[false, null], [false, null], [true, NOW + 8]]);
     });

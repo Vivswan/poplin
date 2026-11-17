@@ -49,8 +49,8 @@ interface Repaired {
   /** How many requests the repair sent, each try of one counted: those to Cloudflare, and the one the SDK asks itself before its first form. */
   readonly calls: number;
 
-  /** Why the repair stopped; left out where the login stands as the users ask. `bad_logins` is stored logins that are no list of emails. */
-  readonly refusal?: KeyRefusal | "access_off" | "no_team" | "bad_logins";
+  /** Why the repair stopped; left out where the login stands as the users ask. `bad_users` is stored users that are no list of emails. */
+  readonly refusal?: KeyRefusal | "access_off" | "no_team" | "bad_users";
 }
 
 /** The install's way to put its own login back. */
@@ -59,7 +59,7 @@ export interface LoginRepair {
   holdsKey(): boolean;
 
   /** Make the login match the given users. It throws for nothing Cloudflare answers, and no answer holds the key. */
-  repair(logins: readonly Login[]): Promise<Repaired>;
+  repair(emails: readonly Login[]): Promise<Repaired>;
 }
 
 /** The names of what a step of a repair wrote, whether it finished or stopped. */
@@ -95,18 +95,18 @@ export function createLoginRepair(key: KeptKey | undefined, place: LoginPlace): 
   return {
     holdsKey: () => key !== undefined,
 
-    async repair(logins) {
+    async repair(emails) {
       const wrote: string[] = [];
       const sent = { calls: 0 };
       const counting = key === undefined ? undefined : countingKey(key, sent);
       const ended = (): Omit<Repaired, "refusal"> => ({ wrote, users: wrote.includes(INSTALL_OBJECTS.accessPolicy), calls: sent.calls });
       const stopped = (refusal: NonNullable<Repaired["refusal"]>): Repaired => ({ ...ended(), refusal });
 
-      const users = parseLogins(logins);
-      if (!users.ok) return stopped("bad_logins");
+      const users = parseLogins(emails);
+      if (!users.ok) return stopped("bad_users");
 
       const access = await keyed(counting, ACCESS_RIGHT, async (connection): Promise<CloudflareResult<"made" | "off">> => {
-        const synced = await syncAccess(connection, accountId, { hostname: adminHost, logins: users.value, privateSites }, "apply");
+        const synced = await syncAccess(connection, accountId, { hostname: adminHost, users: users.value, privateSites }, "apply");
         wrote.push(...written(synced.report));
         if (synced.ok) return { ok: true, value: "made" };
 

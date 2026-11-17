@@ -104,7 +104,7 @@ type Asked<Site> =
   | ({ readonly kind: "config"; readonly action: ConfigAction } & Install)
   | ({ readonly kind: "update"; readonly action: UpdateAction } & Install)
   | ({ readonly kind: "export"; readonly site?: Site; readonly allVersions: boolean; readonly out?: string; readonly overwrite: boolean } & Install)
-  | ({ readonly kind: "import"; readonly zip: string; readonly site?: Site; readonly settings: boolean; readonly logins: boolean; readonly dryRun: boolean } & Install)
+  | ({ readonly kind: "import"; readonly zip: string; readonly site?: Site; readonly settings: boolean; readonly users: boolean; readonly dryRun: boolean } & Install)
   | { readonly kind: "mcp" };
 
 /** A command as the parser read it: the site it names may be an address only its install can read. */
@@ -324,10 +324,10 @@ function importBackup(words: Words): TypedRequest | UsageError {
   if (zip === "") return usageError("The zip path is empty", "Usage: poplin import <zip>");
 
   const settings = words.flags.has("--settings");
-  const logins = words.flags.has("--users");
-  if (logins && !settings) return usageError("--users requires --settings", "Usage: poplin import <zip> --settings --users");
+  const users = words.flags.has("--users");
+  if (users && !settings) return usageError("--users requires --settings", "Usage: poplin import <zip> --settings --users");
 
-  const asked = { zip, settings, logins, dryRun: words.flags.has(DRY_RUN) };
+  const asked = { zip, settings, users, dryRun: words.flags.has(DRY_RUN) };
   const siteText = flagValue(words.flags, "--site");
   if (siteText === undefined) return withInstall(words, (install) => ({ kind: "import", ...asked, ...install }));
 

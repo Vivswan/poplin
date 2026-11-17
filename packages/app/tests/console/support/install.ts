@@ -27,7 +27,7 @@ export const FREE_LIMITS = {
   storageWritesPerDay: { most: 30_000, warning: "above the free 30,000 writes a day" },
   storageReadsPerMonth: { most: 10_000_000, warning: "above the free 10,000,000 reads a month" },
   requestsPerDay: { most: 100_000, warning: "above the free 100,000 requests a day" },
-  logins: { most: 50, warning: "above the free 50 users" },
+  users: { most: 50, warning: "above the free 50 users" },
 } as const;
 
 /** A host of the tests' own that reads no figures: each limit and each page differs, so a number or a link on the wrong line is seen. */

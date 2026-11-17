@@ -129,7 +129,7 @@ export function auditLog(label: string, makeDatabase: DatabaseFactory): void {
       [
         "a setting set to what it is",
         async (database: Database): Promise<unknown> =>
-          database.changeSettings({ trash_days: 7, default_expires: "never", logins: SETTINGS.logins }, signed),
+          database.changeSettings({ trash_days: 7, default_expires: "never", users: SETTINGS.users }, signed),
         [],
       ],
     ] as const)("%s writes exactly these entries: %#", async (_case, change, entries) => {

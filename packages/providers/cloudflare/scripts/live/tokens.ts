@@ -66,7 +66,7 @@ export function removeTokens(run: Run, databaseId: string, now: number): Promise
  * An install with no settings stored refuses the row.
  */
 export function tokenRow(record: Pick<TokenRecord, "id" | "hash" | "note">, now: number): { readonly sql: string; readonly params: readonly string[] } {
-  const firstLogin = "(SELECT json_extract(value, '$.logins[0]') FROM settings WHERE id = 1)";
+  const firstLogin = "(SELECT json_extract(value, '$.users[0]') FROM settings WHERE id = 1)";
   const sql = `INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ${now}, ${now + LIFETIME_MS}, ${firstLogin})`;
 
   return { sql, params: [record.id, record.hash, record.note] };

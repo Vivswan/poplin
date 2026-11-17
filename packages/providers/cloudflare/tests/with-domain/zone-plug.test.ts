@@ -11,7 +11,7 @@ import type { Asked } from "../shared/install/support/replies";
 import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "../shared/install/support/fake-install";
 import { LAYOUT, layoutOf } from "../shared/install/support/layouts";
 
-const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
+const STORED: DomainSettings = { users: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
 const REFUSED = { ok: false, refusal: "token" } as const;
 
@@ -144,7 +144,7 @@ test("a repair writes the application's audience tag and the team's domain onto 
 
 test("a login added to the settings: the check says the Access policy lets other emails through, and the repair lets the new one in, so a person added in Settings is not stopped at Cloudflare's login", async () => {
   const account = emptyAccount();
-  const added: DomainSettings = { ...STORED, logins: [...STORED.logins, "second@example.com" as Login] };
+  const added: DomainSettings = { ...STORED, users: [...STORED.users, "second@example.com" as Login] };
 
   await withAccount(account, async (plug, asked) => {
     await plug.repair(TOKEN, SETTINGS);

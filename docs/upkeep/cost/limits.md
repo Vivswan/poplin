@@ -23,7 +23,7 @@ The limits and alerts below are the protection, and none of them is a cap on wha
 | verified bots, methods other than GET and HEAD, and scanner paths, on site addresses. An assistant that opens one page for a person and a chat app's fetch for a link preview pass, and search engines pass while `search_engines_allowed` is on | Repair: WAF rule, skipped where the plan has no room for it. | Cloudflare blocks the request before the Worker runs |
 | AI crawlers: while `block_bots` is `auto`, on a domain with no other hostnames; while it is `on`, on any domain | Repair: Bot settings | Cloudflare blocks them on the whole domain |
 | plain http | Repair: Redirect rule. The Worker does the same | the request is sent to https |
-| the dashboard and private sites | Repair: Access application and Access policy | Cloudflare's login, for the `logins` alone |
+| the dashboard and private sites | Repair: Access application and Access policy | Cloudflare's login, for the `users` alone  |
 | the bucket's public address | the bucket [the install](../../start/install.md#4-read-what-it-made) makes has none | files are read through the Worker alone |
 | uploads in parts that nobody finished | Cloudflare's own rule on the bucket, after seven days | Cloudflare removes them. No bucket rule deletes a stored file: a site's live files and its dropped ones sit under the same folder of random letters, so only the Worker removes dropped files |
 | the account's usage charges of a billing period: 1 US dollar | the install's key, within a day of the install; or Repair: Budget alert, with the optional permission Notifications: Edit. Under a domain or without one | Cloudflare emails the first user. Nothing is stopped |

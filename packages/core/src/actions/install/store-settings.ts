@@ -1,6 +1,6 @@
-// The one way an action changes the stored settings: a change of the logins is stored only while it leaves somebody able to log in, and `auto_update` is stored on only beside `update_check`.
+// The one way an action changes the stored settings: a change of the users is stored only while it leaves somebody able to log in, and `auto_update` is stored on only beside `update_check`.
 //
-// The login page in front of an install keeps a list of its own, which follows the stored logins when the install carries them there or an admin repairs it from the dashboard.
+// The login page in front of an install keeps a list of its own, which follows the stored users when the install carries them there or an admin repairs it from the dashboard.
 // So an email that was just stored may get nobody in yet, and a list made of such emails alone shuts the dashboard on everyone, the way back included.
 
 import * as v from "valibot";
@@ -18,7 +18,7 @@ export const SETTINGS_ANSWER = v.object({ values: SETTING_VALUES });
 export type Stored = { readonly ok: true } & Readonly<v.InferOutput<typeof SETTINGS_ANSWER>>;
 
 /**
- * Decide whether new logins keep one that works.
+ * Decide whether new users keep one that works.
  *
  * A login works when the login page is known to let it in: the email of an admin who came through that page to make this change, or, for a change made with a token, any email that was a login before it.
  */
@@ -42,17 +42,17 @@ function rehearsed(stored: SettingValues, changes: Partial<SettingValues>): Stor
  *
  * @param changes - the new typed values; each key given is replaced whole
  * @param how - with `dry_run` nothing is stored: the answer is every setting as the change would leave it, judged against the settings as they are read
- * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_login` about `logins` for new logins with no login that works among them.
+ * @returns every setting after the change, `not_set_up` before setup stored any, or `no_working_user` about `users` for new users with no login that works among them.
  *   `needs_update_check` about `auto_update` for a change that would leave it on with `update_check` off, whichever of the two the change names.
  *   `not_allowed` for a token whose user was removed while it asked, and for a person removed while they asked. A refusal changes nothing
  */
-export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>, how: Rehearsal = {}): Promise<Stored | Refused<"not_set_up" | "no_working_login" | "needs_update_check" | "not_allowed">> {
+export async function storeSettings(install: Install, actor: Actor, changes: Partial<SettingValues>, how: Rehearsal = {}): Promise<Stored | Refused<"not_set_up" | "no_working_user" | "needs_update_check" | "not_allowed">> {
   const rehearsing = how.dry_run === true;
-  if (changes.logins !== undefined || rehearsing) {
+  if (changes.users !== undefined || rehearsing) {
     const stored = await install.database.readSettings();
     if (stored === undefined) return refuse("not_set_up");
 
-    if (changes.logins !== undefined && !keepsWorkingLogin(actor, stored.logins, changes.logins)) return refuse("no_working_login", "logins");
+    if (changes.users !== undefined && !keepsWorkingLogin(actor, stored.users, changes.users)) return refuse("no_working_user", "users");
 
     if (rehearsing) return rehearsed(stored, changes);
   }

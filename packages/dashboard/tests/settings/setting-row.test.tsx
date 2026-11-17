@@ -53,7 +53,7 @@ const KINDS: readonly (readonly [string, Row, string])[] = [
   ["a number", SIZE, "0MB"],
   ["a number that is a word now", EXPIRY, "never"],
   ["a number that can be a word", EXPIRY, "0d"],
-  ["a list", { ...SIZE, key: "logins", control: { kind: "lines" }, unit: "", fallback: "" }, "one,one"],
+  ["a list", { ...SIZE, key: "users", control: { kind: "lines" }, unit: "", fallback: "" }, "one,one"],
   ["a text", { ...SIZE, key: "a_new_text" as Row["key"], control: { kind: "text" }, unit: "", fallback: "" }, "as it is"],
 ];
 

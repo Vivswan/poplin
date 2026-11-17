@@ -72,11 +72,11 @@ export const ACCESS_OFF = "Access is off for the account";
 /** What to do about it: no API switches Access on. */
 const ACCESS_STEP = "Open Zero Trust and pick a plan (Free works): that switches Access on.";
 
-/** What the Access row says when the stored logins cannot be read back. */
-const BAD_LOGINS = "the stored logins are not a list of emails";
+/** What the Access row says when the stored users cannot be read back. */
+const BAD_USERS = "the stored users are not a list of emails";
 
 /** What the Access policy's row says when Cloudflare lets other emails through than the settings list. */
-const OTHER_LOGINS = "emails that are not your users";
+const OTHER_USERS = "emails that are not your users";
 
 /** What the variable's row says before the application it is read from exists. */
 const NO_APPLICATION = "written once the Access application exists";
@@ -596,12 +596,12 @@ function accessObject(subject: string): Piece {
   return subject === INSTALL_OBJECTS.accessPolicy ? "Access policy" : "Access application";
 }
 
-// An application's row names what it stands in front of, or lets past the login, and a logins' policy that differs says how: it lets other emails through than the settings list.
+// An application's row names what it stands in front of, or lets past the login, and a users' policy that differs says how: it lets other emails through than the settings list.
 function accessDetail(row: Found, covered: Readonly<Record<string, string>>): Found {
   const places = covered[row.detail];
   if (places !== undefined) return { ...row, detail: `${row.detail}: ${places}` };
 
-  if (row.object === "Access policy" && row.state === "differs") return { ...row, detail: `${row.detail}: ${OTHER_LOGINS}` };
+  if (row.object === "Access policy" && row.state === "differs") return { ...row, detail: `${row.detail}: ${OTHER_USERS}` };
 
   return row;
 }
@@ -611,16 +611,16 @@ function accessDetail(row: Found, covered: Readonly<Record<string, string>>): Fo
  *
  * @returns whether the application can be read from: `false` for Access that is off, and `undefined` for an application that was not made, by a run that stopped or a token with no permission for it
  */
-export async function accessPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<boolean | undefined> {
-  if (progress.stopped || logins === undefined) {
-    progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_LOGINS });
+export async function accessPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, users: Logins | undefined): Promise<boolean | undefined> {
+  if (progress.stopped || users === undefined) {
+    progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_USERS });
     progress.stopped = true;
 
     return undefined;
   }
 
   const { adminHost: host, privateSites } = placed;
-  const synced = await answered(progress, () => syncAccess(connection, placed.accountId, { hostname: host, logins, privateSites }, mode), { ...NO_ANSWER, report: reportOf([]) });
+  const synced = await answered(progress, () => syncAccess(connection, placed.accountId, { hostname: host, users, privateSites }, mode), { ...NO_ANSWER, report: reportOf([]) });
   // A refusal after a step was done is a failure of the run: its rows keep what was made.
   if (synced.ok || synced.failed !== undefined || !isAccessOff(synced)) {
     const before = progress.rows.length;
@@ -649,7 +649,7 @@ export function firstValues(known: Known, zone: Readonly<Record<string, string>>
 
   return [
     { name: INSTALL_OBJECTS.zoneBinding, value: zone },
-    { name: INSTALL_OBJECTS.firstSettingsBinding, value: { logins: known.first.login } },
+    { name: INSTALL_OBJECTS.firstSettingsBinding, value: { users: known.first.login } },
     { name: INSTALL_OBJECTS.accountBinding, value: accountId },
   ];
 }
@@ -841,8 +841,8 @@ export async function variablesPiece(progress: Progress, mode: Mode, placed: Pla
 }
 
 /** The pieces of an install's alerts, each a row of its own, read from one list of the account's policies. Each alert goes to the first user alone, the one who holds the Cloudflare account an install is made in. */
-async function alertPieces(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined, kept: readonly { readonly object: Piece; readonly alert: AccountAlert }[]): Promise<void> {
-  const [first] = logins ?? [];
+async function alertPieces(progress: Progress, mode: Mode, placed: Placed, connection: Connection, users: Logins | undefined, kept: readonly { readonly object: Piece; readonly alert: AccountAlert }[]): Promise<void> {
+  const [first] = users ?? [];
   if (progress.stopped || first === undefined) {
     progress.rows.push(...kept.map(({ object }): Found => ({ object, state: "not-run", detail: "" })));
 
@@ -872,8 +872,8 @@ export async function logsPiece(progress: Progress, mode: Mode, placed: Placed, 
 }
 
 /** The budget alert's piece, of an install of either kind: the alert is the account's. */
-export function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<void> {
-  return alertPieces(progress, mode, placed, connection, logins, [{ object: "Budget alert", alert: BUDGET_ALERT }]);
+export function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, users: Logins | undefined): Promise<void> {
+  return alertPieces(progress, mode, placed, connection, users, [{ object: "Budget alert", alert: BUDGET_ALERT }]);
 }
 
 /** The database's piece. A check the install makes by itself asks Cloudflare nothing of it: the key holds no right to a database, and the install read its settings from its own for this very check. */
@@ -941,8 +941,8 @@ export function readingOf(progress: Progress): DomainReading {
 async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connection: Connection; readonly zone: Zone; readonly placed: Placed }, progress: Progress, readSettings: ReadSettings): Promise<DomainReading> {
   const { connection, zone, placed } = found;
   const settings = await readSettings();
-  const parsed = parseLogins(settings.logins);
-  const logins = parsed.ok ? parsed.value : undefined;
+  const parsed = parseLogins(settings.users);
+  const users = parsed.ok ? parsed.value : undefined;
 
   const { layout } = parts;
   const { plan } = zone;
@@ -971,7 +971,7 @@ async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connec
     () => "Worker route",
     () => syncRoutes(connection, zone.id, { layout, script: parts.script }, mode),
   );
-  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, logins));
+  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, users));
   await logsPiece(progress, mode, placed, connection, settings.provider_logs);
   await piece(
     progress,
@@ -991,7 +991,7 @@ async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connec
   await fromRecords("Bot settings", () => syncZoneBots(connection, zone.id, { blockBots: settings.block_bots, plan, sharesZone }, mode));
   await databasePiece(progress, mode, placed, connection);
   // Cloudflare takes no zone for the certificate alert: it is of every domain of the account, and its name says so.
-  await alertPieces(progress, mode, placed, connection, logins, [
+  await alertPieces(progress, mode, placed, connection, users, [
     { object: "Budget alert", alert: BUDGET_ALERT },
     { object: "Certificate alert", alert: CERTIFICATE_ALERT },
   ]);

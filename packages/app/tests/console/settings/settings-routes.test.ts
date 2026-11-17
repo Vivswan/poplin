@@ -49,7 +49,7 @@ describe("the control of a setting", () => {
     ["block_bots", { kind: "choice", options: ["auto", "on", "off"] }],
     ["trash_days", { kind: "number", word: null }],
     ["site_share_of_day", { kind: "number", word: null }],
-    ["logins", { kind: "lines" }],
+    ["users", { kind: "lines" }],
     ["max_sites", { kind: "number", word: "none" }],
     ["max_total_size", { kind: "number", word: null }],
     ["default_expires", { kind: "number", word: "never" }],
@@ -76,15 +76,15 @@ describe("the rows", () => {
     expect(row.limits).toEqual(counts.map((count) => ({ ...count, warning: "all sites are above the free 10 GB" })));
   });
 
-  // Drift: a row would lose its default or its limits, a new setting would be left out, or the logins, which the Access screen changes, would come back as a row.
-  test("hold every setting of the rule book but the logins, each with its text, its default, and the free limits it can be put above", async () => {
+  // Drift: a row would lose its default or its limits, a new setting would be left out, or the users, which the Access screen changes, would come back as a row.
+  test("hold every setting of the rule book but the users, each with its text, its default, and the free limits it can be put above", async () => {
     const opened = await openConsole();
     const changed = await opened.change("/data/settings", { texts: { requests_per_day: "250000", site_share_of_day: "40%" } });
     const { rows } = await settingsOf(opened);
     const byKey: Readonly<Record<string, unknown>> = Object.fromEntries(rows.map((row) => [row.key, row]));
 
     expect(changed.status).toBe(200);
-    expect(rows.map((row) => row.key)).toEqual(Object.keys(SETTING_VALUES.entries).filter((key) => key !== "logins"));
+    expect(rows.map((row) => row.key)).toEqual(Object.keys(SETTING_VALUES.entries).filter((key) => key !== "users"));
     expect([byKey.requests_per_day, byKey.site_share_of_day, byKey.block_bots]).toEqual([
       {
         key: "requests_per_day",
@@ -165,7 +165,7 @@ describe("a save", () => {
   test.each([
     ["text that is not in the setting's form", { versions_kept: "9", trash_days: "soon" }, "bad_argument", "trash_days"],
     ["a number outside its range", { site_share_of_day: "140%" }, "bad_argument", "site_share_of_day"],
-    ["the logins, which the Access screen changes", { trash_days: "9", logins: "owner@example.com,jonas@example.com" }, "bad_argument", "logins"],
+    ["the users, which the Access screen changes", { trash_days: "9", users: "owner@example.com,jonas@example.com" }, "bad_argument", "users"],
     ["a key that is no setting", { colour: "blue" }, "bad_argument", "colour"],
     ["no setting at all", {}, "bad_argument", "settings"],
   ])("refuses %s and changes nothing", async (_what, texts, code, about) => {

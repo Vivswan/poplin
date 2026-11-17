@@ -272,7 +272,7 @@ One install on the Cloudflare test account, called staging. It stays up between 
 
 | A reset removes                               | A reset leaves                                                                        |
 | --------------------------------------------- | ------------------------------------------------------------------------------------- |
-| every site that is no sample and not the demo | the logins and every other setting                                                    |
+| every site that is no sample and not the demo | the users and every other setting                                                     |
 | a sample that differs from its row, for good  | the Worker, the bucket, the database, and the zone's objects                          |
 | every token, its own among them               | the sample sites below: one that still matches is kept, any other is published anew   |
 | every login of a computer that waits          | the demo: a public site with the public name `demo`, updated where it stands          |
@@ -602,8 +602,8 @@ The first run after a key is made sends its files through the install: that is a
 
 | Step   | On the install                                               | Then, at Cloudflare                                     |
 | ------ | ------------------------------------------------------------ | ------------------------------------------------------- |
-| add    | `poplin config logins` with one more email, at `example.com` | the policy `poplin logins` names the email within 20 s  |
-| remove | `poplin config logins` with the list as it was               | the policy names the same emails as before              |
+| add    | `poplin config users` with one more email, at `example.com`  | the policy `poplin logins` names the email within 20 s  |
+| remove | `poplin config users` with the list as it was                | the policy names the same emails as before              |
 
 The list is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The email is taken out again whatever the check met.
 

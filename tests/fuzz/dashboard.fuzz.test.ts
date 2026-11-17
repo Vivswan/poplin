@@ -2,7 +2,7 @@
 // It must show nothing of the install to a request no user's login vouches for, and change nothing unless a user's page of its own sent JSON.
 //
 // Who asks is the email the stand-in for the provider's login vouches for, checked against the users as they are at that request: the run itself adds users.
-// The logins drawn are the owner, a user only once a run has added them, an email that is never a user, words that are no email, and no header at all.
+// The users drawn are the owner, a user only once a run has added them, an email that is never a user, words that are no email, and no header at all.
 // A request that is not admitted is answered one of `REFUSED`, word for word under its own status: the sentence on a page, the refusal on a data route, nothing to a HEAD request.
 // A change has two guards: its `Origin` and `Sec-Fetch-Site` name the dashboard's own page, and it is JSON. A browser counts every site of the install as the same site as the dashboard, so the login alone tells nothing of the page that sent it.
 // The paths that would do a change name their site by its public name: that stays a reference through a new link, so they keep working for the whole run.
@@ -57,11 +57,11 @@ const knownPaths = fc.oneof(
 );
 const changePaths = fc.constantFrom("/data/sites/shop/new-link", "/data/sites/shop/delete", "/data/sites/shop/restore", "/data/sites/shop/settings", "/data/sites/shop/naming", "/data/settings", "/data/settings/sign-everyone-out", "/data/people/add");
 const paths = fc.oneof({ arbitrary: changePaths, weight: 3 }, { arbitrary: knownPaths, weight: 3 }, { arbitrary: hostile(knownPaths), weight: 2 });
-const logins = fc.constantFrom(base.owner, base.owner, base.owner, base.owner, base.owner, base.owner, "next@example.com", "mallory@example.com", `${base.owner}x`, "nobody", "", undefined);
+const users = fc.constantFrom(base.owner, base.owner, base.owner, base.owner, base.owner, base.owner, "next@example.com", "mallory@example.com", `${base.owner}x`, "nobody", "", undefined);
 const words = fc.constantFrom("private", "unlisted", "public", "previous", "1", "2", "yes", "on", "off", "never", "7d", "2030-01-01", "9GB", "50GB", "docs", "gallery", "<script>alert(1)</script>", "next@example.com", ...LABELS);
 const values = fc.oneof({ arbitrary: words, weight: 3 }, { arbitrary: hostile(words), weight: 1 }, { arbitrary: fc.string(), weight: 1 }, { arbitrary: fc.constantFrom(true, false, 1, null), weight: 1 });
 const fields = fc.dictionary(
-  fc.constantFrom("access", "public_name", "title", "search_engines", "embeddable", "expires", "version", "name", "login", "trash_days", "logins", "max_total_size", "values", "other"),
+  fc.constantFrom("access", "public_name", "title", "search_engines", "embeddable", "expires", "version", "name", "login", "trash_days", "users", "max_total_size", "values", "other"),
   values,
   { maxKeys: 6 },
 );
@@ -84,7 +84,7 @@ async function stored(): Promise<string> {
 const requests = fc.record({
   path: paths,
   method: fc.constantFrom(...METHODS),
-  login: logins,
+  login: users,
   origin: fc.constantFrom(...ORIGINS),
   fetchSite: fc.constantFrom(...FETCH_SITES),
   type: fc.constantFrom(...TYPES),
@@ -137,7 +137,7 @@ async function factsOf(asked: Asked): Promise<Readonly<Record<string, boolean>>>
   const address = new URL(`${ORIGIN}${asked.path}`);
 
   // Whether a user asks is decided here, apart from anything the dashboard answers: the email the request names is one of the users as they are now.
-  const users: readonly string[] = (await base.install.database.readSettings())?.logins ?? [];
+  const users: readonly string[] = (await base.install.database.readSettings())?.users ?? [];
   const loggedIn = asked.login !== undefined && users.includes(asked.login);
   const before = await stored();
   const response = await opened.fetch(requestOf(asked));

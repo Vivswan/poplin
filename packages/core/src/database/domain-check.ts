@@ -82,19 +82,19 @@ export function usersChanged(at: number, when: SQL = CHANGED): Statement {
 }
 
 /**
- * Build the statement that remembers the users changed when a list replaces the stored logins. It goes before that replacement in a batch, since it compares the list with the logins still stored.
+ * Build the statement that remembers the users changed when a list replaces the stored users. It goes before that replacement in a batch, since it compares the list with the users still stored.
  * It writes only on an install that keeps a run, for a list that adds a login, drops one, or has another first login. Another order behind the same first login is no change.
  *
- * @param logins - the logins that replace the stored ones
+ * @param users - the users that replace the stored ones
  * @param signed - who signs the change and its moment; a signer who no longer stands remembers nothing
  * @param when - what else must hold for the replacement to be written; left out, nothing else
  */
-export function usersReplaced(logins: readonly string[], signed: Signed, when?: SQL): Statement {
-  const stored = fragment`json_each(${settings.value}, '$.logins')`;
-  const given = fragment`json_each(${JSON.stringify(logins)})`;
+export function usersReplaced(users: readonly string[], signed: Signed, when?: SQL): Statement {
+  const stored = fragment`json_each(${settings.value}, '$.users')`;
+  const given = fragment`json_each(${JSON.stringify(users)})`;
   const dropped = fragment`EXISTS (SELECT 1 FROM ${stored} AS was WHERE was.value NOT IN (SELECT value FROM ${given}))`;
   const added = fragment`EXISTS (SELECT 1 FROM ${given} AS now WHERE now.value NOT IN (SELECT value FROM ${stored}))`;
-  const moved = fragment`json_extract(${settings.value}, '$.logins[0]') IS NOT ${logins[0] ?? null}`;
+  const moved = fragment`json_extract(${settings.value}, '$.users[0]') IS NOT ${users[0] ?? null}`;
   const differs = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND (${dropped} OR ${added} OR ${moved}))`;
 
   return built(BUILD.update(domainCheck).set({ users_changed_at: laterMark(signed.at) }).where(and(eq(domainCheck.id, 1), differs, signerStands(signed), when)));
@@ -110,16 +110,16 @@ export function usersClaimed(at: number): Statement {
 }
 
 /**
- * Build the statement that settles a change of the users after a try to carry them to the domain. The mark goes only while the stored logins are exactly the list that was carried, in that order, and no mark was set since the try began.
+ * Build the statement that settles a change of the users after a try to carry them to the domain. The mark goes only while the stored users are exactly the list that was carried, in that order, and no mark was set since the try began.
  * Otherwise a later mark is set: a list carried while the users changed again, or while another try wrote the domain, never leaves the change forgotten.
  *
  * @param carried - what the try came to
  * @param at - the moment a mark is set anew with
  */
 export function usersCarried(carried: CarriedUsers, at: number): Statement {
-  if (carried.logins === null) return usersClaimed(at);
+  if (carried.users === null) return usersClaimed(at);
 
-  const same = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND json_extract(${settings.value}, '$.logins') = json(${JSON.stringify(carried.logins)}))`;
+  const same = fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND json_extract(${settings.value}, '$.users') = json(${JSON.stringify(carried.users)}))`;
   const untouched = fragment`${LAST_MARK} <= ${v.parse(MOMENT, carried.since)}`;
   // A settled mark keeps its size, below zero: the next one is later than it.
   const settled = fragment`-abs(${domainCheck.users_changed_at})`;

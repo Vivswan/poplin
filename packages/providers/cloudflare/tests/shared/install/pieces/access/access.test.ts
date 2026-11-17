@@ -20,11 +20,11 @@ const LEFT = [
   { kind: "leave", subject: "poplin" },
 ] as const;
 
-function loginsOf(...emails: string[]): Parameters<typeof planAccess>[0]["logins"] {
-  const logins = parseLogins(emails);
-  if (!logins.ok) throw new Error(`the test's logins were refused: ${logins.refusal}`);
+function loginsOf(...emails: string[]): Parameters<typeof planAccess>[0]["users"] {
+  const users = parseLogins(emails);
+  if (!users.ok) throw new Error(`the test's users were refused: ${users.refusal}`);
 
-  return logins.value;
+  return users.value;
 }
 
 type Current = Parameters<typeof planAccess>[1];
@@ -57,11 +57,11 @@ describe("planAccess", () => {
   const owner = loginsOf("owner@example.com", "second@example.com");
   const emails = ["owner@example.com", "second@example.com"];
   const include = emails.map((email) => ({ email: { email } }));
-  const desired = { hostname: ADMIN, logins: owner, privateSites: PRIVATE_SITES };
+  const desired = { hostname: ADMIN, users: owner, privateSites: PRIVATE_SITES };
 
   // Drift: a private site's address left out of the guarded application reaches the Worker with no token, and every private site answers 404 to its owner.
   // The open paths are planned first: a run that stops half way must never leave the API behind a login no program can pass.
-  test("an account with no Access gets the open paths with their policy, then the logins' policy and the application over the whole admin hostname and the private sites", () => {
+  test("an account with no Access gets the open paths with their policy, then the users' policy and the application over the whole admin hostname and the private sites", () => {
     expect(planAccess(desired, NOTHING)).toEqual([
       { kind: "create", subject: "poplin open paths policy", decision: "bypass", include: [{ everyone: {} }] },
       { kind: "create", subject: "poplin open paths", uris: OPEN, policy: "poplin open paths policy", policyId: undefined },
@@ -91,7 +91,7 @@ describe("planAccess", () => {
 
   // Drift: an install without a domain whose private host is left out of the application has no login in front of it, so the Worker answers every private site 404, to its owner too.
   test("an install without a domain: the same four steps over its free addresses, the open paths of the admin host let through and the application over the whole admin host and the whole private host", () => {
-    const addresses = { hostname: ADDRESSES.adminHost, logins: owner, privateSites: ADDRESSES.privateHost };
+    const addresses = { hostname: ADDRESSES.adminHost, users: owner, privateSites: ADDRESSES.privateHost };
     const guarded = ["poplin.example.workers.dev", "poplin-private.example.workers.dev"];
     const open = ["poplin.example.workers.dev/api"];
     const made = [everyone(), policy("pol-1", emails)];
@@ -123,13 +123,13 @@ describe("planAccess", () => {
     { name: "an email is missing", policy: policy("pol-1", ["owner@example.com"]) },
     { name: "a whole domain was let in", policy: policy("pol-1", emails, { include: [...include, { email_domain: { domain: "example.com" } }] }) },
     { name: "everyone was let in", policy: policy("pol-1", emails, { include: [{ everyone: {} }] }) },
-    { name: "everyone was let in beside the logins", policy: policy("pol-1", emails, { include: [...include, { everyone: {} }] }) },
+    { name: "everyone was let in beside the users", policy: policy("pol-1", emails, { include: [...include, { everyone: {} }] }) },
     { name: "the decision was changed", policy: policy("pol-1", emails, { decision: "bypass" }) },
     { name: "an exclusion was added", policy: policy("pol-1", emails, { exclude: [{ email: { email: "owner@example.com" } }] }) },
     { name: "a requirement was added", policy: policy("pol-1", emails, { require: [{ email_domain: { domain: "example.com" } }] }) },
   ];
 
-  test.each(widened)("$name: the logins' policy is changed back to exactly the login list, everything else left", ({ policy: drifted }) => {
+  test.each(widened)("$name: the users' policy is changed back to exactly the login list, everything else left", ({ policy: drifted }) => {
     const current = { policies: [drifted, everyone()], applications: [application("app-1", ADMIN, "pol-1"), openPaths()] };
 
     expect(planAccess(desired, current)).toEqual([LEFT[0], LEFT[1], { kind: "change", subject: "poplin logins", id: "pol-1", decision: "allow", include }, LEFT[3]]);
@@ -153,7 +153,7 @@ describe("planAccess", () => {
     { name: "the admin hostname changed", application: application("app-1", "old.example.com", "pol-1") },
     { name: "a second policy was attached", application: application("app-1", ADMIN, "pol-1", { policies: [{ id: "pol-1" }, { id: "pol-0" }] }) },
     { name: "another policy replaced it", application: application("app-1", ADMIN, "pol-0") },
-    { name: "the open policy replaced the logins'", application: application("app-1", ADMIN, "pol-open") },
+    { name: "the open policy replaced the users'", application: application("app-1", ADMIN, "pol-open") },
     {
       name: "an override made a path public",
       application: application("app-1", ADMIN, "pol-1", {
@@ -186,7 +186,7 @@ describe("planAccess", () => {
     { name: "a path of the dashboard was added to the open paths", application: openPaths({ destinations: [...OPEN, "poplin.example.com/data"].map((uri) => ({ type: "public", uri })) }) },
     { name: "the whole admin hostname was made an open path", application: openPaths({ domain: "poplin.example.com", destinations: [{ type: "public", uri: "poplin.example.com" }] }) },
     { name: "a path the install opened once and opens no more is still among the open paths", application: openPaths({ destinations: [...OPEN, "poplin.example.com/setup"].map((uri) => ({ type: "public", uri })) }) },
-    { name: "the logins' policy replaced the open one", application: openPaths({ policies: [{ id: "pol-1" }] }) },
+    { name: "the users' policy replaced the open one", application: openPaths({ policies: [{ id: "pol-1" }] }) },
   ];
 
   test.each(opened)("$name: the open application is changed back by its id, everything else left", ({ application: drifted }) => {
@@ -214,7 +214,7 @@ describe("syncAccess", () => {
         return reply(made);
       },
       async (connection, asked) => {
-        const desired = { hostname: ADMIN, logins: loginsOf("owner@example.com"), privateSites: PRIVATE_SITES };
+        const desired = { hostname: ADMIN, users: loginsOf("owner@example.com"), privateSites: PRIVATE_SITES };
         const first = await syncAccess(connection, "account-a", desired, "apply");
         const sent = asked.length;
         const second = await syncAccess(connection, "account-a", desired, "apply");

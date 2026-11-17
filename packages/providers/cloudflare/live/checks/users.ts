@@ -5,9 +5,9 @@ import { expect } from "bun:test";
 import type { Bench, Check } from "../records";
 import { shownInTime } from "../util";
 
-/** The logins of the install as its settings hold them, in order. */
-async function storedLogins(bench: Bench): Promise<string[]> {
-  const shown = await bench.cli("config", "logins");
+/** The users of the install as its settings hold them, in order. */
+async function storedUsers(bench: Bench): Promise<string[]> {
+  const shown = await bench.cli("config", "users");
   expect(shown.code).toBe(0);
 
   return shown.value.value as string[];
@@ -25,14 +25,14 @@ export const USER_CHECKS: readonly Check[] = [
     name: "a user added through the install is in the login list at the provider with no repair, and a user removed is out of it",
     needs: ["token", "access", "kept-key", "login-list"],
     run: async (bench) => {
-      const before = await storedLogins(bench);
+      const before = await storedUsers(bench);
       const email = `${bench.prefix}@example.com`;
 
       try {
-        expect((await bench.cli("config", "logins", [...before, email].join(","))).code).toBe(0);
+        expect((await bench.cli("config", "users", [...before, email].join(","))).code).toBe(0);
         expect(await listed(bench, email, true)).toBe(true);
       } finally {
-        expect((await bench.cli("config", "logins", before.join(","))).code).toBe(0);
+        expect((await bench.cli("config", "users", before.join(","))).code).toBe(0);
       }
 
       expect(await listed(bench, email, false)).toBe(true);

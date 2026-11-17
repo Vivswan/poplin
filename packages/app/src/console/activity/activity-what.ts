@@ -54,11 +54,11 @@ const ONE_DETAIL: Readonly<Record<string, (value: unknown) => string>> = {
 /** What a change of a site's title and name together says: the one form sets both. */
 const TITLE_AND_NAME = "Changed the title and the name";
 
-/** What new logins that hold the same users say: only their order changed. */
+/** What new users that hold the same users say: only their order changed. */
 const USERS_MOVED = "Changed the order of the users";
 
-/** The keys an entry of new logins holds for the users: the list, who it adds, and who it leaves out. Any other key is a setting changed in the same step. */
-const USER_KEYS = ["logins", "added", "removed"];
+/** The keys an entry of new users holds for the users: the list, who it adds, and who it leaves out. Any other key is a setting changed in the same step. */
+const USER_KEYS = ["users", "added", "removed"];
 
 function named(words: string, name: unknown): string | undefined {
   return typeof name === "string" && name !== "" ? `${words} "${name}"` : undefined;
@@ -84,7 +84,7 @@ function usersNamed(done: string, emails: unknown): string[] {
 function usersWords(detail: AuditEntry["detail"]): string | undefined {
   const users = [...usersNamed("Added", detail.added), ...usersNamed("Removed", detail.removed)];
   const alone = Object.keys(detail).every((key) => USER_KEYS.includes(key));
-  if (users.length === 0) return alone && "logins" in detail ? USERS_MOVED : undefined;
+  if (users.length === 0) return alone && "users" in detail ? USERS_MOVED : undefined;
 
   return [...(alone ? [] : [WORDS.settings_changed]), ...users].join(". ");
 }

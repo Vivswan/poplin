@@ -12,9 +12,9 @@ function login(raw: string): Login {
   return parsed.value;
 }
 
-function logins(...raw: string[]): Logins {
+function users(...raw: string[]): Logins {
   const parsed = parseLogins(raw);
-  if (!parsed.ok) throw new Error(`fixture is not a list of logins: ${parsed.refusal}`);
+  if (!parsed.ok) throw new Error(`fixture is not a list of users: ${parsed.refusal}`);
 
   return parsed.value;
 }
@@ -85,6 +85,6 @@ describe("isLogin", () => {
     ["owner@example.com,second@example.com", false],
     ["", false],
   ] as const)("%j may log in: %j", (email, allowed) => {
-    expect(isLogin(logins("owner@example.com", "second@example.com"), email)).toBe(allowed);
+    expect(isLogin(users("owner@example.com", "second@example.com"), email)).toBe(allowed);
   });
 });

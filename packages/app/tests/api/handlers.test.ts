@@ -269,17 +269,17 @@ describe("an export imported into another install", () => {
   });
 
   // Drift: a setting is changed one request at a time and exported all at once; an import held to the cap of one change would refuse the settings of an install whose changes each passed it.
-  test("settings whose logins are as many as one change may name are exported and imported whole", async () => {
+  test("settings whose users are as many as one change may name are exported and imported whole", async () => {
     const [first, second] = [await openApi(), await openApi()];
     const reader = (at: number, labels: readonly number[]): string => `${String(at).padStart(60, "r")}@${labels.map((length) => "d".repeat(length)).join(".")}.example.com`;
-    const logins = ["ada@example.com", ...Array.from({ length: 254 }, (_, at) => reader(at, [60, 60, 59])), reader(254, [60, 60, 30])] as Login[];
-    const changed = await first.routes.config.$patch({ json: { logins }, query: {} });
+    const users = ["ada@example.com", ...Array.from({ length: 254 }, (_, at) => reader(at, [60, 60, 59])), reader(254, [60, 60, 31])] as Login[];
+    const changed = await first.routes.config.$patch({ json: { users }, query: {} });
     const exported = await answered(first.routes.export.settings.$get({ query: {} }));
 
-    const imported = await answered(second.routes.import.settings.$post({ json: { format: exported.body.format, settings: exported.body.settings, logins: true } as never, query: {} }));
+    const imported = await answered(second.routes.import.settings.$post({ json: { format: exported.body.format, settings: exported.body.settings, users: true } as never, query: {} }));
 
     // The body of the change is the 65,536 bytes a request may hold, and the import that carries it is longer.
-    expect<unknown>([JSON.stringify({ logins }).length, changed.status, exported.status, imported.status, JSON.stringify(part(imported, "values").logins) === JSON.stringify(logins)]).toEqual([65_536, 200, 200, 200, true]);
+    expect<unknown>([JSON.stringify({ users }).length, changed.status, exported.status, imported.status, JSON.stringify(part(imported, "values").users) === JSON.stringify(users)]).toEqual([65_536, 200, 200, 200, true]);
   });
 
   // Drift: `--all-versions` is a flag of the client; an export that sent every version without it, or an import that needed them all, would make every backup as large as the bucket.

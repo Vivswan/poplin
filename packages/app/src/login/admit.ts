@@ -32,7 +32,7 @@ interface Admission<Refusal extends string> {
   readonly identify: Identify<Refusal>;
 
   /** The install's users, as they are now. */
-  readonly logins: Logins;
+  readonly users: Logins;
 
   /** The time, in milliseconds since the epoch. */
   readonly now: number;
@@ -52,7 +52,7 @@ export async function admit<Refusal extends string>(headers: RequestHeaders, adm
   const identity = await admission.identify(headers, admission.now);
   if (!identity.ok) return identity;
 
-  if (!isLogin(admission.logins, identity.value)) return { ok: false, refusal: NOT_A_USER };
+  if (!isLogin(admission.users, identity.value)) return { ok: false, refusal: NOT_A_USER };
 
   return { ok: true, actor: { scope: "admin", holder: identity.value }, since: identity.since };
 }

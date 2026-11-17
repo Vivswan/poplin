@@ -8,7 +8,7 @@
 //   storageWritesPerDay    R2: 1,000,000 Class A operations a month    operations are billed
 //   storageReadsPerMonth   R2: 10,000,000 Class B operations a month   operations are billed
 //   requestsPerDay         Workers: 100,000 requests a day             nothing more is served without the paid plan
-//   logins                 Access: 50 users                            seats are billed
+//   users                 Access: 50 users                            seats are billed
 //
 // R2 counts every put, list, and copy as Class A and every get and head as Class B, the ones that fail included; a delete is free. https://developers.cloudflare.com/r2/pricing/
 //
@@ -63,5 +63,5 @@ export const FREE_LIMITS: FreeLimits = {
     warning: "Requests read the storage. Past 10,000,000 reads a month, Cloudflare bills the rest.",
   },
   requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need Cloudflare's paid plan." },
-  logins: { most: 50, warning: "Past 50 users, Cloudflare bills each login." },
+  users: { most: 50, warning: "Past 50 users, Cloudflare bills each login." },
 };

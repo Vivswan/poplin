@@ -14,7 +14,7 @@ import { PeopleTab } from "@/access/people-tab";
 /** The people of the test install: the one logged in here, one more who allowed two tokens, one who allowed one, and one who allowed none. */
 const PEOPLE = {
   ok: true,
-  logins: ["mira@example.com", "jonas@example.com", "lena@example.com", "omar@example.com"],
+  users: ["mira@example.com", "jonas@example.com", "lena@example.com", "omar@example.com"],
   you: "mira@example.com",
   tokens: { "mira@example.com": 4, "jonas@example.com": 2, "lena@example.com": 1 },
 } as unknown as People;

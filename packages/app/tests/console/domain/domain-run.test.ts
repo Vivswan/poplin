@@ -13,7 +13,7 @@ const EVERY_STATE: readonly DomainRow[] = [
   { object: "Route", state: "changed", detail: "every site", part: "reach" },
   { object: "Route", state: "removed", detail: "an old route", part: "reach" },
   { object: "Login application", state: "missing", detail: "the dashboard's login", part: "login" },
-  { object: "Login policy", state: "differs", detail: "the logins of the settings", part: "login" },
+  { object: "Login policy", state: "differs", detail: "the users of the settings", part: "login" },
   { object: "Rate rule", state: "left-out", detail: "rate rule: the plan has none", part: "rest" },
   { object: "Route", state: "left-out", detail: "every site: another application holds it", part: "reach" },
   { object: "Bot settings", state: "optional", detail: "To switch this on, add this permission: Bots: Edit", part: "rest" },
@@ -55,7 +55,7 @@ test("a run is kept as the last check of the domain: when, by whom, which run, a
         { piece: "Route", detail: "every site", part: "reach", state: "ok" },
         { piece: "Route", detail: "an old route", part: "reach", state: "ok" },
         { piece: "Login application", detail: "the dashboard's login", part: "login", state: "needs_repair" },
-        { piece: "Login policy", detail: "the logins of the settings", part: "login", state: "needs_repair" },
+        { piece: "Login policy", detail: "the users of the settings", part: "login", state: "needs_repair" },
         { piece: "Rate rule", detail: "rate rule: the plan has none", part: "rest", state: "not_set_up" },
         { piece: "Route", detail: "every site: another application holds it", part: "reach", state: "needs_repair" },
         { piece: "Bot settings", detail: "To switch this on, add this permission: Bots: Edit", part: "rest", state: "not_set_up" },
@@ -83,7 +83,7 @@ test.each([
   const { opened, asked, kept } = await openRun();
   const rows: DomainRow[] = [
     { object: "Record", state: "missing", detail: "every site", part: "reach" },
-    { object: "Login policy", state: login, detail: "the logins", part: "login", users: true },
+    { object: "Login policy", state: login, detail: "the users", part: "login", users: true },
     { object: "Cost warning", state: holder, detail: "mailed to the first user", part: "rest", users: true },
     { object: "Bots rule", state: "optional", detail: "no right for it", part: "rest" },
   ];
