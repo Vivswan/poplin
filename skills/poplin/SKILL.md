@@ -86,6 +86,8 @@ Leave `no_trash` to the user. With the command, `--no-trash` asks a person to ty
 
 Look at the folder first: what is in it will be on the site, and an unlisted or public site shows all of it. `npx poplin ./report --dry-run` lists the files and uploads nothing.
 
+**Try a change first.** `--dry-run` goes with every command that changes a site or a setting, and with a logout: `npx poplin delete report--k3f9x2ab71qz --no-trash --dry-run`. For these the install is asked: it says what the command would do, or refuses it as it would refuse the run, and changes nothing. With `--json` the answer starts with `"dry_run": true`. The tools take no dry run.
+
 **The site is static.** Files are served as they are. Relative links between them work (`<a href="notes/q3.html">`, `<img src="chart.svg">`): write every link that way, since a link that starts with `/` is refused on an install without a domain. There is no server code, no form handler, and no database, so build pages that need none.
 
 **A site can bring its own page for a wrong address:** a file named `404.html` at the root of the folder. A visitor who asks for a file the site does not have gets that page, with status 404. A site without one answers a plain `Not found`.

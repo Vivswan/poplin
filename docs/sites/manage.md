@@ -38,8 +38,28 @@ Every other example runs the same way, with `npx` before `poplin`.
 | `poplin restore report--k3f9x2ab71qz`         | takes it back out of the trash                                |
 | `poplin delete report--k3f9x2ab71qz --no-trash` | removes it now, after you type its label; nothing restores it |
 
+## Try a change first
+
+`--dry-run` after a command that changes a site says what it would do, and changes nothing.
+
+| Example                                                   | Says                                                       |
+| --------------------------------------------------------- | ---------------------------------------------------------- |
+| `poplin set report--k3f9x2ab71qz --public --dry-run`      | the address the site would have, or that its name is taken |
+| `poplin rollback report--k3f9x2ab71qz --dry-run`          | the version that would be live                             |
+| `poplin new-link report--k3f9x2ab71qz --dry-run`          | the address that would stop                                |
+| `poplin duplicate report--k3f9x2ab71qz --dry-run`         | the copy's name and files, or the limit that refuses it    |
+| `poplin delete report--k3f9x2ab71qz --dry-run`            | the day the site would be gone for good                    |
+| `poplin delete report--k3f9x2ab71qz --no-trash --dry-run` | what would be removed; it asks for no label                |
+| `poplin restore report--k3f9x2ab71qz --dry-run`           | the site as it would come back                             |
+
+- **The install answers a dry run,** so it is refused where the run would be: the same sentence, the same exit code.
+- **`--json` with `--dry-run`** prints what the run prints, with `"dry_run": true` first.
+- **A new link's address** is not in a dry run: the install draws the new id when it makes the link.
+
+## What to know
+
 - **Versions:** an install keeps a few per site. `poplin config versions_kept` shows how many.
 - **Trash:** a deleted site waits some days, then it is gone. `poplin config trash_days` shows how many.
 - **A new link** is for an address that reached the wrong person. A public site keeps its public name.
 - **A copy's title** is the one the site shows, with `(copy)` after it: `Q3 sales (copy)`. A title that ends that way already stays as it is, and a site with no title gives a copy with none. A long title is cut, so that both fit in 200 characters.
-- **Pages opened:** `poplin show report--k3f9x2ab71qz` says about how often a site's pages were opened, today and in the last 7 days. The numbers come from a sample, so they read `about 120`. A page a browser shows from its own copy, inside 5 minutes, is not counted.
+- **Visits:** `poplin show report--k3f9x2ab71qz` says about how often a site's pages were opened, today and in the last 7 days. The numbers come from a sample, so they read `about 120`. A page a browser shows from its own copy, inside 5 minutes, is not counted.

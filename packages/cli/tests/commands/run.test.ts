@@ -126,7 +126,7 @@ describe("run", () => {
 
     expect(shown.out.slice(0, 5)).toEqual([label, url, "", `id              ${label.slice(-12)}`, "name            report"]);
     expect(shown.out.at(-1)).toMatch(/^version 1 {2}2023-11-14 {2}by [0-9a-f]{16} {2}live$/);
-    expect(shown.out.filter((line) => line.startsWith("pages opened"))).toEqual(["pages opened    about 10 or fewer times today, about 10 or fewer in the last 7 days"]);
+    expect(shown.out.filter((line) => line.startsWith("visits"))).toEqual(["visits          about 10 or fewer times today, about 10 or fewer in the last 7 days"]);
     expect(json).toEqual((await answered(bench.install.routes.sites[":site"].$get({ param: { site: label } }))).body);
   });
 
