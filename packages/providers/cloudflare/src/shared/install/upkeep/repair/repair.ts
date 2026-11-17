@@ -162,7 +162,7 @@ function settingsOf(stored: Exclude<Stored, { readonly state: "another" }>, bind
  * @returns `undefined` once the rows are in; else why nothing was read
  */
 async function mended(work: Work, install: BoundInstall, settings: DomainSettings, reach: Reach): Promise<Extract<Repaired, { readonly ok: false }> | undefined> {
-  const parts = { script: SCRIPT, accountId: work.place.accountId, fetch: reach.fetch, now: reach.now };
+  const parts = { script: SCRIPT, accountId: work.place.accountId, fetch: reach.fetch, now: reach.now, sleep: reach.sleep };
   const plug = install.kind === "domain" ? createDomainPlug({ ...parts, layout: install.layout }) : createPathPlug({ ...parts, layout: install.layout });
   const { key } = work.place.connection;
   const reading = await (work.mode === "plan" ? plug.check(key, async () => settings) : plug.repair(key, async () => settings));

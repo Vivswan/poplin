@@ -147,6 +147,7 @@ interface Outcome {
   readonly said: string[];
   readonly calls: readonly Asked[];
   readonly changes: string[];
+  readonly slept: readonly number[];
 }
 
 /** Find the install, then repair it, in one stand-in world. */
@@ -161,7 +162,7 @@ async function repaired(account: Account, kind: keyof typeof KINDS, mend: Partia
   const done = await installer.repair(whole, where, { run: APPLY, update: false, addUser: undefined, ...mend }, world.reach, (row) => said.push(`${row.object} | ${row.state} | ${row.detail}`));
   const calls = world.asked.slice(sought);
 
-  return { done, said, calls, changes: calls.filter(writes).map((entry) => `${entry.method} ${entry.path.split("?")[0]}`) };
+  return { done, said, calls, changes: calls.filter(writes).map((entry) => `${entry.method} ${entry.path.split("?")[0]}`), slept: world.slept };
 }
 
 describe.each(BOTH)("a repair with the token, %s", (kind) => {
@@ -302,6 +303,28 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
     // The release is stated once, by its value: named as kept beside it, Cloudflare would be told one binding twice.
     expect(metadata.bindings.filter((binding) => binding.name === "RELEASE")).toEqual([{ name: "RELEASE", type: "plain_text", text: RELEASE }]);
     expect([again.changes, shown(again.done)[0], again.calls.length]).toEqual([[], `Worker | leave | poplin, runs ${RELEASE}`, CALLS[kind]]);
+  });
+
+  // Drift: for about a second after an upload, Cloudflare lists the Worker without the bindings its new version holds. A repair reads them right after its own upload: read once, it stopped at `Worker variable` on an install with nothing wrong.
+  test.each([1, 2])("settings that trail the upload for %d reads are read again after a wait each time, and the repair ends whole, with that many more calls", async (reads) => {
+    const account = await behindInstall(kind);
+    account.trailing = { from: "upload", answers: Array.from({ length: reads }, () => ({ bindings: [] })) };
+    const { done, changes, calls, slept } = await repaired(account, kind, UPDATE);
+
+    expect([shown(done).filter((row) => !row.includes(" | leave | ")), changes, done.ok && done.ready]).toEqual([[`Worker | change | poplin: ${OLDER} to ${RELEASE}`], [UPLOAD], true]);
+    expect([slept, calls.length - CALLS[kind] - UPLOAD_CALLS]).toEqual([Array(reads).fill(1500), reads]);
+  });
+
+  // Drift: a change sent after a read in part names as kept only the bindings that read listed, and a key read as missing is made anew. Settings that never settle must stop the pieces that read them, with nothing written after the upload.
+  test("settings that trail the upload at every try stop the pieces that read them with a failure, and nothing is written after the upload", async () => {
+    const account = await behindInstall(kind);
+    account.trailing = { from: "upload", answers: Array.from({ length: 100 }, () => ({ bindings: [] })) };
+    const keys = account.tokens.length;
+    const { done, changes } = await repaired(account, kind, UPDATE);
+    const failed = shown(done).filter((row) => row.includes(" | fail | "));
+
+    expect([changes, done.ok && done.ready, account.tokens.length]).toEqual([[UPLOAD], false, keys]);
+    expect(failed).toEqual(["Worker variable | fail | no answer from Cloudflare", "Key | fail | poplin kept key: no answer from Cloudflare", "Upload key | fail | poplin upload key: no answer from Cloudflare"]);
   });
 
   // Drift: a website that does not name the version the install ran publishes no files to go back to. An update stated for it would offer a way back that every start refuses.

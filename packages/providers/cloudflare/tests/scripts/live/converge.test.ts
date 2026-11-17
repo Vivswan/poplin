@@ -67,6 +67,9 @@ const FRESH_KEY = "::warning::The checks of settled-upload-key are skipped: the 
 /** How many reads of the Worker's settings a run that mends an install makes after its upload, before the repair reads them to write the Worker's variables. */
 const WHOLE_READS = 3;
 
+/** How many reads of settings that stay in part a piece makes before it gives up: its first, and three more. */
+const SETTLING_READS = 4;
+
 /** What a run that was through says last. */
 const ANSWERS = "The test install answers.";
 
@@ -568,7 +571,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     expect([ran.code, ran.uploads, ran.lines.at(-1), standing.account.trailing.answers]).toEqual([0, [UPDATE_UPLOAD], ANSWERS, []]);
   });
 
-  // Drift: Cloudflare's settings can trail the run's upload for longer than the repair's first read waits, and then the Worker's variables are not written: the row fails as a call with no answer does.
+  // Drift: Cloudflare's settings can trail the run's upload for longer than the repair reads them again, and then the Worker's variables are not written: the row fails as a call with no answer does.
   // A run that stopped there turned the test install red for a state that is over a minute later; and one that printed the row's state alone left nobody able to tell that from a refusal.
   test("a repair whose row failed on a call with no answer is told with the row's reason and run once more a minute later, and the run goes on to its end", async () => {
     const standing = await standingOn(freshAccount(), kind);
@@ -579,7 +582,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
         return account.bindings;
       },
     };
-    account.trailing = { from: "upload", answers: [...Array.from({ length: WHOLE_READS }, () => whole), { bindings: [] }] };
+    account.trailing = { from: "upload", answers: [...Array.from({ length: WHOLE_READS }, () => whole), ...Array.from({ length: SETTLING_READS }, () => ({ bindings: [] }))] };
     const ran = await standing.again();
 
     expect([ran.code, ran.lines.filter((line) => line.startsWith("Repair") || line.startsWith("Worker variable")), ran.lines.at(-1), account.trailing.answers]).toEqual([

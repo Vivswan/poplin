@@ -36,24 +36,42 @@ test.each(cases)("$name is a $kind", ({ bindings, kind }) => {
   expect(planVariables(DESIRED, bindings).map((step) => `${step.kind} ${step.subject}`)).toEqual([`${kind} ACCESS`]);
 });
 
-// Drift: a change names as kept only the bindings its own read listed. Sent after a read in part, it would drop the bucket, the database, and the key of a Worker that holds them.
-test.each([
-  ["no binding", { bindings: [] }],
-  ["no list of bindings", {}],
-  ["every binding but the Worker's own name", { bindings: emptyAccount().bindings.filter((binding) => binding.name !== "WORKER_NAME") }],
-])("a change after a read of the Worker that answers %s is not sent: it fails as a read that got no answer, names the variable, and leaves every binding", async (_, answered) => {
+/** What a read of settings that trail an upload may answer, each a read in part: no binding, no list of bindings, and every binding but the Worker's own name. */
+const IN_PART = [{ bindings: [] }, {}, { bindings: emptyAccount().bindings.filter((binding) => binding.name !== "WORKER_NAME") }];
+
+// Drift: for about a second after an upload, Cloudflare lists a Worker without the bindings its new version holds. A piece that read once then stopped a repair right after its own upload, on an install with nothing wrong.
+test.each([1, 2, 3])("settings that list the Worker's bindings in part for %d reads are read again after 1.5 seconds each time, and the change is then sent whole", async (reads) => {
   const worker = { accountId: ACCOUNT, script: "poplin" };
-  const account = { ...emptyAccount(), trailing: { from: "now" as const, answers: [answered] } };
-  const before = JSON.stringify(account.bindings);
+  const account = { ...emptyAccount(), trailing: { from: "now" as const, answers: IN_PART.slice(0, reads) } };
+  const slept: number[] = [];
 
   await withFake(
     (asked) => answer(account, asked),
     async (connection, asked) => {
-      const token = { ...connection, key: TOKEN };
+      const token = { ...connection, key: TOKEN, sleep: async (milliseconds: number) => void slept.push(milliseconds) };
+
+      expect(await syncVariables(token, worker, [{ name: "ACCOUNT_ID", value: ACCOUNT }], "apply")).toMatchObject({ ok: true, report: { created: ["ACCOUNT_ID"] } });
+      expect([slept, asked.filter((entry) => entry.method === "GET").length]).toEqual([Array(reads).fill(1500), reads + 1]);
+      expect(account.bindings.map((binding) => binding.name)).toEqual([...emptyAccount().bindings.map((binding) => binding.name), "ACCOUNT_ID"]);
+    },
+  );
+});
+
+// Drift: a change names as kept only the bindings its own read listed. Sent after a read in part, it would drop the bucket, the database, and the key of a Worker that holds them.
+test("settings still in part after three more reads fail as a read that got no answer: no change is sent, every binding is left, and the next run writes", async () => {
+  const worker = { accountId: ACCOUNT, script: "poplin" };
+  const account = { ...emptyAccount(), trailing: { from: "now" as const, answers: [...IN_PART, ...IN_PART.slice(0, 1)] } };
+  const before = JSON.stringify(account.bindings);
+  const slept: number[] = [];
+
+  await withFake(
+    (asked) => answer(account, asked),
+    async (connection, asked) => {
+      const token = { ...connection, key: TOKEN, sleep: async (milliseconds: number) => void slept.push(milliseconds) };
       const wanted = [{ name: "ACCOUNT_ID", value: ACCOUNT }];
 
-      expect(await syncVariables(token, worker, wanted, "apply")).toMatchObject({ ok: false, failure: "network", failed: "ACCOUNT_ID", unrun: [], report: { created: [], changed: [] } });
-      expect([asked.filter((entry) => entry.method !== "GET"), JSON.stringify(account.bindings)]).toEqual([[], before]);
+      expect(await syncVariables(token, worker, wanted, "apply")).toMatchObject({ ok: false, failure: "network", message: "the Worker's settings were not read whole", report: { created: [], changed: [] } });
+      expect([asked.filter((entry) => entry.method !== "GET"), JSON.stringify(account.bindings), slept]).toEqual([[], before, [1500, 1500, 1500]]);
       expect(await syncVariables(token, worker, wanted, "apply")).toMatchObject({ ok: true, report: { created: ["ACCOUNT_ID"] } });
       expect(account.bindings.map((binding) => binding.name)).toEqual([...emptyAccount().bindings.map((binding) => binding.name), "ACCOUNT_ID"]);
     },

@@ -324,7 +324,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
  */
 async function finish(work: Work, target: Target, login: Login, kept: SettingValues | undefined, reach: Reach): Promise<boolean> {
   const settings = kept ?? defaultSettings({ installer: login });
-  const parts = { script: SCRIPT, first: { login: settings.logins[0] ?? login, accountId: work.place.accountId }, fetch: reach.fetch, now: reach.now };
+  const parts = { script: SCRIPT, first: { login: settings.logins[0] ?? login, accountId: work.place.accountId }, fetch: reach.fetch, now: reach.now, sleep: reach.sleep };
   const plug = target.kind === "domain" ? createDomainPlug({ ...parts, layout: target.layout }) : createPathPlug({ ...parts, layout: target.layout });
   const reading = await (work.mode === "plan" ? plug.check(work.place.connection.key, async () => settings) : plug.repair(work.place.connection.key, async () => settings));
   if (!reading.ok && reading.refusal === "unreachable") return false;
