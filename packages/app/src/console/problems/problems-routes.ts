@@ -36,16 +36,17 @@ interface Mark {
 
 /**
  * What the frame holds of the problems: each kind last seen within a day, once, the newest first, and the mark of each screen that has any.
- * `domainAsks` counts those the Domain screen draws that say to press Repair: the screen adds them to the pieces its line counts, so the line counts every mark under it that a repair ends.
+ * `domainAsks` holds the sentence of each one the Domain screen draws that says to press Repair: the screen adds them to the pieces its line counts, so the line counts every mark under it that a repair ends,
+ * and after a repair it counts and names the ones that are gone.
  */
 export interface Marked {
   readonly recent: readonly ShownProblem[];
   readonly marks: Readonly<Record<Home, Mark | null>>;
-  readonly domainAsks: number;
+  readonly domainAsks: readonly string[];
 }
 
 /** The frame of an install with no problem. */
-export const NOTHING_MARKED: Marked = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: 0 };
+export const NOTHING_MARKED: Marked = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: [] };
 
 /** What to do about a problem. An update that was refused is kept under the refusal's code and what it is about, so its advice is that refusal's own sentence. */
 function todoOf(problem: Problem): string {
@@ -80,7 +81,7 @@ export function markedIn(problems: readonly Problem[], now: number, domain: { re
   // A kind seen on both sides of midnight is one problem: its newest day stands for it.
   const recent = seen.filter((problem, at) => seen.findIndex((one) => one.kind === problem.kind) === at).map((problem) => shown(problem, domain.screen));
   const also = { usage: [], settings: [], domain: domain.says === null ? [] : [domain.says] };
-  const asking = recent.filter((problem) => problem.home === "domain" && asksRepair(problem.kind)).length;
+  const asking = recent.filter((problem) => problem.home === "domain" && asksRepair(problem.kind)).map((problem) => problem.sentence);
   const marks = { usage: markOf("usage", recent, also.usage), domain: markOf("domain", recent, also.domain), settings: markOf("settings", recent, also.settings) };
 
   return { recent, marks, domainAsks: asking };

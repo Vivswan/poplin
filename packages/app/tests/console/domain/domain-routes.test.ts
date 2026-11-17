@@ -93,6 +93,7 @@ describe("what the screen opens with", () => {
       ],
       summary: { line: "1 to repair", tone: "bad" },
       waiting: 1,
+      repaired: 0,
     });
   });
 
@@ -255,18 +256,18 @@ describe("a run", () => {
 describe("the line that counts a run's rows", () => {
   // Drift: the line would claim a repair that left work was done, or count an optional piece as work; or the count a screen adds its problems to would be one the line does not say.
   test.each([
-    ["check", rowsIn("present", "missing", "differs", "left-out"), "2 to repair", "bad", 2],
-    ["repair", rowsIn("created", "changed", "removed", "present"), "3 repaired", "good", 0],
-    ["repair", rowsIn("present", "present"), "Nothing to repair", "good", 0],
-    ["check", rowsIn("present", "created"), "Nothing to repair", "good", 0],
-    ["repair", rowsIn("created", "failed", "present"), "1 not done", "bad", 0],
-    ["repair", rowsIn("failed", "not-run", "missing"), "3 not done", "bad", 0],
-    ["repair", rowsIn("created", "optional", "optional"), "1 repaired", "good", 0],
-    ["check", rowsIn("present", "optional"), "Nothing to repair", "good", 0],
-  ] as const)("after a %s of %p says %s", (run, rows, line, tone, waiting) => {
+    ["check", rowsIn("present", "missing", "differs", "left-out"), "2 to repair", "bad", 2, 0],
+    ["repair", rowsIn("created", "changed", "removed", "present"), "3 repaired", "good", 0, 3],
+    ["repair", rowsIn("present", "present"), "Nothing to repair", "good", 0, 0],
+    ["check", rowsIn("present", "created"), "Nothing to repair", "good", 0, 0],
+    ["repair", rowsIn("created", "failed", "present"), "1 not done", "bad", 0, 0],
+    ["repair", rowsIn("failed", "not-run", "missing"), "3 not done", "bad", 0, 0],
+    ["repair", rowsIn("created", "optional", "optional"), "1 repaired", "good", 0, 1],
+    ["check", rowsIn("present", "optional"), "Nothing to repair", "good", 0, 0],
+  ] as const)("after a %s of %p says %s", (run, rows, line, tone, waiting, repaired) => {
     const reading: Extract<DomainReading, { ok: true }> = { ok: true, rows: [...rows], steps: [] };
 
-    expect(runDone(run, reading, false)).toMatchObject({ summary: { line, tone }, waiting });
+    expect(runDone(run, reading, false)).toMatchObject({ summary: { line, tone }, waiting, repaired });
   });
 
   // Drift: a user added in Access cannot log in until a repair, and a green "Nothing to repair" would say there is nothing to do. Said over a count of work, it would hide the pieces a repair must also mend.
@@ -320,6 +321,7 @@ describe("the run the install remembers", () => {
       ],
       summary: { line: "2 not done", tone: "bad" },
       waiting: 0,
+      repaired: 0,
     });
     expect(keptAnswer({ check: null, stale: false, waits: false })).toBeNull();
   });

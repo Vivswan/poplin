@@ -20,8 +20,14 @@ const KEYS = "Alt+T";
 /** The place every line is drawn in: the library gives it the focus at its keys. */
 const PLACE = "[data-sonner-toaster]";
 
-/** The look of the words of a line with a button: on a wide screen they stay on one row, so the line stays lower than the header. A name they begin with is cut before the rest. A phone ends them as it ends every line's. */
-const ONE_ROW = { words: "block md:truncate", named: "block md:flex md:min-w-0", name: "md:truncate", rest: "md:shrink-0 md:whitespace-pre" } as const;
+/** The look of the words of a line with a button: one row on a wide screen and two on a phone, a name they begin with cut before the rest, and what comes next small on a wide screen's second row. */
+const WORDS_LOOK = {
+  words: "md:block md:truncate",
+  named: "flex min-w-0 flex-wrap gap-x-[0.25em] md:flex-nowrap",
+  name: "max-w-full min-w-0 truncate",
+  rest: "md:shrink-0",
+  next: "md:block md:truncate md:text-xs md:leading-4 md:text-muted-foreground",
+} as const;
 
 /** What a line that takes the place of a line of work does not keep of it: its button, and that it stays. */
 const NOT_KEPT = { action: undefined, duration: undefined };
@@ -39,15 +45,25 @@ interface Undo {
 
   /** The name the line's words begin with, such as a site's title: where the words have no room, it is cut and the rest of them stays. */
   readonly name?: string;
+
+  /** What comes next, or when the change takes effect, as one short sentence after the words. A wide screen says it on the line's second row, in place of the keys that lead to the button. */
+  readonly next?: string;
 }
 
-/** The words of a line with a button, whole in the hint a pointer shows. A name they begin with stands apart from the rest, so it alone is cut. */
-function wordsOf(text: string, name: string | undefined): ReactElement {
-  if (name === undefined || !text.startsWith(name)) return createElement("span", { title: text, className: ONE_ROW.words }, text);
+/** What was done, as the first row of a line with a button. A name the words begin with stands apart from the rest, so it alone is cut. */
+function doneOf(text: string, name: string | undefined): ReactElement {
+  if (name === undefined || !text.startsWith(name)) return createElement("span", { key: "done", className: WORDS_LOOK.words }, text);
 
-  const parts = [createElement("span", { key: "name", className: ONE_ROW.name }, name), createElement("span", { key: "rest", className: ONE_ROW.rest }, text.slice(name.length))];
+  const parts = [createElement("span", { key: "name", className: WORDS_LOOK.name }, name), createElement("span", { key: "rest", className: WORDS_LOOK.rest }, text.slice(name.length))];
 
-  return createElement("span", { title: text, className: ONE_ROW.named }, parts);
+  return createElement("span", { key: "done", className: WORDS_LOOK.named }, parts);
+}
+
+/** The words of a line with a button, whole in the hint a pointer shows: what was done, then what comes next. */
+function wordsOf(text: string, { name, next }: Pick<Undo, "name" | "next">): ReactElement {
+  if (next === undefined) return createElement("span", { title: text, className: "block" }, doneOf(text, name));
+
+  return createElement("span", { title: `${text} ${next}`, className: "block", "data-next": "" }, [doneOf(text, name), " ", createElement("span", { key: "next", className: WORDS_LOOK.next }, next)]);
 }
 
 /**
@@ -94,13 +110,13 @@ function pressed(undo: Undo): void {
 }
 
 /**
- * Say a done change in a line with a button, then Close. Where keys are in reach the line names the ones that lead to its button.
+ * Say a done change in a line with a button, then Close. Where keys are in reach the line names the ones that lead to its button, unless its second row says what comes next.
  *
  * Words that are cut are shown whole to a pointer that rests on them.
  *
  * A pressed button leaves with its line, and the focus with it: it goes back to where it was.
  */
-function sayWithButton(text: string, { label = "Undo", run, id, name }: Undo): void {
+function sayWithButton(text: string, { label = "Undo", run, id, name, next }: Undo): void {
   const leave = (): void => {
     toast.dismiss(shown);
     focusBack();
@@ -109,8 +125,8 @@ function sayWithButton(text: string, { label = "Undo", run, id, name }: Undo): v
     run();
     leave();
   };
-  const description = window.matchMedia(PHONE).matches ? undefined : `Press ${KEYS} to reach ${label}.`;
-  const shown = toast.success(wordsOf(text, name), { action: createElement(LineButtons, { label, onPress, onClose: leave }), description, duration: BUTTON_STAYS_MS, id });
+  const description = next !== undefined || window.matchMedia(PHONE).matches ? undefined : `Press ${KEYS} to reach ${label}.`;
+  const shown = toast.success(wordsOf(text, { name, next }), { action: createElement(LineButtons, { label, onPress, onClose: leave }), description, duration: BUTTON_STAYS_MS, id });
 }
 
 /**
@@ -132,7 +148,7 @@ export function sayDone(text: string, undo?: Undo, over?: string): void {
  *
  * @param stop - the button; its `id` names the line
  */
-export function sayWorking(text: string, stop: Required<Omit<Undo, "name">>): void {
+export function sayWorking(text: string, stop: Required<Omit<Undo, "name" | "next">>): void {
   // A press on the button leaves the line where it is: one that left would take the line of the work's end with it, which is said under the same name.
   const press = (event: { preventDefault(): void }): void => {
     event.preventDefault();

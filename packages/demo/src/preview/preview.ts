@@ -102,6 +102,12 @@ const SAMPLE_RELEASE = { released: "2026-12-01", notes: "https://github.com/Vivs
 /** The stand-in for the provider's way to end every login: no login is kept here, so it answers every press as done. */
 const END_LOGINS: EndLogins = async () => ({ ok: true });
 
+/** The stand-in for the host's update on an install that keeps no key: nothing is started. */
+const NO_KEY_UPDATE: SelfUpdate = { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) };
+
+/** The stand-in for the provider's side of a setting the install carries there by itself, with the key it keeps: every change is taken. Nothing is sent anywhere. */
+const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const }) };
+
 /** A day in milliseconds. */
 const DAY_MS = 86_400_000;
 
@@ -289,6 +295,7 @@ function dashboardMount(world: World, prefix: string, host: Host, running: Runni
   const base = `${host.base ?? ""}${prefix}`;
   // The stand-in for the provider's side of the domain keeps what was repaired: one is made for the mount, whatever version it says it runs.
   const domain = changingPlug(world.kind.provider);
+  const keyed = prefix !== EMPTY_PREFIX;
   const dashboard = (version: string): ReturnType<typeof createConsole> =>
     createConsole({
       install: world.install,
@@ -300,9 +307,10 @@ function dashboardMount(world: World, prefix: string, host: Host, running: Runni
       base,
       client: host.client,
       freeLimits: FREE_LIMITS,
-      // The install that holds nothing stands for one that keeps no key, so both kinds of the Usage screen can be seen.
-      usage: prefix === EMPTY_PREFIX ? OWN_USAGE_HOST : USAGE_HOST,
-      update: sampleUpdate(world, running),
+      // The install that holds nothing stands for one that keeps no key, so both kinds of the Usage screen and of a saved setting can be seen.
+      usage: keyed ? USAGE_HOST : OWN_USAGE_HOST,
+      update: keyed ? sampleUpdate(world, running) : NO_KEY_UPDATE,
+      ...(keyed ? { rules: CARRIES, logs: CARRIES } : {}),
       demo: { reset: `${base}${RESET_PATH}` },
       signOut: `${base}${SIGNED_OUT_PATH}`,
       domain,

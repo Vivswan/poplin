@@ -256,7 +256,7 @@ function VersionLine({ offer, started, notice }: { readonly offer: Offer; readon
       {update === null ? null : (
         <p className="text-foreground">
           {update.newest} is out.{" "}
-          <a href={update.notes} target="_blank" rel="noreferrer" className="text-link underline-offset-2 hover:underline">
+          <a href={update.notes} target="_blank" rel="noreferrer" className="rounded-sm text-link underline-offset-2 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50">
             What changed
           </a>
         </p>

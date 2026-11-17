@@ -61,7 +61,7 @@ export function ExpiryDayDialog({ open, onClose, onSave, returnTo }: ExpiryDayDi
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onClose())}>
-      <DialogContent className="sm:max-w-xs" finalFocus={thenHome(returnTo)}>
+      <DialogContent className="sm:max-w-xs" finalFocus={thenHome(returnTo)} nested>
         <DialogHeader>
           <DialogTitle>Pick a day</DialogTitle>
           <DialogDescription>The site deletes itself when that day starts.</DialogDescription>

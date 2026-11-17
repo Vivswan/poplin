@@ -27,10 +27,10 @@ const COUNT_RANGE = `Use a whole number from 1 to ${MOST_OF_A_COUNT.toLocaleStri
 const DAYS_RANGE = `Use a whole number from 1 to ${MOST_DAYS.toLocaleString("en-US")}.`;
 
 /** What a refused size is told. Its top is named with its unit: a size stored in another unit is typed in that one. */
-const SIZE_RANGE = `Use a whole number, 1 or more, up to ${MOST_OF_A_COUNT.toLocaleString("en-US")} MB.`;
+const SIZE_RANGE = `Use a whole number from 1 to ${MOST_OF_A_COUNT.toLocaleString("en-US")} MB.`;
 
 /** What a refused span of time is told, its top named with its unit for the same reason. */
-const SPAN_RANGE = `Use a whole number, 1 or more, up to ${MOST_DAYS.toLocaleString("en-US")} days.`;
+const SPAN_RANGE = `Use a whole number from 1 to ${MOST_DAYS.toLocaleString("en-US")} days.`;
 
 /** What each refusal code says. `{about}` is the field or setting the code is about. A code of an action missing here does not compile. */
 const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {

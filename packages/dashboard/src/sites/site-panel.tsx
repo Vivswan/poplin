@@ -172,7 +172,7 @@ function searchNote({ open, allowed }: { readonly open: boolean; readonly allowe
   return (
     <>
       Off for every site in{" "}
-      <Link {...settingAddress("search_engines_allowed")} className="text-link underline-offset-2 hover:underline">
+      <Link {...settingAddress("search_engines_allowed")} className="rounded-sm text-link underline-offset-2 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50">
         Settings
       </Link>
       .

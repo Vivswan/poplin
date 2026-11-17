@@ -11,6 +11,9 @@ const SCREENS = [
   { width: 1024, height: 768 },
 ] as const;
 
+/** A phone's screen. */
+const PHONE = { width: 390, height: 844 } as const;
+
 /** The sample site that goes to the trash and then for good, by its title and its name. */
 const GONE = { title: "Pricing", name: "pricing" } as const;
 
@@ -54,7 +57,7 @@ for (const size of SCREENS) {
       }).toPass();
 
       // Each part with what it says, and whether it has less room than its words need.
-      const parts = await words.locator("span").evaluateAll((all) => all.map((part) => [part.textContent, part.scrollWidth > part.clientWidth]));
+      const parts = await words.locator("span:not(:has(span))").evaluateAll((all) => all.map((part) => [part.textContent, part.scrollWidth > part.clientWidth]));
       expect(parts).toEqual([
         [SITE.long, true],
         [" moved to the trash.", false],
@@ -62,6 +65,39 @@ for (const size of SCREENS) {
     });
   });
 }
+
+test.describe("on a phone, a result with a button about a site with a long title", () => {
+  test.use({ viewport: PHONE });
+
+  // Drift: a phone gives the words two rows, and the title would fill both: the line would name the site and never say what was done to it.
+  test("cuts the title alone, and shows what was done whole beside its button", async ({ page }) => {
+    await arrive(page);
+    await openPanel(page, SITE.was);
+    await page.getByRole("dialog", { name: SITE.was, exact: true }).getByRole("button", { name: "Edit", exact: true }).click();
+    const edit = page.getByRole("dialog", { name: /^Edit/u });
+    await edit.getByRole("textbox", { name: "Title", exact: true }).fill(SITE.long);
+    await edit.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("dialog", { name: SITE.long, exact: true }).getByRole("button", { name: "Delete", exact: true }).click();
+
+    const words = page.getByTitle(`${SITE.long} moved to the trash.`, { exact: true });
+    await expect(words).toBeVisible();
+    const line = page.locator("[data-sonner-toast]").filter({ has: words });
+    await expect(line.getByRole("button", { name: "Undo", exact: true })).toBeInViewport({ ratio: 1 });
+
+    // Each part with what it says, whether it has less room than its words need, and whether it lies whole inside the box that ends the line's words.
+    const parts = await words.locator("span:not(:has(span))").evaluateAll((all) =>
+      all.map((part) => {
+        const [own, room] = [part.getBoundingClientRect(), part.closest("[data-title]")?.getBoundingClientRect()];
+
+        return [part.textContent, part.scrollWidth > part.clientWidth, room !== undefined && own.top >= room.top && own.bottom <= room.bottom + 1 && own.right <= room.right + 1];
+      }),
+    );
+    expect(parts).toEqual([
+      [SITE.long, true, true],
+      [" moved to the trash.", false, true],
+    ]);
+  });
+});
 
 // Drift: the line that said a site went to the trash stays 20 seconds. Deleted for good meanwhile, its Undo would answer that no site is at the address.
 test("the Undo of a site that went to the trash leaves once the site is deleted for good", async ({ page }) => {

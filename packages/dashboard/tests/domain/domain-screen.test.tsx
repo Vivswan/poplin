@@ -30,7 +30,12 @@ const ROWS = {
 } as const;
 
 /** What a check made now answers. */
-const FOUND = { ok: true, rows: ROWS.found, steps: [], summary: { line: "1 to repair", tone: "bad" }, waiting: 1 };
+const FOUND = { ok: true, rows: ROWS.found, steps: [], summary: { line: "1 to repair", tone: "bad" }, waiting: 1, repaired: 0 };
+
+/** The sentence of the problem of the domain that asks for a repair at a place in the frame's list. */
+function asking(at: number): string {
+  return `Problem ${at} of the domain`;
+}
 
 /** The refusal of a check the provider did not answer. */
 const UNREACHED = { ok: false, code: "unreachable", about: null, sentence: "No answer from the provider. Try again." };
@@ -46,7 +51,7 @@ const held: (() => void)[] = [];
 
 /** The run the install remembers, made `minutes` ago. */
 function lastOf(minutes: number): Record<string, unknown> {
-  return { ran_at: Date.now() - minutes * 60_000, by: "mira@example.com", run: "check", stale: false, waits: false, rows: ROWS.remembered, summary: { line: "Nothing to repair", tone: "good" }, waiting: 0 };
+  return { ran_at: Date.now() - minutes * 60_000, by: "mira@example.com", run: "check", stale: false, waits: false, rows: ROWS.remembered, summary: { line: "Nothing to repair", tone: "good" }, waiting: 0, repaired: 0 };
 }
 
 /**
@@ -59,7 +64,8 @@ function lastOf(minutes: number): Record<string, unknown> {
 function serve(alone: boolean, last: Record<string, unknown> | null, answers: { now: boolean; holds?: boolean; found?: Record<string, unknown> } = { now: true }): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
-    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: frame.asks });
+    const domainAsks = Array.from({ length: frame.asks }, (_, at) => asking(at));
+    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks });
 
     if (init?.method !== "POST") return Response.json({ ok: true, form: FORM, words: { thing: "the domain", line: null }, checks_alone: alone, last });
 
@@ -89,6 +95,18 @@ async function drawn(): Promise<Within> {
   );
   const page = within(document.body);
   await waitFor(() => page.getByRole("button", { name: "Repair" }));
+
+  return page;
+}
+
+/** Draw the screen over one problem of the domain that asks for a repair, which the frame holds once it is read again. */
+async function asked(): Promise<Within> {
+  frame.asks = 1;
+  const page = await drawn();
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: FRAME_KEY });
+  });
+  await waitFor(() => expect(shown(page).line.startsWith("1 to repair")).toBe(true));
 
   return page;
 }
@@ -203,13 +221,46 @@ describe("on an install whose check needs no token", () => {
 
   // Drift: a check that left nothing would be said in the words of the run alone, "Nothing to repair.", beside a line and a problem that ask for a repair.
   test("a pressed check that leaves nothing, over problems that ask for a repair, is said in the line the screen then shows", async () => {
-    serve(true, lastOf(1), { now: true, found: { ok: true, rows: ROWS.remembered, steps: [], summary: { line: "Nothing to repair", tone: "good" }, waiting: 0 } });
+    serve(true, lastOf(1), { now: true, found: { ok: true, rows: ROWS.remembered, steps: [], summary: { line: "Nothing to repair", tone: "good" }, waiting: 0, repaired: 0 } });
     frame.asks = 1;
     const page = await drawn();
     await press(page, "Check");
     await waitFor(() => page.getByText("1 to repair."));
 
     expect([shown(page).line.startsWith("1 to repair"), page.queryByText("Nothing to repair.")]).toEqual([true, null]);
+  });
+
+  // Drift: the line says "3 to repair" over two pieces and a problem. A repair that counted its pieces alone would then say "2 repaired", and the problem would leave the screen with no word of it.
+  test.each([
+    ["two pieces changed", 2, "2 repaired", "3 repaired"],
+    ["no piece changed", 0, "Nothing to repair", "1 repaired"],
+  ] as const)("a repair with %s that ends a problem which asked for it counts the problem as repaired, in the line and in what is said, and names it", async (_name, repaired, line, counted) => {
+    serve(true, lastOf(1), { now: true, found: { ok: true, rows: ROWS.remembered, steps: [], summary: { line, tone: "good" }, waiting: 0, repaired } });
+    const page = await asked();
+    await press(page, "Repair");
+    const asks = within(await waitFor(() => page.getByRole("dialog", { name: "Repair the domain" })));
+    fireEvent.change(asks.getByLabelText("Account token"), { target: { value: "a-token" } });
+    frame.asks = 0;
+    await press(asks, "Repair");
+    await waitFor(() => page.getByText(`${counted}.`));
+
+    expect([shown(page).line.startsWith(counted), within(page.getByRole("list", { name: "Repaired" })).getAllByRole("listitem").map((item) => item.textContent)]).toEqual([true, [`Repaired: ${asking(0)}`]]);
+  });
+
+  // Drift: the names of what a repair ended would stay over a later check, which ended nothing, and be counted into its line.
+  test("a check after such a repair names nothing as repaired", async () => {
+    serve(true, lastOf(1), { now: true, found: { ok: true, rows: ROWS.remembered, steps: [], summary: { line: "Nothing to repair", tone: "good" }, waiting: 0, repaired: 0 } });
+    const page = await asked();
+    await press(page, "Repair");
+    const asks = within(await waitFor(() => page.getByRole("dialog", { name: "Repair the domain" })));
+    fireEvent.change(asks.getByLabelText("Account token"), { target: { value: "a-token" } });
+    frame.asks = 0;
+    await press(asks, "Repair");
+    await waitFor(() => page.getByText("1 repaired."));
+    await press(page, "Check");
+    await waitFor(() => page.getByText("Nothing to repair."));
+
+    expect([shown(page).line.startsWith("Nothing to repair"), page.queryByRole("list", { name: "Repaired" })]).toEqual([true, null]);
   });
 
   // Drift: Check would open the token dialog again, or a pressed check would be told to the server as one nobody pressed and leave no line in Activity.

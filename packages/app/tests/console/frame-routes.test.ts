@@ -11,7 +11,7 @@ import { readShell } from "./support/shell";
 const NEWER = { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", schema: OWN_SCHEMA };
 
 /** What the frame holds of the problems of an install where nothing went wrong. */
-const NOTHING_MARKED = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: 0 };
+const NOTHING_MARKED = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: [] };
 
 /** A day, in milliseconds. */
 const DAY_MS = 86_400_000;

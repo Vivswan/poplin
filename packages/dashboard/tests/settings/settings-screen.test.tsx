@@ -42,6 +42,15 @@ const sentTo: string[] = [];
 /** The saves the server holds back until a test lets them through. */
 const held: (() => void)[] = [];
 
+/** How the server of these tests answers. */
+interface Served {
+  readonly refusedKey?: string;
+  readonly refusedKeys?: readonly string[];
+  readonly holds?: boolean;
+  readonly keyed?: boolean;
+  readonly waits?: { readonly repair?: readonly string[]; readonly update?: readonly string[] };
+}
+
 function rowOf(key: string, control: Row["control"], unit = ""): Row {
   return { key: key as Row["key"], control, text: stored[key] ?? "", unit, fallback: stored[key] ?? "", limits: [], repair: false, needs: null };
 }
@@ -51,8 +60,9 @@ function rowOf(key: string, control: Row["control"], unit = ""): Row {
  *
  * @param holds - whether a save waits until a test lets it through
  * @param keyed - whether the install holds its key
+ * @param waits - the settings whose half at the provider waits after a save that holds them, by what they wait for
  */
-function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false }: { readonly refusedKey?: string; readonly refusedKeys?: readonly string[]; readonly holds?: boolean; readonly keyed?: boolean } = {}): void {
+function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false, waits = {} }: Served = {}): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
     if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: keyed, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
@@ -82,8 +92,9 @@ function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false }: {
     if (each.length > 0) return Response.json({ ok: false, code: "bad_argument", about: each[0]?.about, sentence: each[0]?.sentence, each }, { status: 400 });
 
     Object.assign(stored, texts);
+    const waiting = (keys: readonly string[] = []): readonly string[] => keys.filter((key) => Object.hasOwn(texts, key));
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, waits: { repair: waiting(waits.repair), update: waiting(waits.update) } });
   }) as typeof fetch;
 }
 
@@ -253,6 +264,40 @@ describe("the one Save", () => {
     await press(engines(page));
 
     expect([again, bar(page), engines(page).getAttribute("aria-checked"), saves]).toEqual(["1 unsaved change", null, "false", []]);
+  });
+
+  // Drift: a double click's second press comes before the page has drawn Save as off: the same changes would be sent twice.
+  test("sends one save for two presses that come at once", async () => {
+    serve({ holds: true });
+    const page = await drawn();
+    type(page, "Keep deleted sites", "30");
+    await act(async () => {
+      fireEvent.click(page.getByRole("button", { name: "Save" }));
+      fireEvent.click(page.getByRole("button", { name: "Save" }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => held.shift()?.());
+    await page.findByText("Saved.");
+
+    expect(saves).toEqual([{ trash_days: "30" }]);
+  });
+
+  // Drift: a setting whose half at the provider waits for a repair, or for the next upload of the install's code, would be said as "Saved." alone, and read as in effect.
+  test.each([
+    ["nothing waits", {}, "Saved.Press Alt+T to reach Undo."],
+    ["every saved setting waits for a repair", { repair: ["default_search_engines", "trash_days"] }, "Saved. Takes effect at the next Repair."],
+    ["one of two waits for a repair", { repair: ["default_search_engines"] }, "Saved. 1 setting takes effect at the next Repair."],
+    ["both wait, one for a repair", { repair: ["default_search_engines"], update: ["trash_days"] }, "Saved. Takes effect at the next Repair."],
+    ["one of two waits for the next update", { update: ["trash_days"] }, "Saved. 1 setting takes effect at the next update or Repair."],
+  ] as const)("says after a save when it takes effect: %s", async (_name, waits, line) => {
+    serve({ waits });
+    const page = await drawn();
+    await press(engines(page));
+    type(page, "Keep deleted sites", "30");
+    await press(page.getByRole("button", { name: "Save" }));
+    await page.findByRole("button", { name: "Undo" });
+
+    expect(document.querySelector("[data-sonner-toast] [data-content]")?.textContent).toBe(line);
   });
 
   // Drift: Undo would take back one setting of a save that changed two, or go another way than the save did.

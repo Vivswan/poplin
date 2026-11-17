@@ -101,6 +101,9 @@ interface RunDone {
 
   /** How many rows wait for a repair, where the line counts them; 0 where the line says anything else. A screen adds what else on it asks for a repair. */
   readonly waiting: number;
+
+  /** How many rows a repair changed, after a repair that left no work; 0 after any other run. A screen adds what else on it the repair ended. */
+  readonly repaired: number;
 }
 
 /** A refusal as the client reads it: the code, the box it is about, and the sentence to show. */
@@ -149,6 +152,9 @@ interface Last {
 
   /** How many rows wait for a repair, where the line counts them; 0 where the line says anything else. */
   readonly waiting: number;
+
+  /** Always 0: a remembered run is drawn as a check. */
+  readonly repaired: number;
 }
 
 function count(rows: readonly DomainRow[], states: readonly DomainState[]): number {
@@ -156,19 +162,19 @@ function count(rows: readonly DomainRow[], states: readonly DomainState[]): numb
 }
 
 /** A run goes on past a row that failed for a right and stops at any other failure, and the rows alone do not say which: the line counts what is left and claims neither. An optional piece that is not set up is no work left over. */
-function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): Pick<RunDone, "summary" | "waiting"> {
+function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): Pick<RunDone, "summary" | "waiting" | "repaired"> {
   const failed = count(rows, ["failed"]);
-  if (failed > 0) return { summary: { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" }, waiting: 0 };
+  if (failed > 0) return { summary: { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" }, waiting: 0, repaired: 0 };
 
   const waiting = count(rows, TO_REPAIR);
-  if (waiting > 0) return { summary: { line: `${waiting} to repair`, tone: "bad" }, waiting };
+  if (waiting > 0) return { summary: { line: `${waiting} to repair`, tone: "bad" }, waiting, repaired: 0 };
 
-  if (waits) return { summary: USERS_CHANGED, waiting: 0 };
+  if (waits) return { summary: USERS_CHANGED, waiting: 0, repaired: 0 };
 
-  const repaired = count(rows, REPAIRED);
-  if (run === "repair" && repaired > 0) return { summary: { line: `${repaired} repaired`, tone: "good" }, waiting: 0 };
+  const repaired = run === "repair" ? count(rows, REPAIRED) : 0;
+  if (repaired > 0) return { summary: { line: `${repaired} repaired`, tone: "good" }, waiting: 0, repaired };
 
-  return { summary: { line: "Nothing to repair", tone: "good" }, waiting: 0 };
+  return { summary: { line: "Nothing to repair", tone: "good" }, waiting: 0, repaired: 0 };
 }
 
 /** What a remembered piece says in its row: what names it, and for one that needs a repair also why, as far as the install keeps it. */

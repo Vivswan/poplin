@@ -62,17 +62,20 @@ function DialogPopup({ onInput, ...props }: DialogPrimitive.Popup.Props) {
   )
 }
 
+// `nested` is for a dialog opened from inside a panel: the library dims the page for the outermost one alone.
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  nested = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  nested?: boolean
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay forceRender={nested} />
       <DialogPopup
         data-slot="dialog-content"
         className={cn(

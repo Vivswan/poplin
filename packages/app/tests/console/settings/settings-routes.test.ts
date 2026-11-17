@@ -10,6 +10,9 @@ import { CONTROL_KINDS, controlOf } from "../../../src/console/settings/setting-
 import { openConsole } from "../support/console";
 import { usualPlug } from "../support/fake-plug";
 
+/** The provider's side of a setting on an install that holds its key: every change is taken. */
+const CARRIES = { holdsKey: () => true, push: async () => ({ ok: true as const }) };
+
 /** One setting as the route answers it. */
 interface Row {
   readonly key: string;
@@ -135,13 +138,26 @@ describe("the rows", () => {
 });
 
 describe("a save", () => {
+  // Drift: a rule of the domain that only a repair writes, or the logs of an install with no key, would be answered as in effect; or an install that carries the change by itself, or one with no domain, would be told to wait.
+  test.each([
+    ["with a domain and no key", usualPlug(), {}, { repair: ["search_engines_allowed", "block_bots"], update: ["provider_logs"] }],
+    ["with a domain and a key", usualPlug(), { rules: CARRIES, logs: CARRIES }, { repair: ["block_bots"], update: [] }],
+    ["whose repair carries no setting, with no key", { ...usualPlug(), carriedSettings: [] }, {}, { repair: [], update: ["provider_logs"] }],
+    ["with no Domain screen and a key", undefined, { logs: CARRIES }, { repair: [], update: [] }],
+  ] as const)("answers which saved settings wait at the provider, and for what, on an install %s", async (_name, domain, sides, waits) => {
+    const opened = await openConsole("", domain, sides);
+    const saved = await opened.change("/data/settings", { texts: { trash_days: "30", search_engines_allowed: "on", block_bots: "off", provider_logs: "off" } });
+
+    expect(await saved.json()).toEqual({ ok: true, waits });
+  });
+
   // Drift: a save would write a setting it does not name, or refuse the settings that also change the domain's rules, which this screen changes.
   test("changes the settings it names, the ones of the domain included, and no other", async () => {
     const opened = await openConsole();
     const before = await textsOf(opened);
     const saved = await opened.change("/data/settings", { texts: { trash_days: "30", default_search_engines: "on", block_bots: "off", outside_pages: "allowed" } });
 
-    expect(await saved.json()).toEqual({ ok: true });
+    expect(await saved.json()).toEqual({ ok: true, waits: { repair: [], update: [] } });
     expect(await textsOf(opened)).toEqual({ ...before, trash_days: "30", default_search_engines: "on", block_bots: "off", outside_pages: "allowed" });
   });
 
@@ -215,8 +231,8 @@ describe("a save", () => {
     expect(told.filter(([key, sentence]) => sentence.includes(key) || sentence.includes("is not one it takes"))).toEqual([]);
     expect(Object.fromEntries(told)).toMatchObject({
       trash_days: `Use a whole number from 1 to ${MOST_DAYS.toLocaleString("en-US")}.`,
-      max_total_size: `Use a whole number, 1 or more, up to ${MOST_OF_A_COUNT.toLocaleString("en-US")} MB.`,
-      default_expires: `Use a whole number, 1 or more, up to ${MOST_DAYS.toLocaleString("en-US")} days.`,
+      max_total_size: `Use a whole number from 1 to ${MOST_OF_A_COUNT.toLocaleString("en-US")} MB.`,
+      default_expires: `Use a whole number from 1 to ${MOST_DAYS.toLocaleString("en-US")} days.`,
       max_sites: `Use a whole number from 1 to ${MOST_OF_A_COUNT.toLocaleString("en-US")}, or leave it empty for no limit.`,
       max_files_per_publish: `Use a whole number from 1 to ${MOST_FILES_PER_PUBLISH.toLocaleString("en-US")}.`,
       site_share_of_day: "Use a whole number from 1 to 100.",

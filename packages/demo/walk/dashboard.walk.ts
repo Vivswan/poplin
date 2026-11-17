@@ -1450,6 +1450,8 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
   await page.getByRole("menuitem", { name: "On a day...", exact: true }).click();
   const day = page.getByRole("dialog", { name: "Pick a day", exact: true });
   await expect(day.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  // The dialog is opened from inside the panel, and dims the page as every dialog does.
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toBeVisible();
   await day.getByRole("gridcell").getByRole("button", { disabled: false }).first().click();
   await expect(day.getByText(/^Deletes itself \d{2} [A-Z][a-z]{2} \d{4}, 00:00$/)).toBeVisible();
   await pressEscape(page);

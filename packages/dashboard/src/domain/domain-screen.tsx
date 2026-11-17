@@ -20,6 +20,7 @@ import { Pieces } from "@/domain/pieces";
 import { RunDialog } from "@/domain/run-dialog";
 import { StatusLine } from "@/domain/status-line";
 import type { Sent } from "@/domain/token-run";
+import { ToneMark } from "@/domain/tone-mark";
 import { answerOf, api, Refused } from "@/lib/api";
 import { sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
@@ -37,6 +38,9 @@ const CHECKING = "Checking";
 
 /** What stands in place of a count when such an install's first check read nothing; why is said small beside it. */
 const UNREAD = "Not checked";
+
+/** What stands before the sentence of a problem a repair ended. */
+const REPAIRED = "Repaired:";
 
 /** The run the install remembers. */
 type Last = NonNullable<Domain["last"]>;
@@ -89,6 +93,24 @@ function Waiting({ failure, onAgain }: { readonly failure: string | undefined; r
   );
 }
 
+/** The problems a repair ended, named where they stood: the line over them counts each as repaired. */
+function Mended({ sentences }: { readonly sentences: readonly string[] }): ReactNode {
+  if (sentences.length === 0) return null;
+
+  return (
+    <ul aria-label="Repaired" className="flex shrink-0 flex-col gap-1 px-6 pb-3 max-md:px-4">
+      {sentences.map((sentence) => (
+        <li key={sentence} className="flex items-start gap-2">
+          <ToneMark tone="good" className="mt-0.5" />
+          <span>
+            {REPAIRED} {sentence}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Say what a run found, in the words of its count. */
 function sayRan(summary: Ran["summary"]): void {
   const said = summary.line.endsWith(".") ? summary.line : `${summary.line}.`;
@@ -118,7 +140,7 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
   const run = async (kind: DomainRun, sent: Sent): Promise<Refused | undefined> => {
     try {
       const done = await answerOf(api.domain[kind].$post({ json: { token: sent.token } }));
-      const shown = await pieces.take(done);
+      const shown = await pieces.take(kind, done);
       asks.close();
       sayRan(shown.summary);
 
@@ -164,6 +186,7 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
               </div>
             )}
             <HomeProblems home="domain" className="flex shrink-0 flex-col gap-2 px-6 pb-3 max-md:px-4" />
+            <Mended sentences={pieces.mended} />
             {ran === undefined ? null : <Pieces rows={ran.rows} />}
             {ran === undefined && checking ? <Reading /> : null}
           </section>
