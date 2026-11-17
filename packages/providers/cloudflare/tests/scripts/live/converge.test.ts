@@ -64,6 +64,9 @@ const [FIRST_UPLOAD, UPDATE_UPLOAD] = [`${STATED}, this commit's module`, `${KEP
 /** The warning of a run whose command made the upload key. */
 const FRESH_KEY = "::warning::The checks of settled-upload-key are skipped: the install needs an upload key older than two and a half minutes (this run made the key, or could not read it, and the bucket refuses a new one for about two minutes).";
 
+/** How many reads of the Worker's settings a run that mends an install makes after its upload, before the repair reads them to write the Worker's variables. */
+const WHOLE_READS = 3;
+
 /** What a run that was through says last. */
 const ANSWERS = "The test install answers.";
 
@@ -565,6 +568,51 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     expect([ran.code, ran.uploads, ran.lines.at(-1), standing.account.trailing.answers]).toEqual([0, [UPDATE_UPLOAD], ANSWERS, []]);
   });
 
+  // Drift: Cloudflare's settings can trail the run's upload for longer than the repair's first read waits, and then the Worker's variables are not written: the row fails as a call with no answer does.
+  // A run that stopped there turned the test install red for a state that is over a minute later; and one that printed the row's state alone left nobody able to tell that from a refusal.
+  test("a repair whose row failed on a call with no answer is told with the row's reason and run once more a minute later, and the run goes on to its end", async () => {
+    const standing = await standingOn(freshAccount(), kind);
+    await standing.again();
+    const { account } = standing;
+    const whole = {
+      get bindings() {
+        return account.bindings;
+      },
+    };
+    account.trailing = { from: "upload", answers: [...Array.from({ length: WHOLE_READS }, () => whole), { bindings: [] }] };
+    const ran = await standing.again();
+
+    expect([ran.code, ran.lines.filter((line) => line.startsWith("Repair") || line.startsWith("Worker variable")), ran.lines.at(-1), account.trailing.answers]).toEqual([
+      0,
+      ["Repair: run once more after 60 seconds: the Worker variable is failed (no answer from Cloudflare)", "Worker variable: left"],
+      ANSWERS,
+      [],
+    ]);
+  });
+
+  // Drift: the second repair finds the key the first one made standing. A run that sorted the second's rows alone told the suite of no new key, and the check of the way a file goes failed on a key the bucket still refuses.
+  test("a repair that made the upload key and was then asked to wait is run once more, and the suite is still told that the key is new", async () => {
+    using _step = catchStep();
+    const harness = await harnessOf(freshAccount(), kind);
+    const { account, world } = harness;
+    const env = { POPLIN_LIVE_INSTALL: kind, POPLIN_LIVE_START_OVER: "false" };
+    await convergeInstall(harness.run, env, world);
+    harness.lines.length = 0;
+    account.tokens = account.tokens.filter((token) => token.name !== "poplin upload key");
+    Object.assign(account, { refuse: `GET /accounts/${INSTALL_ACCOUNT}/alerting/v3/policies*`, refuseAs: { status: 429, code: 971 } });
+    const rest = async (milliseconds: number): Promise<void> => {
+      account.refuse = [];
+      await world.ends.sleep(milliseconds);
+    };
+    const code = await convergeInstall(harness.run, env, { ...world, ends: { ...world.ends, sleep: rest } });
+
+    expect([code, harness.lines.filter((line) => /^(Repair|Upload key|Budget alert)/.test(line)), Object.keys(JSON.parse(harness.outputs.missing ?? "{}") as object)]).toEqual([
+      0,
+      ["Repair: run once more after 60 seconds: the Budget alert is failed (Cloudflare asked to wait)", "Upload key: left", "Budget alert: left"],
+      ["settled-upload-key"],
+    ]);
+  });
+
   // Drift: an install that lost a piece answers nowhere until it is mended. A run that waited for its answer before the repair would time out and never reach the repair that puts the piece back.
   test("an install that lost a piece nothing answers without is mended before the run waits for its answer", async () => {
     const standing = await standingOn(freshAccount(), kind);
@@ -589,13 +637,12 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
   // Drift: an install answers without its Workflow, which only a copy too large for one request needs. A run that called that a failure would stop the test install for a part every other check passes without.
   test("a Workflow Cloudflare does not make is a lack the suite skips for, whatever the refusal, and never a failure of the run", async () => {
     const standing = await standingOn(freshAccount({ refuse: `PUT /accounts/${INSTALL_ACCOUNT}/workflows/poplin-jobs`, refuseAs: { status: 500, code: 10001 } }), kind);
-    const ran = await standing.again();
+    const [made, mended] = [await standing.again(), await standing.again()];
+    const told = ["Workflow: failed (refused with status 500 and codes 10001): needs the Worker's Workflow, which Cloudflare did not make"];
 
-    expect([ran.code, ran.missing.jobs, ran.lines.filter((line) => line.startsWith("Workflow"))]).toEqual([
-      0,
-      "the Worker's Workflow, which Cloudflare did not make",
-      ["Workflow: failed (refused with status 500): needs the Worker's Workflow, which Cloudflare did not make"],
-    ]);
+    // The row says the refusal's status and codes, and a repair with a refused row is not run a second time.
+    expect([made.code, made.missing.jobs, made.lines.filter((line) => line.startsWith("Workflow"))]).toEqual([0, "the Worker's Workflow, which Cloudflare did not make", told]);
+    expect([mended.code, mended.lines.filter((line) => line.startsWith("Workflow") || line.startsWith("Repair"))]).toEqual([0, told]);
   });
 
   // Drift: a run that went on after a piece nothing answers without would wait five minutes for an install that cannot answer, and say only that it did not.
