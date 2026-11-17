@@ -22,7 +22,7 @@ const TEST_BOOT = {
   domainNote: null,
   recent: [],
   marks: { usage: null, domain: null, settings: null },
-  domainAsks: 0,
+  domainAsks: [],
 };
 
 /** What of the runtime the page must not replace: the tests that run after it call these. */
