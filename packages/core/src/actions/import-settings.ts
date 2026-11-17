@@ -20,13 +20,14 @@ export const SETTINGS_IMPORT = v.strictObject({
  * Replace this install's settings with a backup's. The logins stay as they are unless `logins` asks for the backup's: another install's logins could shut every admin of this one out.
  *
  * @param request - what `exportSettings` answered, as `format` and `settings`; anything is taken and checked
- * @returns every setting after the change. `backup_too_new` for a format above the one this code reads, `bad_argument` naming the first key that is no setting, is missing, or whose text is refused, `no_working_login` for logins that let nobody in
+ * @returns every setting after the change. `backup_too_new` for a format above the one this code reads, `bad_argument` naming the first key that is no setting, is missing, or whose text is refused.
+ *   `no_working_login` for logins that let nobody in, and `needs_update_check` for a backup that holds `auto_update` on with `update_check` off
  */
 export async function importSettings(
   install: Install,
   actor: Actor,
   request: v.InferInput<typeof SETTINGS_IMPORT>,
-): Promise<Stored | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "backup_too_new" | "no_working_login">> {
+): Promise<Stored | Refused<"not_allowed" | "not_set_up" | "bad_argument" | "backup_too_new" | "no_working_login" | "needs_update_check">> {
   if (actor.scope !== "admin") return refuse("not_allowed");
 
   const asked = v.safeParse(SETTINGS_IMPORT, request);
@@ -35,7 +36,7 @@ export async function importSettings(
   if (asked.output.format > BACKUP_FORMAT) return refuse("backup_too_new", "format");
 
   const read = settingsFromText(asked.output.settings);
-  if (!read.ok) return refuse("bad_argument", read.key);
+  if (!read.ok) return refuse(read.refusal === "needs-update-check" ? "needs_update_check" : "bad_argument", read.key);
 
   const { logins, ...rest } = read.values;
   const changes = asked.output.logins ? read.values : rest;

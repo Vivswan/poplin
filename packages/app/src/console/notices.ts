@@ -45,6 +45,7 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   too_many_tries: "Too many tries. Wait a minute.",
   no_such_login: "That login is no longer waiting. It was allowed or denied already, or its 10 minutes ran out. Run poplin login again.",
   no_working_login: "Your own email has to stay in the logins, so nothing was changed. Another admin can take it out.",
+  needs_update_check: "Updating by itself needs the check for new versions, so nothing was changed. Switch the check on, or automatic updates off.",
   token_gone: "That token is gone already.",
   already_a_login: "That email can log in already.",
   not_a_login: "That email is not in the list. It may have been removed already.",

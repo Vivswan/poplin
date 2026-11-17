@@ -90,6 +90,8 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readSettings": [1, 0],
   "changeSettings": [2, 2],
   "changeSettings, the same": [2, 0],
+  "changeSettings, automatic updates on": [3, 2],
+  "changeSettings, the check off beside them": [3, 0],
   "initSettings, already set": [3, 0],
   "addLogin": [5, 3],
   "addLogin, already one": [5, 0],
@@ -972,6 +974,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     // Last, so the line it adds to the log changes no count before it.
     await cost("noteLogin, a new login", () => database.noteLogin(ADMIN, { since: NOW + 10, at: NOW + 10 }));
     await cost("noteLogin, known", () => database.noteLogin(ADMIN, { since: NOW + 10, at: NOW + 20 }));
+    // The walk's last entries of the log: every reading of it is metered above.
+    await cost("changeSettings, automatic updates on", () => database.changeSettings({ auto_update: true }, BY_ADA));
+    await cost("changeSettings, the check off beside them", () => database.changeSettings({ update_check: false }, BY_ADA));
 
     expect(costs).toEqual(ROWS);
   });

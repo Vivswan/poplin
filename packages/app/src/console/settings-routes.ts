@@ -112,6 +112,11 @@ function rowsOf(values: SettingValues, facts: { readonly freeLimits: FreeLimits;
   });
 }
 
+/** The code a refused setting is answered with: the pair of the update settings has one of its own, and any other is a value its setting does not take. */
+function codeOf(refused: { readonly refusal: string }): string {
+  return refused.refusal === "needs-update-check" ? "needs_update_check" : "bad_argument";
+}
+
 /** The Settings screen's data routes. */
 export const settingsRoutes = new Hono<Shared>()
   .get("/settings", async (context) => {
@@ -137,7 +142,7 @@ export const settingsRoutes = new Hono<Shared>()
     // A setting is read from its text beside every other one, so the settings the save leaves out go along as they are stored and are not sent on.
     const read = settingsFromText({ ...current, ...texts });
     // Every refused text is answered at once, so the screen marks each field at the first Save.
-    if (!read.ok) return refused(context, { code: "bad_argument", about: read.key, each: read.every.map((refusal) => refusal.key) });
+    if (!read.ok) return refused(context, { code: codeOf(read), about: read.key, each: read.every.map((refusal) => ({ code: codeOf(refusal), about: refusal.key })) });
 
     const changed = await changeConfig(install, actor, Object.fromEntries(held.map((key) => [key, read.values[key]])));
     if (!changed.ok) return refused(context, changed);

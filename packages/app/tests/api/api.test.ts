@@ -335,6 +335,9 @@ describe("createApi", () => {
     // Drift: a token names no email, so the API is the way a list of new emails alone would reach the store and shut the dashboard on everyone.
     const shut = await answered(install.routes.config.$patch({ json: { logins: ["new@example.com" as Login] }, query: {} }));
     expect([shut.status, shut.body.error]).toEqual([409, { code: "no_working_login", message: "the change would leave no login that works", about: "logins" }]);
+    // Drift: the dashboard locks the switch of automatic updates, and a token's PATCH never meets that lock.
+    const alone = await answered(install.routes.config.$patch({ json: { update_check: false, auto_update: true }, query: {} }));
+    expect([alone.status, alone.body.error]).toEqual([409, { code: "needs_update_check", message: "auto_update is on only while update_check is on", about: "auto_update" }]);
     // Drift: a sign-out the provider did not take would answer as done, or one it took would leave no entry of who asked.
     const kept = await answered(install.routes.sessions.$delete({ query: {} }));
     expect([kept.status, kept.body.error, install.users.ended]).toEqual([409, { code: "logins_not_ended", message: "the install's provider did not end the dashboard's logins, or gave no answer", about: "no_key" }, 1]);
