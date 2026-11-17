@@ -94,6 +94,20 @@ test("a double click on the button of a question answers it once: one update is 
   expect(sent.length).toBe(1);
 });
 
+// Drift: the second press of a double click came before the page had drawn Save as off, and the same changes were saved twice.
+test("a double click on Save in Settings saves the changes once", async ({ page }) => {
+  await arrive(page);
+  await page.goto("settings");
+  await page.getByRole("textbox", { name: "Keep versions", exact: true }).fill("7");
+  const sent = changesOf(page);
+
+  await page.getByRole("button", { name: "Save", exact: true }).dblclick();
+  await expect(page.getByRole("region", { name: /^Notifications/ }).getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+  await rested(page);
+
+  expect(sent).toEqual(["settings"]);
+});
+
 /**
  * Send a dialog's form again at the moment the dialog begins to close, as a second Enter or a second click does that comes while the dialog fades: the page does it itself, the moment the library marks the dialog as closed.
  *

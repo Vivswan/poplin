@@ -1,6 +1,7 @@
 // The changes of the Settings screen that wait for Save: what each changed control holds, the one request that saves them together, the refusal that comes back at its field, and the Undo of a done save.
 
 import { MutationObserver, type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { InferResponseType } from "hono/client";
 import { useState } from "react";
 
 import { answerOf, api, Refused } from "@/lib/api";
@@ -15,6 +16,12 @@ const FAULT = "That did not work. Try again.";
 
 /** What every save of a setting shares: they are sent one after another, in the order they were made, so the last value is the one stored. */
 const IN_ORDER = { id: "settings-saves" } as const;
+
+/** When a saved setting takes effect whose half at the provider waits: at the next repair of the domain, or, for one the next upload of the install's code states too, at whichever comes first. */
+const UNTIL = { repair: "at the next Repair", update: "at the next update or Repair" } as const;
+
+/** What a done save answers: the saved settings whose half at the provider waits, by what it waits for. */
+type Saved = InferResponseType<typeof api.settings.$post, 200>;
 
 /** The texts of some settings, by key. */
 type Texts = Readonly<Record<string, string>>;
@@ -54,8 +61,24 @@ function refusalsOf(refused: Refused): Refusals {
 }
 
 /** Send a save of some settings: all of them are stored, or on a refusal none. */
-function sendSave(texts: Texts): Promise<unknown> {
+function sendSave(texts: Texts): Promise<Saved> {
   return answerOf(api.settings.$post({ json: { texts } }));
+}
+
+/**
+ * What the line of a done save says after "Saved.": when the saved settings take effect, where the provider's side of some of them waits.
+ *
+ * @param count - how many settings the save held
+ * @returns nothing for a save that waits for nothing; the settings are counted where only some of them wait
+ */
+function nextOf({ waits }: Saved, count: number): string | undefined {
+  const waiting = waits.repair.length + waits.update.length;
+  if (waiting === 0) return undefined;
+
+  const until = waits.repair.length > 0 ? UNTIL.repair : UNTIL.update;
+  if (waiting === count) return `Takes effect ${until}.`;
+
+  return waiting === 1 ? `1 setting takes effect ${until}.` : `${waiting} settings take effect ${until}.`;
 }
 
 /** Show some settings as stored with new texts, before the rows are read again. A read already on its way is dropped: it holds the texts from before. */
@@ -119,12 +142,13 @@ export function useDraft(rows: readonly Row[], onRefused: (key: string) => void)
       onRefused(first.key);
     },
     // The stored texts show before the save stops counting as on its way, so no control is compared with a text from before it.
-    onSuccess: (_done, save) => {
+    onSuccess: (done, save) => {
       showStored(client, save.texts);
       // What was changed while the save was on its way stays changed.
       setHeld((kept) => Object.fromEntries(Object.entries(kept).filter(([key, text]) => text !== save.texts[key])));
       setRefusals({});
-      sayDone("Saved.", { run: () => putBack(client, save.before) });
+      const next = nextOf(done, Object.keys(save.texts).length);
+      sayDone("Saved.", { run: () => putBack(client, save.before), ...(next === undefined ? {} : { next }) });
     },
     onSettled: () => readAfterLast(client),
   });

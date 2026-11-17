@@ -72,7 +72,7 @@ function decisionWords(login: Review, decision: Decision): string {
   return login.scope === "admin" && decision.scope === "publisher" ? DECIDED.lowered : DECIDED.allowed;
 }
 
-/** The line of a person's change: the word that it is done, and after it what the server says of a change that did not reach the domain's login. */
+/** The line of a person who was taken out: the word that it is done, and after it what the server says of a change that did not reach the domain's login. */
 function peopleWords(done: string, note: string | null): string {
   return note === null ? done : `${done} ${note}`;
 }
@@ -141,7 +141,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
         const added = await answerOf(api.people.add.$post({ json: { login: email } }));
         onChanged();
         onUsersChanged();
-        sayDone(peopleWords(PEOPLE_SAID.added, added.note), { run: () => void removePerson(added.login), id: addedLine(added.login) });
+        sayDone(PEOPLE_SAID.added, { run: () => void removePerson(added.login), id: addedLine(added.login), ...(added.note === null ? {} : { next: added.note }) });
 
         return undefined;
       } catch (error) {

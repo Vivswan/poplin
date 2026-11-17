@@ -4,6 +4,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { useOnePress } from "@/dialog/one-press";
 import { useFocusHome } from "@/lib/focus";
 import { GET_KEY, useFrame } from "@/lib/frame";
 import { useChosenTimeZone } from "@/lib/timezone";
@@ -50,7 +51,7 @@ function RepairNote({ block }: { readonly block: Block }): ReactNode {
   return (
     <p className="mb-1 text-muted-foreground">
       {waitingWords(block)} after Repair in{" "}
-      <Link to="/domain" className="text-link underline-offset-2 hover:underline">
+      <Link to="/domain" className="rounded-sm text-link underline-offset-2 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50">
         Domain
       </Link>
       .
@@ -175,16 +176,16 @@ export function SettingsScreen(): ReactNode {
   const last = useRef<HTMLElement | null>(null);
   const kept = useFocusHome(() => last.current);
 
-  const save = async (event: FormEvent): Promise<void> => {
+  // A second press comes before the page draws its Save as off: one save is sent at a time.
+  const { press: send, busy: pressed } = useOnePress(draft.save);
+  const save = (event: FormEvent): void => {
     event.preventDefault();
-    if (busy || count === 0) return;
-
-    await draft.save();
+    if (!busy && count > 0) send();
   };
 
   return (
     <AppShell current="settings" heading="Settings">
-      <form onSubmit={(event) => void save(event)} noValidate aria-label="Settings" className="flex min-h-0 flex-1 flex-col" {...kept}>
+      <form onSubmit={save} noValidate aria-label="Settings" className="flex min-h-0 flex-1 flex-col" {...kept}>
         <div
           onFocusCapture={(event) => {
             last.current = event.target;
@@ -198,7 +199,7 @@ export function SettingsScreen(): ReactNode {
             {settings === undefined ? null : <Groups settings={settings} draft={draft} keyed={keyed} marked={marked} />}
           </MiddleColumn>
         </div>
-        <SaveBar count={count} busy={busy} onDiscard={draft.discard} />
+        <SaveBar count={count} busy={busy || pressed} onDiscard={draft.discard} />
       </form>
       <LeaveGuard unsaved={count > 0} />
     </AppShell>

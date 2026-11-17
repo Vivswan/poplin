@@ -284,7 +284,7 @@ describe("the scheduled run", () => {
     const calls = asked.length;
     await sweep(worker, w, keyed);
 
-    expect(refused).toEqual([200, 0, 200, { ok: true }, true, [], [["rules_not_carried", 1, null]]]);
+    expect(refused).toEqual([200, 0, 200, { ok: true, waits: { repair: [], update: [] } }, true, [], [["rules_not_carried", 1, null]]]);
     expect([carried, asked.length - calls]).toEqual([[false, [INSTALL_OBJECTS.botsRef]], 0]);
   });
 

@@ -23,7 +23,7 @@ const HINT_AFTER_MS = 400;
 const LINE_EDGES = { top: "var(--line-top)", bottom: "var(--line-bottom)" };
 
 /** The look of a line, laid over the library's own: so little room around its words that a line with a button, which has two rows, is lower than the header. On a phone its words end after two rows. */
-const LINE_LOOK = { toast: "cn-toast py-2.5! has-data-description:py-1!", title: "max-md:line-clamp-2", description: "text-xs! leading-4!" };
+const LINE_LOOK = { toast: "cn-toast py-2.5! has-data-description:py-1! md:has-data-next:py-1!", title: "max-md:line-clamp-2", description: "text-xs! leading-4!" };
 
 /** Draw the place where every result is said. */
 function Lines(): ReactNode {

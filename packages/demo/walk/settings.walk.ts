@@ -4,6 +4,12 @@ import { expect, type Page } from "@playwright/test";
 
 import { arrive, SECTIONS_BUTTON, said, screenHeading, test, toSection } from "./visit";
 
+/** The two sample installs a visitor rule is saved on, each with what the line then says: one holds its key and carries the rule by itself, and the rule of the other waits for a repair. */
+const SAVED_ON = [
+  { name: "an install that holds its key", settings: "settings", says: "Saved." },
+  { name: "an install that holds no key", settings: "empty/settings", says: "Saved. Takes effect at the next Repair." },
+] as const;
+
 /** The screens Settings is walked on: the widest, and a phone. */
 const SCREENS = [
   { width: 1440, height: 900 },
@@ -65,6 +71,23 @@ test("a count too large to keep is refused at its field, which keeps what was ty
   await expect(page.getByText(TOO_LARGE.refusal, { exact: true })).toBeVisible();
   await expect(field).toHaveValue(TOO_LARGE.typed);
 });
+
+for (const install of SAVED_ON) {
+  // Drift: a rule of the domain that only a repair writes would be said as "Saved." alone, and read as in effect; or an install that carries the rule by itself would be told to wait for a repair.
+  test(`a saved visitor rule says when it takes effect on ${install.name}, with its words whole`, async ({ page }) => {
+    await arrive(page);
+    await page.goto(install.settings);
+    const rule = page.getByRole("switch", { name: "Let search engines in", exact: true });
+    await rule.click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+
+    const words = page.getByRole("region", { name: /^Notifications/ }).getByTitle(install.says, { exact: true });
+    await expect(words).toBeVisible();
+    await expect(page.getByRole("region", { name: /^Notifications/ }).getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    // No part of the words has less room than it needs.
+    expect(await words.locator("span").evaluateAll((all) => all.filter((part) => part.scrollWidth > part.clientWidth).map((part) => part.textContent))).toEqual([]);
+  });
+}
 
 // Drift: the switch of the logs would stand in another group or under other words, come back on after a reload though it was saved off, or say on an install that holds its key that the change waits for an update.
 test("Keep logs stands under Logs with its sentence, stays off once it is switched off and saved, and says nothing of waiting on an install that holds its key", async ({ page }) => {
