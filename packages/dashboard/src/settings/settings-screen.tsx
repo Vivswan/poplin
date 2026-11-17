@@ -28,6 +28,9 @@ const HEADING = "mb-1 text-base leading-6 font-bold";
 /** The setting that starts updates by itself, and what its row says while the install holds no key: the switch then starts nothing. */
 const [AUTO_UPDATE, NEEDS_KEY] = ["auto_update", `Needs poplin's key to work.${GET_KEY}`] as const;
 
+/** The setting the provider's logs follow, and what its row says while the install holds no key: a change then waits for the next upload of the install's code. */
+const [PROVIDER_LOGS, AT_NEXT_UPDATE] = ["provider_logs", "Takes effect at the next update or Repair."] as const;
+
 /** How long a block an address names stays shaded, in milliseconds. */
 const MARKED_FOR = 2000;
 
@@ -53,6 +56,15 @@ function RepairNote({ block }: { readonly block: Block }): ReactNode {
       .
     </p>
   );
+}
+
+/** What a row says under its control on an install that holds no key; nothing for any other row, and on an install that holds one. */
+function noteOf(key: string, keyed: boolean): string | undefined {
+  if (keyed) return undefined;
+
+  if (key === AUTO_UPDATE) return NEEDS_KEY;
+
+  return key === PROVIDER_LOGS ? AT_NEXT_UPDATE : undefined;
 }
 
 /** The blocks of the page: every group of settings under its heading. */
@@ -82,7 +94,7 @@ function Groups({
               refusal={draft.refusals[row.key]}
               onChange={(text) => draft.change(row, text)}
               marked={marked === row.key}
-              note={row.key === AUTO_UPDATE && !keyed ? NEEDS_KEY : undefined}
+              note={noteOf(row.key, keyed)}
             />
           ))}
         </section>

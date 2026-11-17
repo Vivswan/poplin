@@ -2,7 +2,7 @@
 //
 //   GET  /settings                         every setting with its control, its text, its default, and the limits it can be put above: the host's free ones, and the install's own that bound it
 //   POST /settings                         save some settings together, each as the text it is typed in: all of them, or on a refusal none; a refusal names every refused setting.
-//                                          A saved setting the domain's rules are written from is then carried to them, on an install that holds a key
+//                                          A saved setting the domain's rules are written from is then carried to them, and the one of the logs to the provider, on an install that holds a key
 //   POST /settings/sign-everyone-out       end every login of the dashboard at the provider; a refusal says why they are not known to have ended
 
 import { vValidator } from "@hono/valibot-validator";
@@ -18,6 +18,7 @@ import { type PairMark, pairMarks } from "./settings/pair-limits";
 import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 import type { DomainPlug } from "./domain/records";
 import { type Control, controlOf, screenText, unitOf } from "./setting-controls";
+import { carryLogs, namesLogs } from "./settings/logs-follow";
 import { carryRules } from "./settings/rules-follow";
 
 /** What a save carries: the text of each setting it changes, by the setting's key. */
@@ -169,6 +170,8 @@ export const settingsRoutes = new Hono<Shared>()
     if (!changed.ok) return refused(context, changed);
 
     if (held.some((key) => isCarried(key, true))) await carryRules(context, install, context.get("rules"));
+
+    if (namesLogs(texts)) await carryLogs(context, install, context.get("logs"), changed.values.provider_logs);
 
     return context.json({ ok: true as const });
   })

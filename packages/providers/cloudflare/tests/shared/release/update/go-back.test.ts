@@ -7,6 +7,8 @@ import type { Database } from "@poplin/core/src/database/database";
 import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { installer } from "../../../../src/shared/install/first/installer";
 import { readKeptKey } from "../../../../src/shared/install/key/kept-key";
+import { createLogsFollow } from "../../../../src/shared/install/pieces/worker-logs/logs-follow";
+import { keepsLines } from "../../../../src/shared/install/pieces/worker-logs/worker-logs";
 import type { CheckedBundle } from "../../../../src/shared/release/update/bundle-files";
 import { goBack } from "../../../../src/shared/release/update/go-back";
 import { openUpload } from "../../../../src/shared/release/update/upload";
@@ -220,12 +222,16 @@ async function installed(kind: keyof typeof PLACES): Promise<{ readonly account:
   return { account, fetch: reach.fetch as typeof fetch };
 }
 
-/** Send the update to the next release as the install itself does, then start its code with a schema step that fails; answer what the going back said, and the bindings of the version that runs after it. */
-async function updatedThenFailed(account: InstallAccount, fetch: typeof globalThis.fetch): Promise<{ readonly went: unknown; readonly runs: unknown; readonly holds: readonly string[] }> {
+/**
+ * Send the update to the next release as the install itself does, then start its code with a schema step that fails; answer what the going back said, and the bindings of the version that runs after it.
+ *
+ * @param logsKept - the install's stored setting of its logs, which the update states
+ */
+async function updatedThenFailed(account: InstallAccount, fetch: typeof globalThis.fetch, logsKept = true): Promise<{ readonly went: unknown; readonly runs: unknown; readonly holds: readonly string[] }> {
   const key = readKeptKey(TOKEN, { fetch });
   const update = { from: RELEASE, to: NEXT.version, schema: OWN_SCHEMA, at: NOW - 60_000 };
   const upload = await openUpload(key, WORKER);
-  if (!upload.ok || !(await upload.value.put(NEXT, update)).ok) throw new Error("the test's update was not taken");
+  if (!upload.ok || !(await upload.value.put(NEXT, update, logsKept)).ok) throw new Error("the test's update was not taken");
 
   const went = await goBack({ last: update, failed: { version: NEXT.version, stored: OWN_SCHEMA }, key, worker: WORKER, noting: { database: noting([]), now: () => NOW } });
   const runs = account.versions.find((version) => version.id === account.deployments[0]);
@@ -253,5 +259,17 @@ describe.each(Object.keys(PLACES) as (keyof typeof PLACES)[])("an install as `po
     const outcome = await updatedThenFailed(account, fetch);
 
     expect<unknown>([account.deployments, outcome.went, outcome.runs]).toEqual([["version-4", "version-3", "version-2", "version-1"], undefined, "version-4"]);
+  });
+
+  // Drift: Cloudflare keeps no observability across an upload, and a deployment of an earlier version changes which code runs. Logs that came back on at either would keep lines of an install that switched them off.
+  test("with the setting of the logs off, Cloudflare keeps no line after the change, after the install's own update, and after it went back", async () => {
+    const { account, fetch } = await installed(kind);
+    const made = keepsLines(account.observability);
+    const pushed = await createLogsFollow(readKeptKey(TOKEN, { fetch }), WORKER).push(false);
+    const changed = keepsLines(account.observability);
+    const outcome = await updatedThenFailed(account, fetch, false);
+    const sent = account.uploads.map((upload) => keepsLines((upload.metadata as { readonly observability?: unknown }).observability));
+
+    expect<unknown>([made, pushed, changed, sent, outcome.went, keepsLines(account.observability)]).toEqual([true, { ok: true }, false, [true, false], { from: NEXT.version, to: RELEASE }, false]);
   });
 });

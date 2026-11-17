@@ -118,6 +118,9 @@ interface Meets {
 
   /** The variable the upload of the running code stated; left out on a Worker no update of its own put in place. */
   last?: unknown;
+
+  /** The install's stored setting of its logs; left out on an install that keeps them. */
+  logsKept?: boolean;
 }
 
 /** What one update left behind. */
@@ -222,7 +225,7 @@ async function taken(meets: Meets, wanted: { readonly version: string; readonly 
   const prints = PRINTS.map((name) => spyOn(console, name).mockImplementation(() => undefined));
   const [fetched, calls, uploads]: [string[], string[], Uploaded[]] = [[], [], []];
   const key = readKeptKey(meets.secret, { baseUrl: API, fetch: apiOf(meets, calls, uploads) });
-  const self = createSelfUpdate({ key, worker: WORKER, version: meets.running, last: meets.last, now: () => NOW, fetch: websiteOf(meets, fetched) });
+  const self = createSelfUpdate({ key, worker: WORKER, version: meets.running, last: meets.last, now: () => NOW, fetch: websiteOf(meets, fetched), logsKept: async () => meets.logsKept !== false });
 
   try {
     const ready = await self.ready(wanted);
@@ -533,7 +536,29 @@ describe("an update the install takes by itself", () => {
     meets.script.observability = { enabled: true, head_sampling_rate: 0.5 };
     const outcome = await taken(meets);
 
-    expect<unknown>(outcome.uploads.map((upload) => upload.metadata)).toEqual([{ ...METADATA, observability: { enabled: true, head_sampling_rate: 0.5 } }]);
+    expect<unknown>(outcome.uploads.map((upload) => upload.metadata)).toEqual([{ ...METADATA, observability: { enabled: true, head_sampling_rate: 0.5, logs: { enabled: true, invocation_logs: false } } }]);
+  });
+
+  // Drift: every upload states the observability, so one that stated the release's alone would switch the logs back on at each update of an install whose setting keeps none.
+  test.each([
+    { name: "a release that states its observability", states: true, own: null, sent: { enabled: false, head_sampling_rate: 1, logs: { enabled: false, invocation_logs: false } } },
+    {
+      name: "a release that states none, on a Worker whose logs somebody switched on",
+      states: false,
+      own: { enabled: true, head_sampling_rate: 0.5, logs: { enabled: true, invocation_logs: true } },
+      sent: { enabled: false, head_sampling_rate: 0.5, logs: { enabled: false, invocation_logs: false } },
+    },
+  ])("on an install whose setting keeps no logs, $name is uploaded with the logs off and no record of a request", async ({ states, own, sent }) => {
+    const { observability: _none, ...plain } = CONFIG;
+    const { manifest, pin } = await release("0.3.0", OWN_SCHEMA, states ? CONFIG : plain);
+    const meets = await meeting();
+    meets.pins = JSON.stringify({ "0.3.0": pin });
+    meets.assets.set(bundleAddress("0.3.0", MANIFEST_FILE), ENCODER.encode(manifest));
+    meets.script.observability = own;
+    meets.logsKept = false;
+    const outcome = await taken(meets);
+
+    expect<unknown>(outcome.uploads.map((upload) => upload.metadata)).toEqual([{ ...METADATA, observability: sent }]);
   });
 
   // Drift: a person may take a release that changes the database, which the install never takes by itself.

@@ -41,6 +41,7 @@ import * as v from "valibot";
 
 import { followUsers, type UsersFollow } from "../console/access/users-follow";
 import { holding, type Later } from "../console/later";
+import { carryLogs, type LogsFollow, namesLogs } from "../console/settings/logs-follow";
 import { carryRules, namesRule, type RulesFollow } from "../console/settings/rules-follow";
 import { carries, counted, type Gate, metered, namesSite, sent } from "./asked";
 import { authenticate, type ReadToken } from "./authenticate";
@@ -101,22 +102,32 @@ export interface ApiDeps extends Install, Gate {
   /** The provider's side of the domain's rules: a change of a setting they are written from is carried there by itself. Without it such a change waits for a repair. */
   readonly rules?: RulesFollow;
 
+  /** The provider's side of the install's logs: a change of the setting that keeps them is carried there by itself. Without it such a change waits for the next update or repair. */
+  readonly logs?: LogsFollow;
+
   /** The host's tickets that send an upload's files straight to the store. Without them, and whenever they answer none, the install takes every file itself. */
   readonly direct?: Direct;
 }
 
 /**
- * Carry a stored change of the settings to the provider: the users before the answer, and the settings of the domain's rules with no answer held for them where the host holds the request open.
+ * Carry a stored change of the settings to the provider: the users before the answer, and the settings of the domain's rules and of the logs with no answer held for them where the host holds the request open.
  *
- * @param named - whether the change named the logins, and whether it named a setting the domain's rules are written from
+ * @param named - whether the change named the logins, whether it named a setting the domain's rules are written from, and whether it named the setting of the logs
  * @returns the action's own answer, whatever the provider said: a change that did not reach it waits, and the dashboard says so
  */
-async function carried<Answer extends { readonly ok: boolean }>(deps: Omit<ApiDeps, "store">, context: Context, answer: Answer, named: { readonly logins: boolean; readonly rules: boolean }): Promise<Answer> {
+async function carried<Answer extends { readonly ok: boolean; readonly values?: Pick<SettingValues, "provider_logs"> }>(
+  deps: Omit<ApiDeps, "store">,
+  context: Context,
+  answer: Answer,
+  named: { readonly logins: boolean; readonly rules: boolean; readonly logs: boolean },
+): Promise<Answer> {
   if (!answer.ok) return answer;
 
   if (deps.follow !== undefined && named.logins) await followUsers(deps, deps.follow);
 
   if (named.rules) await carryRules(context, deps, deps.rules);
+
+  if (named.logs && answer.values !== undefined) await carryLogs(context, deps, deps.logs, answer.values.provider_logs);
 
   return answer;
 }
@@ -194,8 +205,8 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
       return respondFile(await exportFile(context.var.install, context.var.actor, { ...context.req.valid("query"), site: context.req.param("site") }));
     })
     .post("/import/settings", token, install, json, noQuery, sent<v.InferInput<typeof SETTINGS_IMPORT>>(SETTINGS_BYTES), async (context) => {
-      // A backup holds every setting, the ones the domain's rules are written from among them.
-      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(deps, context, await importSettings(context.var.install, context.var.actor, request), { logins: request.logins === true, rules: true })));
+      // A backup holds every setting, the ones the domain's rules are written from and the one of the logs among them.
+      return respond(await checked(SETTINGS_IMPORT, context.req.valid("json"), async (request) => carried(deps, context, await importSettings(context.var.install, context.var.actor, request), { logins: request.logins === true, rules: true, logs: true })));
     })
     .post("/import/sites", token, install, json, noQuery, sent<ImportRequest>(deps.limits.manifestBytes), async (context) => {
       return respond(await beginImport(ticketed(context.var.install, deps.direct), context.var.actor, context.req.valid("json"), deps.limits), deps.now());
@@ -204,7 +215,7 @@ function routesOf(deps: Omit<ApiDeps, "store">, install: ReturnType<typeof meter
     .get("/config", token, install, noQuery, async (context) => respond(await readConfig(context.var.install, context.var.actor)))
     .patch("/config", token, install, json, noQuery, sent<Partial<SettingValues>>(JSON_BYTES), async (context) => {
       const changes = context.req.valid("json");
-      const named = { logins: typeof changes === "object" && changes !== null && "logins" in changes, rules: namesRule(changes) };
+      const named = { logins: typeof changes === "object" && changes !== null && "logins" in changes, rules: namesRule(changes), logs: namesLogs(changes) };
 
       return respond(await carried(deps, context, await changeConfig(context.var.install, context.var.actor, changes), named));
     })

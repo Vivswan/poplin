@@ -28,7 +28,7 @@ async function usageWith(official: Keyed<HostFigures>, more: Partial<UsageHost> 
 
     return { read: 7, written: 1 };
   };
-  const opened = await openConsole("", undefined, { ...USAGE_HOST, ...more, unwrittenRows, official: async () => official });
+  const opened = await openConsole("", undefined, { usage: { ...USAGE_HOST, ...more, unwrittenRows, official: async () => official } });
   const day = dayOf(opened.base.clock.now);
   await opened.base.install.database.addRequests({ day, site: (await opened.base.publish("field-notes")).id, requests: 20, rows: { read: 400, written: 6 } });
 

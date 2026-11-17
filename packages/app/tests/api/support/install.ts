@@ -61,7 +61,7 @@ export interface Answered {
  * `routes` sends as the admin, `as` as another token or, for `null`, with no `Authorization` header, and `ask` sends a request written out by hand. `requests` holds every request the three sent, in order.
  *
  * `calls` counts every batch sent to the database and every call made to the store, since the test last set it to zero.
- * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`. `rules` stands in for the provider's side of the domain's rules, on an install that holds a key: `pushed` holds the values of every try.
+ * `counters` count the requests to the routes that take no token; a test breaks them by replacing `takeMinute`. `rules` and `logs` stand in for the provider's side of the domain's rules and of the logs, with a key: `pushed` holds every try.
  * `users` stands in for the provider's side of the users: `pushed` holds every list of logins handed over, `ended` counts the tries to end every login, and `takes` says whether the provider takes either; it starts with no key, and takes none.
  * `host` stands in for the install's host: `key` is whether it holds the key an update is sent with, `release` the newest release above the running version or `null`, `refusal` what it refuses that release with, and `put` every version it put in place.
  * `direct` stands in for the host's tickets past the install: with `tickets` set, the host hands those out; it starts as a host that has none.
@@ -77,6 +77,7 @@ export interface ApiInstall {
   readonly clock: { now: number };
   readonly users: { takes: boolean; readonly pushed: (readonly string[])[]; ended: number };
   readonly rules: { readonly pushed: RuleSettings[] };
+  readonly logs: { readonly pushed: boolean[] };
   readonly direct: { tickets: Tickets | undefined };
   readonly tokens: { readonly admin: string; readonly owner: string; readonly stranger: string };
   readonly reported: unknown[];
@@ -180,6 +181,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
   const host = updateHost("7.9.0");
   const users: ApiInstall["users"] = { takes: false, pushed: [], ended: 0 };
   const rules: ApiInstall["rules"] = { pushed: [] };
+  const logs: ApiInstall["logs"] = { pushed: [] };
   const direct: ApiInstall["direct"] = { tickets: undefined };
   const said = v.parse(ADDRESS_LAYOUT, layout);
   const addresses = addressesUnder(said.kind === "hostname" ? said.public_word : DEFAULT_PUBLIC_WORD);
@@ -224,6 +226,14 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
         return { ok: true };
       },
     },
+    logs: {
+      holdsKey: () => true,
+      push: async (kept) => {
+        logs.pushed.push(kept);
+
+        return { ok: true };
+      },
+    },
     update: hostUpdate(host),
     direct: () => direct.tickets,
   });
@@ -250,6 +260,7 @@ export async function openApi(overrides: Partial<ReturnType<typeof defaultSettin
     clock,
     users,
     rules,
+    logs,
     host,
     direct,
     tokens: { admin, owner, stranger },

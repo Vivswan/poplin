@@ -74,6 +74,7 @@ const VALUES = {
   visitor_requests_per_minute: COUNT_SET,
   update_check: v.boolean(),
   auto_update: v.boolean(),
+  provider_logs: v.boolean(),
 };
 
 /** Every setting, as the settings are stored and read. An install that never asks for the newest release starts no update by itself, so `auto_update` is on only beside `update_check`: checked once those two are typed, whatever another key holds. */
@@ -113,6 +114,7 @@ const FORMS: { readonly [Key in SettingKey]: TextForm<SettingValues[Key]> } = {
   visitor_requests_per_minute: whole(),
   update_check: onOff(),
   auto_update: onOff(),
+  provider_logs: onOff(),
 };
 
 /** The suffix of each unit of an amount and how many base units it holds. */
@@ -299,6 +301,7 @@ export function defaultSettings(install: Install): SettingValues {
     visitor_requests_per_minute: 600,
     update_check: true,
     auto_update: false,
+    provider_logs: true,
   };
 }
 

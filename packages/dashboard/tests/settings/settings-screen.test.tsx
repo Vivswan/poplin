@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BOOT } from "@/lib/boot";
+import { FRAME_KEY } from "@/lib/frame";
 import { settingAddress } from "@/settings/setting-address";
 import type { Row } from "@/settings/settings-queries";
 import { SettingsScreen } from "@/settings/settings-screen";
@@ -27,7 +28,7 @@ const COUNT = { kind: "number", word: null } as const;
 const OWN_FETCH = globalThis.fetch;
 
 /** The texts the server of these tests starts with, by setting. */
-const AT_START = { default_search_engines: "off", trash_days: "7", max_total_size: "9000MB", update_check: "on", auto_update: "off", update_channel: "off" } as const;
+const AT_START = { default_search_engines: "off", trash_days: "7", max_total_size: "9000MB", update_check: "on", auto_update: "off", update_channel: "off", provider_logs: "on" } as const;
 
 /** The texts the server of these tests holds, by setting. */
 const stored: Record<string, string> = {};
@@ -49,11 +50,12 @@ function rowOf(key: string, control: Row["control"], unit = ""): Row {
  * Answer as the server does: the rows as stored, and every save done, or refused about `refusedKey`, or about each of `refusedKeys` at once.
  *
  * @param holds - whether a save waits until a test lets it through
+ * @param keyed - whether the install holds its key
  */
-function serve({ refusedKey, refusedKeys = [], holds = false }: { readonly refusedKey?: string; readonly refusedKeys?: readonly string[]; readonly holds?: boolean } = {}): void {
+function serve({ refusedKey, refusedKeys = [], holds = false, keyed = false }: { readonly refusedKey?: string; readonly refusedKeys?: readonly string[]; readonly holds?: boolean; readonly keyed?: boolean } = {}): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
-    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
+    if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: keyed, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } });
 
     if (init?.method !== "POST") {
       const rows = [
@@ -63,6 +65,7 @@ function serve({ refusedKey, refusedKeys = [], holds = false }: { readonly refus
         rowOf("update_check", { kind: "switch" }),
         rowOf("auto_update", { kind: "switch" }),
         rowOf("update_channel", { kind: "switch" }),
+        rowOf("provider_logs", { kind: "switch" }),
       ];
 
       return Response.json({ ok: true, rows });
@@ -85,10 +88,10 @@ function serve({ refusedKey, refusedKeys = [], holds = false }: { readonly refus
 }
 
 /** Draw the screen and wait for its rows. */
-async function drawn(address = "/settings"): Promise<Within> {
+async function drawn(address = "/settings", client = new QueryClient({ defaultOptions: { queries: { retry: false } } })): Promise<Within> {
   await drawAt(
     address,
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={client}>
       <ThemeProvider storageKey="test.theme">
         <TooltipProvider>
           <SettingsScreen />
@@ -160,10 +163,28 @@ describe("the one page", () => {
       [
         ["New sites", "Show in search engines", "Keep deleted sites"],
         ["Storage", "All sites together"],
+        ["Logs", "Keep logs"],
         ["Updates", "Check for new versions", "Update automatically", "Update channel"],
       ],
       false,
     ]);
+  });
+
+  // Drift: on an install with no key a change of the logs waits for the next upload of its code. A row that said nothing there would read as switched at once, and one that said it on an install with a key would be untrue.
+  test.each([
+    { name: "an install that holds no key says when a change takes effect", keyed: false, waits: true },
+    { name: "an install that holds its key says nothing there", keyed: true, waits: false },
+  ])("under Keep logs, $name", async ({ keyed, waits }) => {
+    serve({ keyed });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const page = await drawn("/settings", client);
+    // The frame starts from the page's own values, which are of an install with no key.
+    await act(async () => void client.setQueryData(FRAME_KEY, (frame: object | undefined) => ({ ...frame, starts: keyed })));
+    const block = page.getByRole("switch", { name: "Keep logs" }).closest("section");
+
+    await waitFor(() =>
+      expect([block?.querySelector("h2")?.textContent, block?.textContent?.includes("Logs help find a fault; while off, the provider keeps none."), block?.textContent?.includes("Takes effect at the next update or Repair.")]).toEqual(["Logs", true, waits]),
+    );
   });
 });
 

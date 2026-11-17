@@ -7,7 +7,7 @@
 //
 // Every binding the Worker has is named `inherit`, so its bucket, its database, its variables, and its key stay as they are; one the release states whole is sent by value.
 // `strict` makes Cloudflare refuse the upload when it cannot keep a binding so named, in place of dropping it.
-// Cloudflare keeps no observability setting across an upload, so every upload states it: the release's, or else the Worker's own.
+// Cloudflare keeps no observability setting across an upload, so every upload states it: the release's, or else the Worker's own, with its logs kept or not as the install's setting of them says.
 // Every upload states the release its code is of, in the binding `RELEASE` and in the tag of the version it makes.
 // Every update states one variable of its own, `LAST_UPDATE`: the version the install ran, the version it takes, the schema its database is at, and when.
 // It comes in with the code or not at all, so the new code reads which version it can go back to.
@@ -22,6 +22,7 @@
 // A first upload is no update, so it states no `LAST_UPDATE`: there is no version to go back to.
 //
 // A repair is an update sent with a person's token in place of the key: the same four calls. That token can make what the key cannot, so a binding the release keeps and the Worker lacks is stated by its first value.
+// It sends before the install's records are read, so it states the logs as the Worker has them, and the repair writes the setting of them after.
 
 import type { Keyed } from "@poplin/app/src/console/key/records";
 import { LAST_UPDATE, type LastUpdate } from "@poplin/core/src/records/update";
@@ -32,6 +33,7 @@ import { MAP_FILE, MODULE_FILE } from "../publish/bundle-manifest";
 import { type KeptKey, keyed } from "../../install/key/kept-key";
 import { type CloudflareResult, type Connection, callCloudflare } from "../../install/client";
 import { INSTALL_OBJECTS } from "../../install/install-objects";
+import { keepsLines, observabilityOf } from "../../install/pieces/worker-logs/worker-logs";
 import * as v from "valibot";
 import type { CheckedBundle } from "./bundle-files";
 import { releaseBinding, taggedAs } from "./release-mark";
@@ -57,13 +59,6 @@ const OWN_BINDINGS: ReadonlySet<string> = new Set([INSTALL_OBJECTS.keyBinding, L
 /** What the version an upload makes says made it, after the release's version. */
 const MADE_BY = { update: "by its own update", install: "by its install", repair: "by a repair" } as const;
 
-/** The observability of a first upload whose release states none. */
-const FIRST_OBSERVABILITY = {
-  enabled: INSTALL_OBJECTS.logsKept,
-  head_sampling_rate: INSTALL_OBJECTS.logsShare,
-  logs: { enabled: INSTALL_OBJECTS.logsKept, invocation_logs: INSTALL_OBJECTS.requestRecords },
-};
-
 /** The Worker that is replaced, or made. */
 interface OwnWorker {
   readonly accountId: string;
@@ -86,8 +81,8 @@ type Put =
 
 /** An opened way to the Worker: the key was taken for it. */
 export interface Upload {
-  /** Reads the Worker's bindings, then sends the one upload of a release's files with the update it is, then the schedule when the release's differs. An `update` of `undefined` states none: the code it puts in place knows no version to go back to. */
-  readonly put: (bundle: CheckedBundle, update: LastUpdate | undefined) => Promise<Put>;
+  /** Reads the Worker's bindings, sends the one upload with its update, then the schedule where it differs. An `update` of `undefined` states none; a `logsKept` of `undefined`, from a sender that read no setting, keeps the logs as the Worker has them. */
+  readonly put: (bundle: CheckedBundle, update: LastUpdate | undefined, logsKept: boolean | undefined) => Promise<Put>;
 }
 
 /** States the first value of each binding a release keeps by name and the Worker lacks; `undefined` when one of them has none. */
@@ -96,10 +91,11 @@ type FirstValues = (lacking: readonly string[]) => readonly SentBinding[] | unde
 /** Who sends an update: the install itself with its key, or a repair with a person's token, which can state a binding the Worker lacks. */
 type Sender = { readonly by: "update" } | { readonly by: "repair"; readonly first: FirstValues };
 
-/** What one update sends: the release's files, the update it is, the Worker's cron list as it was read, and who sends it. */
+/** What one update sends: the release's files, the update it is, whether the install's setting keeps its logs or `undefined` for a setting that is not read, the Worker's cron list as it was read, and who sends it. */
 interface Sending {
   readonly bundle: CheckedBundle;
   readonly update: LastUpdate | undefined;
+  readonly logsKept: boolean | undefined;
   readonly crons: readonly string[];
   readonly sender: Sender;
 }
@@ -107,10 +103,11 @@ interface Sending {
 /** One binding as an upload sends it. */
 export type SentBinding = Readonly<Record<string, unknown>> & { readonly name: string };
 
-/** What an upload says beside the release's own values: every binding the release does not state, the observability where the release states none, and which of the two ways made it. */
+/** What an upload says beside the release's own values: every binding the release does not state, the observability where the release states none, whether the install's setting keeps its logs, and which of the ways made it. */
 interface Beside {
   readonly kept: readonly SentBinding[];
   readonly observability: unknown;
+  readonly logsKept: boolean;
   readonly by: keyof typeof MADE_BY;
 }
 
@@ -130,10 +127,10 @@ export function statesOwnBinding(bundle: CheckedBundle): boolean {
   return statedOf(bundle) === undefined;
 }
 
-/** The metadata of an upload, as JSON text: the one writer of an update and of an install, so the one place that states the release of the code, as a binding and as the version's tag. */
+/** The metadata of an upload, as JSON text: the one writer of an update and of an install, so the one place that states the release of the code, as a binding and as the version's tag, and the logs as the install's setting keeps them. */
 function metadataOf(bundle: CheckedBundle, stated: readonly SentBinding[], beside: Beside): string {
   const { deploy, version } = bundle;
-  const observability = deploy.observability ?? beside.observability ?? undefined;
+  const observability = observabilityOf(deploy.observability ?? beside.observability, beside.logsKept);
   const release = releaseBinding(version);
 
   return JSON.stringify({
@@ -141,7 +138,7 @@ function metadataOf(bundle: CheckedBundle, stated: readonly SentBinding[], besid
     compatibility_date: deploy.compatibility_date,
     compatibility_flags: deploy.compatibility_flags,
     bindings: [...beside.kept.filter((binding) => binding.name !== release.name), ...stated, release],
-    ...(observability === undefined ? {} : { observability }),
+    observability,
     annotations: taggedAs(version, MADE_BY[beside.by]),
   });
 }
@@ -154,8 +151,8 @@ function firstOf(sender: Sender, lacking: readonly string[]): readonly SentBindi
 }
 
 /** The metadata of an update, where every binding the Worker has is kept by name; `undefined` for a release that names a kept binding the Worker lacks and nothing states, or that states the key's own or the update's own variable. */
-function updateMetadata(sending: Pick<Sending, "bundle" | "update" | "sender">, current: { readonly bindings: readonly string[]; readonly observability: unknown }): string | undefined {
-  const { bundle, update, sender } = sending;
+function updateMetadata(sending: Pick<Sending, "bundle" | "update" | "logsKept" | "sender">, current: { readonly bindings: readonly string[]; readonly observability: unknown }): string | undefined {
+  const { bundle, update, logsKept, sender } = sending;
   const released = statedOf(bundle);
   const first = firstOf(
     sender,
@@ -166,7 +163,7 @@ function updateMetadata(sending: Pick<Sending, "bundle" | "update" | "sender">, 
   const stated = [...released, ...first, ...(update === undefined ? [] : [{ name: LAST_UPDATE_BINDING, type: "json", json: update }])];
   const inherited = current.bindings.filter((name) => !stated.some((binding) => binding.name === name)).map((name) => ({ name, type: "inherit" }));
 
-  return metadataOf(bundle, stated, { kept: inherited, observability: current.observability, by: sender.by });
+  return metadataOf(bundle, stated, { kept: inherited, observability: current.observability, logsKept: logsKept ?? keepsLines(current.observability), by: sender.by });
 }
 
 /** Send the one request that carries a release's files and its metadata. With `inherit`, Cloudflare refuses it when it cannot keep a binding the metadata names as kept. */
@@ -236,14 +233,19 @@ export function putCrons(connection: Connection, worker: OwnWorker, crons: reado
  * Send the first upload of a Worker that does not exist yet: a release's checked files, with every binding stated and none inherited.
  *
  * @param connection - a person's token
- * @param first - the first value of each binding the release keeps by name
+ * @param first - the first value of each binding the release keeps by name, and `logsKept`, the setting of the logs the install starts with
  * @returns Cloudflare's answer to the one request; `needs-hand` for a release that states the key's own binding or an update's own variable, which is sent nowhere
  */
-export async function putFirst(connection: Connection, worker: OwnWorker, bundle: CheckedBundle, first: readonly SentBinding[]): Promise<CloudflareResult<unknown> | { readonly ok: false; readonly failure: "needs-hand" }> {
+export async function putFirst(
+  connection: Connection,
+  worker: OwnWorker,
+  bundle: CheckedBundle,
+  first: { readonly bindings: readonly SentBinding[]; readonly logsKept: boolean },
+): Promise<CloudflareResult<unknown> | { readonly ok: false; readonly failure: "needs-hand" }> {
   const stated = statedOf(bundle);
   if (stated === undefined) return { ok: false, failure: "needs-hand" };
 
-  return sendFiles(connection, worker, bundle, { metadata: metadataOf(bundle, stated, { kept: first, observability: FIRST_OBSERVABILITY, by: "install" }), inherit: false });
+  return sendFiles(connection, worker, bundle, { metadata: metadataOf(bundle, stated, { kept: first.bindings, observability: undefined, logsKept: first.logsKept, by: "install" }), inherit: false });
 }
 
 /**
@@ -257,7 +259,7 @@ export async function openUpload(key: KeptKey | undefined, worker: OwnWorker, se
   const crons = await keyed(key, RIGHT, (connection) => readCrons(connection, worker));
   if (!crons.ok) return crons;
 
-  return { ok: true, value: { put: (bundle, update) => put(key, worker, { bundle, update, crons: crons.value, sender }) } };
+  return { ok: true, value: { put: (bundle, update, logsKept) => put(key, worker, { bundle, update, logsKept, crons: crons.value, sender }) } };
 }
 
 /**

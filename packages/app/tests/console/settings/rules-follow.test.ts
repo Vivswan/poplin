@@ -240,7 +240,7 @@ describe("a save on the Settings screen", () => {
   // Drift: the screen saves through this route. One that carried on every save would call the provider for a setting no rule is written from, and one that never carried would leave the rules waiting for a repair the screen no longer asks for.
   test("carries a setting the rules are written from, and asks the provider nothing for any other", async () => {
     const rules = fakeRules();
-    const opened = await openConsole("", usualPlug(), undefined, undefined, rules);
+    const opened = await openConsole("", usualPlug(), { rules });
     await opened.base.install.database.keepDomainCheck({ ran_at: opened.base.install.now(), by: opened.base.owner, run: "repair", pieces: [] }, {});
     opened.base.clock.now += 1;
 
@@ -253,7 +253,7 @@ describe("a save on the Settings screen", () => {
 
   // Drift: a save is answered as saved whatever the provider says, since the setting is stored: a refusal is a problem of the domain, never a refusal of the save.
   test("is answered as saved where the provider refuses, with the change left waiting and noted", async () => {
-    const opened = await openConsole("", usualPlug(), undefined, undefined, fakeRules(() => "lacks_right"));
+    const opened = await openConsole("", usualPlug(), { rules: fakeRules(() => "lacks_right") });
     await opened.base.install.database.keepDomainCheck({ ran_at: opened.base.install.now(), by: opened.base.owner, run: "repair", pieces: [] }, {});
     opened.base.clock.now += 1;
     const saved = await opened.change("/data/settings", { texts: { search_engines_allowed: "on" } });
@@ -265,7 +265,7 @@ describe("a save on the Settings screen", () => {
   test("is answered without waiting for the provider, on a host that holds the request open, and the rules are written all the same", async () => {
     const gate = Promise.withResolvers<undefined>();
     const rules = fakeRules(() => gate.promise);
-    const opened = await openConsole("", usualPlug(), undefined, undefined, rules);
+    const opened = await openConsole("", usualPlug(), { rules });
     await opened.base.install.database.keepDomainCheck({ ran_at: opened.base.install.now(), by: opened.base.owner, run: "repair", pieces: [] }, {});
     opened.base.clock.now += 1;
     const left: Promise<unknown>[] = [];
@@ -282,8 +282,8 @@ describe("a save on the Settings screen", () => {
 
   // Drift: the line that sends a person to Domain to press Repair. It must stay on every setting a repair alone carries, and go from the ones the install carries by itself; on an install with no key a repair carries all three, as before.
   test("marks as waiting for a repair only the settings the install does not carry by itself", async () => {
-    const carried = await settingsOf(await openConsole("", usualPlug(), undefined, undefined, fakeRules()));
-    const noKey = await settingsOf(await openConsole("", usualPlug(), undefined, undefined, fakeRules(undefined, false)));
+    const carried = await settingsOf(await openConsole("", usualPlug(), { rules: fakeRules() }));
+    const noKey = await settingsOf(await openConsole("", usualPlug(), { rules: fakeRules(undefined, false) }));
 
     expect([carried, noKey]).toEqual([["block_bots"], ["outside_pages", "search_engines_allowed", "block_bots"]]);
   });

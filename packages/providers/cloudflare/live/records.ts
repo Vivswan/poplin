@@ -4,7 +4,7 @@ import type { JobRun } from "../scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 
 /** Something a check needs that an install, its account, or a run may lack. `person` is always lacking: such a check is done by hand. */
-type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "kept-key" | "upload-key" | "settled-upload-key" | "jobs" | "job-copy" | "person";
+type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "provider-logs" | "kept-key" | "upload-key" | "settled-upload-key" | "jobs" | "job-copy" | "person";
 
 /** Why each lacking capability is lacking, in words that name no host and no account. */
 export type Missing = Partial<Record<Capability, string>>;
@@ -69,6 +69,9 @@ export interface Bench {
 
   /** Reads the emails the login in front of the install lets in, at the provider itself and with the run's own key there. A run with no such key rejects. */
   readonly loginList: () => Promise<readonly string[]>;
+
+  /** Reads whether the provider keeps the lines the install writes, at the provider itself and with the run's own key there. A run with no such key rejects. */
+  readonly logsKept: () => Promise<boolean>;
 
   /** Runs one command line of the CLI, with `--json`, as the token holder. */
   readonly cli: (...words: readonly string[]) => Promise<Ran>;

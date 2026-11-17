@@ -114,7 +114,7 @@ const BUDGET: Readonly<Record<RouteKey, number>> = {
   "GET /api/export/sites/:site": 4,
   "GET /api/export/sites/:site/files": 6,
   "GET /api/export/sites/:site/file": 5,
-  "POST /api/import/settings": 6,
+  "POST /api/import/settings": 7,
   "POST /api/import/sites": 7,
   "GET /api/config": 2,
   "PATCH /api/config": 5,

@@ -118,7 +118,7 @@ async function uploaded(asked: Asked, release: Release, from: string): Promise<E
   const worker = { accountId: place.accountId, script: SCRIPT };
   const first = (lacking: readonly string[]): ReturnType<Release["first"]> => release.first({ script: SCRIPT, bucket: INSTALL_OBJECTS.bucket, databaseId: asked.databaseId }).filter((binding) => lacking.includes(binding.name));
   const upload = await openUpload({ connection: place.connection }, worker, { by: "repair", first });
-  const put = upload.ok ? await upload.value.put(release.bundle, updateOf(release, from, asked.reach.now())) : upload;
+  const put = upload.ok ? await upload.value.put(release.bundle, updateOf(release, from, asked.reach.now()), undefined) : upload;
   const change = `: ${from} to ${release.bundle.version}`;
   if (put.ok) {
     const unset: Row[] = put.unset === undefined ? [] : [{ object: "Sweep trigger", state: "fail", detail: `${release.bundle.deploy.crons.join(", ")}: ${WORDS.schedule}` }];

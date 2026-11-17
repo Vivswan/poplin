@@ -1,8 +1,8 @@
-// The Settings screen under the wheel: its rows scroll, and the page around them never does. And a count too large to keep, which is refused at its field.
+// The Settings screen under the wheel: its rows scroll, and the page around them never does. A count too large to keep, which is refused at its field. And the switch of the logs, which stays as it was saved.
 
 import { expect, type Page } from "@playwright/test";
 
-import { arrive, SECTIONS_BUTTON, screenHeading, test, toSection } from "./visit";
+import { arrive, SECTIONS_BUTTON, said, screenHeading, test, toSection } from "./visit";
 
 /** The screens Settings is walked on: the widest, and a phone. */
 const SCREENS = [
@@ -15,6 +15,9 @@ const [TURN, TURNS] = [400, 12] as const;
 
 /** A count larger than any a number holds exactly, and what its field is told. */
 const TOO_LARGE = { typed: "99999999999999999999", refusal: "Use a whole number from 1 to 1,000,000,000." } as const;
+
+/** The group of the logs: its heading, its one switch, what the row says of it, and the line an install without a key adds under it. */
+const LOGS = { group: "Logs", label: "Keep logs", about: "Logs help find a fault; while off, the provider keeps none.", waits: "Takes effect at the next update or Repair." } as const;
 
 /** Turn the wheel down to the end with the pointer at a place of the window. */
 async function wheelDown(page: Page, x: number, y: number): Promise<void> {
@@ -61,4 +64,25 @@ test("a count too large to keep is refused at its field, which keeps what was ty
   await expect(field).toHaveAccessibleDescription(new RegExp(TOO_LARGE.refusal.replaceAll(".", "\\.")));
   await expect(page.getByText(TOO_LARGE.refusal, { exact: true })).toBeVisible();
   await expect(field).toHaveValue(TOO_LARGE.typed);
+});
+
+// Drift: the switch of the logs would stand in another group or under other words, come back on after a reload though it was saved off, or say on an install that holds its key that the change waits for an update.
+test("Keep logs stands under Logs with its sentence, stays off once it is switched off and saved, and says nothing of waiting on an install that holds its key", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  const group = page.getByRole("region", { name: LOGS.group, exact: true });
+  const keep = group.getByRole("switch", { name: LOGS.label, exact: true });
+
+  await expect(keep).toBeChecked();
+  await expect(group.getByText(LOGS.about, { exact: false })).toBeVisible();
+  await expect(page.getByText(LOGS.waits, { exact: false })).toHaveCount(0);
+
+  await keep.click();
+  await expect(keep).not.toBeChecked();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(said(page, "Saved.")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("switch", { name: LOGS.label, exact: true })).not.toBeChecked();
+  await expect(page.getByText(LOGS.waits, { exact: false })).toHaveCount(0);
 });

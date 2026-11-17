@@ -33,6 +33,7 @@ import { syncDatabase } from "../shared/install/pieces/database/database";
 import { syncDns } from "./pieces/dns/dns";
 import { INSTALL_OBJECTS } from "../shared/install/install-objects";
 import { syncJobs } from "../shared/install/pieces/jobs/jobs";
+import { syncLogs } from "../shared/install/pieces/worker-logs/worker-logs";
 import { HTTPS_SWITCH, syncHttps } from "./pieces/https/https";
 import { uploadKeyText } from "../shared/install/key/upload-key";
 import { type HeldKey, type HeldKeys, type KeyRead, readBucket, readKeyStates } from "../shared/install/key/key-state";
@@ -171,6 +172,7 @@ const RIGHTS = {
   "Access policy": [RIGHT.access],
   "Access open paths": [RIGHT.access],
   "Worker variable": [RIGHT.scripts, RIGHT.team],
+  "Worker logs": [RIGHT.scripts],
   "Redirect rule": [RIGHT.redirect, RIGHT.zoneSettings],
   "WAF rule": [RIGHT.waf],
   "Rate rule": [RIGHT.waf],
@@ -194,6 +196,7 @@ const KEY_RIGHT: Readonly<Record<Piece, KeyRight | undefined>> = {
   "Access policy": "Access: Apps and Policies Write",
   "Access open paths": "Access: Apps and Policies Write",
   "Worker variable": "Workers Scripts Write",
+  "Worker logs": "Workers Scripts Write",
   "Redirect rule": "Dynamic URL Redirects Read",
   "WAF rule": "Zone WAF Write",
   "Rate rule": "Zone WAF Write",
@@ -217,6 +220,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Access policy": "login",
   "Access open paths": "reach",
   "Worker variable": "login",
+  "Worker logs": "rest",
   "Redirect rule": "rest",
   "WAF rule": "rest",
   "Rate rule": "rest",
@@ -249,6 +253,7 @@ const TOKEN_FORMS = {
       "Access policy",
       "Access open paths",
       "Worker variable",
+      "Worker logs",
       "Redirect rule",
       "WAF rule",
       "Rate rule",
@@ -265,7 +270,7 @@ const TOKEN_FORMS = {
     for: "this account and this domain",
   },
   noDomain: {
-    pieces: ["Forwarder", "Access application", "Access policy", "Access open paths", "Worker variable", "D1 database", "Workflow", "Budget alert", "Key", "Upload key"],
+    pieces: ["Forwarder", "Access application", "Access policy", "Access open paths", "Worker variable", "Worker logs", "D1 database", "Workflow", "Budget alert", "Key", "Upload key"],
     zones: "",
     note: "On the form, choose your account under Account Resources, then create the account token and copy it.",
     for: "this account",
@@ -844,6 +849,16 @@ async function alertPieces(progress: Progress, mode: Mode, placed: Placed, conne
   }
 }
 
+/** The piece of the Worker's logs, of an install of either kind: Cloudflare keeps the lines the Worker writes, or keeps none, as the setting `provider_logs` says. */
+export async function logsPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, kept: boolean): Promise<void> {
+  await piece(
+    progress,
+    mode,
+    () => "Worker logs",
+    () => syncLogs(connection, placed, kept, mode),
+  );
+}
+
 /** The budget alert's piece, of an install of either kind: the alert is the account's. */
 export function alertPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, logins: Logins | undefined): Promise<void> {
   return alertPieces(progress, mode, placed, connection, logins, [{ object: "Budget alert", alert: BUDGET_ALERT }]);
@@ -945,6 +960,7 @@ async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connec
     () => syncRoutes(connection, zone.id, { layout, script: parts.script }, mode),
   );
   await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, logins));
+  await logsPiece(progress, mode, placed, connection, settings.provider_logs);
   await piece(
     progress,
     mode,

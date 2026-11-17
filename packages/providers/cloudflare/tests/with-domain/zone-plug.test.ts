@@ -11,7 +11,7 @@ import type { Asked } from "../shared/install/support/replies";
 import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "../shared/install/support/fake-install";
 import { LAYOUT, layoutOf } from "../shared/install/support/layouts";
 
-const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto" };
+const STORED: DomainSettings = { logins: ["owner@example.com" as Login], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
 const REFUSED = { ok: false, refusal: "token" } as const;
 
@@ -35,6 +35,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker variable | ${variable} | ${variable === "missing" ? "ACCESS: written once the Access application exists" : "ACCESS"}`,
     `Key | ${state("key", usual)} | poplin kept key`,
     `Upload key | ${state("upload", state("key", usual))} | poplin upload key`,
+    `Worker logs | ${states.logs ?? "present"} | kept`,
     `Redirect rule | ${state("https", usual)} | https redirect`,
     `WAF rule | ${state("guards", usual)} | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin`,
     `WAF rule | ${state("guards", usual)} | outside pages rule`,
@@ -359,6 +360,7 @@ test("a repair that fails half way, for another reason than a permission, stops:
       "Worker variable | not-run | ",
       "Key | not-run | ",
       "Upload key | not-run | ",
+      "Worker logs | not-run | ",
       "Redirect rule | not-run | ",
       "WAF rule | not-run | ",
       "Rate rule | not-run | ",
@@ -550,7 +552,7 @@ test("Access refused as not switched on after the policy was already made is a s
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-    expect(rows.slice(6, 14)).toEqual([
+    expect(rows.slice(6, 15)).toEqual([
       "Access application | not-run | poplin: poplin.example.com, *-p-poplin.example.com",
       "Access policy | not-run | poplin logins",
       "Access open paths | created | poplin open paths policy",
@@ -558,6 +560,7 @@ test("Access refused as not switched on after the policy was already made is a s
       "Worker variable | not-run | ",
       "Key | not-run | ",
       "Upload key | not-run | ",
+      "Worker logs | not-run | ",
       "Redirect rule | not-run | ",
     ]);
     expect(account.policies).toHaveLength(1);
@@ -1222,7 +1225,7 @@ describe("a check the install makes with the key it holds", () => {
   }
 
   // Drift: the count is what one request of a Worker spends each time the Domain screen opens on a check that is old. A call to the databases or the tokens is one the key is refused, and its row would fail on every healthy install.
-  test("every piece a repair made reads as present in 21 calls, each a read sent with the key, none to the databases or the tokens, and the database's row says the install runs on it", async () => {
+  test("every piece a repair made reads as present in 22 calls, each a read sent with the key, none to the databases or the tokens, and the database's row says the install runs on it", async () => {
     const account = emptyAccount();
 
     await withKey(account, async (plug, own, asked) => {
@@ -1232,7 +1235,7 @@ describe("a check the install makes with the key it holds", () => {
       const calls = asked.slice(sent);
 
       expect(rows).toEqual(table({}).map((row) => (row.startsWith("D1 database") ? DATABASE : row)));
-      expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens)(\/|\?|$)/.test(call.path))]).toEqual([21, [`GET Bearer ${KEPT}`], []]);
+      expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens)(\/|\?|$)/.test(call.path))]).toEqual([22, [`GET Bearer ${KEPT}`], []]);
     });
   });
 
@@ -1248,6 +1251,7 @@ describe("a check the install makes with the key it holds", () => {
         ...table({ all: "missing" }).slice(0, 11),
         "Key | present | poplin kept key",
         "Upload key | present | poplin upload key",
+        "Worker logs | present | kept",
         `Redirect rule | optional | https redirect: ${OPTIONAL.redirect}`,
         `WAF rule | optional | bots rule: ${OPTIONAL.waf}`,
         `WAF rule | optional | outside pages rule: ${OPTIONAL.waf}`,

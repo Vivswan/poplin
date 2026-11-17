@@ -1,10 +1,10 @@
 // The plug of an install without a domain: every object of an install on the account's free address read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its keys, the database, the budget alert, the Workflow
+//   token -> the account whose free address the install answers under -> the two forwarders, Access, the Worker's own variables and its keys, its logs, the database, the budget alert, the Workflow
 //
 // With no zone to show, a token proves itself by the account: the one whose free address is the one in the install's own hostnames. Any other token is refused before anything is read.
 // Each piece is the one an install with a domain is made of. No record, route, or rule is read or written: the free address has none of them.
-// So no setting is carried by a repair, and the one whose whole effect is at a zone, `block_bots`, is said to do nothing here.
+// So no setting of a rule is carried by a repair, and the one whose whole effect is at a zone, `block_bots`, is said to do nothing here. The Worker's logs follow their setting as on an install with a domain.
 // An install that holds its key checks by itself, with no token: the same pieces are read with the key, in the account the Worker runs in.
 
 import type { DomainPlug, DomainReading, ReadSettings } from "@poplin/app/src/console/domain/records";
@@ -16,7 +16,7 @@ import { type Connection, callCloudflare } from "../shared/install/client";
 import { syncForwarders } from "./pieces/forwarders/forwarders";
 import { syncJobs } from "../shared/install/pieces/jobs/jobs";
 import type { Mode } from "../shared/install/sync";
-import { accessPiece, alertPiece, databasePiece, firstValues, type Known, keyGiven, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "../with-domain/zone-plug";
+import { accessPiece, alertPiece, databasePiece, firstValues, type Known, keyGiven, logsPiece, type Placed, type Progress, piece, REFUSED, readingOf, TOKEN, tokenFacts, UNREACHABLE, variablesPiece } from "../with-domain/zone-plug";
 
 /** What the Domain screen says first on an install of this kind. */
 const NO_DOMAIN = "No domain: your sites answer at Cloudflare's free address.";
@@ -101,6 +101,7 @@ async function readPieces(parts: PathParts, mode: Mode, found: { readonly connec
   );
   progress.rows.splice(0, Number.POSITIVE_INFINITY, ...progress.rows.map((row) => forwarderRow(row, answers)));
   await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, logins));
+  await logsPiece(progress, mode, placed, connection, settings.provider_logs);
   await databasePiece(progress, mode, placed, connection);
   await alertPiece(progress, mode, placed, connection, logins);
   // The Workflow comes last, as on an install with a domain: nothing else of the install waits for it.

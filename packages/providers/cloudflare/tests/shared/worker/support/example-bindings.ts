@@ -29,5 +29,6 @@ export const EXAMPLE_BINDINGS = {
     visitor_requests_per_minute: "600",
     update_check: "on",
     auto_update: "off",
+    provider_logs: "on",
   },
 } as const;

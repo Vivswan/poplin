@@ -98,10 +98,11 @@ const SHARED_MADE = [
   "Worker variable: made",
   "Key: made",
   "Upload key: made",
+  "Worker logs: left",
 ];
 
 /** The same pieces as a repair that changes nothing tells them. */
-const SHARED_LEFT = ["Access application: left", "Access policy: left", "Access open paths: left", "Access open paths: left", "Worker variable: left", "Key: left", "Upload key: left"];
+const SHARED_LEFT = ["Access application: left", "Access policy: left", "Access open paths: left", "Access open paths: left", "Worker variable: left", "Key: left", "Upload key: left", "Worker logs: left"];
 
 /** What a run tells of an account it made the install on from nothing. */
 const FROM_NONE = "Install: none found, so poplin install ran";

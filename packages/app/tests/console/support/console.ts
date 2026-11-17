@@ -8,6 +8,7 @@ import { createConsole } from "../../../src/console/console";
 import type { DomainPlug } from "../../../src/console/domain/records";
 import type { Later } from "../../../src/console/later";
 import type { UsersFollow } from "../../../src/console/access/users-follow";
+import type { LogsFollow } from "../../../src/console/settings/logs-follow";
 import type { RulesFollow } from "../../../src/console/settings/rules-follow";
 import type { UsageHost } from "../../../src/console/usage/records";
 import { admit, type Identify } from "../../../src/login/admit";
@@ -80,6 +81,7 @@ interface Parts {
   readonly follow?: UsersFollow;
   readonly rules?: RulesFollow;
   readonly jobs?: Jobs;
+  readonly logs?: LogsFollow;
   readonly kind: (typeof KINDS)[keyof typeof KINDS];
 }
 
@@ -88,13 +90,10 @@ interface Parts {
  *
  * @param base - the path the console sits under; the root when left out
  * @param domain - the provider's side of the install; left out, the console has no Domain screen
- * @param usage - the host's side of the Usage screen; left out, a host that reads no figures of its own
- * @param follow - the provider's side of the users; left out, the console carries no change of them
- * @param rules - the provider's side of the domain's rules; left out, the console carries no setting to them
- * @param jobs - the host's background work; left out, a host that has none
+ * @param sides - the host's side of the Usage screen, the provider's sides of the users, of the domain's rules and of the install's logs, and the host's background work; one left out is a host that reads no figures of its own, or has no such side
  */
-export async function openConsole(base = "", domain?: DomainPlug, usage: UsageHost = USAGE_HOST, follow?: UsersFollow, rules?: RulesFollow, jobs?: Jobs): Promise<Opened> {
-  return openWith({ base, usage, kind: KINDS.hostname, ...(domain === undefined ? {} : { domain }), ...(follow === undefined ? {} : { follow }), ...(rules === undefined ? {} : { rules }), ...(jobs === undefined ? {} : { jobs }) });
+export async function openConsole(base = "", domain?: DomainPlug, sides: Partial<Pick<Parts, "usage" | "follow" | "rules" | "jobs" | "logs">> = {}): Promise<Opened> {
+  return openWith({ base, usage: USAGE_HOST, kind: KINDS.hostname, ...(domain === undefined ? {} : { domain }), ...sides });
 }
 
 /** Open a console at the root over a fresh install of one kind, with one login and no provider's side. */
@@ -102,7 +101,7 @@ export async function openConsoleOf(kind: Parts["kind"]): Promise<Opened> {
   return openWith({ base: "", usage: USAGE_HOST, kind });
 }
 
-async function openWith({ base, domain, usage, follow, rules, jobs, kind }: Parts): Promise<Opened> {
+async function openWith({ base, domain, usage, follow, rules, jobs, logs, kind }: Parts): Promise<Opened> {
   const opened = await openOwned(kind.addresses);
   const { database } = opened.install;
 
@@ -140,6 +139,7 @@ async function openWith({ base, domain, usage, follow, rules, jobs, kind }: Part
     },
     ...(rules === undefined ? {} : { rules }),
     ...(jobs === undefined ? {} : { jobs }),
+    ...(logs === undefined ? {} : { logs }),
     ...codeCounts(opened.counters),
   });
   const client = { ...opened.proof, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" };
