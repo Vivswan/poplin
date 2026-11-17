@@ -16,7 +16,7 @@ import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, repairAfter, rowLine, runLines, runValue, UNCHANGED, unusedLine } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, repairAfter, rowLine, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -185,19 +185,19 @@ async function waited(installed: Extract<Installed, { readonly ok: true }>, mode
  * So the account is looked in once more, and what is found there says which. Where the run did not use the first login, the repair that follows it lets that person in too.
  * Each of the three commands it names carries the place of the run, so the line runs as written where nothing can be asked.
  */
-async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, ends: InstallEnds): Promise<Next> {
+async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, ends: InstallEnds, platform: string): Promise<Next> {
   const { provider } = request;
   const place = placeOf(provider, ground.where);
   if (request.mode.mode === "dry-run") return NEXT.install(provider, carried(carefulOf("dry-run"), installed.ready), place);
 
-  if (installed.ready && installed.unused !== undefined) return letInNext(installed.unused, place);
+  if (installed.ready && installed.unused !== undefined) return letInNext(installed.unused, place, platform);
 
   if (installed.ready) return installed.address === undefined ? NEXT.none() : NEXT.login(installed.address);
 
   const found = await provider.find(request.token, ground.where, ends.reach, "install");
   if (found.state !== "whole") return NEXT.install(provider, [], place);
 
-  return installed.unused === undefined ? NEXT.repair("this", [], place) : letInNext(installed.unused, place);
+  return installed.unused === undefined ? NEXT.repair("this", [], place) : letInNext(installed.unused, place, platform);
 }
 
 /**
@@ -216,7 +216,7 @@ function doneWords(release: string | undefined, answers: boolean | null): string
 async function ended(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<Ended> {
   const { mode } = request;
   const answers = await waited(installed, mode, ends, show);
-  const next = await nextAfter(installed, ground, request, ends);
+  const next = await nextAfter(installed, ground, request, ends, io.machine.platform);
   const value = runValue(installed, mode.mode, ground.found.state, answers, next);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
   const done = doneWords(installed.release, answers);
@@ -224,7 +224,9 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
 
   const { unused } = installed;
   const letIn = unused !== undefined && installed.ready && mode.mode === "apply" ? [unusedLine(unused, next)] : [];
-  for (const line of [...lines, ...letIn]) show.line(line.tone, line.text);
+  // A run that left a piece undone names the same repair in its last line, so what that line leaves out is said after it too.
+  const leftOut = unused === undefined ? [] : leftOutLines(unused, next);
+  for (const line of [...lines, ...letIn, ...leftOut]) show.line(line.tone, line.text);
 
   if (mode.mode === "dry-run" || value.ok !== true || installed.address === undefined || unused !== undefined) return { code, value };
 

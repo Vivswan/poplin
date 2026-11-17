@@ -380,6 +380,8 @@ With `--json`, the value of a run, and of a run that stopped, names what to run 
 
 So a repair it names runs as written where nothing can be asked, with the token in `POPLIN_INSTALL_TOKEN`.
 
+On Windows, an email with a character that cmd.exe or PowerShell gives a meaning, such as `&` or `'`, is left out of the `command`. `next.add` is then `--add-user <email>`, and an install that prints the line says under it to add the email yourself.
+
 Some stops name the command with no place. A stop that comes while the line is read does: the line is written wrong, or lacks an answer. So may a command that was stopped, or that failed with no word for it. `other_place` does too: the install is at another place than your line named, and its sentence names the option.
 
 A repair that found an install started for another place names the install with that place's option.
