@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, type Mock, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { DomainReading, DomainSettings } from "@poplin/app/src/console/domain/records";
+import type { DomainReading, DomainRow, DomainSettings } from "@poplin/app/src/console/domain/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { readUploadKey } from "../../src/shared/install/key/upload-key";
 import type { HeldKey } from "../../src/shared/install/key/key-state";
-import { createDomainPlug, giveKey, tokenFacts } from "../../src/with-domain/zone-plug";
+import { commandRows, createDomainPlug, giveKey, tokenFacts } from "../../src/with-domain/zone-plug";
 import { withFake } from "../shared/install/support/fake-cloudflare";
 import type { Asked } from "../shared/install/support/replies";
 import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "../shared/install/support/fake-install";
@@ -1393,5 +1393,33 @@ describe("a check the install makes with the key it holds", () => {
         expect(reading === undefined ? [] : shown(reading).filter((row) => row.startsWith("Access"))).toEqual(["Access application | failed | no usable answer from Cloudflare"]);
       },
     );
+  });
+});
+
+describe("an alert left out for its permission, as a command line words it", () => {
+  const FIX = "The account token lacks Notifications: Edit. Fix: add it, then run npx poplin doctor --repair";
+  const alert: DomainRow = { object: "Budget alert", state: "optional", detail: "", part: "rest" };
+  const key = (state: DomainRow["state"]): DomainRow => ({ object: "Key", state, detail: "poplin kept key", part: "rest" });
+
+  // Drift: the row promised that the install makes the alert within a day. An install with no key Cloudflare takes makes none, so a repair whose token could make neither the key nor the alert promised an alert that never comes.
+  test.each<[string, readonly DomainRow[], string]>([
+    ["a key that stands", [key("present"), alert], `${FIX}, or wait a day for the install to create it`],
+    ["a key the run made", [alert, key("created")], `${FIX}, or wait a day for the install to create it`],
+    ["a key that could not be made", [key("failed"), alert], FIX],
+    ["a key Cloudflare refuses", [key("differs"), alert], FIX],
+    ["no row of the key", [alert], FIX],
+  ])("with %s, says that the install makes it only where the install holds a working key", (_what, rows, said) => {
+    expect(commandRows(rows).find((row) => row.object === "Budget alert")?.detail).toBe(said);
+  });
+});
+
+describe("the Worker's logs, as a command line words them", () => {
+  // Drift: the row said `kept`, which reads as something left alone. Worded apart from the other rows, a refusal for a permission kept the dashboard's words for it, which name a button.
+  test.each([
+    ["kept", "enabled"],
+    ["not kept", "disabled"],
+    ["kept: refused with status 403 and codes 10000. Add this permission to the account token: Workers Scripts: Edit", "enabled: refused with status 403 and codes 10000. The account token lacks Workers Scripts: Edit"],
+  ])("`%s` reads `%s`", (detail, said) => {
+    expect(commandRows([{ object: "Worker logs", state: "present", detail, part: "rest" }])[0]?.detail).toBe(said);
   });
 });

@@ -32,7 +32,7 @@ const [AGAIN, BARE] = [
 const FOUND = `poplin 0.1.0 is installed at ${ADDRESS}`;
 
 /** The last lines of a run that left nothing undone, after the line that says what it is called. */
-const ENDED = [`Dashboard: ${ADDRESS}`, "The account token was not stored. Delete it at Stand-In Host."];
+const ENDED = [`Dashboard: ${ADDRESS}`, "The account token was not stored"];
 
 /** The rows of an install with one object missing, which a repair makes. */
 const ONE_GONE: readonly Row[] = [
@@ -136,7 +136,8 @@ describe("a repair with the account token", () => {
     expect([same.code, jsonOf(same)]).toMatchObject([0, { ok: true, ready: true, changes: 0, next: { step: "login" } }]);
   });
 
-  test("a run that leaves a piece undone names the permission and its page, says to run it again, and exits with 1: without this a token that lacks a permission looks like a repair that worked", async () => {
+  // Drift: the last lines said only to run the command again, which the same token is blocked at again.
+  test("a run that leaves a piece undone names the permission and its page, says to add it and then run it again, and exits with 1: without this a token that lacks a permission looks like a repair that worked", async () => {
     const rows: Row[] = [{ object: "Guard rule", state: "block", detail: "bots: The token lacks a permission. Add this one: Rules: Edit", right: "Rules: Edit" }];
     const ran = await runLine(RUN, installed(repairedOf(rows, { ready: false, blocked: [LACKING] })), { env: HELD });
 
@@ -146,7 +147,7 @@ describe("a repair with the account token", () => {
       LACKING.words,
       `  ${LACKING.address}`,
       "The run is incomplete: 1 blocked",
-      "Next: rerun this command",
+      "Next: add the permission, then rerun this command",
       "The account token was not stored",
     ]);
   });
@@ -222,9 +223,9 @@ describe("what a repair does not go on from", () => {
   // After data left behind the sentence names `--adopt`, and the next step does not hold it: a program that runs `next.command` would give a consent no person gave, and take up a database matched by its name alone.
   // An install started for another place is sent to the install at that place at once: a repair there would only stop again, as unfinished. Its line holds that place alone, never the one the repair named.
   test.each([
-    ["nothing", { state: "none", place: PLACE, notes: [] }, 1, "no_install", `This account has no install. Fix: ${install}`, MAKE],
+    ["nothing", { state: "none", place: PLACE, notes: [] }, 1, "no_install", `This account has no install. Nothing changed. Fix: ${install}`, MAKE],
     ["data left behind", LEFTOVER, 1, "no_install", `Records named poplin are in this account. To reuse them: ${install} --adopt`, MAKE],
-    ["an install that was started", { state: "started", place: PLACE, notes: [] }, 1, "unfinished", `This account has an incomplete install. Fix: ${install}`, MAKE],
+    ["an install that was started", { state: "started", place: PLACE, notes: [] }, 1, "unfinished", `This account has an incomplete install. Nothing changed. Fix: ${install}`, MAKE],
     ["a token the provider refuses", { state: "refused", why: "token", words: "The host refused the token." }, 1, "token_refused", "The host refused the token. Nothing changed.", AGAIN],
     [
       "an install that was started for another place",

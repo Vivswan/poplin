@@ -24,6 +24,9 @@ const GAP = "  ";
 /** What kind of line the row of a site is, by what became of the site. */
 const RESULT_TONES: Readonly<Record<Result["result"], Tone>> = { imported: "done", skipped: "note", failed: "error" };
 
+/** What the row of the restored settings names, by whether the users were restored with them. */
+const SETTINGS_ROW = { users: `settings${GAP}with users`, alone: `settings${GAP}without users` } as const;
+
 /** The refusal of a site this install already has, as a run that is started again meets it: the site is passed over, and nothing failed. */
 const ALREADY_THERE = "id_taken";
 
@@ -265,7 +268,7 @@ function shown(done: Result): Result {
 }
 
 function lineOf(done: Result): Line {
-  if (done.result !== "imported") return { tone: RESULT_TONES[done.result], text: [done.result, done.label, `${done.code}: ${done.message}`].join(GAP) };
+  if (done.result !== "imported") return { tone: RESULT_TONES[done.result], text: [done.result, done.label, `${done.code}: ${done.message.charAt(0).toLowerCase()}${done.message.slice(1)}`].join(GAP) };
 
   const versions = done.live_only === true ? "live version only" : countText(done.versions, "version");
 
@@ -277,7 +280,7 @@ function reported(request: ImportRequest, results: readonly Result[]): Outcome {
   const counts = { imported: count("imported"), skipped: count("skipped"), failed: count("failed") };
   const stopped = results.some(stopsRun);
   const lines: (string | Line)[] = results.map(lineOf);
-  if (request.settings) lines.unshift(request.logins ? "Restored the settings and the users" : "Restored the settings except the users");
+  if (request.settings) lines.unshift({ tone: RESULT_TONES.imported, text: ["restored", SETTINGS_ROW[request.logins ? "users" : "alone"]].join(GAP) });
 
   lines.push(`${counts.imported} imported, ${counts.skipped} skipped, ${counts.failed} failed`);
   const sites = results.map(shown);
@@ -327,7 +330,7 @@ async function preview(backup: Backup, request: ImportRequest, chosen: Chosen, a
   }
 
   const lines = sites.map((site) => ["would import", site.label, countText(site.versions, "version"), countText(site.files, "file"), showBytes(site.bytes)].join(GAP));
-  if (request.settings) lines.unshift(request.logins ? "Would restore the settings and the users" : "Would restore the settings except the users");
+  if (request.settings) lines.unshift(["would restore", SETTINGS_ROW[request.logins ? "users" : "alone"]].join(GAP));
 
   return {
     ok: true,

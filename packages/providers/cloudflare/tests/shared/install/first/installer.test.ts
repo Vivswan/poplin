@@ -34,8 +34,8 @@ const [LACKS, ADD_IT] = ["The account token lacks", ". Fix: add it, then run npx
 /** The optional pieces of an install under a domain that are made with a permission of their own, each with that permission. */
 const LACKING = ["Redirect rule | Single Redirect: Edit", "WAF rule | Zone WAF: Edit", "Rate rule | Zone WAF: Edit", "Bot settings | Bot Management: Edit"] as const;
 
-/** What the row of an alert that is left out says: the install makes its alerts by itself too. */
-const ITSELF = "The install creates it within a day. Fix: to create it now, add Notifications: Edit, then run npx poplin doctor --repair";
+/** What the row of an alert that is left out says: the cause first, as every other optional piece's, then that the install makes its alerts by itself too. */
+const ITSELF = `${LACKS} Notifications: Edit${ADD_IT}, or wait a day for the install to create it`;
 
 /** The Worker's own pieces of a new install, which both kinds start with. */
 const OWN = ["R2 bucket | make | poplin-sites", "D1 database | make | poplin", `Worker | make | poplin, runs ${RELEASE}`, "Cron trigger | make | */15 * * * *"];
@@ -53,7 +53,7 @@ function shared(host: string, sites: string): string[] {
     "Worker variable | make | ZONE",
     "Key | make | poplin kept key",
     "Upload key | make | poplin upload key",
-    "Worker logs | leave | kept",
+    "Worker logs | leave | enabled",
   ];
 }
 

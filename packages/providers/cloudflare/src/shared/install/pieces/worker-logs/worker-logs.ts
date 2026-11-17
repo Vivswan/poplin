@@ -14,7 +14,7 @@ import { INSTALL_OBJECTS } from "../../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../../sync";
 
 /** What the row of the logs names them by: kept, or not kept. */
-const SUBJECTS = { kept: "kept", dropped: "not kept" } as const;
+export const LOGS_SUBJECTS = { kept: "kept", dropped: "not kept" } as const;
 
 /** The status Cloudflare answers for a Worker that does not exist. */
 const NO_WORKER = 404;
@@ -79,7 +79,7 @@ export function observabilityOf(base: unknown, kept: boolean): { readonly enable
  * @returns one step, named `kept` or `not kept` as the setting asks: left where Cloudflare already matches and keeps no record of each request beside kept lines, and on an account with no such Worker, else changed. A refusal by Cloudflare is a value
  */
 export async function syncLogs(connection: Connection, worker: OwnWorker, kept: boolean, mode: Mode): Promise<Synced> {
-  const subject = kept ? SUBJECTS.kept : SUBJECTS.dropped;
+  const subject = kept ? LOGS_SUBJECTS.kept : LOGS_SUBJECTS.dropped;
   const settings = await callCloudflare(connection, (api) => new BaseSettings(api).get(worker.script, { account_id: worker.accountId }));
   // A Worker that does not exist has no logs to change: the upload that makes it states them as the setting says.
   if (!settings.ok && settings.failure === "refused" && settings.status === NO_WORKER) return { ok: true, report: reportOf([{ kind: "leave", subject }]) };

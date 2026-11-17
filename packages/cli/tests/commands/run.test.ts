@@ -128,9 +128,9 @@ describe("run", () => {
     const url = `https://${label}-p-poplin.example.com`;
     const open = `https://${label}-u-poplin.example.com`;
 
-    expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`updated   ${label}  access and search engines`, `moved     from ${url}`, "unlisted  open to anyone with the URL", "", open]);
+    expect((await bench.run(`set ${label} --unlisted --search-engines on`)).out).toEqual([`updated    ${label}  access and search engines`, `redirects  from ${url}`, "unlisted   open to anyone with the URL", "", open]);
     expect((await bench.run(`set ${label} --public --public-name docs`)).out).toEqual([`updated   ${label}  access and public name`, 'public    open to everyone, as "docs"', "", "https://docs-page.example.com"]);
-    expect((await bench.run("set docs --private")).out).toEqual([`updated   ${label}  access and public name`, `moved     from ${open}`, "private   login required", "", url]);
+    expect((await bench.run("set docs --private")).out).toEqual([`updated    ${label}  access and public name`, `redirects  from ${open}`, "private    login required", "", url]);
     expect((await bench.run(`set ${label} --private --embeddable off`)).out[0]).toBe(`updated   ${label}  embeddable`);
     expect((await bench.run(`set ${label} --private`)).out[0]).toBe(`unchanged  ${label}`);
     expect((await bench.run(`delete ${label}`)).out).toEqual([`trashed   ${label}  permanent deletion on 2023-11-21`, `Undo: poplin restore ${label}`]);
@@ -259,11 +259,11 @@ describe("run", () => {
     const { bench, label } = await withSite();
     const renamed = `notes--${label.slice(-12)}`;
 
-    const moved = `moved     from https://${label}-p-poplin.example.com`;
+    const moved = `redirects  from https://${label}-p-poplin.example.com`;
 
-    expect((await bench.run(`set ${label} --name notes`)).out).toEqual([`updated   ${renamed}  name`, "renamed   from report", moved, "private   login required", "", `https://${renamed}-p-poplin.example.com`]);
-    expect((await bench.run(`set ${label} --unlisted`)).out[0]).toBe(`updated   ${renamed}  access`);
-    expect((await bench.run(`${folderOf("report", { "index.html": "<title>Second</title>" })} --site ${label} --name q3-report`)).out[1]).toBe(`updated   q3-report--${label.slice(-12)}  version 2`);
+    expect((await bench.run(`set ${label} --name notes`)).out).toEqual([`updated    ${renamed}  name`, "renamed    from report", moved, "private    login required", "", `https://${renamed}-p-poplin.example.com`]);
+    expect((await bench.run(`set ${label} --unlisted`)).out[0]).toBe(`updated    ${renamed}  access`);
+    expect((await bench.run(`${folderOf("report", { "index.html": "<title>Second</title>" })} --site ${label} --name q3-report`)).out[1]).toBe(`updated    q3-report--${label.slice(-12)}  version 2`);
   });
 
   test("rollback and new-link print the version now live and the new label: the old label is dead, so the new one must be on stdout", async () => {
@@ -491,7 +491,7 @@ describe("run", () => {
 
     expect([keyless.code, keyless.out]).toEqual([
       0,
-      [`7.9.0 is available. The install runs ${INSTALL_VERSION}.`, "The install has no key, so it cannot update itself. Fix: open Domain on the dashboard and press Repair", "Dry run: no update was started"],
+      [`The install runs ${INSTALL_VERSION} and 7.9.0 is available`, "The install has no key, so it cannot update itself", "Fix: open Domain on the dashboard and press Repair", "Dry run: no update was started"],
     ]);
     expect([refused.code, refused.err]).toEqual([1, ["The install has no key, so it cannot update itself", "Fix: open Domain on the dashboard and press Repair"]]);
     expect([jsonOf(checked), before]).toEqual([{ version: INSTALL_VERSION, update: { current: INSTALL_VERSION, newest: "7.9.0", notes }, key: true, back: null }, []]);
@@ -507,7 +507,7 @@ describe("run", () => {
     const back = await bench.run("update --to 7.7.0");
 
     expect([checked.out, back.out, bench.install.host.put]).toEqual([
-      [`No newer version is known. The install runs ${INSTALL_VERSION}.`, "The install holds a key to update itself with", "To go back to 7.7.0: poplin update --to 7.7.0", "Dry run: no update was started"],
+      [`The install runs ${INSTALL_VERSION} and no newer version is known`, "The install has the key an update requires", "To go back to 7.7.0: poplin update --to 7.7.0", "Dry run: no update was started"],
       [`Updated the install from ${INSTALL_VERSION} to 7.7.0`],
       ["7.7.0"],
     ]);
@@ -623,14 +623,18 @@ describe("run", () => {
     ];
 
     expect(dry.map(summary)).toEqual([
-      { code: 0, out: [`would update  q3-report--${label.slice(-12)}  name and access`, "would rename  from report", `would move    from ${url}`, "unlisted      open to anyone with the URL", "", open.replace("report", "q3-report"), last], err: [] },
+      {
+        code: 0,
+        out: [`would update    q3-report--${label.slice(-12)}  name and access`, "would rename    from report", `would redirect  from ${url}`, "unlisted        open to anyone with the URL", "", open.replace("report", "q3-report"), last],
+        err: [],
+      },
       { code: 0, out: [`would roll back  ${label}  version 1 would be live`, "private          login required", "", url, last], err: [] },
-      { code: 0, out: [`would rotate  ${label}`, `would revoke  ${label}  ${url}`, "The new id and URL are generated by a real run", last], err: [] },
-      { code: 0, out: [`would copy  ${label}  1 file, as new private site report-draft`, last], err: [] },
+      { code: 0, out: [`would rotate  ${label}  to a new id and URL`, `would revoke  ${label}  ${url}`, last], err: [] },
+      { code: 0, out: [`would copy  ${label}  1 file, to a new private site report-draft`, last], err: [] },
       { code: 0, out: [`would trash  ${label}  permanent deletion on 2023-11-21`, last], err: [] },
       { code: 0, out: [`would delete  ${label}  1 file in 1 version`, `Would no longer be served: ${url}`, last], err: [] },
       { code: 0, out: ["would set  trash_days  9", last], err: [] },
-      { code: 0, out: [`Would log out of ${ORIGIN}`, "The token would be revoked", "POPLIN_SERVER and POPLIN_TOKEN would stay set in this shell", "Dry run: one read-only request checked the token"], err: [] },
+      { code: 0, out: [`Would log out of ${ORIGIN}: the token would be revoked`, "Dry run: one read-only request checked the token"], err: ["POPLIN_SERVER and POPLIN_TOKEN would stay set in this shell"] },
     ]);
     expect([await stateOf(bench), jsonOf(await bench.run("config --json"))]).toEqual(before);
   });
@@ -668,7 +672,7 @@ describe("run", () => {
     expect(summary(await bench.run("config trash_days --dry-run")).err[0]).toBe("--dry-run requires a <value>");
     expect(jsonOf(await bench.run("logout --json --dry-run", { env: {} }))).toEqual({ dry_run: true, revoked: false });
     expect((await bench.run("logout --dry-run", { env: {} })).out).toEqual(["Not logged in", "Dry run: no request was sent"]);
-    expect((await bench.run(`set ${label} --search-engines on --dry-run`)).err).toEqual(["Search engines index only a public site. The setting would be saved."]);
+    expect((await bench.run(`set ${label} --search-engines on --dry-run`)).err).toEqual(["The setting would be saved, but search engines index only a public site"]);
     expect((await bench.run("config logins ada@example.com,new@example.com --dry-run")).err).toEqual(["Before new users can log in, a real run may also need this: open Domain on the dashboard and press Repair"]);
   });
 
@@ -684,7 +688,7 @@ describe("run", () => {
 
     const dry = await bench.run(`duplicate ${label} --dry-run`);
 
-    expect([dry.code, dry.out[0], dry.waits, asked]).toEqual([0, `would copy  ${label}  1 file, as new private site report`, [7000], 2]);
+    expect([dry.code, dry.out[0], dry.waits, asked]).toEqual([0, `would copy  ${label}  1 file, to a new private site report`, [7000], 2]);
   });
 
   // Drift: the one act nothing undoes ended in silence, and the person could not tell a removed site from a command that did nothing.
@@ -701,13 +705,13 @@ describe("run", () => {
 
   // Drift: with the install down every command sent the person to `poplin whoami` for the address, which then failed the same way and showed none; and a change that never left this computer was said to have been made, maybe.
   test.each<[string, string, () => Error, string[]]>([
-    ["a read", "whoami", () => new Error("no route to host"), ["Fix: check the URL and the network, or poplin login --server <url>"]],
+    ["a read", "whoami", () => new Error("no route to host"), ["Fix: poplin login --server <url> if the URL changed"]],
     ["a change that left this computer", `set ${NO_SITE} --private`, () => new Error("socket closed"), ["See: poplin list (the request may have been applied)"]],
     [
       "a change that never left this computer",
       `set ${NO_SITE} --private`,
       () => Object.assign(new TypeError("refused"), { code: "ConnectionRefused" }),
-      ["No request was sent, so nothing changed. Fix: check the URL and the network"],
+      ["No request was sent, so nothing changed. Fix: poplin login --server <url> if the URL changed"],
     ],
   ])("%s that gets no answer names the address it tried, and hints at nothing that needs the install", async (_name, line, thrown, hint) => {
     const bench = await openBench();
@@ -752,7 +756,7 @@ describe("run", () => {
 
     const out = await bench.run("logout", { env: {} });
 
-    expect(summary(out)).toEqual({ code: 0, out: [`Logged out of ${ORIGIN}`, "The token is revoked"], err: [] });
+    expect(summary(out)).toEqual({ code: 0, out: [`Logged out of ${ORIGIN}: the token is revoked`], err: [] });
     expect(existsSync(file)).toBe(false);
     expect((await bench.run("whoami", { env: { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: bench.install.tokens.owner } })).code).toBe(1);
     expect(summary(await bench.run("logout", { env: {} }))).toEqual({ code: 0, out: ["Not logged in"], err: [] });

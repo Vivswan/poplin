@@ -37,6 +37,9 @@ import { readByInstall } from "./sites/wire";
 /** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
 export const AFTER_STOP_TIMEOUT_MS = 4000;
 
+/** How a note starts that says what to run about the note before it: it is shown with no mark, as the hint under an error is. */
+const LEAD = /^(?:Fix|See|Next): /;
+
 /** The commands about the login and the install that this build runs. */
 const INSTALL_COMMANDS = ["whoami", "logout", "config", "doctor"] as const;
 
@@ -264,7 +267,7 @@ function print(outcome: Outcome, json: boolean, { out, screen }: Io, tokens: Rea
     return exitCode({ kind: exit });
   }
 
-  for (const note of outcome.notes ?? []) screen.aside("note", note);
+  for (const note of outcome.notes ?? []) screen.aside(LEAD.test(note) ? "plain" : "note", note);
 
   if (json) {
     out(written(outcome.value, tokens));
