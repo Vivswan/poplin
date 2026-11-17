@@ -171,11 +171,23 @@ export function updateWords(update: boolean): readonly string[] {
  * @param careful - the careful choices of the repair's own line; none where another command names the repair
  * @param place - the place the run knows, which is left out where the provider says the install answers elsewhere
  * @param update - whether the repair's own line asked for the newest release; false where another command names the repair
+ * @param user - the user the repair's own line was given to add, which the repair of an install that is behind carries as its sentence does; none where another command names the repair
  */
-export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean): Next {
-  const named = [...updateWords(update || refused.why === "behind"), ...(refused.why === "elsewhere" ? [] : place)];
+export function repairAfter(refused: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean, user: ReturnType<typeof userOption>): Next {
+  if (refused.why === "behind") return leaving(NEXT.repair("this", careful, ["--update", ...place, ...user.words]), user.add);
 
-  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, named);
+  return NEXT.repair(refused.why === "another" ? "newest" : "this", careful, [...updateWords(update), ...(refused.why === "elsewhere" ? [] : place)]);
+}
+
+/**
+ * The provider's words of a repair it refused, as the command says them.
+ *
+ * @param user - the words that add the user the line was given, which each way on from an install that is behind ends in: a person who follows either adds the user too
+ */
+export function refusedWords(refused: Extract<Repaired, { readonly ok: false }>, user: readonly string[]): string {
+  if (refused.why !== "behind") return refused.words;
+
+  return [refused.words, refused.ways.map((way) => [way, ...user].join(" ")).join(". ")].join(" ");
 }
 
 /** Write a word so a POSIX shell reads it as that one word: as it is, or in single quotes with each one inside written `'\''`. */

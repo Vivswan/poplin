@@ -16,7 +16,7 @@ import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, repairAfter, rowLine, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, refusedWords, repairAfter, rowLine, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
 
 /** What the look for an install is called while it runs and in its line. */
 const LOOKING = "looking for an install";
@@ -63,7 +63,7 @@ async function standing(found: Whole<unknown>, where: unknown, request: InstallR
   const there = { problem: "already_installed", exit: 1, version: found.version, address: found.address, newest: found.newest } as const;
   const place = placeOf(request.provider, where);
   const read = await request.provider.repair(found, where, { run: "dry-run", update: false, addUser: undefined }, ends.reach, () => undefined);
-  if (!read.ok) return { ...there, mend: "unread", unread: read.words, next: repairAfter(read, [], place, false) };
+  if (!read.ok) return { ...there, mend: "unread", unread: refusedWords(read, []), next: repairAfter(read, [], place, false, { words: [] }) };
 
   if (!read.ready || changesIn(read.rows) > 0) return { ...there, mend: "something", next: NEXT.repair("this", [], place) };
 

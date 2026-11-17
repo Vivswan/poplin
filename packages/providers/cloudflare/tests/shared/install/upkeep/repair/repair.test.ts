@@ -470,12 +470,11 @@ describe.each(BOTH)("a repair that was not asked to update, %s", (kind) => {
     const account = await behindInstall(kind);
     await account.store.call("UPDATE schema_steps SET fingerprint = 'another'", []);
     const { done, changes } = await repaired(account, kind);
-    const words =
-      `The install runs ${OLDER}, and its records are not at the schema of this poplin. ` +
-      `To mend it as it is, run the poplin of its version: npx poplin@${OLDER} doctor --repair ${PLACED[kind]}. ` +
-      `To take ${RELEASE} and mend it: npx poplin doctor --repair --update ${PLACED[kind]}`;
+    const words = `The install runs ${OLDER}, and its records are not at the schema of this poplin.`;
+    // Each way ends in its command, so the command line can write the user it was given to add after either.
+    const ways = [`To mend it as it is, run the poplin of its version: npx poplin@${OLDER} doctor --repair ${PLACED[kind]}`, `To take ${RELEASE} and mend it: npx poplin doctor --repair --update ${PLACED[kind]}`];
 
-    expect([done, changes, account.uploads.length]).toEqual([{ ok: false, why: "behind", words }, [], 1]);
+    expect([done, changes, account.uploads.length]).toEqual([{ ok: false, why: "behind", words, ways }, [], 1]);
   });
 
   // Drift: records of another poplin on an install that runs the newest release are not behind anything. Named as the update's to mend, the line would send a person to a repair that stops again.

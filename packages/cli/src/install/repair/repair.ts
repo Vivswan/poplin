@@ -85,16 +85,16 @@ async function planned(plan: RepairPlan, io: Io, ends: InstallEnds, show: Show, 
   const doing = run === "dry-run" ? "reading what a repair would change" : "mending the install";
   show.working(doing);
 
+  const user = userOption(plan.addUser, io.machine.platform);
   const repaired = await provider.repair(ground.found, ground.where, { run, update, addUser: plan.addUser }, ends.reach, (row) => {
     const { tone, text, hang } = rowLine(row, run);
     show.line(tone, text, hang);
     show.working(doing);
   });
-  if (!repaired.ok) return stopped(unmended(repaired, at.careful, at.place, update), show, at);
+  if (!repaired.ok) return stopped(unmended(repaired, at.careful, at.place, update, user), show, at);
 
   for (const line of repairedLines(repaired, run, provider)) show.line(line.tone, line.text);
 
-  const user = userOption(plan.addUser, io.machine.platform);
   show.value(repairedValue(repaired, run, ground.found, { words: [...updateWords(update), ...at.place, ...user.words], add: user.add }));
 
   return exitCode({ kind: repaired.ready ? "done" : "failed" });

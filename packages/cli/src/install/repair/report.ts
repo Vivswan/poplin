@@ -6,7 +6,7 @@ import { columns } from "../../commands/text";
 import type { Line } from "../../local/screen";
 import { TOKEN_HELP } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, leaving, NEXT, optionLines, REFUSED_AS, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
+import { carefulOf, carried, changesIn, DRY_RUN_HELP, dryRunLines, followed, heldStop, leaving, NEXT, optionLines, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords, type userOption } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -89,14 +89,15 @@ export function stopOf(found: NotWhole, provider: Provider, careful: readonly Ca
  * The stop of a repair that changed nothing, in the provider's own words. The repair that goes on from records of another version keeps the careful choices of the line and its place.
  *
  * @param update - whether the line asked for the newest release, which the repair that goes on keeps
+ * @param user - the user the line was given to add, as this machine's shell is given it: the stop of an install that is behind keeps it, in its sentence and in its next step
  */
-export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean): Stop {
-  const words = followed(repaired.words, UNCHANGED);
+export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, careful: readonly Careful[], place: readonly string[], update: boolean, user: ReturnType<typeof userOption>): Stop {
+  const words = followed(refusedWords(repaired, user.words), UNCHANGED);
   if (repaired.why === "unreachable") return { problem: "unreachable", exit: 5, words };
 
   if (repaired.why === "token") return { problem: "token_refused", exit: 1, words };
 
-  if (repaired.why === "another" || repaired.why === "behind") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired, careful, place, update) };
+  if (repaired.why === "another" || repaired.why === "behind") return { problem: "another_version", exit: 1, words, next: repairAfter(repaired, careful, place, update, user) };
 
   return { problem: PROBLEMS[repaired.why], exit: 1, words };
 }
