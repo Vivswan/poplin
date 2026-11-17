@@ -19,7 +19,7 @@ import { refusalResponse } from "@poplin/app/src/limits/refusal";
 import { visitorKey } from "@poplin/app/src/limits/visitor-key";
 import { admit } from "@poplin/app/src/login/admit";
 import { serveSite } from "@poplin/app/src/sites/serve";
-import { noteProblem } from "@poplin/core/src/actions/problems";
+import { noteProblem } from "@poplin/core/src/actions/install/problems";
 import type { Address, ServedLookup, ServedSite } from "@poplin/core/src/database/database";
 import type { Site } from "@poplin/core/src/records/site";
 import { dayOf } from "@poplin/core/src/records/views";

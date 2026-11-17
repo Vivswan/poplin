@@ -9,7 +9,7 @@
 //
 // The publish of two thousand files, which a person switches on, fits one publish and one day.
 
-import { SETTINGS_ANSWER } from "@poplin/core/src/actions/store-settings";
+import { SETTINGS_ANSWER } from "@poplin/core/src/actions/install/store-settings";
 import type { SettingValues } from "@poplin/core/src/records/settings";
 
 import { createClient, type Fetch } from "../../../../cli/src/client/client";

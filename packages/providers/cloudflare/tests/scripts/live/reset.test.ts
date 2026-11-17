@@ -12,7 +12,7 @@ import { openRun } from "../../../scripts/live/util";
 import { BunSqliteDriver } from "../../../../../core/tests/database/support/bun-sqlite-driver";
 import { readSamples } from "../../../../../demo/scripts/samples";
 import { createPreview } from "../../../../../demo/src/preview/preview";
-import { readRealSites } from "../../../../../demo/src/preview/real-sites";
+import { readRealSites } from "../../../../../demo/src/preview/world/real-sites";
 import { withFake } from "../../shared/install/support/fake-cloudflare";
 import { type Asked, page, refusal } from "../../shared/install/support/replies";
 import { liveAddresses } from "../../../live/addresses";

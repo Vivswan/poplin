@@ -9,7 +9,7 @@ import { Command, CommanderError, Option } from "commander";
 
 import type { OptionRow, Question, Token } from "../../../core/src/install/installer";
 import { HELP_FLAG, VERSION_FLAG } from "../commands/command-table";
-import { nearest } from "../commands/util";
+import { nearest } from "../commands/line/util";
 import { TOKEN_VARIABLE } from "./ask";
 import type { Missing, Parsed, Provider, Stop } from "./records";
 

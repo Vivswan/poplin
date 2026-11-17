@@ -1,6 +1,6 @@
 // A console the tests ask requests of: the dashboard tests' install, with the console built over it and helpers that send what its client would.
 
-import type { EndLogins } from "@poplin/core/src/actions/sign-out";
+import type { EndLogins } from "@poplin/core/src/actions/access/sign-out";
 import { parseLogin, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
 

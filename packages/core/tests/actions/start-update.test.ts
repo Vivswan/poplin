@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { pickRelease } from "../../src/actions/pick-release";
+import { pickRelease } from "../../src/actions/update/pick-release";
 import { type SelfUpdate, startUpdate, type Updating } from "../../src/actions/start-update";
 import { OWN_SCHEMA } from "../../src/database/open";
 import { dayOf } from "../../src/records/views";

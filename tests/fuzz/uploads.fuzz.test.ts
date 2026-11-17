@@ -3,7 +3,7 @@
 import { expect } from "bun:test";
 import fc from "fast-check";
 
-import { checkFilePath } from "../../packages/core/src/actions/files";
+import { checkFilePath } from "../../packages/core/src/actions/sites/files";
 import type { TokenId } from "../../packages/core/src/auth/tokens";
 import { openDatabase } from "../../packages/core/src/database/open";
 import { mintSiteFolder } from "../../packages/core/src/records/site";

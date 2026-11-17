@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { runDomain } from "../../../src/console/domain/domain-run";
-import { markedIn } from "../../../src/console/problems-routes";
+import { markedIn } from "../../../src/console/problems/problems-routes";
 import { openOwned } from "../support/install";
 import type { DomainRow } from "../../../src/console/domain/records";
 import { fakePlug, TOKEN } from "../support/fake-plug";

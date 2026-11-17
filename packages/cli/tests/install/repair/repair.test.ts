@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Found, Installer, Repaired, Row, Token } from "../../../../core/src/install/installer";
-import { parseCommand } from "../../../src/commands/parse-command";
+import { parseCommand } from "../../../src/commands/line/parse-command";
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { words } from "../../commands/support/command-line";
 import { jsonOf } from "../../commands/support/harness";

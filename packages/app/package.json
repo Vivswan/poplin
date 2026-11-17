@@ -5,8 +5,8 @@
   "exports": {
     "./src/api/api": "./src/api/api.ts",
     "./src/api/respond": "./src/api/respond.ts",
-    "./src/console/activity-file": "./src/console/activity-file.ts",
-    "./src/console/activity-what": "./src/console/activity-what.ts",
+    "./src/console/activity/activity-file": "./src/console/activity/activity-file.ts",
+    "./src/console/activity/activity-what": "./src/console/activity/activity-what.ts",
     "./src/console/console": "./src/console/console.ts",
     "./src/console/routes": "./src/console/routes.ts",
     "./src/console/shell": "./src/console/shell.ts",

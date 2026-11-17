@@ -1,6 +1,6 @@
 // What a host calls to run a job: one round, and the end of a job whose round kept failing.
 
-import { continueCopy, failCopy } from "../actions/duplicate";
+import { continueCopy, failCopy } from "../actions/sites/duplicate";
 import type { Install } from "../actions/records";
 import type { Job } from "./jobs";
 

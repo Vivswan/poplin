@@ -7,12 +7,12 @@ import type { TOOL_INPUTS } from "../../../core/src/actions/tool-inputs";
 import { parsePublicName, parseSiteName } from "../../../core/src/names/names";
 import { readSiteReference, type TypedSite } from "../../../core/src/sites/references";
 import { type Problem, problem } from "../commands/problems";
-import { planPublish, sendPublish } from "../commands/publish";
+import { planPublish, sendPublish } from "../commands/sites/publish";
 import type { Outcome, RequestOf, Session } from "../commands/records";
-import { removeForGood, runSiteCommand } from "../commands/site-commands";
-import { readSiteSettings, type SiteSettings } from "../commands/site-settings";
-import { isUsageError } from "../commands/util";
-import { readByInstall, siteWord } from "../commands/wire";
+import { removeForGood, runSiteCommand } from "../commands/sites/site-commands";
+import { readSiteSettings, type SiteSettings } from "../commands/sites/site-settings";
+import { isUsageError } from "../commands/line/util";
+import { readByInstall, siteWord } from "../commands/sites/wire";
 import type { Host } from "./records";
 
 /** What a `site` argument may be, for the hint of a refused one. */

@@ -20,10 +20,10 @@ import * as v from "valibot";
 import type { Actor } from "../auth/scopes";
 import { AllowanceSpent } from "../database/driver";
 import { type LastUpdate, UPDATE_NEWS } from "../records/update";
-import { wayBack } from "./go-back";
-import { NEWEST, type WantedRelease } from "./pick-release";
-import { noteProblem } from "./problems";
-import { signedBy } from "./reach";
+import { wayBack } from "./update/go-back";
+import { NEWEST, type WantedRelease } from "./update/pick-release";
+import { noteProblem } from "./install/problems";
+import { signedBy } from "./access/reach";
 import { type Install, type Refused, refuse } from "./records";
 
 /** The most starts the whole install takes a minute, whoever asks. */

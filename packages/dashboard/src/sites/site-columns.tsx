@@ -8,7 +8,7 @@ import { Fragment, type ReactNode } from "react";
 import { ACCESSES, type Access, type AddressParts, addressParts, expiryOf, type Site, shortMoment, showCount, shownName, wholeMoment } from "@/lib/sites";
 import { IconButton } from "@/shared/icon-button";
 import { type LoginNames, Who } from "@/shared/who";
-import { expiryMoment } from "@/sites/expiry";
+import { expiryMoment } from "@/sites/expiry/expiry";
 import { SITE_ORDERS } from "@/sites/sites-query";
 import type { ColumnSpec } from "@/table/data-table";
 

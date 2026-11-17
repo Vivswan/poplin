@@ -1,8 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 
-import { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
-import { sweepExpired } from "@poplin/core/src/actions/sweep";
+import { PUBLISH_REQUEST } from "@poplin/core/src/actions/publish/begin-publish";
+import { sweepExpired } from "@poplin/core/src/actions/install/sweep";
 import { STORED_TYPE_HEADER } from "@poplin/core/src/api/routes";
 import type { Login, } from "@poplin/core/src/auth/logins";
 import type { InferRequestType } from "hono/client";

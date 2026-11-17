@@ -1,6 +1,6 @@
 // The way to save the Activity log as files: every entry the filters keep, the newest first, as comma-separated values or one JSON object a line. A log longer than one file holds is saved a file after another.
 
-import { MOST_IN_FILE } from "@poplin/app/src/console/activity-file";
+import { MOST_IN_FILE } from "@poplin/app/src/console/activity/activity-file";
 import { DownloadIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 

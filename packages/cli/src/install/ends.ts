@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { Run } from "../../../core/src/install/installer";
 import { exitCode } from "../commands/exit-codes";
 import type { Io } from "../commands/records";
-import { guardedScreen, written } from "../commands/util";
+import { guardedScreen, written } from "../commands/line/util";
 import { pasted, runnerOf } from "../local/invoked";
 import { loadProviders } from "../local/providers";
 import { foldedText, type Tone } from "../local/screen";

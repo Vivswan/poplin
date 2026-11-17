@@ -25,7 +25,7 @@
 //   one removal of a folder's files: 30 calls to the store   Workers: 1,000 subrequests to Cloudflare's own services an invocation, R2 among them
 
 import type { FreeLimits } from "@poplin/app/src/console/settings/free-limits";
-import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/sweep";
+import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/install/sweep";
 
 /** The bytes R2 stores for free. */
 const FREE_STORAGE_BYTES = 10_000_000_000;

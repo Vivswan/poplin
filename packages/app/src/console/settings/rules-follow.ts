@@ -13,7 +13,7 @@
 // A try gives that mark a later one and reads the settings in one statement, writes the rules, and settles in a second statement, which lets the mark go only while the stored values are the ones written and no mark was set since.
 // A try sets no mark of its own: one the provider refused leaves waiting exactly what waited.
 
-import { noteProblem } from "@poplin/core/src/actions/problems";
+import { noteProblem } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
 import { RULE_SETTINGS, type RuleSettings } from "@poplin/core/src/records/settings";
 import type { Context } from "hono";

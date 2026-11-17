@@ -6,16 +6,16 @@
 // The folder is read as a publish reads it, by the CLI's own plan of one.
 // Nothing here lists the bucket or writes a row: the versions are read with the site, and each file by its path.
 
-import { DAY_MS, type SiteObject } from "@poplin/core/src/actions/site-object";
-import { readExpires } from "@poplin/core/src/actions/changes";
+import { DAY_MS, type SiteObject } from "@poplin/core/src/actions/sites/site-object";
+import { readExpires } from "@poplin/core/src/actions/sites/changes";
 import type { SiteAccess } from "@poplin/core/src/records/site";
 import * as v from "valibot";
 
 import type { Client, Failure } from "../../../../cli/src/client/client";
-import { parseCommand } from "../../../../cli/src/commands/parse-command";
-import { type PublishPlan, planPublish } from "../../../../cli/src/commands/publish";
+import { parseCommand } from "../../../../cli/src/commands/line/parse-command";
+import { type PublishPlan, planPublish } from "../../../../cli/src/commands/sites/publish";
 import type { Io } from "../../../../cli/src/commands/records";
-import { callUnhurried } from "../../../../cli/src/commands/upload";
+import { callUnhurried } from "../../../../cli/src/commands/sites/upload";
 import type { Stop } from "./util";
 
 /** The code the API refuses a file with that a version does not hold. */

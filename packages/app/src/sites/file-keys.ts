@@ -6,7 +6,7 @@
 //                        about.html, about/index.html         two keys, tried in that order, for a version that holds none
 //                        about, about.html, about/index.html  three keys, for a version whose files without an extension are not kept
 
-import { fileKey } from "@poplin/core/src/actions/files";
+import { fileKey } from "@poplin/core/src/actions/sites/files";
 import type { Site } from "@poplin/core/src/records/site";
 import { holdsBareFile, isBarePath, type VersionContents } from "@poplin/core/src/records/version-contents";
 import type { ObjectKey } from "@poplin/core/src/storage/storage";

@@ -3,7 +3,7 @@
 import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { Api } from "@poplin/app/src/api/api";
-import type { PUBLISH_REQUEST } from "@poplin/core/src/actions/begin-publish";
+import type { PUBLISH_REQUEST } from "@poplin/core/src/actions/publish/begin-publish";
 import type { Install } from "@poplin/core/src/actions/records";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { mintToken } from "@poplin/core/src/auth/tokens";
