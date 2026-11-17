@@ -26,7 +26,7 @@ import type { Io, Outcome, RequestOf, Session } from "./records";
 import type { Request, TypedRequest } from "./requests";
 import { runSiteCommand } from "./site-commands";
 import { runUpdate } from "./update";
-import { hide, written } from "./util";
+import { guardedScreen, hide, written } from "./util";
 import { readByInstall } from "./wire";
 
 /** How long each call may take that a stopped command gives its upload up with, in milliseconds: 4 seconds. */
@@ -54,9 +54,9 @@ function refused(said: Problem): Outcome {
   return { ok: false, problem: said };
 }
 
-/** The same ends, with every token taken out of what a command writes while it runs: a line on stderr, the progress line, and a question. */
+/** The same ends, with every token taken out of what a command shows: each line, what is being worked on, and each question. */
 function guarded(io: Io, tokens: ReadonlySet<string>): Io {
-  return { ...io, err: (line) => io.err(hide(line, tokens)), status: (text) => io.status(hide(text, tokens)), ask: (question) => io.ask(hide(question, tokens)) };
+  return { ...io, screen: guardedScreen(io.screen, tokens) };
 }
 
 /**
@@ -118,7 +118,7 @@ async function connect(request: { readonly server?: string }, io: Io): Promise<S
   if (request.server !== undefined && request.server !== server) return problem("wrong_server", request.server);
 
   const install = { server, token, fetch: io.fetch };
-  const client = createClient({ ...install, timeoutMs: io.timeoutMs, stopped: io.stopped, told: io.err, pause: io.pause });
+  const client = createClient({ ...install, timeoutMs: io.timeoutMs, stopped: io.stopped, told: (line) => io.screen.aside("note", line), pause: io.pause });
   const afterStop = createClient({ ...install, timeoutMs: Math.min(io.timeoutMs ?? AFTER_STOP_TIMEOUT_MS, AFTER_STOP_TIMEOUT_MS) });
 
   return { client, afterStop, io, server, layout: layoutAskedOnce(client), source: current.source };
@@ -238,23 +238,29 @@ async function execute(typed: Exclude<TypedRequest, { readonly kind: "mcp" }>, i
   return dispatch(command.read(site), io, session);
 }
 
-/** Print what a command came to: with `--json` one JSON value on stdout and nothing else there, and whatever is no result on stderr. No token is printed. */
-function print(outcome: Outcome, json: boolean, io: Io, tokens: ReadonlySet<string>): number {
+/**
+ * Print what a command came to: with `--json` one JSON value on stdout and nothing else there, and whatever is no result on stderr. No token is printed.
+ *
+ * @param io - the ends whose screen hides every token
+ */
+function print(outcome: Outcome, json: boolean, { out, screen }: Io, tokens: ReadonlySet<string>): number {
   if (!outcome.ok) {
     const { exit, ...error } = outcome.problem;
-    for (const line of problemLines(outcome.problem)) io.err(hide(line, tokens));
+    const [sentence = "", ...hints] = problemLines(outcome.problem);
+    screen.aside("error", sentence);
+    for (const hint of hints) screen.aside("plain", hint);
 
-    if (json) io.out(written({ error }, tokens));
+    if (json) out(written({ error }, tokens));
 
     return exitCode({ kind: exit });
   }
 
-  for (const note of outcome.notes ?? []) io.err(hide(note, tokens));
+  for (const note of outcome.notes ?? []) screen.aside("note", note);
 
   if (json) {
-    io.out(written(outcome.value, tokens));
+    out(written(outcome.value, tokens));
   } else {
-    for (const line of [...outcome.lines, ...(outcome.steps ?? [])]) io.out(hide(line, tokens));
+    for (const line of [...outcome.lines, ...(outcome.steps ?? [])]) screen.line("plain", line);
   }
 
   return exitCode({ kind: outcome.found ?? "done" });
@@ -267,13 +273,14 @@ function textsHidden<Value>(value: Value, tokens: ReadonlySet<string>): Value {
 
 /** What the MCP server works through: no terminal, no line on stdout, and the login read anew for every tool call. */
 function mcpHost(io: Io): Host {
-  const quiet: Io = { ...io, out: io.err, status: () => undefined, terminal: { asks: false, progress: false } };
+  const log = (line: string): void => io.screen.aside("plain", line);
+  const quiet: Io = { ...io, out: log, screen: { ...io.screen, line: io.screen.aside }, terminal: { asks: false, progress: false } };
 
   return {
     session: async () => connect({}, guarded(quiet, await knownTokens(io))),
     stopped: io.stopped,
     withoutTokens: async (value) => textsHidden(value, await knownTokens(io)),
-    log: io.err,
+    log,
   };
 }
 
@@ -302,7 +309,8 @@ export async function run(
   }
 
   if (parsed.kind === "help") {
-    (parsed.asked ? io.out : io.err)(helpText(parsed.topic));
+    const put = parsed.asked ? io.out : (text: string): void => io.screen.aside("plain", text);
+    put(helpText(parsed.topic));
 
     return exitCode(parsed);
   }
@@ -313,8 +321,9 @@ export async function run(
 
   if (parsed.kind === "usage-error") {
     const { kind, ...error } = parsed;
-    io.err(hide(parsed.message, tokens));
-    if (parsed.hint !== undefined) io.err(hide(parsed.hint, tokens));
+    const { screen } = guarded(io, tokens);
+    screen.aside("error", parsed.message);
+    if (parsed.hint !== undefined) screen.aside("plain", parsed.hint);
 
     if (asksJson(argv)) io.out(written({ error: { code: kind, ...error } }, tokens));
 
@@ -323,11 +332,13 @@ export async function run(
 
   const json = "json" in parsed && parsed.json;
 
+  const safe = guarded(io, tokens);
+
   try {
-    return print(await execute(parsed, guarded(io, tokens)), json, io, tokens);
+    return print(await execute(parsed, safe), json, safe, tokens);
   } catch (error) {
     const what = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown failure";
 
-    return print(refused(problem("crashed", what)), json, io, tokens);
+    return print(refused(problem("crashed", what)), json, safe, tokens);
   }
 }

@@ -226,7 +226,7 @@ async function importSite(session: Session, format: number, site: BackupSite): P
     const sent = await sendUpload(client, begun.value, sending.files, {
       arrived: () => {
         arrived += 1;
-        if (io.terminal.progress) io.status(`importing ${site.label}: ${arrived}/${countText(sending.files.length, "file")}`);
+        if (io.terminal.progress) io.screen.working(`importing ${site.label}: ${arrived}/${countText(sending.files.length, "file")}`);
       },
       io,
     });
@@ -241,7 +241,7 @@ async function importSite(session: Session, format: number, site: BackupSite): P
 
     throw error;
   } finally {
-    if (io.terminal.progress) io.status("");
+    if (io.terminal.progress) io.screen.rest();
   }
 }
 

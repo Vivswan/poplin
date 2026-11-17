@@ -4,9 +4,10 @@
 //   a run        removed        <object>   <detail>
 
 import type { RemovalRow, RemovalState, Removed, Run } from "../../../../core/src/install/installer";
-import { countText } from "../../commands/text";
+import { countText, type StateWords, wordedRow } from "../../commands/text";
+import type { Line } from "../../local/screen";
 import type { Careful, Next, Provider } from "../records";
-import { againWords, blockedLines, type Line, NEXT, type StateWords, wordedRow } from "../report";
+import { againWords, blockedLines, NEXT } from "../report";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
 const STATES: Readonly<Record<RemovalState, StateWords>> = {

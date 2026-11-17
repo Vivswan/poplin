@@ -3,6 +3,7 @@
 import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import type { Called, Client, Fetch } from "../client/client";
 import type { Machine } from "../local/login-file";
+import type { Screen } from "../local/screen";
 import type { Problem } from "./problems";
 import type { Request } from "./requests";
 
@@ -14,14 +15,11 @@ export type RequestOf<Kind extends Request["kind"]> = Narrowed<Request, Kind>;
 
 /** Everything a command touches outside its own arguments, so a test can stand in for each. */
 export interface Io {
-  /** Prints one line of the result, on stdout. */
+  /** Writes one line to stdout as it is: the one JSON value of a command, a help text, the version. */
   readonly out: (line: string) => void;
 
-  /** Prints one line that is no result, on stderr: an error, a hint, a note. */
-  readonly err: (line: string) => void;
-
-  /** Rewrites the one progress line, on stderr. It is called only when `terminal.progress` holds. */
-  readonly status: (text: string) => void;
+  /** What a person sees and answers: the lines of the result on stdout, and on stderr every other line, each question, and the one line that says what is being worked on. */
+  readonly screen: Screen;
 
   /** What sends the requests. */
   readonly fetch: Fetch;
@@ -29,11 +27,8 @@ export interface Io {
   /** The environment, the platform, and the home folder the login is found by. */
   readonly machine: Machine;
 
-  /** Whether a person can be asked a question, and whether a progress line would be seen. */
+  /** Whether a person can be asked a question, and whether the line that says what is being worked on would be seen. */
   readonly terminal: { readonly asks: boolean; readonly progress: boolean };
-
-  /** Asks one question on the terminal and answers the line typed, or `undefined` once the person stopped the question. */
-  readonly ask: (question: string) => Promise<string | undefined>;
 
   /** How long one call may take, in milliseconds, in place of the client's defaults. */
   readonly timeoutMs?: number;

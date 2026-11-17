@@ -15,6 +15,7 @@ import * as v from "valibot";
 
 import { homepage, version as OWN_VERSION } from "../../../../cli/package.json";
 import type { Io } from "../../../../cli/src/commands/records";
+import { plainScreen } from "../../../../cli/src/local/screen";
 import { TOKEN_VARIABLE } from "../../../../cli/src/install/ask";
 import { runInstall } from "../../../../cli/src/install/first/install";
 import type { InstallEnds, Provider } from "../../../../cli/src/install/records";
@@ -166,12 +167,10 @@ export async function command(run: Run, name: keyof typeof COMMANDS, words: read
   const say = (_tone: unknown, line: string): void => run.say(line);
   const io: Io = {
     out: (line) => void printed.push(line),
-    err: run.say,
-    status: () => undefined,
+    screen: plainScreen({ out: (line) => void printed.push(line), err: run.say, status: () => undefined, ask: async () => "" }),
     fetch: (input, init) => ends.reach.fetch(input, init),
     machine: { env: { [TOKEN_VARIABLE]: run.connection.key }, platform: process.platform, home: PACKAGE },
     terminal: { asks: false, progress: false },
-    ask: async () => "",
     computer: "live-checks",
     open: () => undefined,
     pause: async (milliseconds) => {

@@ -110,8 +110,8 @@ async function removal(ground: Ground, request: UninstallRequest, how: Removal, 
   show.working(doing);
 
   const removed = await request.provider.remove(ground.found, ground.where, how, ends.reach, (row: RemovalRow) => {
-    const { tone, text } = removalLine(row, how.run);
-    show.line(tone, text);
+    const { tone, text, hang } = removalLine(row, how.run);
+    show.line(tone, text, hang);
     show.working(doing);
   });
   if (!removed.ok) return removed.why === "unreachable" ? { problem: "unreachable", exit: 5, words: removed.words } : { problem: removed.why, exit: 1, words: removed.words };
@@ -139,7 +139,7 @@ async function typedProof(listed: Listed, data: "remove" | "keep", ends: Install
 function ended(removed: Listed, run: Run, ground: Ground, request: UninstallRequest, show: Show): number {
   const careful = choicesOf(request.mode);
   const lines = run === "dry-run" ? listedLines(removed, request.mode.data) : removedLines(removed, request.provider, careful);
-  for (const line of lines) show.line(line.tone, line.text);
+  for (const line of lines) show.line(line.tone, line.text, line.hang);
 
   show.value(removalValue(removed, run, ground.found.state, NEXT.uninstall(request.provider, carried(careful, removed.ready), placeOf(request.provider, ground.where))));
 

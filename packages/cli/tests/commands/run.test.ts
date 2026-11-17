@@ -584,7 +584,7 @@ describe("run", () => {
     const deleted = await bench.run(`delete ${label.slice(-12)} --no-trash`, { terminal: { asks: true, progress: true }, typed: `${label}\n` });
 
     expect(summary(deleted)).toEqual({ code: 0, out: [`deleted for good  ${label}`, "gone: 1 file in 1 kept version; nothing can restore them", `stopped working: ${site.addresses.site}`], err: [] });
-    expect(deleted.asked).toEqual([`This removes ${label} and every file of it for good. Type its label to go on: `]);
+    expect(deleted.asked).toEqual([`This removes ${label} and every file of it for good.\nType ${label} to go on:`]);
     expect(await stateOf(bench)).toEqual([{ sites: [] }, { sites: [] }, []]);
   });
 

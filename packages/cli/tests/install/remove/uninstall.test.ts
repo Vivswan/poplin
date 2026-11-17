@@ -138,7 +138,7 @@ describe("a run", () => {
     const ran = await runLine("uninstall stand-in --no-place --json", account, { env: HELD, asks: true, typed: [NAME] });
 
     expect([ran.code, ran.out.length, jsonOf(ran)]).toMatchObject([0, 1, { ok: true, run: "apply", rows: [{ did: "remove" }, { did: "remove" }, { did: "remove" }, { did: "remove" }, { did: "stay" }] }]);
-    expect(ran.shown.slice(0, 8)).toEqual([...LISTED.map((line) => `err: ${line}`), ...WARNED.map((line) => `err: ${line}`), `ask: Type ${NAME} to go on:`]);
+    expect(ran.shown.slice(0, 8)).toEqual([...LISTED.map((line) => `err plain: ${line}`), ...WARNED.map((line) => `err plain: ${line}`), `ask: Type ${NAME} to go on:`]);
   });
 
   test("on a terminal asks for where the install is and for the token, hidden, before it looks: without this a person must know every option by heart", async () => {

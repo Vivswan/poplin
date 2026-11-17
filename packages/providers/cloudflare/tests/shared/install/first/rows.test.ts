@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Io } from "../../../../../../cli/src/commands/records";
+import { plainScreen } from "../../../../../../cli/src/local/screen";
 import { run } from "../../../../../../cli/src/commands/run";
 import { TOKEN_VARIABLE } from "../../../../../../cli/src/install/ask";
 import type { InstallEnds, Provider } from "../../../../../../cli/src/install/records";
@@ -58,12 +59,10 @@ async function printed(words: readonly string[], ends: Pick<InstallEnds, "reach"
   const screen: InstallEnds["screen"] = { line: (_tone, text) => void out.push(text), aside: (_tone, text) => void err.push(text), ask: nobody, confirm: nobody, choose: nobody, working: () => undefined, rest: () => undefined };
   const io: Io = {
     out: (line) => void out.push(line),
-    err: (line) => void err.push(line),
-    status: () => undefined,
+    screen: plainScreen({ out: (line) => void out.push(line), err: (line) => void err.push(line), status: () => undefined, ask: async () => "" }),
     fetch: (input, init) => ends.reach.fetch(input, init),
     machine: { env: { [TOKEN_VARIABLE]: TOKEN }, platform: process.platform, home: "/nowhere" },
     terminal: { asks: false, progress: false },
-    ask: async () => "",
     computer: "test-computer",
     open: () => undefined,
     pause: async () => "over",

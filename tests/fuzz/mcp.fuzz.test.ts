@@ -11,6 +11,7 @@ import fc from "fast-check";
 
 import { createClient } from "../../packages/cli/src/client/client";
 import { run } from "../../packages/cli/src/commands/run";
+import { plainScreen } from "../../packages/cli/src/local/screen";
 import { protocolMessages } from "../../packages/cli/tests/mcp/support/bench";
 import { TOOL_INPUTS } from "../../packages/core/src/actions/tool-inputs";
 import { STARTED_UPDATE } from "../../packages/core/src/actions/start-update";
@@ -161,8 +162,7 @@ async function serve(input: readonly string[], answer: Response | undefined, don
     ["mcp"],
     {
       out: (line) => logged.push(`on stdout: ${line}`),
-      err: (line) => logged.push(line),
-      status: (line) => logged.push(`a progress line: ${line}`),
+      screen: plainScreen({ out: (line) => logged.push(`on stdout: ${line}`), err: (line) => logged.push(line), status: (line) => logged.push(`a progress line: ${line}`), ask: async () => "report--k3f9x2ab71qz" }),
       fetch: async (address) => {
         asked.push(new URL(address).pathname);
         if (answer === undefined) throw new Error(`no route to ${TOKEN}`);
@@ -171,7 +171,6 @@ async function serve(input: readonly string[], answer: Response | undefined, don
       },
       machine: { env: { POPLIN_SERVER: SERVER, POPLIN_TOKEN: TOKEN, POPLIN_CONFIG_DIR: join(SCRATCH, "config") }, platform: process.platform, home: SCRATCH },
       terminal: { asks: true, progress: true },
-      ask: async () => "report--k3f9x2ab71qz",
       timeoutMs: 1000,
       computer: "laptop",
       open: () => undefined,

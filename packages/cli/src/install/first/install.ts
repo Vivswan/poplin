@@ -149,7 +149,7 @@ async function offerLogin(login: "yes" | "no" | "ask", json: boolean, address: s
   }
 
   // The address and the code of the login are shown as lines of this command: with `--json` on stderr, so stdout holds the one value.
-  const outcome = await logIn({ kind: "login", publisher: false, browser: true, json: false, server: address }, { ...io, out: json ? io.err : (line) => show.line("plain", line) });
+  const outcome = await logIn({ kind: "login", publisher: false, browser: true, json: false, server: address }, { ...io, screen: json ? { ...io.screen, line: io.screen.aside } : io.screen });
   if (!outcome.ok) {
     for (const line of problemLines(outcome.problem)) show.aside("error", line);
 
@@ -243,8 +243,8 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
   show.working(doing);
 
   const installed = await provider.install(ground.found, ground.where, request.login, mode.mode, ends.reach, (row) => {
-    const { tone, text } = rowLine(row, mode.mode);
-    show.line(tone, text);
+    const { tone, text, hang } = rowLine(row, mode.mode);
+    show.line(tone, text, hang);
     show.working(doing);
   });
 
