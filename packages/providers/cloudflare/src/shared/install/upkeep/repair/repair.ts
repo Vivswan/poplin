@@ -237,7 +237,7 @@ function unmendedWhole(behind: { readonly runs: string; readonly out: string } |
   const asItIs = atPlace(`To mend it as it is, run the poplin of its version: npx poplin@${behind.runs} doctor --repair`, where);
   const updated = atPlace(`To take ${behind.out} and mend it: npx poplin doctor --repair --update`, where);
 
-  return { ok: false, why: "behind", words: `The install runs ${behind.runs}, and its records are not at the schema of this poplin. ${asItIs}. ${updated}` };
+  return { ok: false, why: "behind", words: `The install runs ${behind.runs}, and its records are not at the schema of this poplin.`, ways: [asItIs, updated] };
 }
 
 /**

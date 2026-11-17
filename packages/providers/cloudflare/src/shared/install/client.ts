@@ -3,6 +3,7 @@
 import { BaseCloudflare } from "cloudflare/client";
 import { APIConnectionError, APIError } from "cloudflare/error";
 import { BaseZones } from "cloudflare/resources/zones/zones";
+import * as v from "valibot";
 
 // Where every call goes, unless a test names another place.
 const API = "https://api.cloudflare.com/client/v4";
@@ -12,6 +13,9 @@ const RATE_LIMITED_STATUS = 429;
 
 // The plans a zone can be on, as the first word of Cloudflare's name for one.
 const ZONE_PLANS: ReadonlySet<string> = new Set(["free", "pro", "business", "enterprise"]);
+
+// One entry of the `errors` list in a reply, as far as a refusal is read.
+const REFUSAL = v.object({ code: v.number(), message: v.string() });
 
 /** Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. `sleep` waits so many milliseconds between two reads of settings that trail an upload: the platform's own timer where absent. */
 export interface Connection {
@@ -47,19 +51,13 @@ export interface Zone {
   readonly accountId: string;
 }
 
-function isRefusal(entry: unknown): entry is ApiRefusal {
-  if (typeof entry !== "object" || entry === null) return false;
-
-  return "code" in entry && typeof entry.code === "number" && "message" in entry && typeof entry.message === "string";
-}
-
 function failureOf(error: APIError): CloudflareFailure {
   if (error instanceof APIConnectionError || error.status === undefined) return { ok: false, failure: "network", message: error.message };
 
   if (error.status === RATE_LIMITED_STATUS) return { ok: false, failure: "rate-limited" };
 
   const errors: unknown = error.errors;
-  const refusals = Array.isArray(errors) ? errors.filter(isRefusal) : [];
+  const refusals = Array.isArray(errors) ? errors.filter((entry) => v.is(REFUSAL, entry)) : [];
 
   return { ok: false, failure: "refused", status: error.status, errors: refusals.map(({ code, message }) => ({ code, message })) };
 }

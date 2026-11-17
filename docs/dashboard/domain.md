@@ -39,7 +39,7 @@ The check the screen opens on is a remembered one. Its State column has five wor
 
 A run you press writes its own words there: `Missing` and `Differs` for a piece to repair, and `Created`, `Changed`, or `Removed` for what a Repair did. The screen writes each word with a capital, and the tables below write them small.
 
-No other screen starts a check. A check of an install whose every piece stands sends Cloudflare about 21 requests under a domain and about 16 without: fewer where a piece is missing, more where a list fills more than one page or a request is sent again. Each only reads. A check the screen ran by itself writes no line into Activity, and a pressed one writes one.
+No other screen starts a check. A check sends Cloudflare requests that only read: fewer where a piece is missing, more where a list fills more than one page or a request is sent again. A check the screen ran by itself writes no line into Activity, and a pressed one writes one.
 
 Five rows read otherwise in a check made with the key:
 

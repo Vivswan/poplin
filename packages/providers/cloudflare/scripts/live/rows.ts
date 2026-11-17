@@ -120,7 +120,7 @@ const COPY = new URLPattern({ pathname: "/api/sites/:site/duplicate" });
 /** The method and the path of each priced route, as a request is matched against them. */
 const MATCHERS = PRICES.map(({ method, path, rows }) => ({ method, path: new URLPattern({ pathname: path }), rows }));
 
-/** The most rows each step of a run may make the install write: the checks, the reset when it keeps no sample, the upgrade, and the load a run started by hand may add to its checks. The midnight run's checks count 1,050. */
+/** The most rows each step of a run may make the install write: the checks, the reset when it keeps no sample, the upgrade, and the load a run started by hand may add to its checks. */
 export const ROW_CEILINGS = { checks: 1250, reset: 600, upgrade: 300, load: 600 } as const;
 
 /** What the load of a live run counts its plan in: the rows of a new site that runs out, of one visit, of the request that begins a copy, and of a site removed for good. */

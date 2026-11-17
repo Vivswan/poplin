@@ -206,11 +206,13 @@ export interface Mend {
  * `address` is where the install's dashboard is.
  * The second shape is a repair that changed nothing: the provider gave no answer, or refused the token at the install; the install answers at `elsewhere` than the place named;
  * its records are of `another` poplin than this one, or it runs a newer release than the newest this one reads; or it `changed` since it was found, and is no whole install now.
- * `behind` is an install behind the newest release whose records this code does not read as they are: a repair that updates goes on from it, and its words also name the product of the install's own version, which mends it as it is.
+ * `behind` is an install behind the newest release whose records this code does not read as they are. Its `ways` on follow its words, each a sentence that ends in its command, so that the caller can write an option after one:
+ * first the product of the install's own version, which mends it as it is, then the repair that updates.
  */
 export type Repaired =
   | { readonly ok: true; readonly rows: readonly Row[]; readonly steps: readonly Step[]; readonly blocked: readonly Blocked[]; readonly address: string; readonly ready: boolean }
-  | { readonly ok: false; readonly why: "unreachable" | "token" | "elsewhere" | "another" | "behind" | "changed"; readonly words: string };
+  | { readonly ok: false; readonly why: "unreachable" | "token" | "elsewhere" | "another" | "changed"; readonly words: string }
+  | { readonly ok: false; readonly why: "behind"; readonly words: string; readonly ways: readonly string[] };
 
 /**
  * One provider, as the command works through it. `Where` is the provider's own answer of where the install goes, and `Place` what it found with a token: the command holds both and looks into neither.

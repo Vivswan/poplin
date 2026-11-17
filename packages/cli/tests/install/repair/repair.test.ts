@@ -246,7 +246,6 @@ describe("what a repair does not go on from", () => {
   test.each([
     ["the install answers elsewhere than the place named", "elsewhere", 1, "other_place", BARE],
     ["the install's records are of another version", "another", 1, "another_version", { step: "repair", command: "npx poplin@latest doctor --repair --no-place" }],
-    ["the install is behind, with records this poplin does not read", "behind", 1, "another_version", { step: "repair", command: "npx poplin doctor --repair --update --no-place" }],
     ["the provider refuses the token at the install", "token", 1, "token_refused", AGAIN],
     ["the provider gives no answer", "unreachable", 5, "unreachable", AGAIN],
   ] as const)("a repair that stops because %s exits with its code, says that nothing was changed, and names what goes on from it", async (_, why, code, problem, next) => {
@@ -259,12 +258,60 @@ describe("what a repair does not go on from", () => {
   test.each([
     ["the install answers elsewhere than the place named", "elsewhere", "npx poplin doctor --repair --update"],
     ["the install's records are of another version", "another", "npx poplin@latest doctor --repair --update --no-place"],
-    ["the install is behind, with records this poplin does not read", "behind", "npx poplin doctor --repair --update --no-place"],
     ["the provider refuses the token at the install", "token", "npx poplin doctor --repair --update --no-place"],
   ] as const)("a repair with --update that stops because %s names a next step that keeps --update, once", async (_, why, command) => {
     const ran = await runLine(`${RUN} --update --json`, installed({ ok: false, why, words: "The host says why." }), { env: HELD });
 
     expect(jsonOf(ran).next).toEqual({ step: "repair", command });
+  });
+
+  // Drift: a person who came to add a user is stopped at an install that is behind, and follows one of the two lines it names. A line that dropped the user would update and mend, and let nobody in. Both kinds of install are held to it.
+  test.each(["--no-place", "--place example.com"])("a repair with %s that stops at an install that is behind names both ways on and the next step with the user of its line, as one word of a shell, and with --update once", async (place) => {
+    const [asItIs, updated] = [`npx poplin@0.1.0 doctor --repair ${place}`, `npx poplin doctor --repair --update ${place}`];
+    const behind: Repaired = { ok: false, why: "behind", words: "The install is behind.", ways: [`As it is: ${asItIs}`, `Updated: ${updated}`] };
+    const line = `doctor --repair ${place} --yes --json`;
+    const runs = [
+      await runLine(line, installed(behind), { env: HELD }),
+      await runLine(`${line} --update --add-user new@example.com`, installed(behind), { env: HELD }),
+      await runLine(`${line} --add-user o'brien@example.com`, installed(behind), { env: HELD, platform: "linux" }),
+      // No quote holds in both of Windows' shells, so there both lines leave the email out and the step names the option to add.
+      await runLine(`${line} --add-user o'brien@example.com`, installed(behind), { env: HELD, platform: "win32" }),
+    ];
+    const quoted = "--add-user 'o'\\''brien@example.com'";
+    const said = (user: string): string => `The install is behind. As it is: ${asItIs}${user}. Updated: ${updated}${user}. nothing was changed`;
+
+    expect(runs.map((ran) => [ran.code, jsonOf(ran).problem, jsonOf(ran).words, jsonOf(ran).next])).toEqual([
+      [1, "another_version", said(""), { step: "repair", command: updated }],
+      [1, "another_version", said(" --add-user new@example.com"), { step: "repair", command: `${updated} --add-user new@example.com` }],
+      [1, "another_version", said(` ${quoted}`), { step: "repair", command: `${updated} ${quoted}` }],
+      [1, "another_version", said(""), { step: "repair", command: updated, add: "--add-user <email>" }],
+    ]);
+  });
+
+  // Drift: a person who came to add a user follows the next step of whatever stopped the repair. A stop that built its own line without the user would mend, or only run again, and let nobody in. Both kinds of install are held to it.
+  describe.each(["--no-place", "--place example.com"])("a repair with %s that was given a user to add", (place) => {
+    const held = { state: "held", words: "A program named poplin is in this account.", address: "https://host.example.com/programs/poplin" } as const;
+    const refusal = (why: "elsewhere" | "another" | "token" | "unreachable" | "changed"): Account => installed({ ok: false, why, words: "The host says why." });
+
+    test.each([
+      ["a look the provider refuses the token of", () => installed(undefined, { state: "refused", why: "token", words: "The host refused the token." }), `npx poplin doctor --repair ${place}`],
+      ["a look the provider gives no answer to", () => installed(undefined, { state: "refused", why: "unreachable", words: "The host gave no answer." }), `npx poplin doctor --repair ${place}`],
+      ["a held name the same command goes on from", () => installed(undefined, { ...held, after: "again" }), `npx poplin doctor --repair ${place}`],
+      ["a held name a repair goes on from", () => installed(undefined, { ...held, after: "repair" }), `npx poplin doctor --repair ${place}`],
+      ["an install that answers elsewhere", () => refusal("elsewhere"), "npx poplin doctor --repair"],
+      ["records of another version", () => refusal("another"), `npx poplin@latest doctor --repair ${place}`],
+      ["a token the provider refuses at the install", () => refusal("token"), `npx poplin doctor --repair ${place}`],
+      ["a provider that gives no answer", () => refusal("unreachable"), `npx poplin doctor --repair ${place}`],
+      ["an install that changed since it was found", () => refusal("changed"), `npx poplin doctor --repair ${place}`],
+    ] as const)("and stops at %s names a next step that keeps the user, as one word of a shell, or names the option where Windows holds no such word", async (_, account, command) => {
+      const line = `doctor --repair ${place} --yes --json --add-user o'brien@example.com`;
+      const [posix, windows] = [await runLine(line, account(), { env: HELD, platform: "linux" }), await runLine(line, account(), { env: HELD, platform: "win32" })];
+
+      expect([jsonOf(posix).next, jsonOf(windows).next]).toEqual([
+        { step: "repair", command: `${command} --add-user 'o'\\''brien@example.com'` },
+        { step: "repair", command, add: "--add-user <email>" },
+      ]);
+    });
   });
 });
 

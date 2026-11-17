@@ -1,6 +1,7 @@
 // The one table of what can go wrong: every code a command ends in, its sentence for a person, the hint that goes with it, and how the command exits.
 
 import { TAKEN_BY_REPAIR } from "../../../core/src/actions/start-update";
+import manifest from "../../package.json" with { type: "json" };
 import type { Failure } from "../client/client";
 import type { Ending } from "./exit-codes";
 
@@ -13,6 +14,9 @@ interface Row {
   readonly hint?: string;
   readonly exit: Exit;
 }
+
+/** Where the project takes a report, as the package itself names it. */
+const ISSUES: string = manifest.bugs.url;
 
 /** The codes the API refuses with, in the API's own spelling. */
 const API_ROWS = {
@@ -57,7 +61,7 @@ const API_ROWS = {
   key_refused: { sentence: "the install's host no longer takes the install's key", hint: "open Domain on the dashboard and press Repair", exit: "failed" },
   lacks_right: { sentence: "the install's key lacks this permission at its host", hint: "open Domain on the dashboard and press Repair: it makes a key with the permission", exit: "failed" },
   release_refused: { sentence: "the release cannot be taken, and nothing was changed, for this reason", hint: "poplin update --dry-run says which version the install runs", exit: "failed" },
-  version_refused: { sentence: "the install's host refused the new version, so the install runs the version it ran before", hint: "try again; if it comes back, report it", exit: "failed" },
+  version_refused: { sentence: "the install's host refused the new version, so the install runs the version it ran before", hint: `try again; if it comes back, report it at ${ISSUES}`, exit: "failed" },
   logins_not_ended: { sentence: "the install's provider did not end the dashboard's logins, or gave no answer", hint: "the dashboard's Domain screen has Repair, which gives the install its key", exit: "failed" },
   too_large: { sentence: "a size limit is passed", hint: "poplin config shows the limits", exit: "failed" },
   too_many_requests: { sentence: "the install is asked too often", hint: "wait a minute, then try again", exit: "failed" },
@@ -120,8 +124,8 @@ const HINTS_ABOUT: Readonly<Record<string, Readonly<Record<string, string>>>> = 
   release_refused: {
     no_digest: "no built files are published for that version, so the install cannot take it by itself; to take the newest release: poplin update",
     unreachable: "the release could not be fetched; try again in a few minutes",
-    digest_differs: "the files fetched for the release are not the files the project published; try again, and if it comes back, report it",
-    other_version: "the files published for the release name another version or schema than the project's website; trying again gives the same answer, so report it",
+    digest_differs: `the files fetched for the release are not the files the project published; try again, and if it comes back, report it at ${ISSUES}`,
+    other_version: `the files published for the release name another version or schema than the project's website; trying again gives the same answer, so report it at ${ISSUES}`,
     database: "that release changes the database, and the version asked for cannot read it; trying again gives the same answer",
     needs_hand: TAKEN_BY_REPAIR,
     host: "the install's host did not answer before anything was sent; try again in a few minutes",
