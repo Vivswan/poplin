@@ -29,8 +29,8 @@ const DAY_MS = 86_400_000;
 /** The files one removal takes from a folder whose list pages hold one object each. */
 const WHOLE_REMOVAL = 15;
 
-/** What a step over five sat-out sites costs when each takes a whole removal: the listing of the due ones, the day's count of writes to the bucket, and per site a change, 30 bucket calls, and the leftover forgotten. */
-const MOST_STEP_CALLS = 162;
+/** What a step over five sat-out sites costs when each takes a whole removal: the listing of the due ones, the day's count of writes to the bucket, the five removed in one call, 30 bucket calls for each, and their folders forgotten in one. */
+const MOST_STEP_CALLS = 154;
 
 /** The requests the run's table says a repair of the login sends at the most with the two alerts kept and the carry of the users after it, where each list of the account fits one page. */
 const MOST_REPAIR_CALLS = 29;
@@ -513,8 +513,8 @@ describe("the scheduled run", () => {
   });
 
   // Drift: Cloudflare may start a new instance for every cron run, and D1 answers a Free invocation 50 queries. A run that walked the sites to find the due ones spent them on the rest, and an expired site waited a run for every fifty live ones before it.
-  // A run takes as many due sites as its calls allow, and the next one, whatever instance makes it, finds the rest as the first ones still due.
-  test("thirty expired sites behind sixty newer live ones reach the trash in two runs, twenty-five in the first, each run a new instance that D1 refuses a fifty-first query", async () => {
+  // A run takes fifteen due sites, and the next one, whatever instance makes it, finds the rest as the first ones still due.
+  test("thirty expired sites behind sixty newer live ones reach the trash in two runs, fifteen in the first, each run a new instance that D1 refuses a fifty-first query", async () => {
     const tally = { calls: 0 };
     await ask(instance(w), `${ADMIN}/api/whoami`);
     const install = await installOf(w);
@@ -537,8 +537,29 @@ describe("the scheduled run", () => {
       runs.push({ calls: tally.calls, trash: (await states()).trash });
     }
 
-    expect(runs.map((run) => run.trash)).toEqual([25, 30, 30]);
+    expect(runs.map((run) => run.trash)).toEqual([15, 30, 30]);
     expect(Math.max(...runs.map((run) => run.calls))).toBeLessThanOrEqual(INVOCATION_CALLS);
+  });
+
+  // Drift: a run's rows written are bounded by the items it changes; a last step that took a whole page past the bound would let a run write more than its day's share allows for.
+  test("a run that meets four expired sites and twenty past their days in the trash changes fifteen: the four, and eleven of the twenty", async () => {
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const install = await installOf(w);
+    const file = { path: "index.html", size: HTML.byteLength, contentType: "text/html", open: () => new Blob([HTML]).stream() };
+    const published = async (name: string, expires: "1h" | "never") => {
+      const site = await publishSite(install, { scope: "admin", holder: OWNER }, { name, expires, files: [file] });
+      if (!site.ok) throw new Error(`the test's site was refused: ${site.code}`);
+
+      return site.site.id;
+    };
+
+    for (let made = 0; made < 20; made += 1) await install.database.trashSite(await published(`old-${made}`, "never"), { as: "person", by: OWNER, at: w.clock.now });
+    wait(w, 8 * 24);
+    for (let made = 0; made < 4; made += 1) await published(`brief-${made}`, "1h");
+    wait(w, 2);
+    await sweep(instance(w), w);
+
+    expect(await states()).toEqual({ live: 0, trash: 13 });
   });
 
   // Drift: Cloudflare writes what a run throws into its log, message and all, and an error's message may repeat a stored value. A run that threw its own error would put that value in the log; one that swallowed it would look like a run that worked.

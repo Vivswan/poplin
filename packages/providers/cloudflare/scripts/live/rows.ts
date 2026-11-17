@@ -1,12 +1,12 @@
 // A ceiling on the rows one step of a live run makes the install write to its database. D1's Free plan takes 100,000 rows written a day, every database of the account together, and refuses each write past them until midnight UTC.
 //
-//   POST   /api/uploads                    a new site 20, and 19 where it is told never to run out; a new version 13, and what the settings it asks for cost as a change: the begin and its finish together
+//   POST   /api/uploads                    a new site 23, and 22 where it is told never to run out; a new version 13, and what the settings it asks for cost as a change: the begin and its finish together
 //   POST   /api/uploads/:upload/finish     2 where the publish dropped older versions and 2 for each of them, once its answer says how many
-//   POST   /api/import/sites               a site with one version 19, 2 for each version more, and 1 where it runs out and is in no trash
+//   POST   /api/import/sites               a site with one version 22, 2 for each version more, and 1 where it runs out and is in no trash
 //   DELETE /api/sites/:site                to the trash 6, for good 13
-//   PATCH  /api/sites/:site                who may open it 3, any other setting 2, both 5, and 1 where it is told an expiry
-//   POST   /api/sites/:site/new-link 9     POST /api/sites/:site/restore 6    POST /api/sites/:site/rollback 2
-//   POST   /api/sites/:site/duplicate      the request that begins a copy 21, each one that goes on with it 16, once it is answered
+//   PATCH  /api/sites/:site                who may open it 4, any other setting 2, a title 1 more and a name 2 more, and 1 where it is told an expiry
+//   POST   /api/sites/:site/new-link 12    POST /api/sites/:site/restore 9    POST /api/sites/:site/rollback 2
+//   POST   /api/sites/:site/duplicate      the request that begins a copy 24, each one that goes on with it 19, once it is answered
 //                                          an ask that finds the install copying by itself 0; the rounds of that job 1 each, counted with the answer that names its site
 //   PATCH  /api/config                     6, and 3 where it names a setting of the guard rules
 //   POST   /api/logins 3                   DELETE /api/uploads/:upload 3
@@ -14,7 +14,8 @@
 //   POST   /api/uploads/:upload/tickets    1 where the sender turns back to the install, for the problem that notes it; else none
 //   GET    a page or a file of a site      2, once it is answered 200 or 304
 //
-// D1 counts an index entry and a row a trigger writes as rows, so one new site is 8 of them. Each price is the most its request writes for a site a run made, and is counted before the request is sent.
+// D1 counts an index entry and a row a trigger writes as rows, so one new site is 11 of them: a site outside the trash has an entry in the index of each order a listing offers, by its last change, its name, its title, and who may open it.
+// Each price is the most its request writes for a site a run made, and is counted before the request is sent.
 // A site that runs out has one entry more, in the index of expiries, written when it is told an expiry and when it leaves the trash: a restore is counted as if its site ran out, as every site of the checks does.
 // A visit is counted once it is answered, since only the answer says that a site was served, and so are a dropped version and a request that goes on with a copy. Once a step is stopped, no further request for a site's address is sent.
 // A served site's refusal or missing file writes the same two rows and is not counted: its status is that of an address no site holds.
@@ -27,8 +28,8 @@ import { RULE_SETTINGS } from "@poplin/core/src/records/settings";
 import type { Fetch } from "../../../../cli/src/client/client";
 import type { Declared } from "./budget";
 
-/** The rows of a new site, from its first request to its finish: the site and its first version 8, the upload 6, the day's counts 2, the version's size 2, and the log 1. */
-const NEW_SITE = 19;
+/** The rows of a new site, from its first request to its finish: the site and its first version 11, the upload 6, the day's counts 2, the version's size 2, and the log 1. */
+const NEW_SITE = 22;
 
 /** The rows of a new version of a site, from its first request to its finish, where it drops no older one. */
 const NEW_VERSION = 13;
@@ -37,7 +38,7 @@ const NEW_VERSION = 13;
 const DROPPED = { any: 2, each: 2 } as const;
 
 /** The rows of a site put back from a backup with one version. */
-const IMPORTED_SITE = 19;
+const IMPORTED_SITE = 22;
 
 /** The rows each further version of a site put back from a backup adds. */
 const IMPORTED_VERSION = 2;
@@ -49,13 +50,19 @@ const EXPIRY = 1;
 const TURNED_BACK = 1;
 
 /** The rows of a copy of a site: the request that begins it is counted as one that makes the copy whole, and each request that goes on with it as the one that finishes it. A round the install's own job runs writes one, beside the finish. */
-const COPIED = { begun: 21, goneOn: 16, jobRound: 1 } as const;
+const COPIED = { begun: 24, goneOn: 19, jobRound: 1 } as const;
 
 /** The rows of a site moved to the trash, and of one removed for good with the three versions an install keeps and a day's count of its own. */
 const REMOVED = { trash: 6, noTrash: 13 } as const;
 
-/** The rows of a change to a site: of who may open it, and of any other setting. Both are written where a request asks for both. */
-const CHANGED = { access: 3, details: 2 } as const;
+/** The rows of a change to a site: of who may open it, of any other setting, and what a title or a name adds to that. Both of the first two are written where a request asks for both. */
+const CHANGED = { access: 4, details: 2, title: 1, name: 2 } as const;
+
+/** The rows a site writes as it leaves the trash: the site, its entry in the log, the totals, and its entry in the index of each of the four orders. */
+const RESTORED = 8;
+
+/** The rows of a new link: the site under its new id in each of its indexes, the id it gave up, and its entry in the log. */
+const NEW_LINK = 12;
 
 /** The rows of a change to the settings at most: 6 for the change, its entry in the log, and the users carried, and 3 more where it names a setting of the guard rules, which are marked, carried, and settled too. */
 const CONFIG = { any: 6, rules: 3 } as const;
@@ -95,8 +102,8 @@ const PRICES = [
   { method: "DELETE", path: "/api/uploads/:upload", rows: () => 3 },
   { method: "DELETE", path: "/api/sites/:site", rows: (asked) => (asked.query.get("no_trash") === "true" ? REMOVED.noTrash : REMOVED.trash) },
   { method: "PATCH", path: "/api/sites/:site", rows: (asked) => changeRows(asked.body) },
-  { method: "POST", path: "/api/sites/:site/restore", rows: () => 5 + EXPIRY },
-  { method: "POST", path: "/api/sites/:site/new-link", rows: () => 9 },
+  { method: "POST", path: "/api/sites/:site/restore", rows: () => RESTORED + EXPIRY },
+  { method: "POST", path: "/api/sites/:site/new-link", rows: () => NEW_LINK },
   { method: "POST", path: "/api/sites/:site/rollback", rows: () => 2 },
   { method: "POST", path: "/api/sites/:site/duplicate", rows: (asked) => (asked.body.upload === undefined ? COPIED.begun : 0) },
   { method: "PATCH", path: "/api/config", rows: (asked) => CONFIG.any + (RULE_SETTINGS.some((key) => key in asked.body) ? CONFIG.rules : 0) },
@@ -113,8 +120,8 @@ const COPY = new URLPattern({ pathname: "/api/sites/:site/duplicate" });
 /** The method and the path of each priced route, as a request is matched against them. */
 const MATCHERS = PRICES.map(({ method, path, rows }) => ({ method, path: new URLPattern({ pathname: path }), rows }));
 
-/** The most rows each step of a run may make the install write: the checks, the reset when it keeps no sample, the upgrade, and the load a run started by hand may add to its checks. */
-export const ROW_CEILINGS = { checks: 1100, reset: 600, upgrade: 300, load: 600 } as const;
+/** The most rows each step of a run may make the install write: the checks, the reset when it keeps no sample, the upgrade, and the load a run started by hand may add to its checks. The midnight run's checks count 1,050. */
+export const ROW_CEILINGS = { checks: 1250, reset: 600, upgrade: 300, load: 600 } as const;
 
 /** What the load of a live run counts its plan in: the rows of a new site that runs out, of one visit, of the request that begins a copy, and of a site removed for good. */
 export const ROW_PRICES = { site: NEW_SITE + EXPIRY, visit: VISIT, copy: COPIED.begun, removal: REMOVED.noTrash } as const;
@@ -177,13 +184,20 @@ function importedExpiryRows(site: unknown): number {
   return typeof site.expires === "number" && site.state !== "trash" ? EXPIRY : 0;
 }
 
+/** The rows a change writes to the indexes a listing is ordered by: a name moves the site in the index of names and of titles, a title in that of titles alone. */
+function listedRows(body: Asked["body"]): number {
+  if ("name" in body) return CHANGED.name;
+
+  return "title" in body ? CHANGED.title : 0;
+}
+
 /** The rows of a change to a site, by what it asks for: who may open it, any other setting, or both, and the expiry's entry where it names one. */
 function changeRows(body: Asked["body"]): number {
   const keys = Object.keys(body);
   const access = keys.some((key) => ACCESS_KEYS.has(key)) ? CHANGED.access : 0;
   const details = keys.some((key) => !ACCESS_KEYS.has(key)) ? CHANGED.details : 0;
 
-  return access + details + expiryRows(body);
+  return access + details + listedRows(body) + expiryRows(body);
 }
 
 /** The JSON object a request carries; empty for a body that is none, such as a file's bytes. */

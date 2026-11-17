@@ -195,7 +195,7 @@ export const API_ROWS: readonly BudgetRow[] = [
       return (measured) => apiOf(measured, token).sites[":site"]["new-link"].$post({ param: { site: siteId(1) }, query: {} });
     },
     status: 200,
-    budget: { queries: 3, read: 744, reads: 0, writes: 0 },
+    budget: { queries: 3, read: 748, reads: 0, writes: 0 },
   },
   {
     group,

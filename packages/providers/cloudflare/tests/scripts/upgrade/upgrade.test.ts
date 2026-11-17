@@ -30,7 +30,7 @@ const HELD = [
   "Older install: filled with 3 sites, a second version, a setting, and a user",
   "Update: the older build took 0.4.0 over 0.3.0, by its own start of an update",
   "Bucket writes and lists the upgrade asked for: 19 of at most 40",
-  "Rows written this run: 144 of at most 300",
+  "Rows written this run: 153 of at most 300",
   "Version: runs 0.4.0, and ran 0.3.0",
   "Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte",
   "Token: the one made before the update read every site, the settings, and the log",

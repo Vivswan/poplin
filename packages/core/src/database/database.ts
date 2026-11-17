@@ -21,7 +21,7 @@ import type { Totals } from "../records/sizes";
 import type { AutoStart, UpdateCheck } from "../records/update";
 import type { VersionContents } from "../records/version-contents";
 import type { ManifestFile, Upload, UploadId, UploadPlan } from "../records/upload";
-import type { DailyViews, SiteViews } from "../records/views";
+import type { CountedViews, SiteViews } from "../records/views";
 import type { ProblemNote } from "./problems";
 
 /** How many entries of the audit log, counted by `seq`, one narrowed reading looks at before it stops. */
@@ -629,11 +629,13 @@ export interface Database {
   listDueSites(due: DueSites, limit: number): Promise<readonly SiteId[]>;
 
   /**
-   * Move a site into the trash only while it is live and its expiry is at or before `signed.at`: the check and the move are one step.
+   * Move sites into the trash, each only while it is live and its expiry is at or before `signed.at`, and each with its audit entry: the check and the move of a site are one step, and all of them one query.
    *
-   * @returns `not_due` for a site that is gone, in the trash already, or given a later expiry or none
+   * @param ids - the sites, at most 100
+   * @returns how many went; a site that is gone, in the trash already, or given a later expiry or none stays, and is not counted
+   * @throws {RangeError} more than 100 sites are named
    */
-  trashExpiredSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_due">>;
+  trashExpiredSites(ids: readonly SiteId[], signed: Signed): Promise<number>;
 
   /** Take a site out of the trash. An expiry that is not after `signed.at` becomes `"never"` in the same step, so the site is served again and no sweep trashes it for that expiry. */
   restoreSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found" | "not_in_trash">>;
@@ -646,11 +648,13 @@ export interface Database {
   deleteSite(id: SiteId, signed: Signed): Promise<Done | Refused<"not_found">>;
 
   /**
-   * Remove a site for good, as `deleteSite` does, only while it sits in the trash since `trashedBy` or before: the check and the removal are one step.
+   * Remove sites for good, as `deleteSite` removes one, each only while it sits in the trash since `trashedBy` or before: the check and the removal of a site are one step, and all of them one query.
    *
-   * @returns `not_due` for a site that is gone, was restored, or went to the trash later
+   * @param ids - the sites, at most 100
+   * @returns each site that went, as it was, whose folder the caller empties and then forgets; a site that is gone, was restored, or went to the trash later stays, and is not among them
+   * @throws {RangeError} more than 100 sites are named
    */
-  deleteSatOutSite(id: SiteId, signed: Signed, trashedBy: number): Promise<Done | Refused<"not_due">>;
+  deleteSatOutSites(ids: readonly SiteId[], signed: Signed, trashedBy: number): Promise<readonly Site[]>;
 
   /**
    * One page of the leftovers: the folders of removed sites that are not known to be empty. A folder a site is stored into again is no leftover.
@@ -660,8 +664,13 @@ export interface Database {
    */
   listLeftovers(query: { readonly limit: number; readonly after?: SiteFolder }): Promise<LeftoversPage>;
 
-  /** Forget a leftover, once the bucket holds nothing under the folder. A folder that is none changes nothing. */
-  forgetLeftover(folder: SiteFolder): Promise<void>;
+  /**
+   * Forget leftovers, once the bucket holds nothing under their folders, all in one query. A folder that is none changes nothing, and no folder asks nothing of the database.
+   *
+   * @param folders - the folders, at most 100
+   * @throws {RangeError} more than 100 folders are named
+   */
+  forgetLeftovers(folders: readonly SiteFolder[]): Promise<void>;
 
   /** Set aside the next version number of a site. No two calls get the same number; a number never used is simply skipped. It writes no audit entry: nothing a reader of the site sees has changed. */
   reserveVersion(id: SiteId): Promise<Reserved | Refused<"not_found" | "in_trash">>;
@@ -852,7 +861,8 @@ export interface Database {
 
   /**
    * Remove what ran out by a moment, in one step: every login of a computer that ran out at or before it, whatever its state; every problem of a day before the 30 that are kept;
-   * the counts of declared files and store writes of the days before the day before it; and the request counts of days over a year before it. No write of a count drops an old day itself.
+   * the counts of declared files and store writes of the days before the day before it; and the request counts of days over a year before it, with their sums. No write of a count drops an old day itself.
+   * The same step sums the page views of every day that ended an hour before the moment or earlier and is not summed yet, a row a site and day that counted a view: `readWeeklyViews` reads those.
    *
    * The same step trims what is over 90 days old, a bounded number a call: the oldest entries of the audit log, once anybody has logged in and never the newest entry, and the tokens that ended, by removal or by running out.
    * A token that works at the moment stays, however long ago it was made. A call with nothing to remove writes no row.
@@ -1161,7 +1171,7 @@ export interface Database {
   readViews(sites: readonly SiteId[], day: string): Promise<ReadonlyMap<SiteId, SiteViews>>;
 
   /**
-   * The page views counted day by day, for all sites together and for some sites. It is one query, and every row is read by its key.
+   * The page views counted day by day, for all sites together and for some sites. It is one query: the days `sweepRunOut` has summed are read a stretch a site, and the days not summed yet each by its key.
    *
    * @param sites - the sites to read beside all sites together, at most 50
    * @param day - the last day read, a UTC date such as `2026-11-13`
@@ -1169,5 +1179,17 @@ export interface Database {
    * @returns a count for every day, 0 where nothing was counted
    * @throws {RangeError} `day` is not such a date, `count` is not such a number, or more than 50 sites are asked for
    */
-  readDailyViews(sites: readonly SiteId[], day: string, count: number): Promise<DailyViews>;
+  readDailyViews(sites: readonly SiteId[], day: string, count: number): Promise<CountedViews>;
+
+  /**
+   * The page views counted week by week, for all sites together and for some sites. The weeks end on `day`, so the first holds the days before the first whole week and may be shorter.
+   * It is one query, and its cost goes by the weeks: a week is the difference of two of the sums `sweepRunOut` keeps, and only the days not summed yet are read one by one.
+   *
+   * @param sites - the sites to read beside all sites together, at most 50
+   * @param day - the last day read, a UTC date such as `2026-11-13`
+   * @param count - how many days are read, that day included: a whole number from 1 to 365
+   * @returns a count for every week under the day it starts on, 0 where nothing was counted
+   * @throws {RangeError} `day` is not such a date, `count` is not such a number, or more than 50 sites are asked for
+   */
+  readWeeklyViews(sites: readonly SiteId[], day: string, count: number): Promise<CountedViews>;
 }

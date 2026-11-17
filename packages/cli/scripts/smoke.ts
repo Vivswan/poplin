@@ -30,8 +30,8 @@ const MAIN_FILES = ["bin.mjs", "poplin.mjs", "core.mjs"];
 /** The file of a provider's package that its built file is made from. */
 const INSTALLER = join("src", "shared", "install", "first", "installer.ts");
 
-/** The most bytes a provider's built file may have. It is loaded by the commands that take an account token alone, so no other command starts slower for it. */
-const MOST_PROVIDER_BYTES = 520_000;
+/** The most bytes a provider's built file may have; Cloudflare's is about 520,400. It is loaded by the commands that take an account token alone, so no other command starts slower for it. */
+const MOST_PROVIDER_BYTES = 560_000;
 
 /** Run under node: a provider's built file loads, gives the provider it is named after, and none of its own words is in a main file. */
 const PROVIDER_PROBE = `

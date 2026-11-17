@@ -127,7 +127,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "keepDomainCheck, a check that could end a problem and finds none": [3, 1],
   "endProblems, none to end": [2, 0],
   "listProblems, 7 days of 16 kinds": [112, 0],
-  "sweepRunOut, 18 problems past the days kept": [29, 18],
+  "sweepRunOut, 18 problems past the days kept": [36, 18],
   "keepSweepPlace": [1, 1],
   "readSweepPlace": [1, 0],
   "keepSweepPlace, forgotten": [0, 1],
@@ -148,7 +148,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readTotals": [1, 0],
   "exportSites": [18, 0],
   "exportSites, after": [18, 0],
-  "giveNewId": [737, 8],
+  "giveNewId": [741, 11],
   "getLaterSites": [9, 0],
   "reserveVersion": [5, 1],
   "setLiveVersion, a number": [8, 2],
@@ -156,23 +156,23 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "setLiveVersion, previous": [9, 2],
   "trashSite": [6, 6],
   "trashSite, in the trash": [5, 0],
-  "restoreSite": [6, 5],
+  "restoreSite": [6, 8],
   "deleteSite": [13, 6],
   "listLeftovers": [1, 0],
   "storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload": [27, 21],
-  "forgetLeftover": [1, 1],
+  "forgetLeftovers": [1, 1],
   "addUpload, a new site": [8, 5],
   "getUpload": [1, 0],
   "getUploadFile": [1, 0],
   "getUploadFile, no such file": [1, 0],
   "getUploadFiles, two files and one that is not there": [1, 0],
   "listUploads": [1, 0],
-  "publishUploadAsSite": [14, 13],
+  "publishUploadAsSite": [14, 16],
   "publishUploadAsSite, not pending": [5, 0],
   "setUploadDropped": [1, 1],
   "removeUpload": [1, 1],
   "reserveVersion and addUpload, a version": [14, 6],
-  "publishUploadAsVersion, with access and details": [67, 13],
+  "publishUploadAsVersion, with access and details": [67, 15],
   "publishUploadAsVersion, plain": [48, 8],
   "addUpload, 500 files": [8, 5],
   "abandonUpload": [2, 2],
@@ -190,7 +190,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "listWaitingComputerLogins": [4, 0],
   "decideComputerLogin": [4, 3],
   "redeemComputerLogin": [5, 6],
-  "sweepRunOut": [11, 1],
+  "sweepRunOut": [18, 1],
   "appendAudit, a login": [0, 2],
   "hasLoggedIn, nobody yet": [1, 0],
   "hasLoggedIn": [1, 0],
@@ -201,22 +201,24 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "readRequests": [2, 0],
   "readRequests, all sites": [1, 0],
   "readViews": [42, 0],
-  "readDailyViews, 30 days": [188, 0],
-  "readDailyViews, a year": [2198, 0],
-  "readDailyViews, a year, fifty sites": [18668, 0],
+  // No day of the walk is summed, as on an install whose scheduled run never ended a walk: each read walks every day of its stretch.
+  "readDailyViews, 30 days": [225, 0],
+  "readDailyViews, a year": [2570, 0],
+  "readDailyViews, a year, fifty sites": [19085, 0],
+  "readWeeklyViews, a year, fifty sites": [21788, 0],
   "listSites": [18, 0],
   "listShownSites, with the views and the publishers": [73, 0],
   "listShownSites, with the views": [61, 0],
   "listSites, the next page": [18, 0],
   "listSites, by name, one holder, a text, an access": [38, 0],
-  "listSites, by access": [51, 0],
-  "changeAccess": [6, 3],
+  "listSites, by access": [18, 0],
+  "changeAccess": [6, 4],
   "changeAccess, the same": [5, 0],
   "changeAccess, name taken": [6, 0],
-  "changeAccessAndDetails": [8, 2],
+  "changeAccessAndDetails": [8, 3],
   "changeAccessAndDetails, the same": [8, 0],
-  "publishUploadAsSite, a copy": [15, 14],
-  "changeDetails": [5, 2],
+  "publishUploadAsSite, a copy": [15, 17],
+  "changeDetails": [5, 3],
   "changeDetails, the same": [5, 0],
   "listAudit": [20, 0],
   "searchAudit, one kind, the sites named with a text": [62, 0],
@@ -232,14 +234,14 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "countAudit, no further back than five entries, and where the log starts": [6, 0],
   "no site: getSiteByPublicName": [0, 0],
   "no site: findTaken": [0, 0],
-  "no site: giveNewId": [2, 0],
+  "no site: giveNewId": [3, 0],
   "no site: reserveVersion": [0, 0],
   "no site: setLiveVersion": [0, 0],
   "no site: trashSite": [0, 0],
   "no site: restoreSite": [0, 0],
   "no site: deleteSite": [0, 0],
   "in the trash: findServed": [1, 0],
-  "in the trash: giveNewId": [6, 0],
+  "in the trash: giveNewId": [7, 0],
   "in the trash: reserveVersion": [5, 0],
   "in the trash: changeAccess": [5, 0],
   "in the trash: changeDetails": [5, 0],
@@ -384,8 +386,8 @@ describe("D1: the rows a publish costs of a day's allowance", () => {
   });
 
   // Drift: a day allows 5,000,000 rows read and 100,000 written, and every query fails once either is spent; a publish whose cost grew faster than its files would spend a day in one go.
-  test.each([50, 200])("a whole publish of %d files reads one row a file and 27 more, and writes 19: four read and one written are the count of the listing that checks its files", async (files) => {
-    expect(await publishCost(files)).toEqual({ read: files + 27, written: 19 });
+  test.each([50, 200])("a whole publish of %d files reads one row a file and 27 more, and writes 22: four read and one written are the count of the listing that checks its files", async (files) => {
+    expect(await publishCost(files)).toEqual({ read: files + 27, written: 22 });
   });
 });
 
@@ -446,18 +448,18 @@ describe("D1: the rows a listing, a change to a site, and a page of the audit lo
       "the first page": [32, 0],
       "the page after it": [34, 0],
       "a page of one holder's private sites, by name": [51, 0],
-      "an access that changes": [6, 3],
+      "an access that changes": [6, 4],
       "the same access again": [5, 0],
       "a public name that is taken": [6, 0],
-      "a detail that changes": [5, 2],
+      "a detail that changes": [5, 3],
       "the same detail again": [5, 0],
       "a page of twenty entries": [20, 0],
       "a page of the entries of one kind for one site": [67, 0],
-      "a page by name": [104, 0],
-      "the page by name after it": [94, 0],
-      "a page by title": [104, 0],
-      "the page by title after it": [94, 0],
-      "a page by access, the most open first": [103, 0],
+      "a page by name": [33, 0],
+      "the page by name after it": [34, 0],
+      "a page by title": [33, 0],
+      "the page by title after it": [34, 0],
+      "a page by access, the most open first": [32, 0],
       "a page of the sites that never expire": [32, 0],
       "a page of the trash": [1, 0],
     });
@@ -657,9 +659,9 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     await runSweep(install, latest, running);
 
     expect([first, idle, rows, website.asked]).toEqual([
-      { read: 20, written: 1 },
-      { read: 18, written: 0 },
-      { read: 18, written: 0 },
+      { read: 27, written: 1 },
+      { read: 25, written: 0 },
+      { read: 25, written: 0 },
       1,
     ]);
   });
@@ -681,7 +683,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     rows.written = 0;
     await install.database.sweepRunOut(NOW);
 
-    expect([full, rows, await install.database.countAudit({ most: 1000 }), (await install.database.listTokenStates(NOW, 50)).ended]).toEqual([{ read: 709, written: 125 }, { read: 15, written: 0 }, { count: 1, whole: true }, []]);
+    expect([full, rows, await install.database.countAudit({ most: 1000 }), (await install.database.listTokenStates(NOW, 50)).ended]).toEqual([{ read: 716, written: 125 }, { read: 22, written: 0 }, { count: 1, whole: true }, []]);
   });
 });
 
@@ -790,7 +792,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("storedBack: addUpload, importUploadAsSite, abandonUpload, removeUpload", () => storedBack(database, removed.site));
     await database.trashSite(fourth.id, BY_ADA);
     await database.deleteSite(fourth.id, BY_ADA);
-    await cost("forgetLeftover", () => database.forgetLeftover(fourth.folder));
+    await cost("forgetLeftovers", () => database.forgetLeftovers([fourth.folder]));
 
     const begun = await cost("addUpload, a new site", () => begunSite(database, site(SITES + 3)));
     await cost("getUpload", () => database.getUpload(begun.id));
@@ -846,6 +848,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     // Fifty ids, the most one read takes: the sites there are, and ids no site has.
     const fifty = [...sites.map((made) => made.id), ...Array.from({ length: 50 - SITES }, (_none, at) => `none${String(at).padStart(8, "0")}` as SiteId)];
     await cost("readDailyViews, a year, fifty sites", () => database.readDailyViews(fifty, DAY, 365));
+    await cost("readWeeklyViews, a year, fifty sites", () => database.readWeeklyViews(fifty, DAY, 365));
 
     const page = await cost("listSites", () => database.listSites({ trash: false, limit: 5 }));
     await cost("listShownSites, with the views and the publishers", () => database.listShownSites({ trash: false, limit: 5 }, { day: DAY, publishers: true }));

@@ -34,10 +34,10 @@ import {
 } from "./support/install";
 import { OWN_KEY, ownRelease } from "./support/own-release";
 
-/** This repository's own guard against a library pulled in whole: Cloudflare takes a Worker of up to 64 MiB as it is, on every plan. The bundle is about 1,812,000 bytes, the dashboard's built client in it as strings. */
+/** This repository's own guard against a library pulled in whole: Cloudflare takes a Worker of up to 64 MiB as it is, on every plan. The bundle is about 2,118,000 bytes, the dashboard's built client in it as strings. */
 const MOST_BUNDLE_BYTES = 3_000_000;
 
-/** This repository's own guard on the gzipped bundle: Cloudflare sets no limit on that size. The bundle is about 630,000 bytes then. */
+/** This repository's own guard on the gzipped bundle: Cloudflare sets no limit on that size. The bundle is about 742,000 bytes then. */
 const MOST_BUNDLE_GZIP_BYTES = 800_000;
 
 /** A path that starts at the root of a disk, or an address: it would name the machine a map was built on. */
@@ -1361,43 +1361,45 @@ describe("the rows the live checks count", () => {
     expect({ pairs, stopped: meter.stopped() }).toEqual({
       pairs: {
         // A new site that names no expiry is counted as if the install gave it one.
-        "a new site": [19, 20],
-        "a copy of a site, whole in one request": [21, 21],
+        "a new site": [22, 23],
+        "a copy of a site, whole in one request": [24, 24],
         // A copy that takes more requests is counted as whole at its first, which writes the upload alone.
-        "a copy of 113 files begun": [6, 21],
-        "that copy gone on with, and finished": [16, 16],
-        // The begin is counted as a copy made whole, 15 rows above what it wrote, and the job's round and its finish as 17, one above what they wrote.
-        "a copy of 113 files the install's job finishes: its begin, an ask, the job's round, and the ask that finds the site": [22, 38],
+        "a copy of 113 files begun": [6, 24],
+        "that copy gone on with, and finished": [19, 19],
+        // The begin is counted as a copy made whole, 18 rows above what it wrote, and the job's round and its finish as 20, one above what they wrote.
+        "a copy of 113 files the install's job finishes: its begin, an ask, the job's round, and the ask that finds the site": [25, 44],
         "a second version": [13, 13],
         "a fourth version, which drops the first": [17, 17],
         "a page opened": [2, 2],
         "a rollback": [2, 2],
-        "who may open it changed": [3, 3],
-        "a new name": [2, 2],
+        "who may open it changed": [4, 4],
+        // A name moves the site in the index of names and in the index of titles.
+        "a new name": [4, 4],
         "to the trash": [6, 6],
         // A site out of the trash is counted with the entry one that runs out gets back.
-        "out of the trash": [5, 6],
-        "a new link": [9, 9],
+        "out of the trash": [8, 9],
+        "a new link": [12, 12],
         "the files of a version listed": [1, 1],
         "removed for good, with three versions, an earlier id, and a day's count": [13, 13],
-        "put back from a backup, with three versions": [23, 23],
+        "put back from a backup, with three versions": [26, 26],
         // An upload that is given up was counted with the finish it never had.
-        "an upload begun, asked what it lacks, and given up": [9, 24],
+        "an upload begun, asked what it lacks, and given up": [9, 27],
         // Four rows more are written where the logins change after a check of the domain and Cloudflare refuses them: the mark that they changed, the mark of the try, the mark set anew, and the problem noted.
         "a setting changed": [2, 6],
         "a fourth version, which drops two once the install keeps two": [19, 19],
-        "a new site that runs out": [20, 20],
-        "who may open it and its title changed at once": [5, 5],
+        "a new site that runs out": [23, 23],
+        "who may open it and its title changed at once": [7, 7],
         "another expiry": [3, 3],
         "no expiry, and one again": [5, 5],
         "a site that runs out to the trash": [6, 6],
-        "a site that runs out, out of the trash": [6, 6],
-        "a new link of a site that runs out": [9, 9],
+        "a site that runs out, out of the trash": [9, 9],
+        "a new link of a site that runs out": [12, 12],
         // A removal for good is counted with the three versions an install keeps: this site has one.
         "a site that runs out removed for good": [9, 13],
-        "a site that runs out put back from a backup": [20, 20],
-        "a new version that asks who may open the site and a title": [18, 18],
-        "a new site that takes the install's own expiry": [20, 20],
+        "a site that runs out put back from a backup": [23, 23],
+        // The title is counted as one a change gives a site: a publish that gives it writes the site once for all it asks.
+        "a new version that asks who may open the site and a title": [19, 20],
+        "a new site that takes the install's own expiry": [23, 23],
         "a computer's login begun": [3, 3],
         // The wait for a run's new deployment sends this request alone, so it writes no row however long it waits.
         "who a token is, as the wait for a new deployment asks": [0, 0],

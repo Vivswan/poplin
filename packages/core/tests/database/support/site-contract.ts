@@ -475,18 +475,17 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
 
       const expired = [await database.listDueSites({ expiredBy: NOW + 10 }, 10), await database.listDueSites({ expiredBy: NOW + 10 }, 1), await database.listDueSites({ expiredBy: NOW + 4 }, 10)];
       await database.changeDetails(early.id, { expires: NOW + 30 }, BY_ADA);
-      const moved = [];
-      for (const site of [early, late, late, never, later, sat]) moved.push((await database.trashExpiredSite(site.id, sweeper)).kind);
-      moved.push((await database.trashExpiredSite(NO_SITE, sweeper)).kind);
+      const moved = [await database.trashExpiredSites([early.id, late.id, late.id, never.id, later.id, sat.id, NO_SITE], sweeper), await database.trashExpiredSites([], sweeper)];
       const satOut = [await database.listDueSites({ trashedBy: NOW + 10 }, 10), await database.listDueSites({ trashedBy: NOW }, 10)];
       await database.restoreSite(late.id, { as: "token", by: ADA, at: NOW + 11 });
-      const removed = [];
-      for (const site of [late, fresh, never, sat, sat]) removed.push((await database.deleteSatOutSite(site.id, sweeper, NOW + 10)).kind);
+      const removed = [await database.deleteSatOutSites([late.id, fresh.id, never.id, sat.id, sat.id], sweeper, NOW + 10), await database.deleteSatOutSites([], sweeper, NOW + 10)];
 
       expect(expired).toEqual([[early.id, late.id], [early.id], []]);
-      expect(moved).toEqual(["not_due", "done", "not_due", "not_due", "not_due", "not_due", "not_due"]);
+      expect(moved).toEqual([1, 0]);
       expect(satOut).toEqual([[sat.id, late.id], []]);
-      expect(removed).toEqual(["not_due", "not_due", "not_due", "done", "not_due"]);
+      expect<unknown>(removed.map((gone) => gone.map((site) => [site.name, site.state]))).toEqual([[["sat", "trash"]], []]);
+      await expect(database.trashExpiredSites(Array.from({ length: 101 }, () => NO_SITE), sweeper)).rejects.toThrow(RangeError);
+      await expect(database.deleteSatOutSites(Array.from({ length: 101 }, () => NO_SITE), sweeper, NOW)).rejects.toThrow(RangeError);
       expect<unknown>((await everySite(database)).map((site) => [site.name, site.state]).sort()).toEqual([["early", "live"], ["fresh", "trash"], ["late", "live"], ["later", "live"], ["never", "live"]]);
       expect<unknown>((await auditTrail(database)).filter((entry) => entry.by === BO).map((entry) => [entry.action, entry.site?.name])).toEqual([["trash", "late"], ["delete", "sat"]]);
       await expect(database.listDueSites({ expiredBy: NOW }, 101)).rejects.toThrow(RangeError);
@@ -535,8 +534,9 @@ export function sites(label: string, makeDatabase: DatabaseFactory): void {
       if (back === undefined || second === undefined) throw new Error("the fixture sites are not there");
 
       await storedBack(database, back);
-      await database.forgetLeftover(second);
-      await database.forgetLeftover(second);
+      await database.forgetLeftovers([second, second]);
+      await database.forgetLeftovers([second]);
+      await database.forgetLeftovers([]);
 
       expect([before, pages]).toEqual([{ folders: [] }, [{ folders: [first, second], next: second }, { folders: [third] }]] as never);
       expect(await database.listLeftovers({ limit: 10 })).toEqual({ folders: [third] } as never);

@@ -43,6 +43,9 @@ export const sites = sqliteTable(
     check("sites_next_is_above_live", sql`${table.next_version} > ${table.live_version}`),
     index("sites_by_change").on(table.trashed, sql`${table.updated_at} DESC`, sql`${table.id} DESC`),
     index("sites_by_owner").on(table.owner, table.trashed, sql`${table.updated_at} DESC`, sql`${table.id} DESC`),
+    index("sites_by_name").on(table.name, table.id).where(sql`trashed_at IS NULL`),
+    index("sites_by_title").on(table.title_key, table.id).where(sql`trashed_at IS NULL`),
+    index("sites_by_access").on(table.access_rank, table.id).where(sql`trashed_at IS NULL`),
     index("sites_by_expiry").on(table.expires_at, table.id).where(sql`expires_at IS NOT NULL AND trashed_at IS NULL`),
     index("sites_by_trashing").on(table.trashed_at, table.id).where(sql`trashed_at IS NOT NULL`),
   ],
@@ -196,6 +199,23 @@ export const requestCounts = sqliteTable(
     check("request_counts_views", sql`${table.views} >= 0 AND ${table.views} <= ${table.requests}`),
     check("request_counts_rows_read", sql`${table.rows_read} >= 0`),
     check("request_counts_rows_written", sql`${table.rows_written} >= 0`),
+  ],
+);
+
+/** What the sweep summed of a site's page views, once a day is over: one row per site and UTC day that counted a view, with the views of the day and of every day before it, so a stretch of days is the difference of two rows. */
+export const viewSums = sqliteTable(
+  "view_sums",
+  {
+    site: text().notNull(),
+    day: text().notNull(),
+    views: integer().notNull(),
+    earlier: integer().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.site, table.day] }),
+    check("view_sums_day", sql`${table.day} GLOB ${sql.raw(`'${DAY_FORM}'`)}`),
+    check("view_sums_views", sql`${table.views} >= 0`),
+    check("view_sums_earlier", sql`${table.earlier} >= 0`),
   ],
 );
 
