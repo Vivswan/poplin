@@ -41,7 +41,9 @@ function drawn(fitsOne: boolean, places: readonly (string | null | { readonly se
   const done: Done = { asked: [], saved: [] };
   const answers = [...places];
   HTMLAnchorElement.prototype.click = function click(this: HTMLAnchorElement): void {
-    done.saved.push(this.getAttribute("href") ?? "");
+    // A link is written with its origin: one of the page's own is noted from its path on, as the menu wrote it.
+    const { origin } = window.location;
+    done.saved.push(this.href.startsWith(`${origin}/`) ? this.href.slice(origin.length) : this.href);
   };
   globalThis.fetch = (async (input: Request | string | URL) => {
     const { pathname, search } = new URL(input instanceof Request ? input.url : input, window.location.href);
@@ -97,6 +99,24 @@ describe("the Download menu", () => {
     expect(done).toEqual({ asked: [], saved: [`${BOOT.base}/data/activity/download?format=${format}&kind=sites`] });
   });
 
+  // Drift: a start value that names another place would have the browser press a link to it, or run a script, under the name of a download.
+  test.each([
+    ["another origin", "https://elsewhere.example.com"],
+    ["a script", "javascript:alert(1)//"],
+    ["a thing held in the page under the dashboard's origin", "blob:https://poplin.example.com/"],
+  ])("presses no link whose address is %s and not the dashboard's own", async (_what, base) => {
+    const own = BOOT.base;
+    Object.assign(BOOT, { base });
+    try {
+      const done = drawn(true);
+      await choose("CSV");
+
+      expect(done.saved).toEqual([]);
+    } finally {
+      Object.assign(BOOT, { base: own });
+    }
+  });
+
   // Drift: a long log could be saved only as its newest part: the next file would start over, repeat the first, lose the format, or two files would be saved under one name.
   // A filtered file may end sooner, so the screen must not say 2,000; a first file read from another place than its end was counted from would leave an entry out between two files.
   test.each([
@@ -120,7 +140,7 @@ describe("the Download menu", () => {
       2,
       0,
       {
-        asked: [`/data/activity/download/next${kept.replace("&", "?")}`, `/data/activity/download/next?${kept.slice(1)}${kept === "" ? "" : "&"}after=150`],
+        asked: [`/data/activity/download/next${kept === "" ? "" : `?${kept.slice(1)}`}`, `/data/activity/download/next?${kept.slice(1)}${kept === "" ? "" : "&"}after=150`],
         saved: [`${BOOT.base}/data/activity/download?format=csv${kept}&after=900&part=1`, `${BOOT.base}/data/activity/download?format=csv${kept}&after=150&part=2`],
       },
     ]);
