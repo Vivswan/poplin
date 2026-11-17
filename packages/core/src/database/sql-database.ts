@@ -117,11 +117,16 @@ import {
   tokenById,
   tokenNames,
   USER_TOKENS,
+  auditOfSettings,
   endSignerLeftOut,
   endTokensOfDropped,
   endTokensOfRemoved,
+  isStoredLogin,
   isUser,
+  settingsAndSigner,
+  signerGone,
   signerStands,
+  updatePairKept,
   userBehind,
   userTokenCounts,
   worksAt,
@@ -243,45 +248,6 @@ function auditWithUpload(signed: Signed, action: AuditAction, upload: UploadId, 
 /** The audit entry of a change to no site, written only when the statement before it changed a row. */
 function auditPlain(signed: Pick<Signed, "by" | "at">, action: AuditAction, detail: Readonly<Record<string, unknown>>): Statement {
   return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, ${action}, ${JSON.stringify(detail)} WHERE ${CHANGED}`);
-}
-
-/** Whether an email is one of the stored logins, for a statement on the settings row. */
-function isStoredLogin(email: string): SQL {
-  return fragment`EXISTS (SELECT 1 FROM json_each(${settings.value}, '$.logins') AS j WHERE j.value = ${email})`;
-}
-
-/** The settings, and whether who signs a change of them still stands. */
-function settingsAndSigner(signed: Signed): Statement {
-  return built(BUILD.select({ value: settings.value, stands: fragment<number>`${signerStands(signed)}`.as("stands") }).from(settings).where(eq(settings.id, 1)));
-}
-
-/** Whether the settings a change comes to keep `auto_update` on only beside `update_check`. It reads the stored settings by itself, so a statement on any table can wait on it. */
-function updatePairKept(patched: SQL): SQL {
-  const alone = fragment`json_extract(${patched}, '$.auto_update') = 1 AND json_extract(${patched}, '$.update_check') = 0`;
-
-  return fragment`EXISTS (SELECT 1 FROM ${settings} WHERE ${settings.id} = 1 AND NOT (${alone}))`;
-}
-
-/** Whether the read of `settingsAndSigner` found a signer who no longer stands. */
-function signerGone(read: StatementResult | undefined): boolean {
-  return read?.rows[0]?.stands !== 1;
-}
-
-/** The logins of one list that another does not hold, as a JSON array. Each list is a `json_each` of an array, which the engine walks in the array's order. */
-function loginsApart(held: SQL, missing: SQL): SQL {
-  return fragment`(SELECT json_group_array(one.value) FROM ${held} AS one WHERE one.value NOT IN (SELECT value FROM ${missing}))`;
-}
-
-/**
- * The audit entry of a change of the settings, with the values it sets. New logins are held with who they add and who they leave out, as `added` and `removed`.
- * It goes before the change in a batch, under the change's own condition: it reads the logins still stored.
- */
-function auditOfSettings(signed: Signed, changes: Partial<SettingValues>, lands: SQL | undefined): Statement {
-  const [stored, given] = [fragment`json_each(${settings.value}, '$.logins')`, fragment`json_each(${JSON.stringify(changes.logins ?? [])})`];
-  const users = fragment`json_set(${JSON.stringify(changes)}, '$.added', json(${loginsApart(given, stored)}), '$.removed', json(${loginsApart(stored, given)}))`;
-  const detail = changes.logins === undefined ? fragment`${JSON.stringify(changes)}` : users;
-
-  return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, 'settings_changed', ${detail} FROM ${settings} WHERE ${lands}`);
 }
 
 /** More requests on a day for a site, some of them page views, with the rows the database used, and the count of requests after them. */
