@@ -30,7 +30,7 @@ the token   goes from Cloudflare's page into the command's question, and never i
 | 3c   | the account token                                                   | you, in your browser; the agent gives you the link, and says what to choose  |
 | 3d   | a dry run: what the install would make, and what blocks it          | you run the agent's line, and paste back what it prints: [the table below](#you-run-steps-3d-and-3e) |
 | 3e   | the install: `npx poplin install cloudflare`, with your two answers | you, the same way; then you press Enter at `Log this machine in now?`        |
-| 4    | the login of this machine                                          | you, at the end of step 3e. With an install that was there: the agent runs `npx poplin login`, and you allow it in your browser |
+| 4    | the login of this machine                                          | you, at the end of step 3e. With an install that was there: the agent runs `npx poplin login`, and you approve it in your browser |
 | 5    | poplin's tools are added to the agent's configuration               | the agent; it may ask you to restart it, so that the tools show              |
 | 6    | a last check                                                        | the agent names your install                                                 |
 

@@ -239,7 +239,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | the login of a private site | Cloudflare Access's cookie, HttpOnly and SameSite Lax, one per site hostname, 30 days |
 | a removed user  | the Worker checks the email against the allowed users on every request: the dashboard stops at once, a private site within one minute, whatever session Access still holds  |
 | writes to the dashboard | a write is refused when its `Origin` or `Sec-Fetch-Site` header names any page but the dashboard's own, a site of the same install included, and when it is not JSON; the CLI and `poplin mcp` use bearer tokens, never the cookie |
-| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token runs out after 30 days, a publisher token lives until it is removed. Every token ends when the user who allowed it is removed |
+| tokens at rest | a token itself is never stored: the database keeps its SHA-256 hash. An admin token expires after 30 days, a publisher token lives until it is revoked. Every token ends when the user who approved it is removed |
 | a token that ended | a revoked token never logs in again, and its row is removed once it ended more than 90 days ago, a few rows at a time; [Revoked tokens](../dashboard/access.md#tokens) lists the 50 that ended last in that time |
 | every login at once | Sign everyone out, under Access, asks Cloudflare with the kept key to end every login of the dashboard and of private sites: each browser meets the login again at its next request, a few seconds on. A machine's token is untouched, and is revoked on its own |
 | the stored key | kept in the database; the limits per visitor are made from it |

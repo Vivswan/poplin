@@ -11,7 +11,7 @@ Poplin publishes a static site (a folder, or one HTML file) to an install: the u
 | 1    | Say what is about to happen, and ask                  | you                                                 |
 | 2    | Check what exists: Node.js, a stored login, an install | you                                                 |
 | 3    | Make the install, when there is none                  | the user: in a browser, then two lines of one command in a terminal of their own: the dry run, and the run. You run both in a script alone |
-| 4    | Log this machine in, when no login is stored          | you run it, or the user at the end of step 3; the user allows it in a browser |
+| 4    | Log this machine in, when no login is stored          | you run it, or the user at the end of step 3; the user approves it in a browser |
 | 5    | Add the MCP server to your own configuration          | you                                                 |
 | 6    | Confirm that it works, and tell the user              | you                                                 |
 

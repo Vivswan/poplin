@@ -52,7 +52,7 @@ https://report--k3f9x2ab71qz-p-poplin.example.com
 - **A file that changed after it was read, sent straight to the bucket,** is not stored there. The publish asks for it up to 3 times, then is given up as `missing_files`, and no site changes.
 - **A file the install fails on,** or gives no answer to, is sent up to 4 times, with a pause of seconds before each new try. After the fourth the publish is given up.
 - **A connection cut before any answer** has its request sent once more, at once, when the request is a read or the first step of a publish or an import. It is told in a plain line on stderr: `Connection closed before a response: resending the request`.
-- **A request that never left this computer,** the install's name not found or no connection opened, is tried once more after a second, whatever it asks: nothing of it was sent. It is told as `No connection to the install: retrying once in 1 s`. A second failure is `unreachable`. A file is sent again as every file the install gives no answer to is.
+- **A request that never left this machine,** the install's name not found or no connection opened, is tried once more after a second, whatever it asks: nothing of it was sent. It is told as `No connection to the install: retrying once in 1 s`. A second failure is `unreachable`. A file is sent again as every file the install gives no answer to is.
 - **Ctrl-C** stops a publish, an import, or a copy: the upload on its way is given up, so its site is not made or changed, and the command exits 1. A second Ctrl-C ends it at once.
 - **A file that is sent again is told,** as `Retrying index.html in 2 s, attempt 2 of 4`.
 

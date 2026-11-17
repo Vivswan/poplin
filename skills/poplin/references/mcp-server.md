@@ -38,7 +38,7 @@ The server then reads its login from a folder of its own, named by `POPLIN_CONFI
 
 Write the full path of the folder: the one above is an example. An agent added by a command sets the same variable the way its own documentation says.
 
-Then log in once with the same variable set, and a name for yourself. The user allows it in their browser, as in step 4 of [`setup.md`](setup.md):
+Then log in once with the same variable set, and a name for yourself. The user approves it in their browser, as in step 4 of [`setup.md`](setup.md):
 
 ```sh
 export POPLIN_CONFIG_DIR="/home/user/.config/poplin-agent"
@@ -54,4 +54,4 @@ In PowerShell the first line is `$env:POPLIN_CONFIG_DIR = "C:\Users\user\poplin-
 | each change you make shows that name           | the dashboard's Activity screen, until the login is removed: then its id |
 | the user can end it alone                      | Remove, in the menu of its row under Tokens; their own login stays |
 
-The login is stored as a file in that folder, and it runs out after 30 days, like the user's own. A command you run outside the server uses the machine's stored login, unless the variable is set for it too.
+The login is stored as a file in that folder, and it expires after 30 days, like the user's own. A command you run outside the server uses the machine's stored login, unless the variable is set for it too.

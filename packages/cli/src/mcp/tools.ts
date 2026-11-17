@@ -33,7 +33,7 @@ const SITE = "Its label, e.g. report--k3f9x2ab71qz. Also taken: its bare id, its
 /** What `publish_site` and `update_site` say of each setting. */
 const SETTINGS = {
   name: "A new name, e.g. q3-report. Renaming never breaks a link.",
-  access: "private: only the owner. unlisted: anyone with the URL. public: everyone. E.g. unlisted.",
+  access: "private: the install's users, after login. unlisted: anyone with the URL. public: everyone. E.g. unlisted.",
   public_name: "With access public: the public URL's name, e.g. docs. Left out: kept, or the site's name.",
   title: "Its title on the dashboard, e.g. Q3 sales. null: the page's own title.",
   search_engines: "true: search engines may list it once it is public.",

@@ -28,7 +28,7 @@ Paste this line into an agent, such as Claude Code or Codex. A chat in a browser
 
 | An agent here is | What that means for you                                             |
 | ---------------- | ------------------------------------------------------------------- |
-| an AI tool       | it runs in a terminal on your own computer, and runs commands there |
+| an AI tool       | it runs in a terminal on your own machine, and runs commands there  |
 | a separate tool  | you install it yourself, and it may cost money                      |
 | not in poplin    | poplin brings none. Without one, you publish with a command         |
 
@@ -38,7 +38,7 @@ Look at https://github.com/Vivswan/poplin, read its skill, and help me set up po
 
 The agent sets poplin up with you: it asks for a domain or none and for your email, tells you what to choose in your browser, and gives you two lines to run in a terminal of your own: a dry run, then the install. You paste back what each prints, and the agent never sees your account token.
 
-It acts as you, with the login the setup saves on your computer.
+It acts as you, with the login the setup saves on your machine.
 
 | You have       | The agent                                                                         |
 | -------------- | --------------------------------------------------------------------------------- |
@@ -89,7 +89,7 @@ Have ready a Cloudflare account with a payment method on it, and Node.js 24. An 
 ## Use it from the command line
 
 ```sh
-npx poplin login --server https://poplin.example.com              # once on each computer
+npx poplin login --server https://poplin.example.com              # once on each machine
 npx poplin ./report                                               # a new site, private
 npx poplin ./report --site report--k3f9x2ab71qz                   # the same site, new content
 npx poplin set report--k3f9x2ab71qz --unlisted                    # anyone who has the link
