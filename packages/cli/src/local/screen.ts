@@ -122,6 +122,18 @@ function folded(line: string, width: number, hang: number | undefined): string[]
 }
 
 /**
+ * Fold a text of many lines as a terminal of the widest width shows it: each line at its spaces, its later rows under its own indent.
+ *
+ * @returns the text, in which only a word wider than the line, such as an address, is wider than it
+ */
+export function foldedText(text: string): string {
+  return text
+    .split("\n")
+    .flatMap((line) => folded(line, MAX_WIDTH, undefined))
+    .join("\n");
+}
+
+/**
  * Whether a stream shows colour, marks, and the spinner: a terminal does, unless `NO_COLOR` or `CI` is set or the terminal takes no control sequence.
  *
  * @param terminal - whether the stream is a terminal

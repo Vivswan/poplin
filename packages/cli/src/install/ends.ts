@@ -10,7 +10,7 @@ import type { Io } from "../commands/records";
 import { guardedScreen, written } from "../commands/util";
 import { pasted, runnerOf } from "../local/invoked";
 import { loadProviders } from "../local/providers";
-import type { Tone } from "../local/screen";
+import { foldedText, type Tone } from "../local/screen";
 import { VERSION } from "../poplin";
 import { STOPPED, TOKEN_VARIABLE } from "./ask";
 import type { Careful, InstallEnds, Next, Parsed, Provider, Stop } from "./records";
@@ -138,7 +138,7 @@ export function stopped(stop: Stop, show: Show, at: StoppedAt): number {
 /** The list of providers, for a line that names none where nobody can be asked. */
 function list<Planned>(command: CommandRun<Planned>, providers: readonly Provider[], json: boolean, io: Io): number {
   if (json) io.out(JSON.stringify({ ok: true, providers: providers.map((one) => ({ id: one.id, name: one.name, about: one.about })) }));
-  else io.out(pasted(command.help(providers), runnerOf(io.machine.env)));
+  else io.out(foldedText(pasted(command.help(providers), runnerOf(io.machine.env))));
 
   return exitCode({ kind: "done" });
 }
@@ -165,7 +165,7 @@ async function answered<Planned>(line: Line<Planned>, parsed: Parsed<Planned>, p
   const { command } = line;
   const { name } = command;
   if (parsed.kind === "help" || parsed.kind === "version") {
-    io.out(parsed.kind === "help" ? pasted(command.help(providers, parsed.provider), runnerOf(io.machine.env)) : VERSION);
+    io.out(parsed.kind === "help" ? foldedText(pasted(command.help(providers, parsed.provider), runnerOf(io.machine.env))) : VERSION);
 
     return exitCode({ kind: "done" });
   }

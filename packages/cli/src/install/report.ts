@@ -3,6 +3,8 @@
 //   a dry run    would make   <object>   <detail>
 //   a run        made         <object>   <detail>
 
+import { Help } from "commander";
+
 import type { Login } from "../../../core/src/auth/logins";
 import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run } from "../../../core/src/install/installer";
 import type { TokenFacts } from "../../../core/src/install/token-facts";
@@ -38,6 +40,9 @@ const COUNTED: readonly (readonly [RowState, string])[] = [
   ["remove", "remove"],
   ["leave-out", "leave out"],
 ];
+
+/** Commander's own layout of a help text, at the width every help of poplin has. */
+const HELP = Object.assign(new Help(), { helpWidth: 80 });
 
 /** What a line that stands under another starts with. */
 const INDENT = "  ";
@@ -228,9 +233,16 @@ function ownerLines(provider: Provider, version: string | undefined, newest: str
   return columns(rows).map((line) => `${INDENT}${line}`);
 }
 
-/** The rows of some options in a help text: each as it is typed, what it means, and the variable that answers the same. */
+/**
+ * The rows of some options in a help text: each as it is typed, what it means, and the variable that answers the same.
+ *
+ * @returns one text per option, laid out by commander: a meaning wider than the line goes on under itself
+ */
 export function optionLines(rows: readonly OptionRow[]): string[] {
-  return columns(rows.map((row) => [row.value === null ? row.flag : `${row.flag} ${row.value}`, row.about, row.variable === null ? "" : `(${row.variable})`])).map((line) => `${INDENT}${line}`);
+  const terms = rows.map((row) => (row.value === null ? row.flag : `${row.flag} ${row.value}`));
+  const width = Math.max(...terms.map((term) => term.length));
+
+  return rows.map((row, at) => HELP.formatItem(terms[at] ?? "", width, row.variable === null ? row.about : `${row.about}  (${row.variable})`, HELP));
 }
 
 /**

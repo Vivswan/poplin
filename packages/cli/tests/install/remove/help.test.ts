@@ -10,8 +10,8 @@ const PROVIDER = standIn(emptyAccount()) as Installer<unknown, unknown>;
 /** The help of the command itself, with the one provider listed. */
 const COMMAND_HELP = `poplin uninstall <provider> [options]
 
-Remove your install from a provider: every object that carries poplin's names and
-marks, and nothing else. The sites' files and the database go last.
+Remove your install from a provider: every object that carries poplin's names
+and marks, and nothing else. The sites' files and the database go last.
 
 Providers:
   stand-in  Stand-In Host: under your own place, or without one
@@ -21,7 +21,8 @@ Options:
   --confirm <address>  the install's address, as proof; asked for when left out
   --keep-data          leave the sites' files and the database
   --yes                ask nothing; a missing answer stops the run and is named
-  --token-stdin        read the account token from standard input, and ask nothing
+  --token-stdin        read the account token from standard input, and ask
+                       nothing
   --json               print one JSON value, and nothing else on stdout
 
 A run lists what it would remove, then asks you to type the install's address.
@@ -36,17 +37,19 @@ and stored nowhere.
 
 It logs no computer out: run poplin logout on each one first.
 
-  poplin uninstall stand-in --help  its own options, and what the account token needs`;
+  poplin uninstall stand-in --help  its own options, and what the token needs`;
 
 /** The help of the made-up provider, made from what it declares. */
 const PROVIDER_HELP = `poplin uninstall stand-in (--place <name> | --no-place) [options]
 
-Remove your install from Stand-In Host. Its own options say where the install is.
+Remove your install from Stand-In Host. Its own options say where the install
+is.
 
 Options of Stand-In Host:
-  --place <name>  under your own place: example.com                (POPLIN_PLACE)
-  --no-place      at the address the host gives the account        (POPLIN_PLACE=none)
-  --account <id>  the account, when the token shows more than one  (POPLIN_ACCOUNT)
+  --place <name>  under your own place: example.com  (POPLIN_PLACE)
+  --no-place      at the address the host gives the account  (POPLIN_PLACE=none)
+  --account <id>  the account, when the token shows more than one
+                  (POPLIN_ACCOUNT)
 
 The account token needs:
   with a place   two permissions: Places: Read, Programs: Edit

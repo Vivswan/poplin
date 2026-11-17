@@ -5,6 +5,7 @@ import type { AddressLayout } from "../../../core/src/sites/address-layout";
 import { type Client, createClient } from "../client/client";
 import { currentLogin, TOKEN_VARIABLES } from "../local/current-login";
 import { pasted, runnerOf } from "../local/invoked";
+import { foldedText } from "../local/screen";
 import { isServer } from "../local/login";
 import type { Host } from "../mcp/records";
 import { type Pipes, serveOnPipes } from "../mcp/stdio";
@@ -312,7 +313,7 @@ export async function run(
 
   if (parsed.kind === "help") {
     const put = parsed.asked ? io.out : (text: string): void => io.screen.aside("plain", text);
-    put(pasted(helpText(parsed.topic), runnerOf(io.machine.env)));
+    put(foldedText(pasted(helpText(parsed.topic), runnerOf(io.machine.env))));
 
     return exitCode(parsed);
   }
