@@ -58,8 +58,12 @@ type Narrowing = ReturnType<typeof narrowingOf>;
 
 /** Have the browser save what an address answers: a plain link, pressed. The answer says it is a file to save, so the page stays; the link itself does not, since a browser asks no service worker for a link marked as a download. */
 function saveFrom(address: string): void {
+  // Only an address of the dashboard's own origin, asked for the way the page was, is pressed.
+  const own = new URL(address, window.location.origin);
+  if (own.origin !== window.location.origin || own.protocol !== window.location.protocol) return;
+
   const link = document.createElement("a");
-  link.href = address;
+  link.href = own.href;
   link.click();
 }
 
