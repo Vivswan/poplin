@@ -106,3 +106,7 @@ In your own Cloudflare account, on the Free plan. Cloudflare asks for a payment 
 | [Start](docs/start/README.md)             | getting your own install, under a domain or without  |
 | [Security](docs/about/security.md)        | what poplin protects against and what it does not    |
 | [Remove](docs/upkeep/remove.md)              | taking an install down, with one command or by hand  |
+
+## License
+
+[Individual and Small Organization License 1.1.0](LICENSE.md). Its summary table says who may use poplin, and how.
