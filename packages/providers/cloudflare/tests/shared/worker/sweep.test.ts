@@ -10,6 +10,7 @@ import { OWN_SCHEMA } from "@poplin/core/src/database/open";
 import { dayOf } from "@poplin/core/src/records/views";
 import { sha256Of } from "@poplin/core/src/storage/storage";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import manifest from "../../../../../cli/package.json?raw";
 import { INSTALL_OBJECTS } from "../../../src/shared/install/install-objects";
 import { BUDGET_ALERT } from "../../../src/shared/install/pieces/alerts/budget-alert";
 import { CERTIFICATE_ALERT } from "../../../src/with-domain/pieces/alerts/certificate-alert";
@@ -37,6 +38,9 @@ const MOST_REPAIR_CALLS = 29;
 
 /** The names of the two alerts an install with a domain keeps, in the order they are kept. */
 const ALERTS = [BUDGET_ALERT.name, CERTIFICATE_ALERT.name];
+
+/** The version the Worker under test runs: the one the released package's manifest states, which a release moves. */
+const OWN_VERSION = (JSON.parse(manifest) as { version: string }).version;
 
 /** The one file of a site made only to be swept. */
 const HTML = new TextEncoder().encode("<p>short-lived</p>");
@@ -439,7 +443,7 @@ describe("the scheduled run", () => {
 
     expect([early, taking - dayAfter]).toEqual([0, 4]);
     expect(release.uploads).toEqual([release.upload]);
-    expect(started).toEqual([{ by: "sweep@poplin.invalid", detail: { from: "0.0.0", to: "999.0.0", automatic: true } }]);
+    expect(started).toEqual([{ by: "sweep@poplin.invalid", detail: { from: OWN_VERSION, to: "999.0.0", automatic: true } }]);
     expect(await problemsOf(w)).toEqual([]);
   });
 
