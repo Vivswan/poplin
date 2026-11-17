@@ -1,12 +1,14 @@
 # The live upgrade of the two test installs: a real install of the last release, on each test account, takes the release
 # as it would merge as an update and must answer as before (packages/providers/cloudflare/live/README.md, "The upgrade").
+# Each install is then put back to what main's own run leaves: the upgrade removes the sample sites and the demo, and leaves a schema step main does not have.
 #
 #   the pull request of a release -> live-upgrade.yml, once for each kind of install
-#   every other pull request      -> both jobs skip
+#                                 -> live-install.yml with `put_back_only`, whatever the upgrade came to: main's build, the sample sites, the demo
+#   every other pull request      -> every job skips
 #
 # It is its own workflow, started by the event, and not a job of release-gate.yml: a called workflow is handed only the
 # secrets its caller passes, and the caller of the release gate passes none, so a job under the gate reads an empty value.
-# Each upgrade waits in the lane of its kind's live checks (live-upgrade.yml), and no newer run stops one that started.
+# Each upgrade and each put-back waits in the lane of its kind's live checks (live-upgrade.yml, live-install.yml), and no newer run stops one that started.
 
 name: Release Live Upgrade
 
@@ -39,6 +41,44 @@ jobs:
     with:
       kind: account address
       environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # After the upgrade, failed or not. A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
+  put-back-domain:
+    name: put back (domain)
+    needs: [domain]
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
+    # The called job asks for the right to read a commit's run of CI, which its wait on a push uses.
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+      put_back_only: true
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # After the upgrade, failed or not. A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
+  put-back-account-address:
+    name: put back (account address)
+    needs: [account-address]
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
+    # The called job asks for the right to read a commit's run of CI, which its wait on a push uses.
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: account address
+      environment: without-domain-ci-tests
+      put_back_only: true
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

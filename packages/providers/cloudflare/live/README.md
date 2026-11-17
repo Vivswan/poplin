@@ -122,7 +122,7 @@ An install the older build made and filled takes the run's build as an update, a
 | Started by | The build the install is updated to | Then |
 | ---------- | ----------------------------------- | ---- |
 | hand: Actions, the workflow of the install, Run workflow on `main`, tick `upgrade` | the build of main | the job `checks`, whatever the upgrade came to |
-| the pull request of a release, once its checks are approved to run | the release as it would merge: the pull request's merge commit | nothing more: the next run of main's live checks, the midnight one among them, finds the later step, which its checkout does not have, and starts the install over |
+| the pull request of a release, once its checks are approved to run | the release as it would merge: the pull request's merge commit | the job `put back`, whatever the upgrade came to: [the put-back](#the-put-back-after-the-upgrade-of-a-release) |
 
 Both run the job `upgrade` of `.github/workflows/live-upgrade.yml`, in the lane of the kind's live checks, so an upgrade and a run of main never touch one install together.
 
@@ -195,12 +195,41 @@ of those, the later step                22 rows: 14 as it runs (5 for its mark, 
 beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
 a run with upgrade ticked               about 212 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,680 rows, on each account it runs on
                                         and the first schema of the install the checks start over, which no meter counts
-the pull request of a release           about 212 + 20 = about 232 rows, on each account, each time its checks run
+the pull request of a release           about 212 + 20 + 313 (the put-back) = about 545 rows, on each account, each time its checks run
 ```
 
-The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` once for each kind of install on the pull request of a release alone. Its two checks stand beside `all-green` on the pull request, and `all-green` does not wait for them: read both before merging a release.
+The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` once for each kind of install on the pull request of a release alone. Its checks stand beside `all-green` on the pull request, two of the upgrade and two of the put-back, and `all-green` does not wait for them: read all four before merging a release.
 
 It is no job of the release gate: GitHub hands a called workflow only the secrets its caller passes, and the gate's caller passes none.
+
+### The put-back after the upgrade of a release
+
+The upgrade removes the sample sites and the demo, and leaves a schema step main does not have. So the same workflow then puts each install back to what main's own run leaves.
+
+```text
+live upgrade (domain)           -> put back (domain) / checks
+live upgrade (account address)  -> put back (account address) / checks
+
+put back: main checked out and built -> the install made to match it -> no checks -> the samples and the demo put back
+```
+
+| Asked | Answer |
+| ----- | ------ |
+| which steps | the job `checks` of `live-install.yml`, called with `put_back_only`: the steps of main's run without the wait for a gate and without the checks |
+| which build | the branch the pull request would merge into, `main`, and not the release: the install is the one main's next run finds as its own |
+| what it does to the install | starts it over where it holds the later step, with `poplin uninstall` and `poplin install`; mends it where the upgrade stopped earlier |
+| after a failed upgrade | it runs all the same |
+| after a cancelled run | it does not run: main's next run puts the install back, the midnight one among them |
+| which lane | the one of the kind's live checks, after its upgrade |
+
+```text
+the reset on an install made anew   299 rows and 102 bucket writes and lists on the local fake, of at most 600 and 150
+the harness's own statements        about 14: two tokens in and out, and the caps
+a put-back                          about 313 rows, and the first schema of the install made anew, which no meter counts
+a put-back after an upgrade that stopped with its 3 sites on the install   338 rows by the reset: the 3 removed, 13 each
+```
+
+The reset's own ceilings hold it: 600 rows and 150 bucket writes and lists.
 
 | A run reaches a test account when | Held by |
 | --------------------------------- | ------- |
@@ -239,7 +268,7 @@ One install on the Cloudflare test account, called staging. It stays up between 
 | Runs        | the latest main that changed a file reaching it                                  |
 | Who gets in | the owner alone, behind the login; a stranger opens the public and unlisted sample sites |
 | Updated     | after a green main that changed such a file                                      |
-| Put back    | after every run of the checks, whatever they came to, and at 00:00 UTC every day |
+| Put back    | after every run of the checks, whatever they came to, at 00:00 UTC every day, and after the upgrade on the pull request of a release |
 
 | A reset removes                               | A reset leaves                                                                        |
 | --------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -279,8 +308,8 @@ The owner sets these. Each test account has its own environment, and the secrets
 
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
-| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` of `Release Live Upgrade` |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` of `Release Live Upgrade` |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `put back (domain)` of `Release Live Upgrade` |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `put back (account address)` of `Release Live Upgrade` |
 
 For each account:
 
@@ -483,6 +512,7 @@ the checks, as the harness counts them   959 on the local fake, a few more with 
 the midnight run's checks                1,062: the copy the install's job finishes, 103 more
 a reset that keeps every sample          41: the trashed sample, published and trashed anew while the suite's trash holds a site for one day
 a reset that keeps none                  about 430
+a reset on an install made anew          299: no site to remove
 the harness's own statements             18: three tokens in and out, and the caps
 the wait for the new deployment          0: it asks with the token of the caps, and its request writes no row
 a usual run                              about 1,018 counted; the sweep later drops each upload's row, 5 a publish, about 135 more
