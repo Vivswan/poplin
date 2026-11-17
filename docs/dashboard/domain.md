@@ -106,7 +106,7 @@ It has no DNS record, route, or rule, and its account token needs no permission 
 
 ```text
 $ poplin doctor
-ok  domain    The login for private sites is missing or changed, so private sites may be locked. Open Domain and press Repair.
+ok  domain    The login for private sites is missing or changed, so private sites may be locked. Run poplin doctor --repair.
 ```
 
 | Question          | Answer                                                                                                   |

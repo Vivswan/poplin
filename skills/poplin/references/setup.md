@@ -270,6 +270,7 @@ A run that stopped is looked up in the [install guide](https://github.com/Vivswa
 ```text
 poplin 0.1.0 is installed.
 Your dashboard: https://poplin.example.com
+The token was used for this run and is stored nowhere. You can delete it at Cloudflare.
 Log this computer in now?
 ```
 

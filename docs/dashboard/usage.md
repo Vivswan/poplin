@@ -19,6 +19,8 @@ Storage, all sites                         1.2 GB            9 GB         13%
 Account storage, last 24 hours             at most 5.1 MB    10 GB        0%
 Database size                              1.4 MB            500 MB       0%
 Account database size                      at most 2.3 MB    5 GB         0%
+Sites, the trash included                  12                No limit
+In the trash                               2                 No limit
 Files                                      156               No limit
 Account files stored                       at most 212       No limit
 Uploads left unfinished                    at most 3         No limit
@@ -26,7 +28,7 @@ Requests today                             1,240             100,000      1%
 Account requests today                     1,318             100,000      1%
 Account errors today                       4                 No limit
 Requests stopped by a limit today          0                 No limit
-Processing time, slowest 1 in 100, today   12.4 ms           10 ms        a warning sign
+Processing time, slowest 1 in 100, today   12.4 ms           10 ms        a warning sign, Slow
 Database rows read today                   13,902            5,000,000    0%
 Database rows written today                342               100,000      0%
 Storage writes since 01 Nov UTC            41,200            1,000,000    4%
@@ -40,6 +42,8 @@ without a key                              no line over the table
 
 Storage, all sites                         1.2 GB            9 GB         13%
 Database size                              1.4 MB            500 MB       0%
+Sites, the trash included                  12                No limit
+In the trash                               2                 No limit
 Files                                      156               No limit
 Requests today                             1,240             100,000      1%
 Database rows read today                   about 12,400      5,000,000    0%
@@ -51,6 +55,7 @@ Both kinds of install, with a domain and without one, show the same lines.
 | On the screen | With the key | Without a key |
 | --- | --- | --- |
 | Requests today; Storage, all sites; Files | this install's sites alone, the first two against the settings `requests_per_day` and `max_total_size` | the same |
+| Sites, the trash included; In the trash | this install's sites alone, the first against the setting `max_sites` | the same |
 | Database size | the bytes this install's D1 database holds, as D1 said with its last answer. No question to Cloudflare. 500 MB is the most one database holds on the free plan | the same |
 | Database rows read today, Database rows written today | Cloudflare's figure for every D1 database of the account on the UTC day | poplin's own count of the rows its database read and wrote on the UTC day, after `about` |
 | Account requests today | every request the account's Workers answered on the UTC day | no line |
@@ -70,7 +75,7 @@ Background jobs running now is the one exception: it counts this install's jobs 
 
 Cloudflare counts a month of storage writes and reads by the account's own billing period, which the kept key cannot read. The two lines count from the first day of the UTC month and name that day, so on an account whose period starts on another day they read high or low against the free amount.
 
-The processing time stands beside 10 ms, yet a request is not stopped the moment it passes that: Cloudflare stops one only when it says so, and counts it under Requests stopped by a limit. Above 10 ms the line shows a warning sign, whose hint says this, and never Over the limit.
+The processing time stands beside 10 ms, yet a request is not stopped the moment it passes that: Cloudflare stops one only when it says so, and counts it under Requests stopped by a limit. Above 10 ms the line shows a warning sign and the word Slow. The sign's hint says this, and the line never says Over the limit.
 
 | How fresh | Is |
 | --- | --- |
@@ -86,7 +91,7 @@ When the key gave no figure at all, the line over the table says why and ends in
 | --- | --- |
 | `Cloudflare did not answer.` | open Usage again after a minute |
 | `The kept key no longer works.` | open Domain and press Repair: it makes a new key |
-| `The kept key has no permission to read usage` | Repair leaves a key that still works as it is. Delete the token "poplin kept key" at Cloudflare, then open Domain and press Repair |
+| `The kept key has no permission to read usage` | open Domain and press Repair: it makes a new key |
 
 | On the screen | Is |
 | --- | --- |

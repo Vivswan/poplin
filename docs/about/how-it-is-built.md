@@ -12,9 +12,10 @@ What an install puts in your Cloudflare account; `npx poplin install cloudflare`
 | one Worker                 | serves every site, the dashboard, the login, and the API       | `Worker`, `Sweep trigger`, `Worker variable` |
 | one R2 bucket              | holds every site's files                                       | `R2 bucket`                               |
 | one D1 database            | holds the list of sites, the logins, and the settings          | `D1 database`                             |
-| an Access application      | the login screen in front of the dashboard and private sites   | `Access application`, `Access policy`     |
+| two Access applications    | the login screen in front of the dashboard and private sites, and the open path of the API | `Access application`, `Access policy`, `Access open paths` |
 | DNS records and routes     | send your sites' addresses, and the dashboard's, to the Worker | `DNS record`, `Worker route`              |
 | two keys                   | let the install update and repair itself, and sign uploads     | `Key`, `Upload key`                       |
+| one Workflow               | finishes a copy too large for one request                      | `Workflow`                                |
 | rules on the domain        | slow down and stop unwanted traffic before the Worker          | the optional part                         |
 
 ```text

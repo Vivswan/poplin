@@ -69,7 +69,7 @@ While the two variables are set, `poplin logout` works on that login and leaves 
 npx poplin uninstall cloudflare --no-domain --dry-run
 ```
 
-It prints the token's permissions and a link, then asks for the token without showing what you paste. The form is filled as [without a domain](../start/without-a-domain.md#the-account-token) or [under a domain](../start/install.md#3-make-the-account-token) shows.
+It prints how many permissions the token needs and a link, then asks for the token without showing what you paste. The form is filled as [without a domain](../start/without-a-domain.md#the-account-token) or [under a domain](../start/install.md#3-make-the-account-token) shows.
 
 **Step 4 asks for the token again.** Cloudflare shows a new token once: leave its page open until step 4 is done. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
@@ -91,7 +91,7 @@ stays         Account token         delete it at Cloudflare: https://dash.cloudf
 A run asks you to type this, or takes it with --confirm: poplin.your-name.workers.dev
 The sites' files and the database go last: --keep-data leaves them.
 A removal logs no computer out: run npx poplin logout on each one first.
-ready: a run would remove 10 kinds. nothing was removed
+ready: a run would remove 10 kinds. Nothing was removed.
 ```
 
 Each row is one kind of piece, with the names of its pieces. A kind the command looked for and found no piece of has no row: an install with no budget alert has one kind less.
@@ -127,6 +127,7 @@ It asks for the token again, as step 3 said, lists the same rows, and then asks.
 
 ```text
 $ npx poplin uninstall cloudflare --domain example.com
+...
 Account token (not shown):
 looking for an install ... found: poplin 0.1.0, at https://poplin.example.com
 would remove  Worker route          *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*
@@ -191,7 +192,7 @@ npx poplin uninstall cloudflare --no-domain --keep-data
 
 This is for an install of the same kind, made again in the same account over the data as it stands. It is not the way to move an install to a domain, off one, or to another account: [Move an install](back-up.md#move-an-install) has that.
 
-The list before the question says `would keep` for both, the line above the question says `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
+The list before the question says `would keep` for both, the warning above the question ends `The sites' files and the database stay.`, and their rows then say `kept`. The two keys go with the rest.
 
 A run that left a kind undone ends `Run this command again with --keep-data`, and `next` of its `--json` value names the command with `--keep-data`: a line without it removes the data too.
 
@@ -208,7 +209,7 @@ The new install takes its users and its settings from the kept database:
 | no users yet            | the email you give for `--login`  | used                                                                               |
 | records this poplin cannot read | the email you give for `--login` | used, and the row of the database says that its users were not read          |
 
-To let one more person in afterwards: `npx poplin doctor --repair --add-user you@example.com`, with their email. Where the email of `--login` is none of the kept users, the run ends with that line, and offers no login of this computer.
+To let one more person in afterwards: `npx poplin doctor --repair --no-domain --add-user you@example.com`, with their email. Under a domain the line holds `--domain` and your domain in place of `--no-domain`. Where the email of `--login` is none of the kept users, the run ends with that line, after `To let you@example.com log in too:`, and offers no login of this computer.
 
 A dry run with `--keep-data` lists the same. The kept bucket and database stay in your account as they are: [What can cost money](cost/what-can-cost-money.md) says what stored files count toward.
 

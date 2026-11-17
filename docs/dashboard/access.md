@@ -21,6 +21,7 @@ The line that follows says how the change went:
 | ------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
 | `Added.` or `Removed.`                                  | has the change: a new user can log in            | nothing                                               |
 | `... is tried again by itself.`                         | gave no answer, for the list or for the budget alert | nothing: poplin tries again within 15 minutes         |
+| `... is brought up to date by itself.`                  | is one change behind: the users changed again meanwhile | nothing                                             |
 | `... Open Domain and press Repair.`                     | is as it was or only partly changed: the install holds no key, Cloudflare refused the key, or the list is missing | on Domain, press Repair, paste an account token as in [step 3](../start/install.md#3-make-the-account-token), and press Repair again |
 
 The change is saved in every case. `poplin config logins` shows the same list.
@@ -42,7 +43,7 @@ Sign everyone out, on the tab Users, ends every login of the dashboard and of pr
 | After the press | Means | What to do |
 | --- | --- | --- |
 | `Everyone is signed out. This can take a few seconds.` | Cloudflare ended every login | nothing: each browser meets the login page at its next click |
-| `... so nobody was signed out. Open Domain and press Repair.` | the install holds no key, Cloudflare refused it, or the login in front is missing | on Domain, press Repair with an account token, then press Sign everyone out again |
+| `... so nobody was signed out.`, then `Open Domain and press Repair.` | the install holds no key, Cloudflare refused it, or the login in front is missing | on Domain, press Repair with an account token, then press Sign everyone out again |
 | `... so the logins may not have ended. Try again.` | Cloudflare gave no answer | press it again |
 
 Without a kept key, Cloudflare ends the logins itself: in Zero Trust, open the Access application named poplin and revoke its existing tokens.

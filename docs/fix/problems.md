@@ -23,7 +23,7 @@ The login could not be checked     15 Nov 2026, 11:59 once        Domain
 | the same sign at Domain                 | also what the [last check of the domain](../dashboard/domain.md#the-last-check-of-the-domain) left to do |
 | the sections button, on a phone         | the same sign, for all sections together                                         |
 | Problems, on the Usage screen           | every problem of the last 7 or 30 days; a press on a row opens it                |
-| the Domain screen                       | a login that could not be checked, with what to do                               |
+| the Domain screen                       | a problem of the login, the users, the rules, or the upload key, with what to do |
 | Settings, under Updates                 | an update that did not go as it should, with what to do                                    |
 | `poplin doctor`                         | the `problems` row: `failed` for a problem of today, `ok` for none or an older one |
 
@@ -46,7 +46,7 @@ failed  problems  2 kinds today: request_failed, sweep_failed
 | `count_unwritten`        | The day's count of storage writes was not saved | nothing, unless it comes back                       |
 | `login_unwritten`        | A login was not written to Activity             | nothing: the login itself worked                    |
 | `login_unchecked`        | The login could not be checked                  | open Domain and press Check                         |
-| `update_failed`          | An update did not go as it should               | the sentence of what went wrong; for a key, open Domain and press Repair |
+| `update_failed`          | An update did not go as it should               | the details say what went wrong; to try again, press Update now |
 | `update_went_back`       | An update could not change the database, so poplin went back | nothing is lost; report it, and update again once a later release is out |
 | `users_not_carried`      | A change of the users did not reach the login page | open Domain and press Repair            |
 | `rules_not_carried`      | A changed setting did not reach every rule of the domain | open Domain and press Repair               |
@@ -71,7 +71,7 @@ A daily limit of files or of storage writes is noted once the day has none left.
 | What is never kept  | the address asked, headers, bodies, tokens, emails, visitors' addresses, files                      |
 | The message         | only its plain words and short numbers; everything else reads `...`, and it is cut to 200 characters |
 | Where it is kept    | in the install's own database; nothing is read from Cloudflare's logs, and nothing is sent anywhere |
-| How often it writes | once an hour for each kind, so a storm of failures costs 240 written rows a day at the most         |
+| How often it writes | once an hour for each kind, and once a day for a daily limit, so a storm of failures costs 315 written rows a day at the most |
 | `12+ times`         | the kind came more often than it was written down: the count is the least it can be                 |
 
 A message can still hold a word that is a name, such as a site's name made of letters alone.

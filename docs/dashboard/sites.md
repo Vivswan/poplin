@@ -26,7 +26,7 @@ In a window a little too narrow for the table, the name in a site's link is cut 
 | a heading of the table   | a press on Site, Who can open it, Updated, or Name puts the list in that order    |
 | By updated, on a phone   | the same orders as a menu: By updated, By title, By name, Who can open it         |
 
-The table starts with the columns Site, Who can open it, Link, and Updated. Columns adds Name, Published by, Visits, 7 days, Size, Versions, and Deletes itself.
+The table starts with the columns Site, Who can open it, Link, and Updated. Columns adds Name, Published by, `Visits, 7 days`, Size, Versions, and Deletes itself.
 
 Every heading but Site is dragged to another place, and a heading's edge to another width. Site is always shown. The browser keeps the layout.
 
@@ -69,11 +69,11 @@ Duplicate, in the panel, makes a private copy of the site, with a new link. The 
 | a site of more files          | `Duplicating. Ready in a few seconds.`, with Cancel, then `Duplicated.`           |
 | Cancel                        | `Cancelled. No copy was made.`, or `Duplicated.` if the copy was whole by then    |
 
-The copy goes on while you use other screens. A site of more than 112 files is copied by a background job of the install: closing the tab leaves it running, and the copy is in the list when it is done. Cancel ends the job. A copy that fails makes no site, and Usage shows `copy_failed` under Problems.
+The copy goes on while you use other screens. A site of more than 112 files is copied by a background job of the install: closing the tab leaves it running, and the copy is in the list when it is done. Cancel ends the job. A copy that fails makes no site, and Usage shows `A copy of a site was not made` under Problems.
 
-A copy whose job stops without a word is removed about a day after it began, and Problems shows `copy_failed` then. Until that day is over the line `Duplicating` stays; Cancel ends it sooner.
+A copy whose job stops without a word is removed about a day after it began, and Problems shows `A copy of a site was not made` then. Until that day is over the line `Duplicating` stays; Cancel ends it sooner.
 
-A Worker with no Workflow has no background job: [What one action costs](../upkeep/cost/what-one-action-costs.md) says which. There the page copies, and a tab closed half way makes no site; the files are removed in about a day, and Problems shows `copy_failed`.
+A Worker with no Workflow has no background job: [What one action costs](../upkeep/cost/what-one-action-costs.md) says which. There the page copies, and a tab closed half way makes no site; the files are removed in about a day, and Problems shows `A copy of a site was not made`.
 
 For a site in the trash, the panel has Restore and Delete for good. Its row has Restore alone.
 
