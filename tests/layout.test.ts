@@ -12,7 +12,7 @@ const BUILT_ENTRY = /^(?:\.\/)?dist\/(.+)\.mjs$/;
 
 const UNMIRRORED: readonly (readonly [path: string, reason: string])[] = [
   ["packages/providers/cloudflare/tests/live/self.test.ts", "runs every live check against an install in memory"],
-  ["packages/providers/cloudflare/tests/live/workflow.test.ts", "holds the Live Checks workflow to the pushes that start it and the steps it runs"],
+  ["packages/providers/cloudflare/tests/live/workflow.test.ts", "holds the Live Checks workflows to the accounts they reach, their lanes, and the report of a red night"],
   ["packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts", "holds every request the Worker answers to a budget of database queries and storage calls"],
 ];
 

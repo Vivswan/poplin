@@ -6,16 +6,17 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | check the checks themselves, against a local fake | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts ./packages/providers/cloudflare/tests/migrations`                                                        | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
-| check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
+| check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: every night, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
 | check that an install of the last release updates to the next one | the pull request of a release: the checks `live upgrade from the last release (domain)` and `(account address)` of its `Release Live Upgrade` run | the same environments |
+| check the two test installs before a release      | the pull request of a release: the checks `live checks (domain) / checks` and `live checks (account address) / checks` of the same run | the same environments |
 | check that a release publishes its built Worker   | a release's own run of main, then the `Release Feed` run that follows it: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
 Live Checks workflows, one for each kind of install
-  the `paths` list of each workflow                         the files of the push -> a run of that kind, or none
-  .github/workflows/live-install.yml                       the steps below, which both workflows call
-  packages/providers/cloudflare/scripts/live/gate.ts       the `all-green` check of the commit's CI: it ended green, or the run stops red; a job after it stops nothing
+  midnight UTC                                             a run of each kind, on main; a push starts none
+  a run by hand                                            a run of the one workflow it was started from
+  .github/workflows/live-install.yml                       the steps below, which both workflows call, and the pull request of a release after its upgrades
   build the Worker bundle
   packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, then the install made to match the commit by the product's own commands, the caps
                                                            `poplin install` where the account holds no install; the commit's build by the upload of an update, then `poplin doctor --repair`, where it holds one
@@ -38,51 +39,29 @@ Live Checks workflows, one for each kind of install
 | `Live Checks`                   | `.github/workflows/live-checks.yml`                 | on the account that holds a domain       | `live (domain) / checks`, `live (domain) / reset`, and by hand `live (domain) / upgrade` first |
 | `Live Checks (account address)` | `.github/workflows/live-checks-account-address.yml` | on the account that holds none           | `live (account address) / checks`, `live (account address) / reset`, and by hand `live (account address) / upgrade` first |
 
-Each workflow runs the same steps on its own install. A push starts the one whose install its files reach, or both. One that fails stops no other.
+Each workflow runs the same steps on its own install, every night. One that fails stops no other.
 
 ## What starts a run
 
-| A push to main that changed                                                                  | Deploy and checks |
-| -------------------------------------------------------------------------------------------- | ----------------- |
-| only files of an install with a domain                                                       | that install      |
-| only files of an install without a domain                                                    | that install      |
-| any other file of `packages/**` that is no `.md` page, tests included                        | both installs     |
-| any file of `demo/**` or `packages/providers/cloudflare/live/**` that is no `.md` page                               | both installs     |
-| `wrangler.jsonc`, the root `package.json`, `bun.lock`, `.bun-version`, `tsconfig*`           | both installs     |
-| `.github/workflows/live-install.yml`, `.github/actions/setup/**`, `.gitattributes`           | both installs     |
-| the workflow file of one kind                                                                | that install      |
-| a file no `!` line of either `paths` list names                                              | both installs     |
-| only `website/**`, `docs/**`, `brand/**`, `skills/**`, a `.md` page in any folder            | no run            |
-| only the rest of `.github/**`, the root test guards, `tests/{fuzz,support}/**`               | no run            |
-| only the settings of lint, review, hook, and release tools at the root                       | no run            |
-
-| The files of one kind of install alone                                                                                                  | Kind             |
-| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `packages/providers/cloudflare/{src,tests}/with-domain/pieces/{bots,dns,routes}/**`                                                     | with a domain    |
-| `guards.ts`, `rules.ts`, `waf.ts` of `packages/providers/cloudflare/src/with-domain/pieces/rules/`, and the tests of `guards` and `waf` | with a domain    |
-| `packages/providers/cloudflare/{src,tests}/without-domain/pieces/forwarders/**`                                                         | without a domain |
-| `packages/providers/cloudflare/src/without-domain/path-plug.ts` and its test                                                            | without a domain |
-
-A file that code of both kinds imports is a file of both: `zone-plug.ts` is one, since the plug of an install without a domain is made of its pieces. `rules-follow.ts` beside the rules is another: every install's sweep reads it. So are the two files of a site's addresses, which the demo on every install runs, and every live check and script of `packages/providers/cloudflare/scripts/live`.
-
-The `paths` list of each workflow holds every row: the two lists are the same, and each ends with the files of the other kind, taken out. `packages/providers/cloudflare/tests/live/workflow.test.ts` holds the two kinds' files once and reads both lists beside them.
-
-The files are those of the one push, first commit to last. GitHub reads the first 3,000 changed files of a push, and a push of more than 1,000 commits always starts a run.
+| Started by                                     | What runs                                                                    |
+| ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| 00:00 UTC, every night                         | deploy and checks of main, with the copy the install's job finishes, and the reset; each waits its turn and replaces no run |
+| hand                                           | deploy and checks                                                            |
+| hand, with `start_over` ticked                 | first removes the install with `poplin uninstall`, then the same             |
+| hand, with `upgrade` ticked                    | first the job `upgrade`, then deploy and checks, whatever the upgrade came to |
+| hand, with `load` ticked                       | the same, and [the load](#the-load) after the checks                         |
+| the pull request of a release                  | both upgrades, then deploy and checks of main: [the checks of a release](#the-checks-after-the-upgrades-of-a-release) |
+| a push to main                                 | nothing                                                                      |
 
 | Also                                                   | What happens                                                         |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| a run started by hand                                  | deploy and checks, with no wait for CI                               |
-| a run started by hand with `start_over` ticked         | first removes the install with `poplin uninstall`, then the same     |
-| a run started by hand with `upgrade` ticked            | first the job `upgrade`, then deploy and checks, whatever the upgrade came to |
-| a run started by hand with `load` ticked               | the same, and [the load](#the-load) after the checks                 |
-| a push that starts no run                              | no row in the list of runs, and no tick on the commit                |
-| the commit's `all-green` check did not end green       | a red run: nothing deployed, no call to Cloudflare                   |
-| a run ended red                                        | it stays red until it is run again by hand, or a later push starts a run |
-| a newer push while an older push's run of the same workflow has not started | that older run is cancelled, and the newer one deploys the commits of both pushes |
-| 00:00 UTC                                              | deploy and checks of main, with the copy the install's job finishes, and the reset; each waits its turn and replaces no run |
+| a midnight run ended red, or was cancelled             | one open issue, labelled `live-nightly-domain` or `live-nightly-account-address`, with the run's link |
+| the next midnight run of that kind ended green         | that issue is closed                                                 |
+| a run by hand ended red                                | it stays red until it is run again; no issue                         |
+| a newer run by hand while an older one of the same workflow has not started | that older run is cancelled                     |
 | a run of the other kind at the same time               | both go on side by side: each kind has an account and a lane of its own |
 
-The install is made from the commit of the push, the one whose `all-green` check ended green. Running a red run again makes the install from that same commit.
+A run of a night or by hand makes the install from the commit it started on, and running it again makes the install from that same commit. The pull request of a release takes main's tip as its checks start, each time they run.
 
 One job touches a test install at a time. Each kind has a lane of its own, since the two installs are on two accounts: a run of one kind never waits for the other, and the two run side by side. Inside a lane the checks and the midnight reset each wait their turn, and every waiting job is kept.
 
@@ -122,7 +101,7 @@ An install the older build made and filled takes the run's build as an update, a
 | Started by | The build the install is updated to | Then |
 | ---------- | ----------------------------------- | ---- |
 | hand: Actions, the workflow of the install, Run workflow on `main`, tick `upgrade` | the build of main | the job `checks`, whatever the upgrade came to |
-| the pull request of a release, once its checks are approved to run | the release as it would merge: the pull request's merge commit | the job `put back`, whatever the upgrade came to: [the put-back](#the-put-back-after-the-upgrade-of-a-release) |
+| the pull request of a release, once its checks are approved to run | the release as it would merge: the pull request's merge commit | the job `live checks`, whatever the upgrade came to: [the checks of a release](#the-checks-after-the-upgrades-of-a-release) |
 
 Both run the job `upgrade` of `.github/workflows/live-upgrade.yml`, in the lane of the kind's live checks, so an upgrade and a run of main never touch one install together.
 
@@ -145,7 +124,7 @@ job upgrade
                                    -> the Worker of the new build starts, and applies the later step to the filled database
                                    -> the install says the new version 12 times in a row -> one more site published -> one line a check
                                    -> the settings put back, the sites and the token's row removed
-job checks                         by hand alone: its checkout holds no later step, so the install is started over, then every live check, the samples
+job checks                         its checkout holds no later step, so the install is started over, then every live check, the samples
 ```
 
 A pre-release says its commit in its version, `0.1.0-main.<count>.<date>.g<commit>`. `migrations/older-from.ts` takes the newest one whose commit is an earlier build:
@@ -213,44 +192,46 @@ of those, the later step                22 rows: 14 as it runs (5 for its mark, 
 beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
 a run with upgrade ticked               about 212 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,680 rows, on each account it runs on
                                         and the first schema of the install the checks start over, which no meter counts
-the pull request of a release           about 212 + 20 + 313 (the put-back) = about 545 rows, on each account, each time its checks run
+the pull request of a release           the same sum: about 1,680 rows, on each account, each time its checks run
 where both upgrades find a build        about 232 rows more, and one more install started over, in either run
-where neither finds one                 on the pull request of a release, no upgrade and no put-back: no row; by hand, the checks and the reset alone
+where neither finds one                 the checks and the reset alone, in either run: about 1,018 rows, and the reset's
 ```
 
-The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` twice for each kind of install on the pull request of a release alone. Its checks stand beside `all-green` on the pull request, four of the upgrade and two of the put-back, and `all-green` does not wait for them: read all six before merging a release, and the warnings of the two that only advise.
+The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` twice for each kind of install on the pull request of a release alone. Its checks stand beside `all-green` on the pull request, four of the upgrade and two of the live checks.
+
+`all-green` does not wait for them: read all six before merging a release, and the warnings of the two that only advise.
 
 It is no job of the release gate: GitHub hands a called workflow only the secrets its caller passes, and the gate's caller passes none.
 
-### The put-back after the upgrade of a release
+### The checks after the upgrades of a release
 
-The upgrade removes the sample sites and the demo, and leaves a schema step main does not have. So the same workflow then puts each install back to what main's own run leaves.
+The upgrade removes the sample sites and the demo, and leaves a schema step main does not have. So the same workflow then runs the live checks of a night on each install, which also puts it back to what main's own run leaves.
 
 ```text
-live upgrade from the last release (domain)           -> live upgrade from a pre-release, as advice (domain)           -> put back (domain) / checks
-live upgrade from the last release (account address)  -> live upgrade from a pre-release, as advice (account address)  -> put back (account address) / checks
+live upgrade from the last release (domain)           -> live upgrade from a pre-release, as advice (domain)           -> live checks (domain) / checks
+live upgrade from the last release (account address)  -> live upgrade from a pre-release, as advice (account address)  -> live checks (account address) / checks
 
-put back: main checked out and built -> the install made to match it -> no checks -> the samples and the demo put back
+live checks: main checked out and built -> the install made to match it -> every live check -> the samples and the demo put back
 ```
 
 | Asked | Answer |
 | ----- | ------ |
-| which steps | the job `checks` of `live-install.yml`, called with `put_back_only`: the steps of main's run without the wait for a gate and without the checks |
-| which build | the branch the pull request would merge into, `main`, and not the release: the install is the one main's next run finds as its own |
+| which steps | the job `checks` of `live-install.yml`: the steps of a night's run, without the copy the midnight run alone makes |
+| which build | the branch the pull request would merge into, `main`, and not the release: the upgrade before it is what takes the release, and the install is the one main's next run finds as its own |
 | what it does to the install | starts it over where it holds the later step, with `poplin uninstall` and `poplin install`; mends it where the upgrade stopped earlier |
 | after a failed upgrade | it runs all the same |
-| after two upgrades that never reached the install | it does not run: no install was touched |
-| after a cancelled run | it does not run: main's next run puts the install back, the midnight one among them |
+| after two upgrades that found no build to start from | it runs all the same: every release is checked |
+| a check that fails | the check `live checks (<kind>) / checks` is red |
+| after a cancelled run | it does not run: the midnight run of main checks the install and puts it back |
 | which lane | the one of the kind's live checks, once, after both upgrades |
 
 ```text
 the reset on an install made anew   299 rows and 102 bucket writes and lists on the local fake, of at most 600 and 150
-the harness's own statements        about 14: two tokens in and out, and the caps
-a put-back                          about 313 rows, and the first schema of the install made anew, which no meter counts
-a put-back after an upgrade that stopped with its 3 sites on the install   338 rows by the reset: the 3 removed, 13 each
+the checks of a release             about 1,018 rows (the checks) + 430 (a reset that keeps no sample), and the first schema of the install made anew, which no meter counts
+a reset after an upgrade that stopped with its 3 sites on the install   338 rows: the 3 removed, 13 each
 ```
 
-The reset's own ceilings hold it: 600 rows and 150 bucket writes and lists.
+The ceilings of the checks and of the reset hold it: 1,250 rows and 150 bucket writes and lists by the checks, 600 and 150 by the reset.
 
 | A run reaches a test account when | Held by |
 | --------------------------------- | ------- |
@@ -286,10 +267,10 @@ One install on the Cloudflare test account, called staging. It stays up between 
 
 |             | Staging                                                                          |
 | ----------- | -------------------------------------------------------------------------------- |
-| Runs        | the latest main that changed a file reaching it                                  |
+| Runs        | main as it was at its last run                                                   |
 | Who gets in | the owner alone, behind the login; a stranger opens the public and unlisted sample sites |
-| Updated     | after a green main that changed such a file                                      |
-| Put back    | after every run of the checks, whatever they came to, at 00:00 UTC every day, and after the upgrade on the pull request of a release |
+| Updated     | at 00:00 UTC every night, on a run by hand, and on the pull request of a release |
+| Put back    | after every run of the checks, whatever they came to, at 00:00 UTC every day, and after the checks on the pull request of a release |
 
 | A reset removes                               | A reset leaves                                                                        |
 | --------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -329,8 +310,8 @@ The owner sets these. Each test account has its own environment, and the secrets
 
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
-| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `put back (domain)` of `Release Live Upgrade` |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `put back (account address)` of `Release Live Upgrade` |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `live checks (domain)` of `Release Live Upgrade` |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `live checks (account address)` of `Release Live Upgrade` |
 
 For each account:
 
@@ -477,7 +458,7 @@ either install                   the same sums, each against the 1,000,000 of it
 the files no record names        the bucket found, and 1 list for every thousand files it holds; a delete is free, and counted against the 300 all the same
 ```
 
-A run starts after a green main that changed a file reaching the install, at midnight, or by hand, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
+A run starts at midnight, by hand, or on the pull request of a release, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
 
 The copy the install's job finishes is a site of 113 files: one more than the first request of a copy takes. It costs a run 226 files of the day and over two hundred bucket writes, so the midnight run alone makes it, and a run started by hand with the many-files check.
 
@@ -551,7 +532,7 @@ Rows written this run: 959 of at most 1250
 
 ## The load
 
-A run started by hand with `load` ticked adds one check after all the others: some of the requests of the [load test](../README.md), at small, fixed sizes. No push and no midnight run makes it.
+A run started by hand with `load` ticked adds one check after all the others: some of the requests of the [load test](../README.md), at small, fixed sizes. No midnight run and no pull request of a release makes it.
 
 | Step | Requests | Rows written, at most | Bucket writes and lists |
 | --- | --- | --- | --- |
@@ -702,7 +683,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
 | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `logs-follow`, `duplicate-job`                           |
 | the Worker's Workflow, which Cloudflare did not make                | `duplicate-job`                                                          |
-| the midnight run, or a run started by hand with the many-files check | `duplicate-job`: a copy of 113 files, so once a day and not on every green main |
+| the midnight run, or a run started by hand with the many-files check | `duplicate-job`: a copy of 113 files, so once a day, and at no release |
 | Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `login-page`: the team's login page offers the email code; `users-follow`: no login list exists |
 | the token permission that makes a login method                      | `login-page`                                                             |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
@@ -712,7 +693,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | the guard rule, the redirect rule, or the rate rule on the zone     | `L8-method`, `L8-scanner`, `L8-http`, `burst-rate-rule`                  |
 | one data center that takes more than 300 of the runner's requests in ten seconds | `burst-rate-rule`                                           |
 | a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
-| a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so not on every green main                  |
+| a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so on no run that starts by itself                    |
 | a run started by hand with the load switched on                     | `load`: it is no row of any other run's table                            |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`: the checklist below, which also holds `download` |
 | a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` |

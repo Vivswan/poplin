@@ -451,7 +451,7 @@ function stringsOf(value: unknown): string[] {
 describe.each(["domain", "account address"] as const)("the test install of an account, on its %s, made, mended, and removed by the product's own commands on a fake account in memory", (kind) => {
   const told = TOLD[kind];
 
-  // Drift: a run that put the Worker in place by a way of its own would prove nothing of `poplin install`; and one that made what stands again would leave a new key and a new login on every push.
+  // Drift: a run that put the Worker in place by a way of its own would prove nothing of `poplin install`; and one that made what stands again would leave a new key and a new login on every run.
   test("the first run makes the install with poplin install and this commit's build in its first upload; the next finds it, puts the build in place by the upload of an update, and mends it with nothing made twice", async () => {
     const standing = await standingOn(freshAccount(), kind);
     const [first, second] = [await standing.again(), await standing.again()];
@@ -481,7 +481,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
   });
 
   // Drift: a release read from the tag of the latest version reads as none after the first change of the Worker's settings, on Cloudflare alone: no fake said so for months.
-  // The run reads it back with the product's own command, so a release that is no longer read turns the test install red on the next push.
+  // The run reads it back with the product's own command, so a release that is no longer read turns the test install red on the next run.
   test.each([
     ["makes", 0, "Install: none found, so poplin install ran", "the install wrote its settings"],
     ["mends", 1, "Worker's code: ", "the upload and the repair"],
@@ -752,7 +752,7 @@ describe.each(["domain", "account address"] as const)("the wait for a run's new 
 });
 
 describe.each(["domain", "account address"] as const)("the end of the script, on a fake install on its %s: the wait for the new deployment, then the caps", (kind) => {
-  // Drift: a wait that every run paid in full would add half a minute and a dozen requests to each push; one that an install made anew did not pay would start the checks on the deployment before.
+  // Drift: a wait that every run paid in full would add half a minute and a dozen requests to each run; one that an install made anew did not pay would start the checks on the deployment before.
   test.each([
     ["a run that left the build before able to answer costs one request, then the caps", false, 0, ["New deployment: answered the run's token", "Storage and file caps: set"], [WHOAMI, CAPS]],
     [

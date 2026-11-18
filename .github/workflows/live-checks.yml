@@ -1,50 +1,15 @@
-# Checks the real install on the Cloudflare test account that holds a domain: an install whose every site is a hostname under it, after a push to main that changed a file reaching it, at midnight UTC, and on a manual run.
+# Checks the real install on the Cloudflare test account that holds a domain: an install whose every site is a hostname under it, at midnight UTC and on a manual run.
 # Puts it back to the sample sites after each run of the checks, and at midnight UTC. live-checks-account-address.yml does the same for the account that holds none.
 #
-#   a push that changed a file of the `paths` list -> the steps of live-install.yml on the `with-domain-ci-tests` account
-#   a push that changed no such file, or only files of the other kind of install -> GitHub starts no run here
+#   midnight UTC, or a run by hand -> the steps of live-install.yml on the `with-domain-ci-tests` account, for main as it is
+#   a push to main                 -> GitHub starts no run here
+#   a midnight run that ended red  -> one open issue for this kind of install, which the next green midnight run closes
 #
-# The steps, the wait for the commit's `all-green` check, and the reset are in live-install.yml, written once for both kinds.
-# It is its own workflow, not a job of post-green.yml: the release leg waits on that hook, and a path filter belongs to a push.
+# The steps and the reset are in live-install.yml, written once for both kinds. release-live-upgrade.yml runs the same steps on the pull request of a release.
 
 name: Live Checks
 
 on:
-  # A push to this repository's main. A pull request and a fork's branch start nothing here.
-  # A file in no line below starts a run: the list opens with every file, and each `!` line takes files out.
-  # The last lines take out the files of the other kind of install alone. packages/providers/cloudflare/tests/live/workflow.test.ts holds both kinds' lists and reads this one beside them.
-  push:
-    branches: [main]
-    paths:
-      - "**"
-      - "!website/**"
-      - "!docs/**"
-      - "!brand/**"
-      - "!skills/**"
-      - "!**/*.md"
-      - "!.github/**"
-      - ".github/workflows/live-checks.yml"
-      - ".github/workflows/live-install.yml"
-      - ".github/actions/setup/**"
-      - "!tests/*.test.ts"
-      - "!tests/fuzz/**"
-      - "!tests/support/**"
-      - "!.editorconfig"
-      - "!.gitignore"
-      - "!.gitleaks.toml"
-      - "!.repo-platform.yml"
-      - "!.typography-allow"
-      - "!.yamllint"
-      - "!biome.json"
-      - "!biome.local.jsonc"
-      - "!knip.json"
-      - "!lefthook.yml"
-      - "!.release-please-manifest.json"
-      - "!release-please-config.json"
-      - "!packages/providers/cloudflare/src/without-domain/pieces/forwarders/**"
-      - "!packages/providers/cloudflare/tests/without-domain/pieces/forwarders/**"
-      - "!packages/providers/cloudflare/src/without-domain/path-plug.ts"
-      - "!packages/providers/cloudflare/tests/without-domain/path-plug.test.ts"
   # Midnight UTC. A schedule runs the default branch's own file and nothing a pull request or a fork wrote; a fork's
   # schedule has none of this repository's secrets.
   schedule:
@@ -71,7 +36,7 @@ on:
 permissions:
   contents: read
 
-# One waiting run of this workflow for each event: a newer push takes the place of an older push that waits, and never of the midnight run.
+# One waiting run of this workflow for each event: a newer run by hand takes the place of an older one that waits, and never of the midnight run.
 concurrency:
   group: live-checks-domain-${{ github.event_name }}
   cancel-in-progress: false
@@ -114,10 +79,6 @@ jobs:
     name: live (domain)
     needs: [upgrade, upgrade-next]
     if: ${{ !cancelled() }}
-    # The wait of the called job reads the commit's run of CI and the jobs of that run.
-    permissions:
-      contents: read
-      actions: read
     uses: ./.github/workflows/live-install.yml
     with:
       kind: domain
@@ -130,3 +91,34 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # A red midnight run is one open issue of this kind's label, refreshed each red night; a green one closes it. A run by hand files and closes nothing.
+  # A cancelled run counts as red: a job that reached its timeout is cancelled, not failed.
+  report:
+    name: report (domain)
+    needs: [live]
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The action writes the issue, and assigns it itself: an issue it creates starts no workflow.
+    permissions:
+      issues: write
+    steps:
+      - name: File or refresh the issue of a red night
+        if: needs.live.result == 'failure' || needs.live.result == 'cancelled'
+        uses: Vivswan/repo-platform/actions/fuzz-issue@stable
+        with:
+          mode: report
+          label: "live-nightly-domain"
+          title: Nightly live checks failed (domain)
+          label-color: "D93F0B"
+          label-description: "The nightly live checks of the test install (domain) ended red"
+          stream: generic
+
+      - name: Close the issue on a green night
+        if: needs.live.result == 'success'
+        uses: Vivswan/repo-platform/actions/fuzz-issue@stable
+        with:
+          mode: resolve
+          label: "live-nightly-domain"
+          stream: generic

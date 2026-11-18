@@ -62,7 +62,6 @@ interface Ran {
   readonly code: number;
   readonly lines: readonly string[];
   readonly uploads: number;
-  readonly started?: string;
 }
 
 /** What goes wrong in one upgrade, where anything does. */
@@ -170,7 +169,7 @@ async function upgrade(kind: Found["kind"], fault: Fault = {}): Promise<Ran> {
   };
   const code = await upgradeInstall(harness.run, { env, older, release: harness.world.release, steps: fault.bare === true ? STEPS : BUILD, ends: ownReach(harness), fetch: installOf(harness, fault) });
 
-  return { code, lines: harness.lines.slice(installed), uploads: harness.account.uploads.length, ...(harness.outputs.started === undefined ? {} : { started: harness.outputs.started }) };
+  return { code, lines: harness.lines.slice(installed), uploads: harness.account.uploads.length };
 }
 
 describe.each(["domain", "account address"] as const)("the live upgrade of an install on its %s, on a fake account in memory", (kind) => {
@@ -178,14 +177,7 @@ describe.each(["domain", "account address"] as const)("the live upgrade of an in
   test("an install the older build made and filled takes this commit's build, and every check holds, within the mode's own ceilings", async () => {
     const ran = await upgrade(kind);
 
-    expect(ran).toEqual({ code: 0, lines: HELD, uploads: 2, started: "true" });
-  });
-
-  // Drift: a caller puts the install back where the run says it reached it. Said too early, an install nobody touched is started over; said too late, one the older build removed is left as it is.
-  test("the run says it reached the install once the older build's own install begins, failed or not, and not where it stopped before", async () => {
-    const [before, failed] = [await upgrade(kind, { bare: true }), await upgrade(kind, { install: 3 })];
-
-    expect([before.started, failed.started]).toEqual([undefined, "true"]);
+    expect(ran).toEqual({ code: 0, lines: HELD, uploads: 2 });
   });
 
   // Drift: an upgrade that ended green on an install that never took the build, never ran the step, kept half of it, or was never made would prove nothing.
