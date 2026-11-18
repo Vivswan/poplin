@@ -1,33 +1,35 @@
 // The older build a live upgrade starts from, put in a folder of its own and built there, and this checkout told a version above it and given one schema step more.
 //
-//   the older build   the last release among the ancestors of the checkout; before the first release, the stand-in commit below
+//   the older build   the one older-from.ts finds for what the run asks to start from: the last release, or the newest pre-release that is an earlier build
 //   its folder        `git archive` of it, with its own lockfile installed and its own Worker built
 //   this checkout     packages/cli/package.json told one patch above the older build's version, unless it is above it already
 //                     and the later step of later-step.ts written among the product's steps, so the update has a step to apply
 //
 // An install takes a release above its own version alone, and a commit of main says the version of the last release, as the older build does.
-// The stand-in is on npm as `0.1.0-main.803.20261118.ga185263`: a pre-release with main's first schema step, settings row, and login methods, so main takes over the install it makes and a repair of it changes nothing.
 // A pre-release on npm is the command alone, with no built Worker and no line of the website's `releases.json`, so its Worker is built here from the commit.
+// Where there is no build to start from, the step says so in one line, makes no folder, and sets no output: the steps after it are skipped.
 // Argument: the folder the older build goes in, which must not be there yet. The step that runs this holds no secret.
+// Step output: `older` (the tag or the commit of the older build, once its folder is built).
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as core from "@actions/core";
 import { isPlainVersion } from "@poplin/core/src/records/update";
 import gt from "semver/functions/gt";
 import inc from "semver/functions/inc";
 
 import type { Step } from "../../../core/src/migrations/migrate";
-import { lastRelease } from "../../../../tests/migrations/support/trees";
 import { addLaterStep, stepLabel } from "./later-step";
-
-/** The commit of main that stands in for a release while none is cut. It moves forward when the first schema step or a stored shape is edited in place, or an install gains a part a repair would add; once a release has a tag, that is taken instead. */
-const STAND_IN = "a185263b4ecaecd9c573a6c02882e15927df277a";
+import { olderFrom, readFrom } from "./older-from";
 
 /** The file of a tree that says its version, from the tree's root. */
 const VERSION_FILE = join("packages", "cli", "package.json");
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
+
+/** The command whose versions npm is asked for. */
+const COMMAND = "poplin";
 
 /** Runs one command in a folder. It throws when the command fails. */
 type RunCommand = (command: readonly string[], cwd: string) => void;
@@ -103,12 +105,31 @@ function runCommand(command: readonly string[], cwd: string): void {
   if (ran.exitCode !== 0) throw new Error(`\`${command.join(" ")}\` failed with exit code ${ran.exitCode}`);
 }
 
+/** Ask npm for every version of the command: nothing where it did not answer. */
+function npmVersions(): readonly string[] | undefined {
+  const asked = Bun.spawnSync([process.execPath, "info", COMMAND, "versions", "--json"], { cwd: ROOT, stdio: ["ignore", "pipe", "inherit"] });
+  if (asked.exitCode !== 0) return undefined;
+
+  const versions: unknown = JSON.parse(asked.stdout.toString());
+
+  return [versions].flat().filter((version) => typeof version === "string");
+}
+
+/** Find the older build, and build it where there is one. */
+function main(folder: string): void {
+  const start = olderFrom(ROOT, readFrom(process.env), npmVersions);
+  console.log(start.line);
+  if (start.kind === "none") return;
+
+  const { older, own, step } = prepareBuilds(ROOT, start.ref, folder, runCommand);
+  console.log(`The older build says the version ${older}`);
+  console.log(`This commit's build: published for the upgrade as ${own}, with step ${stepLabel(step.number)} (${step.description}) for the upgrade alone`);
+  if (process.env.GITHUB_OUTPUT) core.setOutput("older", start.ref);
+}
+
 if (import.meta.main) {
   const [folder] = process.argv.slice(2);
   if (folder === undefined) throw new Error("name the folder the older build goes in");
 
-  const ref = lastRelease(ROOT) ?? STAND_IN;
-  const { older, own, step } = prepareBuilds(ROOT, ref, folder, runCommand);
-  console.log(`Older build: ${ref}, which says the version ${older}`);
-  console.log(`This commit's build: published for the upgrade as ${own}, with step ${stepLabel(step.number)} (${step.description}) for the upgrade alone`);
+  main(folder);
 }

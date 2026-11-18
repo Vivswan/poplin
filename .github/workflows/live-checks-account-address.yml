@@ -67,7 +67,7 @@ on:
         type: boolean
         default: false
       upgrade:
-        description: First install the older build, fill it, and update it to the build of main (removes the test install, and writes about 1,600 database rows)
+        description: First upgrade from the last release, then from the newest earlier pre-release as advice (each removes the test install and writes about 230 database rows)
         type: boolean
         default: false
       load:
@@ -85,12 +85,14 @@ concurrency:
 
 jobs:
   # Only a run by hand with the box ticked. release-live-upgrade.yml calls the same file, for the pull request of a release.
+  # From the last release first: its failure fails the run.
   upgrade:
     name: live (account address)
     if: inputs.upgrade == true
     uses: ./.github/workflows/live-upgrade.yml
     with:
       kind: account address
+      from: release
       environment: without-domain-ci-tests
     # Only the names the steps read. The called job names the environment, and its secret of a name is the one it reads, not a value handed over here.
     secrets:
@@ -98,10 +100,26 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
-  # After the upgrade where one was asked for, whatever it came to.
-  live:
+  # Then from the newest pre-release that is an earlier build, in the same lane: its failure is a warning.
+  upgrade-next:
     name: live (account address)
     needs: [upgrade]
+    if: ${{ !cancelled() && inputs.upgrade == true }}
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: account address
+      from: next
+      environment: without-domain-ci-tests
+    # Only the names the steps read. The called job names the environment, and its secret of a name is the one it reads, not a value handed over here.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # After the upgrades where they were asked for, whatever they came to.
+  live:
+    name: live (account address)
+    needs: [upgrade, upgrade-next]
     if: ${{ !cancelled() }}
     # The wait of the called job reads the commit's run of CI and the jobs of that run.
     permissions:

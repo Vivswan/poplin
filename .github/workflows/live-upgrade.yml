@@ -4,6 +4,12 @@
 #   live-checks.yml, live-checks-account-address.yml    a run by hand of main with `upgrade` ticked: the build of main
 #   release-live-upgrade.yml                            the pull request of a release: the release as it would merge
 #
+# Each caller calls it twice for a kind, one after the other in that kind's lane, and the caller says where the upgrade starts from:
+#
+#   from `release`   the last release                                        -> a failure fails the job
+#   from `next`      the newest pre-release on npm that is an earlier build  -> a failure of its three steps is a warning, and the job passes
+#
+# Where there is no build to start from, the job says so in one line, touches no install, and passes.
 # It removes the test install and writes rows and files of its own, so no push and no midnight run makes it.
 # The job names the environment, so the environment's secrets are the ones its steps read, under the names declared below.
 # Each caller is a workflow the event starts: called two files deep, under a caller that passes no secret, the steps would read empty values.
@@ -21,6 +27,10 @@ on:
         description: The environment that holds the test account's secrets
         type: string
         required: true
+      from:
+        description: "Where the upgrade starts from: `release`, or `next` for the newest pre-release that is an earlier build"
+        type: string
+        required: true
     # The names the steps read. A caller must hand each name over, and the value may be empty: the one a step reads is the secret of the job's environment.
     secrets:
       CLOUDFLARE_API_TOKEN:
@@ -32,6 +42,10 @@ on:
       POPLIN_LIVE_LOGIN:
         description: The email the test install lets in
         required: true
+    outputs:
+      started:
+        description: "`true` once the upgrade reached the test install, which a caller then puts back"
+        value: ${{ jobs.upgrade.outputs.started }}
 
 permissions:
   contents: read
@@ -52,6 +66,9 @@ jobs:
     environment: ${{ inputs.environment }}
     env:
       POPLIN_LIVE_INSTALL: ${{ inputs.kind }}
+      POPLIN_UPGRADE_FROM: ${{ inputs.from }}
+    outputs:
+      started: ${{ steps.upgrade.outputs.started }}
     # The lane of every job that touches the test install of one kind, the checks of main among them: each waits its turn, and none takes another's place.
     concurrency:
       group: live-checks-${{ inputs.kind }}
@@ -67,16 +84,30 @@ jobs:
       # The same asking as the job's `if:`, read from the file of the event: it stops the job before any step is handed a secret.
       - name: Refuse a run that may not reach a test account
         run: bun packages/providers/cloudflare/scripts/admit.ts
-      # No secret reaches this step: it installs the packages of a tree of the history and builds it.
+      # No secret reaches this step: it asks npm for the versions of the command, installs the packages of a tree of the history, and builds it.
+      # Its output `older` is set once there is an older build and it is built: the steps after it run only then.
+      # An upgrade from a pre-release only advises: its steps may fail, and the job still passes.
       - name: Put the older build in a folder, build it, and give this checkout a version above it and the later step
+        id: builds
         timeout-minutes: 10
+        continue-on-error: ${{ inputs.from == 'next' }}
         run: bun run --silent --cwd packages/providers/cloudflare live:upgrade-builds "$RUNNER_TEMP/poplin-older"
       - name: Build the Worker bundle
+        id: bundle
+        if: steps.builds.outputs.older != ''
+        continue-on-error: ${{ inputs.from == 'next' }}
         run: bun run --cwd packages/providers/cloudflare build
       - name: Upgrade an install of the older build to this run's
+        id: upgrade
+        if: steps.builds.outputs.older != '' && steps.bundle.outcome == 'success'
         timeout-minutes: 40
+        continue-on-error: ${{ inputs.from == 'next' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
         run: bun run --silent --cwd packages/providers/cloudflare live:upgrade "$RUNNER_TEMP/poplin-older"
+      # The one line a failed upgrade from a pre-release ends with, whichever of its three steps failed.
+      - name: Say that the upgrade from a pre-release only advises
+        if: inputs.from == 'next' && (steps.builds.outcome == 'failure' || steps.bundle.outcome == 'failure' || steps.upgrade.outcome == 'failure')
+        run: 'echo "::warning::Advisory: this upgrade starts from a pre-release, so its failure blocks nothing."'

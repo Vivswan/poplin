@@ -72,7 +72,7 @@ const NAMED_ON_PURPOSE: readonly Purpose[] = [
 
 /** Rule (e): what the upgrade checks call an older version of poplin, and the paths of their files. One written outside a `migrations/` folder is code that knows of a version before its own. */
 const OLDER_VERSION_NAMES: readonly RegExp[] = [
-  /\b(?:lastRelease|openOlder|olderBuild|laterStep|addLaterStep|LATER_NAMES|upgradeFindings|EDITED_IN_PLACE)\b|\bcheckOut\(/,
+  /\b(?:lastRelease|openOlder|olderFrom|olderBuild|laterStep|addLaterStep|LATER_NAMES|upgradeFindings|EDITED_IN_PLACE)\b|\bcheckOut\(/,
   /(?<![A-Za-z])(?:older-build|later-step)|poplin-older|live:upgrade/,
   /\bthe (?:older build|last release)\b/i,
   /migrations\/(?:support\/|README\.md|upgrade|detector|frozen-steps|older|later-|record)/,
@@ -95,7 +95,7 @@ const OLDER_ON_PURPOSE: readonly Purpose[] = [
   // The two scripts a workflow runs the live upgrade by.
   { path: "packages/providers/cloudflare/package.json", name: /"live:upgrade(?:-builds)?": "bun migrations\/(?:older-build|upgrade)\.ts"/ },
   // The test that holds those workflows to their steps.
-  { path: "packages/providers/cloudflare/tests/live/workflow.test.ts", name: /live:upgrade(?:-builds)?|the (?:older build|last release)/i },
+  { path: "packages/providers/cloudflare/tests/live/workflow.test.ts", name: /live:upgrade(?:-builds)?|the (?:older build|last release)|migrations\/older-from/i },
   // The ceiling of the helpers' folder.
   { path: "tests/layout.test.ts", name: /migrations\/support/ },
 ];

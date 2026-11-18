@@ -8,7 +8,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
-| check that an install of the last release updates to the next one | the pull request of a release: the checks `live upgrade (domain)` and `live upgrade (account address)` of its `Release Live Upgrade` run | the same environments |
+| check that an install of the last release updates to the next one | the pull request of a release: the checks `live upgrade from the last release (domain)` and `(account address)` of its `Release Live Upgrade` run | the same environments |
 | check that a release publishes its built Worker   | a release's own run of main, then the `Release Feed` run that follows it: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
@@ -126,6 +126,15 @@ An install the older build made and filled takes the run's build as an update, a
 
 Both run the job `upgrade` of `.github/workflows/live-upgrade.yml`, in the lane of the kind's live checks, so an upgrade and a run of main never touch one install together.
 
+Each runs it twice for a kind, one after the other, since the two share one install:
+
+| From | The older build is | A failure | With no such build |
+| ---- | ------------------ | --------- | ------------------ |
+| `release` | the last release: the highest `vX.Y.Z` tag among the ancestors | fails the check | `Nothing is released yet: there is no version to upgrade from.`, and the check passes |
+| `next` | the newest pre-release on npm that is an earlier build of the commit | is a warning, `Advisory: this upgrade starts from a pre-release, so its failure blocks nothing.`, and the check passes | one line that says which pre-release is the newest and why it is none, and the check passes |
+
+A job that finds no build to start from touches no install.
+
 ```text
 job upgrade
   migrations/older-build.ts        the older build in a folder of its own, its packages installed, its Worker built: no secret reaches this step
@@ -139,12 +148,21 @@ job upgrade
 job checks                         by hand alone: its checkout holds no later step, so the install is started over, then every live check, the samples
 ```
 
-| The older build                              | Is                                                                                       |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| once a release is among the ancestors of main | the highest `vX.Y.Z` tag                                                                 |
-| before the first release                     | the commit `STAND_IN` of `older-build.ts`, which npm holds as a pre-release of the command |
+A pre-release says its commit in its version, `0.1.0-main.<count>.<date>.g<commit>`. `migrations/older-from.ts` takes the newest one whose commit is an earlier build:
 
-The stand-in moves forward whenever the first schema step or a stored shape is edited in place, or an install gains a part a repair would add: main takes over an install of the same step and settings row alone, and `Doctor` holds for an install with the same parts alone.
+| A pre-release is passed over when its commit is | Since |
+| ----------------------------------------------- | ----- |
+| the commit of the run | the older build and the newer one would be one |
+| a commit the run's commit joins, on a pull request | the run is of the commit that joins the branch to main's tip, so that tip is the code under test |
+| no ancestor of the run's commit, or not in its history | the run does not come after it |
+| the last release's, or no descendant of it | the upgrade from the release covers it |
+
+```text
+Older build: 0.1.0-main.812.20261119.g1a2b3c4 (1a2b3c4), 3 commits behind this one
+The older build says the version 0.0.0
+```
+
+An install made by a pre-release whose first schema step, stored shapes, or parts differ from the commit's is not one the commit takes over, so such an upgrade fails as advice until a pre-release with them is an earlier build.
 
 A pre-release on npm is the command alone: no built Worker and no line of the website's `releases.json` exists for one. So the Worker of the older build is built from its commit, and its own harness installs it.
 
@@ -196,9 +214,11 @@ beside those                            about 20 rows: the older build's caps, t
 a run with upgrade ticked               about 212 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,680 rows, on each account it runs on
                                         and the first schema of the install the checks start over, which no meter counts
 the pull request of a release           about 212 + 20 + 313 (the put-back) = about 545 rows, on each account, each time its checks run
+where both upgrades find a build        about 232 rows more, and one more install started over, in either run
+where neither finds one                 on the pull request of a release, no upgrade and no put-back: no row; by hand, the checks and the reset alone
 ```
 
-The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` once for each kind of install on the pull request of a release alone. Its checks stand beside `all-green` on the pull request, two of the upgrade and two of the put-back, and `all-green` does not wait for them: read all four before merging a release.
+The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` twice for each kind of install on the pull request of a release alone. Its checks stand beside `all-green` on the pull request, four of the upgrade and two of the put-back, and `all-green` does not wait for them: read all six before merging a release, and the warnings of the two that only advise.
 
 It is no job of the release gate: GitHub hands a called workflow only the secrets its caller passes, and the gate's caller passes none.
 
@@ -207,8 +227,8 @@ It is no job of the release gate: GitHub hands a called workflow only the secret
 The upgrade removes the sample sites and the demo, and leaves a schema step main does not have. So the same workflow then puts each install back to what main's own run leaves.
 
 ```text
-live upgrade (domain)           -> put back (domain) / checks
-live upgrade (account address)  -> put back (account address) / checks
+live upgrade from the last release (domain)           -> live upgrade from a pre-release, as advice (domain)           -> put back (domain) / checks
+live upgrade from the last release (account address)  -> live upgrade from a pre-release, as advice (account address)  -> put back (account address) / checks
 
 put back: main checked out and built -> the install made to match it -> no checks -> the samples and the demo put back
 ```
@@ -219,8 +239,9 @@ put back: main checked out and built -> the install made to match it -> no check
 | which build | the branch the pull request would merge into, `main`, and not the release: the install is the one main's next run finds as its own |
 | what it does to the install | starts it over where it holds the later step, with `poplin uninstall` and `poplin install`; mends it where the upgrade stopped earlier |
 | after a failed upgrade | it runs all the same |
+| after two upgrades that never reached the install | it does not run: no install was touched |
 | after a cancelled run | it does not run: main's next run puts the install back, the midnight one among them |
-| which lane | the one of the kind's live checks, after its upgrade |
+| which lane | the one of the kind's live checks, once, after both upgrades |
 
 ```text
 the reset on an install made anew   299 rows and 102 bucket writes and lists on the local fake, of at most 600 and 150
