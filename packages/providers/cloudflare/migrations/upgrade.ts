@@ -9,7 +9,6 @@
 // The start runs in this process, with the run's token where the kept key stands: a deployed Worker reads releases from the project's website alone, which names no build of a commit.
 // Every request to the install passes the meters of bucket writes and of rows. No line names an address, a site, a login, or the value of a setting.
 // Argument: the folder older-build.ts put the older build in.
-// Step output: `started` (`true` once the older build's install begins, which removes the test install: a caller then puts the install back).
 
 import { rmSync } from "node:fs";
 import { parseLogin } from "@poplin/core/src/auth/logins";
@@ -169,8 +168,6 @@ async function makeOlder(run: Run, given: Upgrade): Promise<Standing | Stop> {
   const refused = await refuseOtherAccount(run, found.zone);
   if (refused !== undefined) return refused;
 
-  // The older build's install removes the test install first: from here on, a caller puts the install back.
-  run.output("started", "true");
   const code = await given.older.install();
   if (code !== 0) return { kind: "failed", what: `the older build's own install ended with exit code ${code}` };
 

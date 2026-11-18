@@ -1,13 +1,13 @@
-// The live workflows' own filters, lanes, guard, and wait step, and the fuzz run, the release gate, and the release's live upgrade, read beside the tree.
+// The live workflows' own lanes, guard, and report, and the fuzz run, the release gate, and the release's live tests, read beside the tree.
 // There is one workflow for each kind of install, and both call the one file that holds the steps and the one that holds the upgrade.
-// A push that reaches an install and starts no run, a file of one kind that starts the other kind's run, a midnight reset that takes a waiting run's place, or a wait that no test drives would show on a real run alone.
+// A midnight reset that takes a waiting run's place, or a red night that files nothing would show on a real run alone.
 // So would a job that reaches a test account from a run that may not, a fuzz target no job runs, a second copy of the fuzz command with a budget of its own, or an upgrade of the test installs under a caller that hands it no secret.
-// So would a release's upgrade that leaves a test install without the samples and the demo: only the pull request of a release runs the jobs that put it back.
+// So would a release whose live checks ran only where an upgrade reached the install, or that left a test install without the samples and the demo.
 
 import { describe, expect, test } from "bun:test";
 import { mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { join } from "node:path";
 
 import { fuzzTargets, seedOf } from "../../../../../tests/fuzz/plan";
 import { repositoryFiles } from "../../../../../tests/support/repository-files";
@@ -20,48 +20,11 @@ const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
 /** The folder of the workflows, from the root. */
 const WORKFLOWS = ".github/workflows";
 
-/** The workflow of each kind of install, and the files that reach an install of that kind alone. Each workflow's `paths` list ends with the other kind's lines, each behind a `!`. A file that code of both kinds imports is in neither list. */
+/** The workflow of each kind of install, the environment of its account, and the label of the issue a red night of it files. */
 const KINDS = {
-  domain: {
-    file: "live-checks.yml",
-    environment: "with-domain-ci-tests",
-    owns: [
-      "packages/providers/cloudflare/src/with-domain/pieces/bots/**",
-      "packages/providers/cloudflare/src/with-domain/pieces/dns/**",
-      "packages/providers/cloudflare/src/with-domain/pieces/routes/**",
-      "packages/providers/cloudflare/src/with-domain/pieces/rules/guards.ts",
-      "packages/providers/cloudflare/src/with-domain/pieces/rules/rules.ts",
-      "packages/providers/cloudflare/src/with-domain/pieces/rules/waf.ts",
-      "packages/providers/cloudflare/tests/with-domain/pieces/bots/**",
-      "packages/providers/cloudflare/tests/with-domain/pieces/dns/**",
-      "packages/providers/cloudflare/tests/with-domain/pieces/routes/**",
-      "packages/providers/cloudflare/tests/with-domain/pieces/rules/guards.test.ts",
-      "packages/providers/cloudflare/tests/with-domain/pieces/rules/waf.test.ts",
-    ],
-  },
-  "account address": {
-    file: "live-checks-account-address.yml",
-    environment: "without-domain-ci-tests",
-    owns: [
-      "packages/providers/cloudflare/src/without-domain/pieces/forwarders/**",
-      "packages/providers/cloudflare/tests/without-domain/pieces/forwarders/**",
-      "packages/providers/cloudflare/src/without-domain/path-plug.ts",
-      "packages/providers/cloudflare/tests/without-domain/path-plug.test.ts",
-    ],
-  },
+  domain: { file: "live-checks.yml", environment: "with-domain-ci-tests", label: "live-nightly-domain" },
+  "account address": { file: "live-checks-account-address.yml", environment: "without-domain-ci-tests", label: "live-nightly-account-address" },
 } as const;
-
-/** The files of both kinds that import a file of one kind: each runs what it imports for an install of that kind alone, or is a test. */
-const DECIDERS: readonly string[] = [
-  "packages/providers/cloudflare/src/shared/install/first/installer.ts",
-  "packages/providers/cloudflare/src/shared/install/upkeep/remove/remove.ts",
-  "packages/providers/cloudflare/src/shared/install/upkeep/repair/repair.ts",
-  "packages/providers/cloudflare/src/shared/worker/hosts.ts",
-  "packages/providers/cloudflare/src/with-domain/pieces/https/https.ts",
-  "packages/providers/cloudflare/src/with-domain/pieces/rules/rules-follow.ts",
-  "packages/providers/cloudflare/src/with-domain/zone-plug.ts",
-  "packages/providers/cloudflare/tests/with-domain/pieces/rules/rules-follow.test.ts",
-];
 
 /** Both kinds, in the order of `KINDS`. */
 const BOTH = Object.keys(KINDS) as readonly Kind[];
@@ -75,7 +38,7 @@ const STEPS = parse("live-install.yml");
 /** The file both workflows and the release's own workflow call: the upgrade of one install, parsed. */
 const UPGRADE = parse("live-upgrade.yml");
 
-/** The workflow that upgrades both installs on the pull request of a release, and puts each back, parsed. */
+/** The workflow that upgrades both installs on the pull request of a release, then checks each and puts it back, parsed. */
 const RELEASE = parse("release-live-upgrade.yml");
 
 /** The job of that workflow that upgrades the install of each kind. */
@@ -84,11 +47,11 @@ const RELEASE_JOBS = { domain: "domain", "account address": "account-address" } 
 /** The job of that workflow that upgrades the install of each kind from a pre-release, as advice. */
 const ADVICE_JOBS = { domain: "domain-next", "account address": "account-address-next" } as const;
 
-/** The job of that workflow that puts the install of each kind back after its upgrade. */
-const PUT_BACK_JOBS = { domain: "put-back-domain", "account address": "put-back-account-address" } as const;
+/** The job of that workflow that runs the live checks on the install of each kind after its upgrades, and puts it back. */
+const CHECKS_JOBS = { domain: "checks-domain", "account address": "checks-account-address" } as const;
 
-/** The rights the job `checks` of the steps asks for. GitHub starts no run of a workflow whose caller grants a called job less than it asks. */
-const ASKED_RIGHTS = { contents: "read", actions: "read" };
+/** The action that files and closes the issue of a red night. */
+const ISSUE = "Vivswan/repo-platform/actions/fuzz-issue@stable";
 
 /** The environments of the two test accounts. */
 const ENVIRONMENTS: readonly string[] = Object.values(KINDS).map((kind) => kind.environment);
@@ -128,53 +91,15 @@ const ADMIT = "bun packages/providers/cloudflare/scripts/admit.ts";
 // biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.
 const LANE = { group: "live-checks-${{ inputs.kind }}", "cancel-in-progress": false, queue: "max" };
 
-/** The step that waits for the commit's gate. */
-const WAIT = STEPS.jobs.checks?.steps?.find((step) => step.name?.startsWith("Wait for")) as Step;
-
-/** What reads the imports of a file of the tree, by the end of its name. */
-const SCANNERS = { ts: new Bun.Transpiler({ loader: "ts" }), tsx: new Bun.Transpiler({ loader: "tsx" }) };
-
-/** One file of the tree that each kind's lines name. */
-const SAMPLE = Object.fromEntries(BOTH.map((kind) => [kind, repositoryFiles(ROOT).find((path) => KINDS[kind].owns.some((line) => new Bun.Glob(line).match(path))) ?? ""])) as Readonly<Record<Kind, string>>;
-
-/** The files of one push, and the kinds of install whose workflow GitHub starts for them. */
-const PUSH_CASES: readonly (readonly [what: string, changed: readonly string[], starts: readonly Kind[]])[] = [
-  ["a page of the website alone", ["website/src/index.html"], []],
-  [
-    "pages, pictures, the skill, a root guard, another workflow, and a lint setting together",
-    ["README.md", "docs/sites/publish.md", "brand/icon.svg", "skills/poplin/SKILL.md", "tests/layout.test.ts", ".github/workflows/checks.yml", "biome.json"],
-    [],
-  ],
-  ["a fuzz test and a helper the tests share", ["tests/fuzz/names.test.ts", "tests/support/markdown-page.ts"], []],
-  ["the Worker's own source", ["packages/providers/cloudflare/src/shared/worker/worker.ts"], BOTH],
-  ["the file that decides the kind of an install", ["packages/providers/cloudflare/src/shared/worker/hosts.ts"], BOTH],
-  ["a file of the core", ["packages/core/src/names/names.ts"], BOTH],
-  ["a test inside a product package", ["packages/core/tests/names/names.test.ts"], BOTH],
-  ["a page inside a product package or beside the live checks, which reaches no install", ["packages/cli/README.md", "packages/providers/cloudflare/live/README.md", "demo/README.md"], []],
-  ["a page inside a product package among files that reach the install", ["packages/cli/README.md", "packages/cli/src/poplin.ts"], BOTH],
-  ["a sample site", ["demo/samples/launch-deck/index.html"], BOTH],
-  ["a live check, which runs on an install of either kind", ["packages/providers/cloudflare/live/checks/edge.ts"], BOTH],
-  ["the steps both workflows call", [".github/workflows/live-install.yml"], BOTH],
-  ["the action the steps install with", [".github/actions/setup/action.yml"], BOTH],
-  ["the lockfile", ["bun.lock"], BOTH],
-  ["a dotfile at the root that no line names", [".gitattributes"], BOTH],
-  ["a folder that no line names", ["plugins/a/index.ts"], BOTH],
-  ["a new folder of tests that no line names", ["tests/browser/a.test.ts"], BOTH],
-  ["one file that reaches the install among pages", ["docs/sites/publish.md", "wrangler.jsonc", "README.md"], BOTH],
-  ["the plug of an install with a domain, whose pieces the plug of the other kind is made of", ["packages/providers/cloudflare/src/with-domain/zone-plug.ts"], BOTH],
-  ["a file of an install with a domain alone", [SAMPLE.domain], ["domain"]],
-  ["a file of an install without a domain alone", [SAMPLE["account address"]], ["account address"]],
-  ["a file of each kind together", [SAMPLE.domain, SAMPLE["account address"]], BOTH],
-  ["a file of one kind among pages", ["docs/sites/publish.md", SAMPLE["account address"]], ["account address"]],
-  ["the workflow of one kind", [".github/workflows/live-checks.yml"], ["domain"]],
-];
-
 /** A kind of install. */
 type Kind = keyof typeof KINDS;
 
 /** One step of a workflow, as far as a test reads it. */
 interface Step {
   readonly name?: string;
+  readonly if?: string;
+  readonly uses?: string;
+  readonly with?: Readonly<Record<string, unknown>>;
   readonly run?: string;
   readonly env?: Readonly<Record<string, string | number>>;
 }
@@ -195,7 +120,7 @@ interface Job {
 
 /** A workflow, as far as a test reads it. */
 interface Workflow {
-  readonly on: { readonly push: { readonly branches: readonly string[]; readonly paths: readonly string[] }; readonly workflow_call?: { readonly secrets?: Readonly<Record<string, unknown>> } } & Readonly<Record<string, unknown>>;
+  readonly on: { readonly workflow_call?: { readonly secrets?: Readonly<Record<string, unknown>> } } & Readonly<Record<string, unknown>>;
   readonly concurrency?: Readonly<Record<string, unknown>>;
   readonly jobs: Readonly<Record<string, Job>>;
 }
@@ -210,96 +135,26 @@ function workflows(): readonly string[] {
   return repositoryFiles(ROOT).flatMap((path) => (path.startsWith(`${WORKFLOWS}/`) ? [path.slice(WORKFLOWS.length + 1)] : []));
 }
 
-/** The other kind of install. */
-function otherOf(kind: Kind): Kind {
-  return kind === "domain" ? "account address" : "domain";
-}
-
 /** Whether a step is handed a secret. */
 function holdsSecret(step: Step): boolean {
   return Object.values(step.env ?? {}).some((value) => String(value).includes("secrets."));
 }
 
-/** Whether one changed file starts the workflow of a kind, as GitHub reads a `paths` list: the last line that matches decides, and a `!` line takes the file out. */
-function starts(kind: Kind, path: string): boolean {
-  const last = CALLERS[kind].on.push.paths.filter((line) => new Bun.Glob(line.replace(/^!/, "")).match(path)).at(-1);
+describe("the report of a red night", () => {
+  // Drift: a red midnight run is a red row in a list nobody opens. One label for both kinds would let the green kind close the red kind's issue.
+  test.each(BOTH)("a red or cancelled midnight run of %s files the issue of its own label, a green one closes it, and a run by hand does neither", (kind) => {
+    const report = CALLERS[kind].jobs.report;
+    const steps = (report?.steps ?? []).map((step) => ({ if: step.if, uses: step.uses, mode: step.with?.mode, label: step.with?.label, stream: step.with?.stream }));
 
-  return last !== undefined && !last.startsWith("!");
-}
-
-/** The kinds whose workflow a push of these files starts. */
-function started(changed: readonly string[]): readonly Kind[] {
-  return BOTH.filter((kind) => changed.some((path) => starts(kind, path)));
-}
-
-/** The kind a file reaches alone, by the lists of `KINDS` and each workflow's own file; `undefined` for a file of both kinds or of none. */
-function ownerOf(path: string): Kind | undefined {
-  return BOTH.find((kind) => [...KINDS[kind].owns, `${WORKFLOWS}/${KINDS[kind].file}`].some((line) => new Bun.Glob(line).match(path)));
-}
-
-/** The files of the tree a file imports for more than their types, as paths from the root. A module outside the tree, or one the runtime alone knows, is left out. */
-function importsOf(path: string): readonly string[] {
-  const imported: string[] = [];
-
-  // A script opens with the line that names its runtime, which is no line of the language.
-  const source = readFileSync(join(ROOT, path), "utf8").replace(/^#!.*/, "");
-
-  for (const found of SCANNERS[path.endsWith("x") ? "tsx" : "ts"].scanImports(source)) {
-    try {
-      imported.push(relative(ROOT, Bun.resolveSync(found.path, dirname(join(ROOT, path)))).replaceAll("\\", "/"));
-    } catch {
-      // No file of the tree: a package of the registry that is not installed, or a module of the runtime.
-    }
-  }
-
-  return imported;
-}
-
-describe("the files of a push that start the live checks of each kind of install", () => {
-  test.each(PUSH_CASES)("%s", (_what, changed, expected) => {
-    expect(started(changed)).toEqual(expected);
-  });
-
-  test.each(BOTH)("the filter of %s opens with every file, so a file no line names starts a run, and only a push to main is filtered", (kind) => {
-    const on = CALLERS[kind].on;
-
-    expect({ first: on.push.paths[0], branches: on.push.branches, others: Object.keys(on).sort() }).toEqual({ first: "**", branches: ["main"], others: ["push", "schedule", "workflow_dispatch"] });
-  });
-
-  // YAML holds no shared list, so each workflow writes the lines out. A line added to one file alone would start one kind's checks for a file that reaches both.
-  test("the two filters are one list: each names its own workflow, and ends with the lines of the other kind, taken out", () => {
-    const tails = BOTH.map((kind) => CALLERS[kind].on.push.paths.slice(-KINDS[otherOf(kind)].owns.length));
-    const heads = BOTH.map((kind) => CALLERS[kind].on.push.paths.slice(0, -KINDS[otherOf(kind)].owns.length).map((line) => line.replace(KINDS[kind].file, "<its own file>")));
-
-    expect({ tails, same: heads[0] }).toEqual({ tails: BOTH.map((kind) => KINDS[otherOf(kind)].owns.map((line) => `!${line}`)), same: heads[1] });
-  });
-
-  // A folder that moved leaves its line behind: the files then start both workflows again, and nothing says so.
-  test("every line of a kind names a file of the tree", () => {
-    const files = repositoryFiles(ROOT);
-    const empty = BOTH.flatMap((kind) => KINDS[kind].owns.filter((line) => !files.some((path) => new Bun.Glob(line).match(path))));
-
-    expect(empty).toEqual([]);
-  });
-
-  test("a file of the tree starts the workflow of its kind alone when a line of that kind names it, and else both workflows or neither", () => {
-    const wrong = repositoryFiles(ROOT).filter((path) => {
-      const owner = ownerOf(path);
-      const count = started([path]).length;
-
-      return owner === undefined ? count === 1 : count !== 1 || !starts(owner, path);
+    expect({ if: report?.if, needs: report?.needs, permissions: report?.permissions, steps }).toEqual({
+      if: "always() && github.event_name == 'schedule'",
+      needs: ["live"],
+      permissions: { issues: "write" },
+      steps: [
+        { if: "needs.live.result == 'failure' || needs.live.result == 'cancelled'", uses: ISSUE, mode: "report", label: KINDS[kind].label, stream: "generic" },
+        { if: "needs.live.result == 'success'", uses: ISSUE, mode: "resolve", label: KINDS[kind].label, stream: "generic" },
+      ],
     });
-
-    expect(wrong).toEqual([]);
-  });
-
-  // A file of one kind that code of both kinds runs reaches both installs, and a push of it would check one. The demo, which every install serves, is such code.
-  test("a file of one kind is imported by files of that kind, and by the listed files of both kinds, alone", () => {
-    const outside = repositoryFiles(ROOT)
-      .filter((path) => /\.tsx?$/.test(path) && !path.endsWith(".d.ts"))
-      .filter((path) => importsOf(path).some((imported) => ownerOf(imported) !== undefined && ownerOf(imported) !== ownerOf(path)));
-
-    expect(outside).toEqual([...DECIDERS]);
   });
 });
 
@@ -311,7 +166,7 @@ describe("what each workflow hands the steps", () => {
     ["the upgrade from a pre-release", (kind: Kind) => CALLERS[kind].jobs["upgrade-next"]],
     ["the upgrade of a release", (kind: Kind) => RELEASE.jobs[RELEASE_JOBS[kind]]],
     ["the upgrade of a release from a pre-release", (kind: Kind) => RELEASE.jobs[ADVICE_JOBS[kind]]],
-    ["the put-back after the upgrade of a release", (kind: Kind) => RELEASE.jobs[PUT_BACK_JOBS[kind]]],
+    ["the checks after the upgrades of a release", (kind: Kind) => RELEASE.jobs[CHECKS_JOBS[kind]]],
   ] as const)("each workflow names its own kind and the environment of that kind's account for %s, and the two hand over nothing else that differs", (_what, jobOf) => {
     const handed = BOTH.map(jobOf);
     const pairs = handed.map((job) => ({ kind: job?.with?.kind, environment: job?.with?.environment }));
@@ -329,7 +184,7 @@ describe("what each workflow hands the steps", () => {
 describe("the secrets of the live workflows", () => {
   // A called workflow reads only the secrets it declares. A step that reads one more would be handed nothing, and would stop on the real run alone.
   test.each([
-    ["the steps", STEPS, BOTH.flatMap((kind) => [CALLERS[kind].jobs.live, RELEASE.jobs[PUT_BACK_JOBS[kind]]])],
+    ["the steps", STEPS, BOTH.flatMap((kind) => [CALLERS[kind].jobs.live, RELEASE.jobs[CHECKS_JOBS[kind]]])],
     ["the upgrade", UPGRADE, BOTH.flatMap((kind) => [CALLERS[kind].jobs.upgrade, CALLERS[kind].jobs["upgrade-next"], RELEASE.jobs[RELEASE_JOBS[kind]], RELEASE.jobs[ADVICE_JOBS[kind]]])],
   ] as const)("every secret a step of %s reads is one its file declares, and each caller hands over those names and no other", (_what, called, callers) => {
     const read = Object.values(called.jobs).flatMap((job) => (job.steps ?? []).flatMap((step) => Object.values(step.env ?? {}).flatMap((value) => [...String(value).matchAll(/secrets\.(\w+)/g)].map((match) => match[1] ?? ""))));
@@ -349,7 +204,7 @@ describe("the lanes of the live workflows", () => {
     expect(Object.fromEntries(touching.map(([name, job]) => [name, job.concurrency]))).toEqual({ upgrade: LANE, checks: LANE, reset: LANE });
   });
 
-  test("a waiting run is replaced by a newer run of its own workflow and event alone, so a push never takes the place of the midnight run or of the other kind's run", () => {
+  test("a waiting run is replaced by a newer run of its own workflow and event alone, so a run by hand never takes the place of the midnight run or of the other kind's run", () => {
     expect(Object.fromEntries(BOTH.map((kind) => [kind, CALLERS[kind].concurrency]))).toEqual({
       // biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.
       domain: { group: "live-checks-domain-${{ github.event_name }}", "cancel-in-progress": false },
@@ -420,13 +275,6 @@ describe("the runs that reach a test account", () => {
   });
 });
 
-describe("the wait for the commit's gate", () => {
-  // The platform's shell check turns CI red on a loop written into a step, and a wait written there again is one no test here drives.
-  test("the step hands the whole wait to the script that the tests of the gate drive, and holds no loop of its own", () => {
-    expect({ run: WAIT.run?.trim(), loops: /\b(?:while|case|until|for)\b/.test(WAIT.run ?? "") }).toEqual({ run: "bun packages/providers/cloudflare/scripts/live/gate.ts", loops: false });
-  });
-});
-
 describe("the plan of a fuzz run", () => {
   test("the targets are the files of the folder that end as a target does, by name, and no helper or other test beside them", () => {
     using folder = mkdtempDisposableSync(join(tmpdir(), "fuzz-plan-"));
@@ -478,7 +326,7 @@ describe("the release gate", () => {
   });
 });
 
-describe("the live upgrade of a release", () => {
+describe("the live tests of a release", () => {
   // GitHub hands a called workflow only the secrets its caller passes, and a job two calls deep under a caller that passes none reads empty values: the upgrade of a release stopped there, on the real run alone.
   test.each(["live-upgrade.yml", "live-install.yml"])("the event starts each workflow that calls %s, so no workflow between them can hold the secrets back", (called) => {
     const callers = workflows().filter((file) => Object.values(parse(file).jobs).some((job) => job.uses === `./${WORKFLOWS}/${called}`));
@@ -491,23 +339,14 @@ describe("the live upgrade of a release", () => {
   });
 
   // Drift: the workflow starts for every pull request. A job without the branch of a release would wait in the lane of the live checks for each of them, to be refused there.
-  test("each job takes the branch of a release alone, the one the guard of the called job admits", () => {
-    const asked = BOTH.map((kind) => [RELEASE.jobs[RELEASE_JOBS[kind]]?.if, RELEASE.jobs[ADVICE_JOBS[kind]]?.if, RELEASE.jobs[PUT_BACK_JOBS[kind]]?.if]);
-    const after = `!cancelled() && github.head_ref == '${RELEASE_BRANCH}'`;
-    const started = (kind: Kind): string => `needs.${RELEASE_JOBS[kind]}.outputs.started == 'true' || needs.${ADVICE_JOBS[kind]}.outputs.started == 'true'`;
+  // The checks ask for nothing of the upgrades before them: where an upgrade failed, or found no build to start from, the release is checked all the same.
+  test("each job takes the branch of a release alone, the one the guard of the called job admits, and the checks ask no more than that", () => {
+    const asked = BOTH.map((kind) => [RELEASE.jobs[RELEASE_JOBS[kind]]?.if, RELEASE.jobs[ADVICE_JOBS[kind]]?.if, RELEASE.jobs[CHECKS_JOBS[kind]]?.if]);
+    const after = `\${{ !cancelled() && github.head_ref == '${RELEASE_BRANCH}' }}`;
 
     expect({ asked, jobs: Object.keys(RELEASE.jobs).length }).toEqual({
-      asked: BOTH.map((kind) => [`github.head_ref == '${RELEASE_BRANCH}'`, `\${{ ${after} }}`, `\${{ ${after} && (${started(kind)}) }}`]),
+      asked: BOTH.map(() => [`github.head_ref == '${RELEASE_BRANCH}'`, after, after]),
       jobs: 3 * BOTH.length,
     });
-  });
-});
-
-describe("the put-back after the live upgrade of a release", () => {
-  // GitHub refuses the whole workflow, upgrade and all, where a caller grants a called job less than it asks: no run starts, and the pull request shows no check to read.
-  test("every caller of the steps grants the rights their job asks for", () => {
-    const callers = workflows().flatMap((file) => Object.values(parse(file).jobs).filter((job) => job.uses === `./${WORKFLOWS}/live-install.yml`));
-
-    expect({ asks: STEPS.jobs.checks?.permissions, grants: callers.map((job) => job.permissions) }).toEqual({ asks: ASKED_RIGHTS, grants: [ASKED_RIGHTS, ASKED_RIGHTS, ASKED_RIGHTS, ASKED_RIGHTS] });
   });
 });

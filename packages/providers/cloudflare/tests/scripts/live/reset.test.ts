@@ -431,10 +431,10 @@ describe("the reset of the test install, against a local fake", () => {
     expect(Object.keys(addresses).sort()).toEqual(PUBLISHED);
   });
 
-  // The figure the put-back after a release's upgrade is planned with: it runs on the pull request of a release alone, so a sample that grew past the reset's ceilings would first show there, as a demo that stays down.
+  // The figure the reset after a release's upgrade is planned with: the checks there run on an install made anew, so a sample that grew past the reset's ceilings would first show there, as a demo that stays down.
   test.each(["domain", "account address"] as const)("on an install of %s made anew, which holds no site, a reset publishes every sample and the demo for 299 rows and 102 bucket writes and lists", async (kind) => {
     const install = await openSqlInstall(kind);
-    const ended = await reset(install, await install.addToken("the put-back"));
+    const ended = await reset(install, await install.addToken("the reset"));
 
     expect({ ended, left: await left(install) }).toEqual({
       ended: { ...PUT, linked: kind === "domain" ? PUT.linked : 0, removed: 0, trashed: 0, demo: "published", ...FRESH_RESET },

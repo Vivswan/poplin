@@ -42,10 +42,6 @@ on:
       POPLIN_LIVE_LOGIN:
         description: The email the test install lets in
         required: true
-    outputs:
-      started:
-        description: "`true` once the upgrade reached the test install, which a caller then puts back"
-        value: ${{ jobs.upgrade.outputs.started }}
 
 permissions:
   contents: read
@@ -67,8 +63,6 @@ jobs:
     env:
       POPLIN_LIVE_INSTALL: ${{ inputs.kind }}
       POPLIN_UPGRADE_FROM: ${{ inputs.from }}
-    outputs:
-      started: ${{ steps.upgrade.outputs.started }}
     # The lane of every job that touches the test install of one kind, the checks of main among them: each waits its turn, and none takes another's place.
     concurrency:
       group: live-checks-${{ inputs.kind }}

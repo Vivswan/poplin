@@ -1,15 +1,15 @@
-# The live upgrade of the two test installs: a real install of an older build, on each test account, takes the release
+# The live tests of a release, on the two test installs: a real install of an older build, on each test account, takes the release
 # as it would merge as an update and must answer as before (packages/providers/cloudflare/live/README.md, "The upgrade").
-# Each install is then put back to what main's own run leaves: the upgrade removes the sample sites and the demo, and leaves a schema step main does not have.
+# Then the live checks of a night run on each install, which also puts it back: the upgrade removes the sample sites and the demo, and leaves a schema step main does not have.
 #
 #   the pull request of a release -> live-upgrade.yml from the last release, once for each kind of install: a failure fails the check
 #                                 -> live-upgrade.yml from the newest earlier pre-release, after it in the same lane: a failure is a warning
-#                                 -> live-install.yml with `put_back_only`, once, where either upgrade reached the install: main's build, the sample sites, the demo
+#                                 -> live-install.yml, once, whatever the upgrades came to: main's build, the live checks, the sample sites, the demo: a failure fails the check
 #   every other pull request      -> every job skips
 #
 # It is its own workflow, started by the event, and not a job of release-gate.yml: a called workflow is handed only the
 # secrets its caller passes, and the caller of the release gate passes none, so a job under the gate reads an empty value.
-# Each upgrade and each put-back waits in the lane of its kind's live checks (live-upgrade.yml, live-install.yml), and no newer run stops one that started.
+# Each upgrade and each run of the checks waits in the lane of its kind's live checks (live-upgrade.yml, live-install.yml), and no newer run stops one that started.
 
 name: Release Live Upgrade
 
@@ -79,41 +79,31 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
-  # Once, after both upgrades, failed or not, where either reached the install: one that upgraded nothing left it as it was.
-  # A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
-  put-back-domain:
-    name: put back (domain)
+  # Once, after both upgrades, failed or not, and where neither found a build to start from: the checks of a release run all the same.
+  # A run that was cancelled checks nothing and puts nothing back: the midnight run of main does.
+  checks-domain:
+    name: live checks (domain)
     needs: [domain, domain-next]
-    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' && (needs.domain.outputs.started == 'true' || needs.domain-next.outputs.started == 'true') }}
-    # The called job asks for the right to read a commit's run of CI, which its wait on a push uses.
-    permissions:
-      contents: read
-      actions: read
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
     uses: ./.github/workflows/live-install.yml
     with:
       kind: domain
       environment: with-domain-ci-tests
-      put_back_only: true
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
-  # Once, after both upgrades, failed or not, where either reached the install: one that upgraded nothing left it as it was.
-  # A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
-  put-back-account-address:
-    name: put back (account address)
+  # Once, after both upgrades, failed or not, and where neither found a build to start from: the checks of a release run all the same.
+  # A run that was cancelled checks nothing and puts nothing back: the midnight run of main does.
+  checks-account-address:
+    name: live checks (account address)
     needs: [account-address, account-address-next]
-    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' && (needs.account-address.outputs.started == 'true' || needs.account-address-next.outputs.started == 'true') }}
-    # The called job asks for the right to read a commit's run of CI, which its wait on a push uses.
-    permissions:
-      contents: read
-      actions: read
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
     uses: ./.github/workflows/live-install.yml
     with:
       kind: account address
       environment: without-domain-ci-tests
-      put_back_only: true
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
