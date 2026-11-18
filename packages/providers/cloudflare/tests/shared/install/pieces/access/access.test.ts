@@ -181,6 +181,24 @@ describe("planAccess", () => {
     expect(planAccess(desired, current)).toEqual([LEFT[0], LEFT[1], LEFT[2], { kind: "change", subject: "poplin", id: "app-1", uris: GUARDED, policy: "poplin logins", policyId: "pol-1" }]);
   });
 
+  // Drift: an application that names no method offers every method of the account, and a user who is no member of those meets a login they cannot pass. Cloudflare answers the ids in its own order.
+  const METHODS = ["code-1", "passkeys-1"];
+  const offering: readonly { readonly name: string; readonly offers: Partial<Application>; readonly left: boolean }[] = [
+    { name: "the two methods in another order", offers: { allowed_idps: ["passkeys-1", "code-1"], auto_redirect_to_identity: false }, left: true },
+    { name: "the two methods, with nothing said of the redirect", offers: { allowed_idps: METHODS }, left: true },
+    { name: "every method of the account", offers: { allowed_idps: [] }, left: false },
+    { name: "the code alone", offers: { allowed_idps: ["code-1"] }, left: false },
+    { name: "a method of the owner's beside the two", offers: { allowed_idps: [...METHODS, "their-login"] }, left: false },
+    { name: "the two methods and a redirect past the choice", offers: { allowed_idps: METHODS, auto_redirect_to_identity: true }, left: false },
+  ];
+
+  test.each(offering)("a guarded application that offers $name is left only where it offers exactly poplin's methods, and one whose methods are not known is left whatever it offers", ({ offers, left }) => {
+    const current = { policies: [policy("pol-1", emails), everyone()], applications: [application("app-1", ADMIN, "pol-1", offers), openPaths()] };
+    const changed = { kind: "change", subject: "poplin", id: "app-1", uris: GUARDED, policy: "poplin logins", policyId: "pol-1", methods: METHODS };
+
+    expect<unknown>([planAccess({ ...desired, methods: METHODS }, current)[3], planAccess(desired, current)[3]]).toEqual([left ? LEFT[3] : changed, LEFT[3]]);
+  });
+
   // Drift: a path added to the open application by hand is a part of the dashboard anyone reaches with no login at Cloudflare; one taken out puts the API behind it.
   const opened: readonly { readonly name: string; readonly application: Application }[] = [
     { name: "a path of the dashboard was added to the open paths", application: openPaths({ destinations: [...OPEN, "poplin.example.com/data"].map((uri) => ({ type: "public", uri })) }) },
@@ -198,7 +216,8 @@ describe("planAccess", () => {
 
 describe("syncAccess", () => {
   // Drift: a repair would make one application per run. Two policies in one application would also need two precedences, which Cloudflare refuses alike.
-  test("two runs against one account: the first creates each policy and then its application, linked to that policy's new id at precedence 1; the second sends no change", async () => {
+  // Cloudflare writes an application whole: one sent without its login methods offers every method of the account, so each is sent with them, the open paths with none.
+  test("two runs against one account: the first creates each policy and then its application, linked to that policy's new id at precedence 1, the guarded one with its two login methods; the second sends no change", async () => {
     const policies: Record<string, unknown>[] = [];
     const applications: Record<string, unknown>[] = [{ id: "app-0", name: "the owner's own application", type: "self_hosted", domain: "wiki.example.com" }];
 
@@ -214,17 +233,19 @@ describe("syncAccess", () => {
         return reply(made);
       },
       async (connection, asked) => {
-        const desired = { hostname: ADMIN, users: loginsOf("owner@example.com"), privateSites: PRIVATE_SITES };
+        const desired = { hostname: ADMIN, users: loginsOf("owner@example.com"), privateSites: PRIVATE_SITES, methods: ["code-1", "passkeys-1"] };
         const first = await syncAccess(connection, "account-a", desired, "apply");
         const sent = asked.length;
         const second = await syncAccess(connection, "account-a", desired, "apply");
-        const made = (name: string, uris: readonly string[], policyId: string): unknown => ({
+        const made = (name: string, uris: readonly string[], policyId: string, methods: readonly string[]): unknown => ({
           name,
           type: "self_hosted",
           domain: uris[0],
           destinations: uris.map((uri) => ({ type: "public", uri })),
           policies: [{ id: policyId, precedence: 1 }],
           ...SESSION,
+          allowed_idps: methods,
+          auto_redirect_to_identity: false,
         });
 
         expect(first).toMatchObject({ ok: true, report: { created: ["poplin open paths policy", "poplin open paths", "poplin logins", "poplin"], changedNothing: false } });
@@ -232,9 +253,9 @@ describe("syncAccess", () => {
         expect(asked.slice(sent).every((entry) => entry.method === "GET")).toBe(true);
         expect(asked.filter((entry) => entry.method === "POST").map((entry) => [entry.path, entry.body])).toEqual([
           ["/accounts/account-a/access/policies", { name: "poplin open paths policy", decision: "bypass", include: [{ everyone: {} }] }],
-          ["/accounts/account-a/access/apps", made("poplin open paths", OPEN, "made-0")],
+          ["/accounts/account-a/access/apps", made("poplin open paths", OPEN, "made-0", [])],
           ["/accounts/account-a/access/policies", { name: "poplin logins", decision: "allow", include: [{ email: { email: "owner@example.com" } }] }],
-          ["/accounts/account-a/access/apps", made("poplin", GUARDED, "made-1")],
+          ["/accounts/account-a/access/apps", made("poplin", GUARDED, "made-1", ["code-1", "passkeys-1"])],
         ]);
         expect(applications[0]).toEqual({ id: "app-0", name: "the owner's own application", type: "self_hosted", domain: "wiki.example.com" });
       },

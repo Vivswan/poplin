@@ -29,6 +29,11 @@ function addedLine(email: string): string {
   return `added ${email}`;
 }
 
+/** What follows "Added." once the login lets the new user in: nobody mails them, so the line names the address to pass on. */
+function passOn(): string {
+  return `Send them ${window.location.origin}: poplin sends no mail.`;
+}
+
 /** What a decision about a login asks for. */
 interface Decision {
   /** Whether the computer is let in. */
@@ -141,7 +146,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
         const added = await answerOf(api.people.add.$post({ json: { login: email } }));
         onChanged();
         onUsersChanged();
-        sayDone(PEOPLE_SAID.added, { run: () => void removePerson(added.login), id: addedLine(added.login), ...(added.note === null ? {} : { next: added.note }) });
+        sayDone(PEOPLE_SAID.added, { run: () => void removePerson(added.login), id: addedLine(added.login), next: added.note ?? passOn() });
 
         return undefined;
       } catch (error) {

@@ -21,7 +21,7 @@ const KINDS = {
 /** A dry run, and a run that removes everything once the install's address was typed. */
 const DRY: Removal = { run: "dry-run", data: "remove" };
 
-/** What both kinds end with: the login, the alert, the keys, the Workflow, the Worker, and the data, then the token, which stays. */
+/** What both kinds end with: the login, the alert, the keys, the Workflow, the Worker, and the data, then the login methods and the token, which stay. */
 const SHARED = [
   "Access application | remove | poplin open paths, poplin",
   "Access policy | remove | poplin open paths policy, poplin logins",
@@ -32,6 +32,7 @@ const SHARED = [
   "Worker | remove | poplin",
   "R2 bucket | remove | poplin-sites (files: 2, 15 B) | 2 | 15",
   "D1 database | remove | poplin (sites: 3) | 3",
+  "Login method | stay | One-time PIN and Passkeys are login methods of the account, which its other applications may use, and are left in place",
   "Account token | stay | delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens",
 ];
 
@@ -48,9 +49,9 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     "Rate ruleset | remove | poplin rate rule",
     ...SHARED.slice(0, 3),
     "Certificate alert | remove | poplin: certificates of every domain of the account",
-    ...SHARED.slice(3, -1),
+    ...SHARED.slice(3, -2),
     "Bot settings | stay | AI crawler blocking and Bot Fight Mode are zone settings and keep their values",
-    ...SHARED.slice(-1),
+    ...SHARED.slice(-2),
   ],
   "no-domain": ["Forwarder | remove | poplin-sites, poplin-private", ...SHARED],
 };
@@ -170,7 +171,8 @@ function rebound(account: Account, name: string, to: Record<string, string>): vo
 
 describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) => {
   // Drift: a dry run that lists a kind another way than the run removes it would promise a list no run works through, and a removal that misses a kind leaves it at Cloudflare for good.
-  test("a dry run lists every kind with what the data holds and removes nothing; the run after it removes the same rows in the same order, and leaves the account as it was before the install", async () => {
+  // The login methods are the account's: an application of the owner's own may offer them, so a removal that took them would lock its users out.
+  test("a dry run lists every kind with what the data holds and removes nothing; the run after it removes the same rows in the same order, and leaves the account as it was before the install, but for the two login methods, which stay", async () => {
     const account = await installedAccount(kind);
     const before = structuredClone(account);
     const dry = await removed(account, kind, DRY);
@@ -182,6 +184,7 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
 
     expect([shown(run.done), run.said, run.done.ok && run.done.ready]).toEqual([[...ROWS[kind]], ROWS[kind].map((row) => row.split(" | ").slice(0, 2).join(" | ")), true]);
     expect([left(account), run.calls, run.writes.length, run.writes.every((call) => call.startsWith("DELETE "))]).toEqual([NOTHING, CALLS[kind].run, CALLS[kind].removals, true]);
+    expect(account.methods.map((method) => method.type)).toEqual(["cloudflare", "onetimepin", "passkeys"]);
   });
 
   // Drift: the files and the records are what a person cannot get back, so a run told to keep them must leave both whole, and a later run must still find and remove them.

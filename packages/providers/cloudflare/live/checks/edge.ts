@@ -3,7 +3,7 @@
 import { expect } from "bun:test";
 
 import { type Bench, type Check, Skip } from "../records";
-import { expectRefused, GHOST_ID } from "../util";
+import { expectRefused, GHOST_ID, shownInTime } from "../util";
 
 /** The most requests the burst sends before the paced ones: past the rate rule's 300 in ten seconds. */
 const BURST = 340;
@@ -49,6 +49,12 @@ const UNVERIFIED = "a run is no verified bot, so the bot switches answered, and 
 
 /** What every team's login hostname ends in, and the path its login page of a hostname starts with: the edge's own redirect, which no install writes. */
 const TEAM_LOGIN = { host: ".cloudflareaccess.com", path: "/cdn-cgi/access/login/" };
+
+/** What the team's login page holds where it offers the code Cloudflare mails: the form of the code, with the box an email is typed into. */
+const EMAIL_CODE = /<form[^>]+id="totp-form"[\s\S]*?<input[^>]+type="email"/;
+
+/** How long Cloudflare's edge may take to show a login method on the team's page after it was made, and how long a run rests between two looks: it follows within about 75 seconds. */
+const LOGIN_PAGE_WITHIN = { ms: 180_000, pause: 15_000 } as const;
 
 /** The paths of the dashboard a stranger must not reach the install on: its page, its data, a file of its client, and a page a link in a terminal opens. */
 const BEHIND_LOGIN = ["/", "/data/frame", "/assets/index.js", "/tokens/review/x"];
@@ -305,6 +311,22 @@ function sentToTeamLogin(bench: Bench, response: Response): boolean {
   return hostname.endsWith(TEAM_LOGIN.host) && pathname.startsWith(TEAM_LOGIN.path);
 }
 
+/**
+ * Read the team's login page as a stranger reads it, until it offers the email code or its time is up.
+ *
+ * @param page - where the edge sent the stranger; whatever it sends on to within the team's hostname is followed
+ * @returns whether the page came to offer the email code
+ */
+function offersEmailCode(bench: Bench, page: string): Promise<boolean> {
+  const look = async (): Promise<boolean> => {
+    const read = await bench.visit(page, { redirect: "follow" });
+
+    return read.status === 200 && EMAIL_CODE.test(await read.text());
+  };
+
+  return shownInTime(bench, look, LOGIN_PAGE_WITHIN);
+}
+
 /** The two headers by which an answer lets another origin read it: the origin it names, and whether the visitor's cookies may come along. */
 function grantOf(response: Response): readonly [string | null, string | null] {
   return [response.headers.get("Access-Control-Allow-Origin"), response.headers.get("Access-Control-Allow-Credentials")];
@@ -340,6 +362,17 @@ export const EDGE_CHECKS: readonly Check[] = [
       // The client reads this 401 as a login that ended. A redirect here would be followed to a page of another origin, which a script cannot read.
       const called = await bench.visit(`${bench.admin}/data/frame`, { headers: BY_SCRIPT });
       expect([called.status, called.headers.get("Location"), (await called.text()).includes(OWN_REFUSAL)]).toEqual([401, null, false]);
+    },
+  },
+  {
+    id: "login-page",
+    name: "the team's login page a stranger is sent to offers the email code: a user who is no member of the Cloudflare account can log in",
+    needs: ["access", "login-methods"],
+    run: async (bench) => {
+      const sent = await bench.visit(`${bench.admin}/`);
+      expect(sentToTeamLogin(bench, sent)).toBe(true);
+
+      expect(await offersEmailCode(bench, sent.headers.get("Location") ?? "")).toBe(true);
     },
   },
   {

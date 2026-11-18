@@ -31,12 +31,13 @@ const OWN_REFUSALS: ReadonlySet<number> = new Set([302, 303, 401, 403, 404, 405,
 class NotShown extends Error {}
 
 /**
- * Look at the provider until it shows what a change asked of it, every two seconds for twenty.
+ * Look at the provider until it shows what a change asked of it, every two seconds for twenty unless told otherwise.
  *
  * @param look - one look: whether the provider shows it now. A look that rejects with an `Error` ends the wait, and that error is thrown
+ * @param within - how long the provider may take, in milliseconds, and how long one look waits for the next
  * @returns whether the provider came to show it in time
  */
-export async function shownInTime(bench: Pick<Bench, "pause">, look: () => Promise<boolean>): Promise<boolean> {
+export async function shownInTime(bench: Pick<Bench, "pause">, look: () => Promise<boolean>, within: { readonly ms: number; readonly pause: number } = SHOWN_WITHIN): Promise<boolean> {
   const attempt = async (): Promise<true> => {
     if (!(await look())) throw new NotShown();
 
@@ -45,13 +46,13 @@ export async function shownInTime(bench: Pick<Bench, "pause">, look: () => Promi
   const again = async ({ error }: { readonly error: Error }): Promise<boolean> => {
     if (!(error instanceof NotShown)) return false;
 
-    await bench.pause(SHOWN_WITHIN.pause);
+    await bench.pause(within.pause);
 
     return true;
   };
 
   try {
-    return await pRetry(attempt, { retries: SHOWN_WITHIN.ms / SHOWN_WITHIN.pause, minTimeout: 0, shouldRetry: again });
+    return await pRetry(attempt, { retries: within.ms / within.pause, minTimeout: 0, shouldRetry: again });
   } catch (error) {
     if (error instanceof NotShown) return false;
 

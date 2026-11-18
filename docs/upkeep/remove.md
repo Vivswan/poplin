@@ -87,6 +87,7 @@ would remove  Workflow              poplin-jobs
 would remove  Worker                poplin
 would remove  R2 bucket             poplin-sites (files: 2, 15 B)
 would remove  D1 database           poplin (sites: 3)
+unchanged     Login method          One-time PIN and Passkeys are login methods of the account, which its other applications may use, and are left in place
 unchanged     Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 A real run prompts for poplin.your-name.workers.dev, or accepts --confirm poplin.your-name.workers.dev
 Uninstall does not log machines out. Run npx poplin logout on each machine first.
@@ -98,6 +99,8 @@ Each row is one kind of piece, with the names of its pieces. A kind the command 
 Under a domain, five rows stand in place of `Forwarder`: `Worker route`, `DNS record`, `Redirect rule`, `WAF rule`, and `Rate rule`. Each kind of rule has a second row for its rule set, such as `Redirect ruleset`.
 
 A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot settings` row says what stays there. A run under a domain removes 18 resource types at most.
+
+The `Login method` row is of both kinds. The two login methods are your Cloudflare account's own, and another application of the account may use them, so an uninstall leaves them. To remove them, open Zero Trust at Cloudflare.
 
 A rule set is Cloudflare's holder for rules of one kind. One that poplin made goes once no rule but poplin's is in it. One of the domain's own, which poplin only added a rule to, stays and has no row.
 
@@ -141,7 +144,7 @@ Type poplin.example.com to confirm: poplin.example.com
 removed    Worker route          *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*
 ...
 removed    D1 database           poplin (sites: 3)
-The install is removed: 18 resource types removed, 2 unchanged
+The install is removed: 18 resource types removed, 3 unchanged
 Next: npx poplin logout on each machine with a stored login, to delete it
 ```
 
@@ -152,7 +155,7 @@ Nothing is removed before you type the host. Another text than the install's own
 The line that ends the rows counts the ones that say `removed` or `not found`, then the ones that say `skipped` and `unchanged`. Where the token lacks an optional permission, the line under it names the permission and each kind the run skipped:
 
 ```text
-The install is removed: 16 resource types removed, 2 skipped, 2 unchanged
+The install is removed: 16 resource types removed, 2 skipped, 3 unchanged
 Fix: add Notifications: Edit and rerun this command, or delete Budget alert and Certificate alert at Cloudflare
 ```
 

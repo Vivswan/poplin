@@ -91,8 +91,10 @@ const ALREADY = [
   "  remove  npx poplin uninstall cloudflare",
 ];
 
-/** The login, the variables, and the keys, which both kinds make alike. */
-const SHARED_MADE = [
+/** The login, the variables, and the keys, which both kinds make alike. `methods` is what a run does to the account's two login methods: it makes them, or leaves the ones a removal left. */
+const sharedMade = (methods: "made" | "left"): string[] => [
+  `Login method: ${methods}`,
+  `Login method: ${methods}`,
   "Access application: made",
   "Access policy: made",
   "Access application: made",
@@ -107,7 +109,7 @@ const SHARED_MADE = [
 ];
 
 /** The same pieces as a repair that changes nothing tells them. */
-const SHARED_LEFT = ["Access application: left", "Access policy: left", "Access application: left", "Access policy: left", "Worker variable: left", "Key: left", "Upload key: left", "Worker logs: left"];
+const SHARED_LEFT = ["Login method: left", "Login method: left", "Access application: left", "Access policy: left", "Access application: left", "Access policy: left", "Worker variable: left", "Key: left", "Upload key: left", "Worker logs: left"];
 
 /** What a run tells of an account it made the install on from nothing. */
 const FROM_NONE = "Install: none found, so poplin install ran";
@@ -115,7 +117,7 @@ const FROM_NONE = "Install: none found, so poplin install ran";
 /** The Worker's own pieces of a new install. */
 const OWN_MADE = [FROM_NONE, "R2 bucket: made", "D1 database: made", "Worker: made", "Cron trigger: made", "workers.dev route: changed"];
 
-/** What each kind tells of its account, of an install it made, of one it mended, and of one it removed. `bots` is what a new install does to the zone's bot switches, the one thing a removal leaves as it is set. */
+/** What each kind tells of its account, of an install it made, of one it mended, and of one it removed. `bots` is what a new install does to the zone's bot switches. A removal leaves them as set, and the account's login methods too. */
 const TOLD = {
   domain: {
     found: "Zone: found",
@@ -127,7 +129,7 @@ const TOLD = {
       "Worker route: made",
       "Worker route: made",
       "Worker route: made",
-      ...SHARED_MADE,
+      ...sharedMade(bots === "changed" ? "made" : "left"),
       "Redirect rule: made",
       "WAF rule: made",
       "WAF rule: made",
@@ -174,14 +176,14 @@ const TOLD = {
       "Workflow: removed",
       "Worker: removed",
     ],
-    stays: ["Bot settings: stays", "Account token: stays"],
+    stays: ["Bot settings: stays", "Login method: stays", "Account token: stays"],
   },
   "account address": {
     found: "Free address: found",
-    made: () => [...OWN_MADE, "Forwarder: made", "Forwarder: made", ...SHARED_MADE, "Budget alert: made", "Workflow: made"],
+    made: (bots: string) => [...OWN_MADE, "Forwarder: made", "Forwarder: made", ...sharedMade(bots === "changed" ? "made" : "left"), "Budget alert: made", "Workflow: made"],
     mended: ["Worker: left", "Forwarder: left", "Forwarder: left", ...SHARED_LEFT, "D1 database: left", "Budget alert: left", "Workflow: left"],
     removed: ["Forwarder: removed", "Access application: removed", "Access policy: removed", "Budget alert: removed", "Key: removed", "Upload key: removed", "Workflow: removed", "Worker: removed"],
-    stays: ["Account token: stays"],
+    stays: ["Login method: stays", "Account token: stays"],
   },
 } as const;
 
@@ -641,10 +643,23 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
   test("on an account whose Access is off, the login's rows are a lack the suite skips for, on the run that makes the install and on the one that mends it", async () => {
     const standing = await standingOn(freshAccount({ accessOff: true }), kind);
     const [first, second] = [await standing.again(), await standing.again()];
-    const lacking = ["Access application", "Access policy", "Access application", "Worker variable"].map((object) => `${object}: stopped: needs Access switched on for the account`);
+    const lacking = ["Login method", "Access application", "Access policy", "Access application", "Worker variable"].map((object) => `${object}: stopped: needs Access switched on for the account`);
 
-    expect([first.code, second.code, first.missing.access, second.missing]).toEqual([0, 0, "Access switched on for the account", { access: "Access switched on for the account" }]);
+    expect([first.code, second.code, first.missing.access, second.missing]).toEqual([0, 0, "Access switched on for the account", { access: "Access switched on for the account", "login-methods": "Access switched on for the account" }]);
     expect([first.lines.filter((line) => line.includes("stopped")), second.lines.filter((line) => line.includes("stopped"))]).toEqual([lacking, lacking]);
+  });
+
+  // Drift: the suite opens the login's page and looks for the email code. Skipped for passkeys Cloudflare makes an account none of, that check would never run there; run for a token that could make no method, it would fail for the token.
+  test("a token that may not make a login method is a lack the suite skips the login's page for, and passkeys Cloudflare does not make are none: the email code still stands", async () => {
+    const refused = await (await standingOn(freshAccount({ refuse: `POST /accounts/${INSTALL_ACCOUNT}/access/identity_providers` }), kind)).again();
+    const none = await (await standingOn(freshAccount({ noPasskeys: true }), kind)).again();
+    const right = "the token permission Access: Organizations, Identity Providers, and Groups: Edit";
+    const methods = (lines: readonly string[]): string[] => lines.filter((line) => line.startsWith("Login method"));
+
+    const stopped = [`Login method: stopped (refused with status 403 and codes 10000): needs ${right}`, "Login method: not run: needs the run to reach it: an earlier object was not settled"];
+
+    expect([refused.code, refused.missing["login-methods"], methods(refused.lines)]).toEqual([0, right, stopped]);
+    expect([none.code, none.missing["login-methods"], methods(none.lines)]).toEqual([0, undefined, ["Login method: made", "Login method: left out (refused with status 400 and codes 12000): needs passkeys, which Cloudflare did not make for the account"]]);
   });
 
   // Drift: an install answers without its Workflow, which only a copy too large for one request needs. A run that called that a failure would stop the test install for a part every other check passes without.
@@ -700,7 +715,7 @@ describe("the rows of an install with a domain, made by a token with none of the
     expect({ code: ran.code, out: ran.lines.filter((line) => line.includes(": left out: ")), made: ran.lines.filter((line) => line.endsWith(": made")).length }).toEqual({
       code: 0,
       out: out.map((object) => `${object}: left out: needs ${leftOut(object)}`),
-      made: 20,
+      made: 22,
     });
     expect(ran.missing).toEqual({
       "settled-upload-key": expect.any(String),

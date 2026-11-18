@@ -98,6 +98,12 @@ const NOT_PERMITTED = /status 40[13]/;
 /** What a login needs on an account whose Access is off: no API switches it on. */
 const ACCESS_OFF = "Access switched on for the account";
 
+/** The row of each of the account's two login methods. */
+const LOGIN_METHOD = "Login method";
+
+/** What an install lacks whose passkeys Cloudflare did not make: its users log in with the email code. */
+const NO_PASSKEYS = "passkeys, which Cloudflare did not make for the account";
+
 /** How the row of the Worker's login variable starts where the login it is read from is not there. */
 const LOGIN_VARIABLE = `${INSTALL_OBJECTS.accessBinding}:`;
 
@@ -115,6 +121,7 @@ const CAPABILITIES: Readonly<Record<string, string>> = {
   "Bot settings": "bot-block",
   "Access application": "access",
   "Access policy": "access",
+  [LOGIN_METHOD]: "login-methods",
   Key: "kept-key",
   Workflow: "jobs",
   "Upload key": "upload-key",
@@ -254,12 +261,14 @@ async function checkPlans(run: Run, found: Found, progress: Progress): Promise<S
 function needOf(row: CommandRow): string | undefined {
   if (row.state === "not-run") return "the run to reach it: an earlier object was not settled";
 
+  if (row.state === "leave-out" && row.object === LOGIN_METHOD) return NO_PASSKEYS;
+
   if (row.state === "leave-out") return `the ${row.object}, which was left out: the token lacks its optional permission, or the account holds it in another form`;
 
   if (row.state === "block" && row.right !== undefined) return `the token permission ${row.right}`;
 
   // The Worker's login variable is read from the Access application, so it is missing wherever the application is.
-  if (row.state === "block" && (row.object.startsWith("Access") || row.detail.startsWith(LOGIN_VARIABLE))) return ACCESS_OFF;
+  if (row.state === "block" && (row.object.startsWith("Access") || row.object === LOGIN_METHOD || row.detail.startsWith(LOGIN_VARIABLE))) return ACCESS_OFF;
 
   // An install answers without its Workflow: only a copy too large for one request needs it. One that was not made is a lack, which skips the check of that copy, and stops no run.
   if (row.object === "Workflow" && row.state === "fail") return NO_WORKFLOW;
@@ -302,7 +311,8 @@ function sortRows(run: Run, progress: Progress, rows: readonly CommandRow[]): St
     }
 
     const needs = needOf(row);
-    const capability = CAPABILITIES[row.object];
+    // Passkeys Cloudflare makes the account none of are left out, and the email code still stands: the suite checks the login's page as it is.
+    const capability = row.object === LOGIN_METHOD && row.state === "leave-out" ? undefined : CAPABILITIES[row.object];
     note(run, progress, { piece: row.object, result: resultOf(row), needs });
 
     if (needs === undefined) failed ??= { kind: "failed", what: `the ${row.object} is ${resultOf(row)}` };

@@ -18,7 +18,13 @@ const USERS = ["zoe@example.com", "ada@example.com"] as Login[];
 const PLACE = { accountId: ACCOUNT, script: "poplin", adminHost: "poplin.example.com" as Hostname, privateSites: "*-p-poplin.example.com" };
 
 /** The requests the sweep's table says a repair sends at the most, where each list of the account fits one page. */
-const MOST_CALLS = 14;
+const MOST_CALLS = 16;
+
+/** The account's two login methods of poplin's kinds, as a repair with a token leaves them. */
+const METHODS = [
+  { id: "code-1", name: "One-time PIN", type: "onetimepin", config: {} },
+  { id: "passkeys-1", name: "Passkeys", type: "passkeys", config: {} },
+];
 
 /** Every piece a repair writes, in the order it writes them where it makes them all or changes them all. */
 const PIECES = [INSTALL_OBJECTS.accessOpenPolicy, INSTALL_OBJECTS.accessOpenApplication, INSTALL_OBJECTS.accessPolicy, INSTALL_OBJECTS.accessApplication, INSTALL_OBJECTS.accessBinding];
@@ -60,6 +66,13 @@ const stopped: readonly { readonly name: string; readonly change: (account: Acco
   },
 ];
 
+/** An account with nothing of poplin's in it but the two login methods, which the key reads and may not make. */
+function withMethods(): Account {
+  const account = emptyAccount();
+
+  return { ...account, methods: [...account.methods, ...METHODS] };
+}
+
 /** The writes among what was asked, each as its method and its path. */
 function writes(asked: readonly Asked[]): string[] {
   return asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path.split("?")[0]}`);
@@ -71,10 +84,10 @@ async function withRepair(respond: (asked: Asked) => Response, run: (login: Logi
 }
 
 describe("createLoginRepair", () => {
-  // Drift: the sweep fits its steps around the calls a repair says it sent, and its table states 13 for an account whose lists fit a page each.
+  // Drift: the sweep fits its steps around the calls a repair says it sent, and its table states 16 for an account whose lists fit a page each.
   // A repair that sent more, counted fewer than it sent, or wrote a login that stands would pass what one invocation may send.
-  test("writes every piece of a login the account holds none of, nothing of one that stands, and every piece of one that differs throughout, and counts every request it sent, 14 at the most", async () => {
-    const account = emptyAccount();
+  test("writes every piece of a login the account holds none of, nothing of one that stands, and every piece of one that differs throughout, and counts every request it sent, 16 at the most", async () => {
+    const account = withMethods();
 
     await withRepair(
       (asked) => answer(account, asked),
@@ -104,7 +117,7 @@ describe("createLoginRepair", () => {
 
   // Drift: a policy somebody edited at Cloudflare lets the wrong people through, and the stored users get Cloudflare's own refusal with no word of poplin's: only a repair that writes the stored users over it lets them in again.
   test("writes the stored users over a policy that lets another email through, and leaves the pieces that stand", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
 
     await withRepair(
       (asked) => answer(account, asked),
@@ -122,7 +135,7 @@ describe("createLoginRepair", () => {
   // Drift: a refusal read as done would leave a broken login with nobody told, and one that hid what was written before it would keep those writes out of Activity.
   // One that carried Cloudflare's words would put the key, which a refusal can quote, into a stored problem.
   test.each(stopped)("stops at $name with its own refusal beside what it wrote before, and nothing of the key", async ({ change, refusal, wrote }) => {
-    const account = emptyAccount();
+    const account = withMethods();
     change(account);
 
     await withRepair(
@@ -137,8 +150,33 @@ describe("createLoginRepair", () => {
   });
 
   // Drift: the Worker checks a login's token against the team's domain. Written with none, the variable would make the Worker refuse every login of an Access that works.
+  // Drift: the key reads the account's login methods and may make none. A repair that named no method would leave the page offering every method of the account.
+  // One that said nothing of a missing code would leave users shut out with nobody told.
+  test.each([
+    { name: "both methods", held: METHODS, offered: ["code-1", "passkeys-1"], refusal: undefined },
+    { name: "the code alone", held: METHODS.slice(0, 1), offered: ["code-1"], refusal: undefined },
+    { name: "no method that mails a code", held: METHODS.slice(1), offered: ["passkeys-1"], refusal: "no_login_method" },
+  ])("on an account with $name the guarded application offers the methods that stand, never one that is gone, and only a missing code is a refusal, after the rest was written", async ({ held, offered, refusal }) => {
+    const account = { ...emptyAccount(), methods: [...emptyAccount().methods, ...held] };
+
+    await withRepair(
+      (asked) => answer(account, asked),
+      async (login, asked) => {
+        await login.repair(USERS);
+        const guarded = account.applications.find((application) => application.name === INSTALL_OBJECTS.accessApplication);
+        Object.assign(guarded ?? {}, { allowed_idps: ["their-login"] });
+        const again = await login.repair(USERS);
+
+        const now = account.applications.find((application) => application.name === INSTALL_OBJECTS.accessApplication)?.allowed_idps;
+
+        expect<unknown>([guarded === undefined, again.refusal, again.wrote.includes(INSTALL_OBJECTS.accessBinding), now]).toEqual([false, refusal, false, offered]);
+        expect(writes(asked).filter((call) => call.includes("identity_providers"))).toEqual([]);
+      },
+    );
+  });
+
   test("leaves the Worker's variable as it was when Cloudflare names no team for the login", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     const before = JSON.stringify(account.bindings);
 
     await withRepair(
