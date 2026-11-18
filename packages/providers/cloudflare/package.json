@@ -23,7 +23,8 @@
     "live:suite": "bun scripts/live/suite.ts",
     "live:reset": "bun scripts/live/reset.ts",
     "live:upgrade-builds": "bun migrations/older-build.ts",
-    "live:upgrade": "bun migrations/upgrade.ts"
+    "live:upgrade": "bun migrations/upgrade.ts",
+    "step-notices": "bun migrations/steps/notices.ts"
   },
   "dependencies": {
     "@poplin/app": "workspace:*",

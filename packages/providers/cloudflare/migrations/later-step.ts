@@ -41,7 +41,7 @@ const ROWS = { once: 5, eachSite: 3, eachRemoval: 2, siteAfter: 2 } as const;
  * @param version - the release it migrates away from: the one the older build says
  */
 export function laterStep(version: string): Step {
-  return { version, name: NAME, description: DESCRIPTION, statements: STATEMENTS };
+  return { version, name: NAME, description: DESCRIPTION, by: "install", statements: STATEMENTS };
 }
 
 /** Whether a step is the later step: the one of its name, statement for statement. */
@@ -76,7 +76,7 @@ export function laterRows(sites: number): number {
  * @throws {Error} the tree holds the step already, or its steps are not in the form a step is added to
  */
 export function addLaterStep(root: string, version: string): Step {
-  addStep(join(root, STEPS_FOLDER), version, { name: NAME, description: DESCRIPTION, statements: STATEMENTS });
+  addStep(join(root, STEPS_FOLDER), version, { name: NAME, description: DESCRIPTION, by: "install", statements: STATEMENTS });
 
   return laterStep(version);
 }
