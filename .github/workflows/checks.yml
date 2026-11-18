@@ -62,6 +62,39 @@ jobs:
       - name: Build the Worker bundle and test the Worker (Workers runtime)
         run: bun run test:worker
 
+  # What each action asks of the database and the storage, held to the budget that keeps an install inside Cloudflare's
+  # free plan (packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts). A row over its budget fails the job.
+  #
+  #   every run        the job's summary: the standing, one row a ceiling, then every table; and the `free-plan-budget` artifact: every row as JSON
+  #   a pull request   the summary and an annotation lead with what the change did to the costs, against the newest green run on main
+  budget:
+    name: free-plan budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Measure each action against its budget
+        env:
+          FREE_PLAN_BUDGET_FILE: ${{ runner.temp }}/free-plan-budget.json
+        run: bun run --cwd packages/providers/cloudflare budget
+      - name: Keep the numbers of this run
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: free-plan-budget
+          path: ${{ runner.temp }}/free-plan-budget.json
+          if-no-files-found: error
+      # The summary shows the row that went over, so it is written after a failed measuring step too.
+      - name: Write the summary, against the newest green run on main for a pull request
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FREE_PLAN_BUDGET_FILE: ${{ runner.temp }}/free-plan-budget.json
+        run: bun run --cwd packages/providers/cloudflare budget:report
+
   # Every fuzz target side by side, three minutes each (fuzz.yml). The seed is the one input of that file: blank here,
   # as in the nightly and the release gate, so each run draws a new one and its job `plan` prints it.
   fuzz:

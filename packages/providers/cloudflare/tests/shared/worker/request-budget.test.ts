@@ -14,7 +14,7 @@ import { ENTRY_ROWS } from "./support/budget-rows-entry";
 import { JOBS_ROWS } from "./support/budget-rows-jobs";
 import { PUBLISH_ROWS } from "./support/budget-rows-publish";
 import { ACTION_COUNTS, type ActionCost, actionCosts } from "./support/budget-guide";
-import { type Budget, type BudgetRow, type CostLine, costOf } from "./support/budget-stage";
+import { type Budget, type BudgetRow, type CostLine, costOf, type Use } from "./support/budget-stage";
 
 /** One row per thing the product does. */
 const ROWS: readonly BudgetRow[] = [...ENTRY_ROWS, ...CONSOLE_ROWS, ...PUBLISH_ROWS, ...JOBS_ROWS, ...API_ROWS, ...DRY_RUN_ROWS];
@@ -27,6 +27,12 @@ const MOST_STORE_CALLS_A_REQUEST = 250;
 
 /** The most calls one scheduled run may budget: the bound the run sets itself, with the start of its instance. */
 const MOST_RUN_CALLS = 300;
+
+/** The rows D1 reads in a day on the Free plan. */
+const MOST_ROWS_READ_A_DAY = 5_000_000;
+
+/** The rows D1 writes in a day on the Free plan. */
+const MOST_ROWS_WRITTEN_A_DAY = 100_000;
 
 /** The most values D1 binds to one statement. */
 const MOST_BOUND = 100;
@@ -96,12 +102,28 @@ function statedInGuide(): (readonly [action: string, cost: ActionCost])[] {
   });
 }
 
-/** Whether what a row spends, or may spend, is over a ceiling: the queries of one invocation, the bucket calls of one request, every call of one run, or the bucket reads of one page view. A removal is a call, though R2 bills none. */
-function overCeiling(row: BudgetRow, { queries, reads, writes, deletes = 0 }: Pick<Budget, "queries" | "reads" | "writes" | "deletes">): boolean {
+/**
+ * How much of each ceiling a row spends, or may spend: the queries of one invocation, the bucket calls of one request, every call of one run, the bucket reads of one page view, and the rows of a day.
+ * A removal is a call, though R2 bills none. A count of rows that is left out is of no ceiling.
+ */
+function usesOf(row: BudgetRow, { queries, reads, writes, deletes = 0, read, written }: Budget): Use[] {
   const stored = reads + writes + deletes;
-  if (row.status === undefined) return queries > MOST_QUERIES || queries + stored > MOST_RUN_CALLS;
+  const rows = [
+    ...(read === undefined ? [] : [{ ceiling: "Rows read, of one day's", spent: read, most: MOST_ROWS_READ_A_DAY }]),
+    ...(written === undefined ? [] : [{ ceiling: "Rows written, of one day's", spent: written, most: MOST_ROWS_WRITTEN_A_DAY }]),
+  ];
+  if (row.status === undefined) {
+    return [{ ceiling: "Database queries, one scheduled run", spent: queries, most: MOST_QUERIES }, { ceiling: "Every call, one scheduled run", spent: queries + stored, most: MOST_RUN_CALLS }, ...rows];
+  }
 
-  return queries > MOST_QUERIES || stored > MOST_STORE_CALLS_A_REQUEST || (row.group === "One page view of a site" && reads > MOST_STORE_CALLS);
+  const view = row.group === "One page view of a site" ? [{ ceiling: "Bucket reads, one page view", spent: reads, most: MOST_STORE_CALLS, exact: true as const }] : [];
+
+  return [{ ceiling: "Database queries, one request", spent: queries, most: MOST_QUERIES }, { ceiling: "Bucket calls, one request", spent: stored, most: MOST_STORE_CALLS_A_REQUEST }, ...view, ...rows];
+}
+
+/** Whether what a row spends, or may spend, is over a ceiling. */
+function overCeiling(row: BudgetRow, counts: Budget): boolean {
+  return usesOf(row, counts).some(({ spent, most }) => spent > most);
 }
 
 beforeEach(async () => {
@@ -117,10 +139,10 @@ describe("the budget of every request", () => {
   test.for(ROWS)("$name", async (row, { task }) => {
     task.meta.row = row.name;
     const cost = await costOf(row);
-    const line: CostLine = { ...cost, group: row.group, name: row.name, budget: row.budget, ...(row.known === undefined ? {} : { known: row.known }), ...(row.guide === undefined ? {} : { guide: row.guide }) };
+    const spent = { queries: cost.queries, reads: cost.gets + cost.heads, writes: cost.puts + cost.lists, deletes: cost.deletes, read: cost.read, written: cost.written };
+    const line: CostLine = { ...cost, group: row.group, name: row.name, budget: row.budget, uses: usesOf(row, spent), ...(row.known === undefined ? {} : { known: row.known }), ...(row.guide === undefined ? {} : { guide: row.guide }) };
     COSTS.push(line);
     task.meta.cost = line;
-    const spent = { queries: cost.queries, reads: cost.gets + cost.heads, writes: cost.puts + cost.lists, deletes: cost.deletes, read: cost.read, written: cost.written };
     // A row that budgets no removals may make none.
     const most: Budget = { deletes: 0, ...row.budget };
     const over = Object.entries(spent).filter(([what, count]) => count > (most[what as keyof typeof spent] ?? Number.POSITIVE_INFINITY));
