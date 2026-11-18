@@ -11,6 +11,7 @@
 #   live-upgrade-<kind>       the release PR  each real test install, made by the last release, takes the release as it would merge (live-upgrade.yml)
 #   live-upgrade-<kind>-next  the release PR  the same from the newest earlier pre-release, as advice: its failure is a warning
 #   live-checks-<kind>        the release PR  then main's build, the live checks of a night, the sample sites, and the demo (live-install.yml)
+#   put-back-<kind>           the release PR  last, whatever the jobs before came to: the install at the newest green commit of main, the samples, and the demo (live-install.yml, `put_back_only`)
 #
 # Each live job waits in the lane of its kind's live checks, which the called files hold, and names the three secrets it hands on:
 # a called workflow reads only the secrets its caller passes, at every call between the event and the step.
@@ -82,7 +83,7 @@ jobs:
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
   # Once, after both upgrades, failed or not, and where neither found a build to start from: the checks of a release run all the same.
-  # A run that was cancelled checks nothing and puts nothing back: the next run of the kind's lane does, the midnight run of main among them.
+  # A run that was cancelled checks nothing here: the put-back below runs all the same.
   live-checks-domain:
     name: live checks (domain)
     needs: [live-upgrade-domain, live-upgrade-domain-next]
@@ -96,7 +97,22 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
-  # The same three jobs for the install without a domain, on its own account and in its own lane.
+  # Last, whatever the upgrades and the checks came to, and after a run that was cancelled: main's build, never the release's, so the install is the one main's own runs keep.
+  put-back-domain:
+    name: put back (domain)
+    needs: [live-checks-domain]
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+      put_back_only: true
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # The same four jobs for the install without a domain, on its own account and in its own lane.
   live-upgrade-account-address:
     name: live upgrade from the last release (account address)
     if: github.event_name == 'pull_request'
@@ -126,7 +142,7 @@ jobs:
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
   # Once, after both upgrades, failed or not, and where neither found a build to start from: the checks of a release run all the same.
-  # A run that was cancelled checks nothing and puts nothing back: the next run of the kind's lane does, the midnight run of main among them.
+  # A run that was cancelled checks nothing here: the put-back below runs all the same.
   live-checks-account-address:
     name: live checks (account address)
     needs: [live-upgrade-account-address, live-upgrade-account-address-next]
@@ -135,6 +151,21 @@ jobs:
     with:
       kind: account address
       environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # Last, whatever the upgrades and the checks came to, and after a run that was cancelled: main's build, never the release's, so the install is the one main's own runs keep.
+  put-back-account-address:
+    name: put back (account address)
+    needs: [live-checks-account-address]
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: account address
+      environment: without-domain-ci-tests
+      put_back_only: true
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

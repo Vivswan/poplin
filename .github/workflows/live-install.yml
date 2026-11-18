@@ -11,7 +11,8 @@
 #
 #   make the install match: `poplin install` where the account holds none, and where it holds one the commit's build by the upload of an update, then `poplin doctor --repair`
 #   midnight UTC -> the same steps for main as it is, with one check more: a copy too large for one request, which the install's job finishes
-#
+#   a caller with `put_back_only` -> the newest commit of main whose gate ended green, checked out and built -> the install made to match it -> put back, with no checks between:
+#     post-green.yml after each green push to main, where a job a newer green commit overtook makes nothing; the workflows of a night and release-gate.yml after their checks, whatever they came to
 #   put back: every site that is no sample and not the demo removed, each sample that differs from demo/samples and its table published anew, the demo published when its files differ, waiting logins and every token removed
 #
 # The test install stays up between runs, with its logins and its settings.
@@ -45,6 +46,10 @@ on:
         description: Also run the small load after the checks
         type: boolean
         default: false
+      put_back_only:
+        description: Run no checks, and make the install from the newest commit of main whose gate ended green
+        type: boolean
+        default: false
     # The names the steps read. A caller must hand each name over, and the value may be empty: the one a step reads is the secret of the job's environment.
     secrets:
       CLOUDFLARE_API_TOKEN:
@@ -63,13 +68,15 @@ permissions:
 jobs:
   # A caller runs these after the upgrade where one was asked for, whatever it came to: they put the install back to the commit's own build and the samples.
   # The `if:` is the one every job that names a test account's environment carries (live-upgrade.yml says what it admits).
+  # A put-back runs after a run that was cancelled too, so no live check that was cut short leaves an install as it stopped.
   checks:
     if: >-
-      github.ref == 'refs/heads/main' ||
+      (inputs.put_back_only && always() || success()) &&
+      (github.ref == 'refs/heads/main' ||
       (github.event_name == 'pull_request' &&
       github.head_ref == 'release-please--branches--main' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login == 'github-actions[bot]')
+      github.event.pull_request.user.login == 'github-actions[bot]'))
     runs-on: ubuntu-latest
     timeout-minutes: 85
     environment: ${{ inputs.environment }}
@@ -91,11 +98,30 @@ jobs:
       # The same asking as the job's `if:`, read from the file of the event: it stops the job before any step is handed a secret.
       - name: Refuse a run that may not reach a test account
         run: bun packages/providers/cloudflare/scripts/admit.ts
+      # Asked once the job holds the lane, so a job that waited reads what is green now. The token reads this repository's runs and their jobs, and nothing of a test account.
+      - name: Find the newest green commit of main
+        id: newest
+        if: inputs.put_back_only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun packages/providers/cloudflare/scripts/newest-green.ts
+      - name: Take that commit
+        if: steps.newest.outputs.sha != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ steps.newest.outputs.sha }}
+      - name: Install that commit's dependencies
+        if: steps.newest.outputs.sha != ''
+        uses: ./.github/actions/setup
+      # A push's job that a newer green commit overtook builds and makes nothing: the reset below is skipped with the step before it.
       - name: Build the Worker bundle
+        if: steps.newest.outputs.stale != 'true'
         run: bun run --cwd packages/providers/cloudflare build
       # The box is ticked only on a run started by hand: the midnight run and the pull request of a release have no such input, and the step then removes nothing unless another build made the install.
       - name: Make the test install match the commit
         id: converge
+        if: steps.newest.outputs.stale != 'true'
         timeout-minutes: 22
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -104,6 +130,7 @@ jobs:
           POPLIN_LIVE_START_OVER: ${{ inputs.start_over }}
         run: bun run --silent --cwd packages/providers/cloudflare live:converge
       - name: Run the live checks
+        if: ${{ !inputs.put_back_only }}
         timeout-minutes: 25
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -125,9 +152,10 @@ jobs:
 
   # The midnight reset, beside the checks of that night. It shares their lane, so it never touches an install while they
   # do, and it puts an install back when they stopped before their own reset. On an account that holds no test install it
-  # says so and ends green.
+  # says so and ends green. A put-back is no night's run of the checks, and brings no second reset.
   reset:
     if: >-
+      !inputs.put_back_only &&
       github.event_name == 'schedule' &&
       (github.ref == 'refs/heads/main' ||
       (github.event_name == 'pull_request' &&

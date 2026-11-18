@@ -3,6 +3,7 @@
 // A midnight reset that takes a waiting run's place, or a red night that files nothing would show on a real run alone.
 // So would a job that reaches a test account from a run that may not, a fuzz target no job runs, a second copy of the fuzz command with a budget of its own, or an upgrade of the test installs under a caller that hands it no secret.
 // So would a release whose live checks ran only where an upgrade reached the install, or that left a test install without the samples and the demo.
+// So would a test install that stays at an older commit after a merge, or as a live check that was cut short left it.
 
 import { describe, expect, test } from "bun:test";
 import { mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
@@ -50,6 +51,15 @@ const ADVICE_JOBS = { domain: "live-upgrade-domain-next", "account address": "li
 /** The job of that workflow that runs the live checks on the install of each kind after its upgrades, and puts it back. */
 const CHECKS_JOBS = { domain: "live-checks-domain", "account address": "live-checks-account-address" } as const;
 
+/** The job of that workflow that puts the install of each kind back, last. */
+const PUT_BACK_JOBS = { domain: "put-back-domain", "account address": "put-back-account-address" } as const;
+
+/** The hook the managed ci.yml calls after a push to main whose gate ended green, parsed. */
+const GREEN = parse("post-green.yml");
+
+/** The job of that hook that puts the install of each kind at the newest green commit. */
+const GREEN_JOBS = { domain: "test-install-domain", "account address": "test-install-account-address" } as const;
+
 /** The action that files and closes the issue of a red night. */
 const ISSUE = "Vivswan/repo-platform/actions/fuzz-issue@stable";
 
@@ -59,7 +69,7 @@ const ENVIRONMENTS: readonly string[] = Object.values(KINDS).map((kind) => kind.
 /** The names of the secrets of a test account. */
 const SECRETS: readonly string[] = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "POPLIN_LIVE_LOGIN"];
 
-/** The files under `.github` that may name an environment or a secret of a test account: the settings, the two workflows, the files they call, and the release gate. */
+/** The files under `.github` that may name an environment or a secret of a test account: the settings, the two workflows, the files they call, the hook after a green push, and the release gate. */
 const REACHING: readonly string[] = [
   ".github/settings.local.yml",
   ".github/settings.yml",
@@ -67,11 +77,18 @@ const REACHING: readonly string[] = [
   ".github/workflows/live-checks.yml",
   ".github/workflows/live-install.yml",
   ".github/workflows/live-upgrade.yml",
+  ".github/workflows/post-green.yml",
   ".github/workflows/release-gate.yml",
 ];
 
 /** The runs a job that names a test account's environment takes, as its `if:` asks: main, or the pull request of a release as the step of `scripts/admit.ts` asks again. */
 const GUARD = `github.ref == '${MAIN}' || (github.event_name == '${PULL_REQUEST}' && github.head_ref == '${RELEASE_BRANCH}' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == '${RELEASE_BOT}')`;
+
+/** The `if:` of the job that holds the steps: a put-back runs after a run that was cancelled too, and any other call only while nothing before it failed. */
+const CHECKS_GUARD = `(inputs.put_back_only && always() || success()) && (${GUARD})`;
+
+/** The file that holds the steps, as a caller names it. */
+const INSTALL = `./${WORKFLOWS}/live-install.yml`;
 
 /** The file that holds the fuzz run, as a caller names it. */
 const FUZZ = `./${WORKFLOWS}/fuzz.yml`;
@@ -146,13 +163,14 @@ describe("the report of a red night", () => {
     const report = CALLERS[kind].jobs.report;
     const steps = (report?.steps ?? []).map((step) => ({ if: step.if, uses: step.uses, mode: step.with?.mode, label: step.with?.label, stream: step.with?.stream }));
 
+    // The put-back of a night is a part of it: one that failed leaves the install, and the demo, as a check stopped.
     expect({ if: report?.if, needs: report?.needs, permissions: report?.permissions, steps }).toEqual({
       if: "always() && github.event_name == 'schedule'",
-      needs: ["live"],
+      needs: ["live", "put-back"],
       permissions: { issues: "write" },
       steps: [
-        { if: "needs.live.result == 'failure' || needs.live.result == 'cancelled'", uses: ISSUE, mode: "report", label: KINDS[kind].label, stream: "generic" },
-        { if: "needs.live.result == 'success'", uses: ISSUE, mode: "resolve", label: KINDS[kind].label, stream: "generic" },
+        { if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')", uses: ISSUE, mode: "report", label: KINDS[kind].label, stream: "generic" },
+        { if: "needs.live.result == 'success' && needs.put-back.result == 'success'", uses: ISSUE, mode: "resolve", label: KINDS[kind].label, stream: "generic" },
       ],
     });
   });
@@ -167,12 +185,19 @@ describe("what each workflow hands the steps", () => {
     ["the upgrade of a release", (kind: Kind) => RELEASE.jobs[RELEASE_JOBS[kind]]],
     ["the upgrade of a release from a pre-release", (kind: Kind) => RELEASE.jobs[ADVICE_JOBS[kind]]],
     ["the checks after the upgrades of a release", (kind: Kind) => RELEASE.jobs[CHECKS_JOBS[kind]]],
+    ["the put-back of a night", (kind: Kind) => CALLERS[kind].jobs["put-back"]],
+    ["the put-back of a release", (kind: Kind) => RELEASE.jobs[PUT_BACK_JOBS[kind]]],
+    ["the put-back after a green push", (kind: Kind) => GREEN.jobs[GREEN_JOBS[kind]]],
   ] as const)("each workflow names its own kind and the environment of that kind's account for %s, and the two hand over nothing else that differs", (_what, jobOf) => {
     const handed = BOTH.map(jobOf);
     const pairs = handed.map((job) => ({ kind: job?.with?.kind, environment: job?.with?.environment }));
     // A job waits for the upgrades of its own kind, under those jobs' names: one that waited for the other kind's could run beside its own upgrade, or before it, which then leaves the install as before.
     const own = (job: Job | undefined): readonly (readonly [name: string, role: string])[] =>
-      BOTH.filter((kind) => job?.with?.kind === kind).flatMap((kind) => [[ADVICE_JOBS[kind], "the advice of its own kind"] as const, [RELEASE_JOBS[kind], "the upgrade of its own kind"] as const]);
+      BOTH.filter((kind) => job?.with?.kind === kind).flatMap((kind) => [
+        [ADVICE_JOBS[kind], "the advice of its own kind"] as const,
+        [RELEASE_JOBS[kind], "the upgrade of its own kind"] as const,
+        [CHECKS_JOBS[kind], "the checks of its own kind"] as const,
+      ]);
     const waits = (job: Job | undefined): readonly string[] => (job?.needs ?? []).map((name) => own(job).find(([known]) => known === name)?.[1] ?? name);
     const asks = (job: Job | undefined): string | undefined => own(job).reduce((text, [name, role]) => text?.replaceAll(`needs.${name}.`, `needs.<${role}>.`), job?.if);
     const rest = handed.map((job) => ({ ...job, name: undefined, if: asks(job), needs: waits(job), with: { ...job?.with, kind: undefined, environment: undefined } }));
@@ -184,7 +209,7 @@ describe("what each workflow hands the steps", () => {
 describe("the secrets of the live workflows", () => {
   // A called workflow reads only the secrets it declares. A step that reads one more would be handed nothing, and would stop on the real run alone.
   test.each([
-    ["the steps", STEPS, BOTH.flatMap((kind) => [CALLERS[kind].jobs.live, RELEASE.jobs[CHECKS_JOBS[kind]]])],
+    ["the steps", STEPS, BOTH.flatMap((kind) => [CALLERS[kind].jobs.live, CALLERS[kind].jobs["put-back"], RELEASE.jobs[CHECKS_JOBS[kind]], RELEASE.jobs[PUT_BACK_JOBS[kind]], GREEN.jobs[GREEN_JOBS[kind]]])],
     ["the upgrade", UPGRADE, BOTH.flatMap((kind) => [CALLERS[kind].jobs.upgrade, CALLERS[kind].jobs["upgrade-next"], RELEASE.jobs[RELEASE_JOBS[kind]], RELEASE.jobs[ADVICE_JOBS[kind]]])],
   ] as const)("every secret a step of %s reads is one its file declares, and each caller hands over those names and no other", (_what, called, callers) => {
     const read = Object.values(called.jobs).flatMap((job) => (job.steps ?? []).flatMap((step) => Object.values(step.env ?? {}).flatMap((value) => [...String(value).matchAll(/secrets\.(\w+)/g)].map((match) => match[1] ?? ""))));
@@ -210,6 +235,56 @@ describe("the lanes of the live workflows", () => {
       domain: { group: "live-checks-domain-${{ github.event_name }}", "cancel-in-progress": false },
       // biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.
       "account address": { group: "live-checks-account-address-${{ github.event_name }}", "cancel-in-progress": false },
+    });
+  });
+});
+
+describe("the put-back at the newest green commit of main", () => {
+  // Drift: a put-back that waited for green checks, or stood down with a cancelled run, leaves the install and the demo as a check that was cut short left them.
+  // One that ran on a pull request, a schedule, or a fork's push from the hook would reach a test account from a run the hook is not for.
+  test("each caller asks for it with `put_back_only`: after the checks of a night and of a release whatever they came to, and after a push to main of this repository", () => {
+    const asked = (job: Job | undefined): unknown => ({ uses: job?.uses, only: job?.with?.put_back_only, if: job?.if, needs: job?.needs });
+    const hook = "github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.fork";
+
+    expect(BOTH.map((kind) => [asked(CALLERS[kind].jobs["put-back"]), asked(RELEASE.jobs[PUT_BACK_JOBS[kind]]), asked(GREEN.jobs[GREEN_JOBS[kind]])])).toEqual(
+      BOTH.map((kind) => [
+        { uses: INSTALL, only: true, if: "always()", needs: ["live"] },
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.
+        { uses: INSTALL, only: true, if: "${{ always() && github.event_name == 'pull_request' }}", needs: [CHECKS_JOBS[kind]] },
+        { uses: INSTALL, only: true, if: hook, needs: undefined },
+      ]),
+    );
+  });
+
+  // Drift: the release leg of ci.yml needs the hook to end green, so a job of it that another could cancel, or a job beside the two, would hold a release back.
+  test("the hook after a green push holds the two put-backs and no other job, and no lane of its own that could cancel one", () => {
+    expect({ jobs: Object.keys(GREEN.jobs), lanes: [GREEN.concurrency, ...Object.values(GREEN.jobs).map((job) => job.concurrency)] }).toEqual({
+      jobs: BOTH.map((kind) => GREEN_JOBS[kind]),
+      lanes: [undefined, undefined, undefined],
+    });
+  });
+
+  // Drift: a put-back that ran the checks would write a thousand rows a merge, and one that built before it asked would install a commit a newer green one overtook.
+  test("a put-back asks for the newest green commit once it holds the lane and was admitted, takes it, and runs every step of a run but the checks; an overtaken one builds and makes nothing", () => {
+    const steps = STEPS.jobs.checks?.steps ?? [];
+    const named = steps.flatMap((step) => (step.name === undefined ? [] : [[step.name, step.if]]));
+    const admits = steps.findIndex((step) => step.run === ADMIT);
+    const finds = steps.findIndex((step) => step.run === "bun packages/providers/cloudflare/scripts/newest-green.ts");
+
+    expect({ findsAfterAdmit: admits >= 0 && finds > admits, holdsSecret: holdsSecret(steps[finds] ?? {}), named: Object.fromEntries(named) }).toEqual({
+      findsAfterAdmit: true,
+      holdsSecret: false,
+      named: {
+        "Refuse a run that may not reach a test account": undefined,
+        "Find the newest green commit of main": "inputs.put_back_only",
+        "Take that commit": "steps.newest.outputs.sha != ''",
+        "Install that commit's dependencies": "steps.newest.outputs.sha != ''",
+        "Build the Worker bundle": "steps.newest.outputs.stale != 'true'",
+        "Make the test install match the commit": "steps.newest.outputs.stale != 'true'",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.
+        "Run the live checks": "${{ !inputs.put_back_only }}",
+        "Put the test install back": "always() && steps.converge.outcome == 'success'",
+      },
     });
   });
 });
@@ -246,13 +321,13 @@ describe("the runs that reach a test account", () => {
 
     expect(Object.fromEntries(asked)).toEqual({
       upgrade: { if: GUARD, admitsFirst: true },
-      checks: { if: GUARD, admitsFirst: true },
-      reset: { if: `github.event_name == 'schedule' && (${GUARD})`, admitsFirst: true },
+      checks: { if: CHECKS_GUARD, admitsFirst: true },
+      reset: { if: `!inputs.put_back_only && github.event_name == 'schedule' && (${GUARD})`, admitsFirst: true },
     });
   });
 
   // A job written into another workflow that names an environment, or is handed a secret's name, would read a test account with no guard at all.
-  test("no file under .github names an environment or a secret of a test account but the settings, the live workflows, and the release gate, and no job names an environment but the three above", () => {
+  test("no file under .github names an environment or a secret of a test account but the settings, the live workflows, the hook after a green push, and the release gate, and no job names an environment but the three above", () => {
     const files = repositoryFiles(ROOT).filter((path) => path.startsWith(".github/") && /\.ya?ml$/.test(path));
     const naming = files.filter((path) => [...ENVIRONMENTS, ...SECRETS].some((name) => readFileSync(join(ROOT, path), "utf8").includes(name)));
     const jobs = files
@@ -322,7 +397,7 @@ describe("the release gate", () => {
   // A live job without its `if:` would start both test installs over on every dispatch, and a fuzz run would take its minutes.
   test("it upgrades an install of the last release on every call, and on a pull request alone it fuzzes and reaches a test install", () => {
     const asked = Object.entries(RELEASE.jobs).map(([name, job]) => [name, job.if?.includes("github.event_name == 'pull_request'") === true ? "a pull request" : "every call"]);
-    const live = BOTH.flatMap((kind) => [RELEASE_JOBS[kind], ADVICE_JOBS[kind], CHECKS_JOBS[kind]]);
+    const live = BOTH.flatMap((kind) => [RELEASE_JOBS[kind], ADVICE_JOBS[kind], CHECKS_JOBS[kind], PUT_BACK_JOBS[kind]]);
 
     expect(Object.fromEntries(asked)).toEqual({ upgrade: "every call", fuzz: "a pull request", ...Object.fromEntries(live.map((name) => [name, "a pull request"])) });
   });
