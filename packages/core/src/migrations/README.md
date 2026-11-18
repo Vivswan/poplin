@@ -31,7 +31,7 @@ The lint settings refuse an import of a `migrations` folder in the source they r
 
 - **The name is the version the steps migrate away from.** That is the last release: the highest `vX.Y.Z` tag among the ancestors of the checkout. A checkout without its tags is told to fetch them.
 - **Never guess the next number.** The version being cut is in no file name. `draft-step` picks the file by itself.
-- **A released file is frozen.** `tests/migrations/frozen-steps.test.ts` fails when a file of an earlier version differs from the last release's copy by one byte. A change to a frozen step is a new step in the current file.
+- **A released file is frozen.** `tests/migrations/frozen-steps.test.ts` fails when a file of an earlier version differs from the last release's copy by one byte. A change to a frozen step is a new step in the current file. The provider's files of steps are held the same way.
 
 ## An update is one jump, then every step in order
 
@@ -68,10 +68,14 @@ A step at the provider goes in `packages/providers/cloudflare/migrations/steps/`
 
 A step with `by: "account token"` must carry `notice`: one sentence that tells the user to press Repair and why. `packages/providers/cloudflare/tests/migrations/steps/notices.test.ts` fails when a notice is no single sentence or does not name Repair.
 
-```sh
-bun run --cwd packages/providers/cloudflare step-notices 0.3.0
-# one Markdown bullet per account-token step of 0.3.0.ts, for the release notes; "No step needs an account token." when there is none
-```
+| What holds a provider's step | Rule |
+| --- | --- |
+| `tests/migrations/frozen-steps.test.ts` | a released file is frozen, and a new step goes into the file named for the last release |
+| `tests/layout.test.ts` | a file named for its version does not count toward the size of `steps/` |
+| `tests/migrations/steps/notices.test.ts` of the provider | every step of the list that needs an account token has its notice |
+| the type of a step | `by` is there, and `notice` with `"account token"` |
+
+A provider's step may import code: `run` reaches Cloudflare through the provider's own client. The rule that a file of steps imports types alone is held for schema steps.
 
 No code runs a provider step. Whoever writes the first one writes what runs it in the same change: the install tells its user to press Repair, and Repair does the step.
 
@@ -143,7 +147,7 @@ UPDATE settings SET value = json_set(value, '$.<key>', <default>) WHERE json_typ
 | put code for an older version under a `migrations` folder | branch on a stored version anywhere else |
 | let `draft-step` pick the file | name a file for a version that is not released |
 | add a new step for a change to a released step | edit a file of an earlier version |
-| keep a step's statements in its own file | import code into a file of steps: it imports types alone |
+| keep a schema step's statements in its own file | import code into a file of schema steps: it imports types alone |
 | write a step so a second run changes nothing | count on a step running once |
 | make a background job for many rows | loop over rows inside a step |
 | delete the old shape in the same change | keep a reader of the old shape beside the new one |
