@@ -93,7 +93,7 @@ The account token needs 10 permissions on this account and this domain:
   Workers Routes: Edit
   Access: Apps and Policies: Edit
   Workers Scripts: Edit
-  Access: Organizations, Identity Providers, and Groups: Read
+  Access: Organizations, Identity Providers, and Groups: Edit
   Zone Settings: Read
   D1: Edit
   Workers R2 Storage: Edit
@@ -122,7 +122,7 @@ An option answers a question before it is asked: with `--domain example.com` on 
 
 Copy the link the command printed into your browser, or press the same link here. It is this one for an install under a domain; [Without a domain](without-a-domain.md#the-account-token) has the other.
 
-[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20install)
+[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20install)
 
 The form opens with nine rows filled. The install needs ten permissions: the link cannot choose Workers R2 Storage, as the command's line under the link says, so add that one yourself. A zone is your domain.
 
@@ -163,6 +163,8 @@ created    D1 database           poplin
 created    Worker                poplin, runs 0.1.0
 created    DNS record            poplin.example.com
 created    Worker route          poplin.example.com/*
+created    Login method          One-time PIN
+created    Login method          Passkeys
 created    Access application    poplin: poplin.example.com, *-p-poplin.example.com
 created    Key                   poplin kept key
 Waiting for https://poplin.example.com to respond
@@ -191,10 +193,15 @@ Log this machine in now?
 | Worker             | the program Cloudflare runs for you: it serves every site       |
 | DNS record         | what makes an address under your domain exist                   |
 | Worker route       | what sends that address to the Worker                           |
+| Login method       | how a user logs in: by a code Cloudflare mails, and by a passkey |
 | Access application | Cloudflare's login in front of the dashboard and private sites  |
 | Key                | a key the install keeps, so that it can update and repair itself |
 
 Under a domain, the command adds records, routes, and rules of its own. A website or a mailbox on the domain stays as it is.
+
+**The two login methods** are your Cloudflare account's, not the install's. An account that has one already keeps it, and its row says `unchanged`. The login page of the install offers these two and no other. The first time, a user proves the email by the code and can save a passkey. After that the passkey alone logs in.
+
+**Where Cloudflare makes an account no passkeys**, that row says `skipped`, and users log in with the code. Nothing is wrong.
 
 **Where an install already is**, the command changes nothing. It reads whether the install needs a repair, says what to run next, and names the command for each thing you may want:
 
@@ -321,9 +328,10 @@ would create  R2 bucket             poplin-sites
 would create  D1 database           poplin
 would create  Worker                poplin, runs 0.1.0
 would create  DNS record            poplin.example.com
+would create  Login method          One-time PIN
 would create  Access application    poplin: poplin.example.com, *-p-poplin.example.com
 A dry run does not test the account token's write permissions
-A run would create 27 resources and update 1
+A run would create 29 resources and update 1
 ```
 
 The sample is of a token that holds the four optional permissions. With a token that lacks one, the last line counts those rows too: `and skip`, and their number.

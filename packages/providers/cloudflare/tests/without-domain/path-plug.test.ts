@@ -21,7 +21,7 @@ const SETTINGS = async (): Promise<DomainSettings> => STORED;
 const REFUSED = { ok: false, refusal: "token" } as const;
 
 /** The rights the owner set for the token of an install without a domain, in the provider's names: no right of a zone is among them. */
-const RIGHTS = ["Access: Apps and Policies: Edit", "Workers Scripts: Edit", "Access: Organizations, Identity Providers, and Groups: Read", "D1: Edit", "Account API Tokens: Edit"];
+const RIGHTS = ["Access: Apps and Policies: Edit", "Workers Scripts: Edit", "Access: Organizations, Identity Providers, and Groups: Edit", "D1: Edit", "Account API Tokens: Edit"];
 
 /** An account whose one Worker answers under the free address and holds no value of a domain. */
 function deployed(): Account {
@@ -48,6 +48,8 @@ function table(states: Readonly<Record<string, string>>): string[] {
   return [
     `Forwarder | ${state("forwarders")} | poplin-private: https://poplin-private.example.workers.dev (private sites)`,
     `Forwarder | ${state("forwarders")} | poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)`,
+    `Login method | ${state("methods")} | One-time PIN`,
+    `Login method | ${state("methods")} | Passkeys`,
     `Access application | ${state("access")} | poplin: poplin.example.workers.dev, poplin-private.example.workers.dev`,
     `Access policy | ${state("access")} | poplin logins`,
     `Access application | ${state("access")} | poplin open paths: poplin.example.workers.dev/api`,
@@ -94,12 +96,12 @@ test("a check of an account with nothing in it names the two forwarders, the log
 });
 
 // Drift: the count is what one request of a Worker spends on a repair: past 50 the Domain screen's one press could not finish on the free plan.
-test("a repair makes every object in 30 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
+test("a repair makes every object in 34 calls, the forwarders bound to the one Worker and the login over the dashboard and the whole private host; a check then finds all present, and a second repair sends no change", async () => {
   const account = deployed();
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created" }));
-    expect(asked).toHaveLength(30);
+    expect(asked).toHaveLength(34);
     expect(account.workers).toEqual(
       ["poplin-sites", "poplin-private"].map((id) => ({ id, tags: ["poplin-forwarder"], bindings: [{ type: "service", name: "POPLIN", service: "poplin" }], enabled: true, previews_enabled: false })),
     );
@@ -254,7 +256,7 @@ test("a repair with a token without Notifications: Edit fails nothing: every oth
     const reading = await plug.repair(TOKEN, SETTINGS);
 
     expect(shown(reading)).toEqual(rest({ all: "created" }));
-    expect([asked.length, account.alerts, reading.ok ? runDone("repair", reading, false).summary : undefined]).toEqual([29, [], { line: "11 repaired", tone: "good" }]);
+    expect([asked.length, account.alerts, reading.ok ? runDone("repair", reading, false).summary : undefined]).toEqual([33, [], { line: "13 repaired", tone: "good" }]);
 
     const sent = asked.length;
 
@@ -297,7 +299,7 @@ async function withKey(account: Account, run: (plug: ReturnType<typeof createPat
 }
 
 // Drift: the count is what one request of a Worker spends each time the Domain screen opens on a check that is old. With no token to prove, a call for the account's free address, to the databases, or to the tokens is one the check has no use for.
-test("an install that holds its key checks with no token: every piece a repair made reads as present in 17 calls, each a read sent with the key, and the database's row says the install runs on it", async () => {
+test("an install that holds its key checks with no token: every piece a repair made reads as present in 19 calls, each a read sent with the key, and the database's row says the install runs on it", async () => {
   const account = deployed();
 
   await withKey(account, async (plug, own, asked) => {
@@ -307,7 +309,7 @@ test("an install that holds its key checks with no token: every piece a repair m
     const calls = asked.slice(sent);
 
     expect(rows).toEqual(table({}).map((row) => (row.startsWith("D1 database") ? "D1 database | present | poplin: the install is running on it" : row)));
-    expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens|workers\/subdomain)(\/|\?|$)/.test(call.path))]).toEqual([17, [`GET Bearer ${KEPT}`], []]);
+    expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens|workers\/subdomain)(\/|\?|$)/.test(call.path))]).toEqual([19, [`GET Bearer ${KEPT}`], []]);
   });
 });
 
@@ -325,6 +327,20 @@ test("a check by the key of an account with no alert reads the alert as optional
   });
 });
 
+// Drift: a login method deleted at Cloudflare leaves the page without it, and the application naming an id of nothing. Read as present, nobody would be told to repair.
+test("a check by the key of an account whose passkeys were deleted reads that method as missing and the application as one a repair changes, and sends nothing but reads", async () => {
+  const account = deployed();
+
+  await withKey(account, async (plug, own, asked) => {
+    await plug.repair(TOKEN, SETTINGS);
+    account.methods.pop();
+    const sent = asked.length;
+    const rows = shown(await own()).filter((row) => /^(Login method|Access application \| \w+ \| poplin:)/.test(row));
+
+    expect([rows, writes(asked.slice(sent))]).toEqual([["Login method | present | One-time PIN", "Login method | missing | Passkeys", "Access application | differs | poplin: poplin.example.workers.dev, poplin-private.example.workers.dev"], []]);
+  });
+});
+
 // Drift: a key made before a right was added lacks it, and one deleted at Cloudflare is refused. A check that read either as a healthy install, or stopped with no word of the key, would never send the person to the repair that makes a new one.
 test.each([
   {
@@ -335,6 +351,16 @@ test.each([
       "Worker variable | failed | the team's domain: the key the install holds lacks this permission: Access: Organizations, Identity Providers, and Groups Read. Press Repair.",
       "Key | differs | poplin kept key: the key the install holds lacks a permission the install uses now",
       "Upload key | not-run | ",
+      "D1 database | present | poplin: the install is running on it",
+    ],
+  },
+  {
+    name: "lacks the right to read the account's login methods fails that row alone, names the right, and leaves the application as it reads",
+    refuse: `GET /accounts/${ACCOUNT}/access/identity_providers`,
+    as: undefined,
+    rows: [
+      "Login method | failed | the key the install holds lacks this permission: Access: Organizations, Identity Providers, and Groups Read. Press Repair.",
+      "Key | differs | poplin kept key: the key the install holds lacks a permission the install uses now",
       "D1 database | present | poplin: the install is running on it",
     ],
   },
@@ -354,6 +380,7 @@ test.each([
     as: { status: 401, code: 10000 },
     rows: [
       "Forwarder | failed | Cloudflare refused the key the install holds. Press Repair.",
+      "Login method | not-run | ",
       "Access application | not-run | ",
       "Worker variable | not-run | ",
       "Key | differs | poplin kept key: Cloudflare refused the key the install holds",

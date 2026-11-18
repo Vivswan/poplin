@@ -3,7 +3,7 @@
 //                        database calls                                                        other calls           in all
 //   the run's start       1: the last asking, the settings, the walk's place, and the kept run of the domain with what waits under it, read together   0   1
 //   the day's first run   2: that, and the answer written                                        1: the website asked   3
-//   the login repaired    8: the users carried anew where their policy was written, an audit entry, a problem noted, on the run that begins a UTC day   29: 14, the 3 of the two alerts, and that carry's 12, and one for each further page of a list   37
+//   the login repaired    8: the users carried anew where their policy was written, an audit entry, a problem noted, on the run that begins a UTC day   31: 16, the 3 of the two alerts, and that carry's 12, and one for each further page of a list   39
 //   the logs stated       2: the setting read again after each of two writings, on the run that begins a UTC day   4: 2 x (the observability read, and written where it differs)   6
 //   either carried        5 for the users, 4 for the rules: 2 x (the mark set with what is stored read, the settling), a problem noted; 2 where a run only confirms   12 and 10: 2 x 6 and 2 x 5 to Cloudflare; 4 and 3 where nothing differs   17, 14
 //   an update             6: the try, the setting of the logs read, the audit entry, and the    11: the release read,   17

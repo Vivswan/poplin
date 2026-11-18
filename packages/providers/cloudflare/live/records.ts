@@ -4,7 +4,24 @@ import type { JobRun } from "../scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 
 /** Something a check needs that an install, its account, or a run may lack. `person` is always lacking: such a check is done by hand. */
-type Capability = "token" | "letters" | "access" | "guard-rules" | "https-redirect" | "rate-rule" | "bot-block" | "many-files" | "login-list" | "provider-logs" | "kept-key" | "upload-key" | "settled-upload-key" | "jobs" | "job-copy" | "person";
+type Capability =
+  | "token"
+  | "letters"
+  | "access"
+  | "guard-rules"
+  | "https-redirect"
+  | "rate-rule"
+  | "bot-block"
+  | "many-files"
+  | "login-list"
+  | "login-methods"
+  | "provider-logs"
+  | "kept-key"
+  | "upload-key"
+  | "settled-upload-key"
+  | "jobs"
+  | "job-copy"
+  | "person";
 
 /** Why each lacking capability is lacking, in words that name no host and no account. */
 export type Missing = Partial<Record<Capability, string>>;

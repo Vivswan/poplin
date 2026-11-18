@@ -3,6 +3,7 @@
 //   poplin              the whole dashboard hostname and every private site's address   poplin logins: allow, the install's users
 //   poplin open paths   the paths of the dashboard hostname a program reaches            poplin open paths policy: bypass, everyone
 //
+// The guarded application names the login methods its page offers, poplin's own and no other of the account's.
 // Access takes the longer path first, so an open path passes to the Worker with no login, where the API checks its own token.
 
 import type { Logins } from "@poplin/core/src/auth/logins";
@@ -36,6 +37,9 @@ const SESSION = {
   same_site_cookie_attribute: INSTALL_OBJECTS.accessSameSite,
 } as const;
 
+/** Whether the guarded application's page skips the choice of a method: it has two to choose from, so it does not. */
+const REDIRECT = INSTALL_OBJECTS.loginRedirect;
+
 /** A reusable policy as the account has it now. */
 interface AccountPolicy {
   readonly id: string;
@@ -57,6 +61,8 @@ interface AccountApplication {
   readonly session_duration?: string;
   readonly http_only_cookie_attribute?: boolean;
   readonly same_site_cookie_attribute?: string;
+  readonly allowed_idps?: readonly string[];
+  readonly auto_redirect_to_identity?: boolean;
 }
 
 /** What the account's Access holds now. */
@@ -75,6 +81,9 @@ interface DesiredAccess {
 
   /** What every private site answers at: the hostname pattern from `privateSitesPattern`, or on an install without a domain the private host whole. */
   readonly privateSites: string;
+
+  /** The ids of the login methods the guarded application's page offers: `""` for one that is still to be made, which no application names yet. Left out where the account's methods could not be read: the application then names the methods it named. */
+  readonly methods?: readonly string[] | undefined;
 }
 
 /** What the Worker checks a login's token against. `teamDomain` is the hostname alone, such as `team.cloudflareaccess.com`. */
@@ -93,11 +102,12 @@ interface WantedPolicy {
   readonly include: readonly Rule[];
 }
 
-/** An application poplin wants: its name, its addresses in order, and the name of the one policy it holds. */
+/** An application poplin wants: its name, its addresses in order, the name of the one policy it holds, and the ids of the login methods its page offers, where it is to name them. */
 interface WantedApplication {
   readonly subject: typeof APPLICATION_NAME | typeof OPEN_APPLICATION_NAME;
   readonly uris: readonly string[];
   readonly policy: WantedPolicy["subject"];
+  readonly methods?: readonly string[] | undefined;
 }
 
 /** One step of an Access plan. An application step with no `policyId` links the policy the same plan creates. */
@@ -138,7 +148,17 @@ function decidesExactly(policy: AccountPolicy, wanted: WantedPolicy): boolean {
   return included.length === wanted.include.length && [...included].sort().join("\n") === wanted.include.map(ruleText).sort().join("\n");
 }
 
-function protectsExactly(application: AccountApplication, uris: readonly string[], policyId: string): boolean {
+/** Whether an application's page offers exactly the methods, in any order. An application that is to name none is not asked. */
+function offersExactly(application: AccountApplication, methods: readonly string[] | undefined): boolean {
+  if (methods === undefined) return true;
+
+  const offered = [...(application.allowed_idps ?? [])].sort().join("\n");
+
+  return offered === [...methods].sort().join("\n") && (application.auto_redirect_to_identity ?? false) === REDIRECT;
+}
+
+function protectsExactly(application: AccountApplication, wanted: WantedApplication, policyId: string): boolean {
+  const { uris } = wanted;
   const destinations = application.destinations ?? [];
   const samePlaces =
     destinations.every((place) => place.type === "public" && (place.overrides?.length ?? 0) === 0) &&
@@ -146,7 +166,7 @@ function protectsExactly(application: AccountApplication, uris: readonly string[
   const samePolicy = application.policies?.length === 1 && application.policies[0]?.id === policyId;
   const sameSession = Object.entries(SESSION).every(([key, value]) => application[key as keyof typeof SESSION] === value);
 
-  return application.type === "self_hosted" && application.domain === uris[0] && samePlaces && samePolicy && sameSession;
+  return application.type === "self_hosted" && application.domain === uris[0] && samePlaces && samePolicy && sameSession && offersExactly(application, wanted.methods);
 }
 
 function planPolicy(policy: AccountPolicy | undefined, wanted: WantedPolicy): AccessStep {
@@ -160,7 +180,7 @@ function planPolicy(policy: AccountPolicy | undefined, wanted: WantedPolicy): Ac
 function planApplication(application: AccountApplication | undefined, wanted: WantedApplication, policyId: string | undefined): AccessStep {
   if (application === undefined) return { kind: "create", policyId, ...wanted };
 
-  if (policyId !== undefined && protectsExactly(application, wanted.uris, policyId)) return { kind: "leave", subject: wanted.subject };
+  if (policyId !== undefined && protectsExactly(application, wanted, policyId)) return { kind: "leave", subject: wanted.subject };
 
   return { kind: "change", id: application.id, policyId, ...wanted };
 }
@@ -173,6 +193,13 @@ function loginsPolicy(users: Iterable<string>): WantedPolicy {
 /** A policy as Cloudflare is sent it. */
 function policyBody(accountId: string, wanted: WantedPolicy): { account_id: string; name: string; decision: WantedPolicy["decision"]; include: Rule[] } {
   return { account_id: accountId, name: wanted.subject, decision: wanted.decision, include: [...wanted.include] };
+}
+
+/** The login methods an application is sent with: the ones it is to name, or else the ones the application of its name has now, since Cloudflare writes an application whole. */
+function sentMethods(methods: readonly string[] | undefined, held: AccountApplication | undefined): { allowed_idps: string[]; auto_redirect_to_identity: boolean } {
+  if (methods !== undefined) return { allowed_idps: [...methods], auto_redirect_to_identity: REDIRECT };
+
+  return { allowed_idps: [...(held?.allowed_idps ?? [])], auto_redirect_to_identity: held?.auto_redirect_to_identity ?? false };
 }
 
 /** The steps of one application and the policy it holds: the policy's first, so the application links one that exists. */
@@ -197,7 +224,7 @@ export function planAccess(desired: DesiredAccess, current: AccountAccess): Acce
     ...planPair({ subject: OPEN_POLICY_NAME, decision: "bypass", include: [{ everyone: {} }] }, { subject: OPEN_APPLICATION_NAME, uris: open, policy: OPEN_POLICY_NAME }, current),
     ...planPair(
       loginsPolicy(desired.users),
-      { subject: APPLICATION_NAME, uris: [desired.hostname, desired.privateSites], policy: POLICY_NAME },
+      { subject: APPLICATION_NAME, uris: [desired.hostname, desired.privateSites], policy: POLICY_NAME, methods: desired.methods },
       current,
     ),
   ];
@@ -308,6 +335,7 @@ export async function syncAccess(connection: Connection, accountId: string, desi
       destinations: step.uris.map((uri) => ({ type: "public" as const, uri })),
       policies: [{ id: step.policyId ?? made.get(step.policy) ?? "", precedence: 1 }],
       ...SESSION,
+      ...sentMethods(step.methods, current.applications.find((application) => application.name === step.subject)),
     };
 
     return callCloudflare(connection, (api) =>

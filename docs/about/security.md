@@ -76,7 +76,7 @@ A public site is without `noindex` only when both are on. The bots rule is one o
 
 | Who | Credential | Where it comes from |
 | --- | --- | --- |
-| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by a code Cloudflare sends to the email; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed users each time. poplin sets no cookie of its own  |
+| a user at the dashboard | Cloudflare Access's own session, 30 days | one login through Cloudflare Access, by a code Cloudflare sends to the email, or by a passkey saved after it; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed users each time. poplin sets no cookie of its own  |
 | a user at a private site | Cloudflare Access's own session, 30 days | the same login; Access puts a signed token on every request it lets through, and the Worker checks the token and the email against the list of allowed users each time  |
 | the CLI, or an agent through `poplin mcp` | a token the Worker issues | a user runs `poplin login` once and allows that machine in a browser; an agent on that machine acts with the same token, as that user; the token is listed on the dashboard and can be revoked there |
 | a machine with no browser | the same kind of token | `poplin login` prints a URL and a short code to open on another device, where a user allows that machine      |
@@ -147,9 +147,9 @@ you give one account token  ->  poplin install makes "poplin kept key" at Cloudf
 | --- | --- |
 | Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
 | What it reaches | your one account and your one domain; the account alone on an install without a domain |
-| What it may do | read the account's usage figures and the team's name; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
-| What it does by itself | once a day it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. Activity says what it wrote. It also makes the [budget alert](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar), and under a domain the [certificate alert](../dashboard/domain.md#an-email-about-certificates), where the account has none |
-| What it may not do | change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
+| What it may do | read the account's usage figures, the team's name, and the account's login methods; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
+| What it does by itself | once a day it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. It names the two login methods on the application, and makes neither: an account with no method that mails a code is noted as the problem `login_not_repaired`. Activity says what it wrote. It also makes the [budget alert](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar), and under a domain the [certificate alert](../dashboard/domain.md#an-email-about-certificates), where the account has none |
+| What it may not do | make or change a login method; change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
 | How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
 | How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
 

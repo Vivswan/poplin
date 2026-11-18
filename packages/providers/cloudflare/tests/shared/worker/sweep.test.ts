@@ -35,7 +35,7 @@ const WHOLE_REMOVAL = 15;
 const MOST_STEP_CALLS = 154;
 
 /** The requests the run's table says a repair of the login sends at the most with the two alerts kept and the carry of the users after it, where each list of the account fits one page. */
-const MOST_REPAIR_CALLS = 29;
+const MOST_REPAIR_CALLS = 31;
 
 /** The names of the two alerts an install with a domain keeps, in the order they are kept. */
 const ALERTS = [BUDGET_ALERT.name, CERTIFICATE_ALERT.name];
@@ -57,6 +57,14 @@ const HTML = new TextEncoder().encode("<p>short-lived</p>");
 
 let w: World;
 
+/** An account with the two login methods a repair with a token makes: the kept key reads them and may make none. */
+function withMethods(): ReturnType<typeof emptyAccount> {
+  const account = emptyAccount();
+  account.methods.push({ id: "code-1", name: "One-time PIN", type: "onetimepin", config: {} }, { id: "passkeys-1", name: "Passkeys", type: "passkeys", config: {} });
+
+  return account;
+}
+
 async function keysUnder(prefix: string): Promise<string[]> {
   return (await BINDINGS.SITES.list({ prefix })).objects.map((object) => object.key);
 }
@@ -77,7 +85,7 @@ describe("the scheduled run", () => {
   // Drift: with the login in front of the whole dashboard, an application deleted at Cloudflare shuts every user out, and nothing but this run puts it back with no person.
   // A run that wrote a login that stands, or asked on each of a day's 96 runs, would spend the account's calls for nothing.
   test("the run that begins a day puts back a login that was removed at Cloudflare, for the stored users and inside its count of calls, and Activity says so; a login that stands is read and not written, and no other run of the day asks", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
     const worker = instance(w, cloudflareOf(account, asked));
@@ -125,7 +133,7 @@ describe("the scheduled run", () => {
     ["a key that lacks the right", { status: 403, code: 10_000 }, [["login_not_repaired", 1, "lacks_right"]], [`POST /accounts/${ACCOUNT}/alerting/v3/policies`, `POST /accounts/${ACCOUNT}/alerting/v3/policies`]],
     ["a Cloudflare that gives no usable answer", { status: 503, code: 0 }, [], []],
   ] as const)("the run that begins a day, with %s, notes what a person must repair, writes nothing of the login, and still moves an expired site to the trash", async (_name, refuseAs, problems, writes) => {
-    const account = emptyAccount();
+    const account = withMethods();
     const asked: Asked[] = [];
     account.refuse = `GET /accounts/${ACCOUNT}/access/policies`;
     account.refuseAs = refuseAs;
@@ -141,7 +149,7 @@ describe("the scheduled run", () => {
 
   // Drift: the install's own repair keeps no run of the domain, so the problem of a day its key was refused would stay marked through the day the repair came through, with advice nobody needs to take.
   test("the run that begins a day and repairs the login ends the problem the day before's refused repair left, and one of another kind stays", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
     const worker = instance(w, cloudflareOf(account, []));
     await ask(instance(w), `${ADMIN}/api/whoami`);
@@ -159,6 +167,28 @@ describe("the scheduled run", () => {
     await sweep(worker, w, keyed);
 
     expect([refused, await kinds()]).toEqual([["api_failed", "login_not_repaired"], ["api_failed"]]);
+  });
+
+  // Drift: the key reads the account's login methods and may make none. On an account with no method that mails a code only members of the Cloudflare account log in, and a run that said nothing would leave every other user shut out with nobody told.
+  test("the run that begins a day on an account with no login method that mails a code puts the rest of the login back, notes that a person must repair, and ends the problem once the method is there", async () => {
+    const account = emptyAccount();
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    const asked: Asked[] = [];
+    const worker = instance(w, cloudflareOf(account, asked));
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    await sweep(worker, w, keyed);
+    const day = dayOf(w.clock.now);
+    const noted = await problemsOf(w);
+    const offered = (): unknown => account.applications.find((application) => application.name === INSTALL_OBJECTS.accessApplication)?.allowed_idps;
+    const first = [noted, offered(), asked.some((entry) => entry.method !== "GET" && entry.path.includes("identity_providers"))];
+
+    account.methods.push({ id: "code-1", name: "One-time PIN", type: "onetimepin", config: {} });
+    wait(w, 24);
+    await sweep(worker, w, keyed);
+
+    expect([first, offered(), (await database.listProblems(day)).map((problem) => problem.kind)]).toEqual([[[["login_not_repaired", 1, "no_login_method"]], [], false], ["code-1"], []]);
   });
 
   // Drift: a request notes a login it could not check once an hour, and remembers that it did under the install's database.
@@ -187,7 +217,7 @@ describe("the scheduled run", () => {
   // Drift: the key holds the right to make the alert, and no token is pasted after install. With no run that makes it, an install set up with the needed rights alone would have no alert until a user changed.
   // An alert the key may not make is the Domain screen's to say: a problem noted here would stand beside a row that already names the right.
   test("the run that begins a day makes the alerts an account lacks, with the key and for the first user, and Activity says so; alerts that stand are read alone; and a key that may not make them is asked once and notes no problem", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
     const worker = instance(w, cloudflareOf(account, asked));
@@ -220,7 +250,7 @@ describe("the scheduled run", () => {
   // Drift: a repair that stopped half way wrote four objects at Cloudflare; left out of Activity, nothing in the install would say they were made.
   // And a policy it wrote from users read before a change of them would shut the newest user out until the next day, on an install that keeps no run of its domain too.
   test("the run that begins a day, refused the write of the Worker's variable, says in Activity what it wrote before and notes the problem; a user added while it wrote the policy is in the policy when the run ends", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
     await ask(instance(w), `${ADMIN}/api/whoami`);
@@ -249,7 +279,7 @@ describe("the scheduled run", () => {
   // Drift: a user added while Cloudflare refused the list can log in only once the list is carried. Without the run nothing carries it but a person's repair, and a run that carried with nothing waiting would call Cloudflare every 15 minutes for nothing.
   // The alerts that carry made are read once more by a later run, which writes nothing and ends the waiting: a run that never ended it would list the alerts 96 times a day.
   test("a change of the users that Cloudflare did not take is carried by the next run, which settles it; a later run confirms the alerts with reads alone, and a run with nothing waiting asks Cloudflare nothing", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
@@ -284,7 +314,7 @@ describe("the scheduled run", () => {
 
   // Drift: a saved setting whose rule Cloudflare did not take is in force at the edge only once the rule is written. Without the run nothing writes it but a person's repair, and the save itself must be answered as saved whatever Cloudflare said.
   test("a changed setting of the guard rules that Cloudflare did not take is carried by a run a quarter of an hour later and no sooner; the run after it writes nothing and ends the waiting, and a run with nothing waiting asks nothing", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
     const worker = instance(w, cloudflareOf(account, asked));
@@ -322,7 +352,7 @@ describe("the scheduled run", () => {
   // Drift: a setting changed and put back within seconds. The carry of the put-back reads the rules as they were before the first carry's write, finds its rule standing, and writes nothing, so the rule stays removed while the setting says blocked.
   // A carry that ended the waiting there would leave it so until the next change or a repair: the next run, a quarter of an hour later, must read the rules anew and write the rule.
   test("outside_pages allowed and blocked again at once, where the read of the rules trails the first write, leaves the rule removed and the change waiting; the next run writes the rule, and the run after it ends the waiting", async () => {
-    const account = emptyAccount();
+    const account = withMethods();
     const asked: Asked[] = [];
     const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
     const worker = instance(w, cloudflareOf(account, asked));
@@ -362,7 +392,7 @@ describe("the scheduled run", () => {
   // Drift: the first user changed to another person and back within seconds. The carry of the put-back reads the alerts as they were before the first carry's write and writes nothing, so they go on to the other person.
   // The run that begins a day would correct that a day later at the worst: the next run, a quarter of an hour later, must read the alerts anew and write them, on an install of either kind.
   test.each(KEYED)("with $kind, a first user changed and put back at once, where the list of the alerts trails the first write: the next run mails the first user, and the run after it ends the waiting", async ({ bindings, admin, alerts }) => {
-    const account = emptyAccount();
+    const account = withMethods();
     account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
     const asked: Asked[] = [];
     const worker = instance(w, cloudflareOf(account, asked));
@@ -397,7 +427,7 @@ describe("the scheduled run", () => {
   // Drift: who gets the alerts is a setting of its own. A change of it that was carried nowhere would leave Cloudflare mailing the users chosen before, and one no later run compared again would be trusted on a read that may trail its write.
   // The run that begins a day keeps the alerts too: one that read the first user alone would undo the choice once a day, on an install of either kind.
   test.each(KEYED)("with $kind, users chosen for the alerts get every alert of the install at once, the next runs confirm them with reads alone, and the run that begins a day leaves them chosen", async ({ bindings, admin, alerts }) => {
-    const account = emptyAccount();
+    const account = withMethods();
     account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
     const asked: Asked[] = [];
     const worker = instance(w, cloudflareOf(account, asked));
@@ -482,7 +512,7 @@ describe("the scheduled run", () => {
   // one that confirms must stay at the two calls its table counts, whether it finds Cloudflare as the settings ask or writes there.
   test("on an install that holds a key, a run with no mark set asks the database the same six questions and Cloudflare nothing; a run that confirms the rules or the alerts asks two more, whether it writes or finds them standing", async () => {
     const tally = { calls: 0 };
-    const account = emptyAccount();
+    const account = withMethods();
     account.policies.push({ id: "policy-1", name: INSTALL_OBJECTS.accessPolicy, decision: "allow", include: [{ email: { email: OWNER } }] });
     const asked: Asked[] = [];
     const keyed = { ...countedBindings(tally), KEPT_KEY: TOKEN };

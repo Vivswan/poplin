@@ -43,6 +43,8 @@ const OWN = ["R2 bucket | make | poplin-sites", "D1 database | make | poplin", `
 /** The login, the variables, and the keys, which both kinds make alike; `host` and `sites` are what the login stands in front of. */
 function shared(host: string, sites: string): string[] {
   return [
+    "Login method | make | One-time PIN",
+    "Login method | make | Passkeys",
     `Access application | make | poplin: ${host}, ${sites}`,
     "Access policy | make | poplin logins",
     `Access application | make | poplin open paths: ${host}/api`,
@@ -91,8 +93,8 @@ const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
 
 /** The calls each kind sends, pinned: to find an install, for a dry run, and for a run, with how many of the run's change something. */
 const CALLS: Readonly<Record<keyof typeof KINDS, { readonly find: number; readonly dry: number; readonly run: number; readonly writes: number }>> = {
-  domain: { find: 6, dry: 20, run: 50, writes: 24 },
-  "no-domain": { find: 6, dry: 14, run: 38, writes: 18 },
+  domain: { find: 6, dry: 22, run: 54, writes: 26 },
+  "no-domain": { find: 6, dry: 16, run: 42, writes: 20 },
 };
 
 function loginOf(text: string): Login {
@@ -238,13 +240,51 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const dry = await installed(account, kind, DRY);
     const run = await installed(account, kind, APPLY);
     const off = "block | Access is off for the account";
-    const blocked = [`Access application | ${off}`, `Access policy | ${off}`, "Access application | block | poplin open paths: Access is off for the account", "Worker variable | block | ACCESS: written once the Access application exists"];
+    const login = [`Login method | ${off}`, `Access application | ${off}`, `Access policy | ${off}`, "Access application | block | poplin open paths: Access is off for the account"];
+    const blocked = [...login, "Worker variable | block | ACCESS: written once the Access application exists"];
 
     expect(dry.found).toMatchObject({ state: "none", notes: [{ what: "login_off", address: `https://one.dash.cloudflare.com/${ACCOUNT}` }] });
     expect(shown(run.done)).toEqual(shown(dry.done));
     expect(shown(run.done).filter((row) => row.includes(" | block | "))).toEqual(blocked);
     expect(run.done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "login_off" }], steps: [{ address: `https://one.dash.cloudflare.com/${ACCOUNT}` }] });
     expect(account.bindings.map((binding) => binding.name).sort()).toEqual(["ACCOUNT_ID", "DB", "FIRST_SETTINGS", "INSTALL_PLACE", "JOBS", "KEPT_KEY", "MINUTE_LIMITS", "RELEASE", "SITES", "UPLOAD_KEY", "WORKER_NAME", "ZONE"]);
+  });
+
+  // Drift: the login methods are the account's. One made beside the owner's own, or an application that offers every method of the account, would leave a user to choose among logins that are not theirs.
+  test("an account with its own method that mails a code keeps it under its own name, gets passkeys beside it, and the guarded application offers those two and no other", async () => {
+    const theirs = { id: "their-code", name: "Email login", type: "onetimepin", config: {} };
+    const account = fresh({ methods: [...emptyAccount().methods, theirs] });
+    const { done } = await installed(account, kind, APPLY);
+    const guarded = account.applications.find((application) => application.name === "poplin");
+    const passkeys = account.methods.find((method) => method.type === "passkeys");
+
+    expect([shown(done).filter((row) => row.startsWith("Login method")), done.ok && done.ready]).toEqual([["Login method | leave | One-time PIN", "Login method | make | Passkeys"], true]);
+    expect([account.methods.filter((method) => method.type === "onetimepin"), passkeys]).toEqual([[theirs], { id: "made-2", name: "Passkeys", type: "passkeys", config: { login_page_auto_prompt: false } }]);
+    expect([guarded?.allowed_idps, guarded?.auto_redirect_to_identity]).toEqual([["their-code", "made-2"], false]);
+  });
+
+  // Drift: a token made before the methods were part of an install may read them and make none. A run that stopped there, or called the install done, would leave users who cannot log in and no word of the permission.
+  test("a token that may not make a login method is blocked at that row, which names the permission: the rest of the install is made, and the application offers what it offered", async () => {
+    const account = fresh({ refuse: `POST /accounts/${ACCOUNT}/access/identity_providers`, refuseMessage: "Authentication error" });
+    const { done } = await installed(account, kind, APPLY);
+    const right = "Access: Organizations, Identity Providers, and Groups: Edit";
+    const rows = shown(done);
+
+    expect(rows.filter((row) => row.startsWith("Login method"))).toEqual([`Login method | block | One-time PIN: refused with status 403 and codes 10000. The account token lacks ${right}`, "Login method | not-run | Passkeys"]);
+    const offered = account.applications.find((application) => application.name === "poplin")?.allowed_idps;
+
+    expect([rows.filter((row) => !row.startsWith("Login method")), account.methods, offered]).toEqual([ROWS[kind].filter((row) => !row.startsWith("Login method")), emptyAccount().methods, []]);
+    expect(done).toMatchObject({ ok: true, ready: false, blocked: [{ what: "right_lacking", right }] });
+  });
+
+  // Drift: passkeys are new at Cloudflare. An account it makes none for must still get a whole install, whose users log in with the code alone.
+  test("an account Cloudflare makes no passkeys for is whole with the email code alone: the passkeys' row is left out and says why, and the application offers the code", async () => {
+    const account = fresh({ noPasskeys: true });
+    const { done } = await installed(account, kind, APPLY);
+    const left = "Login method | leave-out | Passkeys: Cloudflare refused to add this login method: refused with status 400 and codes 12000. Users log in with an email code.";
+
+    expect([shown(done).filter((row) => row.startsWith("Login method")), done.ok && done.ready, done.ok && done.blocked]).toEqual([["Login method | make | One-time PIN", left], true, []]);
+    expect(account.applications.find((application) => application.name === "poplin")?.allowed_idps).toEqual(["made-1"]);
   });
 
   // Drift: a database of poplin's name may hold an earlier install's records, so a run takes it only once a person said to, and then leaves what it holds.

@@ -1,6 +1,6 @@
 // The dashboard's zone plug for Cloudflare: every object of an install with a domain read, or made to match, with a token that lives for the one call.
 //
-//   token -> the account's zones -> the zone of the install's domain -> records, routes, Access, the Worker's own variables and its keys, https redirect, guard rules, rate rule, bot switches, database, budget alert, certificate alert, Workflow
+//   token -> the account's zones -> the zone of the install's domain -> records, routes, login methods, Access, the Worker's variables and keys, https redirect, guard rules, rate rule, bot switches, database, budget alert, certificate alert, Workflow
 //
 // The two keys are all an install keeps of Cloudflare's: a repair makes each with the token where the install has none that works, and writes them onto the Worker in the same change as the variables.
 // A token proves itself by showing the install's own zone inside the install's own account; any other token is refused before anything is read.
@@ -25,6 +25,7 @@ import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 import { alertAddresses } from "@poplin/core/src/records/settings";
 import { type KeptKey, keyed } from "../shared/install/key/kept-key";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "../shared/install/pieces/access/access";
+import { offeredMethods, PASSKEY_METHOD, syncLoginMethods } from "../shared/install/pieces/access/login-method";
 import { type AccountAlert, listAlerts, syncAlert } from "../shared/install/pieces/alerts/account-alert";
 import { BUDGET_ALERT } from "../shared/install/pieces/alerts/budget-alert";
 import { CERTIFICATE_ALERT } from "./pieces/alerts/certificate-alert";
@@ -72,6 +73,9 @@ export const ACCESS_OFF = "Access is off for the account";
 
 /** What to do about it: no API switches Access on. */
 const ACCESS_STEP = "Open Zero Trust and pick a plan (Free works): that switches Access on.";
+
+/** What the passkeys' row says where Cloudflare refuses to add them, for any reason but a permission: before why, and after it. */
+const NO_PASSKEYS = { refused: "Cloudflare refused to add this login method", still: "Users log in with an email code" } as const;
 
 /** What the Access row says when the stored users cannot be read back. */
 const BAD_USERS = "the stored users are not a list of emails";
@@ -149,7 +153,7 @@ const RIGHT = {
   dns: { name: "DNS: Edit", key: "dns", type: "edit" },
   routes: { name: "Workers Routes: Edit", key: "workers_routes", type: "edit" },
   access: { name: "Access: Apps and Policies: Edit", key: "access", type: "edit" },
-  team: { name: "Access: Organizations, Identity Providers, and Groups: Read", key: "access_acct", type: "read" },
+  team: { name: "Access: Organizations, Identity Providers, and Groups: Edit", key: "access_acct", type: "edit" },
   scripts: { name: "Workers Scripts: Edit", key: "workers_scripts", type: "edit" },
   redirect: { name: "Single Redirect: Edit", adds: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself." },
   zoneSettings: { name: "Zone Settings: Read", key: "zone_settings", type: "read" },
@@ -179,6 +183,7 @@ const RIGHTS = {
   "Access policy": [RIGHT.access],
   "Access open paths": [RIGHT.access],
   "Worker variable": [RIGHT.scripts, RIGHT.team],
+  "Login method": [RIGHT.team],
   "Worker logs": [RIGHT.scripts],
   "Redirect rule": [RIGHT.redirect, RIGHT.zoneSettings],
   "WAF rule": [RIGHT.waf],
@@ -203,6 +208,7 @@ const KEY_RIGHT: Readonly<Record<Piece, KeyRight | undefined>> = {
   "Access policy": "Access: Apps and Policies Write",
   "Access open paths": "Access: Apps and Policies Write",
   "Worker variable": "Workers Scripts Write",
+  "Login method": "Access: Organizations, Identity Providers, and Groups Read",
   "Worker logs": "Workers Scripts Write",
   "Redirect rule": "Dynamic URL Redirects Read",
   "WAF rule": "Zone WAF Write",
@@ -227,6 +233,7 @@ const PART: Readonly<Record<Piece | "Public word", DomainRow["part"]>> = {
   "Access policy": "login",
   "Access open paths": "reach",
   "Worker variable": "login",
+  "Login method": "login",
   "Worker logs": "rest",
   "Redirect rule": "rest",
   "WAF rule": "rest",
@@ -256,6 +263,7 @@ const TOKEN_FORMS = {
       "Zone",
       "DNS record",
       "Worker route",
+      "Login method",
       "Access application",
       "Access policy",
       "Access open paths",
@@ -277,7 +285,7 @@ const TOKEN_FORMS = {
     for: "this account and this domain",
   },
   noDomain: {
-    pieces: ["Forwarder", "Access application", "Access policy", "Access open paths", "Worker variable", "Worker logs", "D1 database", "Workflow", "Budget alert", "Key", "Upload key"],
+    pieces: ["Forwarder", "Login method", "Access application", "Access policy", "Access open paths", "Worker variable", "Worker logs", "D1 database", "Workflow", "Budget alert", "Key", "Upload key"],
     zones: "",
     note: "On the form, choose your account under Account Resources, then create the account token and copy it.",
     for: "this account",
@@ -608,11 +616,44 @@ function accessDetail(row: Found, covered: Readonly<Record<string, string>>): Fo
 }
 
 /**
+ * The piece of the two login methods, of an install of either kind, a row each: the account has the method, or a repair makes it. They are the account's, so one that stands is left under whatever name it has.
+ * A token that may not make one stops nothing: its row names the permission. Passkeys that Cloudflare refuses the account are no failure: an install is whole with the email code alone.
+ *
+ * @returns the ids for the guarded application to name, as `offeredMethods` writes them: in a check `""` stands for a method a repair makes
+ */
+export async function loginMethodPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection): Promise<readonly string[] | undefined> {
+  const object = (): Piece => "Login method";
+  if (progress.stopped) {
+    progress.rows.push({ object: object(), state: "not-run", detail: "" });
+
+    return undefined;
+  }
+
+  const synced = await answered(progress, () => syncLoginMethods(connection, placed.accountId, mode), { ...NO_ANSWER, report: reportOf([]), held: {} });
+  // Access that is off says so here as in the rows of the applications, which carry the one click.
+  if (!synced.ok && synced.failed === undefined && isAccessOff(synced)) {
+    progress.rows.push({ object: object(), state: "missing", detail: ACCESS_OFF });
+
+    return undefined;
+  }
+
+  const declined = !synced.ok && synced.failed === PASSKEY_METHOD && synced.failure === "refused" && !lacksRight(synced);
+  await piece(progress, mode, object, async (): Promise<Outcome> => (declined ? { ok: true, report: synced.report } : synced));
+  if (declined) progress.rows.push({ object: object(), state: "optional", detail: `${PASSKEY_METHOD}: ${NO_PASSKEYS.refused}: ${failureText(synced)}. ${NO_PASSKEYS.still}.` });
+
+  // Methods that were not read name nothing; else the application names the ones that stand, whatever became of the other.
+  if (!synced.ok && synced.failed === undefined) return undefined;
+
+  return offeredMethods(synced.held, mode === "plan" ? "" : undefined);
+}
+
+/**
  * Access that is switched off is a state of the account, not a failure of the run: the other pieces go on, and the page shows the one click.
  *
+ * @param methods - what `loginMethodPiece` answered
  * @returns whether the application can be read from: `false` for Access that is off, and `undefined` for an application that was not made, by a run that stopped or a token with no permission for it
  */
-export async function accessPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, users: Logins | undefined): Promise<boolean | undefined> {
+export async function accessPiece(progress: Progress, mode: Mode, placed: Placed, connection: Connection, users: Logins | undefined, methods: readonly string[] | undefined): Promise<boolean | undefined> {
   if (progress.stopped || users === undefined) {
     progress.rows.push({ object: "Access application", state: progress.stopped ? "not-run" : "failed", detail: progress.stopped ? "" : BAD_USERS });
     progress.stopped = true;
@@ -621,7 +662,7 @@ export async function accessPiece(progress: Progress, mode: Mode, placed: Placed
   }
 
   const { adminHost: host, privateSites } = placed;
-  const synced = await answered(progress, () => syncAccess(connection, placed.accountId, { hostname: host, users, privateSites }, mode), { ...NO_ANSWER, report: reportOf([]) });
+  const synced = await answered(progress, () => syncAccess(connection, placed.accountId, { hostname: host, users, privateSites, methods }, mode), { ...NO_ANSWER, report: reportOf([]) });
   // A refusal after a step was done is a failure of the run: its rows keep what was made.
   if (synced.ok || synced.failed !== undefined || !isAccessOff(synced)) {
     const before = progress.rows.length;
@@ -983,7 +1024,8 @@ async function readPieces(parts: PlugParts, mode: Mode, found: { readonly connec
     () => "Worker route",
     () => syncRoutes(connection, zone.id, { layout, script: parts.script }, mode),
   );
-  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, users));
+  const methods = await loginMethodPiece(progress, mode, placed, connection);
+  await variablesPiece(progress, mode, placed, connection, await accessPiece(progress, mode, placed, connection, users, methods));
   await logsPiece(progress, mode, placed, connection, settings.provider_logs);
   await piece(
     progress,

@@ -12,6 +12,9 @@ import type { Mode } from "../sync";
 /** What a row says before the permission a token lacks. */
 export const LACKS = "The account token lacks";
 
+/** The objects of the login at Cloudflare, which wait where Access is off for the account. */
+const BEHIND_ACCESS = /^(Access |Login method$)/;
+
 /** The states of a row that leave a run not done. */
 export const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);
 
@@ -46,7 +49,7 @@ export function failureWords(failure: CloudflareFailure): string {
  */
 export function rowOf(row: DomainRow, mode: Mode, loginOff: boolean): Row {
   const login = row.state === "missing" && row.detail.startsWith(`${INSTALL_OBJECTS.accessBinding}:`);
-  const waits = loginOff && row.state === "missing" && (login || row.object.startsWith("Access"));
+  const waits = loginOff && row.state === "missing" && (login || BEHIND_ACCESS.test(row.object));
   const state = waits || (row.state === "failed" && row.right !== undefined) ? "block" : STATES[mode][row.state];
 
   return { object: row.object, state, detail: login && !waits ? INSTALL_OBJECTS.accessBinding : row.detail, ...(row.right === undefined ? {} : { right: row.right }) };

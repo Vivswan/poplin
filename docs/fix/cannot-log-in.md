@@ -25,6 +25,7 @@ you get:    the login mended, and with --add-user one more email that can log in
 | --------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------- |
 | a command says `Not logged in`, or `The token is missing or expired`         | this machine's own login ran out. The dashboard still opens | `npx poplin login`: [The machine is not logged in](an-install-step-fails.md#the-machine-is-not-logged-in) |
 | the browser asks for your email, and no code arrives                  | the email is no user of the install, or its mailbox is gone | [the steps](#the-steps), with `--add-user`. With a mailbox that still works, check the spelling and the spam folder first |
+| the login page has no box for your email: it offers only `Sign in with: Cloudflare` | the Cloudflare account has no login method that mails a code, so only its own members get in | [the steps](#the-steps), without `--add-user`: the run makes the two login methods |
 | the browser shows no login page: `The login is not set up yet.`, or an error | the login page in front of the dashboard is missing or broken | [the steps](#the-steps), without `--add-user`                  |
 | the install said `Until then nobody can log in` when it was made      | Zero Trust was off, so the login page was never made    | switch Zero Trust on, as [step 1 of Install](../start/install.md#1-switch-on-what-no-command-can) has it. Then [the steps](#the-steps) |
 
@@ -64,7 +65,7 @@ An **account token** is a long password that lets a program change your Cloudfla
    The account token needs 5 permissions on this account:
      Access: Apps and Policies: Edit
      Workers Scripts: Edit
-     Access: Organizations, Identity Providers, and Groups: Read
+     Access: Organizations, Identity Providers, and Groups: Edit
      D1: Edit
      Account API Tokens: Edit
    See: npx poplin doctor --repair --help for 1 optional permission
@@ -87,6 +88,8 @@ An **account token** is a long password that lets a program change your Cloudfla
    unchanged  Worker                poplin, runs 0.1.0
    unchanged  DNS record            poplin.example.com
    ...
+   created    Login method          One-time PIN
+   created    Login method          Passkeys
    created    Access application    poplin: poplin.example.com, *-p-poplin.example.com
    created    Access policy         poplin logins
    ...
@@ -99,16 +102,17 @@ An **account token** is a long password that lets a program change your Cloudfla
 
    Without a domain, the address ends in `workers.dev`, and rows named `Forwarder` stand in place of `DNS record` and `Worker route`. Where the login page was fine, its rows say `unchanged`.
 
-5. **Open the dashboard and log in.** Cloudflare's login page asks for your email, and sends a code to its inbox. After a run with `--add-user`, type the email you gave it.
+5. **Open the dashboard and log in.** Cloudflare's login page asks for your email, and sends a code to its inbox. After a run with `--add-user`, type the email you gave it. The page also offers a passkey: save one after the first code, and it alone logs you in from then on.
 
 ## What the rows say
 
-Every piece of the install has a row. Four matter here:
+Every piece of the install has a row. Five matter here:
 
 | Row                  | It is                                                         |
 | -------------------- | ------------------------------------------------------------- |
 | `Worker`             | the version the install runs, and which release is out where it is behind: a repair takes none. `updated` where the line had `--update`, and the repair [brought it to the newest release](../upkeep/update.md#a-release-the-install-cannot-take) |
-| `Access application` | Cloudflare's login page in front of your dashboard            |
+| `Login method`       | how that page lets a user prove an email, a row each: `One-time PIN`, a code Cloudflare mails, and `Passkeys`. They are the Cloudflare account's own: a run makes one the account lacks, and no uninstall removes them |
+| `Access application` | Cloudflare's login page in front of your dashboard, which offers those two methods and no other |
 | `Access policy`      | the list of emails that page lets in: the users of the install |
 | `User`               | the email `--add-user` named                                  |
 

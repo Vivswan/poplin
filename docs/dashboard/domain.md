@@ -68,7 +68,22 @@ The key may not change a DNS record, a route, or a redirect, so Repair opens a d
 | 1    | Make an account token | press Open the account token form, or take the token you kept from [step 3](../start/install.md#3-make-the-account-token) |
 | 2    | Paste it              | paste the token into the box Account token, then press the dialog's Repair                                 |
 
-Four rows are Cloudflare's login, two objects twice:
+Two rows named `Login method` are how a user logs in, one row each:
+
+| Detail         | It is                                                                           |
+| -------------- | ------------------------------------------------------------------------------- |
+| `One-time PIN` | Cloudflare mails a code to the email a user types                               |
+| `Passkeys`     | a user who proved the email once by the code saves a passkey, and logs in with it alone from then on |
+
+Both are your Cloudflare account's own, so its other applications may use them. Repair makes one the account lacks and leaves one it has. An uninstall leaves both.
+
+| The row says | Means                                                                                     | Do                           |
+| ------------ | ----------------------------------------------------------------------------------------- | ---------------------------- |
+| `missing`    | the account has no such method. Without `One-time PIN`, no user gets a code by email | press Repair |
+| `failed`, with a permission | the account token may read the methods and make none                       | add the permission to the token, and press Repair |
+| `skipped`, on `Passkeys` | Cloudflare made the account no passkeys. Users log in with the code            | nothing                      |
+
+Four rows are Cloudflare's login, two objects twice. The first of them names the two login methods as the only ones its page offers; one that offers others says `differs`:
 
 | Piece                | It is                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -90,6 +105,7 @@ On an install [without a domain](../start/without-a-domain.md) the screen is the
 | Piece              | It is                                                                  |
 | ------------------ | ---------------------------------------------------------------------- |
 | Forwarder          | one for the unlisted and public sites, one for the private sites: its row names the address |
+| Login method       | how a user logs in, a row each: `One-time PIN`, a code Cloudflare mails, and `Passkeys` |
 | Access application | the login in front of the dashboard and of every private site         |
 | Access policy      | who may log in: your users only                                        |
 | Access application and Access policy, a second time | the paths a program reaches without the login: Detail names them "poplin open paths" |

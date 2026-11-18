@@ -110,7 +110,7 @@ Press Create Token, then Create Custom Token. For each row below, press Add more
 | Account   | Workers R2 Storage                                    | Edit      | the bucket                                  |
 | Account   | D1                                                    | Edit      | the database                                |
 | Account   | Access: Apps and Policies                             | Edit      | the login                                   |
-| Account   | Access: Organizations, Identity Providers, and Groups | Read      | your team's name                            |
+| Account   | Access: Organizations, Identity Providers, and Groups | Edit      | your team's name, and the two login methods |
 | Account   | Account API Tokens                                    | Edit      | making the key poplin keeps                 |
 | Zone      | Zone                                                  | Read      | finding your domain                         |
 | Zone      | DNS                                                   | Edit      | the addresses                               |

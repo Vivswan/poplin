@@ -682,7 +682,8 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `logs-follow`, `duplicate-job`                           |
 | the Worker's Workflow, which Cloudflare did not make                | `duplicate-job`                                                          |
 | the midnight run, or a run started by hand with the many-files check | `duplicate-job`: a copy of 113 files, so once a day and not on every green main |
-| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `users-follow`: no login list exists |
+| Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `login-page`: the team's login page offers the email code; `users-follow`: no login list exists |
+| the token permission that makes a login method                      | `login-page`                                                             |
 | an install that sends a private site's address to its letter p form | `L1`, `L4`, `L5`                                                         |
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |
@@ -710,7 +711,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | Workers R2 Storage: Edit                                    | the account | the bucket                                        |
 | D1: Edit                                                    | the account | the database, and the run's token row             |
 | Access: Apps and Policies: Edit                             | the account | the login                                         |
-| Access: Organizations, Identity Providers, and Groups: Read | the account | the team domain the Worker checks a login against |
+| Access: Organizations, Identity Providers, and Groups: Edit | the account | the team domain the Worker checks a login against, and the two login methods |
 | Billing: Read                                               | the account | reading that every subscription is at a price of 0 |
 | Notifications: Edit                                         | the account | the budget alert, and the certificate alert       |
 | Account API Tokens: Edit                                    | the account | the two keys the install keeps                    |

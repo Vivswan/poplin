@@ -28,6 +28,8 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker route | ${state("routes", usual)} | *-page.example.com/*`,
     `Worker route | ${state("routes", usual)} | *-poplin.example.com/*`,
     `Worker route | ${state("routes", usual)} | poplin.example.com/*`,
+    `Login method | ${state("methods", usual)} | One-time PIN`,
+    `Login method | ${state("methods", usual)} | Passkeys`,
     `Access application | ${state("access", usual)} | poplin: poplin.example.com, *-p-poplin.example.com`,
     `Access policy | ${state("access", usual)} | poplin logins`,
     `Access application | ${state("access", usual)} | poplin open paths: poplin.example.com/api`,
@@ -101,7 +103,7 @@ test("a repair makes every object, a check then finds all present, and a second 
 
   await withAccount(account, async (plug, asked) => {
     expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ all: "created", bots: "changed" }));
-    expect(writes(asked)).toHaveLength(20);
+    expect(writes(asked)).toHaveLength(22);
 
     const sent = asked.length;
 
@@ -211,7 +213,7 @@ const RIGHT_OF: readonly (readonly [path: RegExp, right: string])[] = [
   [/^\/zones\/[^/]+\/dns_records/, "DNS: Edit"],
   [/^\/zones\/[^/]+\/workers\/routes/, "Workers Routes: Edit"],
   [/^\/accounts\/[^/]+\/access\/(apps|policies)/, "Access: Apps and Policies: Edit"],
-  [/^\/accounts\/[^/]+\/access\/organizations/, "Access: Organizations, Identity Providers, and Groups: Read"],
+  [/^\/accounts\/[^/]+\/access\/(organizations|identity_providers)/, "Access: Organizations, Identity Providers, and Groups: Edit"],
   [/^\/accounts\/[^/]+\/workers\/scripts/, "Workers Scripts: Edit"],
   [/^\/zones\/[^/]+\/settings\//, "Zone Settings: Read"],
   [/^\/zones\/[^/]+\/rulesets\/phases\/http_request_dynamic_redirect/, "Single Redirect: Edit"],
@@ -238,7 +240,7 @@ const KEY_OF: Readonly<Record<string, readonly [key: string, type: string]>> = {
   "DNS: Edit": ["dns", "edit"],
   "Workers Routes: Edit": ["workers_routes", "edit"],
   "Access: Apps and Policies: Edit": ["access", "edit"],
-  "Access: Organizations, Identity Providers, and Groups: Read": ["access_acct", "read"],
+  "Access: Organizations, Identity Providers, and Groups: Edit": ["access_acct", "edit"],
   "Workers Scripts: Edit": ["workers_scripts", "edit"],
   "Zone Settings: Read": ["zone_settings", "read"],
   "D1: Edit": ["d1", "edit"],
@@ -251,7 +253,7 @@ const SCOPE_OF: Readonly<Record<string, "Account" | "Zone">> = {
   "DNS: Edit": "Zone",
   "Workers Routes: Edit": "Zone",
   "Access: Apps and Policies: Edit": "Account",
-  "Access: Organizations, Identity Providers, and Groups: Read": "Account",
+  "Access: Organizations, Identity Providers, and Groups: Edit": "Account",
   "Workers Scripts: Edit": "Account",
   "Single Redirect: Edit": "Zone",
   "Zone Settings: Read": "Zone",
@@ -312,15 +314,17 @@ test("one object taken away and one changed by hand: the check names exactly tho
   });
 });
 
-test("Access that was never switched on is no failure: both runs go on past it, mark its three rows, and hand over the one step with the address to open", async () => {
+test("Access that was never switched on is no failure: both runs go on past it, mark the login methods' row and its three rows, and hand over the one step with the address to open", async () => {
   const account = { ...emptyAccount(), accessOff: true };
   // The open paths are named as the application they are, so their row says which one it is of.
-  const said = ["Access application | missing | Access is off for the account", "Access policy | missing | Access is off for the account", "Access application | missing | poplin open paths: Access is off for the account"];
+  const isOff = "missing | Access is off for the account";
+  const said = [`Login method | ${isOff}`, `Access application | ${isOff}`, `Access policy | ${isOff}`, "Access application | missing | poplin open paths: Access is off for the account"];
   const off = (states: Readonly<Record<string, string>>): string[] => {
     const rows = table(states);
-    const first = rows.findIndex((row) => row.startsWith("Access "));
+    const login = (row: string): boolean => row.startsWith("Access ") || row.startsWith("Login method ");
+    const first = rows.findIndex(login);
 
-    return [...rows.slice(0, first), ...said, ...rows.slice(first).filter((row) => !row.startsWith("Access "))];
+    return [...rows.slice(0, first), ...said, ...rows.slice(first).filter((row) => !login(row))];
   };
   const steps = [{ text: "Open Zero Trust and pick a plan (Free works): that switches Access on.", address: `https://one.dash.cloudflare.com/${ACCOUNT}` }];
 
@@ -334,11 +338,11 @@ test("Access that was never switched on is no failure: both runs go on past it, 
 
     expect(shown(repaired)).toEqual(off({ all: "created", bots: "changed", access: "missing" }));
     expect(repaired).toMatchObject({ steps });
-    expect([account.policies, account.applications]).toEqual([[], []]);
+    expect([account.policies, account.applications, account.methods.length]).toEqual([[], [], 1]);
 
     account.accessOff = false;
 
-    expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ access: "created" }));
+    expect(shown(await plug.repair(TOKEN, SETTINGS))).toEqual(table({ access: "created", methods: "created" }));
   });
 });
 
@@ -375,6 +379,7 @@ test("a repair that fails half way, for another reason than a permission, stops:
       "Worker route | not-run | *-page.example.com/*",
       "Worker route | failed | *-poplin.example.com/*: refused with status 500 and codes 10000",
       "Worker route | not-run | poplin.example.com/*",
+      "Login method | not-run | ",
       "Access application | not-run | ",
       "Worker variable | not-run | ",
       "Key | not-run | ",
@@ -498,7 +503,7 @@ const NEEDS: readonly (readonly [right: string, call: string])[] = [
   ["DNS: Edit", "GET /zones/zone-1/dns_records"],
   ["Workers Routes: Edit", "GET /zones/zone-1/workers/routes"],
   ["Access: Apps and Policies: Edit", `GET /accounts/${ACCOUNT}/access/policies`],
-  ["Access: Organizations, Identity Providers, and Groups: Read", `GET /accounts/${ACCOUNT}/access/organizations`],
+  ["Access: Organizations, Identity Providers, and Groups: Edit", `GET /accounts/${ACCOUNT}/access/organizations`],
   ["Workers Scripts: Edit", `GET /accounts/${ACCOUNT}/workers/scripts/poplin/settings`],
   ["Zone Settings: Read", "GET /zones/zone-1/settings/always_use_https"],
   ["Single Redirect: Edit", "GET /zones/zone-1/rulesets/phases/http_request_dynamic_redirect/entrypoint"],
@@ -571,7 +576,7 @@ test("Access refused as not switched on after the policy was already made is a s
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-    expect(rows.slice(6, 15)).toEqual([
+    expect(rows.slice(8, 17)).toEqual([
       "Access application | not-run | poplin: poplin.example.com, *-p-poplin.example.com",
       "Access policy | not-run | poplin logins",
       "Access policy | created | poplin open paths policy",
@@ -602,7 +607,7 @@ test("every row says what its object is for, and a row refused for a missing rig
     const objectsOf = (part: string): string[] => [...new Set(rows.filter((row) => row.part === part).map(named))];
 
     expect([objectsOf("login"), objectsOf("reach")]).toEqual([
-      ["Access application", "Access policy", "Worker variable"],
+      ["Login method", "Access application", "Access policy", "Worker variable"],
       ["DNS record", "Worker route", "Access application of the open paths", "Access policy of the open paths"],
     ]);
     expect(rows.filter((row) => row.right !== undefined).map((row) => [row.object, row.state, row.right])).toEqual([["Worker route", "failed", "Workers Routes: Edit"]]);
@@ -1246,7 +1251,7 @@ describe("a check the install makes with the key it holds", () => {
   }
 
   // Drift: the count is what one request of a Worker spends each time the Domain screen opens on a check that is old. A call to the databases or the tokens is one the key is refused, and its row would fail on every healthy install.
-  test("every piece a repair made reads as present in 22 calls, each a read sent with the key, none to the databases or the tokens, and the database's row says the install runs on it", async () => {
+  test("every piece a repair made reads as present in 24 calls, each a read sent with the key, none to the databases or the tokens, and the database's row says the install runs on it", async () => {
     const account = emptyAccount();
 
     await withKey(account, async (plug, own, asked) => {
@@ -1256,7 +1261,7 @@ describe("a check the install makes with the key it holds", () => {
       const calls = asked.slice(sent);
 
       expect(rows).toEqual(table({}).map((row) => (row.startsWith("D1 database") ? DATABASE : row)));
-      expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens)(\/|\?|$)/.test(call.path))]).toEqual([22, [`GET Bearer ${KEPT}`], []]);
+      expect([calls.length, [...new Set(calls.map((call) => `${call.method} ${call.key}`))], calls.filter((call) => /\/(d1|tokens)(\/|\?|$)/.test(call.path))]).toEqual([24, [`GET Bearer ${KEPT}`], []]);
     });
   });
 
@@ -1269,7 +1274,7 @@ describe("a check the install makes with the key it holds", () => {
       const reading = await own();
 
       expect(shown(reading)).toEqual([
-        ...table({ all: "missing" }).slice(0, 11),
+        ...table({ all: "missing" }).slice(0, 13),
         "Key | present | poplin kept key",
         "Upload key | present | poplin upload key",
         "Worker logs | present | enabled",
@@ -1287,6 +1292,20 @@ describe("a check the install makes with the key it holds", () => {
     });
   });
 
+  // Drift: a login method deleted at Cloudflare leaves the page without it, and the application naming an id of nothing. Read as present, nobody would be told to repair.
+  test("a check by the key of an account whose passkeys were deleted reads that method as missing and the application as one a repair changes, and sends nothing but reads", async () => {
+    const account = emptyAccount();
+
+    await withKey(account, async (plug, own, asked) => {
+      await plug.repair(TOKEN, SETTINGS);
+      account.methods.pop();
+      const sent = asked.length;
+      const rows = shown(await own()).filter((row) => /^(Login method|Access application \| \w+ \| poplin:)/.test(row));
+
+      expect([rows, writes(asked.slice(sent))]).toEqual([["Login method | present | One-time PIN", "Login method | missing | Passkeys", "Access application | differs | poplin: poplin.example.com, *-p-poplin.example.com"], []]);
+    });
+  });
+
   const lacking = [
     { name: "the records", refuse: "/zones/zone-1/dns_records", row: "DNS record | failed | the key the install holds lacks this permission: DNS Read. Press Repair.", right: "DNS Read", unread: ["Rate rule | not-run | ", "Bot settings | not-run | "] },
     { name: "the routes", refuse: "/zones/zone-1/workers/routes", row: "Worker route | failed | the key the install holds lacks this permission: Workers Routes Read. Press Repair.", right: "Workers Routes Read", unread: [] },
@@ -1295,6 +1314,13 @@ describe("a check the install makes with the key it holds", () => {
       refuse: "/zones/zone-1/settings/always_use_https",
       row: "Redirect rule | failed | the zone's own https switch: the key the install holds lacks this permission: Zone Settings Read. Press Repair.",
       right: "Zone Settings Read",
+      unread: [],
+    },
+    {
+      name: "the account's login methods",
+      refuse: `/accounts/${ACCOUNT}/access/identity_providers`,
+      row: "Login method | failed | the key the install holds lacks this permission: Access: Organizations, Identity Providers, and Groups Read. Press Repair.",
+      right: "Access: Organizations, Identity Providers, and Groups Read",
       unread: [],
     },
     { name: "the bot switches", refuse: "/zones/zone-1/bot_management", row: "Bot settings | failed | the key the install holds lacks this permission: Bot Management Read. Press Repair.", right: "Bot Management Read", unread: [] },

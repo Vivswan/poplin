@@ -76,6 +76,12 @@ export interface Account {
   /** The account's Access applications. */
   applications: Row[];
 
+  /** The account's identity providers: the login methods its Access offers. */
+  methods: Row[];
+
+  /** Whether Cloudflare makes the account no passkeys: a call to make that method is then refused, as a request it does not take. */
+  noPasskeys?: boolean;
+
   /** The id of every application whose logins were ended, in order. */
   revoked: string[];
 
@@ -186,6 +192,7 @@ export function emptyAccount(): Account {
     routes: [],
     policies: [],
     applications: [],
+    methods: [{ id: "method-cloudflare", name: "Cloudflare", type: "cloudflare", config: {} }],
     revoked: [],
     rulesets: {},
     switches: { ai_bots_protection: "disabled", fight_mode: false },
@@ -283,6 +290,16 @@ function applications(account: Account, asked: Asked, id: string | undefined, ac
   }
 
   return answered;
+}
+
+/** The account's identity providers. Cloudflare takes one that mails a code an account, and a test may have it refuse passkeys. */
+function methods(account: Account, asked: Asked, id: string | undefined): Response {
+  const type = asked.method === "POST" ? ((asked.body ?? {}) as Row).type : undefined;
+  if (type === "passkeys" && account.noPasskeys === true) return refusal(400, 12000, "access.api.error.invalid_request");
+
+  if (type === "onetimepin" && account.methods.some((method) => method.type === type)) return refusal(409, 12001, "access.api.error.conflict: a onetimepin connection already exists");
+
+  return stored(account.methods, asked, id);
 }
 
 /** Another Worker of the account: an upload makes it with the tags and bindings sent and Cloudflare's first addresses, and its settings and its address switches are read and set. */
@@ -533,6 +550,8 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
   if (kind === "access/policies") return stored(account.policies, asked, parts[4]);
 
   if (kind === "access/apps") return applications(account, asked, parts[4], parts[5]);
+
+  if (kind === "access/identity_providers") return methods(account, asked, parts[4]);
 
   if (kind === "access/organizations") return reply({ auth_domain: TEAM });
 

@@ -78,7 +78,7 @@ const TIMED_OUT = "TimeoutError: The operation timed out.";
 const OPENED: (() => void)[] = [];
 
 /** The checks skipped on an install with no login in front. */
-const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "users-follow": "skipped" } as const;
+const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "login-page": "skipped", "users-follow": "skipped" } as const;
 
 /** The checks a run on an install without a domain skips: each needs a rule or a switch of a zone. */
 const ZONE_CHECKS = { crawler: "skipped", "assistant-fetch": "skipped", "burst-rate-rule": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
@@ -107,7 +107,9 @@ const CASES: readonly Case[] = [
     {},
     { ...NO_LOGIN, ...ZONE_CHECKS, private: "failed", duplicate: "failed", L5: "failed" },
   ],
-  ["an install whose login stands in front of the login path alone fails the check of the whole dashboard", { access: true, loginPathOnly: true }, {}, { "dashboard-login": "failed" }],
+  ["an install whose login stands in front of the login path alone fails the check of the whole dashboard", { access: true, loginPathOnly: true }, {}, { "dashboard-login": "failed", "login-page": "failed" }],
+  ["an install whose login page offers the account's own login alone fails the check of the email code", { access: true, noEmailCode: true }, {}, { "login-page": "failed" }],
+  ["a run told that no login method was made skips the check of the login's page", { access: true, noEmailCode: true }, { "login-methods": "the token permission" }, { "login-page": "skipped" }],
   ["an install whose dashboard lets a site's origin read its answers fails the check of the dashboard's data asked for by a site", { grantsOrigin: true }, {}, { ...NO_LOGIN, "data-cross-origin": "failed" }],
   ["the same install behind a login, whose own answers alone the check judges, fails it on the path the login lets through", { access: true, grantsOrigin: true }, {}, { "data-cross-origin": "failed" }],
   ["an install whose site hostnames answer the API fails the check that keeps the hosts apart, with a domain and without", { apiOnSiteHosts: true }, {}, { ...NO_LOGIN, "hosts-apart": "failed" }],

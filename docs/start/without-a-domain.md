@@ -70,7 +70,7 @@ npx poplin install cloudflare --no-domain
 The account token needs 6 permissions on this account:
   Access: Apps and Policies: Edit
   Workers Scripts: Edit
-  Access: Organizations, Identity Providers, and Groups: Read
+  Access: Organizations, Identity Providers, and Groups: Edit
   D1: Edit
   Workers R2 Storage: Edit
   Account API Tokens: Edit
@@ -84,7 +84,7 @@ Account token (hidden):
 
 The link opens Cloudflare's form with five rows filled, and none of a domain. The install needs six permissions: the link cannot choose Workers R2 Storage, so add that one yourself.
 
-[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&name=poplin%20install)
+[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&name=poplin%20install)
 
 | On the form       | Do                                                                                   |
 | ----------------- | ------------------------------------------------------------------------------------ |
@@ -119,6 +119,8 @@ created    Worker                poplin, runs 0.1.0
 updated    workers.dev route     enabled: poplin.your-name.workers.dev
 created    Forwarder             poplin-private: https://poplin-private.your-name.workers.dev (private sites)
 created    Forwarder             poplin-sites: https://poplin-sites.your-name.workers.dev (unlisted and public sites)
+created    Login method          One-time PIN
+created    Login method          Passkeys
 created    Access application    poplin: poplin.your-name.workers.dev, poplin-private.your-name.workers.dev
 created    Key                   poplin kept key
 Waiting for https://poplin.your-name.workers.dev to respond
@@ -135,7 +137,7 @@ The sample shows a few of the rows. Two pieces are of this kind alone:
 | workers.dev route | the address Cloudflare gives the Worker, enabled: your dashboard answers there       |
 | Forwarder      | a small Worker that gives the sites of one kind their hostname and hands every request on |
 
-The Access application is Cloudflare's login in front of the dashboard and of every private site.
+The Access application is Cloudflare's login in front of the dashboard and of every private site. The two login methods are how a user passes it: [a code Cloudflare mails, and a passkey](install.md#4-read-what-it-made).
 
 ## Log in
 

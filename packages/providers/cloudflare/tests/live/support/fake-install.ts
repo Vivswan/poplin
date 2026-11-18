@@ -51,6 +51,15 @@ const NO_LOGIN = "No login was checked for this request. Open the dashboard's ad
 /** Where the login in front of the install sends a stranger, before the hostname the stranger asked for. */
 const LOGIN_PAGE = "https://team.cloudflareaccess.com/cdn-cgi/access/login/";
 
+/** What the team's login page holds: the button of the account's own login, and the box of the email code where the page offers it. */
+const LOGIN_METHODS = {
+  own: '<button data-idp="Cloudflare">Sign in with: Cloudflare</button>',
+  code: '<form id="totp-form" action="/cdn-cgi/access/verify-code/poplin.example.com" method="post"><input name="email" type="email"><button>Send me a code</button></form>',
+} as const;
+
+/** The hostname of the team's login. */
+const LOGIN_HOST = new URL(LOGIN_PAGE).hostname;
+
 /** The most requests the fake's own limit lets one minute hold. */
 const OWN_LIMIT = 120;
 
@@ -103,6 +112,9 @@ export interface FakeSwitches {
 
   /** A fault: the login in front of the admin hostname covers the path `/login` alone, as an install made before the whole hostname was guarded, so the install itself answers every other path. */
   readonly loginPathOnly?: boolean;
+
+  /** A fault: the login's page offers the account's own login alone and no email code, as on an account with no such login method. */
+  readonly noEmailCode?: boolean;
 
   /** No route reaches the public word's hostnames. */
   readonly noPublicRoute?: boolean;
@@ -222,6 +234,13 @@ function atLogin(request: Request, loginPage: string): Response {
   if (request.headers.get("X-Requested-With") === "XMLHttpRequest") return refusal(401, "Unauthorized\n");
 
   return granting(refusal(302, "", { Location: loginPage }), request.headers.get("Origin"));
+}
+
+/** The team's own login page, as a stranger sent on from the install reads it. */
+function teamLoginPage(switches: FakeSwitches): Response {
+  const code = switches.noEmailCode === true ? "" : LOGIN_METHODS.code;
+
+  return new Response(`<main>${code}${LOGIN_METHODS.own}</main>`, { headers: { "Content-Type": "text/html" } });
 }
 
 function isApiPath(pathname: string): boolean {
@@ -437,6 +456,9 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const grantedOf = (request: Request): string | null => (switches.grantsOrigin === true ? request.headers.get("Origin") : null);
   const asApi = (url: URL): boolean => switches.apiOnSiteHosts === true && url.pathname.startsWith("/api/");
 
+  // The hosts that are none of the install's: the store its tickets name, and the team's login.
+  const elsewhere: Readonly<Record<string, (request: Request, url: URL) => Promise<Response> | Response>> = { [STORE_HOST]: answerStore, [LOGIN_HOST]: () => teamLoginPage(switches) };
+
   const fetch: Fetch = async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
@@ -446,7 +468,8 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     // The fault of an install that lets an origin read its answers is in the install's own alone: the login's are none of its.
     if (url.hostname === place.adminHost) return stoppedAtLogin(request, url) ?? granting(await answerAdmin(request, url), grantedOf(request));
 
-    if (url.hostname === STORE_HOST) return answerStore(request, url);
+    const outside = elsewhere[url.hostname];
+    if (outside !== undefined) return outside(request, url);
 
     const reached = place.sites.isSiteHost(url.hostname) && !(switches.noPublicRoute === true && !url.hostname.endsWith(`-poplin.${FAKE_DOMAIN}`));
     if (!reached) throw new TypeError("no server answers on this hostname");
