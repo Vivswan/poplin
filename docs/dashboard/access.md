@@ -19,12 +19,15 @@ The line that follows says how the change went:
 
 | The line says                                           | Cloudflare's list                                | Do                                                    |
 | ------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
-| `Added.` or `Removed.`                                  | has the change: a new user can log in            | nothing                                               |
+| `Added.`, then `Send them` and the dashboard's address  | has the change: the new user can log in at that address | send them the address: poplin and Cloudflare mail nobody |
+| `Removed.`                                              | has the change                                   | nothing                                               |
 | `... is tried again by itself.`                         | gave no answer, for the list or for the budget alert | nothing: poplin tries again within 15 minutes         |
 | `... is brought up to date by itself.`                  | is one change behind: the users changed again meanwhile | nothing                                             |
 | `... Open Domain and press Repair.`                     | is as it was or only partly changed: the install holds no key, Cloudflare refused the key, or the list is missing | on Domain, press Repair, paste an account token as in [step 3](../start/install.md#3-make-the-account-token), and press Repair again |
 
 The change is saved in every case. `poplin config users` shows the same list.
+
+A new user logs in at the dashboard's address, by the code Cloudflare mails to the email you added. Once Cloudflare's list has the change, their private sites can take up to a minute more to open: until then a private site answers that it was not found, and a reload opens it.
 
 [Activity](activity.md) names each user by email, on the screen and in its files: `Added a user: new@example.com`, `Removed a user: new@example.com`.
 
