@@ -52,8 +52,12 @@ export interface Learned {
   readonly answered: boolean;
 }
 
-/** Ask for the newest release once. `null` is a website that names none yet; `undefined` is no answer that can be read, for whatever reason. */
-async function newestRelease(asking: Asking): Promise<UpdateNews | null | undefined> {
+/**
+ * Ask for the newest release once.
+ *
+ * @returns the release; `null` for a website that names none yet; `undefined` for no answer that can be read, for whatever reason
+ */
+export async function newestRelease(asking: Asking): Promise<UpdateNews | null | undefined> {
   try {
     const response = await asking.fetch(asking.address ?? LATEST_ADDRESS, { signal: AbortSignal.timeout(asking.patienceMs ?? PATIENCE_MS) });
     if (response.status !== 200 || response.body === null) {
