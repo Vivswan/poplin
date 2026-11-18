@@ -45,13 +45,4 @@ A read is asked when the command of the code that made the install has its flags
 
 ## Adding a schema step
 
-1. Change `packages/core/src/database/schema.ts`.
-2. Run `bun run --cwd packages/core draft-step "<what it does>"` and read the draft: it adds the step to the file of the current version.
-
-A file of steps a release shipped is frozen: `tests/migrations/frozen-steps.test.ts` fails when it differs from the tag. A change is a new step, in the file named for the last release: the one file that may be new or change.
-
-A new setting needs a step too. The stored settings row is read strictly, so a row without the new key does not read. The step writes the key's default into the stored row:
-
-```sql
-UPDATE settings SET value = json_set(value, '$.<key>', <default>) WHERE json_type(value, '$.<key>') IS NULL
-```
+[Writing a migration](../../packages/core/src/migrations/README.md) has the steps, the rules, and a worked example. `frozen-steps.test.ts` here holds its rule on released files.

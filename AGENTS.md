@@ -44,5 +44,5 @@ Poplin publishes a static site to the user's own Cloudflare account with one cal
 - Work on the dashboard with every edit shown at once: `bun run preview --dev`
 - Click through an install without a domain: `bun run preview --no-domain`, then open `http://poplin.localhost:4400/`
 - Stop it: `bun run preview:stop`; `--port` runs a second one beside it, `--watch` restarts it when its source changes, and `--gallery` lists every state at `/gallery`
-- Backwards-compatible code lives only in `migrations/`. Everywhere else an old shape is deleted outright.
+- Backwards-compatible code lives only in `migrations/`. Everywhere else an old shape is deleted outright. How to write one: the README in `packages/core/src/migrations/`.
 - Provider-specific code lives only in `packages/providers/`; `tests/portable.test.ts` holds the line.

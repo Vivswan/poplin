@@ -25,3 +25,6 @@ CLAUDE.md -text
 # below the END marker; they stay yours across every sync, and the
 # LAST matching line wins, so entries there override the managed ones.
 # END REPO-PLATFORM MANAGED
+
+# The two links beside the page on writing a migration, kept from text/EOL normalization as the root's links are; the nested CLAUDE.md is matched above.
+packages/core/src/migrations/AGENTS.md -text
