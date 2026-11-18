@@ -49,10 +49,10 @@ export function git(root: string, args: readonly string[]): string {
  *
  * The tags are asked, never the release manifest: on the pull request of a release the manifest already names the version being cut, which has no tag yet.
  *
- * @returns the tag, or `undefined` when no release is among the ancestors
- * @throws {Error} the checkout is shallow: its tags and ancestors are not there to ask
+ * @returns the tag
+ * @throws {Error} the checkout is shallow, or holds no release tag among its ancestors: a clone made without the tags
  */
-export function lastRelease(root: string): string | undefined {
+export function lastRelease(root: string): string {
   if (git(root, ["rev-parse", "--is-shallow-repository"]).trim() === "true") {
     throw new Error(
       `${root} is a shallow checkout, which holds no release tag to upgrade from: fetch the history (\`git fetch --unshallow --tags\`, or \`fetch-depth: 0\` in a workflow)`,
@@ -61,6 +61,8 @@ export function lastRelease(root: string): string | undefined {
 
   const tags = git(root, ["tag", "--merged", "HEAD", "--list", "v*"]).split("\n");
   const [newest] = tags.filter((tag) => RELEASE_TAG.test(tag)).sort((one, other) => Bun.semver.order(other.slice(1), one.slice(1)));
+
+  if (newest === undefined) throw new Error(`${root} holds no release tag among its ancestors: fetch the tags from poplin's repository (\`git fetch --tags <repository>\`)`);
 
   return newest;
 }

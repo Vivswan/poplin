@@ -507,7 +507,7 @@ describe("what stops a run before it changes anything", () => {
   // Drift: the release is read first, so a website that is down, or a release this code cannot place, must leave the account as it was.
   test.each([
     ["the project's website gives no answer", (address: string) => (address.endsWith("releases.json") ? new Response("down", { status: 503 }) : undefined), { ok: false, why: "unreachable" }],
-    ["no release is published yet", (address: string) => (address.endsWith("releases.json") ? new Response("{}") : undefined), { ok: true, ready: false, rows: [], blocked: [{ what: "no_release" }] }],
+    ["a website that names no release", (address: string) => (address.endsWith("releases.json") ? new Response("{}") : undefined), { ok: true, ready: false, rows: [], blocked: [{ what: "no_release" }] }],
     ["the release's module is not the one that was published", (address: string) => (address.endsWith("worker.js") ? new Response("export default 1;\n") : undefined), { ok: true, ready: false, rows: [], blocked: [{ what: "bad_release" }] }],
   ] as const)("%s: nothing is made", async (_, website, outcome) => {
     const account = fresh();

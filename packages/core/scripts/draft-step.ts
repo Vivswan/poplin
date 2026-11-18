@@ -2,7 +2,7 @@
 //
 //   bun run --cwd packages/core draft-step "add a pinned flag to sites"     adds the step `add-a-pinned-flag-to-sites` to src/migrations/<version>.ts
 //
-// The version is the one of the newest release tag among the ancestors of the checkout, which the step migrates away from; 0.0.0 before the first release.
+// The version is the one of the newest release tag among the ancestors of the checkout, which the step migrates away from.
 // A draft is read before it is kept. What a declaration cannot say is added by hand: STRICT, WITHOUT ROWID, and every trigger.
 
 import { execFileSync } from "node:child_process";
@@ -26,9 +26,6 @@ const SCHEMA_IN_GIT = "packages/core/src/database/schema.ts";
 /** The tag of a release: `v` and a version with nothing after it. */
 const RELEASE_TAG = /^v\d+\.\d+\.\d+$/;
 
-/** The version the steps are written against before any release has a tag. */
-const FIRST_VERSION = "0.0.0";
-
 /** How a rebuilt table shows in a draft: its copy under a new name. */
 const REBUILT = "__new_";
 
@@ -50,7 +47,7 @@ async function declaredAtLastCommit(): Promise<Record<string, unknown>> {
 /**
  * The version a new step migrates away from: the highest `vX.Y.Z` tag among the ancestors of the checkout. The tags are asked, never a manifest: on the pull request of a release that already names the version being cut.
  *
- * @throws {Error} the checkout is shallow: its tags are not there to ask
+ * @throws {Error} the checkout is shallow, or holds no release tag among its ancestors: its tags are not there to ask
  */
 function currentVersion(): string {
   const git = (args: readonly string[]): string => execFileSync("git", [...args], { cwd: import.meta.dir, encoding: "utf8" });
@@ -59,7 +56,9 @@ function currentVersion(): string {
   const tags = git(["tag", "--merged", "HEAD", "--list", "v*"]).split("\n");
   const [newest] = tags.filter((tag) => RELEASE_TAG.test(tag)).sort((one, other) => Bun.semver.order(other.slice(1), one.slice(1)));
 
-  return newest?.slice(1) ?? FIRST_VERSION;
+  if (newest === undefined) throw new Error("this checkout holds no release tag among its ancestors: fetch the tags from poplin's repository (`git fetch --tags <repository>`)");
+
+  return newest.slice(1);
 }
 
 const description = process.argv[2];

@@ -49,22 +49,21 @@ function preRelease(count: number, commit: string): string {
 }
 
 describe("the build a live upgrade starts from", () => {
-  test("from the last release: none while no tag is among the ancestors, then the highest tag, with how far behind it is", () => {
+  test("from the last release: the release's tag, with how far behind it is; a checkout with no such tag is told to fetch them, whichever start is asked for, where an upgrade with nothing to start from would pass", () => {
     using repository = fixture();
-    repository.commit();
-    const unreleased = olderFrom(repository.root, "release", () => undefined);
+    const untagged = repository.commit();
+    const refusals = (["release", "next"] as const).map((from) => () => olderFrom(repository.root, from, () => [preRelease(1, untagged)]));
+    for (const refusal of refusals) expect(refusal).toThrow(`${repository.root} holds no release tag among its ancestors: fetch the tags from poplin's repository (\`git fetch --tags <repository>\`)`);
     const released = repository.commit("v0.1.0");
     repository.commit();
     repository.commit();
 
-    expect([unreleased, olderFrom(repository.root, "release", () => undefined)]).toEqual([
-      { kind: "none", line: "Nothing is released yet: there is no version to upgrade from." },
-      { kind: "build", ref: "v0.1.0", line: `Older build: v0.1.0 (${released.slice(0, 7)}), 2 commits behind this one` },
-    ]);
+    expect(olderFrom(repository.root, "release", () => undefined)).toEqual({ kind: "build", ref: "v0.1.0", line: `Older build: v0.1.0 (${released.slice(0, 7)}), 2 commits behind this one` });
   });
 
   test("from a pre-release: the newest one of an ancestor is taken, and this commit's own, one of no ancestor, and one of a commit the checkout lacks are passed over", () => {
     using repository = fixture();
+    repository.commit("v0.0.1");
     const first = repository.commit();
     const before = repository.commit();
     repository.git(["checkout", "--quiet", "-b", "side"]);
@@ -86,6 +85,7 @@ describe("the build a live upgrade starts from", () => {
   // Drift: the run of a pull request is of a commit that joins the branch to main's tip, so the pre-release of that tip is the code under test, less what the branch adds.
   test("from a pre-release, on a commit that joins two: the commits it joins are passed over, and the build before them is taken", () => {
     using repository = fixture();
+    repository.commit("v0.0.1");
     const before = repository.commit();
     const tip = repository.commit();
     repository.git(["checkout", "--quiet", "-b", "release"]);

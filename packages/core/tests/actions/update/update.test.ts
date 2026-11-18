@@ -51,7 +51,7 @@ describe("checkForUpdate and updateOf", () => {
     { name: "a schema written as text", asking: website({ ...RELEASE, schema: "1" }), update: undefined, news: null },
     { name: "a release with keys this version does not know", asking: website({ ...RELEASE, pulled: false, size: { bytes: 9 } }), update: NOTICE, news: RELEASE },
     { name: "a release whose schema is one step past this install's", asking: website({ ...RELEASE, schema: OWN_SCHEMA + 1 }), update: { ...NOTICE, database: true }, news: { ...RELEASE, schema: OWN_SCHEMA + 1 } },
-    { name: "no release yet", asking: website({ version: null }), update: undefined, news: null },
+    { name: "a website that names no release", asking: website({ version: null }), update: undefined, news: null },
     { name: "the running version", asking: website({ ...RELEASE, version: "0.1.0" }), update: undefined, news: { ...RELEASE, version: "0.1.0" } },
     { name: "a version below the running one", asking: website({ ...RELEASE, version: "0.0.9" }), update: undefined, news: { ...RELEASE, version: "0.0.9" } },
     { name: "a version that is no three numbers", asking: website({ ...RELEASE, version: "0.2.0-beta.1" }), update: undefined, news: null },
