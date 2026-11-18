@@ -2,8 +2,9 @@
 # Puts it back to the sample sites after each run of the checks, and at midnight UTC. live-checks-account-address.yml does the same for the account that holds none.
 #
 #   midnight UTC, or a run by hand -> the steps of live-install.yml on the `with-domain-ci-tests` account, for main as it is
-#   a push to main                 -> GitHub starts no run here
-#   a midnight run that ended red  -> one open issue for this kind of install, which the next green midnight run closes
+#   after those steps, always      -> the install put at the newest green commit of main, with the samples and the demo: after checks that failed or were cancelled too
+#   a push to main                 -> GitHub starts no run here: post-green.yml puts the install at each green commit
+#   a midnight run that ended red, by its checks or its put-back -> one open issue for this kind of install, which the next green midnight run closes
 #
 # The steps and the reset are in live-install.yml, written once for both kinds. release-gate.yml runs the same steps on the pull request of a release.
 
@@ -92,11 +93,27 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
+  # Whatever the checks came to, and after a run that was cancelled: no check that was cut short leaves the install, or the demo, as it stopped.
+  put-back:
+    name: put back (domain)
+    needs: [live]
+    if: always()
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+      put_back_only: true
+    # Only the names the steps read. The called jobs name the environment, and its secret of a name is the one they read, not a value handed over here.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
   # A red midnight run is one open issue of this kind's label, refreshed each red night; a green one closes it. A run by hand files and closes nothing.
-  # A cancelled run counts as red: a job that reached its timeout is cancelled, not failed.
+  # A cancelled run counts as red: a job that reached its timeout is cancelled, not failed. A put-back that failed is a red night too.
   report:
     name: report (domain)
-    needs: [live]
+    needs: [live, put-back]
     if: always() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -105,7 +122,7 @@ jobs:
       issues: write
     steps:
       - name: File or refresh the issue of a red night
-        if: needs.live.result == 'failure' || needs.live.result == 'cancelled'
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         uses: Vivswan/repo-platform/actions/fuzz-issue@stable
         with:
           mode: report
@@ -116,7 +133,7 @@ jobs:
           stream: generic
 
       - name: Close the issue on a green night
-        if: needs.live.result == 'success'
+        if: needs.live.result == 'success' && needs.put-back.result == 'success'
         uses: Vivswan/repo-platform/actions/fuzz-issue@stable
         with:
           mode: resolve

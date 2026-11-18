@@ -1,4 +1,4 @@
-// Put the owner's test install back to the sample sites and the demo: after every run of the live checks, and at midnight UTC.
+// Put the owner's test install back to the sample sites and the demo: after every run of the live checks, after every push to main whose gate ended green, and at midnight UTC.
 //
 //   a token for the reset -> the sample sites that still are what the demo's own table ends in, found -> every other site but the demo removed for good, the trash too
 //     -> the missing sample sites published -> the demo built, given the address of each sample site, and published at the public name `demo` unless it holds those files already

@@ -10,13 +10,15 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
 | check that an install of the last release updates to the next one | the pull request of a release: the checks `release-gate / live upgrade from the last release (domain) / upgrade` and `(account address)` of its `CI` run | the same environments |
 | check the two test installs before a release      | the pull request of a release: the checks `release-gate / live checks (domain) / checks` and `(account address)` of the same run | the same environments |
+| keep the two test installs at the newest green commit of main | nothing: the checks `post-green / test install (domain) / checks` and `(account address)` of main's `CI` run, after every merge: [The put-back](#the-put-back) | the same environments |
 | check that a release publishes its built Worker   | a release's own run of main, its `site` job last: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
 Live Checks workflows, one for each kind of install
-  midnight UTC                                             a run of each kind, on main; a push starts none
+  midnight UTC                                             a run of each kind, on main; a push starts none, and puts each install at its commit without the checks
   a run by hand                                            a run of the one workflow it was started from
   .github/workflows/live-install.yml                       the steps below, which both workflows call, and the pull request of a release after its upgrades
+                                                           with `put_back_only`: the same steps without suite.ts, for the newest green commit of main
   build the Worker bundle
   packages/providers/cloudflare/scripts/live/converge.ts   the account's plans, then the install made to match the commit by the product's own commands, the caps
                                                            `poplin install` where the account holds no install; the commit's build by the upload of an update, then `poplin doctor --repair`, where it holds one
@@ -51,19 +53,71 @@ Each workflow runs the same steps on its own install, every night. One that fail
 | hand, with `upgrade` ticked                    | first the job `upgrade`, then deploy and checks, whatever the upgrade came to |
 | hand, with `load` ticked                       | the same, and [the load](#the-load) after the checks                         |
 | the pull request of a release                  | both upgrades, then deploy and checks of main: [the checks of a release](#the-checks-after-the-upgrades-of-a-release) |
-| a push to main                                 | nothing                                                                      |
+| a push to main, once its gate ended green      | no checks: [the put-back](#the-put-back) of both installs, from `post-green.yml`     |
+| the end of any run of the checks above         | the same put-back, whatever the checks came to, and after a cancelled run    |
 
 | Also                                                   | What happens                                                         |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| a midnight run ended red, or was cancelled             | one open issue, labelled `live-nightly-domain` or `live-nightly-account-address`, with the run's link |
+| a midnight run ended red, or was cancelled, its put-back among it | one open issue, labelled `live-nightly-domain` or `live-nightly-account-address`, with the run's link |
 | the next midnight run of that kind ended green         | that issue is closed                                                 |
 | a run by hand ended red                                | it stays red until it is run again; no issue                         |
 | a newer run by hand while an older one of the same workflow has not started | that older run is cancelled                     |
 | a run of the other kind at the same time               | both go on side by side: each kind has an account and a lane of its own |
 
-A run of a night or by hand makes the install from the commit it started on, and running it again makes the install from that same commit. The pull request of a release takes main's tip as its checks start, each time they run.
+A run of a night or by hand checks the install made from the commit it started on, and running it again makes the install from that same commit. The pull request of a release takes main's tip as its checks start, each time they run. The put-back after each takes the newest green commit of main.
 
-One job touches a test install at a time. Each kind has a lane of its own, since the two installs are on two accounts: a run of one kind never waits for the other, and the two run side by side. Inside a lane the checks and the midnight reset each wait their turn, and every waiting job is kept.
+One job touches a test install at a time. Each kind has a lane of its own, since the two installs are on two accounts: a run of one kind never waits for the other, and the two run side by side. Inside a lane the checks, the put-backs, and the midnight reset each wait their turn, and every waiting job is kept.
+
+## The put-back
+
+Each test install runs the newest commit of main whose gate, the `all-green` check of its push, ended green.
+
+```text
+before   a merge                        -> the installs stay at the commit of the last night, up to a day
+         live checks that stop half-way -> the install, and the demo, stay as the checks left them
+after    a merge, its gate green        -> post-green.yml -> both installs at that commit, minutes later
+         live checks, however they end  -> a put-back as their last job -> both installs at the newest green commit
+```
+
+| Caller | Job | Runs |
+| ------ | --- | ---- |
+| `post-green.yml`, which `ci.yml` calls after `all-green` on a push to main | `post-green / test install (<kind>) / checks` | on a push to main of this repository; never on a pull request, a schedule, or a fork |
+| the two `Live Checks` workflows | `put back (<kind>) / checks` | after the checks of a night or of a run by hand: green, red, or cancelled |
+| `release-gate.yml` | `release-gate / put back (<kind>) / checks` | after the live checks on the pull request of a release, the same way: main's build, never the release's |
+
+All three call the job `checks` of `live-install.yml` with `put_back_only`, in the lane of the kind's live checks.
+
+```text
+admitted -> scripts/newest-green.ts: the runs of main's pushes, newest first, the first whose `all-green` job ended success
+  -> that commit checked out, where the job holds another -> built -> converge.ts -> no suite.ts -> reset.ts
+```
+
+| The step `Find the newest green commit of main` prints | Then |
+| ------------------------------------------------------ | ---- |
+| `Newest green commit of main: 1a2b3c4, the one checked out: installing it` | the steps go on |
+| `Newest green commit of main: 1a2b3c4, not the one checked out (5d6e7f8): taking it` | that commit is checked out, its packages installed, and the steps go on. Never on a push |
+| `Newest green commit of main: 1a2b3c4, newer than this run's 5d6e7f8: its own run installs it, nothing is made here` | a push alone: the job ends green in a minute, and no step calls Cloudflare |
+| a warning: GitHub did not say, or none of the last 100 runs holds a green gate | the commit checked out is installed |
+
+A push's job asks once it holds the lane. So of a row of merges that wait, the newest green one is installed and each older one ends at that step. No waiting job is cancelled: the release leg of `ci.yml` runs after this hook ended green, so a put-back that fails holds that commit's release leg back until its failed jobs are run again.
+
+| Asked | Answer |
+| ----- | ------ |
+| the version the install then says | the one in the commit's `packages/cli/package.json`: the Worker is built from the commit, and the commands are answered with that build as the newest release |
+| right after the commit of a release | the new version, before the tag and the published release exist: the commit holds it |
+| on the pull request of a release | the last release's version: the checks and the put-back take main, which does not hold the new one yet |
+| a put-back that fails | its job is red: the run of main, the night's issue, or the release's gate shows it |
+
+```text
+a put-back, as the harness counts it    about 55 rows: 14 for two tokens in and out and the caps, 41 for a reset that keeps every sample
+where the demo's files changed          16 more: about 71 rows
+on an install it starts over            14 + 299 = about 313 rows, and the first schema, which no meter counts
+requests to the Worker                  about 150: the reset reads each sample's files, about 130; 330 at the waits' longest
+bucket writes and lists                 2, and the demo's files where they changed; 453 at the ceilings
+a day's 100,000 rows                    about 1,300 merges at 71 rows beside a night's run; about 300 at 313
+a day's 100,000 requests                about 600 merges at 150
+a push's job that was overtaken         nothing on the account
+```
 
 ## Start the test install over
 
@@ -191,13 +245,14 @@ of those, the later step                22 rows: 14 as it runs (5 for its mark, 
                                         and 8 after it: 2 as each of the 3 sites is removed, and 2 for the site published after it
 beside those                            about 20 rows: the older build's caps, two token rows in and out, the entry of the update
 a run with upgrade ticked               about 212 + 20 + 1,018 (the checks) + 430 (a reset that keeps no sample) = about 1,680 rows, on each account it runs on
+                                        and about 71 for the put-back after it, as after every run of the checks
                                         and the first schema of the install the checks start over, which no meter counts
 the pull request of a release           the same sum: about 1,680 rows, on each account, each time its checks run
 where both upgrades find a build        about 232 rows more, and one more install started over, in either run
 where neither finds one                 the checks and the reset alone, in either run: about 1,018 rows, and the reset's
 ```
 
-The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgrade.yml` twice for each kind of install on the pull request of a release, and then the live checks. `all-green` waits for all six jobs: a release cannot merge while the upgrade from the last release or a live check is red. A failed step of the two that only advise is a warning, and the job passes.
+The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgrade.yml` twice for each kind of install on the pull request of a release, and then the live checks. `all-green` waits for all eight jobs: a release cannot merge while the upgrade from the last release, a live check, or a put-back is red. A failed step of the two that only advise is a warning, and the job passes.
 
 GitHub hands a called workflow only the secrets its caller passes. `ci.yml` hands the gate every secret, and the gate hands the three names on. No other workflow calls the gate, and a dispatch of `ci.yml` runs no live job.
 
@@ -206,10 +261,11 @@ GitHub hands a called workflow only the secrets its caller passes. `ci.yml` hand
 The upgrade removes the sample sites and the demo, and leaves a schema step main does not have. So the same workflow then runs the live checks of a night on each install, which also puts it back to what main's own run leaves.
 
 ```text
-live upgrade from the last release (domain)           -> live upgrade from a pre-release, as advice (domain)           -> live checks (domain) / checks
-live upgrade from the last release (account address)  -> live upgrade from a pre-release, as advice (account address)  -> live checks (account address) / checks
+live upgrade from the last release (domain)           -> live upgrade from a pre-release, as advice (domain)           -> live checks (domain) / checks           -> put back (domain) / checks
+live upgrade from the last release (account address)  -> live upgrade from a pre-release, as advice (account address)  -> live checks (account address) / checks  -> put back (account address) / checks
 
 live checks: main checked out and built -> the install made to match it -> every live check -> the samples and the demo put back
+put back:    the newest green commit of main -> the install made to match it -> the samples and the demo put back
 ```
 
 | Asked | Answer |
@@ -220,7 +276,7 @@ live checks: main checked out and built -> the install made to match it -> every
 | after a failed upgrade | it runs all the same |
 | after two upgrades that found no build to start from | it runs all the same: every release is checked |
 | a check that fails | the check `live checks (<kind>) / checks` is red |
-| after a cancelled run, as when a newer push to the pull request takes its place | it does not run, and an upgrade cut short stays on the install: the next run of the kind's lane puts it right, the midnight run of main among them |
+| after a cancelled run, as when a newer push to the pull request takes its place | it does not run, and [the put-back](#the-put-back) after it does: an upgrade or a check cut short does not stay on the install |
 | which lane | the one of the kind's live checks, once, after both upgrades |
 
 ```text
@@ -265,10 +321,10 @@ One install on the Cloudflare test account, called staging. It stays up between 
 
 |             | Staging                                                                          |
 | ----------- | -------------------------------------------------------------------------------- |
-| Runs        | main as it was at its last run                                                   |
+| Runs        | the newest commit of main whose gate ended green                                 |
 | Who gets in | the owner alone, behind the login; a stranger opens the public and unlisted sample sites |
-| Updated     | at 00:00 UTC every night, on a run by hand, and on the pull request of a release |
-| Put back    | after every run of the checks, whatever they came to, at 00:00 UTC every day, and after the checks on the pull request of a release |
+| Updated     | minutes after each merge to main turns green, and after every run of the checks: [the put-back](#the-put-back) |
+| Put back    | with every update, after every run of the checks, whatever they came to, and at 00:00 UTC every day |
 
 | A reset removes                               | A reset leaves                                                                        |
 | --------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -308,8 +364,8 @@ The owner sets these. Each test account has its own environment, and the secrets
 
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
-| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `live checks (domain)` of the release gate |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `live checks (account address)` of the release gate |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, `live upgrade (domain)`, `live checks (domain)`, and `put back (domain)` of the release gate, and `test install (domain)` of `post-green.yml` |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, `live upgrade (account address)`, `live checks (account address)`, and `put back (account address)` of the release gate, and `test install (account address)` of `post-green.yml` |
 
 For each account:
 
@@ -456,7 +512,7 @@ either install                   the same sums, each against the 1,000,000 of it
 the files no record names        the bucket found, and 1 list for every thousand files it holds; a delete is free, and counted against the 300 all the same
 ```
 
-A run starts at midnight, by hand, or on the pull request of a release, so 40 a day is far above what happens. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
+A run of the checks starts at midnight, by hand, or on the pull request of a release, so 40 a day is far above what happens. A put-back after a merge runs no check: [its price](#the-put-back) is beside these. The count is the harness's own, one for each request that makes the install write or list; the install lists once more for every thousand files.
 
 The copy the install's job finishes is a site of 113 files: one more than the first request of a copy takes. It costs a run 226 files of the day and over two hundred bucket writes, so the midnight run alone makes it, and a run started by hand with the many-files check.
 

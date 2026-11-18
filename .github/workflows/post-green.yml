@@ -3,17 +3,18 @@
 #
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
 #
+#   a push to main whose gate ended green -> each of the two test installs put at the newest green commit of main, with no live check
+#     -> built -> made to match by the product's own commands -> the sample sites and the demo put back (live-install.yml, `put_back_only`)
+#
 # Every green push to main gets its own run of this hook, and the runs of neighbouring commits overlap, so a job
-# here may finish after a newer commit's did.
+# here may start after a newer commit's did. Each job asks which commit is the newest green one once it holds the
+# lane: one that a newer green commit overtook makes nothing, and that commit's own job installs it.
 #
-# Replace the no-op job with this repository's work, since it costs a runner allocation on every green push until
-# you do.
+# Each job waits in the lane of its kind's live checks, which the called file holds and which keeps every waiting
+# job: none is cancelled, since the release leg needs this hook to end green.
 #
-# A job acts on the repository's current state, idempotently, never on "what this commit changed" or "the newest
-# commit".
-#
-# A concurrency group on a job is keyed per commit (inputs.sha), since a shared lane replaces the pending run and
-# the release leg needs this hook.
+# The managed ci.yml starts this file on a push to main alone. Each job asks the same again, and stands down in a
+# fork, which holds no test account.
 
 name: Post Green
 
@@ -25,11 +26,34 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
-  noop:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - env:
-          SHA: ${{ inputs.sha }}
-        run: echo "post-green hook for $SHA - nothing configured"
+  # Only the names the steps read are handed on. The called job names the environment, and its secret of a name is the one it reads, not a value handed over here.
+  test-install-domain:
+    name: test install (domain)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.fork
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+      put_back_only: true
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # The same for the install without a domain, on its own account and in its own lane.
+  test-install-account-address:
+    name: test install (account address)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.fork
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: account address
+      environment: without-domain-ci-tests
+      put_back_only: true
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
