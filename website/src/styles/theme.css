@@ -47,6 +47,13 @@ html {
   scrollbar-color: var(--rule) transparent;
 }
 
+/* A link to a part of the page glides there, unless less motion was asked for. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   display: flex;
   flex-direction: column;
@@ -252,9 +259,10 @@ main {
   height: 28px;
 }
 
-/* The switch, the copy buttons, and the demo's menu need a script; without one they are not offered. */
+/* The switch, the copy buttons, the demo's menu, and a fold's trigger need a script; without one they are not offered. */
 html:not(.js) [data-slot="button"],
-html:not(.js) [data-slot="menu-trigger"] {
+html:not(.js) [data-slot="menu-trigger"],
+html:not(.js) [data-slot="collapsible-trigger"] {
   display: none;
 }
 

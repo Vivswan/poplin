@@ -1,11 +1,12 @@
 ---
 import ChevronRight from "@lucide/astro/icons/chevron-right";
 import { Choice } from "../controls/choice.tsx";
+import { JumpLink } from "../controls/jump-link.tsx";
 import Site from "../layouts/Site.astro";
 import Account from "../show/Account.astro";
 import Ask from "../show/Ask.astro";
 import { PROVIDERS } from "../lib/providers.ts";
-import { SETUP_PROMPT } from "../lib/paths.ts";
+import { SETUP_PROMPT } from "../lib/prompt.ts";
 import Browser from "../show/Browser.astro";
 import Compare from "../show/Compare.astro";
 import Copy from "../show/Copy.astro";
@@ -15,11 +16,16 @@ import Start from "../show/Start.astro";
 import Who from "../show/Who.astro";
 import { AGENTS } from "../lib/agents.ts";
 import { demoAddress } from "../lib/demo.ts";
+import { INSTALLS } from "../lib/installs.ts";
 
 const demo = demoAddress();
 
-// The Start block carries the picked agent, and one rule puts that agent's line on the page.
-const pickerRules = `${AGENTS.map((agent) => `.start[data-picked="${agent.id}"] [data-agent="${agent.id}"]`).join(",")}{display:revert}`;
+// The Start block carries the picked agent and the picked kind of install, and one rule puts the line of each on the page.
+const picked = [
+  ...AGENTS.map((agent) => `.start[data-picked="${agent.id}"] [data-agent="${agent.id}"]`),
+  ...INSTALLS.map((install) => `.start[data-install="${install.id}"] [data-kind="${install.id}"]`),
+];
+const pickerRules = `${picked.join(",")}{display:revert}`;
 
 ---
 
@@ -36,6 +42,9 @@ const pickerRules = `${AGENTS.map((agent) => `.start[data-picked="${agent.id}"] 
       <div class="paste">
         <p>Paste into your agent</p>
         <Copy command={SETUP_PROMPT} wrap />
+        <div class="jump">
+          <JumpLink to="by-hand">Or install it yourself</JumpLink>
+        </div>
       </div>
     </section>
 
@@ -237,6 +246,11 @@ const pickerRules = `${AGENTS.map((agent) => `.start[data-picked="${agent.id}"] 
     margin-bottom: 8px;
     color: var(--muted);
     font-size: 0.8125rem;
+  }
+
+  /* The way past the agent: quiet, under the box. */
+  .jump {
+    margin-top: 12px;
   }
 
   /* The rail runs the whole way down; each step hangs a dot on it. */

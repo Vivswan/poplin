@@ -33,7 +33,7 @@ Paste this line into an agent, such as Claude Code or Codex. A chat in a browser
 | not in poplin    | poplin brings none. Without one, you publish with a command         |
 
 ```text
-Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
+Look at github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
 The agent sets poplin up with you: it asks for a domain or none and for your email, tells you what to choose in your browser, and gives you two lines to run in a terminal of your own: a dry run, then the install. You paste back what each prints, and the agent never sees your account token.

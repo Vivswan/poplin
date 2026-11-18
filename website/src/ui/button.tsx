@@ -2,7 +2,8 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
-const buttonVariants = cva(
+/** The site's looks of a button, as class names: for a link set as a button is, which stays a link. */
+export const buttonVariants = cva(
   "group/button shrink-0 cursor-pointer border-0 text-[0.8125rem] leading-none font-semibold whitespace-nowrap [&_svg]:pointer-events-none",
   {
     variants: {
@@ -13,6 +14,7 @@ const buttonVariants = cva(
       size: {
         sm: "inline-grid h-[28px] place-items-center rounded-[6px] px-[8px] py-0",
         icon: "grid size-[40px] place-items-center rounded-[6px] p-0",
+        line: "inline-flex items-center gap-[6px] rounded-[4px] p-0 text-[0.875rem] leading-[1.5] font-normal no-underline [&_svg]:-ml-[2px]",
       },
     },
   },

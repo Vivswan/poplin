@@ -8,7 +8,7 @@ order: 10
 What happens after you paste the line below, and what you do yourself. The agent follows [its own setup file](../../skills/poplin/references/setup.md), which counts the same steps, and the command is the one of [Install](install.md).
 
 ```text
-Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
+Look at github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
 Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a terminal on your own machine and runs commands there. It is a separate tool that you install yourself, and it may cost money: poplin brings none. A chat in a browser cannot run commands, so it cannot publish.

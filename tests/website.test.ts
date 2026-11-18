@@ -2,12 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseCommand } from "../packages/cli/src/commands/line/parse-command";
 import { publishedPins } from "../packages/core/src/records/release";
 import { publishedRelease } from "../packages/core/src/records/update";
 import { newestRelease } from "../website/src/lib/changelog";
 import { demoEntry } from "../website/src/lib/demo";
+import { INSTALLS } from "../website/src/lib/installs";
+import { SETUP_PROMPT } from "../website/src/lib/prompt";
+import { providerRefusal } from "./support/install-words";
 
 const ROOT = join(import.meta.dir, "..");
+
+const NOW = Date.UTC(2026, 0, 1);
+
+const PROMPT_PAGES = ["README.md", "docs/start/with-an-agent.md", "skills/poplin/README.md"];
 
 const WEBSITE = join(ROOT, "website");
 
@@ -188,6 +196,20 @@ function footLine(html: string): string {
   return line.trim();
 }
 
+/** The words each element of a page that a selector finds holds, in the order of the page. */
+function heldBy(html: string, selector: string): string[] {
+  const held: string[] = [];
+  const reader = new HTMLRewriter().on(selector, {
+    element: () => void held.push(""),
+    text: (chunk) => {
+      held[held.length - 1] += chunk.text;
+    },
+  });
+  reader.transform(html);
+
+  return held.map((words) => words.trim());
+}
+
 describe("the built website", () => {
   test.each(BUILDS)(
     "holds no copy of the demo, and links to the running one first in the top bar and from the home page, only at an https address it was given, with a menu when given both ($what): without this a page gets a dead link, or one kind's demo is not offered",
@@ -227,6 +249,31 @@ describe("the built website", () => {
     },
     120_000,
   );
+
+  test("links from under the first prompt to the folded part of Start: without this the link at the top leads nowhere, and the install is a scroll away again", () => {
+    using site = mkdtempDisposableSync(join(tmpdir(), "poplin-website-"));
+    build(site.path, {});
+    const home = readFileSync(join(site.path, "index.html"), "utf8");
+
+    expect(heldBy(home, '.hero a[href="#by-hand"]')).toHaveLength(1);
+    expect(heldBy(home, 'section[aria-labelledby="start"] #by-hand')).toHaveLength(1);
+  }, 120_000);
+});
+
+describe("the sentence to paste into an agent", () => {
+  test.each(PROMPT_PAGES)("is on %s in the website's own words: without this a person copies one wording from the site and reads another on the page", (page) => {
+    expect(readFileSync(join(ROOT, page), "utf8").split("\n")).toContain(SETUP_PROMPT);
+  });
+});
+
+describe("the home page's install lines", () => {
+  test("are read by the command itself, the install and the login of each kind: without this the page shows a line the command refuses", () => {
+    const read = INSTALLS.flatMap((install) => [install.line, install.login]).map((line) => parseCommand(line.split(" ").slice(2), NOW));
+
+    expect(read.map((parsed) => (parsed.kind === "provider" ? parsed.command : parsed.kind))).toEqual(["install", "login", "install", "login"]);
+    expect(read.flatMap((parsed) => (parsed.kind === "provider" ? [providerRefusal(parsed.command, parsed.words)] : []))).toEqual([undefined, undefined]);
+    expect(providerRefusal("install", ["cloudflare", "--domain", "example.com", "--no-domain"])).toEqual(expect.any(String));
+  });
 });
 
 describe("the top bar's demo entry", () => {
