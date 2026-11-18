@@ -344,6 +344,7 @@ export const V0_0_0: VersionSteps = {
     {
       name: "create-schema",
       description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, view_sums, declared_files, uploads, logins, leftovers, sweep_place, update_check, domain_check, and problems tables",
+      by: "install",
       statements: [
         SITES,
         VERSIONS,

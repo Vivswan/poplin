@@ -42,6 +42,7 @@ function stepLines(step: Written, notes: readonly string[]): string {
     "    {",
     `      name: ${JSON.stringify(step.name)},`,
     `      description: ${JSON.stringify(step.description)},`,
+    `      by: ${JSON.stringify(step.by)},`,
     "      statements: [",
     ...step.statements.map((statement) => `        ${JSON.stringify(statement)},`),
     "      ],",

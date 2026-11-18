@@ -69,6 +69,6 @@ const drafted = await generateSQLiteMigration(await generateSQLiteDrizzleJson(aw
 if (drafted.length === 0) throw new Error("the schema is declared as the last commit declares it: there is nothing to draft");
 
 const statements = drafted.map((statement) => statement.replace(/;\s*$/, ""));
-const step = { name: stepName(description), description, statements };
+const step = { name: stepName(description), description, by: "install", statements } as const;
 const file = addStep(STEPS_FOLDER, currentVersion(), step, statements.some((statement) => statement.includes(REBUILT)) ? [REBUILT_NOTE] : []);
 console.log(`drafted the step ${step.name} in ${file}: ${statements.length} statement(s). Read it before it is kept`);

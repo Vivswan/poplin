@@ -47,6 +47,7 @@ const STEP_THAT_FAILS_HALFWAY: Step = {
   version: "0.0.0",
   name: "add-notes",
   description: "add a notes table",
+  by: "install",
   statements: ["CREATE TABLE notes (text TEXT)", "INSERT INTO nowhere VALUES (1)"],
 };
 

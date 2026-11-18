@@ -29,6 +29,9 @@ const STAMP = `INSERT INTO ${LEDGER_TABLE} (step, version, name, description, ap
 /** What stands between two statements where a step's fingerprint is taken. */
 const STATEMENT_END = "\n;\n";
 
+/** Who can do a step: the install by itself, with what it holds; or only a repair, which is given an account token. */
+export type StepBy = "install" | "account token";
+
 /** One change of schema, as the file of its version writes it. */
 interface VersionStep {
   /** What the step is called within its version, in lower case with hyphens; no other step of the version has it. */
@@ -36,6 +39,9 @@ interface VersionStep {
 
   /** What the step changes, in a few words; reports quote it. */
   readonly description: string;
+
+  /** Who can do the step. A change of schema is the install's own: the runner applies every step in its place, so none waits for a repair. */
+  readonly by: Extract<StepBy, "install">;
 
   /** The SQL of the step, one statement each. They run in order with the stamp, all or none. */
   readonly statements: readonly string[];
