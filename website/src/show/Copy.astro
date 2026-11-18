@@ -11,8 +11,9 @@ interface Props {
 }
 
 const { command, label, wrap = false } = Astro.props;
-// An address inside a sentence is set in the code face and may break after any slash.
-const pieces = command.split(/(https?:\/\/[^\s,]+)/);
+// An address inside a sentence, a word that holds a slash, is set in the code face, with a comma after it held to it.
+// The split keeps each address as a piece of its own, so the pieces at odd places are the addresses.
+const pieces = command.split(/([^\s,]+\/[^\s,]+,?)/);
 ---
 
 <div class:list={["copy", { wrap }]}>
@@ -20,17 +21,22 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
   {
     wrap ? (
       <p>
-        {pieces.map((piece) =>
-          piece.startsWith("http") ? (
-            <code>
-              {piece.split("/").map((part, index) => (
-                <>
-                  {index > 0 && "/"}
-                  {index > 0 && <wbr />}
-                  {part}
-                </>
-              ))}
-            </code>
+        {pieces.map((piece, place) =>
+          place % 2 === 1 ? (
+            <span class="held">
+              <code>
+                {piece
+                  .replace(/,$/, "")
+                  .split("/")
+                  .map((part, index) => (
+                    <>
+                      {index > 0 && "/"}
+                      {index > 0 && <wbr />}
+                      {part}
+                    </>
+                  ))}
+              </code>{piece.endsWith(",") && ","}
+            </span>
           ) : (
             piece
           ),
@@ -79,16 +85,21 @@ const pieces = command.split(/(https?:\/\/[^\s,]+)/);
     overflow-x: auto;
   }
 
+  /* A sentence fills each line up to the button before it takes another. */
   p {
     min-width: 0;
     font-size: 0.9375rem;
     line-height: 1.5;
-    text-wrap: balance;
+  }
+
+  /* An address and its comma stay whole on one line wherever a line holds them. Where none does, the address breaks after a slash and nowhere else. */
+  .held {
+    display: inline-block;
+    max-width: 100%;
   }
 
   p code {
     padding-block: 0;
     white-space: normal;
-    overflow-wrap: anywhere;
   }
 </style>

@@ -1,28 +1,48 @@
 ---
-import ChevronRight from "@lucide/astro/icons/chevron-right";
-import { AgentPicker } from "../controls/agent-picker.tsx";
+import { Fold } from "../controls/fold.tsx";
+import { Picker } from "../controls/picker.tsx";
 import { AGENTS } from "../lib/agents.ts";
-import { EXAMPLE_DASHBOARD } from "../lib/example.ts";
-import { SETUP_PROMPT } from "../lib/paths.ts";
+import { INSTALLS } from "../lib/installs.ts";
+import { SETUP_PROMPT } from "../lib/prompt.ts";
 import Copy from "./Copy.astro";
 
-// The first thing offered is one sentence to paste into any agent. Adding it by hand stays one click away.
+// The first thing offered is one sentence to paste into any agent. Installing and adding it by hand stays one click away.
 ---
 
-<div class="start" data-picked={AGENTS[0]?.id}>
+<div class="start" data-picked={AGENTS[0]?.id} data-install={INSTALLS[0]?.id}>
   <Copy command={SETUP_PROMPT} wrap />
 
-  <details class="byhand">
-    <summary>
-      <ChevronRight class="chev" />
-      Or add it yourself
-    </summary>
+  <Fold client:load id="by-hand" label="Or install it yourself">
     <div class="steps">
-      <Copy label="Once" command={`npx poplin login --server https://${EXAMPLE_DASHBOARD}`} />
+      <div class="pick asks">
+        <div class="then">
+          <span>Install</span>
+          <Picker client:idle name="install" legend="Kind of install" options={INSTALLS.map((install) => ({ value: install.id, label: install.name }))} />
+        </div>
+        <span class="where">Asks for an email and an account token</span>
+      </div>
+      <div>
+        {
+          INSTALLS.map((install) => (
+            <div data-kind={install.id}>
+              <Copy label="Run" command={install.line} />
+            </div>
+          ))
+        }
+      </div>
+      <div>
+        {
+          INSTALLS.map((install) => (
+            <div data-kind={install.id}>
+              <Copy label="Once" command={install.login} />
+            </div>
+          ))
+        }
+      </div>
       <div class="pick">
         <div class="then">
           <span>Then, in</span>
-          <AgentPicker client:idle agents={AGENTS.map((agent) => ({ value: agent.id, label: agent.name }))} />
+          <Picker client:idle name="picked" legend="Your agent" options={AGENTS.map((agent) => ({ value: agent.id, label: agent.name }))} />
         </div>
         <span class="where">
           {AGENTS.map((agent) => <code data-agent={agent.id}>{agent.where}</code>)}
@@ -39,7 +59,7 @@ import Copy from "./Copy.astro";
       </div>
       <Copy label="Terminal" command="npm i -g poplin" />
     </div>
-  </details>
+  </Fold>
 </div>
 
 <style>
@@ -51,32 +71,10 @@ import Copy from "./Copy.astro";
     font-size: 0.875rem;
   }
 
-  /* The block is as wide as its column and no wider, whatever the longest line inside it. */
-  .byhand {
-    width: 100%;
-    min-width: 0;
-  }
-
-  summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    vertical-align: top;
-    color: var(--muted);
-    cursor: pointer;
-    list-style: none;
-  }
-
-  summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .chev {
-    margin: -2px 0 -2px -2px;
-  }
-
-  details[open] .chev {
-    transform: rotate(90deg);
+  /* Where no script runs nothing can open the fold, so it stands open. */
+  :global(:root:not(.js)) .start :global([data-slot="collapsible-content"][hidden]) {
+    display: block;
+    content-visibility: visible;
   }
 
   /* The rows share one surface: a row is a line of it, with its label, its command, and its button each in one column. */
@@ -100,10 +98,6 @@ import Copy from "./Copy.astro";
     width: 4.75rem;
   }
 
-  summary:hover {
-    color: var(--fg);
-  }
-
   .steps {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -120,7 +114,7 @@ import Copy from "./Copy.astro";
     border-top: 1px solid var(--rule);
   }
 
-  /* The picker's row; the file an agent reads, if it reads one, follows its name. */
+  /* A picker's row. What follows the pick is what the install asks, or the file an agent reads, if it reads one. */
   .pick {
     display: flex;
     align-items: center;
@@ -150,14 +144,28 @@ import Copy from "./Copy.astro";
     white-space: nowrap;
   }
 
-  /* Only the chosen agent's line is there, so its row is exactly as tall as that line. */
-  [data-agent] {
+  /* Only the line of what was picked is there, so its row is exactly as tall as that line. */
+  [data-agent],
+  [data-kind] {
     display: none;
     min-width: 0;
     max-width: 100%;
   }
 
-  /* On a phone the file's name takes its own line under the picker. */
+  /* On a phone what follows the pick takes its own line under the picker. What the install asks is a sentence, which
+     is never cut short: it takes its own line as soon as the column beside the words is too narrow for it. */
+  @media (max-width: 1000px) {
+    .asks {
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      padding-block: 8px;
+    }
+
+    .asks .where {
+      flex-basis: 100%;
+    }
+  }
+
   @media (max-width: 720px) {
     .pick {
       flex-wrap: wrap;

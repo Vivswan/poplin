@@ -7,7 +7,7 @@ The `poplin` skill fires when a user asks an agent to put a page, a report, a ch
 Paste this line into your agent:
 
 ```text
-Look at https://github.com/Vivswan/poplin, read its skill, and help me set up poplin.
+Look at github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 ```
 
 With no install yet, the agent makes one with you: it asks for a domain or none and for your email, and tells you what to choose in your browser. It then gives you two lines to run in a terminal of your own: a dry run, and `npx poplin install cloudflare`. You paste back what each prints.
