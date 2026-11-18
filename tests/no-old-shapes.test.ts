@@ -1,4 +1,4 @@
-// Scope: this catches accidental handling of an old stored shape in source under `packages/*/src` outside any `migrations/` folder, and a retired name or a name of the upgrade checks written anywhere else; deliberate hiding is out of scope.
+// Scope: this catches accidental handling of an old stored shape in a package's code outside its tests and outside any `migrations/` folder, and a retired name or a name of the upgrade checks written anywhere else; deliberate hiding is out of scope.
 // An import of a `migrations/` folder is refused by the lint settings, which `bun run lint` applies to the tree; this file plants each such import. A path written as a template is refused as a template, and its fix is the text the import rule reads.
 
 import { describe, expect, test } from "bun:test";
@@ -15,8 +15,14 @@ const ROOT = join(import.meta.dir, "..");
 /** The only files outside a `migrations/` folder that may branch on a stored version; the lint settings name the same files as the only ones that may import from one. */
 const DOORWAYS: readonly string[] = ["packages/core/src/database/open.ts"];
 
-/** The files that count as source. */
-const SOURCE_FILES = new Bun.Glob("packages/*/src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}");
+/** The files that count as source: the code under `packages`, at any depth, so a package moved a folder deeper is still read. */
+const SOURCE_FILES = new Bun.Glob("packages/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}");
+
+/** The folder of a package's tests, which state an old shape to prove it is refused; the names in them are read as text. */
+const TESTS = "tests";
+
+/** The manifest of a package, at any depth of `packages`. */
+const MANIFEST = new Bun.Glob("packages/**/package.json");
 
 /** The names stored data is stamped under: `shape`, and the version words a stamp could be called instead. */
 const STAMP = String.raw`\b(?:shape|(?:schema|data|record|storage|format|layout)_?[vV]ersion|(?:SCHEMA|DATA|RECORD|STORAGE|FORMAT|LAYOUT)_VERSION)\b`;
@@ -116,9 +122,18 @@ function inMigrations(path: string): boolean {
   return path.split("/").includes("migrations");
 }
 
-/** Every source file of the repository under `packages/<package>/src`, as a path from the root with forward slashes. */
+/** Every source file of the repository: a package's code in `src`, its scripts, and any other folder but its tests, as a path from the root with forward slashes. */
 function sourceFiles(root: string): string[] {
-  return repositoryFiles(root).filter((path) => SOURCE_FILES.match(path));
+  return repositoryFiles(root).filter((path) => SOURCE_FILES.match(path) && !path.split("/").includes(TESTS));
+}
+
+/** Every package under `packages`, by the folder of its manifest, that holds no source file: none of its code would be read. */
+function packagesUnread(root: string): string[] {
+  const manifests = repositoryFiles(root).filter((path) => MANIFEST.match(path));
+  const folders = manifests.map((path) => path.slice(0, path.lastIndexOf("/")));
+  const read = sourceFiles(root);
+
+  return folders.filter((folder) => !read.some((path) => path.startsWith(`${folder}/`)));
 }
 
 /** Every text file of the repository that is read, as a path from the root with forward slashes. */
@@ -186,6 +201,7 @@ describe("no old shapes outside migrations/", () => {
   test("drift: code that handles an old stored shape outside a migrations/ folder would outlive its step and never be deleted", () => {
     expect(violations(ROOT)).toEqual([]);
     expect(sourceFiles(ROOT)).toEqual(expect.arrayContaining([...DOORWAYS, "packages/core/src/migrations/registry.ts"]));
+    expect(packagesUnread(ROOT)).toEqual([]);
     expect(textFiles(ROOT)).toEqual(expect.arrayContaining(["README.md", "tests/no-old-shapes.test.ts"]));
   });
 
@@ -233,6 +249,34 @@ describe("no old shapes outside migrations/", () => {
     using tree = plantedRepository({ "packages/demo/src/sites/planted.ts": `// A planted file.\n${line}\n` });
 
     expect(violations(tree.path)).toEqual([`${rule}: packages/demo/src/sites/planted.ts:2`]);
+  });
+
+  // Drift: a guard that reads one depth of `packages`, or the `src` folder alone, is blind in a provider's folder and in every script.
+  test.each([
+    ["a provider's source", "packages/providers/cloudflare/src/shared/worker/planted.ts"],
+    ["a provider's scripts", "packages/providers/cloudflare/scripts/live/planted.ts"],
+    ["a provider's live checks", "packages/providers/cloudflare/live/checks/planted.ts"],
+    ["a provider's load profiles", "packages/providers/cloudflare/load/planted.ts"],
+    ["a portable package's scripts", "packages/demo/scripts/planted.mts"],
+    ["the walk of the demo", "packages/demo/walk/planted.walk.ts"],
+    ["a settings file of a package", "packages/demo/planted.config.ts"],
+    ["a package two folders deeper", "packages/group/kind/example/src/planted.ts"],
+  ])("names an old shape read in %s", (_, path) => {
+    using tree = plantedRepository({ [path]: "// A planted file.\nif (record.shape === 1) return rename(record);\nconst legacyTitle = record.text;\n" });
+
+    expect(violations(tree.path)).toEqual([`branches on a stamp: ${path}:2`, `retired-shape word: ${path}:3`]);
+  });
+
+  test("drift: a package whose code is all unread is under no rule here, so every package a manifest names holds a file that is read", () => {
+    using tree = plantedRepository({
+      "packages/demo/package.json": "{}",
+      "packages/demo/src/sites/site.ts": "",
+      "packages/providers/example/package.json": "{}",
+      "packages/providers/example/tests/site.test.ts": "",
+      "packages/providers/notes.md": "",
+    });
+
+    expect(packagesUnread(tree.path)).toEqual(["packages/providers/example"]);
   });
 
   // Drift: a guard that names a provider's own setting would keep the code that states it out of the source, where its tests are.
@@ -361,6 +405,9 @@ describe("no old shapes outside migrations/", () => {
     using tree = plantedRepository({
       "packages/demo/src/migrations/0001-rename-text.ts": oldShapeCode,
       "packages/demo/src/sites/migrations/helper.ts": oldShapeCode,
+      "packages/providers/cloudflare/src/shared/database/migrations/helper.ts": oldShapeCode,
+      "packages/providers/cloudflare/migrations/older.ts": oldShapeCode,
+      "packages/providers/cloudflare/tests/shared/database/planted.test.ts": oldShapeCode,
       "packages/core/src/database/open.ts": oldShapeCode,
       "packages/demo/src/sites/current.ts": currentShapeCode,
       "packages/demo/tests/planted.test.ts": oldShapeCode,
