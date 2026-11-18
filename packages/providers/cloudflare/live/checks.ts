@@ -1,4 +1,4 @@
-// Every live check, in the order a run makes them. The check of the way a file goes comes first: it watches the run's first publish. The edge checks come last: their last two use up the visitor's minute.
+// Every live check, in the order a run makes them. The check of the way a file goes comes first: it watches the run's first publish. The edge checks come last.
 
 import { BACKUP_CHECKS } from "./checks/backup";
 import { EDGE_CHECKS } from "./checks/edge";

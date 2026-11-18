@@ -42,10 +42,10 @@ const LIVE = process.env.POPLIN_LIVE === "1";
 /** Whether the run adds the load to its checks. */
 const LOAD = process.env.POPLIN_LIVE_LOAD === "1";
 
-/** The checks of this run: the load comes last, after a wait of its own, since the checks of the edge before it use up its visitor's minute. */
+/** The checks of this run: the load comes last, after a wait of its own, since the checks before it spend a part of its visitor's minute. */
 const RUN = LOAD ? [...CHECKS, ...loadChecks()] : CHECKS;
 
-/** How long one check may take: the publish of many files is thousands of requests, and the burst waits out the rate rule's block. */
+/** How long one check may take: the publish of many files is thousands of requests. */
 const CHECK_TIMEOUT_MS = 900_000;
 
 /** How many files the publish of many small files holds. */

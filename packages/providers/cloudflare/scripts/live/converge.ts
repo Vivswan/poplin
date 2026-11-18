@@ -123,7 +123,6 @@ const FRESH_KEY = "an upload key older than two and a half minutes (this run mad
 const CAPABILITIES: Readonly<Record<string, string>> = {
   "Redirect rule": "https-redirect",
   "WAF rule": "guard-rules",
-  "Rate rule": "rate-rule",
   "Bot settings": "bot-block",
   "Access application": "access",
   "Access policy": "access",
