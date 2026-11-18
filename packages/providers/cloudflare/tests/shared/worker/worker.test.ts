@@ -408,7 +408,7 @@ describe("an instance's first request", () => {
   test("a database newer than the code is refused with the way out, and is served again once the code knows it", async () => {
     const worker = instance(w);
     await ask(instance(w), `${ADMIN}/api/whoami`);
-    await BINDINGS.DB.exec("INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (999, 'a step of a newer poplin', 0, 'newer')");
+    await BINDINGS.DB.exec("INSERT INTO schema_steps (step, version, name, description, applied_at, fingerprint) VALUES (999, '9.9.9', 'newer', 'a step of a newer poplin', 0, 'newer')");
     const refused = await ask(worker, `${ADMIN}/api/whoami`);
     await BINDINGS.DB.exec("DELETE FROM schema_steps WHERE step = 999");
     const served = await ask(worker, `${ADMIN}/api/whoami`);
@@ -421,7 +421,7 @@ describe("an instance's first request", () => {
   test("an instance that started before the database gained a step it lacks goes on answering a token stored after it, while one that starts then is refused", async () => {
     const started = instance(w);
     await ask(started, `${ADMIN}/api/whoami`);
-    await BINDINGS.DB.exec("INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (999, 'a step of a newer poplin', 0, 'newer')");
+    await BINDINGS.DB.exec("INSERT INTO schema_steps (step, version, name, description, applied_at, fingerprint) VALUES (999, '9.9.9', 'newer', 'a step of a newer poplin', 0, 'newer')");
     const { token, record } = await mintToken({ scope: "admin", note: "stored after the step", now: w.clock.now });
     await BINDINGS.DB.prepare("INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES (?, ?, 'admin', ?, ?, ?, ?)").bind(record.id, record.hash, record.note, w.clock.now, w.clock.now + 3_600_000, OWNER).run();
     const headers = { Authorization: `Bearer ${token}` };

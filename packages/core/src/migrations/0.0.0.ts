@@ -1,4 +1,4 @@
-// Step 1: the first schema. Before it the database is empty; nothing older exists to carry over.
+// The steps that take a database on from 0.0.0. The first makes the schema: before it the database is empty, and nothing older exists to carry over.
 //
 // sites        one row per site; `id` is the key and the link, `folder` is where its files are and never changes
 // versions     the publishes of a site that can still be gone back to
@@ -19,7 +19,7 @@
 // domain_check one row once the domain was checked or repaired: when, by whom, how each piece stood, and whether the users changed since
 // problems     one row per UTC day and kind of what went wrong: how often, when, and the latest failure's name and cleaned message; 30 days are kept
 
-import type { Step } from "./migrate";
+import type { VersionSteps } from "./migrate";
 
 /** One row per site. A site is public exactly when it holds a public name, and a public name is never a site id. `title` is the one its owner typed, `page_title` the one its entry page had when it was last published. */
 const SITES = `
@@ -337,61 +337,66 @@ const AUDIT_ROWS_NEVER_CHANGE = `
 CREATE TRIGGER audit_rows_never_change BEFORE UPDATE ON audit
 BEGIN SELECT RAISE(ABORT, 'an entry of the audit log is never rewritten'); END`;
 
-/** Creates every table, index, and trigger of the first schema. */
-export const CREATE_SCHEMA: Step = {
-  number: 1,
-  description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, view_sums, declared_files, uploads, logins, leftovers, sweep_place, update_check, domain_check, and problems tables",
-  statements: [
-    SITES,
-    VERSIONS,
-    EARLIER_IDS,
-    TOKENS,
-    SETTINGS,
-    SECRETS,
-    TOTALS,
-    TOTALS_START_AT_ZERO,
-    AUDIT,
-    REQUEST_COUNTS,
-    VIEW_SUMS,
-    DECLARED_FILES,
-    UPLOADS,
-    LOGINS,
-    LEFTOVERS,
-    SWEEP_PLACE,
-    UPDATE_CHECK,
-    DOMAIN_CHECK,
-    PROBLEMS,
-    "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
-    "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
-    "CREATE INDEX sites_by_name ON sites (name, id) WHERE trashed_at IS NULL",
-    "CREATE INDEX sites_by_title ON sites (title_key, id) WHERE trashed_at IS NULL",
-    "CREATE INDEX sites_by_access ON sites (access_rank, id) WHERE trashed_at IS NULL",
-    "CREATE INDEX sites_by_expiry ON sites (expires_at, id) WHERE expires_at IS NOT NULL AND trashed_at IS NULL",
-    "CREATE INDEX sites_by_trashing ON sites (trashed_at, id) WHERE trashed_at IS NOT NULL",
-    "CREATE INDEX earlier_ids_by_folder ON earlier_ids (folder)",
-    "CREATE INDEX audit_logins ON audit (action, actor, at) WHERE action = 'login'",
-    "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",
-    "CREATE INDEX tokens_by_end ON tokens (end_at DESC, id DESC)",
-    "CREATE INDEX tokens_by_user ON tokens (allowed_by, expires_at) WHERE removed_at IS NULL",
-    "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
-    "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",
-    "CREATE INDEX logins_by_visitor ON logins (state, visitor, created_at, expires_at)",
-    NAME_IS_NO_ID_ON_INSERT,
-    NAME_IS_NO_ID_ON_UPDATE,
-    FIRST_VERSION_COMES_WITH_THE_SITE,
-    LIVE_VERSION_IS_KEPT,
-    LIVE_VERSION_STAYS,
-    FOLDER_NEVER_CHANGES,
-    REMOVED_SITE_LEAVES_ITS_FOLDER,
-    SITE_KEEPS_ITS_FOLDER,
-    TOTALS_COUNT_A_NEW_SITE,
-    TOTALS_FORGET_A_DELETED_SITE,
-    TOTALS_FOLLOW_THE_TRASH,
-    TOTALS_ADD_A_KEPT_VERSION,
-    TOTALS_TAKE_OFF_A_DROPPED_VERSION,
-    TOTALS_FOLLOW_A_RESIZED_VERSION,
-    TOTALS_KEEP_THEIR_ROW,
-    AUDIT_LOSES_ONLY_ITS_OLDEST,
-    AUDIT_ROWS_NEVER_CHANGE,
+/** The steps that leave 0.0.0: the first creates every table, index, and trigger of the first schema. */
+export const V0_0_0: VersionSteps = {
+  version: "0.0.0",
+  steps: [
+    {
+      name: "create-schema",
+      description: "create the sites, versions, earlier_ids, tokens, settings, secrets, totals, audit, request_counts, view_sums, declared_files, uploads, logins, leftovers, sweep_place, update_check, domain_check, and problems tables",
+      statements: [
+        SITES,
+        VERSIONS,
+        EARLIER_IDS,
+        TOKENS,
+        SETTINGS,
+        SECRETS,
+        TOTALS,
+        TOTALS_START_AT_ZERO,
+        AUDIT,
+        REQUEST_COUNTS,
+        VIEW_SUMS,
+        DECLARED_FILES,
+        UPLOADS,
+        LOGINS,
+        LEFTOVERS,
+        SWEEP_PLACE,
+        UPDATE_CHECK,
+        DOMAIN_CHECK,
+        PROBLEMS,
+        "CREATE INDEX sites_by_change ON sites (trashed, updated_at DESC, id DESC)",
+        "CREATE INDEX sites_by_owner ON sites (owner, trashed, updated_at DESC, id DESC)",
+        "CREATE INDEX sites_by_name ON sites (name, id) WHERE trashed_at IS NULL",
+        "CREATE INDEX sites_by_title ON sites (title_key, id) WHERE trashed_at IS NULL",
+        "CREATE INDEX sites_by_access ON sites (access_rank, id) WHERE trashed_at IS NULL",
+        "CREATE INDEX sites_by_expiry ON sites (expires_at, id) WHERE expires_at IS NOT NULL AND trashed_at IS NULL",
+        "CREATE INDEX sites_by_trashing ON sites (trashed_at, id) WHERE trashed_at IS NOT NULL",
+        "CREATE INDEX earlier_ids_by_folder ON earlier_ids (folder)",
+        "CREATE INDEX audit_logins ON audit (action, actor, at) WHERE action = 'login'",
+        "CREATE INDEX tokens_by_creation ON tokens (created_at DESC, id DESC) WHERE removed_at IS NULL",
+        "CREATE INDEX tokens_by_end ON tokens (end_at DESC, id DESC)",
+        "CREATE INDEX tokens_by_user ON tokens (allowed_by, expires_at) WHERE removed_at IS NULL",
+        "CREATE INDEX uploads_by_age ON uploads (created_at, id)",
+        "CREATE INDEX uploads_by_state ON uploads (state, owner, number, bytes)",
+        "CREATE INDEX logins_by_visitor ON logins (state, visitor, created_at, expires_at)",
+        NAME_IS_NO_ID_ON_INSERT,
+        NAME_IS_NO_ID_ON_UPDATE,
+        FIRST_VERSION_COMES_WITH_THE_SITE,
+        LIVE_VERSION_IS_KEPT,
+        LIVE_VERSION_STAYS,
+        FOLDER_NEVER_CHANGES,
+        REMOVED_SITE_LEAVES_ITS_FOLDER,
+        SITE_KEEPS_ITS_FOLDER,
+        TOTALS_COUNT_A_NEW_SITE,
+        TOTALS_FORGET_A_DELETED_SITE,
+        TOTALS_FOLLOW_THE_TRASH,
+        TOTALS_ADD_A_KEPT_VERSION,
+        TOTALS_TAKE_OFF_A_DROPPED_VERSION,
+        TOTALS_FOLLOW_A_RESIZED_VERSION,
+        TOTALS_KEEP_THEIR_ROW,
+        AUDIT_LOSES_ONLY_ITS_OLDEST,
+        AUDIT_ROWS_NEVER_CHANGE,
+      ],
+    },
   ],
 };

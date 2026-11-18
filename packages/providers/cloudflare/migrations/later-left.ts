@@ -8,11 +8,11 @@
 
 import type { SqlDriver } from "@poplin/core/src/database/driver";
 
-import { readStanding, type Step } from "../../../core/src/migrations/migrate";
+import { readStanding, type Step, stepLabel } from "../../../core/src/migrations/migrate";
 import type { LiveSite } from "../live/records";
 import { askDatabase } from "../scripts/live/shape";
 import type { Run, Stop } from "../scripts/live/util";
-import { LATER_NAMES, laterLabel, stepLabel } from "./later-step";
+import { LATER_NAMES, laterLabel } from "./later-step";
 import type { Reading } from "./record";
 
 /** The table of the sites, the step's table, and the step's index, each as the schema holds it. */
@@ -42,13 +42,18 @@ interface Left {
   readonly made: readonly string[];
 }
 
-/** What is wrong with the marks: a database this build would not open, or one that is not at the build's last step. */
+/** What is wrong with the marks: a database this build would not open, or one that does not hold every step of the build. */
 async function markFaults(driver: SqlDriver, steps: readonly Step[]): Promise<string[]> {
   const standing = await readStanding(driver, steps);
-  if (standing.kind !== "at") return [`this commit's build refuses the database: ${standing.kind === "newer" ? "it holds a step the build does not have" : `step ${stepLabel(standing.step)} was applied by another build`}`];
+  if (standing.kind === "newer") return ["this commit's build refuses the database: it holds a step the build does not have"];
 
+  if (standing.kind === "differs") {
+    const step = steps[standing.step - 1];
 
-  return standing.version === steps.length ? [] : [`the database is at step ${stepLabel(standing.version)}, where this commit's build has ${steps.length} steps`];
+    return [`this commit's build refuses the database: step ${step === undefined ? standing.step : stepLabel(step)} was applied by another build`];
+  }
+
+  return standing.version === steps.length ? [] : [`the database holds ${standing.version} of the ${steps.length} schema steps of this commit's build`];
 }
 
 /** What of the step's table, column, and index the schema does not hold. */

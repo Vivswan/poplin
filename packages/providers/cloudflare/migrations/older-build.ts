@@ -3,7 +3,7 @@
 //   the older build   the one older-from.ts finds for what the run asks to start from: the last release, or the newest pre-release that is an earlier build
 //   its folder        `git archive` of it, with its own lockfile installed and its own Worker built
 //   this checkout     packages/cli/package.json told one patch above the older build's version, unless it is above it already
-//                     and the later step of later-step.ts written among the product's steps, so the update has a step to apply
+//                     and the later step of later-step.ts added to the file of the older build's version among the product's steps, so the update has a step to apply
 //
 // An install takes a release above its own version alone, and a commit of main says the version of the last release, as the older build does.
 // A pre-release on npm is the command alone, with no built Worker and no line of the website's `releases.json`, so its Worker is built here from the commit.
@@ -18,8 +18,8 @@ import { isPlainVersion } from "@poplin/core/src/records/update";
 import gt from "semver/functions/gt";
 import inc from "semver/functions/inc";
 
-import type { Step } from "../../../core/src/migrations/migrate";
-import { addLaterStep, stepLabel } from "./later-step";
+import { type Step, stepLabel } from "../../../core/src/migrations/migrate";
+import { addLaterStep } from "./later-step";
 import { olderFrom, readFrom } from "./older-from";
 
 /** The file of a tree that says its version, from the tree's root. */
@@ -96,7 +96,7 @@ export function prepareBuilds(root: string, ref: string, folder: string, run: Ru
   const own = versionAbove(said, older);
   if (own !== said) tellVersion(root, said, own);
 
-  return { older, own, step: addLaterStep(root) };
+  return { older, own, step: addLaterStep(root, older) };
 }
 
 /** Run one command, with what it prints on this process's own. */
@@ -123,7 +123,7 @@ function main(folder: string): void {
 
   const { older, own, step } = prepareBuilds(ROOT, start.ref, folder, runCommand);
   console.log(`The older build says the version ${older}`);
-  console.log(`This commit's build: published for the upgrade as ${own}, with step ${stepLabel(step.number)} (${step.description}) for the upgrade alone`);
+  console.log(`This commit's build: published for the upgrade as ${own}, with step ${stepLabel(step)} (${step.description}) for the upgrade alone`);
   if (process.env.GITHUB_OUTPUT) core.setOutput("older", start.ref);
 }
 

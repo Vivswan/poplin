@@ -26,10 +26,10 @@ import { readStanding } from "../scripts/live/shape";
 import { refuseOtherAccount } from "../scripts/live/test-account";
 import { findDatabase, removeTokens } from "../scripts/live/tokens";
 import { type Found, findInstall, isStop, liveLogin, openRun, type Run, reportStop, type Stop } from "../scripts/live/util";
-import type { Step } from "../../../core/src/migrations/migrate";
+import { type Step, stepLabel } from "../../../core/src/migrations/migrate";
 import { STEPS } from "../../../core/src/migrations/registry";
 import { readLeft } from "./later-left";
-import { isLaterStep, laterRows, stepLabel } from "./later-step";
+import { isLaterStep, laterRows } from "./later-step";
 import { type Older, openOlder } from "./older";
 import { type Desk, fill, logFaults, publishAfter, putBack, type Reading, readInstall, settingFaults, settingsOf, siteFaults } from "./record";
 
@@ -238,7 +238,7 @@ async function checksOf(run: Run, given: Upgrade, standing: Standing, read: Aske
   const { before, after } = read;
   const [from, to] = [given.older.version, given.release.version];
   const state = await stateOf(read.fetch, standing);
-  const step = stepLabel(given.steps.length);
+  const step = given.steps.map(stepLabel).at(-1);
 
   return [
     { check: "Version", holds: `runs ${to}, and ran ${from}`, faults: [] },

@@ -1,31 +1,21 @@
-// The later step of a live upgrade: one schema step numbered above every step of the product, which the checkout of the run is given for the upgrade alone.
+// The later step of a live upgrade: one schema step after every step of the product, which the checkout of the run is given for the upgrade alone.
 //
-//   live:upgrade-builds   writes it beside the product's steps and lists it in their registry, in the checkout of the run: no commit holds it
+//   live:upgrade-builds   adds it to the file of the older build's version among the product's steps, in the checkout of the run: no commit holds it
 //   the build after it    is the product with one step more, so the install that takes it has a step to apply on its real database
 //
 // It does what a step of a release does: a new table, a new column with a default on a table that holds rows, a new index, and rows filled from what the database held.
-// The file is written by the writer core's `draft-step` writes a step with: it holds its statements itself, and STRICT and WITHOUT ROWID are added by hand.
+// It is added by the writer core's `draft-step` adds a step with: it holds its statements itself, and STRICT and WITHOUT ROWID are added by hand.
 
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { stepFile, stepFileName } from "../../../core/scripts/step-file";
+import { addStep } from "../../../core/scripts/step-file";
 import type { Step } from "../../../core/src/migrations/migrate";
 
 /** The folder of the product's steps, from the root of a tree. */
 const STEPS_FOLDER = join("packages", "core", "src", "migrations");
 
-/** The file that lists every step, in that folder. */
-const REGISTRY = "registry.ts";
-
-/** The file of a step: its number, then what it does. */
-const STEP_FILE = /^(\d{4})-[a-z0-9-]+\.ts$/;
-
-/** The list of the registry: what stands before its steps, the steps, and what ends it. A list that holds a comment is none the step is added to: a line comment would take the step in. */
-const LIST = /(export const STEPS: readonly Step\[\] = \[)([^\]/]*?)(,?\s*\];)/g;
-
-/** The first line of the registry that loads something, which the step's own line goes before. */
-const FIRST_IMPORT = /^import /m;
+/** What the step is called in the file of its version. */
+const NAME = "upgrade-proof";
 
 /** What the step changes, in a few words. */
 const DESCRIPTION = "add the upgrade proof";
@@ -45,23 +35,18 @@ const STATEMENTS: readonly string[] = [
 /** The rows the step costs an upgrade, as the provider's database counts them: 5 as it runs and 3 more for each site; then, past the price of any request, 2 as each of those sites is removed and 2 for the site published after it. */
 const ROWS = { once: 5, eachSite: 3, eachRemoval: 2, siteAfter: 2 } as const;
 
-/** The number of a step as a line of a run writes it. */
-export function stepLabel(number: number): string {
-  return String(number).padStart(4, "0");
-}
-
 /**
- * The later step, as the step of a number.
+ * The later step, as a step of a version.
  *
- * @param number - the schema version it leaves a database at: one above the product's last step
+ * @param version - the release it migrates away from: the one the older build says
  */
-export function laterStep(number: number): Step {
-  return { number, description: DESCRIPTION, statements: STATEMENTS };
+export function laterStep(version: string): Step {
+  return { version, name: NAME, description: DESCRIPTION, statements: STATEMENTS };
 }
 
-/** Whether a step is the later step: the one of its number, statement for statement. */
+/** Whether a step is the later step: the one of its name, statement for statement. */
 export function isLaterStep(step: Step | undefined): boolean {
-  return step !== undefined && step.description === DESCRIPTION && step.statements.join("\n") === STATEMENTS.join("\n");
+  return step !== undefined && step.name === NAME && step.statements.join("\n") === STATEMENTS.join("\n");
 }
 
 /**
@@ -83,25 +68,15 @@ export function laterRows(sites: number): number {
 }
 
 /**
- * Give a tree the later step: its file beside the product's steps, and its line in their registry.
+ * Give a tree the later step: the last step of the file of a version among the product's steps, which is made and listed in their registry where the tree has none.
  *
  * @param root - the root of the tree, which is the checkout of a run and never one a commit is made from
- * @returns the step, numbered one above the tree's last
- * @throws {Error} the tree holds the step already, or its registry does not list its steps on one line of the known form
+ * @param version - the version the older build says, which the step migrates away from
+ * @returns the step
+ * @throws {Error} the tree holds the step already, or its steps are not in the form a step is added to
  */
-export function addLaterStep(root: string): Step {
-  const folder = join(root, STEPS_FOLDER);
-  const files = readdirSync(folder).filter((file) => STEP_FILE.test(file));
-  const step = laterStep(Math.max(0, ...files.map((file) => Number(STEP_FILE.exec(file)?.[1]))) + 1);
-  const name = stepFileName(step);
-  if (files.some((file) => file.slice(4) === name.slice(4))) throw new Error(`${STEPS_FOLDER} holds the later step already`);
+export function addLaterStep(root: string, version: string): Step {
+  addStep(join(root, STEPS_FOLDER), version, { name: NAME, description: DESCRIPTION, statements: STATEMENTS });
 
-  const registry = readFileSync(join(folder, REGISTRY), "utf8");
-  if (registry.match(LIST)?.length !== 1 || !FIRST_IMPORT.test(registry)) throw new Error(`${REGISTRY} does not list its steps in the form the later step is added to`);
-
-  const listed = registry.replace(LIST, (_all, before: string, steps: string, after: string) => `${before}${steps}, STEP_${step.number}${after}`);
-  writeFileSync(join(folder, name), stepFile(step), { flag: "wx" });
-  writeFileSync(join(folder, REGISTRY), listed.replace(FIRST_IMPORT, `import { STEP_${step.number} } from "./${name.slice(0, -".ts".length)}";\nimport `));
-
-  return step;
+  return laterStep(version);
 }

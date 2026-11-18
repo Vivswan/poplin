@@ -44,24 +44,36 @@ import {
 const SCHEMA_VERSION = STEPS.length;
 
 const STEP_THAT_FAILS_HALFWAY: Step = {
-  number: SCHEMA_VERSION + 1,
+  version: "0.0.0",
+  name: "add-notes",
   description: "add a notes table",
   statements: ["CREATE TABLE notes (text TEXT)", "INSERT INTO nowhere VALUES (1)"],
 };
 
-const FIRST_STEP_OF_ANOTHER_BUILD: Step = { number: 1, description: "create the schema", statements: [...(STEPS[0]?.statements ?? []), "CREATE TABLE notes (text TEXT)"] };
+const FIRST_STEP: Step = STEPS[0] ?? STEP_THAT_FAILS_HALFWAY;
+
+const FIRST_STEP_OF_ANOTHER_BUILD: Step = { ...FIRST_STEP, statements: [...FIRST_STEP.statements, "CREATE TABLE notes (text TEXT)"] };
+
+const FIRST_LABEL = `${FIRST_STEP.version}/${FIRST_STEP.name}`;
 
 const MADE_BY_ANOTHER_BUILD = {
   kind: "differs" as const,
   stored: 1,
   step: 1,
-  message: `step 0001 (${STEPS[0]?.description}) of the database was applied by another build of poplin, so its tables are not the ones this build reads. Run the build that made the database, or delete the database and poplin makes it anew`,
+  message: `step ${FIRST_LABEL} (${FIRST_STEP.description}) of the database was applied by another build of poplin, so its tables are not the ones this build reads. Run the build that made the database, or delete the database and poplin makes it anew`,
 };
 
 const LEDGER_WITHOUT_FINGERPRINTS: readonly Statement[] = [
-  { sql: "CREATE TABLE schema_steps (step INTEGER NOT NULL PRIMARY KEY, description TEXT NOT NULL, applied_at INTEGER NOT NULL) STRICT", params: [] },
-  { sql: "INSERT INTO schema_steps (step, description, applied_at) VALUES (1, 'create the schema', ?1)", params: [NOW] },
+  {
+    sql: "CREATE TABLE schema_steps (step INTEGER NOT NULL PRIMARY KEY, version TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL, applied_at INTEGER NOT NULL) STRICT",
+    params: [],
+  },
+  { sql: "INSERT INTO schema_steps (step, version, name, description, applied_at) VALUES (1, ?1, ?2, 'create the schema', ?3)", params: [FIRST_STEP.version, FIRST_STEP.name, NOW] },
 ];
+
+const RENAMED = "UPDATE schema_steps SET name = 'make-schema'";
+
+const OF_ANOTHER_VERSION = "UPDATE schema_steps SET version = '0.0.1'";
 
 const MENDED_STEP: Step = { ...STEP_THAT_FAILS_HALFWAY, statements: ["CREATE TABLE notes (text TEXT)"] };
 
@@ -194,7 +206,7 @@ function theDriver(label: string, makeDriver: DriverFactory): void {
 function migrations(label: string, makeDriver: DriverFactory): void {
   describe(`${label}: migrations`, () => {
     // Drift: a step that only works on the author's database, or that changes something on a second run, breaks every install at its next start.
-    test.each(STEPS.map((step) => [step.number, step.description] as const))(
+    test.each(STEPS.map((step, at) => [at + 1, `${step.version}/${step.name}`] as const))(
       "step %i (%s) runs from an empty database, and a second run changes nothing",
       async (number) => {
         const driver = await makeDriver();
@@ -208,8 +220,8 @@ function migrations(label: string, makeDriver: DriverFactory): void {
           { kind: "current", version: number, applied: [] },
         ]);
         expect(await schemaOf(driver)).toEqual(schema);
-        expect(await rows(driver, "SELECT step, applied_at FROM schema_steps ORDER BY step")).toEqual(
-          upTo.map((step) => ({ step: step.number, applied_at: NOW })),
+        expect(await rows(driver, "SELECT step, version, name, applied_at FROM schema_steps ORDER BY step")).toEqual(
+          upTo.map((step, at) => ({ step: at + 1, version: step.version, name: step.name, applied_at: NOW })),
         );
       },
     );
@@ -224,10 +236,12 @@ function migrations(label: string, makeDriver: DriverFactory): void {
       expect(await readStanding(driver, STEPS)).toEqual({ kind: "at", version: SCHEMA_VERSION });
     });
 
-    // Drift: a step changed in place keeps its number, so a database an earlier build made counts as up to date and every statement written for the new tables fails on it, one request at a time.
+    // Drift: a step changed in place keeps its place, so a database an earlier build made counts as up to date and every statement written for the new tables fails on it, one request at a time.
     test.each([
       ["whose first step ran other statements", (driver: SqlDriver) => migrate(driver, [FIRST_STEP_OF_ANOTHER_BUILD], NOW)],
       ["whose ledger holds no fingerprint", (driver: SqlDriver) => driver.batch(LEDGER_WITHOUT_FINGERPRINTS)],
+      ["whose first step is marked under another name", async (driver: SqlDriver) => void (await migrate(driver, [FIRST_STEP], NOW), await driver.batch([{ sql: RENAMED, params: [] }]))],
+      ["whose first step is marked under another version", async (driver: SqlDriver) => void (await migrate(driver, [FIRST_STEP], NOW), await driver.batch([{ sql: OF_ANOTHER_VERSION, params: [] }]))],
     ])("a database %s is refused as made by another build, and nothing in it changes", async (_name, make) => {
       const driver = await makeDriver();
       await make(driver);
@@ -242,7 +256,7 @@ function migrations(label: string, makeDriver: DriverFactory): void {
     test("a database stamped by a newer poplin is refused with the upgrade named, and nothing in it changes", async () => {
       const driver = await migrated(makeDriver);
       await driver.batch([
-        { sql: "INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (?1, ?2, ?3, 'later')", params: [SCHEMA_VERSION + 1, "a step of a later release", NOW] },
+        { sql: "INSERT INTO schema_steps (step, version, name, description, applied_at, fingerprint) VALUES (?1, '9.9.9', 'later', ?2, ?3, 'later')", params: [SCHEMA_VERSION + 1, "a step of a later release", NOW] },
       ]);
       const schema = await schemaOf(driver);
       const opened = await openDatabase(driver, NOW);
@@ -262,12 +276,12 @@ function migrations(label: string, makeDriver: DriverFactory): void {
       const schema = await schemaOf(driver);
       const failed = await migrate(driver, [...STEPS, STEP_THAT_FAILS_HALFWAY], NOW);
 
-      expect(failed).toMatchObject({ kind: "failed", stored: SCHEMA_VERSION, step: STEP_THAT_FAILS_HALFWAY.number });
+      expect(failed).toMatchObject({ kind: "failed", stored: SCHEMA_VERSION, step: SCHEMA_VERSION + 1 });
       expect(failed.kind === "failed" ? failed.message : "").toMatch(/^the database could not be brought up to date: .* Try again$/);
       expect([await readStanding(driver, STEPS), await schemaOf(driver)]).toEqual([{ kind: "at", version: SCHEMA_VERSION }, schema]);
       expect(await migrate(driver, [...STEPS, MENDED_STEP], NOW)).toEqual({
         kind: "current",
-        version: STEP_THAT_FAILS_HALFWAY.number,
+        version: SCHEMA_VERSION + 1,
         applied: [MENDED_STEP.description],
       });
     });
@@ -298,7 +312,7 @@ function migrations(label: string, makeDriver: DriverFactory): void {
       };
 
       expect([await migrate(late, STEPS, NOW), raced.yet]).toEqual([{ kind: "current", version: SCHEMA_VERSION, applied: [] }, true]);
-      expect(await rows(inner, "SELECT step FROM schema_steps")).toEqual(STEPS.map((step) => ({ step: step.number })));
+      expect(await rows(inner, "SELECT step FROM schema_steps")).toEqual(STEPS.map((_step, at) => ({ step: at + 1 })));
     });
 
     // Drift: a read the day's allowance stopped says so itself. Asked of the schema instead, which may fail in its own way, the start would answer a fault where the wait is to midnight UTC.
