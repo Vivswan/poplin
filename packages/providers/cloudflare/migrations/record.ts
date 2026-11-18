@@ -10,9 +10,9 @@
 import { isDeepStrictEqual } from "node:util";
 import * as v from "valibot";
 
-import { readEntryName } from "../../../../cli/src/backup/layout";
-import { readZip } from "../../../../cli/tests/backup/support/zips";
-import type { Bench, LiveSite } from "../../live/records";
+import { readEntryName } from "../../../cli/src/backup/layout";
+import { readZip } from "../../../cli/tests/backup/support/zips";
+import type { Bench, LiveSite } from "../live/records";
 
 /** The accesses of the sites an upgrade publishes, in order: the first gets a second version. */
 const ACCESSES = ["private", "unlisted", "public"] as const;

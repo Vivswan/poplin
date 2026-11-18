@@ -6,7 +6,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempDisposableSync, readdirSync, read
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { prepareBuilds, versionAbove } from "../../../scripts/upgrade/older-build";
+import { prepareBuilds, versionAbove } from "../../migrations/older-build";
 
 /** The file of a tree that says its version. */
 const VERSION_FILE = join("packages", "cli", "package.json");
@@ -15,7 +15,7 @@ const VERSION_FILE = join("packages", "cli", "package.json");
 const STEPS_FOLDER = join("packages", "core", "src", "migrations");
 
 /** This repository's own steps. */
-const OWN_STEPS = join(import.meta.dir, "..", "..", "..", "..", "..", "..", STEPS_FOLDER);
+const OWN_STEPS = join(import.meta.dir, "..", "..", "..", "..", "..", STEPS_FOLDER);
 
 /** Write the file that says a tree's version, with a line after it that must stay. */
 function tellVersion(tree: string, version: string): void {

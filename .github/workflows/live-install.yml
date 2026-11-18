@@ -100,7 +100,7 @@ jobs:
       - uses: ./.github/actions/setup
       # The same asking as the job's `if:`, read from the file of the event: it stops the job before any step is handed a secret.
       - name: Refuse a run that may not reach a test account
-        run: bun packages/providers/cloudflare/scripts/upgrade/admit.ts
+        run: bun packages/providers/cloudflare/scripts/admit.ts
       # The gate is the `all-green` job of the commit's own CI run, the one a push to main started. A job after the gate stops nothing here.
       # The step's own timeout is above the script's ceiling of 30 minutes, so the wait ends with its own line.
       - name: Wait for this commit's all-green check
@@ -169,7 +169,7 @@ jobs:
       - uses: ./.github/actions/setup
       # The same asking as the job's `if:`, read from the file of the event: it stops the job before any step is handed a secret.
       - name: Refuse a run that may not reach a test account
-        run: bun packages/providers/cloudflare/scripts/upgrade/admit.ts
+        run: bun packages/providers/cloudflare/scripts/admit.ts
       - name: Put the test install back
         timeout-minutes: 10
         env:

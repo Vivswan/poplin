@@ -11,7 +11,7 @@ import { dirname, join, relative } from "node:path";
 
 import { fuzzTargets, seedOf } from "../../../../../tests/fuzz/plan";
 import { repositoryFiles } from "../../../../../tests/support/repository-files";
-import { MAIN, PULL_REQUEST, RELEASE_BOT, RELEASE_BRANCH } from "../../scripts/upgrade/admit";
+import { MAIN, PULL_REQUEST, RELEASE_BOT, RELEASE_BRANCH } from "../../scripts/admit";
 
 /** The root of the repository. */
 const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
@@ -103,7 +103,7 @@ const REACHING: readonly string[] = [
   ".github/workflows/release-live-upgrade.yml",
 ];
 
-/** The runs a job that names a test account's environment takes, as its `if:` asks: main, or the pull request of a release as the step of `scripts/upgrade/admit.ts` asks again. */
+/** The runs a job that names a test account's environment takes, as its `if:` asks: main, or the pull request of a release as the step of `scripts/admit.ts` asks again. */
 const GUARD = `github.ref == '${MAIN}' || (github.event_name == '${PULL_REQUEST}' && github.head_ref == '${RELEASE_BRANCH}' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == '${RELEASE_BOT}')`;
 
 /** The file that holds the fuzz run, as a caller names it. */
@@ -118,7 +118,7 @@ const SEEDS = {
 } as const;
 
 /** The step that asks the same of the event's own file. */
-const ADMIT = "bun packages/providers/cloudflare/scripts/upgrade/admit.ts";
+const ADMIT = "bun packages/providers/cloudflare/scripts/admit.ts";
 
 /** The lane of every job that touches the install of one kind, named by the kind the caller hands over: each waiting job is kept, and none is stopped. */
 // biome-ignore lint/suspicious/noTemplateCurlyInString: the expression is the workflow's own, read by GitHub.

@@ -8,10 +8,10 @@
 
 import type { SqlDriver } from "@poplin/core/src/database/driver";
 
-import { readStanding, type Step } from "../../../../core/src/migrations/migrate";
-import type { LiveSite } from "../../live/records";
-import { askDatabase } from "../live/shape";
-import type { Run, Stop } from "../live/util";
+import { readStanding, type Step } from "../../../core/src/migrations/migrate";
+import type { LiveSite } from "../live/records";
+import { askDatabase } from "../scripts/live/shape";
+import type { Run, Stop } from "../scripts/live/util";
 import { LATER_NAMES, laterLabel, stepLabel } from "./later-step";
 import type { Reading } from "./record";
 

@@ -1,4 +1,4 @@
-// Scope: this catches accidental handling of an old stored shape in source under `packages/*/src` outside any `migrations/` folder, and a retired name written anywhere in the repository; deliberate hiding is out of scope.
+// Scope: this catches accidental handling of an old stored shape in source under `packages/*/src` outside any `migrations/` folder, and a retired name or a name of the upgrade checks written anywhere else; deliberate hiding is out of scope.
 // An import of a `migrations/` folder is refused by the lint settings, which `bun run lint` applies to the tree; this file plants each such import. A path written as a template is refused as a template, and its fix is the text the import rule reads.
 
 import { describe, expect, test } from "bun:test";
@@ -62,13 +62,55 @@ const RETIRED_NAMES: readonly RegExp[] = [
 ];
 
 /** The places a retired name is rightly written, each with the one name it may hold: this guard holds them all. */
-const NAMED_ON_PURPOSE: readonly { readonly path: string; readonly name?: RegExp }[] = [
+const NAMED_ON_PURPOSE: readonly Purpose[] = [
   { path: "tests/no-old-shapes.test.ts" },
   // The test that the binding refuses the old key.
   { path: "packages/providers/cloudflare/tests/shared/install/kind/zone-binding.test.ts", name: /admin_hostname/ },
   // The preview's page of its own samples, which it calls its gallery and switches by an option of that name.
   { path: "packages/demo/tests/preview/preview.test.ts", name: /gallery: false/ },
 ];
+
+/** Rule (e): what the upgrade checks call an older version of poplin, and the paths of their files. One written outside a `migrations/` folder is code that knows of a version before its own. */
+const OLDER_VERSION_NAMES: readonly RegExp[] = [
+  /\b(?:lastRelease|openOlder|olderBuild|laterStep|addLaterStep|LATER_NAMES|upgradeFindings|EDITED_IN_PLACE)\b|\bcheckOut\(/,
+  /(?<![A-Za-z])(?:older-build|later-step)|poplin-older|live:upgrade/,
+  /\bthe (?:older build|last release)\b/i,
+  /migrations\/(?:support\/|README\.md|upgrade|detector|frozen-steps|older|later-|record)/,
+];
+
+/** What a workflow that runs the upgrade checks says of them: the two builds in words, the scripts it runs, the folder the older build goes in, and the page that describes the checks. */
+const IN_A_WORKFLOW = /the (?:older build|last release)|live:upgrade(?:-builds)?|poplin-older|migrations\/README\.md/i;
+
+/** The places an older version is rightly named: the page that describes the live upgrade, whole, and the files that hold one name of it. */
+const OLDER_ON_PURPOSE: readonly Purpose[] = [
+  { path: "tests/no-old-shapes.test.ts" },
+  { path: "packages/providers/cloudflare/live/README.md" },
+  { path: ".github/workflows/checks.yml", name: IN_A_WORKFLOW },
+  { path: ".github/workflows/release-gate.yml", name: IN_A_WORKFLOW },
+  { path: ".github/workflows/release-live-upgrade.yml", name: IN_A_WORKFLOW },
+  { path: ".github/workflows/live-upgrade.yml", name: IN_A_WORKFLOW },
+  { path: ".github/workflows/live-install.yml", name: IN_A_WORKFLOW },
+  { path: ".github/workflows/live-checks.yml", name: IN_A_WORKFLOW },
+  { path: ".github/workflows/live-checks-account-address.yml", name: IN_A_WORKFLOW },
+  // The two scripts a workflow runs the live upgrade by.
+  { path: "packages/providers/cloudflare/package.json", name: /"live:upgrade(?:-builds)?": "bun migrations\/(?:older-build|upgrade)\.ts"/ },
+  // The test that holds those workflows to their steps.
+  { path: "packages/providers/cloudflare/tests/live/workflow.test.ts", name: /live:upgrade(?:-builds)?|the (?:older build|last release)/i },
+  // The ceiling of the helpers' folder.
+  { path: "tests/layout.test.ts", name: /migrations\/support/ },
+];
+
+/** A place a name is rightly written: a file, whole or for the one name it may hold. */
+interface Purpose {
+  readonly path: string;
+  readonly name?: RegExp;
+}
+
+/** A part of a line, by the characters it starts at and ends before. */
+interface Span {
+  readonly start: number;
+  readonly end: number;
+}
 
 function inMigrations(path: string): boolean {
   return path.split("/").includes("migrations");
@@ -84,21 +126,28 @@ function textFiles(root: string): string[] {
   return repositoryFiles(root).filter((path) => TEXT_FILES.match(path) && !UNREAD.test(path));
 }
 
-/** Whether a retired name found in a file is one the file is listed to hold. A listed name must cover the whole find, so a longer old word beside it is still named. */
-function isNamedOnPurpose(path: string, line: string, found: string): boolean {
-  return NAMED_ON_PURPOSE.some((place) => place.path === path && (place.name === undefined || (place.name.exec(line)?.[0].includes(found) ?? false)));
+/** Every match of a pattern in a line, the first and each one after it, as where it starts and ends. */
+function everyMatch(pattern: RegExp, line: string): Span[] {
+  return [...line.matchAll(new RegExp(pattern, `${pattern.flags.replace("g", "")}g`))].map((match) => ({ start: match.index, end: match.index + match[0].length }));
 }
 
-/** Every retired name written outside a `migrations/` folder, as `retired name: <path>:<line>`. */
-function retiredNames(root: string): string[] {
+/** Whether a name found in a file is one the file is listed to hold. A listed name must cover the find where it stands, so a longer old word beside it, or the same name once more on the line, is still named. */
+function isNamedOnPurpose(places: readonly Purpose[], path: string, line: string, found: Span): boolean {
+  const covers = (allowed: Span): boolean => allowed.start <= found.start && found.end <= allowed.end;
+
+  return places.some((place) => place.path === path && (place.name === undefined || everyMatch(place.name, line).some(covers)));
+}
+
+/** Every name of a list written outside a `migrations/` folder and outside the places listed for it, as `<rule>: <path>:<line>`. */
+function namesWritten(root: string, rule: string, patterns: readonly RegExp[], places: readonly Purpose[]): string[] {
   const found: string[] = [];
 
   for (const path of textFiles(root).filter((file) => !inMigrations(file))) {
     const lines = readFileSync(join(root, path), "utf8").split("\n");
 
     for (const [at, line] of lines.entries()) {
-      const names = RETIRED_NAMES.flatMap((pattern) => pattern.exec(line)?.[0] ?? []);
-      if (names.some((name) => !isNamedOnPurpose(path, line, name))) found.push(`retired name: ${path}:${at + 1}`);
+      const names = patterns.flatMap((pattern) => everyMatch(pattern, line));
+      if (names.some((name) => !isNamedOnPurpose(places, path, line, name))) found.push(`${rule}: ${path}:${at + 1}`);
     }
   }
 
@@ -127,7 +176,10 @@ function violations(root: string): string[] {
     }
   }
 
-  return [...found, ...retiredNames(root)].sort();
+  const retired = namesWritten(root, "retired name", RETIRED_NAMES, NAMED_ON_PURPOSE);
+  const older = namesWritten(root, "older version", OLDER_VERSION_NAMES, OLDER_ON_PURPOSE);
+
+  return [...found, ...retired, ...older].sort();
 }
 
 describe("no old shapes outside migrations/", () => {
@@ -241,6 +293,47 @@ describe("no old shapes outside migrations/", () => {
     using tree = plantedRepository({ [path]: `A planted file.\n${line}\n` });
 
     expect(violations(tree.path)).toEqual([`retired name: ${path}:2`]);
+  });
+
+  // Drift: code that names an older version outside a migrations folder is upgrade code no folder owns, and it stays after the release it was written for.
+  test.each([
+    ["the release a checkout descends from", "packages/demo/tests/planted.test.ts", "const from = lastRelease(root);"],
+    ["the older build opened", "packages/demo/scripts/planted.ts", "const older = await openOlder(folder, env);"],
+    ["a commit's tree", "packages/demo/tests/planted.test.ts", "await using tree = checkOut(root, ref);"],
+    ["the step of the live upgrade", "packages/demo/scripts/planted.ts", "const step = addLaterStep(root);"],
+    ["the script that builds the older build", "docs/planted.md", "Run `bun scripts/older-build.ts` first."],
+    ["the script of the live upgrade", "packages/demo/package.json", '    "upgrade": "bun run live:upgrade",'],
+    ["the older build in words", "docs/planted.md", "The older build is installed first."],
+    ["the last release in words", "skills/demo/references/planted.md", "An install of the last release is updated."],
+    ["an import of the upgrade check's helpers", "packages/demo/tests/planted.test.ts", 'import { part } from "../../../tests/migrations/support/trees";'],
+  ])("names %s outside a migrations folder", (_, path, line) => {
+    using tree = plantedRepository({ [path]: `A planted file.\n${line}\n` });
+
+    expect(violations(tree.path)).toEqual([`older version: ${path}:2`]);
+  });
+
+  // Drift: an allow-list by file alone would let any upgrade code into a file that rightly holds one name of it.
+  test("a file listed for one name of the upgrade checks is still named for another, and for the same one a second time on its line; a migrations folder holds them all, and core's steps and a word that only holds one are no such name", () => {
+    const words = "# The older build is built first, then `live:upgrade` runs.\n";
+    const code = "const older = await openOlder(folder, env);\n";
+    using tree = plantedRepository({
+      "packages/providers/cloudflare/package.json": '    "live:upgrade": "bun migrations/upgrade.ts",\n    "older": "bun migrations/older.ts"\n    "live:upgrade": "bun migrations/upgrade.ts", "again": "bun migrations/upgrade.ts"\n',
+      "packages/providers/cloudflare/migrations/older.ts": "const from = lastRelease(root);\n",
+      "tests/migrations/upgrade.test.ts": "await using tree = checkOut(root, lastRelease(root));\n",
+      "packages/demo/tests/database/schema.test.ts": 'import { STEPS } from "../../src/migrations/registry";\n',
+      "packages/providers/cloudflare/tests/live/workflow.test.ts": 'const commands = ["live:upgrade", "bun scripts/older-build.ts"];\n',
+      "docs/planted.md": "The folder-builder writes a new site directory.\nFolder-builder is its name.\n",
+      ".github/workflows/live-upgrade.yml": `${words}${code}`,
+      ".github/workflows/other.yml": words,
+    });
+
+    expect(violations(tree.path)).toEqual([
+      "older version: .github/workflows/live-upgrade.yml:2",
+      "older version: .github/workflows/other.yml:1",
+      "older version: packages/providers/cloudflare/package.json:2",
+      "older version: packages/providers/cloudflare/package.json:3",
+      "older version: packages/providers/cloudflare/tests/live/workflow.test.ts:1",
+    ]);
   });
 
   // Drift: an allow-list by file alone would let any old name back into a file that rightly holds one.

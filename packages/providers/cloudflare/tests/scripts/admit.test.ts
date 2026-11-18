@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { admit, MAIN, PULL_REQUEST, RELEASE_BOT, RELEASE_BRANCH } from "../../../scripts/upgrade/admit";
+import { admit, MAIN, PULL_REQUEST, RELEASE_BOT, RELEASE_BRANCH } from "../../scripts/admit";
 
 /** The repository the runs are of. */
 const HERE = "example/poplin";

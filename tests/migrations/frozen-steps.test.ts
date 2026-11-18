@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempDisposableSync, readdirSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { git, HERE, lastRelease } from "./upgrade/support/trees";
+import { git, HERE, lastRelease } from "./support/trees";
 
 /** The folder of the steps, from the root of a repository. */
 const STEPS_FOLDER = "packages/core/src/migrations";

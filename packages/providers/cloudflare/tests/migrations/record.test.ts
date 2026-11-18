@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { logFaults, type Reading, settingFaults, siteFaults } from "../../../scripts/upgrade/record";
+import { logFaults, type Reading, settingFaults, siteFaults } from "../../migrations/record";
 
 /** A page as a stranger is served it. */
 const SERVED = { status: 200, digest: "a".repeat(64), type: "text/html; charset=utf-8" };

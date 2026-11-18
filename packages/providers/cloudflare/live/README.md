@@ -4,7 +4,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 
 | To                                                | Run                                                                       | Needs                                                                     |
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| check the checks themselves, against a local fake | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts`                                                        | nothing                                                                   |
+| check the checks themselves, against a local fake | `bun test ./packages/providers/cloudflare/tests/live ./packages/providers/cloudflare/tests/scripts ./packages/providers/cloudflare/tests/migrations`                                                        | nothing                                                                   |
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: after a push to main that reaches the install, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
@@ -128,9 +128,9 @@ Both run the job `upgrade` of `.github/workflows/live-upgrade.yml`, in the lane 
 
 ```text
 job upgrade
-  scripts/upgrade/older-build.ts   the older build in a folder of its own, its packages installed, its Worker built: no secret reaches this step
+  migrations/older-build.ts        the older build in a folder of its own, its packages installed, its Worker built: no secret reaches this step
                                    this checkout told one patch above the older build's version and given the later step, then built
-  scripts/upgrade/upgrade.ts       a test account alone -> the older build's own poplin uninstall and poplin install
+  migrations/upgrade.ts            a test account alone -> the older build's own poplin uninstall and poplin install
                                    -> the older build's command line: 3 sites, a second version, a setting, a user; a token of its making
                                    -> the older build's own start of an update, fed the build of main as a release
                                    -> the Worker of the new build starts, and applies the later step to the filled database
@@ -233,7 +233,7 @@ The reset's own ceilings hold it: 600 rows and 150 bucket writes and lists.
 
 | A run reaches a test account when | Held by |
 | --------------------------------- | ------- |
-| it is a run of main | the `if:` of every job that names an environment, and `scripts/upgrade/admit.ts` as a step before the first one that is handed a secret |
+| it is a run of main | the `if:` of every job that names an environment, and `scripts/admit.ts` as a step before the first one that is handed a secret |
 | it is the pull request of a release: the branch `release-please--branches--main`, of this repository, opened by `github-actions[bot]` | the same two |
 | its ref is `main` or `refs/pull/<number>/merge` | the environment's own rule, in `.github/settings.local.yml` |
 
@@ -241,7 +241,7 @@ GitHub judges a pull request's run by the ref `refs/pull/<number>/merge`, which 
 
 ### The later step
 
-`scripts/upgrade/later-step.ts` writes one step into the checkout of the run: a file beside the product's steps, numbered one above the last, and its line in `registry.ts`. No commit holds it, and no other build or run has it.
+`migrations/later-step.ts` writes one step into the checkout of the run: a file beside the product's steps, numbered one above the last, and its line in `registry.ts`. No commit holds it, and no other build or run has it.
 
 | It runs                                                                   | As a step of a release would                    |
 | ------------------------------------------------------------------------- | ----------------------------------------------- |

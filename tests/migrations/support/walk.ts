@@ -62,7 +62,7 @@ async function linesOf(
   const lines = Object.entries(WALK).filter(([action]) => known.every((actions) => actions.includes(action)));
   const unwalked = known.flat().filter((action) => !Object.hasOwn(WALK, action));
 
-  return { lines, faults: [...new Set(unwalked)].map((action) => `the site action \`${action}\` has no line in the walk of tests/upgrade`) };
+  return { lines, faults: [...new Set(unwalked)].map((action) => `the site action \`${action}\` has no line in the walk of tests/migrations`) };
 }
 
 /** Publish the site a walk starts from. */

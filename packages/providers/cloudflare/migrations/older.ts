@@ -12,13 +12,13 @@ import type { startUpdate } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { SqlDatabase } from "@poplin/core/src/database/sql-database";
 
-import { part, type Tree } from "../../../../../tests/upgrade/support/trees";
-import type { liveAddresses } from "../../live/addresses";
-import type { openBench } from "../../live/bench";
-import type { apiDriver } from "../../src/shared/database/api-driver";
-import type { createSelfUpdate } from "../../src/shared/release/update/self-update";
-import type { seedToken } from "../live/tokens";
-import { type Run, SCRIPT } from "../live/util";
+import { part, type Tree } from "../../../../tests/migrations/support/trees";
+import type { liveAddresses } from "../live/addresses";
+import type { openBench } from "../live/bench";
+import type { apiDriver } from "../src/shared/database/api-driver";
+import type { createSelfUpdate } from "../src/shared/release/update/self-update";
+import type { seedToken } from "../scripts/live/tokens";
+import { type Run, SCRIPT } from "../scripts/live/util";
 import { versionOf } from "./older-build";
 
 /** The provider's package, from a tree's root. */

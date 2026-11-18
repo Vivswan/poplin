@@ -16,8 +16,8 @@ import { isPlainVersion } from "@poplin/core/src/records/update";
 import gt from "semver/functions/gt";
 import inc from "semver/functions/inc";
 
-import type { Step } from "../../../../core/src/migrations/migrate";
-import { lastRelease } from "../../../../../tests/upgrade/support/trees";
+import type { Step } from "../../../core/src/migrations/migrate";
+import { lastRelease } from "../../../../tests/migrations/support/trees";
 import { addLaterStep, stepLabel } from "./later-step";
 
 /** The commit of main that stands in for a release while none is cut. It moves forward when the first schema step or a stored shape is edited in place, or an install gains a part a repair would add; once a release has a tag, that is taken instead. */
@@ -27,7 +27,7 @@ const STAND_IN = "a185263b4ecaecd9c573a6c02882e15927df277a";
 const VERSION_FILE = join("packages", "cli", "package.json");
 
 /** The repository this file sits in. */
-const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
+const ROOT = join(import.meta.dir, "..", "..", "..", "..");
 
 /** Runs one command in a folder. It throws when the command fails. */
 type RunCommand = (command: readonly string[], cwd: string) => void;

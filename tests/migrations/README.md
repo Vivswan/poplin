@@ -9,11 +9,11 @@ its install   = that code's own preview seed, on a database and a store the test
 then          = this code opens the same database and the same objects, and is asked the same things
 ```
 
-| To                                  | Run                                     |
-| ----------------------------------- | --------------------------------------- |
-| run the check and its own test      | `bun test ./tests/upgrade/`             |
-| check that no released step changed | `bun test ./tests/frozen-steps.test.ts` |
-| run both as a release does          | the `Release Gate` workflow             |
+| To                                  | Run                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| run the check and its own test      | `bun test ./tests/migrations/upgrade.test.ts ./tests/migrations/detector.test.ts` |
+| check that no released step changed | `bun test ./tests/migrations/frozen-steps.test.ts`                                |
+| run both as a release does          | `bun test ./tests/migrations/`, as the `Release Gate` workflow does               |
 
 Both run on every push, inside `bun run test`, and again in `release-gate.yml` on the pull request of a release, beside the fuzz run. The upgrade of the two real test installs is `release-live-upgrade.yml`, on the same pull request, which then puts each install back to main's build, the sample sites, and the demo. A shallow checkout fails with the command that fetches the history.
 
@@ -49,7 +49,7 @@ A read is asked when the command of the code that made the install has its flags
 2. Run `bun run --cwd packages/core draft-step "<what it does>"` and read the draft.
 3. List the step in `packages/core/src/migrations/registry.ts`.
 
-A step a release shipped is frozen: `tests/frozen-steps.test.ts` fails when its file differs from the tag. A change to it is a new step with the next number.
+A step a release shipped is frozen: `tests/migrations/frozen-steps.test.ts` fails when its file differs from the tag. A change to it is a new step with the next number.
 
 A new setting needs a step too. The stored settings row is read strictly, so a row without the new key does not read. The step writes the key's default into the stored row:
 
