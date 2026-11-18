@@ -352,7 +352,7 @@ Workflow: failed (refused with status 500): needs the Worker's Workflow, which C
 
 | Differs from the other install                                   | So                                                                              |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` are skipped: needs a domain |
+| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch` are skipped: needs a domain |
 | a site answers under a path                                      | `relative-file` also asks the address without its last slash, which moves to the one with it |
 | a site's address is no root of an origin                         | the demo gets no link to a sample site: `sites.json` is empty                   |
 | `poplin install` finds the account by the token                  | the token must show its account in the list of its accounts                     |
@@ -461,22 +461,19 @@ A run starts at midnight, by hand, or on the pull request of a release, so 40 a 
 The copy the install's job finishes is a site of 113 files: one more than the first request of a copy takes. It costs a run 226 files of the day and over two hundred bucket writes, so the midnight run alone makes it, and a run started by hand with the many-files check.
 
 ```text
-burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few seconds after one data center passed 300
-burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
-own-limit                about 700
 backup-drill             72, of which 34 make the install write to its bucket or list it
 the waits                2 a usual run; 14 after an install made anew, where `poplin install` asks too, 13 after a new schema step, and more where a row begins again; 60 + 60 + 61 = 181 at their longest
-a run, at its worst      1,140 + 700 + 72 + 181 = 2,093
-the plan's day           100,000 requests to the Worker, reached at about 47 such runs
+a run, at its worst      72 + 181 = 253
+the plan's day           100,000 requests to the Worker, reached at about 395 such runs
 ```
 
 The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests. A stranger's request that gets no answer and is asked again is counted once here, though it may have reached the Worker each time.
 
 ```text
 the install without a domain
-a run, at its worst      700 (own-limit) + 72 (backup-drill) + 181 (the waits) = 953: no rate rule stands in front of it, so no burst is sent
-a usual run              about 125 (own-limit, which ends at the first 429) + 72 + about 130 (the reset) and a few dozen more
-a day of 45 runs         45 x 953 = 42,885 of its own account's 100,000
+a run, at its worst      72 (backup-drill) + 181 (the waits) = 253
+a usual run              72 + about 130 (the reset) and a few dozen more
+a day of 45 runs         45 x 253 = 11,385 of its own account's 100,000
 a request for a site     one request of a forwarder, which hands it to the Worker at no further request, by Cloudflare's documentation
 ```
 
@@ -550,7 +547,7 @@ load: at most 453 rows written of a ceiling of 600, 60 bucket writes and lists o
 | --- | --- |
 | says its plan before it sends anything | the first line above: the rows, the bucket writes and lists, and the visits it makes at the most |
 | plans more than a ceiling, or more visits than one visitor's minute holds | it sends nothing, and the check fails with the number that is over |
-| waits 61 seconds before its first visit | the checks of the edge before it used up its visitor's minute |
+| waits 61 seconds before its first visit | the checks before it spent a part of its visitor's minute |
 | is answered a visitor's refusal, status 429 with `Retry-After` and the install's own words | counted as refused, and no failure |
 | is answered anything else that is not what the step asks for | the check fails, with the statuses alone |
 
@@ -640,19 +637,6 @@ assistant-fetch: ChatGPT-User let through (302), Perplexity-User let through (30
 
 A run's requests come from no address Cloudflare has verified, so the bots rule reads none of them. The check is 2 requests where none is sent again, and no write to the bucket or the database.
 
-## The check of the rate rule
-
-Cloudflare counts the rate rule in each data center for itself, and each address for itself. `burst-rate-rule` counts the same way, from the data center each answer names and the addresses the edge says it saw.
-
-| The run met                                                                     | Result  |
-| ------------------------------------------------------------------------------- | ------- |
-| a 429 of the rate rule                                                          | passed  |
-| no block, and the edge saw the runner at more than one address                  | skipped |
-| no block, and one data center held more than 300 in ten seconds for 5 seconds   | failed  |
-| no block, and no data center stayed past 300 that long                          | skipped |
-
-Each result comes with one line: the requests, the time, each answer's count, each data center's count, and how many addresses the edge saw. It never holds an address.
-
 ## A request that is cut off
 
 The edge closes a connection it kept open, and a request sent on it then gets no answer. A client sends a read again by itself, and no other request. So every request of a run that is no read opens a connection of its own, in `send.ts`; reads keep the open ones.
@@ -688,13 +672,11 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |
 | a plan whose bot settings the API can change                        | `crawler`, `assistant-fetch`                                             |
-| the guard rule, the redirect rule, or the rate rule on the zone     | `L8-method`, `L8-scanner`, `L8-http`, `burst-rate-rule`                  |
-| one data center that takes more than 300 of the runner's requests in ten seconds | `burst-rate-rule`                                           |
-| a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
+| the guard rule or the redirect rule on the zone                     | `L8-method`, `L8-scanner`, `L8-http`                                     |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so on no run that starts by itself                    |
 | a run started by hand with the load switched on                     | `load`: it is no row of any other run's table                            |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`: the checklist below, which also holds `download` |
-| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` |
+| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch` |
 
 ## The token's permissions
 

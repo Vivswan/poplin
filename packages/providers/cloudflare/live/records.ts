@@ -10,7 +10,6 @@ type Capability =
   | "access"
   | "guard-rules"
   | "https-redirect"
-  | "rate-rule"
   | "bot-block"
   | "many-files"
   | "login-list"

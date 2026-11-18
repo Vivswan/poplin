@@ -4,7 +4,7 @@
 //   poplin.example.com/...           with the login in front, a redirect off the domain to the team's login
 //   poplin.example.com/data/...      from a script, with the login in front, the edge's own 401
 //   poplin.example.com/...           with no login in front, the install's own refusal: 401 as JSON under /data/, a 403 anywhere else
-//   *-poplin.example.com             the edge's rules, the install's own count of one visitor, then the real serving
+//   *-poplin.example.com             the edge's rules, then the real serving
 //   *-page.example.com               the same, on an install whose routes reach the public word
 //   store.example.com/<upload>       the store the install's tickets name: it takes a file as the install's own route does, or refuses every one
 //   any other hostname               no answer
@@ -12,12 +12,10 @@
 // With `noDomain`, the fake is an install on an account's free address, and no rule of a zone stands in front of it:
 //
 //   poplin.example.workers.dev            the dashboard, the login, and the API, as above
-//   poplin-sites.example.workers.dev      every unlisted and public site, as a path: the install's own count of one visitor, then the real serving
+//   poplin-sites.example.workers.dev      every unlisted and public site, as a path: the real serving
 //   poplin-private.example.workers.dev    every private site, as a path: with the login in front, a redirect to the team's login from every path of it
 //
-// Every answer on a site hostname names the data center it came through, as the edge's `cf-ray` does, and `/cdn-cgi/trace` there says which address the edge saw.
-//
-// The fake's time stands still while requests are sent and moves on only in a pause, so its two limits count as the real ones do: by the minute and by ten seconds.
+// The fake's time stands still while requests are sent and moves on only in a pause.
 // A pause is also when the fake's provider works with nobody asking: each job that was started runs one round in it, as one step.
 
 import { createApi } from "../../../../../app/src/api/api";
@@ -61,36 +59,6 @@ const LOGIN_METHODS = {
 /** The hostname of the team's login. */
 const LOGIN_HOST = new URL(LOGIN_PAGE).hostname;
 
-/** The most requests the fake's own limit lets one minute hold. */
-const OWN_LIMIT = 120;
-
-/** How long the fake's own limit counts over, in milliseconds. */
-const OWN_WINDOW_MS = 60_000;
-
-/** The most requests the fake's rate rule lets through. */
-const RULE_LIMIT = 300;
-
-/** How long the fake's rate rule counts over, in milliseconds. */
-const RULE_WINDOW_MS = 10_000;
-
-/** How late a request enters the own count of an install whose count lags, in milliseconds. */
-const LAG_MS = 1000;
-
-/** How late a request enters the count of a rate rule whose count lags, in milliseconds. */
-const RULE_LAG_MS = 3000;
-
-/** The data centers the fake answers from: the first alone, or the first two or all four in turn for a visitor whose requests are spread. */
-const CENTERS = ["AAA", "BBB", "CCC", "DDD"] as const;
-
-/** How many addresses the requests of a visitor with several leave from, in turn. */
-const ADDRESSES_IN_TURN = 4;
-
-/** The path on which the edge itself says what it saw of a request. */
-const TRACE_PATH = "/cdn-cgi/trace";
-
-/** The address the fake's edge sees a visitor's requests come from: one kept for documents, which no computer has. A visitor with several has it with other last numbers. */
-const VISITOR = "192.0.2.7";
-
 /** The headers of the fake's own refusals. */
 const REFUSAL_HEADERS = { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" };
 
@@ -131,24 +99,6 @@ export interface FakeSwitches {
 
   /** A fault: a letter p address opens for a request with no login behind it. */
   readonly leaksPrivate?: boolean;
-
-  /** The install's own count of a visitor takes a request in a second late, as a count kept per location and caught up in the background does. */
-  readonly lateCount?: boolean;
-
-  /** A fault: the install counts no visitor, so it has no limit of its own. */
-  readonly noOwnLimit?: boolean;
-
-  /** The rate rule's count takes a request in three seconds late, as the edge's does: it starts to block some seconds after the request past its limit. */
-  readonly lateRule?: boolean;
-
-  /** A fault: the zone holds no rate rule, on a run not told so. */
-  readonly noRateRule?: boolean;
-
-  /** One visitor's requests reach this many data centers in turn, and the rate rule counts in each for itself, as the edge's does. */
-  readonly spread?: 2 | 4;
-
-  /** One visitor's requests leave from four addresses in turn, and the rate rule counts each for itself, as the edge's does. */
-  readonly manyAddresses?: boolean;
 
   /** The install holds no key of its provider, so a change of the users reaches no login list, and a change of the setting of the logs no provider. */
   readonly noKey?: boolean;
@@ -197,15 +147,6 @@ interface Place {
   readonly api: Pick<ApiInstall["api"], "fetch">;
   readonly typed: LiveAddresses;
   readonly privateHost: string | undefined;
-}
-
-/** A data center of the fake. */
-type Center = (typeof CENTERS)[number];
-
-/** How a request reached the fake's edge: through which data center, and from which address. */
-interface Path {
-  readonly center: Center;
-  readonly source: string;
 }
 
 /** The zone's redirect rule: plain http moves to https, on every hostname of the install. */
@@ -383,42 +324,16 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     return place.api.fetch(new Request(`https://${place.adminHost}/api/uploads${url.pathname}/file${url.search}`, { method: request.method, headers, body: request.body, duplex: "half" } as RequestInit));
   };
 
-  // When each request the rules let through came, on the fake's own time, and by which path.
-  const arrivals: (Path & { readonly at: number })[] = [];
   let time = 0;
-  let asked = 0;
-
-  // How many requests came in a stretch of time: by one path, or by any.
-  const arrivedIn = (from: number, to: number, path?: Path): number =>
-    arrivals.filter((arrival) => arrival.at > from && arrival.at <= to && (path === undefined || (arrival.center === path.center && arrival.source === path.source))).length;
-
-  // The path a request comes by: the next data center in turn for a visitor whose requests are spread, and the next address for one with several.
-  const route = (): Path => {
-    const center = CENTERS[asked % (switches.spread ?? 1)] ?? CENTERS[0];
-    const source = switches.manyAddresses === true ? VISITOR.replace(/\d+$/, String(asked % ADDRESSES_IN_TURN)) : VISITOR;
-    asked += 1;
-
-    return { center, source };
-  };
-
-  // How far each count runs behind the requests.
-  const ruleLag = switches.lateRule === true ? RULE_LAG_MS : 0;
-  const ownLag = switches.lateCount === true ? LAG_MS : 0;
-
   // The user agents the zone's bot block stops.
   const stoppedAgents = switches.stopsAssistants === true ? [CRAWLERS, ASSISTANTS] : [CRAWLERS];
 
-  // The zone's rules on a site hostname: the guard rule, the bot block, the rate rule. Then the install's own count of one visitor.
-  const edge = (request: Request, url: URL, path: Path): Response | undefined => {
+  // The zone's rules on a site hostname: the guard rule and the bot block.
+  const edge = (request: Request, url: URL): Response | undefined => {
     const guarded = zone && switches.noGuards !== true;
     if (guarded && (!READS.has(request.method) || SCANNER_PATHS.test(url.pathname))) return new Response("blocked", { status: 403 });
 
     if (zone && stoppedAgents.some((agents) => agents.test(request.headers.get("User-Agent") ?? ""))) return new Response("blocked", { status: 403 });
-
-    arrivals.push({ at: time, ...path });
-    if (zone && switches.noRateRule !== true && arrivedIn(time - ruleLag - RULE_WINDOW_MS, time - ruleLag, path) > RULE_LIMIT) return new Response("error code: 1015", { status: 429 });
-
-    if (switches.noOwnLimit !== true && arrivedIn(time - OWN_WINDOW_MS, time - ownLag) > OWN_LIMIT) return refusal(429, "Too many requests. Try again in 60 seconds.\n", { "Retry-After": "60" });
 
     return undefined;
   };
@@ -431,10 +346,8 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     return switches.access === true && privateAddress ? refusal(302, "", { Location: loginPage }) : undefined;
   };
 
-  const answerSite = async (request: Request, url: URL, path: Path): Promise<Response> => {
-    if (url.pathname === TRACE_PATH) return new Response(`ip=${path.source}\ncolo=${path.center}\n`);
-
-    const stopped = edge(request, url, path) ?? login(url);
+  const answerSite = async (request: Request, url: URL): Promise<Response> => {
+    const stopped = edge(request, url) ?? login(url);
     if (stopped !== undefined) return stopped;
 
     return serveSite(request, {
@@ -486,12 +399,7 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
     if (asApi(url)) return place.api.fetch(request);
 
-    const path = route();
-    const answer = await answerSite(request, url, path);
-    const marked = new Response(answer.body, answer);
-    marked.headers.set("cf-ray", `${asked.toString(16)}-${path.center}`);
-
-    return marked;
+    return answerSite(request, url);
   };
 
   const pause = async (ms: number): Promise<void> => {
