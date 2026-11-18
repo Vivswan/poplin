@@ -18,7 +18,7 @@ describe("publishedPins", () => {
   const pin = { bundle: digest, schema: 2 };
 
   const files: readonly { readonly name: string; readonly text: string; readonly read: unknown; readonly newest: string | undefined }[] = [
-    { name: "no release yet", text: "{}", read: {}, newest: undefined },
+    { name: "a file that names no release", text: "{}", read: {}, newest: undefined },
     { name: "two releases, the lower version written last", text: JSON.stringify({ "0.10.0": pin, "0.9.0": pin }), read: { "0.10.0": pin, "0.9.0": pin }, newest: "0.10.0" },
     { name: "a release with a field a later poplin added", text: JSON.stringify({ "0.2.0": { ...pin, pulled: false } }), read: { "0.2.0": pin }, newest: "0.2.0" },
     { name: "a release with no digest", text: JSON.stringify({ "0.2.0": {} }), read: undefined, newest: undefined },

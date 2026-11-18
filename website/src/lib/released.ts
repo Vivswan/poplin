@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
+import REPOSITORY_CHANGELOG from "../../../CHANGELOG.md?raw";
 import { releases } from "./changelog.ts";
-
-// The repository's changelog, or nothing while no version is released and the file does not exist.
-const REPOSITORY_CHANGELOG = import.meta.glob<string>("../../../CHANGELOG.md", { eager: true, query: "?raw", import: "default" });
 
 /** One release an install may take: the digest of the manifest of its built files, and its schema. */
 interface ReleasePin {
@@ -42,7 +40,7 @@ export function releasePins(): Record<string, ReleasePin> {
  */
 export function released(): Released | undefined {
   const override = process.env.POPLIN_CHANGELOG;
-  const changelog = override ? readFileSync(override, "utf8") : (REPOSITORY_CHANGELOG["../../../CHANGELOG.md"] ?? "");
+  const changelog = override ? readFileSync(override, "utf8") : REPOSITORY_CHANGELOG;
   const pins = releasePins();
   const newest = releases(changelog).find(({ version }) => Object.hasOwn(pins, version));
 

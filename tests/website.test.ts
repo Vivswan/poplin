@@ -90,7 +90,7 @@ const CHANGELOGS: readonly {
   readonly latest: unknown;
   readonly read: ReturnType<typeof publishedRelease>;
 }[] = [
-  { what: "no version released", changelog: "# Changelog\n", pins: {}, named: {}, foot: "poplin", latest: { version: null }, read: null },
+  { what: "a changelog that names no version", changelog: "# Changelog\n", pins: {}, named: {}, foot: "poplin", latest: { version: null }, read: null },
   { what: "one version, its digests published", changelog: `# Changelog\n\n${FIRST_RELEASE}`, pins: { "0.1.0": FIRST_PIN }, named: { "0.1.0": FIRST_PIN }, foot: "poplin 0.1.0", latest: FIRST_NEWS, read: FIRST_NEWS },
   {
     what: "two versions, the digests of both published",
@@ -237,10 +237,9 @@ describe("the top bar's demo entry", () => {
 
 describe("the changelog", () => {
   test("names the version the release tooling records as the newest: without this latest.json tells installs of a version that was never released, or hides one that was", () => {
-    const file = join(ROOT, "CHANGELOG.md");
-    const newest = newestRelease(existsSync(file) ? readFileSync(file, "utf8") : "");
+    const newest = newestRelease(readFileSync(join(ROOT, "CHANGELOG.md"), "utf8"));
     const manifest: Record<string, string> = JSON.parse(readFileSync(join(ROOT, ".release-please-manifest.json"), "utf8"));
 
-    expect(newest?.version ?? "0.0.0").toBe(manifest["."] ?? "");
+    expect(newest?.version).toBe(manifest["."]);
   });
 });

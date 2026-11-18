@@ -15,7 +15,9 @@ then          = this code opens the same database and the same objects, and is a
 | check that no released step changed | `bun test ./tests/migrations/frozen-steps.test.ts`                                |
 | run both as a release does          | `bun test ./tests/migrations/`, as the `Release Gate` workflow does               |
 
-Both run on every push, inside `bun run test`, and again in `release-gate.yml` on the pull request of a release, beside the fuzz run. Beside them, the same file upgrades the two real test installs, then runs the live checks on each and puts it back to main's build, the sample sites, and the demo. A shallow checkout fails with the command that fetches the history.
+Both run on every push, inside `bun run test`, and again in `release-gate.yml` on the pull request of a release, beside the fuzz run. Beside them, the same file upgrades the two real test installs, then runs the live checks on each and puts it back to main's build, the sample sites, and the demo.
+
+A shallow checkout fails with the command that fetches the history, and one without its tags with the command that fetches them.
 
 ## What is checked
 
@@ -38,7 +40,7 @@ A read is asked when the command of the code that made the install has its flags
 
 | Test               | From                                                 | Expects                                                               |
 | ------------------ | ---------------------------------------------------- | --------------------------------------------------------------------- |
-| `upgrade.test.ts`  | the last release                                     | no finding; before the first release it says that nothing is released |
+| `upgrade.test.ts`  | the last release                                     | no finding                                                            |
 | `detector.test.ts` | this code itself                                     | no finding                                                            |
 | `detector.test.ts` | a commit from before step 1 was last edited in place | findings for the database, the settings, and the backup               |
 | `detector.test.ts` | answers written by hand                              | each comparison names what is gone or changed, and passes what is kept, moved, or added |

@@ -75,7 +75,7 @@ const PUBLISHED_NOTES = v.pipe(
   v.check((notes) => notes === RELEASES || notes.startsWith(`${RELEASES}/`), "the notes of a release are a page of the project's releases"),
 );
 
-/** The file the website publishes, as JSON text: a release, or a `version` of `null` before the first one. A key a later poplin added is passed over. */
+/** The file the website publishes, as JSON text: a release, or a `version` of `null` where the website names none. A key a later poplin added is passed over. */
 const LATEST_FILE = v.pipe(
   v.string(),
   v.parseJson(),

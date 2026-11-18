@@ -2,7 +2,7 @@
 // With the last release R, every file the tag of R holds is as the tag holds it, and the one file that may be new or change is `R.ts`: a new step is written there.
 // A released step edited in place leaves the installs of that release without the change: they hold the step as stamped and never run it again.
 //
-// Before the first release no step is frozen. A change that an old settings row needs, such as a new key, is a step in `packages/core/src/migrations/` that writes the value into the stored row.
+// A change that an old settings row needs, such as a new key, is a step in `packages/core/src/migrations/` that writes the value into the stored row.
 
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempDisposableSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -17,14 +17,11 @@ const STEPS_FOLDER = "packages/core/src/migrations";
 /** The file of a version's steps: the version alone. */
 const STEP_FILE = /^\d+\.\d+\.\d+\.ts$/;
 
-/** The last release this checkout descends from; none before the first. */
+/** The last release this checkout descends from. */
 const RELEASE = lastRelease(HERE.root);
 
 /** What the guard holds in this checkout, as the test's name. */
-const FROZEN =
-  RELEASE === undefined
-    ? "nothing is released yet, so no step is frozen"
-    : `every file of steps ${RELEASE} shipped is as it shipped it, and every newer step is in the file named for ${RELEASE}`;
+const FROZEN = `every file of steps ${RELEASE} shipped is as it shipped it, and every newer step is in the file named for ${RELEASE}`;
 
 /** Reads the imports of a step that load a module; an import of types alone loads none. */
 const SCANNER = new Bun.Transpiler({ loader: "ts" });
@@ -52,11 +49,9 @@ function borrowing(root: string): string[] {
     .map((file) => `${file} imports a value: a step holds its statements itself`);
 }
 
-/** Every released file of steps that is no longer as its release shipped it, and every new file that is not the one named for that release; one line each, none before the first release. */
+/** Every released file of steps that is no longer as its release shipped it, and every new file that is not the one named for that release; one line each. */
 function thawed(root: string): string[] {
   const release = lastRelease(root);
-  if (release === undefined) return [];
-
   const released = git(root, ["ls-tree", "--name-only", release, `${STEPS_FOLDER}/`])
     .split("\n")
     .map((path) => path.slice(STEPS_FOLDER.length + 1));
@@ -107,12 +102,12 @@ describe("released steps", () => {
     expect([borrowing(HERE.root), borrowing(repository.root)]).toEqual([[], ["0.0.0.ts imports a value: a step holds its statements itself"]]);
   });
 
-  test("the last release is the highest version among the tags a checkout descends from, by version and not by text: without this 0.9.0 outranks 0.10.0 and a tag of another branch counts", () => {
+  test("the last release is the highest version among the tags a checkout descends from, by version and not by text; a checkout with none is told to fetch them: without this 0.9.0 outranks 0.10.0, and a clone without tags passes", () => {
     using repository = fixture();
     repository.write("0.0.0.ts", "one");
 
     repository.commit();
-    const unreleased = lastRelease(repository.root);
+    expect(() => lastRelease(repository.root)).toThrow(`${repository.root} holds no release tag among its ancestors: fetch the tags from poplin's repository (\`git fetch --tags <repository>\`)`);
     repository.commit("v0.9.0");
     repository.commit("v0.10.0");
     git(repository.root, [...SEALED, "tag", "scratch"]);
@@ -121,15 +116,13 @@ describe("released steps", () => {
     repository.commit("v9.0.0");
     git(repository.root, ["checkout", "--quiet", "main"]);
 
-    expect([unreleased, lastRelease(repository.root)]).toEqual([undefined, "v0.10.0"]);
+    expect(lastRelease(repository.root)).toBe("v0.10.0");
   });
 
   test("a released file of steps that is edited or removed, and a new file that is not the one named for the last release, are named; a step written into that one file is not", () => {
     using repository = fixture();
     repository.write("0.9.0.ts", "one");
     repository.write("migrate.ts", "the runner");
-    repository.commit();
-    const before = thawed(repository.root);
     repository.commit("v1.0.0");
     repository.write("migrate.ts", "the runner, changed");
     repository.write("1.0.0.ts", "two");
@@ -149,6 +142,6 @@ describe("released steps", () => {
       "1.1.0.ts is new and is not 1.0.0.ts: a new step goes into the file named for the last release",
     ];
 
-    expect({ before, made, appended, edited, removed: thawed(repository.root) }).toEqual({ before: [], made: [], appended: [], edited: named, removed: named });
+    expect({ made, appended, edited, removed: thawed(repository.root) }).toEqual({ made: [], appended: [], edited: named, removed: named });
   });
 });

@@ -109,7 +109,7 @@ Each runs it twice for a kind, one after the other, since the two share one inst
 
 | From | The older build is | A failure | With no such build |
 | ---- | ------------------ | --------- | ------------------ |
-| `release` | the last release: the highest `vX.Y.Z` tag among the ancestors | fails the check | `Nothing is released yet: there is no version to upgrade from.`, and the check passes |
+| `release` | the last release: the highest `vX.Y.Z` tag among the ancestors | fails the check | the run fails: a checkout with no release tag is told to fetch the tags |
 | `next` | the newest pre-release on npm that is an earlier build of the commit | is a warning, `Advisory: this upgrade starts from a pre-release, so its failure blocks nothing.`, and the check passes | one line that says which pre-release is the newest and why it is none, and the check passes |
 
 A job that finds no build to start from touches no install.
@@ -138,7 +138,7 @@ A pre-release says its commit in its version, `0.1.0-main.<count>.<date>.g<commi
 
 ```text
 Older build: 0.1.0-main.812.20261119.g1a2b3c4 (1a2b3c4), 3 commits behind this one
-The older build says the version 0.0.0
+The older build says the version 0.1.0
 ```
 
 An install made by a pre-release whose first schema step, stored shapes, or parts differ from the commit's is not one the commit takes over, so such an upgrade fails as advice until a pre-release with them is an earlier build.
@@ -160,15 +160,15 @@ A pre-release on npm is the command alone: no built Worker and no line of the we
 | `Cleanup`    | the two settings were put back, and the sites and the token's row removed                                    |
 
 ```text
-Older install: made by the older build's own poplin install, which says the version 0.0.0
+Older install: made by the older build's own poplin install, which says the version 0.1.0
 Older install: filled with 3 sites, a second version, a setting, and a user
-Update: the older build took 0.0.1 over 0.0.0, by its own start of an update
+Update: the older build took 0.1.1 over 0.1.0, by its own start of an update
 Bucket writes and lists the upgrade asked for: 23 of at most 40
 Rows written this run: 212 of at most 300, 22 of them for the later step
-Version: runs 0.0.1, and ran 0.0.0
+Version: runs 0.1.1, and ran 0.1.0
 Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte
-Database: the 2 schema steps of this commit's build are marked as it applies them, step 0.0.0/upgrade-proof among them
-Later step: the table, the column, and the index of step 0.0.0/upgrade-proof are there, and the 3 sites hold what it filled from them
+Database: the 2 schema steps of this commit's build are marked as it applies them, step 0.1.0/upgrade-proof among them
+Later step: the table, the column, and the index of step 0.1.0/upgrade-proof are there, and the 3 sites hold what it filled from them
 Going back: not offered: the update changed the database, which the version before cannot read
 Cleanup: the two settings put back, the sites and the token's row removed
 ```

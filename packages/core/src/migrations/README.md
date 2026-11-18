@@ -26,11 +26,10 @@ The lint settings refuse an import of a `migrations` folder in the source they r
 
 | The last release | Write into | Frozen |
 | --- | --- | --- |
-| none | `0.0.0.ts` | nothing |
 | `v0.1.0` | `0.1.0.ts` | `0.0.0.ts` |
 | `v0.2.0` | `0.2.0.ts` | `0.0.0.ts`, `0.1.0.ts` |
 
-- **The name is the version the steps migrate away from.** That is the last release: the highest `vX.Y.Z` tag among the ancestors of the checkout, or `0.0.0` before the first release.
+- **The name is the version the steps migrate away from.** That is the last release: the highest `vX.Y.Z` tag among the ancestors of the checkout. A checkout without its tags is told to fetch them.
 - **Never guess the next number.** The version being cut is in no file name. `draft-step` picks the file by itself.
 - **A released file is frozen.** `tests/migrations/frozen-steps.test.ts` fails when a file of an earlier version differs from the last release's copy by one byte. A change to a frozen step is a new step in the current file.
 
@@ -95,25 +94,20 @@ bun run --cwd packages/core draft-step "add a pinned flag to sites"
 ```
 
 ```text
-drafted the step add-a-pinned-flag-to-sites in 0.0.0.ts: 1 statement(s). Read it before it is kept
+drafted the step add-a-pinned-flag-to-sites in 0.1.0.ts: 1 statement(s). Read it before it is kept
 ```
 
-The end of `0.0.0.ts` before:
+The last release is `v0.1.0`, so the step goes into `0.1.0.ts`, after the steps that file holds:
 
 ```ts
-        AUDIT_ROWS_NEVER_CHANGE,
-      ],
-    },
-  ],
-};
-```
+// The steps that take a database on from 0.1.0.
 
-And after:
+import type { VersionSteps } from "./migrate";
 
-```ts
-        AUDIT_ROWS_NEVER_CHANGE,
-      ],
-    },
+/** The steps that leave 0.1.0. */
+export const V0_1_0: VersionSteps = {
+  version: "0.1.0",
+  steps: [
     {
       name: "add-a-pinned-flag-to-sites",
       description: "add a pinned flag to sites",
@@ -126,7 +120,7 @@ And after:
 };
 ```
 
-A version with no file gets one, and `registry.ts` lists it:
+A version with no file gets one, as here, and `registry.ts` lists it:
 
 ```ts
 import { V0_0_0 } from "./0.0.0";
