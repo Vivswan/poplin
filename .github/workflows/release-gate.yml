@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   # An install made and filled by the last release must open, read, serve, and take every command under the code about
-  # to be released, and no schema step that release shipped may have changed (tests/upgrade/README.md). On the release
+  # to be released, and no schema step that release shipped may have changed (tests/migrations/README.md). On the release
   # PR the last release is the one before the version being cut. The checks workflow runs the same tests on every push.
   upgrade:
     name: upgrade from the last release
@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - name: Upgrade an install of the last release, and hold its schema steps as shipped
-        run: bun test ./tests/upgrade/ ./tests/frozen-steps.test.ts
+        run: bun test ./tests/migrations/
 
   # Every fuzz target side by side, three minutes each, under a new random seed that the job `plan` prints (fuzz.yml).
   # The checks of every pull request and the nightly fuzz run the same file, each under a new seed of its own.

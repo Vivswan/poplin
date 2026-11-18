@@ -48,7 +48,7 @@ const TEST_ENDING = /\.test\.tsx?$/;
 
 const FOLDER_SIZE = 8;
 
-const SIZED = /^(?:tests|packages\/(?:providers\/[^/]+|[^/]+)\/(?:src|tests|scripts))(?:\/|$)/;
+const SIZED = /^(?:tests|packages\/(?:providers\/[^/]+|[^/]+)\/(?:src|tests|scripts|migrations))(?:\/|$)/;
 
 const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: string])[] = [
   ["packages/app/src/console", 16, "the console: its entry, what every screen shares, and one folder for each screen"],
@@ -80,9 +80,9 @@ const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: stri
   ["packages/providers/cloudflare/tests/shared", 9, "the tests of src/shared/, file for file"],
   ["packages/providers/cloudflare/tests/shared/worker", 10, "the tests of src/shared/worker/, file for file"],
   ["packages/providers/cloudflare/tests/shared/worker/support", 16, "the helpers of the Worker's tests, the rows of the request budget among them"],
-  ["tests", 10, "the guards of the tree, one file for each, and the suites no package owns"],
+  ["tests", 9, "the guards of the tree, one file for each, and the suites no package owns"],
   ["tests/fuzz", 20, "one file for each target"],
-  ["tests/upgrade/support", 9, "the helpers of the upgrade test"],
+  ["tests/migrations/support", 9, "the helpers of the upgrade test"],
 ];
 
 const MIRRORED: readonly string[] = ["/src/", "/"];
@@ -176,7 +176,7 @@ function partCrossings(root: string, choosers: readonly string[]): string[] {
   return found.sort();
 }
 
-/** What the size rule refuses, one line each: a folder of a package's `src`, `tests`, or `scripts`, or of the root's `tests`, over the size or over the ceiling of its row, and a row whose folder is at the size or under it. */
+/** What the size rule refuses, one line each: a folder of a package's `src`, `tests`, `scripts`, or `migrations`, or of the root's `tests`, over the size or over the ceiling of its row, and a row whose folder is at the size or under it. */
 function oversized(root: string, ceilings: ReadonlyMap<string, number>): string[] {
   const held = new Map<string, Set<string>>();
 

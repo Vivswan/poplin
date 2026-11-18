@@ -6,15 +6,15 @@ import { cpSync, mkdtempDisposableSync, readdirSync, readFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { Step } from "../../../../../core/src/migrations/migrate";
-import { STEPS } from "../../../../../core/src/migrations/registry";
-import { addLaterStep, isLaterStep, laterStep } from "../../../scripts/upgrade/later-step";
+import type { Step } from "../../../../core/src/migrations/migrate";
+import { STEPS } from "../../../../core/src/migrations/registry";
+import { addLaterStep, isLaterStep, laterStep } from "../../migrations/later-step";
 
 /** The folder of the product's steps, from the root of a tree. */
 const STEPS_FOLDER = join("packages", "core", "src", "migrations");
 
 /** This repository's own steps. */
-const OWN_STEPS = join(import.meta.dir, "..", "..", "..", "..", "..", "..", STEPS_FOLDER);
+const OWN_STEPS = join(import.meta.dir, "..", "..", "..", "..", "..", STEPS_FOLDER);
 
 /** The file of a step, as the guard of the frozen steps and core's own registry test name it. */
 const STEP_FILE = /^(\d{4})-[a-z0-9-]+\.ts$/;

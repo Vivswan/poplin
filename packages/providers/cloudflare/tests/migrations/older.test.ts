@@ -4,14 +4,14 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { liveAddresses } from "../../../live/addresses";
-import { openBench } from "../../../live/bench";
-import { seedToken } from "../../../scripts/live/tokens";
-import { openOlder } from "../../../scripts/upgrade/older";
-import { versionOf } from "../../../scripts/upgrade/older-build";
+import { liveAddresses } from "../../live/addresses";
+import { openBench } from "../../live/bench";
+import { seedToken } from "../../scripts/live/tokens";
+import { openOlder } from "../../migrations/older";
+import { versionOf } from "../../migrations/older-build";
 
 /** The repository's folder, which stands in for the older build's. */
-const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..", "..");
+const ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
 
 describe("the older build's own code", () => {
   test("every part is found in a tree laid out as this checkout is, and is that tree's own", async () => {

@@ -66,7 +66,7 @@ jobs:
       - uses: ./.github/actions/setup
       # The same asking as the job's `if:`, read from the file of the event: it stops the job before any step is handed a secret.
       - name: Refuse a run that may not reach a test account
-        run: bun packages/providers/cloudflare/scripts/upgrade/admit.ts
+        run: bun packages/providers/cloudflare/scripts/admit.ts
       # No secret reaches this step: it installs the packages of a tree of the history and builds it.
       - name: Put the older build in a folder, build it, and give this checkout a version above it and the later step
         timeout-minutes: 10

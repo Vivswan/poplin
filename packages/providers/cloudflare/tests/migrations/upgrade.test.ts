@@ -6,21 +6,21 @@ import { describe, expect, test } from "bun:test";
 import { startUpdate } from "@poplin/core/src/actions/start-update";
 import { SqlDatabase } from "@poplin/core/src/database/sql-database";
 
-import type { Fetch } from "../../../../../cli/src/client/client";
-import { LEDGER_TABLE, migrate, type Step } from "../../../../../core/src/migrations/migrate";
-import { STEPS } from "../../../../../core/src/migrations/registry";
-import { liveAddresses } from "../../../live/addresses";
-import { openBench } from "../../../live/bench";
-import { convergeInstall } from "../../../scripts/live/converge";
-import { findDatabase, seedToken } from "../../../scripts/live/tokens";
-import type { Found } from "../../../scripts/live/util";
-import { LATER_NAMES, laterStep } from "../../../scripts/upgrade/later-step";
-import { type Older, takeWith } from "../../../scripts/upgrade/older";
-import { awaitVersion, upgradeInstall } from "../../../scripts/upgrade/upgrade";
-import { apiDriver } from "../../../src/shared/database/api-driver";
-import { createSelfUpdate } from "../../../src/shared/release/update/self-update";
-import { COMMIT, freshAccount, type harnessOf as HarnessOf, harnessOf } from "../../live/support/harness-world";
-import { catchStep } from "../../live/support/step";
+import type { Fetch } from "../../../../cli/src/client/client";
+import { LEDGER_TABLE, migrate, type Step } from "../../../../core/src/migrations/migrate";
+import { STEPS } from "../../../../core/src/migrations/registry";
+import { liveAddresses } from "../../live/addresses";
+import { openBench } from "../../live/bench";
+import { convergeInstall } from "../../scripts/live/converge";
+import { findDatabase, seedToken } from "../../scripts/live/tokens";
+import type { Found } from "../../scripts/live/util";
+import { LATER_NAMES, laterStep } from "../../migrations/later-step";
+import { type Older, takeWith } from "../../migrations/older";
+import { awaitVersion, upgradeInstall } from "../../migrations/upgrade";
+import { apiDriver } from "../../src/shared/database/api-driver";
+import { createSelfUpdate } from "../../src/shared/release/update/self-update";
+import { COMMIT, freshAccount, type harnessOf as HarnessOf, harnessOf } from "../live/support/harness-world";
+import { catchStep } from "../live/support/step";
 
 /** The version the older build says: below the one a test publishes as this commit's. */
 const OLDER = "0.3.0";

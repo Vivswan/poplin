@@ -9,8 +9,8 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { stepFile, stepFileName } from "../../../../core/scripts/step-file";
-import type { Step } from "../../../../core/src/migrations/migrate";
+import { stepFile, stepFileName } from "../../../core/scripts/step-file";
+import type { Step } from "../../../core/src/migrations/migrate";
 
 /** The folder of the product's steps, from the root of a tree. */
 const STEPS_FOLDER = join("packages", "core", "src", "migrations");
