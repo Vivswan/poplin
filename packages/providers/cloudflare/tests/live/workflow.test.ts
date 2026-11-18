@@ -38,17 +38,17 @@ const STEPS = parse("live-install.yml");
 /** The file both workflows and the release's own workflow call: the upgrade of one install, parsed. */
 const UPGRADE = parse("live-upgrade.yml");
 
-/** The workflow that upgrades both installs on the pull request of a release, then checks each and puts it back, parsed. */
-const RELEASE = parse("release-live-upgrade.yml");
+/** The release gate, which upgrades both installs on the pull request of a release, then checks each and puts it back, parsed. */
+const RELEASE = parse("release-gate.yml");
 
 /** The job of that workflow that upgrades the install of each kind. */
-const RELEASE_JOBS = { domain: "domain", "account address": "account-address" } as const;
+const RELEASE_JOBS = { domain: "live-upgrade-domain", "account address": "live-upgrade-account-address" } as const;
 
 /** The job of that workflow that upgrades the install of each kind from a pre-release, as advice. */
-const ADVICE_JOBS = { domain: "domain-next", "account address": "account-address-next" } as const;
+const ADVICE_JOBS = { domain: "live-upgrade-domain-next", "account address": "live-upgrade-account-address-next" } as const;
 
 /** The job of that workflow that runs the live checks on the install of each kind after its upgrades, and puts it back. */
-const CHECKS_JOBS = { domain: "checks-domain", "account address": "checks-account-address" } as const;
+const CHECKS_JOBS = { domain: "live-checks-domain", "account address": "live-checks-account-address" } as const;
 
 /** The action that files and closes the issue of a red night. */
 const ISSUE = "Vivswan/repo-platform/actions/fuzz-issue@stable";
@@ -59,7 +59,7 @@ const ENVIRONMENTS: readonly string[] = Object.values(KINDS).map((kind) => kind.
 /** The names of the secrets of a test account. */
 const SECRETS: readonly string[] = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "POPLIN_LIVE_LOGIN"];
 
-/** The files under `.github` that may name an environment or a secret of a test account: the settings, the two workflows, the files they call, and the release's live upgrade. */
+/** The files under `.github` that may name an environment or a secret of a test account: the settings, the two workflows, the files they call, and the release gate. */
 const REACHING: readonly string[] = [
   ".github/settings.local.yml",
   ".github/settings.yml",
@@ -67,7 +67,7 @@ const REACHING: readonly string[] = [
   ".github/workflows/live-checks.yml",
   ".github/workflows/live-install.yml",
   ".github/workflows/live-upgrade.yml",
-  ".github/workflows/release-live-upgrade.yml",
+  ".github/workflows/release-gate.yml",
 ];
 
 /** The runs a job that names a test account's environment takes, as its `if:` asks: main, or the pull request of a release as the step of `scripts/admit.ts` asks again. */
@@ -115,7 +115,7 @@ interface Job {
   readonly steps?: readonly Step[];
   readonly uses?: string;
   readonly with?: Readonly<Record<string, unknown>>;
-  readonly secrets?: Readonly<Record<string, string>>;
+  readonly secrets?: Readonly<Record<string, string>> | "inherit";
 }
 
 /** A workflow, as far as a test reads it. */
@@ -252,7 +252,7 @@ describe("the runs that reach a test account", () => {
   });
 
   // A job written into another workflow that names an environment, or is handed a secret's name, would read a test account with no guard at all.
-  test("no file under .github names an environment or a secret of a test account but the settings, the live workflows, and the release's live upgrade, and no job names an environment but the three above", () => {
+  test("no file under .github names an environment or a secret of a test account but the settings, the live workflows, and the release gate, and no job names an environment but the three above", () => {
     const files = repositoryFiles(ROOT).filter((path) => path.startsWith(".github/") && /\.ya?ml$/.test(path));
     const naming = files.filter((path) => [...ENVIRONMENTS, ...SECRETS].some((name) => readFileSync(join(ROOT, path), "utf8").includes(name)));
     const jobs = files
@@ -318,35 +318,23 @@ describe("the fuzz run of the workflows", () => {
 });
 
 describe("the release gate", () => {
-  // Drift: the nightly calls the same file. A fuzz run without its `if:` would run every night, beside the nightly fuzz.
-  test("it upgrades an install of the last release on every call, and on the pull request of a release alone it fuzzes", () => {
-    const asked = Object.fromEntries(Object.entries(parse("release-gate.yml").jobs).map(([name, job]) => [name, job.if ?? "every call"]));
+  // Drift: a dispatch of ci.yml calls the same file on main, with the secrets, and a run of main is one the guard of the called jobs admits.
+  // A live job without its `if:` would start both test installs over on every dispatch, and a fuzz run would take its minutes.
+  test("it upgrades an install of the last release on every call, and on a pull request alone it fuzzes and reaches a test install", () => {
+    const asked = Object.entries(RELEASE.jobs).map(([name, job]) => [name, job.if?.includes("github.event_name == 'pull_request'") === true ? "a pull request" : "every call"]);
+    const live = BOTH.flatMap((kind) => [RELEASE_JOBS[kind], ADVICE_JOBS[kind], CHECKS_JOBS[kind]]);
 
-    expect(asked).toEqual({ upgrade: "every call", fuzz: "github.event_name == 'pull_request'" });
+    expect(Object.fromEntries(asked)).toEqual({ upgrade: "every call", fuzz: "a pull request", ...Object.fromEntries(live.map((name) => [name, "a pull request"])) });
   });
 });
 
 describe("the live tests of a release", () => {
   // GitHub hands a called workflow only the secrets its caller passes, and a job two calls deep under a caller that passes none reads empty values: the upgrade of a release stopped there, on the real run alone.
-  test.each(["live-upgrade.yml", "live-install.yml"])("the event starts each workflow that calls %s, so no workflow between them can hold the secrets back", (called) => {
-    const callers = workflows().filter((file) => Object.values(parse(file).jobs).some((job) => job.uses === `./${WORKFLOWS}/${called}`));
+  // The managed ci.yml is the one caller, and no file here writes it: a sync that dropped the line would show on the next release alone.
+  test("every call between a pull request and the live jobs hands the secrets on: ci.yml alone calls the gate and hands it all of them, and the gate hands the three names", () => {
+    const gate = `./${WORKFLOWS}/release-gate.yml`;
+    const callers = workflows().flatMap((file) => Object.values(parse(file).jobs).flatMap((job) => (job.uses === gate ? [[file, job.secrets ?? "none"]] : [])));
 
-    expect(Object.fromEntries(callers.map((file) => [file, Object.keys(parse(file).on).includes("workflow_call")]))).toEqual({
-      "live-checks-account-address.yml": false,
-      "live-checks.yml": false,
-      "release-live-upgrade.yml": false,
-    });
-  });
-
-  // Drift: the workflow starts for every pull request. A job without the branch of a release would wait in the lane of the live checks for each of them, to be refused there.
-  // The checks ask for nothing of the upgrades before them: where an upgrade failed, or found no build to start from, the release is checked all the same.
-  test("each job takes the branch of a release alone, the one the guard of the called job admits, and the checks ask no more than that", () => {
-    const asked = BOTH.map((kind) => [RELEASE.jobs[RELEASE_JOBS[kind]]?.if, RELEASE.jobs[ADVICE_JOBS[kind]]?.if, RELEASE.jobs[CHECKS_JOBS[kind]]?.if]);
-    const after = `\${{ !cancelled() && github.head_ref == '${RELEASE_BRANCH}' }}`;
-
-    expect({ asked, jobs: Object.keys(RELEASE.jobs).length }).toEqual({
-      asked: BOTH.map(() => [`github.head_ref == '${RELEASE_BRANCH}'`, after, after]),
-      jobs: 3 * BOTH.length,
-    });
+    expect(Object.fromEntries(callers)).toEqual({ "ci.yml": "inherit" });
   });
 });
