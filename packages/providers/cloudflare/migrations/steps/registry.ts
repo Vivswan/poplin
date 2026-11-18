@@ -40,7 +40,7 @@ interface TokenStep extends StepOfAny {
   /** Who can do the step: a repair alone. */
   readonly by: Extract<StepBy, "account token">;
 
-  /** What the person must do and why, in one sentence that names Repair: the release notes carry it. */
+  /** What the person must do and why, in one sentence that names Repair. */
   readonly notice: string;
 }
 

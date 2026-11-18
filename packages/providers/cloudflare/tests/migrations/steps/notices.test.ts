@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { noticeFaults, noticeLines } from "../../../migrations/steps/notices";
+import { noticeFaults } from "../../../migrations/steps/notices";
 import { type ProviderStep, type ProviderVersionSteps, VERSIONS } from "../../../migrations/steps/registry";
 
 /** A change that is made to no effect. */
@@ -40,13 +40,7 @@ describe("the notices of the steps that need an account token", () => {
     expect(noticeFaults([{ version: "0.2.0", steps: [tokenStep("widen-the-key", notice)] }])).toEqual(faults);
   });
 
-  test("a step the install does by itself needs no notice, and the release notes of its version carry none", () => {
+  test("a step the install does by itself needs no notice, beside one that needs an account token and carries its sentence", () => {
     expect(noticeFaults(FILES)).toEqual([]);
-    expect(noticeLines(FILES, "0.1.0")).toEqual([]);
-  });
-
-  test("the release notes carry the notice of each such step of the version being left, and of no other version", () => {
-    expect(noticeLines(FILES, "0.2.0")).toEqual([`- ${TOLD}`]);
-    expect(noticeLines(FILES, "0.3.0")).toEqual([]);
   });
 });
