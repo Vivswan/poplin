@@ -144,7 +144,7 @@ job checks                         by hand alone: its checkout holds no later st
 | once a release is among the ancestors of main | the highest `vX.Y.Z` tag                                                                 |
 | before the first release                     | the commit `STAND_IN` of `older-build.ts`, which npm holds as a pre-release of the command |
 
-The stand-in moves forward whenever the first schema step or a stored shape is edited in place: main takes over an install of the same step and settings row alone.
+The stand-in moves forward whenever the first schema step or a stored shape is edited in place, or an install gains a part a repair would add: main takes over an install of the same step and settings row alone, and `Doctor` holds for an install with the same parts alone.
 
 A pre-release on npm is the command alone: no built Worker and no line of the website's `releases.json` exists for one. So the Worker of the older build is built from its commit, and its own harness installs it.
 
