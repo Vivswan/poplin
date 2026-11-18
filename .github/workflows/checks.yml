@@ -172,10 +172,19 @@ jobs:
   # in a real browser, one job per engine. Each job builds the demo itself: the build takes about a second. The test
   # that stops the demo's worker runs in Chromium alone, as the walk's own config sets. The WebKit here is Playwright's
   # build of the engine for Linux, not Safari itself.
+  #
+  # The job runs inside Playwright's own image, which holds the three browsers and the system libraries they need, so
+  # no step asks apt for a package. The image's tag is the Playwright version the lockfile installs: in the image
+  # of a version with other browser builds, a test fails at its start and names the image to take.
   demo:
     name: demo / ${{ matrix.engine }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
+    env:
+      # Firefox starts as root only under root's own home folder, and a job in a container has another.
+      HOME: /root
     strategy:
       fail-fast: false
       matrix:
@@ -184,22 +193,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup
-      - name: Read the Playwright version the lockfile installed
-        id: playwright
-        working-directory: packages/demo
-        run: echo "version=$(bunx playwright --version | cut -d ' ' -f 2)" >> "$GITHUB_OUTPUT"
-      - name: Keep the engine's browser between runs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ matrix.engine }}-${{ steps.playwright.outputs.version }}
-      # With the browser already kept, this installs the system libraries it needs and downloads no browser.
-      - name: Install the browser
-        working-directory: packages/demo
-        env:
-          ENGINE: ${{ matrix.engine }}
-        run: bunx playwright install --with-deps "$ENGINE"
+      # The setup action unpacks bun with unzip, which the image leaves out, and apt would have to fetch it: the
+      # image's own npm installs the same bun.
+      - name: Install the bun that .bun-version pins
+        run: npm install --global "bun@$(cat .bun-version)"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
       - name: Walk the demo
         env:
           ENGINE: ${{ matrix.engine }}
