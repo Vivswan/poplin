@@ -4,10 +4,11 @@
 //   main's costs          a pull request alone: the `free-plan-budget` artifact of the newest CI run of a push to main that ended green
 //   the job's summary     one line on what changed, the standing, the actions that moved, one row a ceiling, then every table folded away
 //   the annotation        a pull request alone: the first line, as a notice, a warning when a cost rose, an error when the budget is broken
+//   the comment           a pull request alone: the summary again, in FREE_PLAN_BUDGET_COMMENT_FILE, for the workflow to post
 //
 // The mark is an HTML entity, so this file holds plain ASCII and GitHub draws it.
 
-import { existsSync, mkdtempDisposableSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { error, notice, summary, warning } from "@actions/core";
@@ -105,7 +106,7 @@ interface Report {
   /** How loud the annotation of a pull request is; left out for a run that is no pull request. */
   readonly level?: Level;
 
-  /** The job's summary, as HTML. */
+  /** The job's summary, as HTML; a pull request's comment is the same text. */
   readonly html: string;
 }
 
@@ -396,8 +397,11 @@ function required(name: string): string {
 
 if (import.meta.main) {
   const now = readCosts(required("FREE_PLAN_BUDGET_FILE"));
-  const { line, level } = budgetReport(required("GITHUB_EVENT_NAME") === "pull_request" ? { now, main: await costsOnMain() } : { now });
+  const onPullRequest = required("GITHUB_EVENT_NAME") === "pull_request";
+  const { line, level, html } = budgetReport(onPullRequest ? { now, main: await costsOnMain() } : { now });
   // The buffer holds the report: the job's summary takes it.
   await summary.write();
+  if (onPullRequest) writeFileSync(required("FREE_PLAN_BUDGET_COMMENT_FILE"), html);
+
   if (level !== undefined) ({ notice, warning, error })[level](line, { title: TITLE });
 }

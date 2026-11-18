@@ -3,7 +3,8 @@
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync, so edit freely.
 #
 # The caller passes the repository's secrets through (a job reading an environment secret declares its environment) and
-# caps at contents: read. A check needing more permissions gets its own workflow, wired via .github/settings.yml.
+# caps at contents: read and pull-requests: write. Every job gets contents: read from the block below; the one job that
+# comments on the pull request states the write for itself.
 #
 # A job skipped by its own `if:` stands down from the all-green gate. A job with `continue-on-error: true` is an
 # advisory check, whose failures stay out of the gate too.
@@ -66,9 +67,13 @@ jobs:
   # free plan (packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts). A row over its budget fails the job.
   #
   #   every run        the job's summary: the standing, one row a ceiling, then every table; and the `free-plan-budget` artifact: every row as JSON
-  #   a pull request   the summary and an annotation lead with what the change did to the costs, against the newest green run on main
+  #   a pull request   the summary and an annotation lead with what the change did to the costs, against the newest green run on main;
+  #                    one comment holds the same report as the summary, and each push writes it again in place
   budget:
     name: free-plan budget
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -89,11 +94,29 @@ jobs:
           if-no-files-found: error
       # The summary shows the row that went over, so it is written after a failed measuring step too.
       - name: Write the summary, against the newest green run on main for a pull request
+        id: report
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           FREE_PLAN_BUDGET_FILE: ${{ runner.temp }}/free-plan-budget.json
+          FREE_PLAN_BUDGET_COMMENT_FILE: ${{ runner.temp }}/free-plan-budget-comment.html
         run: bun run --cwd packages/providers/cloudflare budget:report
+      # The token of a pull request from a fork cannot write a comment: such a run says so and posts none.
+      - name: Post the report as the one comment of the pull request
+        if: >-
+          !cancelled() && steps.report.outcome == 'success' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: poplin/checks
+          path: ${{ runner.temp }}/free-plan-budget-comment.html
+      - name: Say that this pull request gets no comment
+        if: >-
+          !cancelled() && steps.report.outcome == 'success' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        run: echo "No comment is posted - the token of a pull request from a fork cannot write one. The report is in the summary of this job."
 
   # Every fuzz target side by side, three minutes each (fuzz.yml). The seed is the one input of that file: blank here,
   # as in the nightly and the release gate, so each run draws a new one and its job `plan` prints it.
