@@ -1,23 +1,15 @@
-// Shows what every row of the budget table cost, once the run ends: as tables on the terminal, as the job's summary on GitHub, and as a JSON file where the run names one.
+// Shows what every row of the budget table cost, once the run ends: as tables on the terminal, and as a JSON file where the run names one.
 //
 //   always                               the actions a person does, then a table a group, printed
-//   GITHUB_STEP_SUMMARY is set           the same tables, added to the job's summary
-//   ACTION_COSTS_FILE names a file       every row as JSON, and the rows whose test failed before measuring, for a later run to compare against
+//   FREE_PLAN_BUDGET_FILE names a file   every row as JSON, the rows whose test failed before measuring, and the actions: what scripts/free-plan-budget.ts writes a job's summary from
 
 import { writeFileSync } from "node:fs";
-import { summary } from "@actions/core";
 import type { Reporter, TestCase } from "vitest/node";
 import { actionCosts } from "./budget-guide";
 import type { CostLine, Group } from "./budget-stage";
 
 /** The groups in the order a person reads them. */
 const GROUPS: readonly Group[] = ["One page view of a site", "Each dashboard screen", "Publishing", "CLI / agent actions", "Background work"];
-
-/** The heading of the summary. */
-const TITLE = "What each action costs";
-
-/** What the summary says under its heading. */
-const LEAD = "Measured on the local Workers runtime with the real database driver. Cloudflare's free plan answers one request 50 database queries; a request here may spend 40.";
 
 /** The heading of the first table: the actions the guide names, each with what its requests cost together. */
 const ACTIONS = "What a person does";
@@ -81,7 +73,7 @@ export class BudgetReport implements Reporter {
     else if (row !== undefined) this.#unmeasured.push(row);
   }
 
-  async onTestRunEnd(): Promise<void> {
+  onTestRunEnd(): void {
     if (this.#lines.length + this.#unmeasured.length === 0) return;
 
     const tables = tablesOf(this.#lines);
@@ -90,17 +82,8 @@ export class BudgetReport implements Reporter {
       console.table(rows);
     }
 
-    const file = process.env.ACTION_COSTS_FILE ?? "";
-    if (file !== "") writeFileSync(file, `${JSON.stringify({ rows: this.#lines, unmeasured: this.#unmeasured }, null, 2)}\n`);
-
-    if ((process.env.GITHUB_STEP_SUMMARY ?? "") === "") return;
-
-    summary.addHeading(TITLE, 2).addRaw(LEAD, true);
-    for (const { heading, rows } of tables) {
-      const head = Object.keys(rows[0] ?? {}).map((data) => ({ data, header: true }));
-      summary.addHeading(heading, 3).addTable([head, ...rows.map((row) => Object.values(row).map(String))]);
-    }
-
-    await summary.write();
+    const file = process.env.FREE_PLAN_BUDGET_FILE ?? "";
+    const actions = tables.find(({ heading }) => heading === ACTIONS)?.rows ?? [];
+    if (file !== "") writeFileSync(file, `${JSON.stringify({ rows: this.#lines, unmeasured: this.#unmeasured, actions }, null, 2)}\n`);
   }
 }
