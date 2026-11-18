@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/Vivswan/poplin/compare/v0.1.0...v0.1.1) (2026-11-18)
+
+
+### Features
+
+* **cloudflare:** offer the Cloudflare login beside the email code and the passkey ([#440](https://github.com/Vivswan/poplin/issues/440)) ([c34ff10](https://github.com/Vivswan/poplin/commit/c34ff109940ff60e5dfe3cfe838ee1bb4589b7e6))
+
 ## 0.1.0 (2026-11-18)
 
 
