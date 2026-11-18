@@ -28,6 +28,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Worker route | ${state("routes", usual)} | *-page.example.com/*`,
     `Worker route | ${state("routes", usual)} | *-poplin.example.com/*`,
     `Worker route | ${state("routes", usual)} | poplin.example.com/*`,
+    `Login method | ${states.cloudflare ?? "present"} | Cloudflare`,
     `Login method | ${state("methods", usual)} | One-time PIN`,
     `Login method | ${state("methods", usual)} | Passkeys`,
     `Access application | ${state("access", usual)} | poplin: poplin.example.com, *-p-poplin.example.com`,
@@ -576,7 +577,7 @@ test("Access refused as not switched on after the policy was already made is a s
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
 
-    expect(rows.slice(8, 17)).toEqual([
+    expect(rows.slice(9, 18)).toEqual([
       "Access application | not-run | poplin: poplin.example.com, *-p-poplin.example.com",
       "Access policy | not-run | poplin logins",
       "Access policy | created | poplin open paths policy",
@@ -1274,7 +1275,7 @@ describe("a check the install makes with the key it holds", () => {
       const reading = await own();
 
       expect(shown(reading)).toEqual([
-        ...table({ all: "missing" }).slice(0, 13),
+        ...table({ all: "missing" }).slice(0, 14),
         "Key | present | poplin kept key",
         "Upload key | present | poplin upload key",
         "Worker logs | present | enabled",
@@ -1302,7 +1303,31 @@ describe("a check the install makes with the key it holds", () => {
       const sent = asked.length;
       const rows = shown(await own()).filter((row) => /^(Login method|Access application \| \w+ \| poplin:)/.test(row));
 
-      expect([rows, writes(asked.slice(sent))]).toEqual([["Login method | present | One-time PIN", "Login method | missing | Passkeys", "Access application | differs | poplin: poplin.example.com, *-p-poplin.example.com"], []]);
+      const read = ["Login method | present | Cloudflare", "Login method | present | One-time PIN", "Login method | missing | Passkeys", "Access application | differs | poplin: poplin.example.com, *-p-poplin.example.com"];
+
+      expect([rows, writes(asked.slice(sent))]).toEqual([read, []]);
+    });
+  });
+
+  // Drift: every account comes with the method of its own members, and an owner may remove it. Read as missing, a repair would be asked for that makes none; read as present, the application would go on naming an id of nothing.
+  test("a check by the key of an account whose own login method was removed reads that method as optional and the application as one a repair changes; a repair changes the application alone, to offer the two that stand", async () => {
+    const account = emptyAccount();
+
+    await withKey(account, async (plug, own, asked) => {
+      await plug.repair(TOKEN, SETTINGS);
+      account.methods.shift();
+      const sent = asked.length;
+      const login = (rows: readonly string[]): string[] => rows.filter((row) => /^(Login method|Access application \| \w+ \| poplin:)/.test(row));
+      const out = "Login method | optional | Cloudflare: the account has none; users log in with an email code";
+      const read = login(shown(await own()));
+      const reads = writes(asked.slice(sent));
+      const repaired = login(shown(await plug.repair(TOKEN, SETTINGS)));
+
+      expect([read, reads]).toEqual([[out, "Login method | present | One-time PIN", "Login method | present | Passkeys", "Access application | differs | poplin: poplin.example.com, *-p-poplin.example.com"], []]);
+      expect([repaired, account.applications.find((application) => application.name === "poplin")?.allowed_idps]).toEqual([
+        [out, "Login method | present | One-time PIN", "Login method | present | Passkeys", "Access application | changed | poplin: poplin.example.com, *-p-poplin.example.com"],
+        ["made-1", "made-2"],
+      ]);
     });
   });
 

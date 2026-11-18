@@ -65,6 +65,8 @@ Updated the install from 0.3.0 to 0.3.1
 | the Worker's log settings                              | the upload states them again: the release's, or else the Worker's own |
 | the schedule of the sweep                              | written only when the release's differs                          |
 
+**The login after an update.** Within half an hour the install checks its login with the kept key, as it does once a day. Where the new version expects another login than the one before, it writes it, and Activity says what it wrote.
+
 | The install finds                                         | It answers            | Changed |
 | --------------------------------------------------------- | --------------------- | ------- |
 | no release above the running version, or `--to` the version it runs | `no_update` | nothing |

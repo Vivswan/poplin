@@ -163,6 +163,7 @@ created    D1 database           poplin
 created    Worker                poplin, runs 0.1.0
 created    DNS record            poplin.example.com
 created    Worker route          poplin.example.com/*
+unchanged  Login method          Cloudflare
 created    Login method          One-time PIN
 created    Login method          Passkeys
 created    Access application    poplin: poplin.example.com, *-p-poplin.example.com
@@ -193,15 +194,21 @@ Log this machine in now?
 | Worker             | the program Cloudflare runs for you: it serves every site       |
 | DNS record         | what makes an address under your domain exist                   |
 | Worker route       | what sends that address to the Worker                           |
-| Login method       | how a user logs in: by a code Cloudflare mails, and by a passkey |
+| Login method       | how a user logs in: with the Cloudflare account, by a code Cloudflare mails, and by a passkey |
 | Access application | Cloudflare's login in front of the dashboard and private sites  |
 | Key                | a key the install keeps, so that it can update and repair itself |
 
 Under a domain, the command adds records, routes, and rules of its own. A website or a mailbox on the domain stays as it is.
 
-**The two login methods** are your Cloudflare account's, not the install's. An account that has one already keeps it, and its row says `unchanged`. The login page of the install offers these two and no other. The first time, a user proves the email by the code and can save a passkey. After that the passkey alone logs in.
+**The three login methods** are your Cloudflare account's, not the install's. An account that has one already keeps it, and its row says `unchanged`. The login page of the install offers these three and no other.
 
-**Where Cloudflare makes an account no passkeys**, that row says `skipped`, and users log in with the code. Nothing is wrong.
+| Row | A user logs in |
+| --- | --- |
+| `Cloudflare` | with the Cloudflare account, as a member of yours. Every account comes with this method, and the command makes none |
+| `One-time PIN` | by a code Cloudflare mails to the email |
+| `Passkeys` | by a passkey, saved after the email was proved once by the code |
+
+**Where Cloudflare makes an account no passkeys**, or the account's `Cloudflare` method was removed, that row says `skipped`, and users log in with the code. Nothing is wrong.
 
 **Where an install already is**, the command changes nothing. It reads whether the install needs a repair, says what to run next, and names the command for each thing you may want:
 

@@ -2,7 +2,7 @@
 
 import { expect } from "bun:test";
 
-import { type Bench, type Check, Skip } from "../records";
+import { type Bench, type Check, type Missing, Skip } from "../records";
 import { expectRefused, GHOST_ID, shownInTime } from "../util";
 
 /** The most requests the burst sends before the paced ones: past the rate rule's 300 in ten seconds. */
@@ -50,8 +50,12 @@ const UNVERIFIED = "a run is no verified bot, so the bot switches answered, and 
 /** What every team's login hostname ends in, and the path its login page of a hostname starts with: the edge's own redirect, which no install writes. */
 const TEAM_LOGIN = { host: ".cloudflareaccess.com", path: "/cdn-cgi/access/login/" };
 
-/** What the team's login page holds where it offers the code Cloudflare mails: the form of the code, with the box an email is typed into. */
-const EMAIL_CODE = /<form[^>]+id="totp-form"[\s\S]*?<input[^>]+type="email"/;
+/** What the team's login page holds where it offers each login method, and what the run lacks where the account has none of it: the form of the code Cloudflare mails, with the box an email is typed into, and a button of each other. */
+const LOGIN_METHODS: readonly { readonly name: string; readonly shown: RegExp; readonly lack?: keyof Missing }[] = [
+  { name: "the email code", shown: /<form[^>]+id="totp-form"[\s\S]*?<input[^>]+type="email"/ },
+  { name: "the Cloudflare login", shown: /data-idp="Cloudflare"/, lack: "cloudflare-login" },
+  { name: "passkeys", shown: /data-idp="passkeys"/, lack: "passkeys" },
+];
 
 /** How long Cloudflare's edge may take to show a login method on the team's page after it was made, and how long a run rests between two looks: it follows within about 75 seconds. */
 const LOGIN_PAGE_WITHIN = { ms: 180_000, pause: 15_000 } as const;
@@ -312,19 +316,24 @@ function sentToTeamLogin(bench: Bench, response: Response): boolean {
 }
 
 /**
- * Read the team's login page as a stranger reads it, until it offers the email code or its time is up.
+ * Read the team's login page as a stranger reads it, until it offers every login method the account has or its time is up.
  *
  * @param page - where the edge sent the stranger; whatever it sends on to within the team's hostname is followed
- * @returns whether the page came to offer the email code
+ * @returns the name of each method the page did not come to offer; a method the run says the account has none of is not looked for
  */
-function offersEmailCode(bench: Bench, page: string): Promise<boolean> {
+async function methodsNotOffered(bench: Bench, page: string): Promise<string[]> {
+  const expected = LOGIN_METHODS.filter(({ lack }) => lack === undefined || bench.missing[lack] === undefined);
+  let absent = expected;
   const look = async (): Promise<boolean> => {
     const read = await bench.visit(page, { redirect: "follow" });
+    const text = read.status === 200 ? await read.text() : "";
+    absent = expected.filter(({ shown }) => !shown.test(text));
 
-    return read.status === 200 && EMAIL_CODE.test(await read.text());
+    return absent.length === 0;
   };
+  await shownInTime(bench, look, LOGIN_PAGE_WITHIN);
 
-  return shownInTime(bench, look, LOGIN_PAGE_WITHIN);
+  return absent.map(({ name }) => name);
 }
 
 /** The two headers by which an answer lets another origin read it: the origin it names, and whether the visitor's cookies may come along. */
@@ -366,13 +375,13 @@ export const EDGE_CHECKS: readonly Check[] = [
   },
   {
     id: "login-page",
-    name: "the team's login page a stranger is sent to offers the email code: a user who is no member of the Cloudflare account can log in",
+    name: "the team's login page a stranger is sent to offers the Cloudflare login, the email code, and passkeys: a user who is no member of the Cloudflare account can log in",
     needs: ["access", "login-methods"],
     run: async (bench) => {
       const sent = await bench.visit(`${bench.admin}/`);
       expect(sentToTeamLogin(bench, sent)).toBe(true);
 
-      expect(await offersEmailCode(bench, sent.headers.get("Location") ?? "")).toBe(true);
+      expect(await methodsNotOffered(bench, sent.headers.get("Location") ?? "")).toEqual([]);
     },
   },
   {

@@ -57,7 +57,7 @@ const HTML = new TextEncoder().encode("<p>short-lived</p>");
 
 let w: World;
 
-/** An account with the two login methods a repair with a token makes: the kept key reads them and may make none. */
+/** An account with its own login method and the two a repair with a token makes: the kept key reads them and may make none. */
 function withMethods(): ReturnType<typeof emptyAccount> {
   const account = emptyAccount();
   account.methods.push({ id: "code-1", name: "One-time PIN", type: "onetimepin", config: {} }, { id: "passkeys-1", name: "Passkeys", type: "passkeys", config: {} });
@@ -126,6 +126,43 @@ describe("the scheduled run", () => {
     expect(JSON.stringify([said, await problemsOf(w)])).not.toContain(TOKEN);
   });
 
+  // Drift: a version may expect another login than the one before made, as the one that added a third method to the login's page. With no repair on the runs after an update the page would lack it for up to a day,
+  // and a repair on every run of an install that was updated once would spend the account's calls for good.
+  test("a run within half an hour of an update repairs a login the version before left another way, on any hour of the day; a run with no update behind it, and one after that half hour, read nothing of the login", async () => {
+    const account = withMethods();
+    const asked: Asked[] = [];
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    w.clock.now = Math.ceil(w.clock.now / DAY_MS) * DAY_MS;
+    const updatedAt = w.clock.now + 5 * 3_600_000;
+    const updated: Bindings = { ...keyed, LAST_UPDATE: { from: "0.1.0", to: OWN_VERSION, schema: 1, at: updatedAt } };
+    const [plain, after] = [instance(w, cloudflareOf(account, asked)), instance(w, cloudflareOf(account, asked))];
+    const offered = (): unknown => account.applications.find((entry) => entry.name === INSTALL_OBJECTS.accessApplication)?.allowed_idps;
+    await sweep(after, w, updated);
+    const whole = offered();
+    const offeredAfter = async (worker: typeof plain, bindings: Bindings, minutes: number): Promise<unknown> => {
+      Object.assign(account.applications.find((entry) => entry.name === INSTALL_OBJECTS.accessApplication) ?? {}, { allowed_idps: ["code-1", "passkeys-1"] });
+      w.clock.now = updatedAt + minutes * 60_000;
+      const before = asked.length;
+      await sweep(worker, w, bindings);
+
+      return [offered(), asked.length > before];
+    };
+
+    const none = await offeredAfter(plain, keyed, 14);
+    const soon = await offeredAfter(after, updated, 14);
+    const second = await offeredAfter(after, updated, 29);
+    const late = await offeredAfter(after, updated, 31);
+
+    expect(whole).toEqual(["method-cloudflare", "code-1", "passkeys-1"]);
+    expect([none, soon, second, late]).toEqual([
+      [["code-1", "passkeys-1"], false],
+      [whole, true],
+      [whole, true],
+      [["code-1", "passkeys-1"], false],
+    ]);
+  });
+
   // Drift: a repair that failed and said nothing leaves the owner to learn of a broken login by being shut out; one that threw would stop the run before it removes a single expired site.
   // A key that lacks the login's right may hold the alerts': both are still kept. A key Cloudflare refuses, or no answer, is not asked a second time.
   test.each([
@@ -188,7 +225,7 @@ describe("the scheduled run", () => {
     wait(w, 24);
     await sweep(worker, w, keyed);
 
-    expect([first, offered(), (await database.listProblems(day)).map((problem) => problem.kind)]).toEqual([[[["login_not_repaired", 1, "no_login_method"]], [], false], ["code-1"], []]);
+    expect([first, offered(), (await database.listProblems(day)).map((problem) => problem.kind)]).toEqual([[[["login_not_repaired", 1, "no_login_method"]], ["method-cloudflare"], false], ["method-cloudflare", "code-1"], []]);
   });
 
   // Drift: a request notes a login it could not check once an hour, and remembers that it did under the install's database.
@@ -201,7 +238,7 @@ describe("the scheduled run", () => {
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
     const login = { holdsKey: () => true, repair: async () => ({ wrote: [], users: false, calls: 0, refusal: undefined }) };
     const keepAlerts = async (): Promise<{ readonly wrote: readonly string[] }> => ({ wrote: [] });
-    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, dailyLogs: keyless };
+    const running = { version: "0.1.0", updatedAt: undefined, updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, dailyLogs: keyless };
     const kinds = async (): Promise<string[]> => (await install.database.listProblems(dayOf(w.clock.now))).map((problem) => problem.kind);
     await noteProblem(install, "login_unchecked");
     const noted = await kinds();

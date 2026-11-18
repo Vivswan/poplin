@@ -1,12 +1,14 @@
-// The login methods an install's users log in with, both identity providers of the account's Zero Trust:
+// The login methods an install's users log in with, each an identity provider of the account's Zero Trust:
 //
+//   Cloudflare     a member of the Cloudflare account logs in with that account
 //   One-time PIN   Cloudflare mails a code to the email a person types
 //   Passkeys       a person who proved the email once saves a passkey, and logs in with it alone from then on
 //
-// Without them the login page offers only the methods the account has, and a user who is no member of those cannot log in.
+// Without the last two the login page offers only the methods the account has, and a user who is no member of those cannot log in.
 //
 //   the account has a method of the type, under any name   left as it is: it may serve the owner's other applications
-//   the account has none                                   made, under the name above
+//   the account has no One-time PIN, or no Passkeys        made, under the name above
+//   the account has no Cloudflare                          no step: the account comes with one, so one that is gone was removed
 //
 // They are the account's, not the install's: nothing removes them.
 
@@ -16,14 +18,18 @@ import { type CloudflareResult, type Connection, callCloudflare } from "../../cl
 import { INSTALL_OBJECTS } from "../../install-objects";
 import { applySteps, type Mode, reportOf, type Synced } from "../../sync";
 
+/** The method of the account's own members, by the name its row has: poplin makes none, and an install is whole without it. */
+export const CLOUDFLARE_METHOD = INSTALL_OBJECTS.cloudflareMethod;
+
 /** The method no install is whole without, by the name its row has. */
 export const CODE_METHOD = INSTALL_OBJECTS.codeMethod;
 
 /** The method an account may be refused, by the name its row has: an install is whole without it. */
 export const PASSKEY_METHOD = INSTALL_OBJECTS.passkeyMethod;
 
-/** Each method, in the order of its row: its name, Cloudflare's type of its identity provider, and the configuration one that poplin makes is sent with. */
+/** Each method, in the order of its row: its name, Cloudflare's type of its identity provider, and the configuration one that poplin makes is sent with; `undefined` for the one poplin never makes. */
 const METHODS = [
+  { name: CLOUDFLARE_METHOD, type: "cloudflare", config: undefined },
   { name: CODE_METHOD, type: "onetimepin", config: {} },
   { name: PASSKEY_METHOD, type: "passkeys", config: { login_page_auto_prompt: INSTALL_OBJECTS.passkeyPrompt } },
 ] as const;
@@ -47,11 +53,11 @@ export type SyncedMethods = Synced & { readonly held: HeldMethods };
  * Name the methods the guarded application's page is to offer.
  *
  * @param held - the methods the account has, as its list was read: an application is written with these and no other, so it never names one that is gone
- * @param pending - what stands for a method the account lacks: `""` in a check, which a repair makes, and left out after a run, which names only what stands
- * @returns the ids in the order of the methods; none on an account with neither, whose application then offers every method the account has
+ * @param pending - what stands for a method the account lacks and a repair makes: `""` in a check, and left out after a run, which names only what stands
+ * @returns the ids in the order of the methods; none on an account with none of them, whose application then offers every method the account has
  */
 export function offeredMethods(held: HeldMethods, pending?: ""): string[] {
-  return METHODS.flatMap(({ name }) => held[name] ?? pending ?? []);
+  return METHODS.flatMap(({ name, config }) => held[name] ?? (config === undefined ? undefined : pending) ?? []);
 }
 
 /**
@@ -77,17 +83,22 @@ export async function readLoginMethods(connection: Connection, accountId: string
 }
 
 /**
- * Make sure the account has both login methods.
+ * Make sure the account has the login methods poplin makes, and find the one it does not.
  *
  * @param mode - `plan` reads the account's identity providers and sends no change
- * @returns one step a method, under its name: left where the account has one of the type, else created. A refusal is a value with the report of what was done before it, and `held` has the methods that stand whatever came of the run
+ * @returns one step a method, under its name: left where the account has one of the type, else created, and none for the one poplin never makes where the account has none.
+ * A refusal is a value with the report of what was done before it, and `held` has the methods that stand whatever came of the run
  */
 export async function syncLoginMethods(connection: Connection, accountId: string, mode: Mode): Promise<SyncedMethods> {
   const read = await readLoginMethods(connection, accountId);
   if (!read.ok) return { ...read, report: reportOf([]), held: {} };
 
   const held: Partial<Record<MethodName, string>> = { ...read.value };
-  const steps = METHODS.map((method) => (held[method.name] === undefined ? ({ kind: "create", subject: method.name, method } as const) : ({ kind: "leave", subject: method.name } as const)));
+  const steps = METHODS.flatMap((method) => {
+    if (held[method.name] !== undefined) return { kind: "leave", subject: method.name } as const;
+
+    return method.config === undefined ? [] : ({ kind: "create", subject: method.name, method } as const);
+  });
   const synced = await applySteps(
     steps,
     async ({ method }) => {

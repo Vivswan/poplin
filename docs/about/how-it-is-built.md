@@ -13,7 +13,7 @@ What an install puts in your Cloudflare account; `npx poplin install cloudflare`
 | one R2 bucket              | holds every site's files                                       | `R2 bucket`                               |
 | one D1 database            | holds the list of sites, the users, and the settings           | `D1 database`                             |
 | two Access applications    | the login screen in front of the dashboard and private sites, and the open path of the API | `Access application`, `Access policy`                      |
-| two login methods          | how a user passes that screen: a code Cloudflare mails, and a passkey. They are the account's own | `Login method`                    |
+| three login methods        | how a user passes that screen: the Cloudflare account, a code Cloudflare mails, and a passkey. They are the account's own | `Login method`                    |
 | DNS records and routes     | send your sites' addresses, and the dashboard's, to the Worker | `DNS record`, `Worker route`              |
 | two keys                   | let the install update and repair itself, and sign uploads     | `Key`, `Upload key`                       |
 | one Workflow               | finishes a copy too large for one request                      | `Workflow`                                |

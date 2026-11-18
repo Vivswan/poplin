@@ -96,12 +96,14 @@ function weightOf(piece: CheckedPiece): number {
 /**
  * Say what a run showed that ends problems.
  *
- * @returns `login_stands` for a check or a repair that read a piece of the login and left every one of them ok; `repaired` for a repair that read a piece and left none to repair and none unread. A run that read nothing shows nothing
+ * @returns `login_stands` for a check or a repair that found a piece of the login ok and none to repair or unread, an optional one that was left out being neither.
+ *   `repaired` for a repair that read a piece and left none to repair and none unread. A run that read nothing shows nothing
  */
 export function mendsOf(check: Pick<DomainCheck, "run"> & { readonly pieces: readonly CheckedPiece[] }): readonly Mend[] {
   const login = check.pieces.filter((piece) => piece.part === "login");
-  const stands = login.length > 0 && login.every((piece) => piece.state === "ok");
-  const repaired = check.run === "repair" && check.pieces.length > 0 && check.pieces.every((piece) => piece.state === "ok" || piece.state === "not_set_up");
+  const settled = (piece: CheckedPiece): boolean => piece.state === "ok" || piece.state === "not_set_up";
+  const stands = login.some((piece) => piece.state === "ok") && login.every(settled);
+  const repaired = check.run === "repair" && check.pieces.length > 0 && check.pieces.every(settled);
 
   return [...(stands ? (["login_stands"] as const) : []), ...(repaired ? (["repaired"] as const) : [])];
 }

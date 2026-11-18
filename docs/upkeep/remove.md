@@ -87,7 +87,7 @@ would remove  Workflow              poplin-jobs
 would remove  Worker                poplin
 would remove  R2 bucket             poplin-sites (files: 2, 15 B)
 would remove  D1 database           poplin (sites: 3)
-unchanged     Login method          One-time PIN and Passkeys are login methods of the account, which its other applications may use, and are left in place
+unchanged     Login method          Cloudflare, One-time PIN, and Passkeys are login methods of the account, which its other applications may use, and are left in place
 unchanged     Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 A real run prompts for poplin.your-name.workers.dev, or accepts --confirm poplin.your-name.workers.dev
 Uninstall does not log machines out. Run npx poplin logout on each machine first.
@@ -100,7 +100,7 @@ Under a domain, five rows stand in place of `Forwarder`: `Worker route`, `DNS re
 
 A `Certificate alert` row follows `Budget alert`, for an install that has that alert. A `Bot settings` row says what stays there. A run under a domain removes 18 resource types at most.
 
-The `Login method` row is of both kinds. The two login methods are your Cloudflare account's own, and another application of the account may use them, so an uninstall leaves them. To remove them, open Zero Trust at Cloudflare.
+The `Login method` row is of both kinds. The three login methods are your Cloudflare account's own, and another application of the account may use them, so an uninstall leaves them. To remove them, open Zero Trust at Cloudflare.
 
 A rule set is Cloudflare's holder for rules of one kind. One that poplin made goes once no rule but poplin's is in it. One of the domain's own, which poplin only added a rule to, stays and has no row.
 

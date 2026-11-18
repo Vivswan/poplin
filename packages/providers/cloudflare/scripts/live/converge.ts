@@ -98,11 +98,17 @@ const NOT_PERMITTED = /status 40[13]/;
 /** What a login needs on an account whose Access is off: no API switches it on. */
 const ACCESS_OFF = "Access switched on for the account";
 
-/** The row of each of the account's two login methods. */
+/** The row of each of the account's three login methods. */
 const LOGIN_METHOD = "Login method";
 
 /** What an install lacks whose passkeys Cloudflare did not make: its users log in with the email code. */
 const NO_PASSKEYS = "passkeys, which Cloudflare did not make for the account";
+
+/** What an install lacks whose account holds no login method of its own members: its users log in with the email code. */
+const NO_CLOUDFLARE = "the login of the Cloudflare account's own members, which the account holds no method of";
+
+/** How the row of that method starts. */
+const CLOUDFLARE_ROW = `${INSTALL_OBJECTS.cloudflareMethod}:`;
 
 /** How the row of the Worker's login variable starts where the login it is read from is not there. */
 const LOGIN_VARIABLE = `${INSTALL_OBJECTS.accessBinding}:`;
@@ -253,6 +259,11 @@ async function checkPlans(run: Run, found: Found, progress: Progress): Promise<S
   return undefined;
 }
 
+/** What the live suite calls the login method a row left out. */
+function leftOutMethod(row: CommandRow): "cloudflare-login" | "passkeys" {
+  return row.detail.startsWith(CLOUDFLARE_ROW) ? "cloudflare-login" : "passkeys";
+}
+
 /**
  * Say what a row a command did not settle needs, in words that quote nothing Cloudflare said.
  *
@@ -261,7 +272,7 @@ async function checkPlans(run: Run, found: Found, progress: Progress): Promise<S
 function needOf(row: CommandRow): string | undefined {
   if (row.state === "not-run") return "the run to reach it: an earlier object was not settled";
 
-  if (row.state === "leave-out" && row.object === LOGIN_METHOD) return NO_PASSKEYS;
+  if (row.state === "leave-out" && row.object === LOGIN_METHOD) return row.detail.startsWith(CLOUDFLARE_ROW) ? NO_CLOUDFLARE : NO_PASSKEYS;
 
   if (row.state === "leave-out") return `the ${row.object}, which was left out: the token lacks its optional permission, or the account holds it in another form`;
 
@@ -311,8 +322,8 @@ function sortRows(run: Run, progress: Progress, rows: readonly CommandRow[]): St
     }
 
     const needs = needOf(row);
-    // Passkeys Cloudflare makes the account none of are left out, and the email code still stands: the suite checks the login's page as it is.
-    const capability = row.object === LOGIN_METHOD && row.state === "leave-out" ? undefined : CAPABILITIES[row.object];
+    // A login method that is left out leaves the email code standing: the suite checks the login's page for the methods that are there.
+    const capability = row.object === LOGIN_METHOD && row.state === "leave-out" ? leftOutMethod(row) : CAPABILITIES[row.object];
     note(run, progress, { piece: row.object, result: resultOf(row), needs });
 
     if (needs === undefined) failed ??= { kind: "failed", what: `the ${row.object} is ${resultOf(row)}` };

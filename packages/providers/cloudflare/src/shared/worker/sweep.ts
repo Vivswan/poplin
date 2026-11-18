@@ -85,15 +85,19 @@ const RUN_EVERY_MS = 900_000;
 /** The milliseconds of one UTC day. */
 const DAY_MS = 86_400_000;
 
+/** How long after an update a run repairs the login: two runs' time, so one run at least falls in it, however late a run starts. */
+const AFTER_UPDATE_MS = 2 * RUN_EVERY_MS;
+
 /** Where a walk begins: at the sites that expired. The steps go on from there through the trash, the uploads, and the leftovers. */
 const START: NonNullable<Place> = { trash: false };
 
 /** Where the walk stands, as the database keeps it between two runs; `undefined` once it reached its end. */
 type Place = Awaited<ReturnType<Install["database"]["readSweepPlace"]>>;
 
-/** The version the install runs, what updates it, and the login's, the users', the alerts', the guard rules', and the logs' side at Cloudflare. */
+/** The version the install runs, when an update put it in place, what updates it, and the login's, the users', the alerts', the guard rules', and the logs' side at Cloudflare. */
 interface Running {
   readonly version: string;
+  readonly updatedAt: number | undefined;
   readonly updating: Updating;
   readonly login: LoginRepair;
   readonly follow: UsersFollow;
@@ -137,6 +141,11 @@ function fitsAnotherStep(tally: Tally, place: NonNullable<Place>): boolean {
 /** Whether a run is the one that begins a UTC day: the one of a day's 96 whose clock stands in the day's first quarter of an hour. An install with `update_check` off never asks the day's question, so the clock tells. */
 function beginsDay(now: number): boolean {
   return now % DAY_MS < RUN_EVERY_MS;
+}
+
+/** Whether a run repairs the login: the run that begins a UTC day, and each run soon after an update put the running code in place, since a version may expect another login than the one before. */
+function repairsLogin(now: number, updatedAt: number | undefined): boolean {
+  return beginsDay(now) || (updatedAt !== undefined && now >= updatedAt && now - updatedAt < AFTER_UPDATE_MS);
 }
 
 /**
@@ -225,7 +234,7 @@ async function stateLogs(install: Install, running: Pick<Running, "dailyLogs">, 
  * The first run of a UTC day also writes which version of poplin is the newest and may start an update, and the run that begins the day repairs the login and states the logs: each leaves the steps fewer calls.
  *
  * @param asking - what sends the day's one request for the newest version, and where to
- * @param running - the version the install runs and what updates it, for the update an install starts by itself, and the login's, the users', the guard rules', and the logs' side at Cloudflare
+ * @param running - the version the install runs, when an update put it in place, and what updates it, for the update an install starts by itself, and the login's, the users', the guard rules', and the logs' side at Cloudflare
  * @throws {Error} the sweep was refused, or the database failed; what was moved or removed before stays so, and the next run begins where this one began
  */
 export async function runSweep(install: Install, asking: Asking, running: Running): Promise<void> {
@@ -239,7 +248,7 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   const taking = running.updating.self;
   const self = { ...taking, ready: counted({ ready: taking.ready }, tally, "web", SELF_UPDATE_REQUESTS).ready };
   if (learned !== undefined) await startDueUpdate(watched, { ...learned, version: running.version }, { ...running.updating, self });
-  if (beginsDay(install.now()) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings))) {
+  if (repairsLogin(install.now(), running.updatedAt) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings))) {
     // What a broken login was noted as ends with a repair that came through. It is ended under the install's own database, which is what a request of this instance noted it under, so the call is counted here.
     tally.database += 1;
     await endProblems(install, ["login_stands"]);

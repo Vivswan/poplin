@@ -37,7 +37,7 @@ const SESSION = {
   same_site_cookie_attribute: INSTALL_OBJECTS.accessSameSite,
 } as const;
 
-/** Whether the guarded application's page skips the choice of a method: it has two to choose from, so it does not. */
+/** Whether the guarded application's page skips the choice of a method: it has more than one to choose from, so it does not. */
 const REDIRECT = INSTALL_OBJECTS.loginRedirect;
 
 /** A reusable policy as the account has it now. */
