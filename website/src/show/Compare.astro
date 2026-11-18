@@ -1,47 +1,21 @@
 ---
-import Check from "@lucide/astro/icons/check";
-import Minus from "@lucide/astro/icons/minus";
-import X from "@lucide/astro/icons/x";
-import { ROWS, TOOLS } from "../lib/compare.ts";
+import { CompareTable } from "../controls/compare-table.tsx";
+import { REPOSITORY_URL } from "../lib/paths.ts";
 
-// Poplin beside the tools people reach for to put a page online. The answers live in one table of data; this draws it.
+// Poplin beside the tools people reach for to put a page online. The answers live in one table of data; the table of the UI library draws it, and this gives it its look.
+const ISSUES = `${REPOSITORY_URL}/issues`;
 ---
 
-<div class="scroll">
-  <table>
-    <thead>
-      <tr>
-        <td></td>
-        {TOOLS.map((tool, index) => <th scope="col" class={index === 0 ? "ours" : undefined}>{tool.name}</th>)}
-      </tr>
-    </thead>
-    <tbody>
-      {
-        ROWS.map((row) => (
-          <tr>
-            <th scope="row">{row.ask}</th>
-            {TOOLS.map((tool, index) => {
-              const answer = tool.answers[row.id] ?? "not stated";
-              return (
-                <td class:list={[index === 0 && "ours", answer === "no" && "no"]}>
-                  {answer === "yes" && <Check role="img" aria-label="yes" />}
-                  {answer === "no" && <X role="img" aria-label="no" />}
-                  {answer === "not stated" && <Minus class="unsaid" role="img" aria-label="not stated" />}
-                  {answer === "partly" && "partly"}
-                </td>
-              );
-            })}
-          </tr>
-        ))
-      }
-    </tbody>
-  </table>
+<div class="compare">
+  <CompareTable issues={ISSUES} />
 </div>
-<p class="legend">A dash: their own pages do not say.</p>
+<div class="legend">
+  <p>A dash: their own pages do not say.</p>
+  <p>Missing something? <a href={`${ISSUES}?q=is%3Aissue+is%3Aopen+label%3Aparked`}>See the open requests and vote.</a></p>
+</div>
 
 <style>
-  .scroll {
-    overflow-x: auto;
+  .compare :global([data-slot="table-container"]) {
     border: 1px solid var(--rule);
     border-radius: var(--radius);
     background: var(--surface);
@@ -53,30 +27,32 @@ import { ROWS, TOOLS } from "../lib/compare.ts";
     font-size: 0.875rem;
   }
 
-  table {
-    width: 100%;
+  .legend p + p {
+    margin-top: 4px;
+  }
+
+  .compare :global(table) {
     min-width: 760px;
-    border-collapse: collapse;
     font-size: 0.9375rem;
     line-height: 1.35;
   }
 
-  th,
-  td {
+  .compare :global(th),
+  .compare :global(td) {
     padding: 11px 14px;
     text-align: center;
     font-weight: 400;
     white-space: nowrap;
   }
 
-  thead th {
+  .compare :global(thead th) {
     padding-block: 14px;
     color: var(--muted);
     font-size: 0.875rem;
   }
 
-  tbody th,
-  thead td {
+  .compare :global(tbody th),
+  .compare :global(thead td) {
     position: sticky;
     left: 0;
     z-index: 1;
@@ -84,72 +60,82 @@ import { ROWS, TOOLS } from "../lib/compare.ts";
     text-align: left;
   }
 
-  tbody tr {
+  .compare :global(tbody tr) {
     border-top: 1px solid var(--rule);
   }
 
-  tbody td {
+  .compare :global(tbody td) {
     color: var(--fg);
     font-size: 0.875rem;
     vertical-align: middle;
   }
 
-  .ours,
-  tbody td.ours {
+  .compare :global(.ours),
+  .compare :global(tbody td.ours) {
     background: var(--accent-tint);
     color: var(--fg);
     font-weight: 600;
   }
 
-  thead .ours {
+  .compare :global(thead .ours) {
     color: var(--accent-text);
     font-size: 0.9375rem;
     font-weight: 700;
     letter-spacing: -0.01em;
   }
 
-  svg {
+  .compare :global(svg) {
     margin-inline: auto;
   }
 
-  .no svg,
-  .unsaid {
+  .compare :global(.no svg),
+  .compare :global(.unsaid) {
     color: var(--muted);
   }
 
-  .ours svg {
+  .compare :global(.ours svg) {
     color: var(--accent-text);
+  }
+
+  /* A request is a number in our column's ink, underlined when pointed at. */
+  .compare :global(.ours a) {
+    color: var(--accent-text);
+    text-decoration: none;
+  }
+
+  .compare :global(.ours a:hover) {
+    text-decoration: underline;
   }
 
   /* Between a phone and a desk the whole table fits its column with tighter cells; only a phone scrolls sideways. */
   @media (max-width: 960px) {
-    table {
+    .compare :global(table) {
       min-width: 0;
     }
 
-    th,
-    td {
+    .compare :global(th),
+    .compare :global(td) {
       padding-inline: 9px;
     }
   }
 
   @media (max-width: 720px) {
-    .scroll {
+    .compare :global([data-slot="table-container"]) {
       margin-right: calc(-1 * var(--edge));
       border-right: 0;
       border-radius: var(--radius) 0 0 var(--radius);
     }
 
-    table {
+    .compare :global(table) {
       min-width: 640px;
     }
 
-    th,
-    td {
+    .compare :global(th),
+    .compare :global(td) {
       padding: 11px 10px;
     }
 
-    tbody th {
+    .compare :global(tbody th) {
       white-space: normal;
       width: 10.5rem;
     }
