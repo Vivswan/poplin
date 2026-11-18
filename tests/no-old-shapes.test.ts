@@ -93,7 +93,6 @@ const OLDER_ON_PURPOSE: readonly Purpose[] = [
   { path: "packages/providers/cloudflare/live/README.md" },
   { path: ".github/workflows/checks.yml", name: IN_A_WORKFLOW },
   { path: ".github/workflows/release-gate.yml", name: IN_A_WORKFLOW },
-  { path: ".github/workflows/release-live-upgrade.yml", name: IN_A_WORKFLOW },
   { path: ".github/workflows/live-upgrade.yml", name: IN_A_WORKFLOW },
   { path: ".github/workflows/live-install.yml", name: IN_A_WORKFLOW },
   { path: ".github/workflows/live-checks.yml", name: IN_A_WORKFLOW },

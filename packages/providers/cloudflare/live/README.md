@@ -8,8 +8,8 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: every night, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
-| check that an install of the last release updates to the next one | the pull request of a release: the checks `live upgrade from the last release (domain)` and `(account address)` of its `Release Live Upgrade` run | the same environments |
-| check the two test installs before a release      | the pull request of a release: the checks `live checks (domain) / checks` and `live checks (account address) / checks` of the same run | the same environments |
+| check that an install of the last release updates to the next one | the pull request of a release: the checks `release-gate / live upgrade from the last release (domain) / upgrade` and `(account address)` of its `CI` run | the same environments |
+| check the two test installs before a release      | the pull request of a release: the checks `release-gate / live checks (domain) / checks` and `(account address)` of the same run | the same environments |
 | check that a release publishes its built Worker   | a release's own run of main, then the `Release Feed` run that follows it: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
@@ -120,7 +120,7 @@ job upgrade
                                    this checkout told one patch above the older build's version and given the later step, then built
   migrations/upgrade.ts            a test account alone -> the older build's own poplin uninstall and poplin install
                                    -> the older build's command line: 3 sites, a second version, a setting, a user; a token of its making
-                                   -> the older build's own start of an update, fed the build of main as a release
+                                   -> the older build's own start of an update, fed the run's build as a release
                                    -> the Worker of the new build starts, and applies the later step to the filled database
                                    -> the install says the new version 12 times in a row -> one more site published -> one line a check
                                    -> the settings put back, the sites and the token's row removed
@@ -147,7 +147,7 @@ A pre-release on npm is the command alone: no built Worker and no line of the we
 
 | Check        | Holds when                                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------------------------ |
-| `Version`    | the install says the version the build of main was published under                                           |
+| `Version`    | the install says the version the run's build was published under                                             |
 | `Sites`      | each site is shown to its holder as before, a stranger is answered the same status, bytes, and media type, and a backup of it holds the same files in every version |
 | `Token`      | the token made before the update read every site, the settings, and the log                                  |
 | `Settings`   | every setting is as before, the changed one and the added user among them                                    |
@@ -180,7 +180,7 @@ A check that fails says `FAILED` and what differs, by a site's place and access 
 | the release picked, its files fetched and checked | the older build's code                                            |
 | the `update_started` entry, the upload            | the older build's code, over the database's API                   |
 | the key the upload is sent with                   | the run's token, where a deployed install uses the key it keeps   |
-| the release                                       | the build of main, answered in the run's own process              |
+| the release                                       | the run's build, answered in the run's own process                |
 | the count of starts a minute                      | left out: a binding of the Worker keeps it                        |
 
 A deployed Worker reads releases from the project's website alone, which names no build of a commit. So no run shows a deployed Worker that fetches a release and uploads itself with its kept key: the `self-update` row of the checklist does, once two releases are out.
@@ -197,11 +197,9 @@ where both upgrades find a build        about 232 rows more, and one more instal
 where neither finds one                 the checks and the reset alone, in either run: about 1,018 rows, and the reset's
 ```
 
-The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` twice for each kind of install on the pull request of a release alone. Its checks stand beside `all-green` on the pull request, four of the upgrade and two of the live checks.
+The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgrade.yml` twice for each kind of install on the pull request of a release, and then the live checks. `all-green` waits for all six jobs: a release cannot merge while the upgrade from the last release or a live check is red. A failed step of the two that only advise is a warning, and the job passes.
 
-`all-green` does not wait for them: read all six before merging a release, and the warnings of the two that only advise.
-
-It is no job of the release gate: GitHub hands a called workflow only the secrets its caller passes, and the gate's caller passes none.
+GitHub hands a called workflow only the secrets its caller passes. `ci.yml` hands the gate every secret, and the gate hands the three names on. No other workflow calls the gate, and a dispatch of `ci.yml` runs no live job.
 
 ### The checks after the upgrades of a release
 
@@ -222,7 +220,7 @@ live checks: main checked out and built -> the install made to match it -> every
 | after a failed upgrade | it runs all the same |
 | after two upgrades that found no build to start from | it runs all the same: every release is checked |
 | a check that fails | the check `live checks (<kind>) / checks` is red |
-| after a cancelled run | it does not run: the midnight run of main checks the install and puts it back |
+| after a cancelled run, as when a newer push to the pull request takes its place | it does not run, and an upgrade cut short stays on the install: the next run of the kind's lane puts it right, the midnight run of main among them |
 | which lane | the one of the kind's live checks, once, after both upgrades |
 
 ```text
@@ -310,8 +308,8 @@ The owner sets these. Each test account has its own environment, and the secrets
 
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
-| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `live checks (domain)` of `Release Live Upgrade` |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `live checks (account address)` of `Release Live Upgrade` |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `live checks (domain)` of the release gate |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `live checks (account address)` of the release gate |
 
 For each account:
 

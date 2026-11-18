@@ -2,7 +2,7 @@
 # build as an update, and must answer as before (packages/providers/cloudflare/live/README.md, "The upgrade").
 #
 #   live-checks.yml, live-checks-account-address.yml    a run by hand of main with `upgrade` ticked: the build of main
-#   release-live-upgrade.yml                            the pull request of a release: the release as it would merge
+#   release-gate.yml                                    the pull request of a release: the release as it would merge
 #
 # Each caller calls it twice for a kind, one after the other in that kind's lane, and the caller says where the upgrade starts from:
 #
@@ -12,7 +12,7 @@
 # Where there is no build to start from, the job says so in one line, touches no install, and passes.
 # It removes the test install and writes rows and files of its own, so no push and no midnight run makes it.
 # The job names the environment, so the environment's secrets are the ones its steps read, under the names declared below.
-# Each caller is a workflow the event starts: called two files deep, under a caller that passes no secret, the steps would read empty values.
+# Every call between the event and this file hands the names on: under a caller that passes no secret, the steps would read empty values.
 
 name: Live Upgrade
 

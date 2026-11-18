@@ -6,7 +6,7 @@
 #   every run -> build the Worker bundle -> make the standing test install match main -> run packages/providers/cloudflare/live against it -> put the install back
 #   a run by hand with `start_over` ticked -> the same steps, and the one that makes the install match first removes it with `poplin uninstall`, then makes it from nothing
 #   a run by hand with `upgrade` ticked -> the caller first runs live-upgrade.yml: the older build installed with its own commands, filled, and updated to this commit's build; then these steps
-#   the pull request of a release -> release-live-upgrade.yml calls these steps after its upgrades, whatever they came to: main checked out and built
+#   the pull request of a release -> release-gate.yml calls these steps after its upgrades, whatever they came to: main checked out and built
 #     -> the install made to match main, which starts it over where the upgrade left its later schema step -> the same checks -> put back
 #
 #   make the install match: `poplin install` where the account holds none, and where it holds one the commit's build by the upload of an update, then `poplin doctor --repair`
