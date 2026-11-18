@@ -10,7 +10,7 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
 | check that an install of the last release updates to the next one | the pull request of a release: the checks `release-gate / live upgrade from the last release (domain) / upgrade` and `(account address)` of its `CI` run | the same environments |
 | check the two test installs before a release      | the pull request of a release: the checks `release-gate / live checks (domain) / checks` and `(account address)` of the same run | the same environments |
-| check that a release publishes its built Worker   | a release's own run of main, then the `Release Feed` run that follows it: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
+| check that a release publishes its built Worker   | a release's own run of main, its `site` job last: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
 Live Checks workflows, one for each kind of install
