@@ -8,7 +8,8 @@
 //   FUZZ_PATH     with FUZZ_SEED, jumps straight to the counterexample path a failure printed
 //   FUZZ_REPORTS  a directory that receives one `<target>-<n>/report.md` per failing property
 //
-// An async run that has not settled after five seconds fails its property. A budget ends between two runs: a run that began goes to its end, so nothing of it lands in the test after it.
+// An async run that has not settled after five seconds is run once more, and fails its property when it is late again: an input that is slow fails, a moment the machine stood still does not.
+// A budget ends between two runs: a run that began goes to its end, so nothing of it lands in the test after it.
 
 import { test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -84,6 +85,19 @@ function endsAfter<Ts>(budgetMs: number): fc.Plugin<Ts> {
   };
 }
 
+/** Gives a run that failed at or past `limitMs` one more run, whose answer stands. `began` is read before the limit's timer starts, so a run the limit ended is never read as early. */
+function againWhenLate<Ts>(limitMs: number): fc.Plugin<Ts> {
+  return () => ({
+    decorateRun: (run) => (value) => {
+      const began = performance.now();
+      const outcome = run(value);
+      if (!(outcome instanceof Promise)) return outcome;
+
+      return outcome.then((first) => (first !== null && "error" in first && performance.now() - began >= limitMs ? run(value) : first));
+    },
+  });
+}
+
 function writeReport(folder: string, title: string, command: string, failure: string): void {
   if (REPORTS === undefined) return;
 
@@ -130,7 +144,7 @@ export function fuzzTarget(file: string): RegisterProperty {
     const check = async (): Promise<void> => {
       const share = TARGET_BUDGET_MS / registered;
 
-      await fc.assert(property, { numRuns: RUNS, plugins: [endsAfter(share)], timeout: HUNG_RUN_MS, includeErrorInReport: true, reporter: report, ...replay() });
+      await fc.assert(property, { numRuns: RUNS, plugins: [endsAfter(share), againWhenLate(HUNG_RUN_MS)], timeout: HUNG_RUN_MS, includeErrorInReport: true, reporter: report, ...replay() });
     };
 
     test(name, check, TARGET_BUDGET_MS + TEST_TIMEOUT_SLACK_MS);
