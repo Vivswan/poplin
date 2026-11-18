@@ -15,7 +15,7 @@ const [OWNER, LOST] = [loginOf("owner@example.com"), loginOf("lost@example.com")
 const ASKED = { accountId: ACCOUNT, databaseId: "database-1" };
 
 /** A step of a later poplin, stamped into the ledger of steps. */
-const LATER_STEP = "INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (?1, ?2, ?3, ?4)";
+const LATER_STEP = "INSERT INTO schema_steps (step, version, name, description, applied_at, fingerprint) VALUES (?1, '9.9.9', 'later', ?2, ?3, ?4)";
 
 function loginOf(text: string): Login {
   const login = parseLogin(text);

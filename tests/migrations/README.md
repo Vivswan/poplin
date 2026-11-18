@@ -46,10 +46,9 @@ A read is asked when the command of the code that made the install has its flags
 ## Adding a schema step
 
 1. Change `packages/core/src/database/schema.ts`.
-2. Run `bun run --cwd packages/core draft-step "<what it does>"` and read the draft.
-3. List the step in `packages/core/src/migrations/registry.ts`.
+2. Run `bun run --cwd packages/core draft-step "<what it does>"` and read the draft: it adds the step to the file of the current version.
 
-A step a release shipped is frozen: `tests/migrations/frozen-steps.test.ts` fails when its file differs from the tag. A change to it is a new step with the next number.
+A file of steps a release shipped is frozen: `tests/migrations/frozen-steps.test.ts` fails when it differs from the tag. A change is a new step, in the file named for the last release: the one file that may be new or change.
 
 A new setting needs a step too. The stored settings row is read strictly, so a row without the new key does not read. The step writes the key's default into the stored row:
 

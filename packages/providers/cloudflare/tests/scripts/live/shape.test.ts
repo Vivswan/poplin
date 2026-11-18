@@ -72,7 +72,7 @@ const CASES: readonly Case[] = [
   ["a database whose schema step another build applied is another build's", { drift: OF_ANOTHER_BUILD }, { drift: "a database that held schema step 1 as another build applied it", current: false }],
   [
     "a database with a step this code does not have is another build's",
-    { drift: "INSERT INTO schema_steps (step, description, applied_at, fingerprint) VALUES (999, 'a step of a later commit', 0, 'later')" },
+    { drift: "INSERT INTO schema_steps (step, version, name, description, applied_at, fingerprint) VALUES (999, '9.9.9', 'later', 'a step of a later commit', 0, 'later')" },
     { drift: "a database that held a schema step this commit does not have", current: false },
   ],
   ["a Worker bound to another bucket than the product's is another build's, whatever its database holds", { bucket: "a-bucket-of-another-name", drift: "SELECT 1" }, { drift: "a Worker bound to another bucket than the product's", current: false }],

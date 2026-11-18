@@ -26,13 +26,10 @@ import { catchStep } from "../live/support/step";
 const OLDER = "0.3.0";
 
 /** Every step of the build a test publishes as this commit's: the product's, then the later step. */
-const BUILD: readonly Step[] = [...STEPS, laterStep(STEPS.length + 1)];
+const BUILD: readonly Step[] = [...STEPS, laterStep(OLDER)];
 
-/** The number of the later step, as a line writes it. */
-const LATER = String(BUILD.length).padStart(4, "0");
-
-/** The number of the product's last step, as a line writes it. */
-const BEFORE = String(STEPS.length).padStart(4, "0");
+/** The later step, as a line writes it: the older build's version, then its name. */
+const LATER = `${OLDER}/upgrade-proof`;
 
 /** How core reads the marks of the applied steps. */
 const MARKS_READ = `SELECT * FROM ${LEDGER_TABLE} ORDER BY step`;
@@ -199,7 +196,7 @@ describe.each(["domain", "account address"] as const)("the live upgrade of an in
       { noStep: true },
       2,
       [
-        `Database: FAILED: the database is at step ${BEFORE}, where this commit's build has ${BUILD.length} steps`,
+        `Database: FAILED: the database holds ${STEPS.length} of the ${BUILD.length} schema steps of this commit's build`,
         "Later step: FAILED: the step's table is not there; the step's column is not among those of the sites; the step's index is not there, over the sites",
         "::error::The upgrade left the install changed: Database, Later step.",
       ],

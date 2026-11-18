@@ -48,6 +48,8 @@ const TEST_ENDING = /\.test\.tsx?$/;
 
 const FOLDER_SIZE = 8;
 
+const VERSION_STEPS = /(?:^|\/)migrations\/\d+\.\d+\.\d+\.ts$/;
+
 const SIZED = /^(?:tests|packages\/(?:providers\/[^/]+|[^/]+)\/(?:src|tests|scripts|migrations))(?:\/|$)/;
 
 const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: string])[] = [
@@ -183,7 +185,10 @@ function oversized(root: string, ceilings: ReadonlyMap<string, number>): string[
   for (const path of repositoryFiles(root)) {
     const parts = path.split("/");
 
-    for (let depth = 1; depth < parts.length; depth += 1) {
+    // A file of schema steps named for its version, in a folder named `migrations`, is not counted: each release adds one.
+    const depths = VERSION_STEPS.test(path) ? parts.length - 1 : parts.length;
+
+    for (let depth = 1; depth < depths; depth += 1) {
       const folder = parts.slice(0, depth).join("/");
       if (SIZED.test(folder)) held.set(folder, (held.get(folder) ?? new Set<string>()).add(parts[depth] ?? ""));
     }
@@ -244,8 +249,16 @@ describe("package layout", () => {
   });
 
   test("drift: a size rule that counts nothing passes forever; a folder over the size, one over its ceiling, and a row for a folder that is small again are each planted and named", () => {
-    const nine = (folder: string): Record<string, string> => Object.fromEntries(Array.from({ length: 9 }, (_, index) => [`${folder}/file-${index}.ts`, ""]));
+    const files = (folder: string, count: number): Record<string, string> => Object.fromEntries(Array.from({ length: count }, (_, index) => [`${folder}/file-${index}.ts`, ""]));
+    const nine = (folder: string): Record<string, string> => files(folder, 9);
     using tree = plantedRepository({
+      ...files("packages/demo/src/migrations", 8),
+      "packages/demo/src/migrations/0.1.0.ts": "",
+      "packages/demo/src/migrations/0.10.0.ts": "",
+      ...nine("packages/providers/example/src/migrations"),
+      "packages/providers/example/src/migrations/1.0.0.ts": "",
+      ...files("packages/demo/src/versions", 8),
+      "packages/demo/src/versions/1.0.0.ts": "",
       ...nine("packages/demo/src/sites"),
       ...nine("packages/demo/tests/sites/support"),
       ...nine("packages/providers/example/scripts"),
@@ -259,10 +272,13 @@ describe("package layout", () => {
       ["packages/demo/src/small", 12],
     ]);
 
+    // Drift: a version's file of steps is left out in a `migrations` folder alone, and every other file there still counts.
     expect(oversized(tree.path, ceilings)).toEqual([
       "packages/demo/src/sites holds 9, over 8",
       "packages/demo/src/small has a row and holds no more than 8",
+      "packages/demo/src/versions holds 9, over 8",
       "packages/providers/example/scripts holds 9, over 8",
+      "packages/providers/example/src/migrations holds 9, over 8",
       "tests/fuzz holds 9, over 8",
     ]);
   });

@@ -1,9 +1,12 @@
 // Old schemas and every step between them live in this folder alone; all other code knows only the current schema.
-// A step is one file named `0001-<what>.ts`, numbered in the order written, and listed here in that order.
-// `bun run --cwd packages/core draft-step "<what>"` drafts the next one from a change to `database/schema.ts`.
+// A file is named for the release its steps migrate away from, `<version>.ts`, and is listed here in ascending order of version.
+// `bun run --cwd packages/core draft-step "<what>"` drafts a step from a change to `database/schema.ts`, into the file of the newest release.
 
-import { CREATE_SCHEMA } from "./0001-create-schema";
-import type { Step } from "./migrate";
+import { V0_0_0 } from "./0.0.0";
+import type { Step, VersionSteps } from "./migrate";
 
-/** Every step, in ascending order from 1 with no gap. */
-export const STEPS: readonly Step[] = [CREATE_SCHEMA];
+/** Every file of steps, in ascending order of version. */
+export const VERSIONS: readonly VersionSteps[] = [V0_0_0];
+
+/** Every step in the order they run: by version, then as its file lists them. A step's place here, counted from 1, is the schema version it leaves a database at. */
+export const STEPS: readonly Step[] = VERSIONS.flatMap(({ version, steps }) => steps.map((step): Step => ({ version, ...step })));

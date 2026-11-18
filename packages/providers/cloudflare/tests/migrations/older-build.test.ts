@@ -51,16 +51,15 @@ describe("the older build of a live upgrade", () => {
     using holder = mkdtempDisposableSync(join(tmpdir(), "poplin-upgrade-older-"));
     const folder = join(holder.path, "older");
     checkout(root.path, "0.0.0");
-    const steps = readdirSync(OWN_STEPS).length;
     const run = (command: readonly string[]): void => {
       if (command[1] === "archive") writeFileSync(join(folder, "tree.tar"), "");
 
       if (command[0] === "tar") tellVersion(folder, "0.0.0");
     };
 
-    expect(prepareBuilds(root.path, "a-commit", folder, run)).toMatchObject({ older: "0.0.0", own: "0.0.1", step: { description: "add the upgrade proof" } });
+    expect(prepareBuilds(root.path, "a-commit", folder, run)).toMatchObject({ older: "0.0.0", own: "0.0.1", step: { version: "0.0.0", name: "upgrade-proof" } });
     expect([readFileSync(join(root.path, VERSION_FILE), "utf8"), existsSync(join(folder, "tree.tar"))]).toEqual([`{\n  "name": "poplin",\n  "version": "0.0.1",\n  "type": "module"\n}\n`, false]);
-    expect(readdirSync(join(root.path, STEPS_FOLDER))).toHaveLength(steps + 1);
+    expect(readFileSync(join(root.path, STEPS_FOLDER, "0.0.0.ts"), "utf8")).toContain('name: "upgrade-proof"');
   });
 
   // Drift: a folder left by a build that failed is taken for a built tree by the step after it.

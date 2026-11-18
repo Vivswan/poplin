@@ -188,8 +188,8 @@ Bucket writes and lists the upgrade asked for: 23 of at most 40
 Rows written this run: 212 of at most 300, 22 of them for the later step
 Version: runs 0.0.1, and ran 0.0.0
 Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte
-Database: the 2 schema steps of this commit's build are marked as it applies them, step 0002 among them
-Later step: the table, the column, and the index of step 0002 are there, and the 3 sites hold what it filled from them
+Database: the 2 schema steps of this commit's build are marked as it applies them, step 0.0.0/upgrade-proof among them
+Later step: the table, the column, and the index of step 0.0.0/upgrade-proof are there, and the 3 sites hold what it filled from them
 Going back: not offered: the update changed the database, which the version before cannot read
 Cleanup: the two settings put back, the sites and the token's row removed
 ```
@@ -262,7 +262,7 @@ GitHub judges a pull request's run by the ref `refs/pull/<number>/merge`, which 
 
 ### The later step
 
-`migrations/later-step.ts` writes one step into the checkout of the run: a file beside the product's steps, numbered one above the last, and its line in `registry.ts`. No commit holds it, and no other build or run has it.
+`migrations/later-step.ts` adds one step to the checkout of the run: the last step of the file named for the older build's version among the product's steps, called `upgrade-proof`. Where the checkout has no such file, it is made and listed in `registry.ts`. No commit holds it, and no other build or run has it.
 
 | It runs                                                                   | As a step of a release would                    |
 | ------------------------------------------------------------------------- | ----------------------------------------------- |
