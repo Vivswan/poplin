@@ -644,7 +644,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
     const updating = { self: { holdsKey: () => false, ready: () => Promise.reject(new Error("the test asked for an update")) }, counters: { takeMinute: async () => ({ ok: true as const }) } };
     const login = { holdsKey: () => false, repair: () => Promise.reject(new Error("the test asked for a repair of the login")) };
     const keepAlerts = (): Promise<never> => Promise.reject(new Error("the test asked for the alerts"));
-    const running = { version: "0.1.0", updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, dailyLogs: keyless };
+    const running = { version: "0.1.0", updatedAt: undefined, updating, login, keepAlerts, follow: { where: "Cloudflare", ...keyless }, rules: keyless, dailyLogs: keyless };
     await install.database.initSettings(defaultSettings({ installer: "ada@example.com" as Login }), signedBy(PUBLISHER, NOW));
     rows.read = 0;
     rows.written = 0;

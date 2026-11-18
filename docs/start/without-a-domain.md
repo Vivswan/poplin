@@ -119,6 +119,7 @@ created    Worker                poplin, runs 0.1.0
 updated    workers.dev route     enabled: poplin.your-name.workers.dev
 created    Forwarder             poplin-private: https://poplin-private.your-name.workers.dev (private sites)
 created    Forwarder             poplin-sites: https://poplin-sites.your-name.workers.dev (unlisted and public sites)
+unchanged  Login method          Cloudflare
 created    Login method          One-time PIN
 created    Login method          Passkeys
 created    Access application    poplin: poplin.your-name.workers.dev, poplin-private.your-name.workers.dev
@@ -137,7 +138,7 @@ The sample shows a few of the rows. Two pieces are of this kind alone:
 | workers.dev route | the address Cloudflare gives the Worker, enabled: your dashboard answers there       |
 | Forwarder      | a small Worker that gives the sites of one kind their hostname and hands every request on |
 
-The Access application is Cloudflare's login in front of the dashboard and of every private site. The two login methods are how a user passes it: [a code Cloudflare mails, and a passkey](install.md#4-read-what-it-made).
+The Access application is Cloudflare's login in front of the dashboard and of every private site. The three login methods are how a user passes it: [the Cloudflare account, a code Cloudflare mails, and a passkey](install.md#4-read-what-it-made).
 
 ## Log in
 

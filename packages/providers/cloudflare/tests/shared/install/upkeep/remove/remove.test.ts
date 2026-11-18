@@ -32,7 +32,7 @@ const SHARED = [
   "Worker | remove | poplin",
   "R2 bucket | remove | poplin-sites (files: 2, 15 B) | 2 | 15",
   "D1 database | remove | poplin (sites: 3) | 3",
-  "Login method | stay | One-time PIN and Passkeys are login methods of the account, which its other applications may use, and are left in place",
+  "Login method | stay | Cloudflare, One-time PIN, and Passkeys are login methods of the account, which its other applications may use, and are left in place",
   "Account token | stay | delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens",
 ];
 
@@ -172,7 +172,7 @@ function rebound(account: Account, name: string, to: Record<string, string>): vo
 describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) => {
   // Drift: a dry run that lists a kind another way than the run removes it would promise a list no run works through, and a removal that misses a kind leaves it at Cloudflare for good.
   // The login methods are the account's: an application of the owner's own may offer them, so a removal that took them would lock its users out.
-  test("a dry run lists every kind with what the data holds and removes nothing; the run after it removes the same rows in the same order, and leaves the account as it was before the install, but for the two login methods, which stay", async () => {
+  test("a dry run lists every kind with what the data holds and removes nothing; the run after it removes the same rows in the same order, and leaves the account as it was before the install, but for the login methods, which stay", async () => {
     const account = await installedAccount(kind);
     const before = structuredClone(account);
     const dry = await removed(account, kind, DRY);

@@ -47,6 +47,7 @@ import { CloudflareCounters } from "../limits/counters";
 import { createUsageHost } from "../usage/usage-host";
 import { goBack } from "../release/update/go-back";
 import { createSelfUpdate } from "../release/update/self-update";
+import { readLastUpdate } from "../release/update/upload";
 import { createLogsFollow } from "../install/pieces/worker-logs/logs-follow";
 import { accessIdentity } from "../login/access-token";
 import { accessKeys } from "../login/keys";
@@ -158,6 +159,9 @@ export interface Instance {
 
   /** The version of poplin the install runs. */
   readonly version: string;
+
+  /** When an update put the running code in place; `undefined` for code put in place another way. */
+  readonly updatedAt: number | undefined;
 
   /** What runs the rounds of a job after the request that started it. */
   readonly jobs: Jobs;
@@ -389,6 +393,7 @@ export async function startInstance(env: Bindings, outside: Outside, visitorOf: 
     keepAlerts: (emails) => keepAlerts(kept, own.value.accountId, alerts, emails),
     usage: createUsageHost({ accountId: own.value.accountId, unwrittenRows: (day) => driver.heldRows(day), databaseBytes: () => driver.heldBytes(), workflow: workflowNameOf(own.value.script), key: kept }),
     version: VERSION,
+    updatedAt: readLastUpdate(env.LAST_UPDATE)?.at,
     jobs: workflowJobs(env.JOBS),
     updating: { self: update, counters },
   };

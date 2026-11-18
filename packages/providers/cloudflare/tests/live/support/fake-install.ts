@@ -51,10 +51,11 @@ const NO_LOGIN = "No login was checked for this request. Open the dashboard's ad
 /** Where the login in front of the install sends a stranger, before the hostname the stranger asked for. */
 const LOGIN_PAGE = "https://team.cloudflareaccess.com/cdn-cgi/access/login/";
 
-/** What the team's login page holds: the button of the account's own login, and the box of the email code where the page offers it. */
+/** What the team's login page holds: the button of the account's own login, the box of the email code where the page offers it, and the button of the passkeys. */
 const LOGIN_METHODS = {
   own: '<button data-idp="Cloudflare">Sign in with: Cloudflare</button>',
   code: '<form id="totp-form" action="/cdn-cgi/access/verify-code/poplin.example.com" method="post"><input name="email" type="email"><button>Send me a code</button></form>',
+  passkeys: '<button data-idp="passkeys">Sign in with: Passkeys</button>',
 } as const;
 
 /** The hostname of the team's login. */
@@ -115,6 +116,12 @@ export interface FakeSwitches {
 
   /** A fault: the login's page offers the account's own login alone and no email code, as on an account with no such login method. */
   readonly noEmailCode?: boolean;
+
+  /** The login's page offers no passkeys, as on an account Cloudflare makes none for, or an application that does not name them. */
+  readonly noPasskeys?: boolean;
+
+  /** The login's page offers no login of the account's own members, as on an account without that method, or an application that does not name it. */
+  readonly noOwnLogin?: boolean;
 
   /** No route reaches the public word's hostnames. */
   readonly noPublicRoute?: boolean;
@@ -240,7 +247,10 @@ function atLogin(request: Request, loginPage: string): Response {
 function teamLoginPage(switches: FakeSwitches): Response {
   const code = switches.noEmailCode === true ? "" : LOGIN_METHODS.code;
 
-  return new Response(`<main>${code}${LOGIN_METHODS.own}</main>`, { headers: { "Content-Type": "text/html" } });
+  const passkeys = switches.noPasskeys === true ? "" : LOGIN_METHODS.passkeys;
+  const own = switches.noOwnLogin === true ? "" : LOGIN_METHODS.own;
+
+  return new Response(`<main>${code}${own}${passkeys}</main>`, { headers: { "Content-Type": "text/html" } });
 }
 
 function isApiPath(pathname: string): boolean {

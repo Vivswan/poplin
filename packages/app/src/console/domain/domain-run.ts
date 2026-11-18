@@ -96,7 +96,7 @@ function byState(reading: Extract<DomainReading, { ok: true }>): Record<string, 
 
 /** Whether a run carried the users to the domain: a repair, with no piece of the login left undone and every object that holds the users left as the settings ask. One the run could not read or change may hold the users of an earlier day. */
 function carriedUsers(run: DomainRun, rows: readonly DomainRow[], pieces: readonly CheckedPiece[]): boolean {
-  const login = pieces.every((piece) => piece.part !== "login" || piece.state === "ok");
+  const login = pieces.every((piece) => piece.part !== "login" || piece.state === "ok" || piece.state === "not_set_up");
 
   return run === "repair" && login && rows.every((row) => row.users !== true || STANDS.includes(row.state));
 }

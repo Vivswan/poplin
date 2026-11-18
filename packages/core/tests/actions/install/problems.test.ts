@@ -119,6 +119,13 @@ describe("a problem that was mended", () => {
   // Drift: a run that mended nothing, or another thing, would take away a problem that still stands; or one that mended it would leave it marked for a day, with advice that was taken already.
   test.each([
     ["a check that found the login standing ends what the login alone mends", "check", [pieceOf("login", "ok"), pieceOf("reach", "needs_repair")], ["users_not_carried"]],
+    [
+      "a check that found the login standing but for an optional piece that was left out ends what the login alone mends",
+      "check",
+      [pieceOf("login", "ok"), pieceOf("login", "not_set_up"), pieceOf("reach", "needs_repair")],
+      ["users_not_carried"],
+    ],
+    ["a check that read an optional piece of the login alone, left out, ends nothing", "check", [pieceOf("login", "not_set_up"), pieceOf("reach", "ok")], ["login_unchecked", "users_not_carried"]],
     ["a check that found the login broken ends nothing", "check", [pieceOf("login", "needs_repair"), pieceOf("reach", "ok")], ["login_unchecked", "users_not_carried"]],
     ["a check that read no piece of the login ends nothing", "check", [pieceOf("reach", "ok")], ["login_unchecked", "users_not_carried"]],
     ["a check that found nothing to repair ends no more than the login's", "check", [pieceOf("login", "ok"), pieceOf("rest", "ok")], ["users_not_carried"]],

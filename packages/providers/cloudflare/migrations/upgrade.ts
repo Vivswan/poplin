@@ -17,6 +17,7 @@ import * as v from "valibot";
 import type { Fetch } from "../../../cli/src/client/client";
 import { type LiveInstall, liveAddresses } from "../live/addresses";
 import { openBench } from "../live/bench";
+import { shownInTime } from "../live/util";
 import { CEILINGS, meterBucket } from "../scripts/live/budget";
 import { command, type Ends, type Published, placeWords, publish, reachOf, readBuilt } from "../scripts/live/commands";
 import { meterRows, ROW_CEILINGS } from "../scripts/live/rows";
@@ -47,8 +48,14 @@ const PACE = { everyMs: 3_000, answerMs: 5_000, withinMs: 180_000 } as const;
 /** What a dry run of a repair says of a piece it would not touch: one that is as it should be, and one the install works without. */
 const UNTOUCHED: ReadonlySet<string> = new Set(["leave", "leave-out"]);
 
-/** How often a repair is asked what it would change, and the pause between two askings, in milliseconds: the login list follows the settings that were put back within seconds, by the install's own key. */
-const REPAIR_ASKS = { times: 4, everyMs: 10_000 } as const;
+/** How long a repair is asked what it would change, and the pause between two askings, in milliseconds: the login list follows the settings that were put back within seconds, by the install's own key. */
+const REPAIR_WITHIN = { ms: 30_000, pause: 10_000 } as const;
+
+/** The pieces the install repairs by itself, with the key it keeps, on a scheduled run soon after an update: what a version expects of them may differ from the one before. */
+const OWN_REPAIR: ReadonlySet<string> = new Set(["Access application", "Access policy", "Access open paths", "Worker variable"]);
+
+/** How long a repair is asked while only such pieces are left, and the pause between two askings, in milliseconds: past the next scheduled run, which is a quarter of an hour away at most. */
+const OWN_REPAIR_WITHIN = { ms: 1_080_000, pause: 30_000 } as const;
 
 /** Why an upgrade stops before it removes anything, where its build is the product alone: it would apply no step, and prove less than it says. */
 const NO_LATER_STEP = "this commit's build holds no later step: `live:upgrade-builds` gives the checkout one, before the Worker is built";
@@ -103,6 +110,12 @@ interface Noted {
 
   /** The rows the later step costs the run, by the sites the install listed before the update: what the Worker wrote as it applied it, and what its index and table add to the requests after; none before the install took it. */
   stepRows: number;
+}
+
+/** A piece a repair would touch: the line that says so, and the piece's name. */
+interface Touched {
+  readonly piece?: string;
+  readonly line: string;
 }
 
 /** What the install was asked after the update, beside the reading of what it held before. */
@@ -205,22 +218,36 @@ async function takeUpdate(run: Run, given: Upgrade, standing: Standing, fetch: F
   return arrived;
 }
 
-/** Ask what a repair would change, and answer the pieces it would touch, each with what it would do. */
-async function wouldRepair(run: Run, given: Upgrade, found: Found): Promise<string[]> {
+/** Ask what a repair would change, and answer the pieces it would touch, each with what it would do; `piece` is left out of the line of a repair that named none. */
+async function wouldRepair(run: Run, given: Upgrade, found: Found): Promise<Touched[]> {
   const dry = await command(run, "repair", ["--repair", "--dry-run", ...placeWords(run, found), "--yes", "--json"], given.ends);
-  if (dry.kind !== "rows") return [dry.kind === "stopped" ? `it stopped (${dry.problem})` : `it printed no value a run can read (exit ${dry.code})`];
+  if (dry.kind !== "rows") return [{ line: dry.kind === "stopped" ? `it stopped (${dry.problem})` : `it printed no value a run can read (exit ${dry.code})` }];
 
-  return dry.rows.filter((row) => !UNTOUCHED.has(row.state)).map((row) => `${row.object}: ${row.state}`);
+  return dry.rows.filter((row) => !UNTOUCHED.has(row.state)).map((row) => ({ piece: row.object, line: `${row.object}: ${row.state}` }));
 }
 
-/** Ask a repair what it would change until it would change nothing, a few times at most, and answer what the last asking named. */
+/**
+ * Say what a repair would still change, once the install had its time to follow the update.
+ *
+ * @returns nothing where a repair would change nothing. What is left after a few askings is the fault at once, but where every piece left is one the install repairs by itself:
+ *   those are waited for past its next scheduled run, and a piece of another kind that shows meanwhile ends the wait as the fault
+ */
 async function repairFaults(run: Run, given: Upgrade, found: Found): Promise<string[]> {
-  for (let asked = 1; ; asked += 1) {
-    const faults = await wouldRepair(run, given, found);
-    if (faults.length === 0 || asked === REPAIR_ASKS.times) return faults;
+  let touched: readonly Touched[] = [];
+  const settled = async (): Promise<boolean> => {
+    touched = await wouldRepair(run, given, found);
 
-    await given.ends.sleep(REPAIR_ASKS.everyMs);
-  }
+    return touched.length === 0;
+  };
+  const ownAlone = (): boolean => touched.every(({ piece }) => piece !== undefined && OWN_REPAIR.has(piece));
+  const lines = (): string[] => touched.map(({ line }) => line);
+  const pace = { pause: given.ends.sleep };
+  if ((await shownInTime(pace, settled, REPAIR_WITHIN)) || !ownAlone()) return lines();
+
+  run.say(`Doctor: waiting for the install's own repair after the update, up to ${OWN_REPAIR_WITHIN.ms / 60_000} min (${lines().join(", ")})`);
+  await shownInTime(pace, async () => (await settled()) || !ownAlone(), OWN_REPAIR_WITHIN);
+
+  return lines();
 }
 
 /** What is wrong with the way back the install offers: an update that changed the database is never gone back from, so a version it offers is the fault. */

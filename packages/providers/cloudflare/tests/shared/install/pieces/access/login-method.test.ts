@@ -1,17 +1,20 @@
-// The two login methods against the fake API of an account.
+// The three login methods against the fake API of an account.
 // Without these a run could make a second method beside the owner's own, name a method by a name anyone may change, or stop at Cloudflare's refusal of a method that stands.
 
 import { expect, test } from "bun:test";
-import { readLoginMethods, syncLoginMethods } from "../../../../../src/shared/install/pieces/access/login-method";
+import { offeredMethods, readLoginMethods, syncLoginMethods } from "../../../../../src/shared/install/pieces/access/login-method";
 import { withFake } from "../../support/fake-cloudflare";
 import { ACCOUNT, type Account, answer, emptyAccount, TOKEN } from "../../support/fake-install";
 import type { Asked } from "../../support/replies";
 
-/** A method of each of poplin's two kinds as an owner made it, under a name of their own. */
+/** A method of each of the two kinds poplin makes, as an owner made it, under a name of their own. */
 const THEIRS = [
   { id: "their-code", name: "Email login", type: "onetimepin", config: {} },
   { id: "their-passkeys", name: "Keys", type: "passkeys", config: {} },
 ];
+
+/** The method of the account's own members, as the fake account comes with it. */
+const OWN = { Cloudflare: "method-cloudflare" };
 
 function writes(asked: readonly Asked[]): string[] {
   return asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path} ${JSON.stringify(entry.body)}`);
@@ -25,7 +28,7 @@ async function withAccount(account: Account, run: (connection: Parameters<typeof
 }
 
 // Drift: Cloudflare's page on each method documents the type and the configuration. Sent another way, the method is refused or made as another kind.
-test("an account with neither method gets both, each as Cloudflare documents it; a plan before says the same and sends nothing, and a run after leaves both", async () => {
+test("an account with its own method alone keeps it and gets the other two, each as Cloudflare documents it; a plan before says the same and sends nothing, and a run after leaves all three", async () => {
   const account = emptyAccount();
   const path = `/accounts/${ACCOUNT}/access/identity_providers`;
 
@@ -35,12 +38,12 @@ test("an account with neither method gets both, each as Cloudflare documents it;
     const sent = asked.length;
     const again = await syncLoginMethods(connection, ACCOUNT, "apply");
 
-    expect([planned.ok && planned.report.created, planned.held, made.ok && made.report.created, made.held]).toEqual([["One-time PIN", "Passkeys"], {}, ["One-time PIN", "Passkeys"], { "One-time PIN": "made-1", Passkeys: "made-2" }]);
+    expect([planned.ok && planned.report.created, planned.held, made.ok && made.report.created, made.held]).toEqual([["One-time PIN", "Passkeys"], OWN, ["One-time PIN", "Passkeys"], { ...OWN, "One-time PIN": "made-1", Passkeys: "made-2" }]);
     expect(writes(asked)).toEqual([
       `POST ${path} {"name":"One-time PIN","type":"onetimepin","config":{}}`,
       `POST ${path} {"name":"Passkeys","type":"passkeys","config":{"login_page_auto_prompt":false}}`,
     ]);
-    expect([again.ok && again.report.left, again.held, writes(asked.slice(sent))]).toEqual([["One-time PIN", "Passkeys"], made.held, []]);
+    expect([again.ok && again.report.left, again.held, writes(asked.slice(sent))]).toEqual([["Cloudflare", "One-time PIN", "Passkeys"], made.held, []]);
   });
 });
 
@@ -51,7 +54,7 @@ test("methods an owner made under other names are found by their type and left: 
   await withAccount(account, async (connection, asked) => {
     const synced = await syncLoginMethods(connection, ACCOUNT, "apply");
 
-    expect([synced.ok && synced.report.left, synced.held, writes(asked), account.methods.length]).toEqual([["One-time PIN", "Passkeys"], { "One-time PIN": "their-code", Passkeys: "their-passkeys" }, [], 3]);
+    expect([synced.ok && synced.report.left, synced.held, writes(asked), account.methods.length]).toEqual([["Cloudflare", "One-time PIN", "Passkeys"], { ...OWN, "One-time PIN": "their-code", Passkeys: "their-passkeys" }, [], 3]);
     expect(await readLoginMethods(connection, ACCOUNT)).toEqual({ ok: true, value: synced.held });
   });
 });
@@ -64,20 +67,31 @@ test("a code method the list did not show yet is refused as a second one: the ru
   await withAccount(account, async (connection) => {
     const synced = await syncLoginMethods(connection, ACCOUNT, "apply");
 
-    expect([synced.ok, synced.held, account.methods.map((method) => method.type)]).toEqual([true, { "One-time PIN": "their-code", Passkeys: "made-2" }, ["cloudflare", "onetimepin", "passkeys"]]);
+    expect([synced.ok, synced.held, account.methods.map((method) => method.type)]).toEqual([true, { ...OWN, "One-time PIN": "their-code", Passkeys: "made-2" }, ["cloudflare", "onetimepin", "passkeys"]]);
   });
 });
 
 // Drift: Cloudflare answers a key with no right to the identity providers an empty list, with no refusal. Believed, a run would ask for a second code method on an account that has one, and a check would say both are missing.
-test("an empty list from a key that may not read the team is a refusal, and nothing is made; an account that truly has no identity provider gets both methods", async () => {
+test("an empty list from a key that may not read the team is a refusal, and nothing is made; an account that truly has no identity provider gets the two poplin makes, and its own is no step and never made", async () => {
   const unread = { ...emptyAccount(), methods: [], refuse: `GET /accounts/${ACCOUNT}/access/organizations` };
-  const none = { ...emptyAccount(), methods: [] };
+  const none: Account = { ...emptyAccount(), methods: [] };
 
   await withAccount(unread, async (connection, asked) => {
     expect([await syncLoginMethods(connection, ACCOUNT, "apply"), writes(asked)]).toMatchObject([{ ok: false, failure: "refused", status: 403, held: {} }, []]);
   });
   await withAccount(none, async (connection) => {
-    expect((await syncLoginMethods(connection, ACCOUNT, "apply")).held).toEqual({ "One-time PIN": "made-0", Passkeys: "made-1" });
+    const planned = await syncLoginMethods(connection, ACCOUNT, "plan");
+    const made = await syncLoginMethods(connection, ACCOUNT, "apply");
+    const both = ["One-time PIN", "Passkeys"];
+
+    expect([planned.ok && planned.report.created, offeredMethods(planned.held, ""), made.ok && made.report.created, made.held, offeredMethods(made.held)]).toEqual([
+      both,
+      ["", ""],
+      both,
+      { "One-time PIN": "made-0", Passkeys: "made-1" },
+      ["made-0", "made-1"],
+    ]);
+    expect(none.methods.map((method) => method.type)).toEqual(["onetimepin", "passkeys"]);
   });
 });
 

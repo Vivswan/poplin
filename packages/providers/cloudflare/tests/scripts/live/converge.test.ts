@@ -91,8 +91,12 @@ const ALREADY = [
   "  remove  npx poplin uninstall cloudflare",
 ];
 
-/** The login, the variables, and the keys, which both kinds make alike. `methods` is what a run does to the account's two login methods: it makes them, or leaves the ones a removal left. */
+/** What a run lacks on an account with no login method of its own members. */
+const OWN_NEEDED = "the login of the Cloudflare account's own members, which the account holds no method of";
+
+/** The login, the variables, and the keys, which both kinds make alike. `methods` is what a run does to the two login methods it makes: it makes them, or leaves the ones a removal left; the account's own is left. */
 const sharedMade = (methods: "made" | "left"): string[] => [
+  "Login method: left",
   `Login method: ${methods}`,
   `Login method: ${methods}`,
   "Access application: made",
@@ -109,7 +113,19 @@ const sharedMade = (methods: "made" | "left"): string[] => [
 ];
 
 /** The same pieces as a repair that changes nothing tells them. */
-const SHARED_LEFT = ["Login method: left", "Login method: left", "Access application: left", "Access policy: left", "Access application: left", "Access policy: left", "Worker variable: left", "Key: left", "Upload key: left", "Worker logs: left"];
+const SHARED_LEFT = [
+  "Login method: left",
+  "Login method: left",
+  "Login method: left",
+  "Access application: left",
+  "Access policy: left",
+  "Access application: left",
+  "Access policy: left",
+  "Worker variable: left",
+  "Key: left",
+  "Upload key: left",
+  "Worker logs: left",
+];
 
 /** What a run tells of an account it made the install on from nothing. */
 const FROM_NONE = "Install: none found, so poplin install ran";
@@ -649,17 +665,25 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
     expect([first.lines.filter((line) => line.includes("stopped")), second.lines.filter((line) => line.includes("stopped"))]).toEqual([lacking, lacking]);
   });
 
-  // Drift: the suite opens the login's page and looks for the email code. Skipped for passkeys Cloudflare makes an account none of, that check would never run there; run for a token that could make no method, it would fail for the token.
-  test("a token that may not make a login method is a lack the suite skips the login's page for, and passkeys Cloudflare does not make are none: the email code still stands", async () => {
+  // Drift: the suite opens the login's page and looks for each method. Skipped for a method the account has none of, that check would never run there; told nothing of that method, it would fail for the account.
+  // Run for a token that could make no method, it would fail for the token.
+  test("a token that may not make a login method is a lack the suite skips the login's page for; passkeys Cloudflare does not make, and an account without its own method, are each a lack of that method alone: the email code still stands", async () => {
     const refused = await (await standingOn(freshAccount({ refuse: `POST /accounts/${INSTALL_ACCOUNT}/access/identity_providers` }), kind)).again();
     const none = await (await standingOn(freshAccount({ noPasskeys: true }), kind)).again();
+    const bare = await (await standingOn(freshAccount({ methods: [] }), kind)).again();
     const right = "the token permission Access: Organizations, Identity Providers, and Groups: Edit";
     const methods = (lines: readonly string[]): string[] => lines.filter((line) => line.startsWith("Login method"));
 
-    const stopped = [`Login method: stopped (refused with status 403 and codes 10000): needs ${right}`, "Login method: not run: needs the run to reach it: an earlier object was not settled"];
+    const stopped = ["Login method: left", `Login method: stopped (refused with status 403 and codes 10000): needs ${right}`, "Login method: not run: needs the run to reach it: an earlier object was not settled"];
 
     expect([refused.code, refused.missing["login-methods"], methods(refused.lines)]).toEqual([0, right, stopped]);
-    expect([none.code, none.missing["login-methods"], methods(none.lines)]).toEqual([0, undefined, ["Login method: made", "Login method: left out (refused with status 400 and codes 12000): needs passkeys, which Cloudflare did not make for the account"]]);
+    expect([none.code, none.missing["login-methods"], none.missing.passkeys, methods(none.lines)]).toEqual([
+      0,
+      undefined,
+      "passkeys, which Cloudflare did not make for the account",
+      ["Login method: left", "Login method: made", "Login method: left out (refused with status 400 and codes 12000): needs passkeys, which Cloudflare did not make for the account"],
+    ]);
+    expect([bare.code, bare.missing["login-methods"], bare.missing["cloudflare-login"], methods(bare.lines)]).toEqual([0, undefined, OWN_NEEDED, [`Login method: left out: needs ${OWN_NEEDED}`, "Login method: made", "Login method: made"]]);
   });
 
   // Drift: an install answers without its Workflow, which only a copy too large for one request needs. A run that called that a failure would stop the test install for a part every other check passes without.

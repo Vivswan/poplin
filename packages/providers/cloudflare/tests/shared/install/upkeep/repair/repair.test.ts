@@ -191,7 +191,7 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
   });
 
   // Drift: Cloudflare writes an application whole, so a change made there by hand, or by an older poplin, leaves it offering every method of the account: a user who is no member of those then meets a login they cannot pass.
-  test("an application that offers other login methods than poplin's two is named by a dry run and changed by the run after it, alone; a method that is gone is made, and the application then offers the new one", async () => {
+  test("an application that offers other login methods than poplin's three is named by a dry run and changed by the run after it, alone; a method that is gone is made, and the application then offers the new one", async () => {
     const account = await wholeInstall(kind);
     const guarded = (): Record<string, unknown> | undefined => account.applications.find((application) => application.name === "poplin");
     const offered = guarded()?.allowed_idps;
@@ -201,13 +201,13 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     const changed = shown(run.done).filter((row) => !row.includes(" | leave | "));
 
     expect([dry.changes, shown(dry.done), changed.map((row) => row.split(": ")[0]), run.changes]).toEqual([[], shown(run.done), ["Access application | change | poplin"], [`PUT /accounts/${ACCOUNT}/access/apps/${String(guarded()?.id)}`]]);
-    expect([offered, guarded()?.allowed_idps, guarded()?.auto_redirect_to_identity]).toEqual([["made-1", "made-2"], ["made-1", "made-2"], false]);
+    expect([offered, guarded()?.allowed_idps, guarded()?.auto_redirect_to_identity]).toEqual([["method-cloudflare", "made-1", "made-2"], ["method-cloudflare", "made-1", "made-2"], false]);
 
     account.methods.splice(-1, 1, { id: "their-login", name: "Shop login", type: "google", config: {} });
     const again = await repaired(account, kind);
 
     expect(shown(again.done).filter((row) => !row.includes(" | leave | ")).map((row) => row.split(": ")[0])).toEqual(["Login method | make | Passkeys", "Access application | change | poplin"]);
-    expect([account.methods.map((method) => method.type), guarded()?.allowed_idps, again.done.ok && again.done.ready]).toEqual([["cloudflare", "onetimepin", "google", "passkeys"], ["made-1", "made-3"], true]);
+    expect([account.methods.map((method) => method.type), guarded()?.allowed_idps, again.done.ok && again.done.ready]).toEqual([["cloudflare", "onetimepin", "google", "passkeys"], ["method-cloudflare", "made-1", "made-3"], true]);
   });
 
   // Drift: a repair mends through a connection of its own making. One made without the rider of the connection that found the install would stop at a busy answer, which an uninstall rides out.

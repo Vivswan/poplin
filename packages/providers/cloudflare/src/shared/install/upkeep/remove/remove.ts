@@ -97,7 +97,7 @@ const WORDS = {
   strangers: "a Worker with this name is not poplin's and is left in place",
   othersRules: "it has rules that are not poplin's and is left in place",
   bots: "AI crawler blocking and Bot Fight Mode are zone settings and keep their values",
-  methods: `${INSTALL_OBJECTS.codeMethod} and ${INSTALL_OBJECTS.passkeyMethod} are login methods of the account, which its other applications may use, and are left in place`,
+  methods: `${INSTALL_OBJECTS.cloudflareMethod}, ${INSTALL_OBJECTS.codeMethod}, and ${INSTALL_OBJECTS.passkeyMethod} are login methods of the account, which its other applications may use, and are left in place`,
   token: `delete it at Cloudflare: ${TOKENS_PAGE}`,
   unreachable: "Cloudflare gave no valid response. Nothing changed.",
   notConfirmed: "The confirmation does not match",

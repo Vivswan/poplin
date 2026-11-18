@@ -25,7 +25,7 @@ import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 import { alertAddresses } from "@poplin/core/src/records/settings";
 import { type KeptKey, keyed } from "../shared/install/key/kept-key";
 import { ACCESS_NOT_ENABLED, isAccessOff, readLoginFacts, syncAccess } from "../shared/install/pieces/access/access";
-import { offeredMethods, PASSKEY_METHOD, syncLoginMethods } from "../shared/install/pieces/access/login-method";
+import { CLOUDFLARE_METHOD, offeredMethods, PASSKEY_METHOD, syncLoginMethods } from "../shared/install/pieces/access/login-method";
 import { type AccountAlert, listAlerts, syncAlert } from "../shared/install/pieces/alerts/account-alert";
 import { BUDGET_ALERT } from "../shared/install/pieces/alerts/budget-alert";
 import { CERTIFICATE_ALERT } from "./pieces/alerts/certificate-alert";
@@ -76,6 +76,9 @@ const ACCESS_STEP = "Open Zero Trust and pick a plan (Free works): that switches
 
 /** What the passkeys' row says where Cloudflare refuses to add them, for any reason but a permission: before why, and after it. */
 const NO_PASSKEYS = { refused: "Cloudflare refused to add this login method", still: "Users log in with an email code" } as const;
+
+/** What the row of the account's own login method says on an account that has none. */
+const NO_CLOUDFLARE = `${CLOUDFLARE_METHOD}: the account has none; users log in with an email code`;
 
 /** What the Access row says when the stored users cannot be read back. */
 const BAD_USERS = "the stored users are not a list of emails";
@@ -616,7 +619,8 @@ function accessDetail(row: Found, covered: Readonly<Record<string, string>>): Fo
 }
 
 /**
- * The piece of the two login methods, of an install of either kind, a row each: the account has the method, or a repair makes it. They are the account's, so one that stands is left under whatever name it has.
+ * The piece of the three login methods, of an install of either kind, a row each: the account has the method, or a repair makes it. They are the account's, so one that stands is left under whatever name it has.
+ * The method of the account's own members is never made: on an account without it that row is optional, as the passkeys' is.
  * A token that may not make one stops nothing: its row names the permission. Passkeys that Cloudflare refuses the account are no failure: an install is whole with the email code alone.
  *
  * @returns the ids for the guarded application to name, as `offeredMethods` writes them: in a check `""` stands for a method a repair makes
@@ -636,6 +640,10 @@ export async function loginMethodPiece(progress: Progress, mode: Mode, placed: P
 
     return undefined;
   }
+
+  // The methods were read wherever the run got as far as a step.
+  const read = synced.ok || synced.failed !== undefined;
+  if (read && synced.held[CLOUDFLARE_METHOD] === undefined) progress.rows.push({ object: object(), state: "optional", detail: NO_CLOUDFLARE });
 
   const declined = !synced.ok && synced.failed === PASSKEY_METHOD && synced.failure === "refused" && !lacksRight(synced);
   await piece(progress, mode, object, async (): Promise<Outcome> => (declined ? { ok: true, report: synced.report } : synced));

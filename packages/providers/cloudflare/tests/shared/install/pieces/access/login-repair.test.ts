@@ -20,7 +20,7 @@ const PLACE = { accountId: ACCOUNT, script: "poplin", adminHost: "poplin.example
 /** The requests the sweep's table says a repair sends at the most, where each list of the account fits one page. */
 const MOST_CALLS = 16;
 
-/** The account's two login methods of poplin's kinds, as a repair with a token leaves them. */
+/** The account's two login methods a repair with a token makes, as it leaves them. */
 const METHODS = [
   { id: "code-1", name: "One-time PIN", type: "onetimepin", config: {} },
   { id: "passkeys-1", name: "Passkeys", type: "passkeys", config: {} },
@@ -66,7 +66,10 @@ const stopped: readonly { readonly name: string; readonly change: (account: Acco
   },
 ];
 
-/** An account with nothing of poplin's in it but the two login methods, which the key reads and may not make. */
+/** The login method of the account's own members, which every account comes with. */
+const OWN_METHOD = emptyAccount().methods;
+
+/** An account with nothing of poplin's in it but its own login method and those two, which the key reads and may not make. */
 function withMethods(): Account {
   const account = emptyAccount();
 
@@ -153,11 +156,12 @@ describe("createLoginRepair", () => {
   // Drift: the key reads the account's login methods and may make none. A repair that named no method would leave the page offering every method of the account.
   // One that said nothing of a missing code would leave users shut out with nobody told.
   test.each([
-    { name: "both methods", held: METHODS, offered: ["code-1", "passkeys-1"], refusal: undefined },
-    { name: "the code alone", held: METHODS.slice(0, 1), offered: ["code-1"], refusal: undefined },
-    { name: "no method that mails a code", held: METHODS.slice(1), offered: ["passkeys-1"], refusal: "no_login_method" },
+    { name: "all three methods", held: [...OWN_METHOD, ...METHODS], offered: ["method-cloudflare", "code-1", "passkeys-1"], refusal: undefined },
+    { name: "no method of its own members", held: METHODS, offered: ["code-1", "passkeys-1"], refusal: undefined },
+    { name: "its own method and the code alone", held: [...OWN_METHOD, ...METHODS.slice(0, 1)], offered: ["method-cloudflare", "code-1"], refusal: undefined },
+    { name: "no method that mails a code", held: [...OWN_METHOD, ...METHODS.slice(1)], offered: ["method-cloudflare", "passkeys-1"], refusal: "no_login_method" },
   ])("on an account with $name the guarded application offers the methods that stand, never one that is gone, and only a missing code is a refusal, after the rest was written", async ({ held, offered, refusal }) => {
-    const account = { ...emptyAccount(), methods: [...emptyAccount().methods, ...held] };
+    const account = { ...emptyAccount(), methods: [...held] };
 
     await withRepair(
       (asked) => answer(account, asked),

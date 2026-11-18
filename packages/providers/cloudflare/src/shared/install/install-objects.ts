@@ -19,6 +19,7 @@ export const INSTALL_OBJECTS = {
   accessSession: "720h",
   accessHttpOnly: true,
   accessSameSite: "lax",
+  cloudflareMethod: "Cloudflare",
   codeMethod: "One-time PIN",
   passkeyMethod: "Passkeys",
   passkeyPrompt: false,

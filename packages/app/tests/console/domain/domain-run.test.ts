@@ -72,19 +72,21 @@ test("a run is kept as the last check of the domain: when, by whom, which run, a
 // Drift: the domain's login lets in the users of the last repair that reached it. Settled by a check, a repair that left the login undone, or one that began before the user was added, a new user is locked out and no screen says why.
 // An object outside the login can hold a user too, such as the address a warning is mailed to: settled by a repair whose token had no right for it, it would go on naming a user who was removed.
 test.each([
-  { name: "a check", run: "check", login: "present", holder: "present", addedAfter: 0, waits: true },
-  { name: "a repair that left the login undone", run: "repair", login: "failed", holder: "present", addedAfter: 0, waits: true },
-  { name: "a repair under way when the user was added", run: "repair", login: "changed", holder: "present", addedAfter: 1, waits: true },
-  { name: "a repair that changed the login", run: "repair", login: "changed", holder: "changed", addedAfter: 0, waits: false },
-  { name: "a repair that found the login standing", run: "repair", login: "present", holder: "present", addedAfter: 0, waits: false },
-  { name: "a repair with no right for another object that holds the users", run: "repair", login: "changed", holder: "optional", addedAfter: 0, waits: true },
-  { name: "a repair that failed at another object that holds the users", run: "repair", login: "present", holder: "failed", addedAfter: 0, waits: true },
-  { name: "a repair that wrote the login and failed after it, though nothing waited before", run: "repair", login: "changed", holder: "failed", addedAfter: -1, waits: true },
-] as const)("users that changed still wait after $name: $waits", async ({ run, login, holder, addedAfter, waits }) => {
+  { name: "a check", run: "check", login: "present", holder: "present", method: "present", addedAfter: 0, waits: true },
+  { name: "a repair that left the login undone", run: "repair", login: "failed", holder: "present", method: "present", addedAfter: 0, waits: true },
+  { name: "a repair under way when the user was added", run: "repair", login: "changed", holder: "present", method: "present", addedAfter: 1, waits: true },
+  { name: "a repair that changed the login", run: "repair", login: "changed", holder: "changed", method: "present", addedAfter: 0, waits: false },
+  { name: "a repair that found the login standing", run: "repair", login: "present", holder: "present", method: "present", addedAfter: 0, waits: false },
+  { name: "a repair with no right for another object that holds the users", run: "repair", login: "changed", holder: "optional", method: "present", addedAfter: 0, waits: true },
+  { name: "a repair that failed at another object that holds the users", run: "repair", login: "present", holder: "failed", method: "present", addedAfter: 0, waits: true },
+  { name: "a repair that wrote the login and failed after it, though nothing waited before", run: "repair", login: "changed", holder: "failed", method: "present", addedAfter: -1, waits: true },
+  { name: "a repair that changed the login, beside an optional login method that is not set up", run: "repair", login: "changed", holder: "changed", method: "optional", addedAfter: 0, waits: false },
+] as const)("users that changed still wait after $name: $waits", async ({ run, login, holder, method, addedAfter, waits }) => {
   const { opened, asked, kept } = await openRun();
   const rows: DomainRow[] = [
     { object: "Record", state: "missing", detail: "every site", part: "reach" },
     { object: "Login policy", state: login, detail: "the users", part: "login", users: true },
+    { object: "Login method", state: method, detail: "a way to log in", part: "login" },
     { object: "Cost warning", state: holder, detail: "mailed to the first user", part: "rest", users: true },
     { object: "Bots rule", state: "optional", detail: "no right for it", part: "rest" },
   ];

@@ -18,6 +18,7 @@ import { LATER_NAMES, laterStep } from "../../migrations/later-step";
 import { type Older, takeWith } from "../../migrations/older";
 import { awaitVersion, upgradeInstall } from "../../migrations/upgrade";
 import { apiDriver } from "../../src/shared/database/api-driver";
+import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 import { createSelfUpdate } from "../../src/shared/release/update/self-update";
 import { COMMIT, freshAccount, type harnessOf as HarnessOf, harnessOf } from "../live/support/harness-world";
 import { catchStep } from "../live/support/step";
@@ -30,6 +31,15 @@ const BUILD: readonly Step[] = [...STEPS, laterStep(OLDER)];
 
 /** The later step, as a line writes it: the older build's version, then its name. */
 const LATER = `${OLDER}/upgrade-proof`;
+
+/** The id of the login method of the account's own members, as the fake account comes with it. */
+const OWN_METHOD = "method-cloudflare";
+
+/** The pause between two askings of a repair while the install's own repair is waited for, in milliseconds. */
+const LONG_WAIT_MS = 30_000;
+
+/** What a run says before it waits for the install's own repair of the guarded application. */
+const WAITING = "Doctor: waiting for the install's own repair after the update, up to 18 min (Access application: change)";
 
 /** How core reads the marks of the applied steps. */
 const MARKS_READ = `SELECT * FROM ${LEDGER_TABLE} ORDER BY step`;
@@ -86,6 +96,15 @@ interface Fault {
 
   /** The status the install answers a removal of a site with, where it refuses one. */
   readonly removal?: number;
+
+  /** The update leaves the guarded application without the account's own login method, as a build that offered fewer methods made it. The install's own repair puts it back after so many of the long waits; never, where left out. */
+  readonly fewerMethods?: { readonly repairedAfter?: number };
+
+  /** The update leaves the account without its budget alert, which the install's own login repair never makes. */
+  readonly noAlert?: true;
+
+  /** The account loses its budget alert after so many of the long waits. */
+  readonly alertGoneAfter?: number;
 }
 
 /** What an install says of its version and its way back: the older build's before the Worker's second upload, and after it what that upload put in place. */
@@ -109,6 +128,16 @@ async function startBuild(harness: Awaited<ReturnType<typeof HarnessOf>>, fault:
   if (started.kind !== "current") throw new Error(`the later step did not run: ${started.kind}`);
 
   if (fault.undo !== undefined) await driver.batch([{ sql: fault.undo, params: [] }]);
+
+  if (fault.fewerMethods !== undefined) offer(harness, (method) => method !== OWN_METHOD);
+
+  if (fault.noAlert === true) harness.account.alerts.length = 0;
+}
+
+/** Make the guarded application of a harness offer the login methods that pass, of all the account has. */
+function offer(harness: Awaited<ReturnType<typeof HarnessOf>>, passes: (id: unknown) => boolean): void {
+  const guarded = harness.account.applications.find((application) => application.name === INSTALL_OBJECTS.accessApplication);
+  Object.assign(guarded ?? {}, { allowed_idps: harness.account.methods.map((method) => method.id).filter(passes) });
 }
 
 /** The install of a harness as an upgrade reaches it. The fake's API says one version for good, so its answer is given the state the Worker's uploads leave, and the second upload's Worker starts at its first request. */
@@ -133,8 +162,18 @@ function installOf(harness: Awaited<ReturnType<typeof HarnessOf>>, fault: Fault)
 /**
  * What this process's command line reaches the world through. Its code holds the product's steps alone, where the command line of a live run holds the later step too: so its reading of the marks is answered the steps it knows.
  */
-function ownReach(harness: Awaited<ReturnType<typeof HarnessOf>>): Awaited<ReturnType<typeof HarnessOf>>["world"]["ends"] {
+function ownReach(harness: Awaited<ReturnType<typeof HarnessOf>>, fault: Fault): Awaited<ReturnType<typeof HarnessOf>>["world"]["ends"] {
   const { ends } = harness.world;
+  let long = 0;
+  const sleep: typeof ends.sleep = async (milliseconds) => {
+    if (milliseconds === LONG_WAIT_MS) long += 1;
+
+    if (long === fault.fewerMethods?.repairedAfter) offer(harness, () => true);
+
+    if (long === fault.alertGoneAfter) harness.account.alerts.length = 0;
+
+    await ends.sleep(milliseconds);
+  };
   const fetch: typeof ends.reach.fetch = async (input, init) => {
     const answered = await ends.reach.fetch(input, init);
     if (typeof init?.body !== "string" || !init.body.includes(MARKS_READ) || !answered.ok) return answered;
@@ -145,7 +184,7 @@ function ownReach(harness: Awaited<ReturnType<typeof HarnessOf>>): Awaited<Retur
     return Response.json({ ...told, result }, { status: answered.status });
   };
 
-  return { ...ends, reach: { ...ends.reach, fetch } };
+  return { ...ends, sleep, reach: { ...ends.reach, fetch } };
 }
 
 /** Upgrade an install on a fresh account in memory, with this commit's own code as the older build. */
@@ -167,7 +206,7 @@ async function upgrade(kind: Found["kind"], fault: Fault = {}): Promise<Ran> {
     liveAddresses,
     take: (given) => takeWith({ startUpdate, SqlDatabase, apiDriver, createSelfUpdate }, given),
   };
-  const code = await upgradeInstall(harness.run, { env, older, release: harness.world.release, steps: fault.bare === true ? STEPS : BUILD, ends: ownReach(harness), fetch: installOf(harness, fault) });
+  const code = await upgradeInstall(harness.run, { env, older, release: harness.world.release, steps: fault.bare === true ? STEPS : BUILD, ends: ownReach(harness, fault), fetch: installOf(harness, fault) });
 
   return { code, lines: harness.lines.slice(installed), uploads: harness.account.uploads.length };
 }
@@ -178,6 +217,23 @@ describe.each(["domain", "account address"] as const)("the live upgrade of an in
     const ran = await upgrade(kind);
 
     expect(ran).toEqual({ code: 0, lines: HELD, uploads: 2 });
+  });
+
+  // Drift: a version may expect another login than the one before made, and the install repairs it by itself on a scheduled run. A check that called that a fault at once would fail every such upgrade;
+  // one that waited for any piece would hide a piece only a person's repair makes, and one that waited for good would never end.
+  test("a login the version before left another way is waited for and holds once the install repaired it; left so it fails after the wait, and a piece of another kind fails at once, before the wait or in it", async () => {
+    const repaired = await upgrade(kind, { fewerMethods: { repairedAfter: 3 } });
+    const left = await upgrade(kind, { fewerMethods: {} });
+    const other = await upgrade(kind, { fewerMethods: { repairedAfter: 1 }, noAlert: true });
+    const later = await upgrade(kind, { fewerMethods: { repairedAfter: 5 }, alertGoneAfter: 2 });
+    const told = (ran: Ran): string[] => ran.lines.filter((line) => line.startsWith("Doctor") || WRONG.test(line));
+    const alerts = kind === "domain" ? "Budget alert: make; Certificate alert: make" : "Budget alert: make";
+
+    expect([repaired.code, told(repaired)]).toEqual([0, [WAITING, "Doctor: a repair would change nothing, once the two settings were put back"]]);
+    expect([left.code, told(left)]).toEqual([1, [WAITING, "Doctor: FAILED: Access application: change", "::error::The upgrade left the install changed: Doctor."]]);
+    expect([other.code, told(other)]).toEqual([1, [`Doctor: FAILED: Access application: change; ${alerts}`, "::error::The upgrade left the install changed: Doctor."]]);
+    // The login would stand three waits later: a wait that went on would name the alert alone.
+    expect([later.code, told(later)]).toEqual([1, [WAITING, `Doctor: FAILED: Access application: change; ${alerts}`, "::error::The upgrade left the install changed: Doctor."]]);
   });
 
   // Drift: an upgrade that ended green on an install that never took the build, never ran the step, kept half of it, or was never made would prove nothing.

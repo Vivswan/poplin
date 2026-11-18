@@ -15,6 +15,8 @@ type Capability =
   | "many-files"
   | "login-list"
   | "login-methods"
+  | "cloudflare-login"
+  | "passkeys"
   | "provider-logs"
   | "kept-key"
   | "upload-key"
