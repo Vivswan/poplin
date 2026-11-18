@@ -2,8 +2,9 @@
 //
 //   bun run test:browser                      every engine; each needs its browser: `bunx playwright install`
 //   bun run test:browser --project chromium   one engine
+//   bun run test:browser --shard 1/3          the first of three parts of the tests
 //
-// CI walks every engine on Linux, one job each: the `demo` job of `.github/workflows/checks.yml`.
+// CI walks every engine on Linux, each in parts side by side: the `demo` job of `.github/workflows/checks.yml`.
 //
 // A failed test leaves its trace and a screenshot under `.cache/walk/`: `bunx playwright show-trace <trace.zip>` opens one.
 
