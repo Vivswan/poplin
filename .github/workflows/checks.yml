@@ -202,7 +202,7 @@ jobs:
         run: bun run --cwd packages/providers/cloudflare check-bundle "$RUNNER_TEMP/bundle/first"
 
   # The dashboard demo as a visitor meets it: built as static files, served under a path of a static host, and walked
-  # in a real browser, one job per engine. Each job builds the demo itself: the build takes about a second. The test
+  # in a real browser, each engine in parts side by side. Each job builds the demo itself: that takes a second. The test
   # that stops the demo's worker runs in Chromium alone, as the walk's own config sets. The WebKit here is Playwright's
   # build of the engine for Linux, not Safari itself.
   #
@@ -210,7 +210,7 @@ jobs:
   # no step asks apt for a package. The image's tag is the Playwright version the lockfile installs: in the image
   # of a version with other browser builds, a test fails at its start and names the image to take.
   demo:
-    name: demo / ${{ matrix.engine }}
+    name: demo / ${{ matrix.engine }} (${{ matrix.part.k }} of ${{ matrix.part.of }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
@@ -222,6 +222,9 @@ jobs:
       fail-fast: false
       matrix:
         engine: [chromium, firefox, webkit]
+        # The one place that sets how many parts an engine's walk runs in: part k of the same total, once each. Playwright
+        # deals the tests out itself. The count follows the slowest other job of this file: enough parts to end before it.
+        part: [{ k: 1, of: 3 }, { k: 2, of: 3 }, { k: 3, of: 3 }]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -235,12 +238,13 @@ jobs:
       - name: Walk the demo
         env:
           ENGINE: ${{ matrix.engine }}
-        run: bun run --cwd packages/demo test:browser --project "$ENGINE"
+          SHARD: ${{ matrix.part.k }}/${{ matrix.part.of }}
+        run: bun run --cwd packages/demo test:browser --project "$ENGINE" --shard "$SHARD"
       - name: Keep the traces and screenshots of the tests that failed
         if: failure() || cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: demo-walk-${{ matrix.engine }}
+          name: demo-walk-${{ matrix.engine }}-${{ matrix.part.k }}-of-${{ matrix.part.of }}
           path: packages/demo/.cache/walk/
           # The folder's name starts with a dot, and hidden paths are left out unless asked for.
           include-hidden-files: true
