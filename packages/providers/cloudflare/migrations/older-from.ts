@@ -17,9 +17,6 @@ const FROM = ["release", "next"] as const;
 /** The variable a run names its start in. */
 const FROM_VARIABLE = "POPLIN_UPGRADE_FROM";
 
-/** What a run that asks for the last release says while there is none. */
-const NOTHING_RELEASED = "Nothing is released yet: there is no version to upgrade from.";
-
 /** What a run that asks for a pre-release says while npm holds none. */
 const NO_PRE_RELEASE = "No pre-release is on npm: there is no earlier build to upgrade from.";
 
@@ -47,7 +44,7 @@ interface Checkout {
   readonly joined: readonly string[];
 
   /** The last release among its ancestors. */
-  readonly release: string | undefined;
+  readonly release: string;
 }
 
 /** Ask git, and answer nothing where it fails: a commit the checkout does not hold, or one that is no ancestor. */
@@ -78,8 +75,8 @@ function refusal(checkout: Checkout, commit: string | undefined): string | undef
 
   if (ask(root, ["merge-base", "--is-ancestor", commit, head]) === undefined) return "of a commit that is no ancestor of this one";
 
-  const release = checkout.release === undefined ? undefined : git(root, ["rev-parse", `${checkout.release}^{commit}`]).trim();
-  if (release !== undefined && (release === commit || ask(root, ["merge-base", "--is-ancestor", release, commit]) === undefined)) return `no newer than the last release, ${checkout.release}`;
+  const release = git(root, ["rev-parse", `${checkout.release}^{commit}`]).trim();
+  if (release === commit || ask(root, ["merge-base", "--is-ancestor", release, commit]) === undefined) return `no newer than the last release, ${checkout.release}`;
 
   return undefined;
 }
@@ -123,7 +120,7 @@ export function readFrom(env: Readonly<Record<string, string | undefined>>): Fro
  * @param root - the checkout, with its whole history
  * @param versions - asks npm for every version of the command; nothing where npm did not answer
  * @returns the tag or the commit of the build with the line that names it, or the line that says why there is none
- * @throws {Error} the checkout is shallow, or npm did not answer
+ * @throws {Error} the checkout is shallow or holds no release tag, or npm did not answer
  */
 export function olderFrom(root: string, from: From, versions: () => readonly string[] | undefined): Start {
   if (from === "next") {
@@ -134,7 +131,6 @@ export function olderFrom(root: string, from: From, versions: () => readonly str
   }
 
   const release = lastRelease(root);
-  if (release === undefined) return { kind: "none", line: NOTHING_RELEASED };
 
   return { kind: "build", ref: release, line: olderLine(root, release, release) };
 }

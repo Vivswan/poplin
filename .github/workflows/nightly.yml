@@ -1,9 +1,13 @@
 # Runs the nightly CI, as the starter written once by Vivswan/repo-platform and never overwritten by a
 # later sync.
 #
-# Replace the placeholder step. The release-gate job runs the repo-owned release acceptance tier on the schedule too
-# (docs/all-green.md, "The release-gate hook"). The report job files one label-deduplicated tracking issue on a red
+# The report job files one label-deduplicated tracking issue on a red
 # night and closes it on a green one (docs/modules/nightly.md).
+#
+#   the website's releases.json and latest.json name the newest tag of this repository   -> green
+#   a file cannot be fetched, is not one an install can read, or names another release   -> red, one sentence a fault
+#
+# The release gate is not called here: at night it would run only the upgrade on the local fake, which every push runs.
 name: Nightly
 
 on:
@@ -25,24 +29,23 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every tag: the newest one is what the website is compared with.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
 
       # Add sibling jobs freely: list each in the report job's `needs` and
       # fold its result into the red/green conditions there.
 
-      - name: Nightly checks
-        run: |
-          # Replace with the repository's nightly checks. A green no-op
-          # until then: an uncustomized starter must not file issues.
-          echo "::warning::nightly starter not customized yet - replace the placeholder step (see repo-platform's docs/modules/nightly.md)"
-
-  # The same hook ci.yml calls on the release PR, so a tier the release blocks on is also judged every night.
-  release-gate:
-    uses: ./.github/workflows/release-gate.yml
+      # Every install asks the website once a day which release is the newest, and takes a release only by the digest the website names.
+      - name: Read whether the website names the newest release
+        run: bun packages/providers/cloudflare/scripts/live/feed-watch.ts
 
   # A CANCELLED job counts as red: hitting the timeout cancels rather
   # than fails, and a hang is exactly what a nightly exists to catch.
   report:
-    needs: [checks, release-gate]
+    needs: [checks]
     if: always()
     runs-on: ubuntu-latest
     # A hung reporter is the residual silence window; keep this tight.
@@ -52,9 +55,7 @@ jobs:
       issues: write
     steps:
       - name: File or update the nightly issue
-        if: >-
-          contains(fromJSON('["failure","cancelled"]'), needs.checks.result) ||
-          contains(fromJSON('["failure","cancelled"]'), needs.release-gate.result)
+        if: contains(fromJSON('["failure","cancelled"]'), needs.checks.result)
         uses: Vivswan/repo-platform/actions/fuzz-issue@stable
         with:
           mode: report
@@ -65,7 +66,7 @@ jobs:
           stream: generic
 
       - name: Close the nightly issue on a green night
-        if: needs.checks.result == 'success' && needs.release-gate.result == 'success'
+        if: needs.checks.result == 'success'
         uses: Vivswan/repo-platform/actions/fuzz-issue@stable
         with:
           mode: resolve

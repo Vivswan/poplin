@@ -16,15 +16,14 @@
     "check-bundle": "bun scripts/check-bundle.ts",
     "pin-releases": "bun scripts/pin-releases.ts",
     "test": "bun run build && vitest run",
-    "costs": "bun run build && vitest run tests/shared/worker/request-budget.test.ts",
-    "costs:compare": "bun scripts/action-costs.ts",
+    "budget": "bun run build && vitest run tests/shared/worker/request-budget.test.ts",
+    "budget:report": "bun scripts/free-plan-budget.ts",
     "load": "bun run build && POPLIN_LOAD=full vitest run",
     "live:converge": "bun scripts/live/converge.ts",
     "live:suite": "bun scripts/live/suite.ts",
     "live:reset": "bun scripts/live/reset.ts",
     "live:upgrade-builds": "bun migrations/older-build.ts",
-    "live:upgrade": "bun migrations/upgrade.ts",
-    "step-notices": "bun migrations/steps/notices.ts"
+    "live:upgrade": "bun migrations/upgrade.ts"
   },
   "dependencies": {
     "@poplin/app": "workspace:*",

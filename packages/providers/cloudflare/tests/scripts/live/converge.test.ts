@@ -745,7 +745,6 @@ describe("the rows of an install with a domain, made by a token with none of the
       "settled-upload-key": expect.any(String),
       "https-redirect": leftOut("Redirect rule"),
       "guard-rules": leftOut("WAF rule"),
-      "rate-rule": leftOut("Rate rule"),
       "bot-block": leftOut("Bot settings"),
     });
   });

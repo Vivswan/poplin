@@ -3,7 +3,8 @@
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync, so edit freely.
 #
 # The caller passes the repository's secrets through (a job reading an environment secret declares its environment) and
-# caps at contents: read. A check needing more permissions gets its own workflow, wired via .github/settings.yml.
+# caps at contents: read and pull-requests: write. Every job gets contents: read from the block below; the one job that
+# comments on the pull request states the write for itself.
 #
 # A job skipped by its own `if:` stands down from the all-green gate. A job with `continue-on-error: true` is an
 # advisory check, whose failures stay out of the gate too.
@@ -61,6 +62,61 @@ jobs:
         run: bun run test:client
       - name: Build the Worker bundle and test the Worker (Workers runtime)
         run: bun run test:worker
+
+  # What each action asks of the database and the storage, held to the budget that keeps an install inside Cloudflare's
+  # free plan (packages/providers/cloudflare/tests/shared/worker/request-budget.test.ts). A row over its budget fails the job.
+  #
+  #   every run        the job's summary: the standing, one row a ceiling, then every table; and the `free-plan-budget` artifact: every row as JSON
+  #   a pull request   the summary and an annotation lead with what the change did to the costs, against the newest green run on main;
+  #                    one comment holds the same report as the summary, and each push writes it again in place
+  budget:
+    name: free-plan budget
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Measure each action against its budget
+        env:
+          FREE_PLAN_BUDGET_FILE: ${{ runner.temp }}/free-plan-budget.json
+        run: bun run --cwd packages/providers/cloudflare budget
+      - name: Keep the numbers of this run
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: free-plan-budget
+          path: ${{ runner.temp }}/free-plan-budget.json
+          if-no-files-found: error
+      # The summary shows the row that went over, so it is written after a failed measuring step too.
+      - name: Write the summary, against the newest green run on main for a pull request
+        id: report
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FREE_PLAN_BUDGET_FILE: ${{ runner.temp }}/free-plan-budget.json
+          FREE_PLAN_BUDGET_COMMENT_FILE: ${{ runner.temp }}/free-plan-budget-comment.html
+        run: bun run --cwd packages/providers/cloudflare budget:report
+      # The token of a pull request from a fork cannot write a comment: such a run says so and posts none.
+      - name: Post the report as the one comment of the pull request
+        if: >-
+          !cancelled() && steps.report.outcome == 'success' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: poplin/checks
+          path: ${{ runner.temp }}/free-plan-budget-comment.html
+      - name: Say that this pull request gets no comment
+        if: >-
+          !cancelled() && steps.report.outcome == 'success' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        run: echo "No comment is posted - the token of a pull request from a fork cannot write one. The report is in the summary of this job."
 
   # Every fuzz target side by side, three minutes each (fuzz.yml). The seed is the one input of that file: blank here,
   # as in the nightly and the release gate, so each run draws a new one and its job `plan` prints it.
@@ -169,7 +225,7 @@ jobs:
         run: bun run --cwd packages/providers/cloudflare check-bundle "$RUNNER_TEMP/bundle/first"
 
   # The dashboard demo as a visitor meets it: built as static files, served under a path of a static host, and walked
-  # in a real browser, one job per engine. Each job builds the demo itself: the build takes about a second. The test
+  # in a real browser, each engine in parts side by side. Each job builds the demo itself: that takes a second. The test
   # that stops the demo's worker runs in Chromium alone, as the walk's own config sets. The WebKit here is Playwright's
   # build of the engine for Linux, not Safari itself.
   #
@@ -177,7 +233,7 @@ jobs:
   # no step asks apt for a package. The image's tag is the Playwright version the lockfile installs: in the image
   # of a version with other browser builds, a test fails at its start and names the image to take.
   demo:
-    name: demo / ${{ matrix.engine }}
+    name: demo / ${{ matrix.engine }} (${{ matrix.part.k }} of ${{ matrix.part.of }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
@@ -189,6 +245,9 @@ jobs:
       fail-fast: false
       matrix:
         engine: [chromium, firefox, webkit]
+        # The one place that sets how many parts an engine's walk runs in: part k of the same total, once each. Playwright
+        # deals the tests out itself. The count follows the slowest other job of this file: enough parts to end before it.
+        part: [{ k: 1, of: 3 }, { k: 2, of: 3 }, { k: 3, of: 3 }]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -202,12 +261,13 @@ jobs:
       - name: Walk the demo
         env:
           ENGINE: ${{ matrix.engine }}
-        run: bun run --cwd packages/demo test:browser --project "$ENGINE"
+          SHARD: ${{ matrix.part.k }}/${{ matrix.part.of }}
+        run: bun run --cwd packages/demo test:browser --project "$ENGINE" --shard "$SHARD"
       - name: Keep the traces and screenshots of the tests that failed
         if: failure() || cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: demo-walk-${{ matrix.engine }}
+          name: demo-walk-${{ matrix.engine }}-${{ matrix.part.k }}-of-${{ matrix.part.of }}
           path: packages/demo/.cache/walk/
           # The folder's name starts with a dot, and hidden paths are left out unless asked for.
           include-hidden-files: true

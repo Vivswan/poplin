@@ -579,7 +579,7 @@ describe("a run that is blocked", () => {
     expect(jsonOf(json)).toMatchObject({ ok: false, ready: false, address: null, release: null, blocked: [{ what: "bad_release" }] });
   });
 
-  // Drift: a run that is blocked before its first row has started nothing, so a count of what is undone beside exit 1 and `Next: rerun this command` say what is not so, of a project with no release yet as of an account with no address.
+  // Drift: a run that is blocked before its first row has started nothing, so a count of what is undone beside exit 1 and `Next: rerun this command` say what is not so, of a website that names no release as of an account with no address.
   test("before its first row says that nothing changed and when to rerun, and counts nothing: without this a run that started nothing ends with a count of what is undone", async () => {
     const account = emptyAccount();
     const none: Blocked = { what: "no_release", words: "The project's website names no release now. Run this again in a few minutes.", address: "https://example.com" };

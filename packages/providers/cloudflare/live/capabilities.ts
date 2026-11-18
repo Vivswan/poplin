@@ -13,7 +13,7 @@ const NO_LETTERS = "an install that sends a private site's address to its letter
 const NO_ACCESS = "Access switched on for the account";
 
 /** What only a zone gives: the rules and the switches that stand in front of an install with a domain. */
-const ZONE_ONLY = ["https-redirect", "guard-rules", "rate-rule", "bot-block"] as const;
+const ZONE_ONLY = ["https-redirect", "guard-rules", "bot-block"] as const;
 
 /** Why a check of such a thing is skipped on an install without a domain. */
 const NO_DOMAIN = "a domain";

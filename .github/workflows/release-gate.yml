@@ -1,14 +1,19 @@
 # Runs this repository's release acceptance tests: the tier that is critical for a release but need not run on every
 # merge (slow, environment-heavy, or network-bound). The managed ci.yml calls it on the release PR and on a dispatch,
-# where all-green blocks on it; the nightly starter calls it on the schedule (docs/all-green.md, "The release-gate hook").
+# where all-green blocks on it (docs/all-green.md, "The release-gate hook").
 #
 # This file is repo-owned, seeded once by the fleet sync and never overwritten by a later sync.
 #
-# The caller grants no secrets and caps at contents: read, so the upgrade of the two real test installs is not here:
-# it needs each test account's secrets, and release-live-upgrade.yml runs it.
+# The managed ci.yml hands this file the repository's secrets and caps it at contents: read. A dispatch runs none of the jobs that read one.
 #
-#   upgrade        every call      an install of the last release, on the local fake
-#   fuzz           the release PR  every fuzz target for three minutes, under a new seed
+#   upgrade                   every call      an install of the last release, on the local fake
+#   fuzz                      the release PR  every fuzz target for three minutes, under a new seed
+#   live-upgrade-<kind>       the release PR  each real test install, made by the last release, takes the release as it would merge (live-upgrade.yml)
+#   live-upgrade-<kind>-next  the release PR  the same from the newest earlier pre-release, as advice: its failure is a warning
+#   live-checks-<kind>        the release PR  then main's build, the live checks of a night, the sample sites, and the demo (live-install.yml)
+#
+# Each live job waits in the lane of its kind's live checks, which the called files hold, and names the three secrets it hands on:
+# a called workflow reads only the secrets its caller passes, at every call between the event and the step.
 
 name: Release Gate
 
@@ -45,3 +50,92 @@ jobs:
       seed: ""
       # The checks of the same run call the file too, and two artifacts of one run cannot share a name.
       reports: release-fuzz-failures
+
+  # The live tests of a release, for each kind of install. The called jobs ask again that the run is the pull request of a release, of this repository, opened by the release bot.
+  # Only the names the steps read are handed on. The called job names the environment, and its secret of a name is the one it reads, not a value handed over here.
+  live-upgrade-domain:
+    name: live upgrade from the last release (domain)
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: domain
+      from: release
+      environment: with-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # After the upgrade from the release, failed or not: the two share one install, so they never run side by side.
+  live-upgrade-domain-next:
+    name: live upgrade from a pre-release, as advice (domain)
+    needs: [live-upgrade-domain]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: domain
+      from: next
+      environment: with-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # Once, after both upgrades, failed or not, and where neither found a build to start from: the checks of a release run all the same.
+  # A run that was cancelled checks nothing and puts nothing back: the next run of the kind's lane does, the midnight run of main among them.
+  live-checks-domain:
+    name: live checks (domain)
+    needs: [live-upgrade-domain, live-upgrade-domain-next]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: domain
+      environment: with-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # The same three jobs for the install without a domain, on its own account and in its own lane.
+  live-upgrade-account-address:
+    name: live upgrade from the last release (account address)
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: account address
+      from: release
+      environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # After the upgrade from the release, failed or not: the two share one install, so they never run side by side.
+  live-upgrade-account-address-next:
+    name: live upgrade from a pre-release, as advice (account address)
+    needs: [live-upgrade-account-address]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: account address
+      from: next
+      environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # Once, after both upgrades, failed or not, and where neither found a build to start from: the checks of a release run all the same.
+  # A run that was cancelled checks nothing and puts nothing back: the next run of the kind's lane does, the midnight run of main among them.
+  live-checks-account-address:
+    name: live checks (account address)
+    needs: [live-upgrade-account-address, live-upgrade-account-address-next]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/live-install.yml
+    with:
+      kind: account address
+      environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}

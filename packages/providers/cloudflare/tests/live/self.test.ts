@@ -81,7 +81,7 @@ const OPENED: (() => void)[] = [];
 const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "login-page": "skipped", "users-follow": "skipped" } as const;
 
 /** The checks a run on an install without a domain skips: each needs a rule or a switch of a zone. */
-const ZONE_CHECKS = { crawler: "skipped", "assistant-fetch": "skipped", "burst-rate-rule": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
+const ZONE_CHECKS = { crawler: "skipped", "assistant-fetch": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
 
 /** How the line of the assistants' check ends. */
 const UNVERIFIED = "a run is no verified bot, so the bot switches answered, and the bots rule's pass for a verified assistant is held by the test of its expression";
@@ -128,12 +128,11 @@ const CASES: readonly Case[] = [
   [
     "a run told what the zone lacks skips the checks of each lacking rule, and the many-files publish it was not asked for",
     { noGuards: true },
-    { "bot-block": "bots", "rate-rule": "rate", "guard-rules": "guards", "https-redirect": "redirect", "many-files": "asked" },
+    { "bot-block": "bots", "guard-rules": "guards", "https-redirect": "redirect", "many-files": "asked" },
     {
       ...NO_LOGIN,
       crawler: "skipped",
       "assistant-fetch": "skipped",
-      "burst-rate-rule": "skipped",
       "L8-method": "skipped",
       "L8-scanner": "skipped",
       "L8-http": "skipped",
@@ -168,10 +167,6 @@ const CASES: readonly Case[] = [
     { "login-list": "a key of the provider", "provider-logs": "a key of the provider" },
     { "users-follow": "skipped", "logs-follow": "skipped" },
   ],
-  ["an install whose own count of a visitor lags behind a burst still shows its own limit", { lateCount: true }, {}, NO_LOGIN],
-  ["a rate rule that starts to block seconds after the burst passed its limit still shows its block", { lateRule: true }, {}, NO_LOGIN],
-  ["a zone with no rate rule, on a run not told so, fails the check of that rule", { noRateRule: true }, {}, { ...NO_LOGIN, "burst-rate-rule": "failed" }],
-  ["an install with no limit of its own fails the check of that limit", { noOwnLimit: true }, {}, { ...NO_LOGIN, "own-limit": "failed" }],
   ["the midnight run copies a site too large for one request, and the install's job finishes it", { access: true, midnight: true }, {}, {}],
   ["the midnight run on an install without a domain copies such a site too, read at the paths of its layout, and the install's job finishes it", { noDomain: true, access: true, midnight: true }, {}, ZONE_CHECKS],
   ["an install whose provider runs no job, on a midnight run not told so, fails the check of the job: the requests made the copy, and the provider holds no job of it", { access: true, midnight: true, noJobs: true }, {}, { "duplicate-job": "failed" }],
@@ -184,50 +179,12 @@ const CASES: readonly Case[] = [
   ],
 ];
 
-/** How a line ends on the fake, whose edge sees one address: once in each lane of the burst and once at the end. */
-const ONE_SEEN = "the edge saw addresses x1 (IPv4) in samples x21";
-
 /** One request a fake refuses in the install's place: the so-manieth of a method to a path. */
 interface Refusal {
   readonly method: string;
   readonly path: RegExp;
   readonly nth: number;
 }
-
-/** How the reason starts of a check of the rate rule skipped for no data center past the limit, before its line. */
-const NOT_PROVEN = "one data center that takes more than 300 of the runner's requests in ten seconds";
-
-/** How the reason starts of a check of the rate rule skipped for a runner at several addresses, before its line. */
-const ONE_ADDRESS = "a runner whose requests leave from one address";
-
-/** One fake install, what the check of the rate rule comes to on it, and the parts of the one line it says: printed on a pass, the failure's own words, or a skip's reason. */
-type BurstCase = readonly [what: string, switches: FakeSwitches, result: Outcome["result"], line: readonly string[]];
-
-/** The check of the rate rule on a fake whose rule blocks, on one with no rule, and on ones where the rule was never due: no data center past its limit, or a visitor at several addresses. */
-const BURST_CASES: readonly BurstCase[] = [
-  ["a burst the rate rule blocks says through which data center it went", {}, "passed",
-    ["320 requests in 0 ms were answered: 302 x120, 429 of the install x180, 429 of the rate rule x20", "through AAA x320 (most in ten seconds x320)", ONE_SEEN],
-  ],
-  ["requests spread over two data centers are blocked once one of them has seen more than the limit", { spread: 2 }, "passed",
-    ["606 requests in 3192 ms were answered: 302 x120, 429 of the install x480, 429 of the rate rule x6", "through AAA x303 (most in ten seconds x303), BBB x303 (most in ten seconds x303)", ONE_SEEN],
-  ],
-  ["one data center past the limit for five seconds, with no rule to block, fails", { noRateRule: true }, "failed",
-    ["757 requests in 5004 ms were answered: 302 x120, 429 of the install x637", "through AAA x757 (most in ten seconds x757)", ONE_SEEN],
-  ],
-  ["two data centers past the limit for five seconds, with no rule to block, fail before the requests end", { noRateRule: true, spread: 2 }, "failed",
-    ["1023 requests in 8196 ms were answered: 302 x120, 429 of the install x903", "through AAA x512 (most in ten seconds x512), BBB x511 (most in ten seconds x511)", ONE_SEEN],
-  ],
-  ["requests spread over four data centers, none past the limit, prove nothing and are skipped", { spread: 4 }, "skipped",
-    [
-      `${NOT_PROVEN}: 1140 requests in 9600 ms were answered: 302 x120, 429 of the install x1020`,
-      "through AAA x285 (most in ten seconds x285), BBB x285 (most in ten seconds x285), CCC x285 (most in ten seconds x285), DDD x285 (most in ten seconds x285)",
-      ONE_SEEN,
-    ],
-  ],
-  ["requests from four addresses, none past the limit though their data center is, prove nothing and are skipped", { manyAddresses: true }, "skipped",
-    [`${ONE_ADDRESS}: 757 requests in 5004 ms were answered: 302 x120, 429 of the install x637`, "through AAA x757 (most in ten seconds x757)", "the edge saw addresses x4 (IPv4) in samples x21"],
-  ],
-];
 
 /** Publish the demo's site as the reset of the test install does: a first page, and beside it the worker, unless the case leaves it out. */
 async function publishDemoSite(bench: Bench, kind: "whole" | "no-worker"): Promise<void> {
@@ -508,34 +465,5 @@ describe("the live checks, against a local fake", () => {
     const outcome = await runCheck(bench, check, report);
 
     expect({ result: outcome.result, said, paused, reported }).toEqual({ result, said: askings.map((asking) => `${ASKED_AGAIN}: ${asking}`), paused: askings.map((asking) => asking * 1000), reported: failure });
-  }, RUN_MS);
-
-  // A failure that said only the answers left it open whether the rule was gone or the requests never met in one count; a line that held the address the edge saw would put it in a public log.
-  test.each(BURST_CASES)("%s", async (_what, switches, result, line) => {
-    const fake = await openFake(switches);
-    const said: string[] = [];
-    const { bench, close } = openBench({
-      addresses: fake.addresses,
-      token: fake.token,
-      run: "selftest",
-      missing: {},
-      fetch: fake.fetch,
-      pause: fake.pause,
-      now: fake.now,
-      say: (text) => said.push(text),
-      manyFiles: MANY_FILES, largeCopy: LARGE_COPY,
-    });
-    OPENED.push(close);
-
-    const burst = CHECKS.find((check) => check.id === "burst-rate-rule");
-    if (burst === undefined) throw new Error("the checks hold no check of the rate rule");
-
-    // A failure's words are the line and then what was expected of it.
-    const outcome = await runCheck(bench, burst, (error) => said.push(...String(error).replace(/^Error: /, "").split("\n").slice(0, 1)));
-
-    const heard = outcome.result === "skipped" ? [outcome.reason] : said;
-
-    expect({ result: outcome.result, heard }).toEqual({ result, heard: [line.join("; ")] });
-    expect(heard.join()).not.toMatch(/\d+\.\d+\.\d+|[0-9a-f]*:[0-9a-f]*:/);
   }, RUN_MS);
 });

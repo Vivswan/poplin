@@ -105,6 +105,21 @@ export interface BudgetRow {
   readonly guide?: string;
 }
 
+/** How much of one ceiling a row spends. */
+export interface Use {
+  /** The ceiling, as the report names it. */
+  readonly ceiling: string;
+
+  /** What the row spends of it. */
+  readonly spent: number;
+
+  /** The most the ceiling lets through. */
+  readonly most: number;
+
+  /** Set for an allowance a row may spend in full by design: at its most it is near no ceiling, and over it is broken like any other. */
+  readonly exact?: true;
+}
+
 /** What a row cost, and what it answered. */
 interface Cost extends Tally {
   /** The status the step answered. */
@@ -119,6 +134,7 @@ export interface CostLine extends Tally {
   readonly group: Group;
   readonly name: string;
   readonly budget: Budget;
+  readonly uses: readonly Use[];
   readonly ms: number;
   readonly known?: string;
   readonly guide?: string;

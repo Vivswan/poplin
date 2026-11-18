@@ -5,7 +5,7 @@
 #   a push to main                 -> GitHub starts no run here
 #   a midnight run that ended red  -> one open issue for this kind of install, which the next green midnight run closes
 #
-# The steps and the reset are in live-install.yml, written once for both kinds. release-live-upgrade.yml runs the same steps on the pull request of a release.
+# The steps and the reset are in live-install.yml, written once for both kinds. release-gate.yml runs the same steps on the pull request of a release.
 
 name: Live Checks (account address)
 
@@ -42,7 +42,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Only a run by hand with the box ticked. release-live-upgrade.yml calls the same file, for the pull request of a release.
+  # Only a run by hand with the box ticked. release-gate.yml calls the same file, for the pull request of a release.
   # From the last release first: its failure fails the run.
   upgrade:
     name: live (account address)

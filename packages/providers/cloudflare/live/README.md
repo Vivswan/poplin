@@ -8,9 +8,9 @@ The checks of a deployed install: a stranger's requests over HTTPS, and a token 
 | check an install of your own                      | `bun run live`                                                            | `POPLIN_LIVE_DOMAIN`, or `POPLIN_LIVE_ACCOUNT_ADDRESS` for an install without a domain, and `POPLIN_LIVE_TOKEN` for the checks that publish |
 | check the two test installs                       | the `Live Checks` and `Live Checks (account address)` workflows: every night, or by hand | the `with-domain-ci-tests` and `without-domain-ci-tests` environments     |
 | check that an install of the older build updates to main | the same two workflows, by hand, with `upgrade` ticked: [The upgrade](#the-upgrade) | the same environments |
-| check that an install of the last release updates to the next one | the pull request of a release: the checks `live upgrade from the last release (domain)` and `(account address)` of its `Release Live Upgrade` run | the same environments |
-| check the two test installs before a release      | the pull request of a release: the checks `live checks (domain) / checks` and `live checks (account address) / checks` of the same run | the same environments |
-| check that a release publishes its built Worker   | a release's own run of main, then the `Release Feed` run that follows it: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
+| check that an install of the last release updates to the next one | the pull request of a release: the checks `release-gate / live upgrade from the last release (domain) / upgrade` and `(account address)` of its `CI` run | the same environments |
+| check the two test installs before a release      | the pull request of a release: the checks `release-gate / live checks (domain) / checks` and `(account address)` of the same run | the same environments |
+| check that a release publishes its built Worker   | a release's own run of main, its `site` job last: both `build the Worker` jobs green and the step that compares them; `poplin-<version>-worker.json`, `-worker.js`, and `-worker.js.map` on the release's page; `gh attestation verify` passes for each; `bundle` and `schema` under that version in the website's `releases.json`, and `schema` in `latest.json` | a published release |
 
 ```text
 Live Checks workflows, one for each kind of install
@@ -109,7 +109,7 @@ Each runs it twice for a kind, one after the other, since the two share one inst
 
 | From | The older build is | A failure | With no such build |
 | ---- | ------------------ | --------- | ------------------ |
-| `release` | the last release: the highest `vX.Y.Z` tag among the ancestors | fails the check | `Nothing is released yet: there is no version to upgrade from.`, and the check passes |
+| `release` | the last release: the highest `vX.Y.Z` tag among the ancestors | fails the check | the run fails: a checkout with no release tag is told to fetch the tags |
 | `next` | the newest pre-release on npm that is an earlier build of the commit | is a warning, `Advisory: this upgrade starts from a pre-release, so its failure blocks nothing.`, and the check passes | one line that says which pre-release is the newest and why it is none, and the check passes |
 
 A job that finds no build to start from touches no install.
@@ -120,7 +120,7 @@ job upgrade
                                    this checkout told one patch above the older build's version and given the later step, then built
   migrations/upgrade.ts            a test account alone -> the older build's own poplin uninstall and poplin install
                                    -> the older build's command line: 3 sites, a second version, a setting, a user; a token of its making
-                                   -> the older build's own start of an update, fed the build of main as a release
+                                   -> the older build's own start of an update, fed the run's build as a release
                                    -> the Worker of the new build starts, and applies the later step to the filled database
                                    -> the install says the new version 12 times in a row -> one more site published -> one line a check
                                    -> the settings put back, the sites and the token's row removed
@@ -138,7 +138,7 @@ A pre-release says its commit in its version, `0.1.0-main.<count>.<date>.g<commi
 
 ```text
 Older build: 0.1.0-main.812.20261119.g1a2b3c4 (1a2b3c4), 3 commits behind this one
-The older build says the version 0.0.0
+The older build says the version 0.1.0
 ```
 
 An install made by a pre-release whose first schema step, stored shapes, or parts differ from the commit's is not one the commit takes over, so such an upgrade fails as advice until a pre-release with them is an earlier build.
@@ -147,7 +147,7 @@ A pre-release on npm is the command alone: no built Worker and no line of the we
 
 | Check        | Holds when                                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------------------------ |
-| `Version`    | the install says the version the build of main was published under                                           |
+| `Version`    | the install says the version the run's build was published under                                             |
 | `Sites`      | each site is shown to its holder as before, a stranger is answered the same status, bytes, and media type, and a backup of it holds the same files in every version |
 | `Token`      | the token made before the update read every site, the settings, and the log                                  |
 | `Settings`   | every setting is as before, the changed one and the added user among them                                    |
@@ -160,15 +160,15 @@ A pre-release on npm is the command alone: no built Worker and no line of the we
 | `Cleanup`    | the two settings were put back, and the sites and the token's row removed                                    |
 
 ```text
-Older install: made by the older build's own poplin install, which says the version 0.0.0
+Older install: made by the older build's own poplin install, which says the version 0.1.0
 Older install: filled with 3 sites, a second version, a setting, and a user
-Update: the older build took 0.0.1 over 0.0.0, by its own start of an update
+Update: the older build took 0.1.1 over 0.1.0, by its own start of an update
 Bucket writes and lists the upgrade asked for: 23 of at most 40
 Rows written this run: 212 of at most 300, 22 of them for the later step
-Version: runs 0.0.1, and ran 0.0.0
+Version: runs 0.1.1, and ran 0.1.0
 Sites: 3 are shown, answered to a stranger, and stored in every version as before the update, byte for byte
-Database: the 2 schema steps of this commit's build are marked as it applies them, step 0.0.0/upgrade-proof among them
-Later step: the table, the column, and the index of step 0.0.0/upgrade-proof are there, and the 3 sites hold what it filled from them
+Database: the 2 schema steps of this commit's build are marked as it applies them, step 0.1.0/upgrade-proof among them
+Later step: the table, the column, and the index of step 0.1.0/upgrade-proof are there, and the 3 sites hold what it filled from them
 Going back: not offered: the update changed the database, which the version before cannot read
 Cleanup: the two settings put back, the sites and the token's row removed
 ```
@@ -180,7 +180,7 @@ A check that fails says `FAILED` and what differs, by a site's place and access 
 | the release picked, its files fetched and checked | the older build's code                                            |
 | the `update_started` entry, the upload            | the older build's code, over the database's API                   |
 | the key the upload is sent with                   | the run's token, where a deployed install uses the key it keeps   |
-| the release                                       | the build of main, answered in the run's own process              |
+| the release                                       | the run's build, answered in the run's own process                |
 | the count of starts a minute                      | left out: a binding of the Worker keeps it                        |
 
 A deployed Worker reads releases from the project's website alone, which names no build of a commit. So no run shows a deployed Worker that fetches a release and uploads itself with its kept key: the `self-update` row of the checklist does, once two releases are out.
@@ -197,11 +197,9 @@ where both upgrades find a build        about 232 rows more, and one more instal
 where neither finds one                 the checks and the reset alone, in either run: about 1,018 rows, and the reset's
 ```
 
-The `Release Live Upgrade` workflow runs it. `.github/workflows/release-live-upgrade.yml` starts on every pull request, and calls `live-upgrade.yml` twice for each kind of install on the pull request of a release alone. Its checks stand beside `all-green` on the pull request, four of the upgrade and two of the live checks.
+The release gate runs it. `.github/workflows/release-gate.yml` calls `live-upgrade.yml` twice for each kind of install on the pull request of a release, and then the live checks. `all-green` waits for all six jobs: a release cannot merge while the upgrade from the last release or a live check is red. A failed step of the two that only advise is a warning, and the job passes.
 
-`all-green` does not wait for them: read all six before merging a release, and the warnings of the two that only advise.
-
-It is no job of the release gate: GitHub hands a called workflow only the secrets its caller passes, and the gate's caller passes none.
+GitHub hands a called workflow only the secrets its caller passes. `ci.yml` hands the gate every secret, and the gate hands the three names on. No other workflow calls the gate, and a dispatch of `ci.yml` runs no live job.
 
 ### The checks after the upgrades of a release
 
@@ -222,7 +220,7 @@ live checks: main checked out and built -> the install made to match it -> every
 | after a failed upgrade | it runs all the same |
 | after two upgrades that found no build to start from | it runs all the same: every release is checked |
 | a check that fails | the check `live checks (<kind>) / checks` is red |
-| after a cancelled run | it does not run: the midnight run of main checks the install and puts it back |
+| after a cancelled run, as when a newer push to the pull request takes its place | it does not run, and an upgrade cut short stays on the install: the next run of the kind's lane puts it right, the midnight run of main among them |
 | which lane | the one of the kind's live checks, once, after both upgrades |
 
 ```text
@@ -310,8 +308,8 @@ The owner sets these. Each test account has its own environment, and the secrets
 
 | Environment               | Its secrets are of                    | Read by                    |
 | ------------------------- | ------------------------------------- | -------------------------- |
-| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `live checks (domain)` of `Release Live Upgrade` |
-| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `live checks (account address)` of `Release Live Upgrade` |
+| `with-domain-ci-tests`    | the test account that holds a domain  | the `Live Checks` workflow, and `live upgrade (domain)` and `live checks (domain)` of the release gate |
+| `without-domain-ci-tests` | the test account that holds no domain | the `Live Checks (account address)` workflow, and `live upgrade (account address)` and `live checks (account address)` of the release gate |
 
 For each account:
 
@@ -354,7 +352,7 @@ Workflow: failed (refused with status 500): needs the Worker's Workflow, which C
 
 | Differs from the other install                                   | So                                                                              |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` are skipped: needs a domain |
+| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch` are skipped: needs a domain |
 | a site answers under a path                                      | `relative-file` also asks the address without its last slash, which moves to the one with it |
 | a site's address is no root of an origin                         | the demo gets no link to a sample site: `sites.json` is empty                   |
 | `poplin install` finds the account by the token                  | the token must show its account in the list of its accounts                     |
@@ -463,22 +461,19 @@ A run starts at midnight, by hand, or on the pull request of a release, so 40 a 
 The copy the install's job finishes is a site of 113 files: one more than the first request of a copy takes. It costs a run 226 files of the day and over two hundred bucket writes, so the midnight run alone makes it, and a run started by hand with the many-files check.
 
 ```text
-burst-rate-rule, usual   about 850 requests to the Worker: the rule blocks a few seconds after one data center passed 300
-burst-rate-rule, worst   340 (burst) + 800 (paced, 12 ms apart) = 1,140: no block, and no data center past 300 for 5 seconds
-own-limit                about 700
 backup-drill             72, of which 34 make the install write to its bucket or list it
 the waits                2 a usual run; 14 after an install made anew, where `poplin install` asks too, 13 after a new schema step, and more where a row begins again; 60 + 60 + 61 = 181 at their longest
-a run, at its worst      1,140 + 700 + 72 + 181 = 2,093
-the plan's day           100,000 requests to the Worker, reached at about 47 such runs
+a run, at its worst      72 + 181 = 253
+the plan's day           100,000 requests to the Worker, reached at about 395 such runs
 ```
 
 The runs of one day must stay under the plan's 100,000 requests to the Worker. The other checks send a few dozen more, and a reset that keeps the samples reads each of their files, about 130 requests. A stranger's request that gets no answer and is asked again is counted once here, though it may have reached the Worker each time.
 
 ```text
 the install without a domain
-a run, at its worst      700 (own-limit) + 72 (backup-drill) + 181 (the waits) = 953: no rate rule stands in front of it, so no burst is sent
-a usual run              about 125 (own-limit, which ends at the first 429) + 72 + about 130 (the reset) and a few dozen more
-a day of 45 runs         45 x 953 = 42,885 of its own account's 100,000
+a run, at its worst      72 (backup-drill) + 181 (the waits) = 253
+a usual run              72 + about 130 (the reset) and a few dozen more
+a day of 45 runs         45 x 253 = 11,385 of its own account's 100,000
 a request for a site     one request of a forwarder, which hands it to the Worker at no further request, by Cloudflare's documentation
 ```
 
@@ -552,7 +547,7 @@ load: at most 453 rows written of a ceiling of 600, 60 bucket writes and lists o
 | --- | --- |
 | says its plan before it sends anything | the first line above: the rows, the bucket writes and lists, and the visits it makes at the most |
 | plans more than a ceiling, or more visits than one visitor's minute holds | it sends nothing, and the check fails with the number that is over |
-| waits 61 seconds before its first visit | the checks of the edge before it used up its visitor's minute |
+| waits 61 seconds before its first visit | the checks before it spent a part of its visitor's minute |
 | is answered a visitor's refusal, status 429 with `Retry-After` and the install's own words | counted as refused, and no failure |
 | is answered anything else that is not what the step asks for | the check fails, with the statuses alone |
 
@@ -642,19 +637,6 @@ assistant-fetch: ChatGPT-User let through (302), Perplexity-User let through (30
 
 A run's requests come from no address Cloudflare has verified, so the bots rule reads none of them. The check is 2 requests where none is sent again, and no write to the bucket or the database.
 
-## The check of the rate rule
-
-Cloudflare counts the rate rule in each data center for itself, and each address for itself. `burst-rate-rule` counts the same way, from the data center each answer names and the addresses the edge says it saw.
-
-| The run met                                                                     | Result  |
-| ------------------------------------------------------------------------------- | ------- |
-| a 429 of the rate rule                                                          | passed  |
-| no block, and the edge saw the runner at more than one address                  | skipped |
-| no block, and one data center held more than 300 in ten seconds for 5 seconds   | failed  |
-| no block, and no data center stayed past 300 that long                          | skipped |
-
-Each result comes with one line: the requests, the time, each answer's count, each data center's count, and how many addresses the edge saw. It never holds an address.
-
 ## A request that is cut off
 
 The edge closes a connection it kept open, and a request sent on it then gets no answer. A client sends a read again by itself, and no other request. So every request of a run that is no read opens a connection of its own, in `send.ts`; reads keep the open ones.
@@ -690,13 +672,11 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |
 | a plan whose bot settings the API can change                        | `crawler`, `assistant-fetch`                                             |
-| the guard rule, the redirect rule, or the rate rule on the zone     | `L8-method`, `L8-scanner`, `L8-http`, `burst-rate-rule`                  |
-| one data center that takes more than 300 of the runner's requests in ten seconds | `burst-rate-rule`                                           |
-| a runner whose requests leave from one address                      | `burst-rate-rule`                                                        |
+| the guard rule or the redirect rule on the zone                     | `L8-method`, `L8-scanner`, `L8-http`                                     |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so on no run that starts by itself                    |
 | a run started by hand with the load switched on                     | `load`: it is no row of any other run's table                            |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`: the checklist below, which also holds `download` |
-| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch`, `burst-rate-rule` |
+| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch` |
 
 ## The token's permissions
 
