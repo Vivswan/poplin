@@ -47,4 +47,4 @@ A read is asked when the command of the code that made the install has its flags
 
 ## Adding a schema step
 
-[Writing a migration](../../packages/core/src/migrations/README.md) has the steps, the rules, and a worked example. `frozen-steps.test.ts` here holds its rule on released files.
+[Writing a migration](../../packages/core/src/migrations/README.md) has the steps, the rules, and a worked example. `frozen-steps.test.ts` here holds its rule on released files, for the schema steps and for the provider's steps.
