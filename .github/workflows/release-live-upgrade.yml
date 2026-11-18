@@ -1,9 +1,10 @@
-# The live upgrade of the two test installs: a real install of the last release, on each test account, takes the release
+# The live upgrade of the two test installs: a real install of an older build, on each test account, takes the release
 # as it would merge as an update and must answer as before (packages/providers/cloudflare/live/README.md, "The upgrade").
 # Each install is then put back to what main's own run leaves: the upgrade removes the sample sites and the demo, and leaves a schema step main does not have.
 #
-#   the pull request of a release -> live-upgrade.yml, once for each kind of install
-#                                 -> live-install.yml with `put_back_only`, whatever the upgrade came to: main's build, the sample sites, the demo
+#   the pull request of a release -> live-upgrade.yml from the last release, once for each kind of install: a failure fails the check
+#                                 -> live-upgrade.yml from the newest earlier pre-release, after it in the same lane: a failure is a warning
+#                                 -> live-install.yml with `put_back_only`, once, where either upgrade reached the install: main's build, the sample sites, the demo
 #   every other pull request      -> every job skips
 #
 # It is its own workflow, started by the event, and not a job of release-gate.yml: a called workflow is handed only the
@@ -22,11 +23,12 @@ jobs:
   # The branch is the one release-please opens the release from. The called job asks the rest: this repository, and the
   # release bot as the one who opened it.
   domain:
-    name: live upgrade (domain)
+    name: live upgrade from the last release (domain)
     if: github.head_ref == 'release-please--branches--main'
     uses: ./.github/workflows/live-upgrade.yml
     with:
       kind: domain
+      from: release
       environment: with-domain-ci-tests
     # Only the names the steps read. The called job names the environment, and its secret of a name is the one it reads, not a value handed over here.
     secrets:
@@ -34,23 +36,55 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
+  # After the upgrade from the release, failed or not: the two share one install, so they never run side by side.
+  domain-next:
+    name: live upgrade from a pre-release, as advice (domain)
+    needs: [domain]
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: domain
+      from: next
+      environment: with-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
   account-address:
-    name: live upgrade (account address)
+    name: live upgrade from the last release (account address)
     if: github.head_ref == 'release-please--branches--main'
     uses: ./.github/workflows/live-upgrade.yml
     with:
       kind: account address
+      from: release
       environment: without-domain-ci-tests
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
-  # After the upgrade, failed or not. A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
+  # After the upgrade from the release, failed or not: the two share one install, so they never run side by side.
+  account-address-next:
+    name: live upgrade from a pre-release, as advice (account address)
+    needs: [account-address]
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
+    uses: ./.github/workflows/live-upgrade.yml
+    with:
+      kind: account address
+      from: next
+      environment: without-domain-ci-tests
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
+
+  # Once, after both upgrades, failed or not, where either reached the install: one that upgraded nothing left it as it was.
+  # A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
   put-back-domain:
     name: put back (domain)
-    needs: [domain]
-    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
+    needs: [domain, domain-next]
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' && (needs.domain.outputs.started == 'true' || needs.domain-next.outputs.started == 'true') }}
     # The called job asks for the right to read a commit's run of CI, which its wait on a push uses.
     permissions:
       contents: read
@@ -65,11 +99,12 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POPLIN_LIVE_LOGIN: ${{ secrets.POPLIN_LIVE_LOGIN }}
 
-  # After the upgrade, failed or not. A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
+  # Once, after both upgrades, failed or not, where either reached the install: one that upgraded nothing left it as it was.
+  # A run that was cancelled puts nothing back: main's next run does, the midnight one among them.
   put-back-account-address:
     name: put back (account address)
-    needs: [account-address]
-    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' }}
+    needs: [account-address, account-address-next]
+    if: ${{ !cancelled() && github.head_ref == 'release-please--branches--main' && (needs.account-address.outputs.started == 'true' || needs.account-address-next.outputs.started == 'true') }}
     # The called job asks for the right to read a commit's run of CI, which its wait on a push uses.
     permissions:
       contents: read

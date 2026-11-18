@@ -11,6 +11,7 @@ import { dirname, join, relative } from "node:path";
 
 import { fuzzTargets, seedOf } from "../../../../../tests/fuzz/plan";
 import { repositoryFiles } from "../../../../../tests/support/repository-files";
+import { readFrom } from "../../migrations/older-from";
 import { MAIN, PULL_REQUEST, RELEASE_BOT, RELEASE_BRANCH } from "../../scripts/admit";
 
 /** The root of the repository. */
@@ -79,6 +80,9 @@ const RELEASE = parse("release-live-upgrade.yml");
 
 /** The job of that workflow that upgrades the install of each kind. */
 const RELEASE_JOBS = { domain: "domain", "account address": "account-address" } as const;
+
+/** The job of that workflow that upgrades the install of each kind from a pre-release, as advice. */
+const ADVICE_JOBS = { domain: "domain-next", "account address": "account-address-next" } as const;
 
 /** The job of that workflow that puts the install of each kind back after its upgrade. */
 const PUT_BACK_JOBS = { domain: "put-back-domain", "account address": "put-back-account-address" } as const;
@@ -304,14 +308,19 @@ describe("what each workflow hands the steps", () => {
   test.each([
     ["the steps", (kind: Kind) => CALLERS[kind].jobs.live],
     ["the upgrade", (kind: Kind) => CALLERS[kind].jobs.upgrade],
+    ["the upgrade from a pre-release", (kind: Kind) => CALLERS[kind].jobs["upgrade-next"]],
     ["the upgrade of a release", (kind: Kind) => RELEASE.jobs[RELEASE_JOBS[kind]]],
+    ["the upgrade of a release from a pre-release", (kind: Kind) => RELEASE.jobs[ADVICE_JOBS[kind]]],
     ["the put-back after the upgrade of a release", (kind: Kind) => RELEASE.jobs[PUT_BACK_JOBS[kind]]],
   ] as const)("each workflow names its own kind and the environment of that kind's account for %s, and the two hand over nothing else that differs", (_what, jobOf) => {
     const handed = BOTH.map(jobOf);
     const pairs = handed.map((job) => ({ kind: job?.with?.kind, environment: job?.with?.environment }));
-    // A put-back waits for the upgrade of its own kind, under that job's name: one that waited for the other kind's could run before its own upgrade, which then leaves the install as before.
-    const waits = (job: Job | undefined): readonly string[] => (job?.needs ?? []).map((name) => (BOTH.some((kind) => RELEASE_JOBS[kind] === name && job?.with?.kind === kind) ? "the upgrade of its own kind" : name));
-    const rest = handed.map((job) => ({ ...job, name: undefined, needs: waits(job), with: { ...job?.with, kind: undefined, environment: undefined } }));
+    // A job waits for the upgrades of its own kind, under those jobs' names: one that waited for the other kind's could run beside its own upgrade, or before it, which then leaves the install as before.
+    const own = (job: Job | undefined): readonly (readonly [name: string, role: string])[] =>
+      BOTH.filter((kind) => job?.with?.kind === kind).flatMap((kind) => [[ADVICE_JOBS[kind], "the advice of its own kind"] as const, [RELEASE_JOBS[kind], "the upgrade of its own kind"] as const]);
+    const waits = (job: Job | undefined): readonly string[] => (job?.needs ?? []).map((name) => own(job).find(([known]) => known === name)?.[1] ?? name);
+    const asks = (job: Job | undefined): string | undefined => own(job).reduce((text, [name, role]) => text?.replaceAll(`needs.${name}.`, `needs.<${role}>.`), job?.if);
+    const rest = handed.map((job) => ({ ...job, name: undefined, if: asks(job), needs: waits(job), with: { ...job?.with, kind: undefined, environment: undefined } }));
 
     expect({ pairs, same: rest[0] }).toEqual({ pairs: BOTH.map((kind) => ({ kind, environment: KINDS[kind].environment })), same: rest[1] });
   });
@@ -321,7 +330,7 @@ describe("the secrets of the live workflows", () => {
   // A called workflow reads only the secrets it declares. A step that reads one more would be handed nothing, and would stop on the real run alone.
   test.each([
     ["the steps", STEPS, BOTH.flatMap((kind) => [CALLERS[kind].jobs.live, RELEASE.jobs[PUT_BACK_JOBS[kind]]])],
-    ["the upgrade", UPGRADE, BOTH.flatMap((kind) => [CALLERS[kind].jobs.upgrade, RELEASE.jobs[RELEASE_JOBS[kind]]])],
+    ["the upgrade", UPGRADE, BOTH.flatMap((kind) => [CALLERS[kind].jobs.upgrade, CALLERS[kind].jobs["upgrade-next"], RELEASE.jobs[RELEASE_JOBS[kind]], RELEASE.jobs[ADVICE_JOBS[kind]]])],
   ] as const)("every secret a step of %s reads is one its file declares, and each caller hands over those names and no other", (_what, called, callers) => {
     const read = Object.values(called.jobs).flatMap((job) => (job.steps ?? []).flatMap((step) => Object.values(step.env ?? {}).flatMap((value) => [...String(value).matchAll(/secrets\.(\w+)/g)].map((match) => match[1] ?? ""))));
     const names = [...new Set(read)].sort();
@@ -358,6 +367,14 @@ describe("the upgrade of the live workflows", () => {
     const first = steps.findIndex(holdsSecret);
 
     expect([builds >= 0 && builds < first, holdsSecret(steps[builds] ?? {}), steps[first]?.run?.includes("live:upgrade ")]).toEqual([true, false, true]);
+  });
+
+  // Drift: a start the script does not know stops the step, on the run of a release alone.
+  test("each caller names where its two upgrades of a kind start from by the names the script reads: the last release, then a pre-release", () => {
+    const pairs = BOTH.flatMap((kind) => [[CALLERS[kind].jobs.upgrade, CALLERS[kind].jobs["upgrade-next"]] as const, [RELEASE.jobs[RELEASE_JOBS[kind]], RELEASE.jobs[ADVICE_JOBS[kind]]] as const]);
+    const start = (job: Job | undefined): string => readFrom({ POPLIN_UPGRADE_FROM: String(job?.with?.from) });
+
+    expect(pairs.map(([first, second]) => [start(first), start(second)])).toEqual(pairs.map(() => ["release", "next"]));
   });
 });
 
@@ -475,9 +492,14 @@ describe("the live upgrade of a release", () => {
 
   // Drift: the workflow starts for every pull request. A job without the branch of a release would wait in the lane of the live checks for each of them, to be refused there.
   test("each job takes the branch of a release alone, the one the guard of the called job admits", () => {
-    const asked = BOTH.map((kind) => [RELEASE.jobs[RELEASE_JOBS[kind]]?.if, RELEASE.jobs[PUT_BACK_JOBS[kind]]?.if]);
+    const asked = BOTH.map((kind) => [RELEASE.jobs[RELEASE_JOBS[kind]]?.if, RELEASE.jobs[ADVICE_JOBS[kind]]?.if, RELEASE.jobs[PUT_BACK_JOBS[kind]]?.if]);
+    const after = `!cancelled() && github.head_ref == '${RELEASE_BRANCH}'`;
+    const started = (kind: Kind): string => `needs.${RELEASE_JOBS[kind]}.outputs.started == 'true' || needs.${ADVICE_JOBS[kind]}.outputs.started == 'true'`;
 
-    expect({ asked, jobs: Object.keys(RELEASE.jobs).length }).toEqual({ asked: BOTH.map(() => [`github.head_ref == '${RELEASE_BRANCH}'`, `\${{ !cancelled() && github.head_ref == '${RELEASE_BRANCH}' }}`]), jobs: 2 * BOTH.length });
+    expect({ asked, jobs: Object.keys(RELEASE.jobs).length }).toEqual({
+      asked: BOTH.map((kind) => [`github.head_ref == '${RELEASE_BRANCH}'`, `\${{ ${after} }}`, `\${{ ${after} && (${started(kind)}) }}`]),
+      jobs: 3 * BOTH.length,
+    });
   });
 });
 
