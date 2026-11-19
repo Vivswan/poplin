@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/Vivswan/poplin/compare/v0.1.1...v0.1.2) (2026-11-19)
+
+
+### Features
+
+* **website:** show the one install command on the home page ([#457](https://github.com/Vivswan/poplin/issues/457)) ([3f719d3](https://github.com/Vivswan/poplin/commit/3f719d3ea6e840be2c5846f61a371655737eb528))
+* **website:** show what is requested, not built, in the comparison ([#458](https://github.com/Vivswan/poplin/issues/458)) ([b19c4b0](https://github.com/Vivswan/poplin/commit/b19c4b0e47403ca384504dd10b8b3d2cba0f6e0c))
+
 ## [0.1.1](https://github.com/Vivswan/poplin/compare/v0.1.0...v0.1.1) (2026-11-18)
 
 
