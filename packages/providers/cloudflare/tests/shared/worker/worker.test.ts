@@ -1620,7 +1620,7 @@ describe("the built bundle", () => {
     expect(modules).toContain("../src/shared/worker/worker.ts");
     expect(modules.filter((path) => /(^|\/)tests\/|\.test\.|\/support\/|vitest|fixtures/.test(path))).toEqual([]);
     // The Workflow's class and its error are the runtime's own: no upload carries them.
-    expect(parse(bundle)[0].map((left) => left.n)).toEqual(["cloudflare:workers", "cloudflare:workflows"]);
+    expect(parse(bundle)[0].map((left) => left.specifier)).toEqual(["cloudflare:workers", "cloudflare:workflows"]);
     expect(new TextEncoder().encode(bundle).byteLength).toBeLessThan(MOST_BUNDLE_BYTES);
     expect(await gzippedBytes(bundle)).toBeLessThan(MOST_BUNDLE_GZIP_BYTES);
   });
