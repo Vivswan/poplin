@@ -4,19 +4,21 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 import { arrive, onPage, reset, test, toSection } from "./visit";
 
+/** What a screen with the sections at its side has room for: the row's name, the version, and what the row holds at its right on one line, with the next row under it. */
+const ONE_LINE = {
+  says: "the row of the version is one line: the version beside its name, and at the right the notes of the newer release with Update now after them",
+  beside: (page: Page) => [notes(page), start(page)],
+  under: (page: Page) => [page.getByRole("heading", { name: "Check for new versions", exact: true })],
+} as const;
+
 /**
- * The screens the row is walked on: a wide one, and a phone, which keeps the sections behind a button.
+ * The screens the row is walked on: a wide one, a tablet, where the column of the controls is at its narrowest, and a phone, which keeps the sections behind a button.
  *
- * Each with what stands on the line of the row's name there, after the version, and with what stands under that line.
- * A wide screen has room for what the row holds at its right, so the next row is under the line. On a phone what the row holds is.
+ * Each with what stands on the line of the row's name there, after the version, and with what stands under that line. On a phone what the row holds is under the line.
  */
 const SCREENS = [
-  {
-    size: { width: 1440, height: 900 },
-    says: "the row of the version is one line: the version beside its name, and at the right the notes of the newer release with Update now after them",
-    beside: (page: Page) => [notes(page), start(page)],
-    under: (page: Page) => [page.getByRole("heading", { name: "Check for new versions", exact: true })],
-  },
+  { size: { width: 1440, height: 900 }, ...ONE_LINE },
+  { size: { width: 820, height: 1100 }, ...ONE_LINE },
   {
     size: { width: 390, height: 844 },
     says: "the version stands beside the name of its row, and the notes of the newer release and Update now under them",

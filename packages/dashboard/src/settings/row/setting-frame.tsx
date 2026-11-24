@@ -153,7 +153,8 @@ export function SettingFrame({
       className={cn(
         "-mx-3 flex gap-x-6 gap-y-2 rounded-lg px-3 py-2.5 motion-safe:transition-colors",
         beside ? "items-center justify-between" : "flex-col",
-        "@[480px]:grid @[480px]:grid-cols-[minmax(0,1fr)_16.5rem] @[600px]:grid-cols-[minmax(0,1fr)_19rem]",
+        // The controls of every row stand in one column. In a column of middle width it has room for the line the Version row mostly holds, a newer release with Update now after it, and a little more: some browsers draw the text wider.
+        "@[480px]:grid @[480px]:grid-cols-[minmax(0,1fr)_18rem] @[600px]:grid-cols-[minmax(0,1fr)_19rem]",
         top ? "@[480px]:items-start" : "@[480px]:items-center @[600px]:items-start",
         marked && "bg-muted/60",
       )}
