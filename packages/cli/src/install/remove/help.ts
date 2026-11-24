@@ -6,6 +6,7 @@ import { type Look, PLAIN_LOOK } from "../../local/screen";
 import { permissionsPart } from "../ask";
 import type { Provider } from "../records";
 import { NO_PROVIDER, optionRows } from "../report";
+import { optionsOf } from "../words";
 import { UNINSTALL_OPTIONS } from "./parse";
 
 /** The help of the command itself: what it does, the providers, and the options every provider takes. */
@@ -26,7 +27,7 @@ function providerHelp(provider: Provider): HelpPage {
   return {
     usage: [`poplin uninstall ${provider.id} ${provider.usage} [options]`],
     about: `Remove the install from ${provider.name}`,
-    parts: [{ title: "Options:", rows: optionRows([...provider.options, ...UNINSTALL_OPTIONS]) }, permissionsPart("remove", provider)],
+    parts: [{ title: "Options:", rows: optionRows([...optionsOf(provider, "remove"), ...UNINSTALL_OPTIONS]) }, permissionsPart("remove", provider)],
   };
 }
 

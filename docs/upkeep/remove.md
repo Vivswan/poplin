@@ -88,6 +88,7 @@ would remove  Worker                poplin
 would remove  R2 bucket             poplin-sites (files: 2, 15 B)
 would remove  D1 database           poplin (sites: 3)
 unchanged     Login method          Cloudflare, One-time PIN, and Passkeys are login methods of the account, which its other applications may use, and are left in place
+unchanged     Account subdomain     left in place where the account has one: it is the account's own, and its other Workers may answer under it
 unchanged     Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 A real run prompts for poplin.your-name.workers.dev, or accepts --confirm poplin.your-name.workers.dev
 Uninstall does not log machines out. Run npx poplin logout on each machine first.
@@ -137,6 +138,7 @@ would remove  DNS record            *.example.com, poplin.example.com
 would remove  R2 bucket             poplin-sites (files: 2, 15 B)
 would remove  D1 database           poplin (sites: 3)
 unchanged     Bot settings          AI crawler blocking and Bot Fight Mode are zone settings and keep their values
+...
 unchanged     Account token         delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens
 An uninstall cannot be undone
 Uninstall does not log machines out. Run npx poplin logout on each machine first.
@@ -144,7 +146,7 @@ Type poplin.example.com to confirm: poplin.example.com
 removed    Worker route          *-poplin.example.com/*, *-page.example.com/*, poplin.example.com/*
 ...
 removed    D1 database           poplin (sites: 3)
-The install is removed: 18 resource types removed, 3 unchanged
+The install is removed: 18 resource types removed, 4 unchanged
 Next: npx poplin logout on each machine with a stored login, to delete it
 ```
 
@@ -155,7 +157,7 @@ Nothing is removed before you type the host. Another text than the install's own
 The line that ends the rows counts the ones that say `removed` or `not found`, then the ones that say `skipped` and `unchanged`. Where the token lacks an optional permission, the line under it names the permission and each kind the run skipped:
 
 ```text
-The install is removed: 16 resource types removed, 2 skipped, 3 unchanged
+The install is removed: 16 resource types removed, 2 skipped, 4 unchanged
 Fix: add Notifications: Edit and rerun this command, or delete Budget alert and Certificate alert at Cloudflare
 ```
 
@@ -173,7 +175,8 @@ Read the rows that say `unchanged`:
 | the budget alert, and under a domain the certificate alert and the redirect, guard, and rate rules | when the token lacks the optional permission the row names. The command then cannot see whether the install has them | look for them [by hand](#by-hand-at-cloudflare), and delete what is there; or add the permission, and run the command again |
 | a rule set of poplin's name             | under a domain, when it holds a rule that is not poplin's: its row says so | nothing: the rule in it is yours. [The list by hand](#by-hand-at-cloudflare) names the three |
 | the two bot switches                    | under a domain                                               | [switch off what you do not want](#by-hand-at-cloudflare)             |
-| what you switched on in [step 1 of Install](../start/install.md#1-switch-on-what-no-command-can) | always: the Zero Trust team with its Free plan, R2, the payment method, and the account's `workers.dev` subdomain | nothing: they are not poplin's. They are yours, to keep or to cancel at Cloudflare |
+| the account's `workers.dev` subdomain   | always, also where the install made it                       | nothing: it is your account's own, and its other Workers may answer under it |
+| what you switched on in [step 1 of Install](../start/install.md#1-switch-on-what-no-command-can) | always: the Zero Trust team with its Free plan, R2, and the payment method | nothing: they are not poplin's. They are yours, to keep or to cancel at Cloudflare |
 
 ### Which token to delete
 

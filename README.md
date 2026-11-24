@@ -63,6 +63,7 @@ First user's email: you@example.com
 ...
 Account token (hidden):
 This account has no install
+unchanged  Account subdomain     your-name.workers.dev
 created    R2 bucket             poplin-sites
 created    D1 database           poplin
 created    Worker                poplin, runs 0.1.0

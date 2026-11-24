@@ -18,6 +18,9 @@ const BEHIND_ACCESS = /^(Access |Login method$)/;
 /** The states of a row that leave a run not done. */
 export const UNDONE: ReadonlySet<RowState> = new Set(["block", "fail", "not-run"]);
 
+/** The error codes whose refusal a person mends, each with what it means and what to do: 10063 is a call that needs the account to have a `workers.dev` subdomain, as a cron trigger does. */
+const MENDED_BY_HAND: ReadonlyMap<number, string> = new Map([[10_063, "this account has no workers.dev subdomain. Set one under Workers & Pages in the Cloudflare dashboard"]]);
+
 /** What each state of a repair's row is as a row of a command: a check's `missing` is what a run makes, and after a run it is what the run could not make. */
 const STATES: Readonly<Record<Mode, Readonly<Record<DomainRow["state"], RowState>>>> = {
   plan: { present: "leave", missing: "make", differs: "change", "left-out": "leave-out", optional: "leave-out", created: "make", changed: "change", removed: "remove", failed: "fail", "not-run": "not-run" },
@@ -28,7 +31,7 @@ const STATES: Readonly<Record<Mode, Readonly<Record<DomainRow["state"], RowState
 export type CommandRow = DomainRow & { readonly extra?: string };
 
 /**
- * Why a call failed, with nothing Cloudflare said but its status and the numbers of its error codes.
+ * Why a call failed, with nothing Cloudflare said but its status and the numbers of its error codes. A code a person mends is told in this file's own words, in place of the numbers.
  *
  * The sentence beside a code is never passed on: it may quote an id, an address, or the key it was sent with, and a row is printed, kept, and answered.
  */
@@ -36,6 +39,9 @@ export function failureWords(failure: CloudflareFailure): string {
   if (failure.failure === "rate-limited") return "Cloudflare asked to wait";
 
   if (failure.failure === "network") return "no answer from Cloudflare";
+
+  const mended = failure.errors.map((error) => MENDED_BY_HAND.get(error.code)).find((words) => words !== undefined);
+  if (mended !== undefined) return mended;
 
   const codes = failure.errors.map((error) => error.code).join(", ");
 

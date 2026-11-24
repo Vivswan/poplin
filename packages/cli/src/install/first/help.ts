@@ -7,6 +7,7 @@ import { permissionsPart } from "../ask";
 import { SHARED_OPTIONS } from "./parse";
 import type { Provider } from "../records";
 import { NO_PROVIDER, optionRows } from "../report";
+import { optionsOf } from "../words";
 
 /** The help of the command itself: what it does, the providers, the options every provider takes, and the commands about an install. */
 function commandHelp(providers: readonly Provider[]): HelpPage {
@@ -26,7 +27,7 @@ function providerHelp(provider: Provider): HelpPage {
   return {
     usage: [`poplin install ${provider.id} ${provider.usage} [options]`],
     about: `Install poplin on ${provider.name}`,
-    parts: [{ title: "Options:", rows: optionRows([...provider.options, ...SHARED_OPTIONS]) }, permissionsPart("install", provider)],
+    parts: [{ title: "Options:", rows: optionRows([...optionsOf(provider, "install"), ...SHARED_OPTIONS]) }, permissionsPart("install", provider)],
   };
 }
 

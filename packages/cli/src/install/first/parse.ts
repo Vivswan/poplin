@@ -6,7 +6,7 @@ import type { OptionRow, Token } from "../../../../core/src/install/installer";
 import { FLAG_WORDS } from "../../commands/command-table";
 import { EVERY_RIGHT, rightsOf, TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, InstallMode, Missing, ParsedInstall, Plan, Provider, Stop } from "../records";
-import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
+import { type CommandWords, givenTo, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
 
 /** The variable that answers the first login. */
 const USER_VARIABLE = "POPLIN_USER";
@@ -38,7 +38,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
 const RUN_ALONE = ["--log-in", "--no-log-in", "--no-wait"] as const;
 
 /** The command, as its words are read. */
-const COMMAND: CommandWords = { name: "install", options: SHARED_OPTIONS, elsewhere: ELSEWHERE };
+const COMMAND: CommandWords = { name: "install", work: "install", options: SHARED_OPTIONS, elsewhere: ELSEWHERE };
 
 /** The answers the options and the variables gave: where the install goes or the questions still open, the first login, and the token of the variable. */
 interface Answers {
@@ -75,7 +75,7 @@ function modeOf<Open extends "ask" | "no">(shared: Typed, open: Open): InstallMo
 /** Read every answer the options and the variables gave, each checked once: a provider's own, the first login, and the token of the variable. */
 function readAnswers(read: Named, env: Variables): Answers | Stop {
   const { provider, shared } = read;
-  const where = provider.read({ flags: read.own, env });
+  const where = provider.read(givenTo(read, env));
   if (!where.ok && where.why === "refused") return usage(where.refused);
 
   const login = readLogin(shared, env);

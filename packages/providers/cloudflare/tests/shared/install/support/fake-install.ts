@@ -25,6 +25,9 @@ export const TEAM = "team.cloudflareaccess.com";
 /** What Cloudflare answers on an account whose Access was never switched on. */
 const ACCESS_OFF = { status: 403, code: 9999, message: "access.api.error.not_enabled" } as const;
 
+/** What Cloudflare answers a cron trigger in an account that has no free address. */
+const NO_SUBDOMAIN = { status: 403, code: 10063, message: "The account has no subdomain." } as const;
+
 /** How the value of every key the fake makes starts. A test looks for it in whatever a run says: the value is no text of a row, a step, a log, or an error. */
 export const KEY_VALUE_START = "value-of-made-key-";
 
@@ -148,8 +151,11 @@ export interface Account {
   /** Accounts the token shows beside its own. */
   alsoShown?: Row[];
 
-  /** Whether the account never set the name of its free address: Cloudflare then answers the read of it with no name. */
-  noFreeAddress?: boolean;
+  /** The account's name in its free address; `undefined` for an account that never set one, which is refused the read of it and every cron trigger. */
+  subdomain: string | undefined;
+
+  /** The names Cloudflare gives no account for a free address: a call that sets one of them is refused. */
+  takenNames?: readonly string[];
 
   /** The account's other Workers, each with its tags, its bindings, and its two address switches. */
   workers: Row[];
@@ -214,6 +220,7 @@ export function emptyAccount(): Account {
     address: { enabled: false, previews_enabled: true },
     buckets: [],
     objects: [],
+    subdomain: FREE_ADDRESSES[ACCOUNT],
     workers: [],
     accessOff: false,
     tokens: [],
@@ -408,6 +415,15 @@ function scriptSettings(account: Account, asked: Asked): Response {
   return reply({ logpush: false, observability: account.observability ?? { enabled: false }, tags: [] });
 }
 
+/** The cron list of the install's Worker: read, or replaced by the one sent. Cloudflare takes no cron trigger in an account with no free address, also for a Worker that never answers under it. */
+function schedules(account: Account, asked: Asked): Response {
+  if (asked.method === "PUT" && account.subdomain === undefined) return refusal(NO_SUBDOMAIN.status, NO_SUBDOMAIN.code, NO_SUBDOMAIN.message);
+
+  if (asked.method === "PUT") account.crons = (asked.body as { readonly cron: string }[]).map((schedule) => schedule.cron);
+
+  return reply({ schedules: account.crons.map((cron) => ({ cron })) });
+}
+
 /** The account's Workers: the list, the Worker named `poplin` with its settings, its versions, its cron list, and its address switches, and every other Worker. */
 function worker(account: Account, asked: Asked, parts: readonly string[]): Response {
   if (parts[4] === undefined) return page(asked, [{ id: "poplin", tags: [] }, ...account.workers]);
@@ -420,11 +436,7 @@ function worker(account: Account, asked: Asked, parts: readonly string[]): Respo
 
   if (parts[5] === "versions" || parts[5] === "deployments") return versions(account, asked, parts);
 
-  if (parts[5] === "schedules") {
-    if (asked.method === "PUT") account.crons = (asked.body as { readonly cron: string }[]).map((schedule) => schedule.cron);
-
-    return reply({ schedules: account.crons.map((cron) => ({ cron })) });
-  }
+  if (parts[5] === "schedules") return schedules(account, asked);
 
   if (parts[5] === "subdomain") {
     if (asked.method === "POST") Object.assign(account.address, asked.body);
@@ -538,6 +550,20 @@ async function storeQueried(account: Account, asked: Asked): Promise<Response> {
   }
 }
 
+/** The account's free address: its name, read, or set to the one sent. An account with none is refused the read, a name Cloudflare gives no account is refused, and so is a call that names another account than the token's. */
+function freeAddress(account: Account, asked: Asked, accountId: string | undefined): Response {
+  if (accountId !== ACCOUNT) return refusal(403, 10000, "Authentication error");
+
+  if (asked.method === "PUT") {
+    const { subdomain } = asked.body as { readonly subdomain: string };
+    if (account.takenNames?.includes(subdomain) === true) return refusal(409, 10031, "The subdomain is not available.");
+
+    account.subdomain = subdomain;
+  }
+
+  return account.subdomain === undefined ? refusal(404, 10007, "The account has no subdomain.") : reply({ subdomain: account.subdomain });
+}
+
 /** Answer a request of the install's own account by the kind of object its path names. */
 function inAccount(account: Account, asked: Asked, parts: readonly string[]): Response {
   const kind = parts.slice(2, 4).join("/");
@@ -557,7 +583,7 @@ function inAccount(account: Account, asked: Asked, parts: readonly string[]): Re
 
   if (kind === "workers/scripts") return worker(account, asked, parts);
 
-  if (kind === "workers/subdomain") return reply({ subdomain: account.noFreeAddress === true ? null : FREE_ADDRESSES[ACCOUNT] });
+  if (kind === "workers/subdomain") return freeAddress(account, asked, parts[1]);
 
   if (kind === "d1/database" && parts[5] === "query") return queried(account, asked);
 
@@ -628,7 +654,7 @@ export function answer(account: Account, asked: Asked): Response {
   if (path === "/accounts") return page(asked, [{ id: owner, name: "An account" }, ...(owner === ACCOUNT ? (account.alsoShown ?? []) : [])]);
 
   // A token of another account reads its own free address, and reaches nothing of this account.
-  if (owner !== ACCOUNT && path === `/accounts/${owner}/workers/subdomain`) return reply({ subdomain: FREE_ADDRESSES[owner] });
+  if (owner !== ACCOUNT && asked.method === "GET" && path === `/accounts/${owner}/workers/subdomain`) return reply({ subdomain: FREE_ADDRESSES[owner] });
 
   return barred(account, asked, path) ?? trailed(account, asked, path) ?? inAccount(account, asked, path.split("/").slice(1));
 }

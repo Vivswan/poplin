@@ -8,6 +8,7 @@
 // Each answer is checked once, where it is read: what `read` and `token` give is taken by the later steps as it is.
 // `find` only reads. `install` with a dry run only reads too, and lists the rows a run would work through: the same objects, in the same order.
 // The provider asks nothing itself: it declares each question, and the command asks it, or names the option that answers it.
+// An answer only the account shows the need of is asked for by `install`, before it makes anything: the command gets the answer, and runs it again.
 
 import type { Login } from "../auth/logins";
 
@@ -56,6 +57,9 @@ export interface OptionRow {
 
   /** The variable that answers the same, as the help shows it, such as `POPLIN_DOMAIN`; `null` for an option with none. */
   readonly variable: string | null;
+
+  /** The one work the option is of, such as an install's alone; absent for an option every work takes. */
+  readonly work?: "install" | "repair" | "remove";
 }
 
 /** What a person gave the provider's own options: each option typed, by its name without the dashes, with its value or `true`, and the environment. */
@@ -161,11 +165,11 @@ export interface Step {
  * What a run came to.
  *
  * `rows` are the same objects in the same order for a dry run and the run after it. `ready` is true for a dry run that a run would go through after, and for a run that left nothing undone.
- * `release` is the version a run uploads, and `address` where the install's dashboard is; each is absent from a run that was blocked before it knew. Whether the install answers there yet is the command's to ask.
- * `release` is absent too from a run that went on with code that was there before it, and uploaded none.
+ * `release` and `address` are absent from a run that ended before it had read the release. Whether the install answers at `address`, its dashboard's, is the command's to ask.
+ * Once the release is read, `release` is the version a run uploads, also for a dry run and a run that stopped before its upload. A run that goes on with standing code uploads none, and names the version that code states, if any.
  * `proof` says how the token's rights were proven: each object's first read was allowed, which a write then proves.
  * `unused` is the first login a person gave, where the install keeps the users its records hold and that login is none of them: nobody lets that person in but a repair that adds them.
- * The second shape is a run that could not start its work: the provider or the project's website gave no answer.
+ * The second shape is a run that got no answer from the provider or the project's website, at its start or after rows it had told.
  */
 export type Installed =
   | {
@@ -180,6 +184,19 @@ export type Installed =
       readonly unused: Login | undefined;
     }
   | { readonly ok: false; readonly why: "unreachable"; readonly words: string };
+
+/**
+ * A run that stopped before it made anything or told a row, for an answer of the provider's own that only the account shows the need of.
+ *
+ * `question` asks for the answer, and its answer is the place to run with again. `refused` is on an answer a person gave and the provider did not take: one line that says why.
+ * A dry run sends no change, so it meets no such refusal: the run after a dry run that was ready can still answer with one, in place of its rows.
+ */
+export interface Unanswered<Where> {
+  readonly ok: false;
+  readonly why: "answer";
+  readonly question: Question<Where>;
+  readonly refused: string | undefined;
+}
 
 /** What a removal starts from: an install that is set, one begun and not finished, data of the product's names that no install holds, or no install, where an earlier removal may have left an object behind. */
 export type Removable<Place> = Extract<Found<never, Place>, { readonly state: "whole" | "started" | "leftover" | "none" }>;
@@ -286,8 +303,8 @@ export interface Installer<Where, Place> {
   /** Look for an install with the token, in the account that place is in, for the work the token is made for: a look reads nothing that needs a permission that work's token is not asked for. It only reads. */
   find(token: Token, where: Where, reach: Reach, work: "install" | "repair" | "remove"): Promise<Found<Where, Place>>;
 
-  /** Make the install, or with a dry run say what a run would make. `say` is told each row as it is settled. */
-  install(found: Startable<Place>, where: Where, login: Login, run: Run, reach: Reach, say: (row: Row) => void): Promise<Installed>;
+  /** Make the install, or with a dry run say what a run would make. `say` is told each row as it is settled. A run that lacks an answer of the provider's own makes nothing, and asks for it. */
+  install(found: Startable<Place>, where: Where, login: Login, run: Run, reach: Reach, say: (row: Row) => void): Promise<Installed | Unanswered<Where>>;
 
   /** Remove the install and nothing else, or with a dry run list what a run would remove. `say` is told each row as it is settled. */
   remove(found: Removable<Place>, where: Where, removal: Removal, reach: Reach, say: (row: RemovalRow) => void): Promise<Removed>;

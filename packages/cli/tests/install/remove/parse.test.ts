@@ -59,6 +59,7 @@ describe("a line that is written wrong", () => {
     ["uninstall stand-in --no-place --confirm=", ["--confirm requires the text --dry-run shows", "Fix: get the text from a run with --dry-run"]],
     ["uninstall stand-in --no-place --force", ["Unknown option --force", "Fix: confirm with --confirm <text>"]],
     ["uninstall stand-in --no-place --user you@example.com", ["Unknown option --user", "Fix: remove --user"]],
+    ["uninstall stand-in --no-place --alias mine --dry-run", ["Unknown option --alias", "See: poplin uninstall stand-in --help"]],
     ["uninstall stand-in --place example.com --no-place --dry-run", ["--place and --no-place are mutually exclusive"]],
     ["uninstall nowhere --dry-run", ['Unknown provider "nowhere"', "See: poplin uninstall"]],
     ["uninstall stand-in --no-place --dry-run --token-stdin", [`${TOKEN_VARIABLE} and --token-stdin are mutually exclusive`]],

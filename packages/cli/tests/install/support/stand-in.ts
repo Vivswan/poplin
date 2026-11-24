@@ -3,7 +3,7 @@
 // The provider is no real one: its options, its words, and its token's form are its own, so the command is proven to work through the interface alone.
 
 import type { Login } from "../../../../core/src/auth/logins";
-import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, TokenForm, Whole } from "../../../../core/src/install/installer";
+import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, TokenForm, Unanswered, Whole } from "../../../../core/src/install/installer";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
 import type { InstallEnds } from "../../../src/install/records";
@@ -37,8 +37,8 @@ export const WHOLE: readonly RemovalRow[] = [
   { object: "Account token", state: "stay", detail: "delete it at Stand-In Host" },
 ];
 
-/** Where the made-up provider puts an install: at a place of a name, or at none. */
-export type Where = { readonly kind: "place"; readonly name: string; readonly account?: string } | { readonly kind: "none"; readonly account?: string };
+/** Where the made-up provider puts an install: at a place of a name, or at none. `alias` is the name a person gave for an account that has none, which an install alone takes. */
+export type Where = { readonly kind: "place"; readonly name: string; readonly account?: string; readonly alias?: string } | { readonly kind: "none"; readonly account?: string; readonly alias?: string };
 
 /** What the made-up provider found: the token it looked with, which the command must hand back and never print. */
 export interface Place {
@@ -52,6 +52,9 @@ export interface Account {
 
   /** What a run comes to, in place of the fresh rows. */
   installed: Installed | undefined;
+
+  /** What the next runs stop for before they make anything, each once and in order: an answer of the provider's own. */
+  unanswered: Unanswered<Where>[];
 
   /** What a run throws in place of working. */
   crash: Error | undefined;
@@ -162,18 +165,21 @@ export interface Ran {
   readonly opened: string[];
 }
 
-function placeQuestion(account: string | undefined): Question<Where> {
+/** What a line said of the account, beside the place. */
+type Said = Pick<Where, "account" | "alias">;
+
+function placeQuestion(said: Said): Question<Where> {
   return {
     key: "where",
     name: "place",
     ask: "Your own place (example.com), or Enter for none:",
     give: "pass --place <name> or --no-place, or set POPLIN_PLACE",
-    answer: (text) => readPlace(text, account),
+    answer: (text) => readPlace(text, said),
   };
 }
 
-function readPlace(text: string, account: string | undefined): Read<Where> {
-  const extra = account === undefined ? {} : { account };
+function readPlace(text: string, said: Said): Read<Where> {
+  const extra = { ...(said.account === undefined ? {} : { account: said.account }), ...(said.alias === undefined ? {} : { alias: said.alias }) };
   if (text === "" || text === "none") return { ok: true, where: { kind: "none", ...extra } };
 
   if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(text)) return { ok: false, why: "refused", refused: `--place takes a name alone, such as example.com: ${JSON.stringify(text)}` };
@@ -181,18 +187,43 @@ function readPlace(text: string, account: string | undefined): Read<Where> {
   return { ok: true, where: { kind: "place", name: text, ...extra } };
 }
 
+/** Why a name for the account is refused, by one rule at the question, the option, and the variable; `undefined` for a name that is accepted. */
+function aliasRefusal(alias: string): string | undefined {
+  if (alias === "") return "The account needs a name";
+
+  return alias.includes(" ") ? "The account's name is one word" : undefined;
+}
+
 /** Read the made-up provider's own options and variables: a place, none, or the question that is still open. */
 function readGiven(given: Given): Read<Where> {
-  const typed = given.flags.get("account") ?? given.env.POPLIN_ACCOUNT;
-  const account = typeof typed === "string" ? typed : undefined;
+  const [typed, alias] = [given.flags.get("account") ?? given.env.POPLIN_ACCOUNT, given.flags.get("alias") ?? given.env.POPLIN_ALIAS];
+  const said = { account: typeof typed === "string" ? typed : undefined, alias: typeof alias === "string" ? alias : undefined };
+  const refused = said.alias === undefined ? undefined : aliasRefusal(said.alias);
+  if (refused !== undefined) return { ok: false, why: "refused", refused };
+
   if (given.flags.has("place") && given.flags.has("no-place")) return { ok: false, why: "refused", refused: "--place and --no-place are mutually exclusive" };
 
-  if (given.flags.has("no-place")) return readPlace("none", account);
+  if (given.flags.has("no-place")) return readPlace("none", said);
 
   const named = given.flags.get("place") ?? given.env.POPLIN_PLACE;
-  if (typeof named !== "string" || named === "") return { ok: false, why: "open", open: [placeQuestion(account)] };
+  if (typeof named !== "string" || named === "") return { ok: false, why: "open", open: [placeQuestion(said)] };
 
-  return readPlace(named, account);
+  return readPlace(named, said);
+}
+
+/** The question a run asks, before it makes anything, of an account that has no name of its own: its answer is the place with the name. */
+export function aliasQuestion(where: Where): Question<Where> {
+  return {
+    key: "alias",
+    name: "account name (this account has none)",
+    ask: "Name for the account (it has none):",
+    give: "pass --alias <name> or set POPLIN_ALIAS",
+    answer: (text) => {
+      const refused = aliasRefusal(text);
+
+      return refused === undefined ? { ok: true, where: { ...where, alias: text } } : { ok: false, why: "refused", refused };
+    },
+  };
 }
 
 /** The question a token that shows two accounts is asked: its answer is the place with the account chosen. */
@@ -225,6 +256,7 @@ export function emptyAccount(): Account {
   return {
     scenes: [{ state: "none", place: { token: TOKEN as Token }, notes: [] }],
     installed: undefined,
+    unanswered: [],
     crash: undefined,
     finds: [],
     looks: [],
@@ -258,6 +290,7 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
       { flag: "--place", value: "<name>", about: "Your own place, such as example.com", variable: "POPLIN_PLACE" },
       { flag: "--no-place", value: null, about: "The address the host gives the account", variable: "POPLIN_PLACE=none" },
       { flag: "--account", value: "<id>", about: "Account id, if the token can access several accounts", variable: "POPLIN_ACCOUNT" },
+      { flag: "--alias", value: "<name>", about: "Name to give the account, if it has none", variable: "POPLIN_ALIAS", work: "install" },
     ],
     usage: "(--place <name> | --no-place)",
     tokenHelp: { install: ["Programs: Edit", "Places: Read (--place)"], repair: ["Programs: Edit", "Places: Read (--place)"], remove: ["Programs: Edit", "Places: Read (--place)"] },
@@ -280,6 +313,9 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
     install: async (found, where, login, mode, _reach, say) => {
       account.runs.push({ found, where, login, run: mode });
       if (account.crash !== undefined) throw account.crash;
+
+      const open = account.unanswered.shift();
+      if (open !== undefined) return open;
 
       const installed = account.installed ?? installedOf(FRESH);
       if (!installed.ok) return installed;

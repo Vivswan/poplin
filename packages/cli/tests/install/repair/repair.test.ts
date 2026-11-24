@@ -342,6 +342,7 @@ describe("the words of a repair", () => {
   test.each([
     ["--server https://poplin.example.com", ["Unknown option --server", "Fix: remove --server"]],
     ["--user you@example.com", ["Unknown option --user", "Fix: add a user with --add-user <email>"]],
+    ["--no-place --alias mine", ["Unknown option --alias", "See: poplin doctor --repair --help"]],
     ["--place example.com --no-place", ["--place and --no-place are mutually exclusive"]],
   ])("a repair with %s is refused with a line that says what to type: without this a wrong option is ignored", async (options, err) => {
     const account = installed();

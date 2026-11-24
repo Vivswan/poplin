@@ -3,7 +3,7 @@
 //   1  the account     the one the domain's zone is in, or the one the token shows
 //   2  the Worker      `poplin`: none, poplin's own by its bindings, an install's that lost a binding, or somebody else's
 //                      one that is not set yet says where it was started for, and a place of another kind, or under another domain, is refused
-//   3  the version     of a whole install, from the binding every upload states: no call of its own
+//   3  the version     of the Worker's code, whole or started, from the binding every upload states: no call of its own
 //   4  the database    `poplin`, by its name
 //   5  the bucket      `poplin-sites`, by its name; a refusal here says the token lacks the storage right, or that storage is switched off
 //                      a repair's look reads none: a repair makes no bucket, so its token is asked for no storage permission
@@ -75,13 +75,20 @@ const WORDS = {
   lacks: "The account token lacks",
 } as const;
 
-/** Where an install goes: under a domain of the person's own, or on the account's free address; `account` is the account a person named, where the token shows more than one. */
-export type Where = { readonly kind: "domain"; readonly layout: DomainLayout; readonly account: string | undefined } | { readonly kind: "no-domain"; readonly account: string | undefined };
+/**
+ * Where an install goes: under a domain of the person's own, or on the account's free address.
+ *
+ * `account` is the account a person named, where the token shows more than one. `subdomain` is the name they gave for the account's free address, which an install makes in an account that has none.
+ */
+export type Where =
+  | { readonly kind: "domain"; readonly layout: DomainLayout; readonly account: string | undefined; readonly subdomain: string | undefined }
+  | { readonly kind: "no-domain"; readonly account: string | undefined; readonly subdomain: string | undefined };
 
-/** What a token showed: the way to Cloudflare with it, and the account the install is in or goes to. It holds the token, so a place written as JSON writes nothing. */
+/** What a token showed: the way to Cloudflare with it, the account the install is in or goes to, and in `runs` the release the code of its Worker states, where one stands and states one. It holds the token, so a place written as JSON writes nothing. */
 export interface Place {
   readonly connection: Connection;
   readonly accountId: string;
+  readonly runs: string | undefined;
   readonly toJSON: () => undefined;
 }
 
@@ -296,11 +303,11 @@ function startedElsewhere(bindings: readonly ListedBinding[], where: Where): Pic
   return named ? undefined : { words: `This account has an incomplete install under ${started.domain}. Pass ${give}.`, give };
 }
 
-/** A whole install: the release its bindings state, and the newest release the project's website names. */
-async function wholeAt(place: Place, set: { readonly address: string; readonly version: string | undefined }, reach: Reach): Promise<FoundHere> {
+/** A whole install at its dashboard's address: the release its place read off its bindings, and the newest release the project's website names. */
+async function wholeAt(place: Place, address: string, reach: Reach): Promise<FoundHere> {
   const pins = await projectReleases({ fetch: reach.fetch }).pins();
 
-  return { state: "whole", place, ...set, newest: pins === undefined ? undefined : newestPinned(pins) };
+  return { state: "whole", place, address, version: place.runs, newest: pins === undefined ? undefined : newestPinned(pins) };
 }
 
 /** What stops a run before it changes anything, from the three reads Cloudflare refused or answered. Access that is switched off is no block: a run goes on without it. */
@@ -361,16 +368,16 @@ export async function findInstall(token: Token, where: Where, reach: Reach, righ
   const accountId = await accountOf(connection, where);
   if (typeof accountId !== "string") return accountId;
 
-  const place: Place = { connection, accountId, toJSON: () => undefined };
   const bindings = await readSettled(connection, { accountId, script: SCRIPT }, isOwn);
   if (!bindings.ok) return rights.lacks(bindings) ? { state: "blocked", blocked: [rightLacking(rights, "Worker variable", accountId)] } : refusedBy(bindings);
 
+  const place: Place = { connection, accountId, runs: bindings.value === undefined ? undefined : readRelease(bindings.value), toJSON: () => undefined };
   if (bindings.value === undefined) return standing(place, false, rights);
 
   if (!isOwn(bindings.value)) return { state: "held", ...heldBy(bindings.value, where), address: pagesOf(accountId).worker };
 
   const address = dashboardOf(bindings.value);
-  if (address !== undefined) return wholeAt(place, { address, version: readRelease(bindings.value) }, reach);
+  if (address !== undefined) return wholeAt(place, address, reach);
 
   const other = startedElsewhere(bindings.value, where);
 

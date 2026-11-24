@@ -86,11 +86,11 @@ const JSON_SPAN = /^\{.*\}$/;
 /** What a table cell holds beside its codes when it holds codes alone: the commas between them. */
 const BETWEEN_CODES = /^[\s,]*$/;
 
-/** For each command that works at a provider, a line it reads, then two it refuses. */
+/** For each command that works at a provider, a line it reads, then the ones it refuses. The option that names a new account's subdomain is an install's alone: the two others refuse it. */
 const PROVIDER_SAMPLES: readonly (readonly string[])[] = [
-  ["poplin install cloudflare --no-domain --dry-run", "poplin install cloudflare --no-such-flag", "poplin install no-such-provider"],
-  ["poplin uninstall cloudflare --no-domain --dry-run", "poplin uninstall cloudflare --no-domain --yes", "poplin uninstall cloudflare --force"],
-  ["poplin doctor --repair --no-domain --add-user you@example.com", "poplin doctor --repair --server https://poplin.example.com", "poplin doctor --add-user you@example.com"],
+  ["poplin install cloudflare --no-domain --subdomain your-name --dry-run", "poplin install cloudflare --no-such-flag", "poplin install no-such-provider"],
+  ["poplin uninstall cloudflare --no-domain --dry-run", "poplin uninstall cloudflare --no-domain --yes", "poplin uninstall cloudflare --force", "poplin uninstall cloudflare --no-domain --subdomain your-name --dry-run"],
+  ["poplin doctor --repair --no-domain --add-user you@example.com", "poplin doctor --repair --server https://poplin.example.com", "poplin doctor --add-user you@example.com", "poplin doctor --repair --no-domain --subdomain your-name"],
 ];
 
 /** A code of the CLI's table of problems. */
@@ -216,7 +216,7 @@ describe("the pages a person reads", () => {
     expect(read).toBeGreaterThan(0);
     expect(refusals).toEqual([]);
     expect(["poplin new-link", "poplin no-such-command", "poplin new-link --no-such-flag"].filter(namesCommand)).toEqual(["poplin new-link"]);
-    for (const lines of PROVIDER_SAMPLES) expect(lines.map(refusalOf)).toEqual([undefined, expect.any(String), expect.any(String)]);
+    for (const [reads = "", ...refused] of PROVIDER_SAMPLES) expect([refusalOf(reads), ...refused.map(refusalOf)]).toEqual([undefined, ...refused.map(() => expect.any(String))]);
     expect(commandLines({ spans: ["poplin list --trash", "poplin.example.com"], blocks: ["$ npx poplin ./report --site report   # new content\npoplin 0.1.0 is installed.\n"] })).toEqual([
       "poplin ./report --site report",
       "poplin list --trash",

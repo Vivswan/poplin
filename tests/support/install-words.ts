@@ -20,6 +20,7 @@ const PROBLEMS = {
   blocked: true,
   token_refused: true,
   no_domain: true,
+  answer_refused: true,
   stopped: true,
   crashed: true,
   no_install: true,
